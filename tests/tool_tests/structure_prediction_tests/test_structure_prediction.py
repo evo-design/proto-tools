@@ -30,9 +30,6 @@ from bio_programming.tools.structures import is_valid_structure
 from bio_programming.tools.tool_cache import ToolCache
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
-# Read in all example sequence files
-FASTA_FILES = glob.glob("tests/dummy_data/structure_prediction_test_examples/*.fasta")
-
 STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig),
     "af3": (run_af3, AlphaFold3Input, AlphaFold3Config),
@@ -43,72 +40,203 @@ STRUCTURE_PREDICTORS = {
 FAST_PREDICTORS = ["esmfold"]
 
 
+# =============================================================================
+# File Loading
+# =============================================================================
+def _parse_modifications_from_header(description):
+    """
+    Parse modifications from FASTA header.
+
+    Format: >name|entity_type|position:code,position:code
+    Example: >peptide|protein|5:SEP,10:TPO
+
+    Returns list of (position, code) tuples or empty list if no modifications.
+    """
+    parts = description.split("|")
+    if len(parts) < 3:
+        return []
+
+    mod_string = parts[2].strip()
+    if not mod_string:
+        return []
+
+    modifications = []
+    for mod in mod_string.split(","):
+        mod = mod.strip()
+        if ":" in mod:
+            pos_str, code = mod.split(":")
+            modifications.append((int(pos_str), code.strip()))
+
+    return modifications
+
+
+def _parse_fasta_to_complexes(fasta_file):
+    """
+    Parse a FASTA file into a list of StructurePredictionComplex objects.
+
+    FASTA format supports modifications in the header:
+    >name|entity_type|position:code,position:code
+
+    Examples:
+    >peptide|protein|5:SEP,10:TPO  (protein with modifications at positions 5 and 10)
+    >peptide|protein  (protein without modifications)
+    """
+    chains_data = []
+
+    for record in SeqIO.parse(fasta_file, "fasta"):
+        sequence = str(record.seq).strip()
+        parts = record.description.split("|")
+        entity_type = parts[1].strip()
+        modifications = _parse_modifications_from_header(record.description)
+
+        chain_dict = {
+            "sequence": sequence,
+            "entity_type": entity_type,
+        }
+
+        if modifications:
+            chain_dict["modifications"] = modifications
+
+        chains_data.append(chain_dict)
+
+    # By default, treat all sequences as chains in a single complex
+    if "two_complex" not in fasta_file:
+        complexes = [StructurePredictionComplex(chains=chains_data)]
+    else:
+        # For two_complex.fasta, treat each sequence as a separate complex to test multi-complex prediction
+        complexes = [
+            StructurePredictionComplex(chains=[chain_dict])
+            for chain_dict in chains_data
+        ]
+
+    return complexes
+
+
+def _load_all_test_complexes():
+    """Pre-load all FASTA files and parse them into complexes."""
+    fasta_files = glob.glob("tests/dummy_data/structure_prediction_test_examples/*.fasta")
+    test_complexes = {}
+
+    for fasta_file in fasta_files:
+        basename = os.path.basename(fasta_file).replace(".fasta", "")
+        complexes = _parse_fasta_to_complexes(fasta_file)
+        test_complexes[basename] = complexes
+
+    return test_complexes
+
+
+# Pre-load all test complexes at module level
+TEST_COMPLEXES = _load_all_test_complexes()
+
+# =============================================================================
+# Test Parameterization
+# =============================================================================
 def _supports_msa(config_class):
     """Check if a config class supports MSA."""
     return hasattr(config_class, "model_fields") and "use_msa" in config_class.model_fields
 
 
-def _make_param(predictor_name, use_msa, msa_search_mode):
-    """Create a pytest.param with appropriate ID and marks."""
-    suffix = (
-        f"with_msa-{msa_search_mode}"
-        if use_msa and msa_search_mode
-        else ("with_msa" if use_msa else "without_msa")
-    )
-    marks = pytest.mark.slow if predictor_name not in FAST_PREDICTORS else ()
-    return pytest.param(
-        predictor_name, use_msa, msa_search_mode, id=f"{predictor_name}-{suffix}", marks=marks
-    )
+def _get_complex_entity_types(complexes):
+    """Get all entity types present in a list of complexes."""
+    entity_types = set()
+    for comp in complexes:
+        entity_types.update(comp.get_entity_type_set())
+    return entity_types
 
 
-def _generate_msa_params():
-    """Generate MSA parameter combinations, filtering out unsupported combinations."""
+def _has_modifications(complexes):
+    """Check if any complex has modifications."""
+    return any(comp.has_modifications() for comp in complexes)
+
+
+def _is_compatible_input_for_test(complexes, input_class):
+    """
+    Check if complexes are compatible with an input class.
+
+    Checks:
+    1. Entity types are supported (SUPPORTED_ENTITY_TYPES)
+    2. Modifications are allowed if present (ALLOWS_CHAIN_MODIFICATIONS)
+    """
+    # Check entity types
+    complex_entity_types = _get_complex_entity_types(complexes)
+    supported_types = input_class.SUPPORTED_ENTITY_TYPES
+    if not complex_entity_types.issubset(supported_types):
+        return False
+
+    # Check modifications
+    if _has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS:
+        return False
+
+    return True
+
+
+def _generate_test_params():
+    """
+    Generate all valid test parameter combinations.
+
+    Filters out incompatible combinations based on:
+    - Input class SUPPORTED_ENTITY_TYPES
+    - Input class ALLOWS_CHAIN_MODIFICATIONS
+    - MSA support
+    """
     params = []
-    for predictor_name, (_, _, config_class) in STRUCTURE_PREDICTORS.items():
-        if _supports_msa(config_class):
-            # Predictor supports MSA with both local and remote search modes
-            params.extend(
-                [
-                    # _make_param(predictor_name, True, "local"), # DISABLED FOR NOW: these take too long, and local MSAs are tested separately
-                    _make_param(predictor_name, True, "remote"),
-                ]
-            )
 
-        # All predictors get a without_msa variant
-        params.append(_make_param(predictor_name, False, None))
+    for test_name, complexes in TEST_COMPLEXES.items():
+        for predictor_name, (_, input_class, config_class) in STRUCTURE_PREDICTORS.items():
+            # Skip if complexes are not compatible with this predictor
+            if not _is_compatible_input_for_test(complexes, input_class):
+                continue
+
+            # Generate MSA variants if supported
+            if _supports_msa(config_class):
+                # Add remote MSA variant
+                params.append(
+                    pytest.param(
+                        test_name,
+                        predictor_name,
+                        True,  # use_msa
+                        "remote",  # msa_search_mode
+                        id=f"{test_name}-{predictor_name}-with_msa-remote",
+                        marks=(
+                            pytest.mark.slow if predictor_name not in FAST_PREDICTORS else ()
+                        ),
+                    )
+                )
+
+            # Add without_msa variant (all predictors support this)
+            params.append(
+                pytest.param(
+                    test_name,
+                    predictor_name,
+                    False,  # use_msa
+                    None,  # msa_search_mode
+                    id=f"{test_name}-{predictor_name}-without_msa",
+                    marks=pytest.mark.slow if predictor_name not in FAST_PREDICTORS else (),
+                )
+            )
 
     return params
 
 
+# =============================================================================
+# Primary Folding Test
+# =============================================================================
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize(
-    "fasta_file",
-    [
-        pytest.param(f, id=os.path.basename(f).replace(".fasta", ""))
-        for f in FASTA_FILES
-    ],
+    "test_name,predictor_name,use_msa,msa_search_mode",
+    _generate_test_params(),
 )
-@pytest.mark.parametrize(
-    "predictor_name,use_msa,msa_search_mode",
-    _generate_msa_params(),
-)
-def test_folding(fasta_file, predictor_name, use_msa, msa_search_mode):
+def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
-    # Read in the sequences in the fasta files as a list of strings
-    complexes = parse_fasta_to_complexes(fasta_file)
+    # Get pre-loaded complexes
+    complexes = TEST_COMPLEXES[test_name]
 
     # Get predictor function, input class, and config class
     run_func, input_class, config_class = STRUCTURE_PREDICTORS[predictor_name]
 
-    # Model specific input validation errors
-    if "esmfold" == predictor_name:
-        # ESMFold only supports protein sequences
-        if any(comp.get_entity_type_set() != {"protein"} for comp in complexes):
-            with pytest.raises(ValueError):
-                # Ensure that the input validation error is raised
-                inputs = input_class(complexes=complexes)
-            return
-
+    # Create input (should always succeed since we filtered incompatible combinations)
     inputs = input_class(complexes=complexes)
 
     # Create config with MSA settings (if supported)
@@ -256,31 +384,6 @@ def test_folding_cache():
     finally:
         # Clean up cache
         _program_tool_cache.set(None)
-
-
-def parse_fasta_to_complexes(fasta_file):
-
-    complexes = []
-
-    sequences = [str(record.seq).strip() for record in SeqIO.parse(fasta_file, "fasta")]
-    entity_types = [
-        record.description.split("|")[1].strip()
-        for record in SeqIO.parse(fasta_file, "fasta")
-    ]
-
-    # By default, each treat each sequence as a separate complex
-    if "two_complex" not in fasta_file:
-        complexes = [
-            StructurePredictionComplex(chains=sequences, entity_types=entity_types)
-        ]
-    else:
-        # For two_complex.fasta, treat each sequence as a separate complex to test multi-complex prediction
-        for seq, e_type in zip(sequences, entity_types):
-            complexes.append(
-                StructurePredictionComplex(chains=[seq], entity_types=[e_type])
-            )
-
-    return complexes
 
 
 @pytest.mark.uses_gpu
