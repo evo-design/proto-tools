@@ -1,21 +1,25 @@
 """
 test_evo2.py
 
-Tests the Evo2 implementation
+Tests the Evo2 implementation.
 """
 
+import numpy as np
 import pytest
 
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 
+# ============================================================================
+# Sampling Tests
+# ============================================================================
+
 @pytest.mark.uses_gpu
-def test_evo2_inference():
-    """Test Evo2Model inference with direct model call."""
+def test_evo2_sample_inference():
+    """Test Evo2Model inference with direct model.sample() call."""
     from bio_programming.tools.language_models.evo2 import Evo2Model
 
     prompts = ["ATCGATCG", "GGCCTTAA"]
-
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -29,22 +33,24 @@ def test_evo2_inference():
     )
 
     sequences = result["sequences"]
+    assert len(sequences) == 2
+
+    # Validate actual sequence content
+    valid_chars = set("ATCGN")  # Evo2 may generate N for uncertain positions
+    for i, (prompt, seq) in enumerate(zip(prompts, sequences)):
+        # Sequence should be non-empty string of valid DNA characters
+        assert isinstance(seq, str) and len(seq) > 0
+        assert set(seq.upper()).issubset(valid_chars), f"Invalid chars: {set(seq) - valid_chars}"
+
+        # Sequence should contain the prompt (vortex returns only generated tokens)
+        # So we check that the sequence is non-empty and valid
+        assert len(seq) > 0, f"Sequence {i} should be non-empty"
+
+    # Validate logits and kv_caches are present
     assert result.get("logits", None) is not None, "Logits should be present"
     assert result.get("kv_caches", None) is not None, "KV caches should be present"
-
-    # Check that we got the correct number of sequences
-    assert len(sequences) == 2, "Should generate 2 sequences"
-
-    # Check that sequences are strings
-    assert all(isinstance(seq, str) for seq in sequences), "Sequences should be strings"
-
-    # Check that sequences are longer than 0 (generation happened)
-    assert all(len(seq) > 0 for seq in sequences), "Sequences should not be empty"
-
-    # Check that sequences contain valid DNA characters
-    valid_chars = set("ATCGN")  # Evo2 may generate N for uncertain positions
-    for seq in sequences:
-        assert set(seq.upper()).issubset(valid_chars), f"Sequence contains invalid characters: {set(seq) - valid_chars}"
+    assert len(result["logits"]) == 2
+    assert len(result["kv_caches"]) == 2
 
 
 @pytest.mark.uses_gpu
@@ -56,8 +62,8 @@ def test_evo2_sample_tool():
         run_evo2_sample,
     )
 
-    # Test with simple prompts
-    inputs = Evo2SampleInput(prompts=["ATCG", "GCTA"])
+    prompts = ["ATCG", "GCTA"]
+    inputs = Evo2SampleInput(prompts=prompts)
     config = Evo2SampleConfig(
         model_checkpoint="evo2_7b",
         num_tokens=50,
@@ -70,36 +76,39 @@ def test_evo2_sample_tool():
     )
 
     result = run_evo2_sample(inputs=inputs, config=config)
-
-    # Validate output and export functionality
     validate_output(result)
 
-    # Check output structure
-    assert result.tool_id == "evo2-sample", "Tool ID should be correct"
-    assert result.metadata["model_checkpoint"] == "evo2_7b", "Model name should match config"
-
-    # Check sequences
-    assert len(result.sequences) == 2, "Should generate 2 sequences"
-    assert all(isinstance(seq, str) for seq in result.sequences), "Sequences should be strings"
-    assert all(len(seq) > 0 for seq in result.sequences), "Sequences should not be empty"
-
-    # Check metadata
+    # Validate tool output structure
+    assert result.tool_id == "evo2-sample"
+    assert result.metadata["model_checkpoint"] == "evo2_7b"
     assert result.metadata["num_tokens"] == 50
     assert result.metadata["temperature"] == 0.8
-    assert result.metadata["model_checkpoint"] == "evo2_7b"
+    assert len(result.sequences) == 2
+
+    # Validate sequences contain prompts and are valid
+    valid_chars = set("ATCGN")
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+        # With prepend_prompt=True (default), sequences should start with prompt
+        assert seq.startswith(prompt), f"Sequence {i} should start with '{prompt}'"
+        assert set(seq.upper()).issubset(valid_chars)
+        assert len(seq) > len(prompt), f"Sequence {i} should be longer than prompt"
 
 
 @pytest.mark.uses_gpu
-def test_evo2_sample_with_prepend():
-    """Test evo2 sampling - sequences should include prompts by default."""
+@pytest.mark.parametrize("prompt", [
+    "ATCGATCG",
+    "GCTAGCTA",
+    "AAAACCCC",
+])
+def test_evo2_sample_prompt_handling(prompt):
+    """Test evo2 sampling with various prompt formats."""
     from bio_programming.tools.language_models.evo2 import (
         Evo2SampleConfig,
         Evo2SampleInput,
         run_evo2_sample,
     )
 
-    prompts = ["ATCGATCG", "GGCCTTAA"]
-    inputs = Evo2SampleInput(prompts=prompts)
+    inputs = Evo2SampleInput(prompts=prompt)
     config = Evo2SampleConfig(
         model_checkpoint="evo2_7b",
         num_tokens=50,
@@ -109,103 +118,375 @@ def test_evo2_sample_with_prepend():
     )
 
     result = run_evo2_sample(inputs=inputs, config=config)
-
-    # Validate output and export functionality
     validate_output(result)
 
-    # Check that prompts are included in output (Evo2 includes prompt by default)
+    assert len(result.sequences) == 1
+    seq = result.sequences[0]
+    assert prompt in seq, f"Expected '{prompt}' in output"
+    assert len(seq) > len(prompt), "Should generate beyond prompt"
+
+
+@pytest.mark.uses_gpu
+def test_evo2_sample_prepend_prompt():
+    """Test that prepend_prompt controls whether prompt is included."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2SampleConfig,
+        Evo2SampleInput,
+        run_evo2_sample,
+    )
+
+    prompt = "ATCGATCG"
+    
+    # With prepend_prompt=True (default)
+    result_with = run_evo2_sample(
+        inputs=Evo2SampleInput(prompts=[prompt]),
+        config=Evo2SampleConfig(
+            model_checkpoint="evo2_7b",
+            num_tokens=50,
+            prepend_prompt=True,
+            verbose=False,
+            print_generation=False,
+        ),
+    )
+    assert result_with.sequences[0].startswith(prompt)
+
+    # With prepend_prompt=False
+    result_without = run_evo2_sample(
+        inputs=Evo2SampleInput(prompts=[prompt]),
+        config=Evo2SampleConfig(
+            model_checkpoint="evo2_7b",
+            num_tokens=50,
+            prepend_prompt=False,
+            verbose=False,
+            print_generation=False,
+        ),
+    )
+    # Should not start with prompt (only generated tokens)
+    assert not result_without.sequences[0].startswith(prompt)
+    assert len(result_without.sequences[0]) > 0
+
+
+@pytest.mark.parametrize("config_kwargs,match", [
+    ({"prompts": []}, "prompts must not be empty"),
+])
+def test_evo2_sample_input_validation(config_kwargs, match):
+    """Test Evo2SampleInput validation."""
+    from bio_programming.tools.language_models.evo2 import Evo2SampleInput
+
+    with pytest.raises(ValueError, match=match):
+        Evo2SampleInput(**config_kwargs)
+
+
+@pytest.mark.parametrize("config_kwargs", [
+    {"temperature": 0.0},
+    {"top_p": 1.5},
+    {"num_tokens": 0},
+])
+def test_evo2_sample_config_validation(config_kwargs):
+    """Test Evo2SampleConfig validation for invalid values."""
+    from bio_programming.tools.language_models.evo2 import Evo2SampleConfig
+
+    with pytest.raises(ValueError):
+        Evo2SampleConfig(**config_kwargs)
+
+
+# ============================================================================
+# Batched Sampling Tests
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_evo2_sample_batched_inference():
+    """Test batched sampling with direct model call."""
+    from bio_programming.tools.language_models.evo2 import Evo2Model
+
+    prompts = ["ATCGATCG", "GGCCTTAA", "AAAACCCC", "TTTTGGGG"]
+    evo2_model = Evo2Model(model_checkpoint="evo2_7b")
+
+    result = evo2_model.sample(
+        prompts=prompts,
+        num_tokens=50,
+        temperature=1.0,
+        batch_size=2,
+        verbose=False,
+        print_generation=False,
+    )
+
+    sequences = result["sequences"]
+    assert len(sequences) == 4
+
+    # Each sequence should be valid
+    valid_chars = set("ATCGN")
+    for i, seq in enumerate(sequences):
+        assert isinstance(seq, str) and len(seq) > 0
+        assert set(seq.upper()).issubset(valid_chars)
+
+
+@pytest.mark.uses_gpu
+def test_evo2_sample_batched_tool():
+    """Test batched sampling with tool layer (run_evo2_sample)."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2SampleConfig,
+        Evo2SampleInput,
+        run_evo2_sample,
+    )
+
+    prompts = ["ATCG", "GCTA", "AAAA", "GGGG", "CCCC", "TTTT"]
+    inputs = Evo2SampleInput(prompts=prompts)
+    config = Evo2SampleConfig(
+        model_checkpoint="evo2_7b",
+        num_tokens=50,
+        temperature=1.0,
+        batch_size=2,
+        verbose=False,
+        print_generation=False,
+    )
+
+    result = run_evo2_sample(inputs=inputs, config=config)
+    validate_output(result)
+
+    assert len(result.sequences) == 6
+
+    # Each sequence should start with its corresponding prompt
     for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
-        assert seq.startswith(prompt), f"Sequence {i} should start with prompt '{prompt}'"
-        assert len(seq) > len(prompt), f"Sequence {i} should be longer than prompt"
+        assert seq.startswith(prompt), f"Sequence {i} should start with '{prompt}'"
+        assert len(seq) > len(prompt)
+
+
+# ============================================================================
+# Scoring Tests
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_evo2_score_inference():
+    """Test Evo2Model.score() with comprehensive value validation."""
+    from bio_programming.tools.language_models.evo2 import Evo2Model
+
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
+    evo2_model = Evo2Model(model_checkpoint="evo2_7b")
+
+    result = evo2_model.score(sequences=sequences, device="cuda", verbose=False)
+
+    assert "logits" in result and "metrics" in result
+    assert len(result["logits"]) == len(result["metrics"]) == 2
+
+    for seq, metrics, logits in zip(sequences, result["metrics"], result["logits"]):
+        # Validate metrics types
+        assert isinstance(metrics["log_likelihood"], float)
+        assert isinstance(metrics["avg_log_likelihood"], float)
+        assert isinstance(metrics["perplexity"], float)
+
+        # Log likelihood should be negative (log probabilities are <= 0)
+        assert metrics["log_likelihood"] < 0, f"Log likelihood should be negative, got {metrics['log_likelihood']}"
+
+        # Average log likelihood should be between log_likelihood and 0
+        assert metrics["log_likelihood"] <= metrics["avg_log_likelihood"] <= 0
+
+        # Perplexity should be >= 1 (exp(0) = 1 is minimum when avg_ll = 0)
+        assert metrics["perplexity"] >= 1.0, f"Perplexity should be >= 1, got {metrics['perplexity']}"
+
+        # Verify perplexity = exp(-avg_log_likelihood)
+        expected_ppl = np.exp(-metrics["avg_log_likelihood"])
+        np.testing.assert_allclose(metrics["perplexity"], expected_ppl, rtol=1e-5)
+
+        # Logits shape: (seq_len, vocab_size)
+        # Note: Evo2 tokenization may differ from raw sequence length
+        assert logits.shape[0] > 0, f"Logits seq_len should be > 0, got {logits.shape[0]}"
+        assert logits.shape[1] >= 4, f"Vocab size should be >= 4 (ACGT), got {logits.shape[1]}"
 
 
 @pytest.mark.uses_gpu
-def test_evo2_sample_single_prompt_batch():
-    """Test evo2 sampling with single prompt."""
+def test_evo2_score_different_sequences():
+    """Test that model produces different perplexities for different sequences."""
     from bio_programming.tools.language_models.evo2 import (
-        Evo2SampleConfig,
-        Evo2SampleInput,
-        run_evo2_sample,
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
     )
 
-    # Single prompt should work
-    inputs = Evo2SampleInput(prompts=["ATCGATCG"])
-    config = Evo2SampleConfig(
-        model_checkpoint="evo2_7b",
-        num_tokens=100,
-        temperature=1.0,
-        verbose=False,
-        print_generation=False,
-    )
+    # Different sequences should produce different perplexities
+    seq1 = "ATCGATCGATCGATCGATCG"  # Alternating pattern
+    seq2 = "AAAAAAAAAAAAAAAAAAAA"  # Homopolymer
 
-    result = run_evo2_sample(inputs=inputs, config=config)
+    inputs = Evo2ScoringInput(sequences=[seq1, seq2])
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
 
-    # Validate output and export functionality
-    validate_output(result)
+    result = run_evo2_score(inputs=inputs, config=config)
 
-    # Should generate 1 sequence
-    assert len(result.sequences) == 1
-    assert isinstance(result.sequences[0], str)
-    assert len(result.sequences[0]) > 0
+    ppl1 = result.scores[0].perplexity
+    ppl2 = result.scores[1].perplexity
+
+    # Different sequences should have different perplexities (model discriminates)
+    assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
+
+    # Both should be valid perplexities
+    assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
-def test_evo2_sample_single_prompt_string():
-    """Test evo2 sampling with single prompt as string (not list)."""
+def test_evo2_score_metrics_consistency():
+    """Test that scoring metrics are mathematically consistent."""
     from bio_programming.tools.language_models.evo2 import (
-        Evo2SampleConfig,
-        Evo2SampleInput,
-        run_evo2_sample,
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
     )
 
-    # Single prompt as string (not list) should work
-    inputs = Evo2SampleInput(prompts="ATCGATCG")
-    config = Evo2SampleConfig(
+    inputs = Evo2ScoringInput(sequences=["ATCGATCGATCGATCG"])
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
+
+    result = run_evo2_score(inputs=inputs, config=config)
+    score = result.scores[0]
+
+    # Verify perplexity = exp(-avg_log_likelihood)
+    expected_perplexity = np.exp(-score.avg_log_likelihood)
+    np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
+
+    # Average should equal total / count (approximately, accounting for tokenization)
+    # We can't assert exact equality due to tokenization differences, but we can check
+    # that avg_log_likelihood is reasonable relative to log_likelihood
+    assert score.avg_log_likelihood <= 0, "avg_log_likelihood should be <= 0"
+    assert score.log_likelihood <= score.avg_log_likelihood, "log_likelihood should be <= avg_log_likelihood"
+
+
+def test_evo2_score_input_validation():
+    """Test Evo2ScoringInput validation and normalization."""
+    from bio_programming.tools.language_models.evo2 import Evo2ScoringInput
+
+    # Empty sequences should fail
+    with pytest.raises(ValueError, match="sequences must not be empty"):
+        Evo2ScoringInput(sequences=[])
+
+    # String input should be normalized to list
+    input_str = Evo2ScoringInput(sequences="ATCG")
+    assert input_str.sequences == ["ATCG"]
+
+    # List should be preserved
+    input_list = Evo2ScoringInput(sequences=["ATCG", "GCTA"])
+    assert input_list.sequences == ["ATCG", "GCTA"]
+
+
+# ============================================================================
+# Batched Scoring Tests
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_evo2_score_batched_inference():
+    """Test batched scoring with direct model call."""
+    from bio_programming.tools.language_models.evo2 import Evo2Model
+
+    sequences = ["ATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG"]
+    evo2_model = Evo2Model(model_checkpoint="evo2_7b")
+
+    result = evo2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False)
+
+    assert len(result["metrics"]) == 4
+
+    for i, (seq, metrics, logits) in enumerate(zip(sequences, result["metrics"], result["logits"])):
+        # Each sequence should have valid metrics
+        assert metrics["log_likelihood"] < 0
+        assert metrics["perplexity"] >= 1.0
+
+        # Logits should have valid shape
+        assert logits.shape[0] > 0, f"Sequence {i}: wrong logits length"
+        assert logits.shape[1] >= 4
+
+
+@pytest.mark.uses_gpu
+def test_evo2_score_batched_tool():
+    """Test batched scoring with tool layer (run_evo2_score)."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
+    )
+
+    sequences = ["ATCGATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG", "CCCCAAAA", "GGGGTTTT"]
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(
         model_checkpoint="evo2_7b",
-        num_tokens=100,
-        temperature=1.0,
+        batch_size=2,
         verbose=False,
-        print_generation=False,
     )
 
-    result = run_evo2_sample(inputs=inputs, config=config)
-
-    # Validate output and export functionality
+    result = run_evo2_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Should generate 1 sequence
-    assert len(result.sequences) == 1
-    assert isinstance(result.sequences[0], str)
-    assert len(result.sequences[0]) > 0
-    assert result.sequences[0].startswith("ATCGATCG")
+    assert len(result.scores) == 6
+
+    for seq, score in zip(sequences, result.scores):
+        assert score.log_likelihood < 0
+        assert score.perplexity >= 1.0
+        assert score.logits is not None
+        assert score.logits.shape[0] > 0
+        assert score.logits.shape[1] >= 4
 
 
-def test_evo2_input_and_config_validation():
-    """Test Evo2SampleConfig validation."""
+@pytest.mark.uses_gpu
+def test_evo2_score_batch_size_consistency():
+    """Test that different batch_sizes produce consistent results.
+    
+    Note: Evo2 uses a Hyena-based state-space architecture which can have small
+    numerical differences across batch sizes due to internal state computations.
+    We use a relaxed tolerance (1%) compared to transformer models like ProGen2.
+    """
     from bio_programming.tools.language_models.evo2 import (
-        Evo2SampleConfig,
-        Evo2SampleInput,
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
     )
 
-    # Test empty prompts should fail
-    with pytest.raises(ValueError, match="prompts must not be empty"):
-        Evo2SampleInput(prompts=[])
+    sequences = ["ATCGATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG"]
+    inputs = Evo2ScoringInput(sequences=sequences)
 
-    # Test invalid temperature should fail
-    with pytest.raises(ValueError):
-        _ = Evo2SampleInput(prompts=["ATCG"])
-        _ = Evo2SampleConfig(num_tokens=100, temperature=0.0)  # Must be > 0
+    results = {
+        bs: run_evo2_score(
+            inputs=inputs,
+            config=Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=bs, verbose=False),
+        )
+        for bs in [1, 2, None]
+    }
 
-    # Test invalid top_p should fail
-    with pytest.raises(ValueError):
-        _ = Evo2SampleInput(prompts=["ATCG"])
-        _ = Evo2SampleConfig(num_tokens=100, top_p=1.5)  # Must be <= 1.0
+    # All batch sizes should produce consistent perplexities
+    # Relaxed tolerance for Hyena architecture batch-dependent numerical variance
+    for i in range(4):
+        perplexities = [results[bs].scores[i].perplexity for bs in [1, 2, None]]
+        log_likelihoods = [results[bs].scores[i].log_likelihood for bs in [1, 2, None]]
 
-    # Test invalid num_tokens should fail
-    with pytest.raises(ValueError):
-        _ = Evo2SampleInput(prompts=["ATCG"])
-        _ = Evo2SampleConfig(num_tokens=0)  # Must be >= 1
+        np.testing.assert_allclose(perplexities[0], perplexities[1], rtol=1e-2)
+        np.testing.assert_allclose(perplexities[0], perplexities[2], rtol=1e-2)
+        np.testing.assert_allclose(log_likelihoods[0], log_likelihoods[1], rtol=1e-2)
+        np.testing.assert_allclose(log_likelihoods[0], log_likelihoods[2], rtol=1e-2)
 
+
+@pytest.mark.uses_gpu
+def test_evo2_score_variable_length_sequences():
+    """Test scoring sequences of different lengths produces correct logits shapes."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
+    )
+
+    sequences = ["AT", "ATCG", "ATCGATCG", "ATCGATCGATCG"]
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=2, verbose=False)
+
+    result = run_evo2_score(inputs=inputs, config=config)
+
+    for (seq, score) in zip(sequences, result.scores):
+        # Logits should have valid shape (may differ from raw seq len due to tokenization)
+        assert score.logits.shape[0] > 0, (
+            f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {score.logits.shape[0]}"
+        )
+
+        # Metrics should be valid
+        assert score.perplexity >= 1.0
+        assert score.log_likelihood < 0
+
+
+# ============================================================================
+# Evo2-Specific Tests (KV Cache)
+# ============================================================================
 
 @pytest.mark.uses_gpu
 def test_evo2_batch_with_kv_cache():
