@@ -379,7 +379,10 @@ def test_progen2_score_tool():
     validate_output(result)
 
     assert result.tool_id == "progen2-score"
-    assert result.alphabet == "ACDEFGHIKLMNPQRSTVWY"
+    # ProGen2 vocab: 30 tokens (0=pad, 1=bos, 2=eos, 3='1', 4='2', 5-29=A..Z no J)
+    assert len(result.vocab) == 30
+    assert result.vocab[5] == "A" and result.vocab[7] == "C"
+    assert result.vocab[22] == "S" and result.vocab[28] == "Y"
     assert len(result.scores) == 2
 
     for seq, score in zip(sequences, result.scores):
