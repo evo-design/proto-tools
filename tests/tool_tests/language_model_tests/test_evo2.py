@@ -601,7 +601,10 @@ def test_evo2_score_tool():
     # Check output structure
     assert result.tool_id == "evo2-score", "Tool ID should be correct"
     assert len(result.scores) == 2, "Should score 2 sequences"
-    assert result.alphabet == "ACGT", "Alphabet should be DNA nucleotides"
+    # Evo2 uses byte-level vocab (512 chars); DNA nucleotides at ASCII indices
+    assert len(result.vocab) == 512, "Evo2 vocab should be 512 (byte-level)"
+    assert result.vocab[65] == "A" and result.vocab[67] == "C"
+    assert result.vocab[71] == "G" and result.vocab[84] == "T"
 
     # Check scoring metrics for each sequence
     for i, score in enumerate(result.scores):

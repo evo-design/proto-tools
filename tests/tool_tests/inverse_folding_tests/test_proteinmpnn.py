@@ -4,29 +4,30 @@ test_proteinmpnn.py
 Tests for ProteinMPNN inverse folding tools.
 """
 
-import json
 import random
-import tempfile
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from bio_programming.tools.inverse_folding.proteinmpnn.proteinmpnn import (
-    MPNN_ALPHABET,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     SequenceStructurePair,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from bio_programming.tools.language_models.schemas import SequenceScores
+from bio_programming.tools.inverse_folding.proteinmpnn.standalone.inference import (
+    ALPHAFOLD_VOCAB,
+)
 from bio_programming.tools.inverse_folding.schemas import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
 )
+from bio_programming.tools.language_models.schemas import SequenceScores
 from bio_programming.tools.structures.structure import ProteinStructure
+from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
 
@@ -54,6 +55,9 @@ class TestProteinMPNNSample:
         assert (
             output.success
         ), f"Failed to sample protein sequences using ProteinMPNN: {output}"
+
+        validate_output(output)
+        assert output.tool_id == "proteinmpnn-sample"
 
         # Validate outputs
         for designed_sequences in output.designed_sequences:
@@ -111,6 +115,8 @@ class TestProteinMPNNSample:
             output.success
         ), f"Failed to sample protein sequences using ProteinMPNN: {output}"
 
+        validate_output(output)
+
         # Validate outputs followed the advanced config settings
         for designed_sequences in output.designed_sequences:
             for sequence in designed_sequences.sequences:
@@ -164,6 +170,10 @@ class TestProteinMPNNScore:
             output.success
         ), f"Failed to score protein sequence using ProteinMPNN: {output}"
 
+        validate_output(output)
+        assert output.tool_id == "proteinmpnn-score"
+        assert output.vocab == ALPHAFOLD_VOCAB
+
         # Validate outputs
         assert len(output.scores) == 2
         assert all(isinstance(score, SequenceScores) for score in output.scores)
@@ -187,6 +197,8 @@ class TestProteinMPNNScore:
         config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False)
         output = run_proteinmpnn_score(input, config)
         assert output.success
+
+        validate_output(output)
 
         score = output.scores[0]
 
@@ -212,7 +224,7 @@ class TestProteinMPNNScore:
         # perplexity = exp(-avg_log_likelihood)
         assert np.isclose(
             score.perplexity, np.exp(-score.avg_log_likelihood), rtol=1e-5
-        )
+        ), "Perplexity should equal exp(-avg_log_likelihood)"
 
         # avg_log_likelihood should be negative (log probs are <= 0)
         assert score.avg_log_likelihood <= 0
@@ -220,12 +232,12 @@ class TestProteinMPNNScore:
         # perplexity should be >= 1 (since exp(-x) >= 1 when x <= 0)
         assert score.perplexity >= 1.0
 
-        # Validate logits shape: (seq_len, alphabet_size)
-        assert score.logits.shape == (seq_len, len(MPNN_ALPHABET))
+        # Validate logits shape: (seq_len, vocab_size)
+        assert score.logits.shape == (seq_len, len(ALPHAFOLD_VOCAB))
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_alphabet(self, pdb_structure: ProteinStructure):
-        """Test the alphabet property on output."""
+    def test_proteinmpnn_score_vocab(self, pdb_structure: ProteinStructure):
+        """Test the vocab property on output (from each SequenceScores)."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
         input = ProteinMPNNScoringInput(
@@ -239,12 +251,16 @@ class TestProteinMPNNScore:
         output = run_proteinmpnn_score(input, config)
         assert output.success
 
-        # Test alphabet on output
-        assert output.alphabet == MPNN_ALPHABET
+        validate_output(output)
+
+        # Test vocab on output (convenience from first score)
+        assert output.vocab == ALPHAFOLD_VOCAB
+        # Test vocab on each score
+        assert output.scores[0].vocab == ALPHAFOLD_VOCAB
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_export_json(self, pdb_structure: ProteinStructure):
-        """Test JSON export of scoring output."""
+    def test_proteinmpnn_score_single_pair(self, pdb_structure: ProteinStructure):
+        """Test ProteinMPNN scoring with a single sequence-structure pair."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
         input = ProteinMPNNScoringInput(
@@ -256,33 +272,27 @@ class TestProteinMPNNScore:
         )
         config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False)
         output = run_proteinmpnn_score(input, config)
+
         assert output.success
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Test export to directory (auto-naming)
-            output._export_output(tmpdir, "json")
-            json_path = Path(tmpdir) / "scores.json"
-            assert json_path.exists()
-
-            with open(json_path) as f:
-                data = json.load(f)
-
-            assert len(data) == 1
-            assert "log_likelihood" in data[0]
-            assert "avg_log_likelihood" in data[0]
-            assert "perplexity" in data[0]
-            assert "logits" in data[0]
-
-            # Verify values match (using metrics dict or attribute access)
-            assert np.isclose(data[0]["perplexity"], output.scores[0].metrics["perplexity"])
-            assert np.isclose(data[0]["log_likelihood"], output.scores[0].metrics["log_likelihood"])
+        validate_output(output)
+        assert len(output.scores) == 1
+        assert output.scores[0].perplexity >= 1.0
+        assert output.scores[0].logits is not None
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_export_csv(self, pdb_structure: ProteinStructure):
-        """Test CSV export of scoring output."""
-        import csv
-
+    def test_proteinmpnn_score_batched(self, pdb_structure: ProteinStructure):
+        """Test batched scoring with multiple sequence-structure pairs."""
         original_sequence = pdb_structure.get_chain_sequence("A")
+
+        # Create a few modified sequences
+        modified_1 = list(original_sequence)
+        for i in random.sample(range(len(modified_1)), 30):
+            modified_1[i] = "A"
+        modified_1 = "".join(modified_1)
+        modified_2 = list(original_sequence)
+        for i in random.sample(range(len(modified_2)), 30):
+            modified_2[i] = "G"
+        modified_2 = "".join(modified_2)
 
         input = ProteinMPNNScoringInput(
             sequence_structure_pairs=[
@@ -290,28 +300,25 @@ class TestProteinMPNNScore:
                     sequence=original_sequence, structure=pdb_structure
                 ),
                 SequenceStructurePair(
-                    sequence=original_sequence, structure=pdb_structure
+                    sequence=modified_1, structure=pdb_structure
+                ),
+                SequenceStructurePair(
+                    sequence=modified_2, structure=pdb_structure
                 ),
             ]
         )
         config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False)
         output = run_proteinmpnn_score(input, config)
+
         assert output.success
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output._export_output(tmpdir, "csv")
-            csv_path = Path(tmpdir) / "scores.csv"
-            assert csv_path.exists()
-
-            with open(csv_path) as f:
-                reader = csv.DictReader(f)
-                rows = list(reader)
-
-            assert len(rows) == 2
-            assert set(rows[0].keys()) == {"log_likelihood", "avg_log_likelihood", "perplexity"}
-
-            # Verify values match (CSV stores as strings)
-            assert np.isclose(float(rows[0]["perplexity"]), output.scores[0].perplexity)
+        validate_output(output)
+        assert len(output.scores) == 3
+        for score in output.scores:
+            assert score.perplexity >= 1.0
+            assert score.logits is not None
+            assert "log_likelihood" in score.metrics
+            assert "avg_log_likelihood" in score.metrics
+            assert "perplexity" in score.metrics
 
     @pytest.mark.uses_gpu
     def test_proteinmpnn_score_cache(self, pdb_structure: ProteinStructure):
@@ -369,6 +376,7 @@ class TestProteinMPNNScore:
                 output_first_pass.success
             ), f"Failed to score protein sequence using ProteinMPNN: {output_first_pass}"
             assert len(output_first_pass.scores) == 3
+            validate_output(output_first_pass)
 
             # Cache should have three entries
             cache_info = get_cache_info()
@@ -398,6 +406,7 @@ class TestProteinMPNNScore:
                 output_second_pass.success
             ), f"Failed to score protein sequence using ProteinMPNN: {output_second_pass}"
             assert len(output_second_pass.scores) == 4
+            validate_output(output_second_pass)
 
             # Cache should have four entries (first three were cached, one new)
             cache_info = get_cache_info()
