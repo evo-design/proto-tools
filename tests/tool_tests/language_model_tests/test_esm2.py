@@ -1,0 +1,255 @@
+"""
+test_esm2.py
+
+Tests the ESM2 implementation
+"""
+
+import numpy as np
+import pytest
+
+from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+# ============================================================================
+# Embedding Tests
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_esm2_forward_pass():
+    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+
+    sequences = ["TARGET"] * 10 + ["TEST"] * 30
+
+    esm2_model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
+
+    outputs = esm2_model(sequences, batch_size=2, device="cuda")
+
+    # Check mean embedding shape
+    assert outputs["mean_embeddings"].shape == (
+        40,
+        1280,
+    ), "Embedding shape is not correct"
+
+    # Check attention mask shape
+    assert outputs["attention_masks"].shape == (
+        40,
+        6,
+    ), "Attention mask shape is not correct"
+
+    # Check logit shape
+    assert outputs["logits"].shape == (40, 6, 20), "Logit shape is not correct"
+
+    # Ensure output only contains these keys
+    assert set(outputs.keys()) == {
+        "mean_embeddings",
+        "attention_masks",
+        "logits",
+    }
+
+
+# ============================================================================
+# Scoring Tests
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_esm2_score_inference():
+    """Test ESM2Model.score() with comprehensive value validation."""
+    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+
+    sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
+    model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
+
+    result = model.score(sequences=sequences, device="cuda", verbose=False)
+
+    assert "logits" in result and "metrics" in result
+    assert len(result["logits"]) == len(result["metrics"]) == 2
+
+    for seq, metrics, logits in zip(sequences, result["metrics"], result["logits"]):
+        # Validate metrics types
+        assert isinstance(metrics["log_likelihood"], float)
+        assert isinstance(metrics["avg_log_likelihood"], float)
+        assert isinstance(metrics["perplexity"], float)
+
+        # Log likelihood should be negative (log probabilities are <= 0)
+        assert metrics["log_likelihood"] < 0, f"Log likelihood should be negative, got {metrics['log_likelihood']}"
+
+        # Average log likelihood should be between log_likelihood and 0
+        assert metrics["log_likelihood"] <= metrics["avg_log_likelihood"] <= 0
+
+        # Perplexity should be >= 1 (exp(0) = 1 is minimum when avg_ll = 0)
+        assert metrics["perplexity"] >= 1.0, f"Perplexity should be >= 1, got {metrics['perplexity']}"
+
+        # Verify perplexity = exp(-avg_log_likelihood)
+        expected_ppl = np.exp(-metrics["avg_log_likelihood"])
+        np.testing.assert_allclose(metrics["perplexity"], expected_ppl, rtol=1e-5)
+
+        # Logits shape: (seq_len, vocab_size=20 for standard amino acids)
+        assert logits.shape[0] == len(seq), f"Logits seq_len should be {len(seq)}, got {logits.shape[0]}"
+        assert logits.shape[1] == 20, f"Vocab size should be 20, got {logits.shape[1]}"
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_tool():
+    """Test the esm2 scoring tool with run_esm2_score."""
+    from bio_programming.tools.language_models.esm2 import (
+        ESM2ScoringConfig,
+        run_esm2_score,
+    )
+    from bio_programming.tools.language_models.schemas import LanguageModelInput
+
+    sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
+    inputs = LanguageModelInput(sequences=sequences)
+    config = ESM2ScoringConfig(
+        model_checkpoint="esm2_t33_650M_UR50D",
+        batch_size=32,
+        verbose=False,
+    )
+
+    result = run_esm2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Validate tool output structure
+    assert result.tool_id == "esm2-score"
+    assert len(result.scores) == 2
+    # ESM2 returns AA-only vocab (20 standard amino acids) as a list
+    assert isinstance(result.vocab, list), f"Vocab should be a list, got {type(result.vocab)}"
+    assert len(result.vocab) == 20, f"ESM2 vocab should have 20 tokens, got {len(result.vocab)}"
+
+    for seq, score in zip(sequences, result.scores):
+        # Check metrics
+        assert "log_likelihood" in score.metrics
+        assert "avg_log_likelihood" in score.metrics
+        assert "perplexity" in score.metrics
+
+        # Validate values
+        assert score.perplexity >= 1.0
+        assert score.log_likelihood < 0
+
+        # Logits should be present with correct shape (as nested lists)
+        assert score.logits is not None
+        assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
+        assert len(score.logits) == len(seq), f"Logits length should be {len(seq)}, got {len(score.logits)}"
+        assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_different_sequences():
+    """Test that model produces different perplexities for different sequences."""
+    from bio_programming.tools.language_models.esm2 import (
+        ESM2ScoringConfig,
+        run_esm2_score,
+    )
+    from bio_programming.tools.language_models.schemas import LanguageModelInput
+
+    # Different sequences should produce different perplexities
+    seq1 = "MVLSPADKTNVKAAW"  # Natural-looking sequence
+    seq2 = "AAAAAAAAAAAAAAAA"  # Homopolymer
+
+    inputs = LanguageModelInput(sequences=[seq1, seq2])
+    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False)
+
+    result = run_esm2_score(inputs=inputs, config=config)
+
+    ppl1 = result.scores[0].perplexity
+    ppl2 = result.scores[1].perplexity
+
+    # Different sequences should have different perplexities
+    assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
+
+    # Both should be valid perplexities
+    assert ppl1 >= 1.0 and ppl2 >= 1.0
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_metrics_consistency():
+    """Test that scoring metrics are mathematically consistent."""
+    from bio_programming.tools.language_models.esm2 import (
+        ESM2ScoringConfig,
+        run_esm2_score,
+    )
+    from bio_programming.tools.language_models.schemas import LanguageModelInput
+
+    inputs = LanguageModelInput(sequences=["MVLSPADKTNVKAAW"])
+    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False)
+
+    result = run_esm2_score(inputs=inputs, config=config)
+    score = result.scores[0]
+
+    # Verify perplexity = exp(-avg_log_likelihood)
+    expected_perplexity = np.exp(-score.avg_log_likelihood)
+    np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
+
+    # Verify avg = total / length
+    seq_len = 15  # MVLSPADKTNVKAAW
+    expected_avg = score.log_likelihood / seq_len
+    np.testing.assert_allclose(score.avg_log_likelihood, expected_avg, rtol=1e-5)
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_batched():
+    """Test batched scoring with different batch sizes."""
+    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+
+    sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
+    model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
+
+    # Test with batch_size=2
+    result = model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False)
+
+    assert len(result["metrics"]) == 4
+    assert len(result["logits"]) == 4
+
+    for seq, metrics, logits in zip(sequences, result["metrics"], result["logits"]):
+        assert metrics["perplexity"] >= 1.0
+        assert metrics["log_likelihood"] < 0
+        assert logits.shape[0] == len(seq)
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_variable_length():
+    """Test scoring sequences of different lengths."""
+    from bio_programming.tools.language_models.esm2 import (
+        ESM2ScoringConfig,
+        run_esm2_score,
+    )
+    from bio_programming.tools.language_models.schemas import LanguageModelInput
+
+    sequences = ["MK", "MKTA", "MKTAYIAK", "MKTAYIAKQRQISFVK"]
+    inputs = LanguageModelInput(sequences=sequences)
+    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False)
+
+    result = run_esm2_score(inputs=inputs, config=config)
+
+    for seq, score in zip(sequences, result.scores):
+        # Logits should have correct shape for each sequence (as nested lists)
+        assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
+        assert len(score.logits) == len(seq), (
+            f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"
+        )
+        assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
+
+        # Metrics should be valid
+        assert score.perplexity >= 1.0
+        assert score.log_likelihood < 0
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_single_sequence():
+    """Test esm2 scoring with a single sequence (string input)."""
+    from bio_programming.tools.language_models.esm2 import (
+        ESM2ScoringConfig,
+        run_esm2_score,
+    )
+    from bio_programming.tools.language_models.schemas import LanguageModelInput
+
+    # Single sequence should work
+    inputs = LanguageModelInput(sequences="MKTAYIAKQRQISFVKSHFS")
+    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False)
+
+    result = run_esm2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Should score 1 sequence
+    assert len(result.scores) == 1
+    assert result.scores[0].perplexity > 0
+    assert result.scores[0].logits is not None
