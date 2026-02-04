@@ -332,7 +332,7 @@ def test_progen2_score_inference():
     sequences = ["MKTLVIVTGA", "EVQLVESGGGLVQ"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
-    result = progen2_model.score(sequences=sequences, device="cuda", verbose=False)
+    result = progen2_model.score(sequences=sequences, device="cuda", verbose=False, return_logits=True)
 
     assert "logits" in result and "metrics" in result
     assert len(result["logits"]) == len(result["metrics"]) == 2
@@ -373,7 +373,7 @@ def test_progen2_score_tool():
 
     sequences = ["MKTLVIVTGASGAGK", "EVQLVESGGGLVQPG"]
     inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False)
+    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
     validate_output(result)
@@ -395,9 +395,10 @@ def test_progen2_score_tool():
         assert score.log_likelihood <= score.avg_log_likelihood <= 0
         assert score.perplexity >= 1.0
 
-        # Logits should have correct shape
+        # Logits should have correct shape (list of lists)
         assert score.logits is not None
-        assert score.logits.shape[0] == len(seq) + 1  # +1 for start token
+        assert len(score.logits) == len(seq) + 1  # +1 for start token
+        assert len(score.logits[0]) == 30  # ProGen2 vocab size
 
 
 @pytest.mark.uses_gpu
@@ -414,7 +415,7 @@ def test_progen2_score_different_sequences():
     seq2 = "MKTLVIVTGASGAGKSTIVNLLAQRFGKED"  # Different sequence
 
     inputs = ProGen2ScoringInput(sequences=[seq1, seq2])
-    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False)
+    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
 
@@ -438,7 +439,7 @@ def test_progen2_score_metrics_consistency():
     )
 
     inputs = ProGen2ScoringInput(sequences=["MKTLVIVTGASGAGK"])
-    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False)
+    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
     score = result.scores[0]
@@ -519,7 +520,7 @@ def test_progen2_score_batched_inference():
     sequences = ["MKTL", "EVQLVESGGS", "AAAACCCC", "TTTTGGGG"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
-    result = progen2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False)
+    result = progen2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False, return_logits=True)
 
     assert len(result["metrics"]) == 4
 
@@ -547,6 +548,7 @@ def test_progen2_score_batched_tool():
         model_checkpoint="progen2-small",
         batch_size=2,
         verbose=False,
+        return_logits=True,
     )
 
     result = run_progen2_score(inputs=inputs, config=config)
@@ -558,7 +560,8 @@ def test_progen2_score_batched_tool():
         assert score.log_likelihood < 0
         assert score.perplexity >= 1.0
         assert score.logits is not None
-        assert score.logits.shape[0] == len(seq) + 1
+        assert len(score.logits) == len(seq) + 1  # +1 for start token
+        assert len(score.logits[0]) == 30  # ProGen2 vocab size
 
 
 @pytest.mark.uses_gpu
@@ -603,17 +606,176 @@ def test_progen2_score_variable_length_sequences():
 
     sequences = ["MK", "MKTL", "MKTLVIVT", "MKTLVIVTGASG"]
     inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=2, verbose=False)
+    config = ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=2, verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
 
     for (seq, score) in zip(sequences, result.scores):
         # Logits should match each sequence's length
         expected_len = len(seq) + 1  # +1 for start token
-        assert score.logits.shape[0] == expected_len, (
-            f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {score.logits.shape[0]}"
+        assert len(score.logits) == expected_len, (
+            f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {len(score.logits)}"
         )
+        assert len(score.logits[0]) == 30, "ProGen2 vocab size should be 30"
 
         # Metrics should be valid
         assert score.perplexity >= 1.0
         assert score.log_likelihood < 0
+
+
+# ============================================================================
+# Logits-Specific Tests (Scoring)
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_progen2_score_logits_disabled_by_default():
+    """Test that logits are None when return_logits=False (default)."""
+    from bio_programming.tools.language_models.progen2 import (
+        ProGen2ScoringConfig,
+        ProGen2ScoringInput,
+        run_progen2_score,
+    )
+
+    sequences = ["MKTLVIVTGA", "EVQLVESGGS"]
+    inputs = ProGen2ScoringInput(sequences=sequences)
+    config = ProGen2ScoringConfig(
+        model_checkpoint="progen2-small",
+        verbose=False,
+        # return_logits defaults to False
+    )
+
+    result = run_progen2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Logits should be None when return_logits=False
+    for score in result.scores:
+        assert score.logits is None, "Logits should be None when return_logits=False"
+
+
+@pytest.mark.uses_gpu
+def test_progen2_score_logits_enabled():
+    """Test that logits are correctly returned when return_logits=True."""
+    from bio_programming.tools.language_models.progen2 import (
+        ProGen2ScoringConfig,
+        ProGen2ScoringInput,
+        run_progen2_score,
+    )
+
+    sequences = ["MKTLVIVTGA", "EVQLVESGGS"]
+    inputs = ProGen2ScoringInput(sequences=sequences)
+    config = ProGen2ScoringConfig(
+        model_checkpoint="progen2-small",
+        verbose=False,
+        return_logits=True,
+    )
+
+    result = run_progen2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Logits should be present with correct shape
+    for seq, score in zip(sequences, result.scores):
+        assert score.logits is not None, "Logits should not be None when return_logits=True"
+        assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
+        
+        # Convert to ndarray for shape validation if it's a list
+        logits_arr = np.array(score.logits)
+        # ProGen2 includes start token, so logits length is seq_len + 1
+        assert logits_arr.shape[0] == len(seq) + 1, f"Logits length should be {len(seq) + 1}, got {logits_arr.shape[0]}"
+        assert logits_arr.shape[1] == 30, f"ProGen2 vocab size should be 30, got {logits_arr.shape[1]}"
+
+
+@pytest.mark.uses_gpu
+def test_progen2_score_logits_serialization():
+    """Test that logits are properly serialized as nested lists."""
+    from bio_programming.tools.language_models.progen2 import (
+        ProGen2ScoringConfig,
+        ProGen2ScoringInput,
+        run_progen2_score,
+    )
+
+    sequences = ["MKTLVIVTGA"]
+    inputs = ProGen2ScoringInput(sequences=sequences)
+    config = ProGen2ScoringConfig(
+        model_checkpoint="progen2-small",
+        verbose=False,
+        return_logits=True,
+    )
+
+    result = run_progen2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    score = result.scores[0]
+    
+    # Logits should be serialized as nested lists (not tensors)
+    assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
+    
+    if isinstance(score.logits, list):
+        # Verify nested list structure
+        assert len(score.logits) > 0, "Logits list should not be empty"
+        assert isinstance(score.logits[0], list), "Logits should be a list of lists"
+        assert len(score.logits[0]) == 30, "Inner logits list should have 30 elements (ProGen2 vocab size)"
+        
+        # Verify all values are numeric
+        for position_logits in score.logits:
+            for logit_value in position_logits:
+                assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
+    else:
+        # If ndarray, verify shape
+        assert score.logits.ndim == 2, "Logits should be 2D array"
+        assert score.logits.shape[1] == 30, "ProGen2 vocab size should be 30"
+
+
+# ============================================================================
+# Logits-Specific Tests (Sampling)
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_progen2_sample_logits_inference():
+    """Test that sample() can return logits at inference layer."""
+    from bio_programming.tools.language_models.progen2 import ProGen2Model
+
+    prompts = ["1MKTLV", "1EVQLVE"]
+    progen2_model = ProGen2Model(model_checkpoint="progen2-small")
+
+    result = progen2_model.sample(
+        prompts=prompts,
+        max_length=50,
+        temperature=0.2,
+        top_p=0.95,
+        return_logits=True,
+        verbose=False,
+    )
+
+    # Verify logits are returned
+    assert "logits" in result, "Result should contain 'logits' key"
+    assert result["logits"] is not None, "Logits should not be None when return_logits=True"
+    assert len(result["logits"]) == 2, f"Should have logits for 2 sequences, got {len(result['logits'])}"
+    
+    # Verify logits are tensors (before serialization at inference layer)
+    for i, logits in enumerate(result["logits"]):
+        assert hasattr(logits, "shape"), f"Logits[{i}] should be a tensor with shape attribute"
+        # Logits shape should be (generated_length, vocab_size=30)
+        assert logits.shape[1] == 30, f"Logits vocab size should be 30, got {logits.shape[1]}"
+
+
+@pytest.mark.uses_gpu
+def test_progen2_sample_logits_not_returned_by_default():
+    """Test that sample() does not return logits when return_logits=False (default)."""
+    from bio_programming.tools.language_models.progen2 import ProGen2Model
+
+    prompts = ["1MKTLV"]
+    progen2_model = ProGen2Model(model_checkpoint="progen2-small")
+
+    result = progen2_model.sample(
+        prompts=prompts,
+        max_length=50,
+        temperature=0.2,
+        return_logits=False,  # Explicit False
+        verbose=False,
+    )
+
+    # Verify logits are None or empty when not requested
+    assert "logits" in result, "Result should contain 'logits' key"
+    logits = result["logits"]
+    assert logits is None or (isinstance(logits, list) and len(logits) == 0), \
+        f"Logits should be None or empty when return_logits=False, got {type(logits)}"

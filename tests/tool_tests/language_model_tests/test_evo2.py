@@ -30,6 +30,7 @@ def test_evo2_sample_inference():
         top_p=1.0,
         cached_generation=True,
         verbose=False,
+        return_logits=True,
     )
 
     sequences = result["sequences"]
@@ -46,8 +47,8 @@ def test_evo2_sample_inference():
         # So we check that the sequence is non-empty and valid
         assert len(seq) > 0, f"Sequence {i} should be non-empty"
 
-    # Validate logits and kv_caches are present
-    assert result.get("logits", None) is not None, "Logits should be present"
+    # Validate logits and kv_caches are present (when return_logits=True)
+    assert result.get("logits", None) is not None, "Logits should be present when return_logits=True"
     assert result.get("kv_caches", None) is not None, "KV caches should be present"
     assert len(result["logits"]) == 2
     assert len(result["kv_caches"]) == 2
@@ -264,7 +265,7 @@ def test_evo2_score_inference():
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
-    result = evo2_model.score(sequences=sequences, device="cuda", verbose=False)
+    result = evo2_model.score(sequences=sequences, device="cuda", verbose=False, return_logits=True)
 
     assert "logits" in result and "metrics" in result
     assert len(result["logits"]) == len(result["metrics"]) == 2
@@ -308,7 +309,7 @@ def test_evo2_score_different_sequences():
     seq2 = "AAAAAAAAAAAAAAAAAAAA"  # Homopolymer
 
     inputs = Evo2ScoringInput(sequences=[seq1, seq2])
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
 
@@ -332,7 +333,7 @@ def test_evo2_score_metrics_consistency():
     )
 
     inputs = Evo2ScoringInput(sequences=["ATCGATCGATCGATCG"])
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
     score = result.scores[0]
@@ -377,7 +378,7 @@ def test_evo2_score_batched_inference():
     sequences = ["ATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG"]
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
-    result = evo2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False)
+    result = evo2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False, return_logits=True)
 
     assert len(result["metrics"]) == 4
 
@@ -406,6 +407,7 @@ def test_evo2_score_batched_tool():
         model_checkpoint="evo2_7b",
         batch_size=2,
         verbose=False,
+        return_logits=True,
     )
 
     result = run_evo2_score(inputs=inputs, config=config)
@@ -416,9 +418,10 @@ def test_evo2_score_batched_tool():
     for seq, score in zip(sequences, result.scores):
         assert score.log_likelihood < 0
         assert score.perplexity >= 1.0
-        assert score.logits is not None
-        assert score.logits.shape[0] > 0
-        assert score.logits.shape[1] >= 4
+        assert score.logits is not None, "Logits should be present when return_logits=True"
+        # Logits are serialized as nested lists after going through tool layer
+        assert len(score.logits) > 0
+        assert len(score.logits[0]) >= 4
 
 
 @pytest.mark.uses_gpu
@@ -469,14 +472,16 @@ def test_evo2_score_variable_length_sequences():
 
     sequences = ["AT", "ATCG", "ATCGATCG", "ATCGATCGATCG"]
     inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=2, verbose=False)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=2, verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
 
     for (seq, score) in zip(sequences, result.scores):
         # Logits should have valid shape (may differ from raw seq len due to tokenization)
-        assert score.logits.shape[0] > 0, (
-            f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {score.logits.shape[0]}"
+        # Logits are serialized as nested lists after going through tool layer
+        assert score.logits is not None, "Logits should be present when return_logits=True"
+        assert len(score.logits) > 0, (
+            f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"
         )
 
         # Metrics should be valid
@@ -591,6 +596,7 @@ def test_evo2_score_tool():
     config = Evo2ScoringConfig(
         model_checkpoint="evo2_7b",
         verbose=False,
+        return_logits=True,
     )
 
     result = run_evo2_score(inputs=inputs, config=config)
@@ -664,6 +670,7 @@ def test_evo2_score_metrics_consistency():
     config = Evo2ScoringConfig(
         model_checkpoint="evo2_7b",
         verbose=False,
+        return_logits=True,
     )
 
     result = run_evo2_score(inputs=inputs, config=config)
@@ -707,7 +714,7 @@ def test_evo2_score_batched_uniform_length():
     # All sequences same length - should use batched scoring
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA", "AAAACCCCGGGG", "TTTTGGGGCCCC"]
     inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
 
@@ -729,7 +736,7 @@ def test_evo2_score_variable_length():
     # Different length sequences - should fall back to sequential scoring
     sequences = ["ATCG", "ATCGATCG", "ATCGATCGATCG"]
     inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
 
@@ -739,3 +746,164 @@ def test_evo2_score_variable_length():
         assert score.logits is not None
         # Logits should have seq_len matching input (may differ due to tokenization)
         assert score.perplexity > 0
+
+
+# ============================================================================
+# Logits-Specific Tests (Scoring)
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_evo2_score_logits_disabled_by_default():
+    """Test that logits are None when return_logits=False (default)."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
+    )
+
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(
+        model_checkpoint="evo2_7b",
+        verbose=False,
+        # return_logits defaults to False
+    )
+
+    result = run_evo2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Logits should be None when return_logits=False
+    for score in result.scores:
+        assert score.logits is None, "Logits should be None when return_logits=False"
+
+
+@pytest.mark.uses_gpu
+def test_evo2_score_logits_enabled():
+    """Test that logits are correctly returned when return_logits=True."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
+    )
+
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(
+        model_checkpoint="evo2_7b",
+        verbose=False,
+        return_logits=True,
+    )
+
+    result = run_evo2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    # Logits should be present with correct shape
+    for score in result.scores:
+        assert score.logits is not None, "Logits should not be None when return_logits=True"
+        assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
+        
+        # Convert to ndarray for shape validation if it's a list
+        logits_arr = np.array(score.logits)
+        # Evo2 uses byte-level tokenization, so seq_len may differ from raw length
+        assert logits_arr.shape[0] > 0, "Logits should have at least one position"
+        assert logits_arr.shape[1] == 512, f"Evo2 vocab size should be 512 (byte-level), got {logits_arr.shape[1]}"
+
+
+@pytest.mark.uses_gpu
+def test_evo2_score_logits_serialization():
+    """Test that logits are properly serialized as nested lists."""
+    from bio_programming.tools.language_models.evo2 import (
+        Evo2ScoringConfig,
+        Evo2ScoringInput,
+        run_evo2_score,
+    )
+
+    sequences = ["ATCGATCGATCG"]
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(
+        model_checkpoint="evo2_7b",
+        verbose=False,
+        return_logits=True,
+    )
+
+    result = run_evo2_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    score = result.scores[0]
+    
+    # Logits should be serialized as nested lists (not tensors)
+    assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
+    
+    if isinstance(score.logits, list):
+        # Verify nested list structure
+        assert len(score.logits) > 0, "Logits list should not be empty"
+        assert isinstance(score.logits[0], list), "Logits should be a list of lists"
+        assert len(score.logits[0]) == 512, "Inner logits list should have 512 elements (Evo2 byte-level vocab)"
+        
+        # Verify all values are numeric
+        for position_logits in score.logits:
+            for logit_value in position_logits:
+                assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
+    else:
+        # If ndarray, verify shape
+        assert score.logits.ndim == 2, "Logits should be 2D array"
+        assert score.logits.shape[1] == 512, "Evo2 vocab size should be 512"
+
+
+# ============================================================================
+# Logits-Specific Tests (Sampling)
+# ============================================================================
+
+@pytest.mark.uses_gpu
+def test_evo2_sample_logits_inference():
+    """Test that sample() can return logits at inference layer."""
+    from bio_programming.tools.language_models.evo2 import Evo2Model
+
+    prompts = ["ATCGATCG", "GCTAGCTA"]
+    evo2_model = Evo2Model(model_checkpoint="evo2_7b")
+
+    result = evo2_model.sample(
+        prompts=prompts,
+        num_tokens=50,
+        temperature=1.0,
+        return_logits=True,
+        cached_generation=False,
+        verbose=False,
+        print_generation=False,
+    )
+
+    # Verify logits are returned
+    assert "logits" in result, "Result should contain 'logits' key"
+    assert result["logits"] is not None, "Logits should not be None when return_logits=True"
+    assert len(result["logits"]) == 2, f"Should have logits for 2 sequences, got {len(result['logits'])}"
+    
+    # Verify logits are tensors (before serialization at inference layer)
+    for i, logits in enumerate(result["logits"]):
+        assert hasattr(logits, "shape"), f"Logits[{i}] should be a tensor with shape attribute"
+        # Logits shape should be (generated_length, vocab_size=512)
+        assert logits.shape[1] == 512, f"Evo2 vocab size should be 512, got {logits.shape[1]}"
+
+
+@pytest.mark.uses_gpu
+def test_evo2_sample_logits_not_returned_by_default():
+    """Test that sample() does not return logits when return_logits=False (default)."""
+    from bio_programming.tools.language_models.evo2 import Evo2Model
+
+    prompts = ["ATCGATCG"]
+    evo2_model = Evo2Model(model_checkpoint="evo2_7b")
+
+    result = evo2_model.sample(
+        prompts=prompts,
+        num_tokens=50,
+        temperature=1.0,
+        return_logits=False,  # Explicit False
+        cached_generation=False,
+        verbose=False,
+        print_generation=False,
+    )
+
+    # Verify logits are None or empty when not requested
+    assert "logits" in result, "Result should contain 'logits' key"
+    logits = result["logits"]
+    assert logits is None or (isinstance(logits, list) and len(logits) == 0), \
+        f"Logits should be None or empty when return_logits=False, got {type(logits)}"
