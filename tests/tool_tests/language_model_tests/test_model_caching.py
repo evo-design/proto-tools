@@ -13,8 +13,8 @@ class TestEvo2Caching:
 
     def test_cache_returns_same_instance(self):
         """Verify that cache returns the same model instance for identical parameters."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
@@ -22,8 +22,8 @@ class TestEvo2Caching:
         clear_evo2_cache()
 
         # Get model twice with same parameters
-        model1 = _get_cached_evo2_model("evo2_7b", None)
-        model2 = _get_cached_evo2_model("evo2_7b", None)
+        model1 = get_cached_evo2_model("evo2_7b", None)
+        model2 = get_cached_evo2_model("evo2_7b", None)
 
         # Should be the exact same object
         assert model1 is model2, "Cache should return same instance"
@@ -33,16 +33,16 @@ class TestEvo2Caching:
 
     def test_cache_different_models_separately(self):
         """Verify that different model configs create separate cache entries."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
         clear_evo2_cache()
 
         # Get models with different parameters
-        model1 = _get_cached_evo2_model("evo2_7b", None)
-        model2 = _get_cached_evo2_model("evo2_7b", "/custom/path")
+        model1 = get_cached_evo2_model("evo2_7b", None)
+        model2 = get_cached_evo2_model("evo2_7b", "/custom/path")
 
         # Should be different objects
         assert model1 is not model2, "Different configs should create different instances"
@@ -51,14 +51,14 @@ class TestEvo2Caching:
 
     def test_cached_model_not_loaded_initially(self):
         """Verify that cached models are not loaded until first call."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
         clear_evo2_cache()
 
-        model = _get_cached_evo2_model("evo2_7b", None)
+        model = get_cached_evo2_model("evo2_7b", None)
 
         # Model instance exists but not loaded
         assert model._loaded is False, "Model should not be loaded on cache retrieval"
@@ -69,14 +69,14 @@ class TestEvo2Caching:
     @pytest.mark.uses_gpu
     def test_cached_model_lazy_loads_on_first_call(self):
         """Verify that cached model lazy loads on first inference call."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
         clear_evo2_cache()
 
-        model = _get_cached_evo2_model("evo2_7b", None)
+        model = get_cached_evo2_model("evo2_7b", None)
         assert model._loaded is False
 
         # First call triggers lazy loading
@@ -91,19 +91,19 @@ class TestEvo2Caching:
     @pytest.mark.uses_gpu
     def test_cached_model_reuses_loaded_instance(self):
         """Verify that subsequent calls reuse the loaded model."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
         clear_evo2_cache()
 
         # First call loads model
-        model1 = _get_cached_evo2_model("evo2_7b", None)
+        model1 = get_cached_evo2_model("evo2_7b", None)
         model1.sample(prompts=["ATCG"], num_tokens=10, device="cuda")
 
         # Second call returns same loaded instance
-        model2 = _get_cached_evo2_model("evo2_7b", None)
+        model2 = get_cached_evo2_model("evo2_7b", None)
 
         assert model1 is model2, "Should return same instance"
         assert model2._loaded is True, "Model should still be loaded"
@@ -114,14 +114,14 @@ class TestEvo2Caching:
     @pytest.mark.slow
     def test_device_migration_after_cpu_move(self):
         """Verify that models can be moved to CPU and back to GPU."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
         )
 
         clear_evo2_cache()
 
-        model = _get_cached_evo2_model("evo2_7b", None)
+        model = get_cached_evo2_model("evo2_7b", None)
 
         # Load on GPU
         model.sample(prompts=["ATCG"], num_tokens=10, device="cuda")
@@ -140,8 +140,8 @@ class TestEvo2Caching:
 
     def test_clear_cache_unloads_models(self):
         """Verify that clear_cache properly unloads all models."""
-        from bio_programming.tools.language_models.evo2.evo2 import (
-            _get_cached_evo2_model,
+        from bio_programming.tools.language_models.evo2.evo2_cache import (
+            get_cached_evo2_model,
             clear_evo2_cache,
             _evo2_model_cache,
         )
@@ -149,8 +149,8 @@ class TestEvo2Caching:
         clear_evo2_cache()
 
         # Create cached models
-        _get_cached_evo2_model("evo2_7b", None)
-        _get_cached_evo2_model("evo2_7b", "/path1")
+        get_cached_evo2_model("evo2_7b", None)
+        get_cached_evo2_model("evo2_7b", "/path1")
 
         assert len(_evo2_model_cache) == 2, "Should have 2 cached models"
 
