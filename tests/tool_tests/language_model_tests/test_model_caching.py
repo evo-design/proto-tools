@@ -239,15 +239,15 @@ class TestESM2Caching:
 
     def test_cache_returns_same_instance(self):
         """Verify that cache returns the same ESM2 model instance for identical parameters."""
-        from bio_programming.tools.language_models.esm2.esm2 import (
-            _get_cached_esm2_model,
+        from bio_programming.tools.language_models.esm2.esm2_cache import (
+            get_cached_esm2_model,
             clear_esm2_cache,
         )
 
         clear_esm2_cache()
 
-        model1 = _get_cached_esm2_model("esm2_t6_8M_UR50D")
-        model2 = _get_cached_esm2_model("esm2_t6_8M_UR50D")
+        model1 = get_cached_esm2_model("esm2_t6_8M_UR50D")
+        model2 = get_cached_esm2_model("esm2_t6_8M_UR50D")
 
         assert model1 is model2, "Cache should return same ESM2 instance"
 
@@ -255,15 +255,15 @@ class TestESM2Caching:
 
     def test_cache_different_models_separately(self):
         """Verify that different ESM2 model sizes create separate cache entries."""
-        from bio_programming.tools.language_models.esm2.esm2 import (
-            _get_cached_esm2_model,
+        from bio_programming.tools.language_models.esm2.esm2_cache import (
+            get_cached_esm2_model,
             clear_esm2_cache,
         )
 
         clear_esm2_cache()
 
-        model1 = _get_cached_esm2_model("esm2_t6_8M_UR50D")
-        model2 = _get_cached_esm2_model("esm2_t12_35M_UR50D")
+        model1 = get_cached_esm2_model("esm2_t6_8M_UR50D")
+        model2 = get_cached_esm2_model("esm2_t12_35M_UR50D")
 
         assert model1 is not model2, "Different ESM2 sizes should create different instances"
         assert model1.model_checkpoint != model2.model_checkpoint
@@ -272,14 +272,14 @@ class TestESM2Caching:
 
     def test_cached_model_not_loaded_initially(self):
         """Verify that cached ESM2 model is not loaded until first call."""
-        from bio_programming.tools.language_models.esm2.esm2 import (
-            _get_cached_esm2_model,
+        from bio_programming.tools.language_models.esm2.esm2_cache import (
+            get_cached_esm2_model,
             clear_esm2_cache,
         )
 
         clear_esm2_cache()
 
-        model = _get_cached_esm2_model("esm2_t6_8M_UR50D")
+        model = get_cached_esm2_model("esm2_t6_8M_UR50D")
 
         assert model._loaded is False, "ESM2 model should not be loaded on cache retrieval"
         assert not hasattr(model, 'model') or model.model is None, "ESM2 model weights should not be loaded yet"
@@ -289,14 +289,14 @@ class TestESM2Caching:
     @pytest.mark.uses_gpu
     def test_cached_model_lazy_loads_on_first_call(self):
         """Verify that cached ESM2 model lazy loads on first inference call."""
-        from bio_programming.tools.language_models.esm2.esm2 import (
-            _get_cached_esm2_model,
+        from bio_programming.tools.language_models.esm2.esm2_cache import (
+            get_cached_esm2_model,
             clear_esm2_cache,
         )
 
         clear_esm2_cache()
 
-        model = _get_cached_esm2_model("esm2_t6_8M_UR50D")
+        model = get_cached_esm2_model("esm2_t6_8M_UR50D")
         assert model._loaded is False
 
         # First call triggers lazy loading
@@ -310,16 +310,16 @@ class TestESM2Caching:
 
     def test_clear_cache_unloads_models(self):
         """Verify that clear_esm2_cache properly unloads all models."""
-        from bio_programming.tools.language_models.esm2.esm2 import (
-            _get_cached_esm2_model,
+        from bio_programming.tools.language_models.esm2.esm2_cache import (
+            get_cached_esm2_model,
             clear_esm2_cache,
             _esm2_model_cache,
         )
 
         clear_esm2_cache()
 
-        _get_cached_esm2_model("esm2_t6_8M_UR50D")
-        _get_cached_esm2_model("esm2_t12_35M_UR50D")
+        get_cached_esm2_model("esm2_t6_8M_UR50D")
+        get_cached_esm2_model("esm2_t12_35M_UR50D")
 
         assert len(_esm2_model_cache) == 2, "Should have 2 cached ESM2 models"
 
