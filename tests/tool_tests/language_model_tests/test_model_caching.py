@@ -165,15 +165,15 @@ class TestESM3Caching:
 
     def test_cache_returns_same_instance(self):
         """Verify that cache returns the same ESM3 model instance."""
-        from bio_programming.tools.language_models.esm3.esm3 import (
-            _get_cached_esm3_model,
+        from bio_programming.tools.language_models.esm3.esm3_cache import (
+            get_cached_esm3_model,
             clear_esm3_cache,
         )
 
         clear_esm3_cache()
 
-        model1 = _get_cached_esm3_model("esm3_sm_open_v1")
-        model2 = _get_cached_esm3_model("esm3_sm_open_v1")
+        model1 = get_cached_esm3_model("esm3_sm_open_v1")
+        model2 = get_cached_esm3_model("esm3_sm_open_v1")
 
         assert model1 is model2, "Cache should return same ESM3 instance"
 
@@ -181,14 +181,14 @@ class TestESM3Caching:
 
     def test_cached_model_not_loaded_initially(self):
         """Verify that cached ESM3 model is not loaded until first call."""
-        from bio_programming.tools.language_models.esm3.esm3 import (
-            _get_cached_esm3_model,
+        from bio_programming.tools.language_models.esm3.esm3_cache import (
+            get_cached_esm3_model,
             clear_esm3_cache,
         )
 
         clear_esm3_cache()
 
-        model = _get_cached_esm3_model("esm3_sm_open_v1")
+        model = get_cached_esm3_model("esm3_sm_open_v1")
 
         assert model._loaded is False, "ESM3 model should not be loaded on cache retrieval"
         assert not hasattr(model, 'model') or model.model is None, "ESM3 model weights should not be loaded yet"
@@ -198,14 +198,14 @@ class TestESM3Caching:
     @pytest.mark.uses_gpu
     def test_cached_model_lazy_loads_on_first_call(self):
         """Verify that cached ESM3 model lazy loads on first inference call."""
-        from bio_programming.tools.language_models.esm3.esm3 import (
-            _get_cached_esm3_model,
+        from bio_programming.tools.language_models.esm3.esm3_cache import (
+            get_cached_esm3_model,
             clear_esm3_cache,
         )
 
         clear_esm3_cache()
 
-        model = _get_cached_esm3_model("esm3_sm_open_v1")
+        model = get_cached_esm3_model("esm3_sm_open_v1")
         assert model._loaded is False
 
         # First call triggers lazy loading
@@ -219,15 +219,15 @@ class TestESM3Caching:
 
     def test_clear_cache_unloads_models(self):
         """Verify that clear_esm3_cache properly unloads all models."""
-        from bio_programming.tools.language_models.esm3.esm3 import (
-            _get_cached_esm3_model,
+        from bio_programming.tools.language_models.esm3.esm3_cache import (
+            get_cached_esm3_model,
             clear_esm3_cache,
             _esm3_model_cache,
         )
 
         clear_esm3_cache()
 
-        _get_cached_esm3_model("esm3_sm_open_v1")
+        get_cached_esm3_model("esm3_sm_open_v1")
         assert len(_esm3_model_cache) == 1, "Should have 1 cached ESM3 model"
 
         clear_esm3_cache()
