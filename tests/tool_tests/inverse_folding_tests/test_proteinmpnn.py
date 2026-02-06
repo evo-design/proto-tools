@@ -10,10 +10,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_programming.tools.inverse_folding.proteinmpnn.proteinmpnn import (
+from bio_programming.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
-    SequenceStructurePair,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
@@ -24,6 +23,7 @@ from bio_programming.tools.inverse_folding.schemas import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
+    SequenceStructurePair,
 )
 from bio_programming.tools.language_models.schemas import SequenceScores
 from bio_programming.tools.structures.structure import ProteinStructure
