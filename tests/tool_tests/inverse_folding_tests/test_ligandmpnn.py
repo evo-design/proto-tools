@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from bio_programming.tools.inverse_folding import (
+    InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
-    LigandMPNNConfig,
     run_ligandmpnn_sample,
 )
 from bio_programming.tools.structures.structure import ProteinStructure
@@ -37,7 +37,7 @@ class TestLigandMPNNSample:
                 InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])
             ]
         )
-        config = LigandMPNNConfig(batch_size=2, temperature=0.1, seed=42)
+        config = InverseFoldingConfig(batch_size=2, temperature=0.1, seed=42)
 
         output = run_ligandmpnn_sample(input, config)
 
@@ -48,8 +48,8 @@ class TestLigandMPNNSample:
         assert len(designed.sequences) == 2
         assert all(isinstance(sequence, str) for sequence in designed.sequences)
         assert all(len(seq) > 0 for seq in designed.sequences)
-        assert len(designed.ligandmpnn_scores) == 2
-        assert all(isinstance(score, dict) for score in designed.ligandmpnn_scores)
+        assert len(designed.ligandmpnn_metrics) == 2
+        assert all(isinstance(score, dict) for score in designed.ligandmpnn_metrics)
 
     @pytest.mark.uses_gpu
     def test_ligandmpnn_sample_multiple_structures(
@@ -62,7 +62,7 @@ class TestLigandMPNNSample:
                 InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"]),
             ]
         )
-        config = LigandMPNNConfig(batch_size=3, temperature=0.1, seed=42)
+        config = InverseFoldingConfig(batch_size=3, temperature=0.1, seed=42)
 
         output = run_ligandmpnn_sample(input, config)
 
