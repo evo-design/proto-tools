@@ -520,7 +520,7 @@ def test_evo2_batch_with_kv_cache():
     assert len(result1.kv_caches) == 4, "Should have 4 KV caches"
 
     # Test slicing the cache
-    from bio_programming.tools.language_models.evo2.inference import _slice_cache
+    from bio_programming.tools.language_models.evo2.standalone.inference import _slice_cache
     sliced = _slice_cache(result1.kv_caches[0], 0, 1)
     assert sliced is not None, "Sliced cache should not be None"
 
