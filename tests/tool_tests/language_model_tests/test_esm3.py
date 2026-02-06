@@ -19,7 +19,7 @@ GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSR
 
 @pytest.mark.uses_gpu
 def test_esm3_forward_pass():
-    from bio_programming.tools.language_models.esm3.inference import ESM3Model
+    from bio_programming.tools.language_models.esm3.standalone.inference import ESM3Model
 
     sequences = ["TARGET"] * 10 + ["TEST"] * 30
 
@@ -52,7 +52,7 @@ def test_esm3_forward_pass():
 
 @pytest.mark.uses_gpu
 def test_esm3_predict_structure():
-    from bio_programming.tools.language_models.esm3.inference import ESM3Model
+    from bio_programming.tools.language_models.esm3.standalone.inference import ESM3Model
 
     sequences = [GFP] * 2
 
@@ -70,7 +70,7 @@ def test_esm3_predict_structure():
 @pytest.mark.uses_gpu
 def test_esm3_score_inference():
     """Test ESM3Model.score() with comprehensive value validation."""
-    from bio_programming.tools.language_models.esm3.inference import ESM3Model
+    from bio_programming.tools.language_models.esm3.standalone.inference import ESM3Model
 
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
     model = ESM3Model()
@@ -201,7 +201,7 @@ def test_esm3_score_metrics_consistency():
 @pytest.mark.uses_gpu
 def test_esm3_score_batched():
     """Test batched scoring with different batch sizes."""
-    from bio_programming.tools.language_models.esm3.inference import ESM3Model
+    from bio_programming.tools.language_models.esm3.standalone.inference import ESM3Model
 
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
     model = ESM3Model()

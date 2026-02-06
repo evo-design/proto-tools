@@ -16,7 +16,7 @@ from tests.tool_tests.tool_infra_tests.test_export_functionality import validate
 
 @pytest.mark.uses_gpu
 def test_esm2_forward_pass():
-    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
 
     sequences = ["TARGET"] * 10 + ["TEST"] * 30
 
@@ -54,7 +54,7 @@ def test_esm2_forward_pass():
 @pytest.mark.uses_gpu
 def test_esm2_score_inference():
     """Test ESM2Model.score() with comprehensive value validation."""
-    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
 
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
     model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
@@ -190,7 +190,7 @@ def test_esm2_score_metrics_consistency():
 @pytest.mark.uses_gpu
 def test_esm2_score_batched():
     """Test batched scoring with different batch sizes."""
-    from bio_programming.tools.language_models.esm2.inference import ESM2Model
+    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
 
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
     model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
