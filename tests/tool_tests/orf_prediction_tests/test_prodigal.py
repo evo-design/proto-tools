@@ -365,7 +365,10 @@ class TestProdigalIntegration:
 
     def test_comparison_with_direct_pyrodigal(self):
         """Test that wrapper produces same results as direct pyrodigal usage."""
-        import pyrodigal
+        try:
+            import pyrodigal
+        except ImportError:
+            pytest.skip("pyrodigal not available in base environment")
 
         sequence = "ATGCGTAAATAA" * 50
 
@@ -437,29 +440,26 @@ class TestProdigalCaching:
             inputs = ProdigalInput(input_sequences=sequence)
             config = ProdigalConfig()
 
-            # Patch the internal processing function to verify it's called
-            # We use the real function as side_effect to ensure real logic runs
-            from bio_programming.tools.orf_prediction.prodigal.prodigal import (
-                _process_sequence as real_process_sequence,
-            )
+            # Patch the subprocess call to verify it's invoked only when not cached.
+            # We use the real method as side_effect so real logic still runs.
+            from bio_programming.tools.env_manager import EnvManager
 
-            with patch("bio_programming.tools.orf_prediction.prodigal.prodigal._process_sequence") as mock_process:
-                mock_process.side_effect = real_process_sequence
+            real_call = EnvManager.call_standalone_script_in_venv
 
+            with patch.object(EnvManager, "call_standalone_script_in_venv", side_effect=real_call, autospec=True) as mock_call:
                 # First call - should Compute
-                # This should trigger _process_sequence once (since 1 sequence)
                 result1 = run_prodigal_prediction(inputs, config)
                 assert result1.success is True
-                assert mock_process.call_count == 1
+                assert mock_call.call_count == 1
 
                 # Capture result for comparison
                 orfs1 = result1.predicted_orfs[0]
 
                 # Second call - same inputs - should Cache Hit
-                # _process_sequence should NOT be called again
+                # call_standalone_script_in_venv should NOT be called again
                 result2 = run_prodigal_prediction(inputs, config)
                 assert result2.success is True
-                assert mock_process.call_count == 1  # Still 1
+                assert mock_call.call_count == 1  # Still 1
 
                 # Verify results are identical (compare ORF counts and first ORF)
                 orfs2 = result2.predicted_orfs[0]
@@ -472,7 +472,7 @@ class TestProdigalCaching:
                 result3 = run_prodigal_prediction(inputs_diff, config)
                 assert result3.success is True
                 # Should be called again
-                assert mock_process.call_count == 2
+                assert mock_call.call_count == 2
 
         finally:
             _program_tool_cache.reset(token)
