@@ -32,25 +32,27 @@ class TestOrfipyParsing:
         if not ORFIPY_AA_FILE.exists() or not ORFIPY_NT_FILE.exists():
             pytest.skip("Test data files not available")
 
-        # Access the private parsing function for testing (import directly from module)
-        from bio_programming.tools.orf_prediction.orfipy.orfipy import (
-            _parse_orfipy_results_to_df,
+        # Access the private parsing function for testing (import directly from standalone)
+        from bio_programming.tools.orf_prediction.orfipy.standalone.run import (
+            _parse_orfipy_results,
         )
 
-        df = _parse_orfipy_results_to_df(ORFIPY_AA_FILE, ORFIPY_NT_FILE)
+        results = _parse_orfipy_results(ORFIPY_AA_FILE, ORFIPY_NT_FILE, "dna_seq_1")
 
-        assert len(df) == 4  # Based on test data
-        assert "parent_id" in df.columns
-        assert "orf_id" in df.columns
-        assert "amino_acid_sequence" in df.columns
-        assert "nucleotide_sequence" in df.columns
-        assert "nucleotide_start" in df.columns
-        assert "nucleotide_end" in df.columns
-        assert "strand" in df.columns
-        assert "frame" in df.columns
+        assert len(results) == 4  # Based on test data
+
+        # Check that all expected keys are present
+        first_row = results[0]
+        assert "parent_id" in first_row
+        assert "orf_id" in first_row
+        assert "amino_acid_sequence" in first_row
+        assert "nucleotide_sequence" in first_row
+        assert "nucleotide_start" in first_row
+        assert "nucleotide_end" in first_row
+        assert "strand" in first_row
+        assert "frame" in first_row
 
         # Check first row data
-        first_row = df.iloc[0]
         assert first_row["parent_id"] == "dna_seq_1"
         assert first_row["orf_id"] == "ORF.1"
         assert first_row["amino_acid_sequence"].startswith("MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGK")
@@ -72,8 +74,8 @@ class TestOrfipyParsing:
     )
     def test_header_parsing(self, header, expected):
         """Test parsing of individual Orfipy headers."""
-        # Access the private parsing function for testing (import directly from module)
-        from bio_programming.tools.orf_prediction.orfipy.orfipy import (
+        # Access the private parsing function for testing (import directly from standalone)
+        from bio_programming.tools.orf_prediction.orfipy.standalone.run import (
             _parse_orfipy_header as parse_header,
         )
 
