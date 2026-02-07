@@ -11,7 +11,7 @@ from bio_programming.tools.structure_dynamics.bioemu import (
     BioEmuOutput,
     run_bioemu,
 )
-from bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling import (
+from bio_programming.tools.structure_dynamics.bioemu.bioemu_sample import (
     _pdb_frames_to_structures,
 )
 from bio_programming.tools.structure_prediction.schemas import StructurePredictionComplex
@@ -48,7 +48,7 @@ class TestBioEmuInput:
 
     def test_new_module_path_import(self):
         """Test importing symbols from the new per-tool module path."""
-        from bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling import (
+        from bio_programming.tools.structure_dynamics.bioemu.bioemu_sample import (
             BioEmuConfig as BioEmuConfigFromModule,
             BioEmuInput as BioEmuInputFromModule,
             run_bioemu as run_bioemu_from_module,
@@ -93,7 +93,7 @@ class TestBioEmuInput:
     def test_rejects_invalid_amino_acids(self):
         """Test that invalid amino acid characters are rejected."""
         with patch(
-            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.return_invalid_protein_chars",
+            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
             return_value={"1", "2", "3"},
         ):
             with pytest.raises(ValueError, match="Invalid protein characters"):
@@ -114,7 +114,7 @@ class TestBioEmuInput:
         """Test that long sequences log a warning."""
         long_sequence = "A" * 600
         with patch(
-            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.return_invalid_protein_chars",
+            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
             return_value=set(),
         ):
             with caplog.at_level("WARNING"):
@@ -225,11 +225,11 @@ class TestRunBioEmu:
         }
 
         with patch(
-            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.use_modal_gpu",
+            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
             return_value=False,
         ):
             with patch(
-                "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.EnvManager",
+                "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.EnvManager",
                 return_value=mock_venv_manager,
             ):
                 result = run_bioemu(bioemu_input, bioemu_config)
@@ -271,11 +271,11 @@ class TestRunBioEmu:
         }
 
         with patch(
-            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.use_modal_gpu",
+            "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
             return_value=False,
         ):
             with patch(
-                "bio_programming.tools.structure_dynamics.bioemu.bioemu_sampling.EnvManager",
+                "bio_programming.tools.structure_dynamics.bioemu.bioemu_sample.EnvManager",
                 return_value=mock_venv_manager,
             ):
                 result = run_bioemu(bioemu_input, bioemu_config)
