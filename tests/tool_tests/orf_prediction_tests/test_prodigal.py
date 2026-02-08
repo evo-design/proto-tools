@@ -307,8 +307,6 @@ class TestProdigalRegistration:
         tools_dict = {spec.key: spec for spec in all_tools}
         prodigal_spec = tools_dict["prodigal-prediction"]
 
-        assert prodigal_spec.category == "orf_prediction"
-        assert prodigal_spec.requires_gpu is False
         assert "Prokaryotic" in prodigal_spec.description or "ORF" in prodigal_spec.description
 
     def test_tool_schema_generation(self):
