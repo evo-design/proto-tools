@@ -19,12 +19,15 @@ from bio_programming.tools.structure_prediction import (
     ChaiInput,
     ESMFoldConfig,
     ESMFoldInput,
+    ProtenixConfig,
+    ProtenixInput,
     StructurePredictionComplex,
     StructurePredictionOutput,
     run_af3,
     run_boltz,
     run_chai,
     run_esmfold,
+    run_protenix,
 )
 from bio_programming.tools.structures import is_valid_structure
 from bio_programming.tools.tool_cache import ToolCache
@@ -35,6 +38,7 @@ STRUCTURE_PREDICTORS = {
     "af3": (run_af3, AlphaFold3Input, AlphaFold3Config),
     "chai": (run_chai, ChaiInput, ChaiConfig),
     "boltz": (run_boltz, BoltzInput, BoltzConfig),
+    "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
 }
 
 FAST_PREDICTORS = ["esmfold"]
@@ -308,11 +312,17 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
                 metrics["iptm"] is None or 0 <= metrics["iptm"] <= 1.0
             ), f"'iptm' has invalid value of {metrics['ptm']}"
 
-        # PAE.
-        assert "avg_pae" in metrics, f"'avg_pae' not found in {predictor_name} metrics"
-        assert (
-            0 <= metrics["avg_pae"] <= 31.75
-        ), f"'avg_pae' has invalid value of {metrics['avg_pae']}"
+        # PAE / GPDE.
+        if predictor_name == "protenix":
+            assert "gpde" in metrics, f"'gpde' not found in {predictor_name} metrics"
+            assert (
+                0 <= metrics["gpde"]
+            ), f"'gpde' has invalid value of {metrics['gpde']}"
+        else:
+            assert "avg_pae" in metrics, f"'avg_pae' not found in {predictor_name} metrics"
+            assert (
+                0 <= metrics["avg_pae"] <= 31.75
+            ), f"'avg_pae' has invalid value of {metrics['avg_pae']}"
 
 
 @pytest.mark.uses_gpu
