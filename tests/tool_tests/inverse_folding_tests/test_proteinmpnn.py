@@ -19,13 +19,13 @@ from bio_programming.tools.inverse_folding.proteinmpnn import (
 from bio_programming.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
 )
-from bio_programming.tools.inverse_folding.schemas import (
+from bio_programming.tools.inverse_folding.shared_data_models import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from bio_programming.tools.masked_models.shared_data_models import SequenceScores
+from bio_programming.tools.inverse_folding.shared_data_models import SequenceScores
 from bio_programming.tools.structures.structure import ProteinStructure
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
