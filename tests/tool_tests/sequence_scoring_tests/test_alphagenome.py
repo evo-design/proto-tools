@@ -27,17 +27,17 @@ class TestAlphaGenome:
     def test_interval_prediction(self):
         """Test interval prediction with multiple output types."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeConfig,
-            AlphaGenomeInput,
+            AlphaGenomePredictIntervalConfig,
+            AlphaGenomePredictIntervalInput,
             run_alphagenome_predict_interval,
         )
 
-        inputs = AlphaGenomeInput(
+        inputs = AlphaGenomePredictIntervalInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SHORT,
         )
-        config = AlphaGenomeConfig(
+        config = AlphaGenomePredictIntervalConfig(
             requested_outputs=["RNA_SEQ", "ATAC"],
             organism="human",
         )
@@ -59,12 +59,12 @@ class TestAlphaGenome:
     def test_variant_prediction(self):
         """Test variant prediction returns correct metadata and predictions."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeConfig,
-            AlphaGenomeVariantInput,
+            AlphaGenomePredictVariantConfig,
+            AlphaGenomePredictVariantInput,
             run_alphagenome_predict_variant,
         )
 
-        inputs = AlphaGenomeVariantInput(
+        inputs = AlphaGenomePredictVariantInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SHORT,
@@ -72,7 +72,7 @@ class TestAlphaGenome:
             reference_bases="A",
             alternate_bases="G",
         )
-        config = AlphaGenomeConfig(
+        config = AlphaGenomePredictVariantConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )
@@ -95,14 +95,14 @@ class TestAlphaGenome:
     def test_sequence_prediction(self):
         """Test prediction from a raw DNA sequence string."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeConfig,
-            AlphaGenomeSequenceInput,
+            AlphaGenomePredictSequenceConfig,
+            AlphaGenomePredictSequenceInput,
             run_alphagenome_predict_sequence,
         )
 
         sequence = "ATCG" * (_SHORT // 4)  # 2,048 bp
-        inputs = AlphaGenomeSequenceInput(sequence=sequence)
-        config = AlphaGenomeConfig(
+        inputs = AlphaGenomePredictSequenceInput(sequence=sequence)
+        config = AlphaGenomePredictSequenceConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )
@@ -124,11 +124,11 @@ class TestAlphaGenome:
         """Test variant scoring with default scorers."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreVariantConfig,
-            AlphaGenomeVariantInput,
+            AlphaGenomeScoreVariantInput,
             run_alphagenome_score_variant,
         )
 
-        inputs = AlphaGenomeVariantInput(
+        inputs = AlphaGenomeScoreVariantInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
@@ -155,12 +155,12 @@ class TestAlphaGenome:
     def test_interval_scoring(self):
         """Test interval scoring with default scorers."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeInput,
             AlphaGenomeScoreIntervalConfig,
+            AlphaGenomeScoreIntervalInput,
             run_alphagenome_score_interval,
         )
 
-        inputs = AlphaGenomeInput(
+        inputs = AlphaGenomeScoreIntervalInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
@@ -183,19 +183,19 @@ class TestAlphaGenome:
     def test_ism(self):
         """Test ISM over a small sub-interval."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeISMInput,
-            AlphaGenomeScoreVariantConfig,
+            AlphaGenomeScoreISMInput,
+            AlphaGenomeScoreISMConfig,
             run_alphagenome_score_ism_variants,
         )
 
-        inputs = AlphaGenomeISMInput(
+        inputs = AlphaGenomeScoreISMInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
             ism_interval_start=_SCORE_MID - 10,
             ism_interval_end=_SCORE_MID + 10,  # 20 bp window
         )
-        config = AlphaGenomeScoreVariantConfig(
+        config = AlphaGenomeScoreISMConfig(
             variant_scorers=None,
             organism="human",
         )
@@ -211,12 +211,12 @@ class TestAlphaGenome:
     def test_ism_with_variant_context(self):
         """Test ISM with an existing variant applied as background context."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeISMInput,
-            AlphaGenomeScoreVariantConfig,
+            AlphaGenomeScoreISMInput,
+            AlphaGenomeScoreISMConfig,
             run_alphagenome_score_ism_variants,
         )
 
-        inputs = AlphaGenomeISMInput(
+        inputs = AlphaGenomeScoreISMInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
@@ -226,7 +226,7 @@ class TestAlphaGenome:
             reference_bases="A",
             alternate_bases="G",
         )
-        config = AlphaGenomeScoreVariantConfig(
+        config = AlphaGenomeScoreISMConfig(
             variant_scorers=["RNA_SEQ"],
             organism="human",
         )
@@ -242,17 +242,17 @@ class TestAlphaGenome:
     def test_full_context_interval_prediction(self):
         """Stress test: interval prediction at the maximum 1 Mb context length."""
         from bio_programming.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeConfig,
-            AlphaGenomeInput,
+            AlphaGenomePredictIntervalConfig,
+            AlphaGenomePredictIntervalInput,
             run_alphagenome_predict_interval,
         )
 
-        inputs = AlphaGenomeInput(
+        inputs = AlphaGenomePredictIntervalInput(
             chromosome="chr1",
             interval_start=0,
             interval_end=1_048_576,
         )
-        config = AlphaGenomeConfig(
+        config = AlphaGenomePredictIntervalConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )

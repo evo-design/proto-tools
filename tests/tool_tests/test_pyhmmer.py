@@ -12,13 +12,16 @@ from Bio import SeqIO
 
 # Public API imports
 from bio_programming.tools.gene_annotation.pyhmmer import (
+    PyHmmerOutput,
     PyJackhmmerConfig,
     PyJackhmmerInput,
-    PyHmmerConfig,
-    PyHmmerOutput,
+    PyHmmscanConfig,
     PyHmmscanInput,
+    PyHmmsearchConfig,
     PyHmmsearchInput,
+    PyNhmmerConfig,
     PyNhmmerInput,
+    PyPhmmerConfig,
     PyPhmmerInput,
     pyhmmer_jackhmmer,
     pyhmmer_hmmscan,
@@ -28,7 +31,7 @@ from bio_programming.tools.gene_annotation.pyhmmer import (
 )
 
 # Private helper functions (imported directly from module for testing)
-from bio_programming.tools.gene_annotation.pyhmmer.hmmsearch import (
+from bio_programming.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_dataframes,
     _convert_dtypes,
 )
@@ -232,7 +235,7 @@ class TestPyHmmsearchExecution:
             hmm=str(TEST_HMM_FILE),
             sequences=SAMPLE_SEQUENCES
         )
-        config = PyHmmerConfig(
+        config = PyHmmsearchConfig(
             evalue_threshold=1000.0,  # Very permissive to allow hits
             domain_evalue_threshold=1000.0,  # Very permissive to allow hits
         )
@@ -252,7 +255,7 @@ class TestPyHmmsearchExecution:
             hmm=str(TEST_HMM_FILE),
             sequences=SAMPLE_SEQUENCES
         )
-        config = PyHmmerConfig(
+        config = PyHmmsearchConfig(
             evalue_threshold=1e-100,  # Extremely restrictive threshold
             domain_evalue_threshold=1e-100,  # Extremely restrictive domain threshold
         )
@@ -271,7 +274,7 @@ class TestPyHmmscanExecution:
             hmm_db=str(TEST_HMM_FILE),
             sequences=SAMPLE_SEQUENCES,
         )
-        config = PyHmmerConfig()
+        config = PyHmmscanConfig()
         result = pyhmmer_hmmscan(inputs, config)
 
         # Validate output and export functionality
@@ -286,7 +289,7 @@ class TestPyPhmmerExecution:
             sequences=SAMPLE_SEQUENCES[:2],
             target_sequences=SAMPLE_SEQUENCES[2:],
         )
-        config = PyHmmerConfig()
+        config = PyPhmmerConfig()
         result = pyhmmer_phmmer(inputs, config)
 
         # Validate output (skip export check since test may have no hits)
@@ -301,7 +304,7 @@ class TestPyNhmmerExecution:
             sequences=SAMPLE_DNA_SEQUENCES[:1],
             target_sequences=SAMPLE_DNA_SEQUENCES,
         )
-        config = PyHmmerConfig(
+        config = PyNhmmerConfig(
             evalue_threshold=1000.0,
             domain_evalue_threshold=1000.0,
         )
