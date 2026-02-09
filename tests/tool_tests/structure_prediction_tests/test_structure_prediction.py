@@ -15,8 +15,8 @@ from bio_programming.tools.structure_prediction import (
     AlphaFold3Input,
     BoltzConfig,
     BoltzInput,
-    ChaiConfig,
-    ChaiInput,
+    Chai1Config,
+    Chai1Input,
     ESMFoldConfig,
     ESMFoldInput,
     ProtenixConfig,
@@ -25,7 +25,7 @@ from bio_programming.tools.structure_prediction import (
     StructurePredictionOutput,
     run_alphafold3,
     run_boltz,
-    run_chai,
+    run_chai1,
     run_esmfold,
     run_protenix,
 )
@@ -36,7 +36,7 @@ from tests.tool_tests.tool_infra_tests.test_export_functionality import validate
 STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig),
     "af3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
-    "chai": (run_chai, ChaiInput, ChaiConfig),
+    "chai1": (run_chai1, Chai1Input, Chai1Config),
     "boltz": (run_boltz, BoltzInput, BoltzConfig),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
 }
