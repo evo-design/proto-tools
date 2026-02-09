@@ -14,7 +14,7 @@ from bio_programming.tools.structure_dynamics.bioemu import (
 from bio_programming.tools.structure_dynamics.bioemu.bioemu_sample import (
     _pdb_frames_to_structures,
 )
-from bio_programming.tools.structure_prediction.schemas import StructurePredictionComplex
+from bio_programming.tools.structure_prediction.shared_data_models import StructurePredictionComplex
 from bio_programming.tools.structures import ProteinStructure, ProteinStructureEnsemble
 
 

@@ -6,7 +6,7 @@ Test the structure prediction input classes.
 
 import pytest
 
-from bio_programming.tools.structure_prediction.schemas import (
+from bio_programming.tools.structure_prediction.shared_data_models import (
     Chain,
     ChainModification,
     StructurePredictionComplex,
