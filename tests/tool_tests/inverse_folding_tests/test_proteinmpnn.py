@@ -25,7 +25,7 @@ from bio_programming.tools.inverse_folding.schemas import (
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from bio_programming.tools.language_models.schemas import SequenceScores
+from bio_programming.tools.masked_models.shared_data_models import SequenceScores
 from bio_programming.tools.structures.structure import ProteinStructure
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 

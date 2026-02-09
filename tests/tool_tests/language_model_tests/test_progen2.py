@@ -7,6 +7,16 @@ Tests the ProGen2 implementation.
 import numpy as np
 import pytest
 
+from bio_programming.language.core.sequence import PROTEIN_AMINO_ACIDS
+from bio_programming.tools.causal_models.progen2 import (
+    ProGen2Model,
+    ProGen2SampleConfig,
+    ProGen2SampleInput,
+    ProGen2ScoringConfig,
+    ProGen2ScoringInput,
+    run_progen2_sample,
+    run_progen2_score,
+)
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 
@@ -17,8 +27,6 @@ from tests.tool_tests.tool_infra_tests.test_export_functionality import validate
 @pytest.mark.uses_gpu
 def test_progen2_sample_inference():
     """Test ProGen2Model inference with direct model.sample() call."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-    from bio_programming.language.core.sequence import PROTEIN_AMINO_ACIDS
 
     prompts = ["1MKTLV", "1EVQLVE"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
@@ -57,13 +65,6 @@ def test_progen2_sample_inference():
 @pytest.mark.uses_gpu
 def test_progen2_sample_tool():
     """Test the progen2 sampling tool with run_progen2_sample."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-    from bio_programming.language.core.sequence import PROTEIN_AMINO_ACIDS
-
     prompts = ["1MKTL", "1EVQLV"]
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
@@ -101,12 +102,6 @@ def test_progen2_sample_tool():
 ])
 def test_progen2_sample_prompt_handling(prompt, expected_prefix):
     """Test progen2 sampling with various prompt formats."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-
     inputs = ProGen2SampleInput(prompts=prompt)
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
@@ -127,12 +122,6 @@ def test_progen2_sample_prompt_handling(prompt, expected_prefix):
 @pytest.mark.uses_gpu
 def test_progen2_sample_max_length_respected():
     """Test that max_length is strictly respected."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-
     inputs = ProGen2SampleInput(prompts="1M")  # Short prompt
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
@@ -150,13 +139,6 @@ def test_progen2_sample_max_length_respected():
 @pytest.mark.uses_gpu
 def test_progen2_sample_special_token_stripping():
     """Test special token stripping behavior."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-    from bio_programming.language.core.sequence import PROTEIN_AMINO_ACIDS
-
     # Test with stripping (default)
     result_stripped = run_progen2_sample(
         inputs=ProGen2SampleInput(prompts="1MKTLV"),
@@ -192,8 +174,6 @@ def test_progen2_sample_special_token_stripping():
 ])
 def test_progen2_sample_input_validation(config_kwargs, match):
     """Test ProGen2SampleInput validation."""
-    from bio_programming.tools.language_models.progen2 import ProGen2SampleInput
-
     with pytest.raises(ValueError, match=match):
         ProGen2SampleInput(**config_kwargs)
 
@@ -205,8 +185,6 @@ def test_progen2_sample_input_validation(config_kwargs, match):
 ])
 def test_progen2_sample_config_validation(config_kwargs):
     """Test ProGen2SampleConfig validation for invalid values."""
-    from bio_programming.tools.language_models.progen2 import ProGen2SampleConfig
-
     with pytest.raises(ValueError):
         ProGen2SampleConfig(**config_kwargs)
 
@@ -214,12 +192,6 @@ def test_progen2_sample_config_validation(config_kwargs):
 @pytest.mark.uses_gpu
 def test_progen2_sample_special_tokens():
     """Test ProGen2 with domain tag in prompt."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-
     inputs = ProGen2SampleInput(prompts="<|pf03668|>1MEVVIVTGMSGAGK")
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
@@ -238,12 +210,6 @@ def test_progen2_sample_special_tokens():
 @pytest.mark.uses_gpu
 def test_progen2_sample_without_special_token_stripping():
     """Test ProGen2 without stripping special tokens."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-
     inputs = ProGen2SampleInput(prompts="1MKTLV")
     config = ProGen2SampleConfig(
         model_checkpoint="progen2-small",
@@ -267,8 +233,6 @@ def test_progen2_sample_without_special_token_stripping():
 @pytest.mark.uses_gpu
 def test_progen2_sample_batched_inference():
     """Test batched sampling with direct model call."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-
     prompts = ["1MKTLV", "1EVQLV", "1AAAAA", "1GGGGG"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
@@ -292,12 +256,6 @@ def test_progen2_sample_batched_inference():
 @pytest.mark.uses_gpu
 def test_progen2_sample_batched_tool():
     """Test batched sampling with tool layer (run_progen2_sample)."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2SampleConfig,
-        ProGen2SampleInput,
-        run_progen2_sample,
-    )
-
     prompts = ["1MKTL", "1EVQL", "1AAAA", "1GGGG", "1LLLL", "1VVVV"]
     inputs = ProGen2SampleInput(prompts=prompts)
     config = ProGen2SampleConfig(
@@ -327,8 +285,6 @@ def test_progen2_sample_batched_tool():
 @pytest.mark.uses_gpu
 def test_progen2_score_inference():
     """Test ProGen2Model.score() with comprehensive value validation."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-
     sequences = ["MKTLVIVTGA", "EVQLVESGGGLVQ"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
@@ -365,12 +321,6 @@ def test_progen2_score_inference():
 @pytest.mark.uses_gpu
 def test_progen2_score_tool():
     """Test the progen2 scoring tool with comprehensive validation."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGASGAGK", "EVQLVESGGGLVQPG"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
@@ -404,12 +354,6 @@ def test_progen2_score_tool():
 @pytest.mark.uses_gpu
 def test_progen2_score_different_sequences():
     """Test that model produces different perplexities for different sequences."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     # Different sequences should produce different perplexities
     seq1 = "EVQLVESGGGLVQPGGSLRLSCAASGFTFS"  # VH domain start
     seq2 = "MKTLVIVTGASGAGKSTIVNLLAQRFGKED"  # Different sequence
@@ -432,12 +376,6 @@ def test_progen2_score_different_sequences():
 @pytest.mark.uses_gpu
 def test_progen2_score_metrics_consistency():
     """Test that scoring metrics are mathematically consistent."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     inputs = ProGen2ScoringInput(sequences=["MKTLVIVTGASGAGK"])
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
 
@@ -458,12 +396,6 @@ def test_progen2_score_metrics_consistency():
 @pytest.mark.uses_gpu
 def test_progen2_score_auto_prepends_start_token():
     """Test that scoring auto-prepends start token and produces identical results."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False)
 
     # Without start token
@@ -493,8 +425,6 @@ def test_progen2_score_auto_prepends_start_token():
 
 def test_progen2_score_input_validation():
     """Test ProGen2ScoringInput validation and normalization."""
-    from bio_programming.tools.language_models.progen2 import ProGen2ScoringInput
-
     # Empty sequences should fail
     with pytest.raises(ValueError, match="sequences must not be empty"):
         ProGen2ScoringInput(sequences=[])
@@ -515,8 +445,6 @@ def test_progen2_score_input_validation():
 @pytest.mark.uses_gpu
 def test_progen2_score_batched_inference():
     """Test batched scoring with direct model call."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-
     sequences = ["MKTL", "EVQLVESGGS", "AAAACCCC", "TTTTGGGG"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
@@ -536,12 +464,6 @@ def test_progen2_score_batched_inference():
 @pytest.mark.uses_gpu
 def test_progen2_score_batched_tool():
     """Test batched scoring with tool layer (run_progen2_score)."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGA", "EVQLVESGGS", "AAAACCCCGG", "TTTTGGGGCC", "LLLLLLLLLL", "VVVVVVVVVV"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(
@@ -567,12 +489,6 @@ def test_progen2_score_batched_tool():
 @pytest.mark.uses_gpu
 def test_progen2_score_batch_size_consistency():
     """Test that different batch_sizes produce identical results."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGA", "EVQLVESGGS", "AAAACCCCGG", "TTTTGGGGCC"]
     inputs = ProGen2ScoringInput(sequences=sequences)
 
@@ -598,12 +514,6 @@ def test_progen2_score_batch_size_consistency():
 @pytest.mark.uses_gpu
 def test_progen2_score_variable_length_sequences():
     """Test scoring sequences of different lengths produces correct logits shapes."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MK", "MKTL", "MKTLVIVT", "MKTLVIVTGASG"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=2, verbose=False, return_logits=True)
@@ -630,12 +540,6 @@ def test_progen2_score_variable_length_sequences():
 @pytest.mark.uses_gpu
 def test_progen2_score_logits_disabled_by_default():
     """Test that logits are None when return_logits=False (default)."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGA", "EVQLVESGGS"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(
@@ -655,12 +559,6 @@ def test_progen2_score_logits_disabled_by_default():
 @pytest.mark.uses_gpu
 def test_progen2_score_logits_enabled():
     """Test that logits are correctly returned when return_logits=True."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGA", "EVQLVESGGS"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(
@@ -687,12 +585,6 @@ def test_progen2_score_logits_enabled():
 @pytest.mark.uses_gpu
 def test_progen2_score_logits_serialization():
     """Test that logits are properly serialized as nested lists."""
-    from bio_programming.tools.language_models.progen2 import (
-        ProGen2ScoringConfig,
-        ProGen2ScoringInput,
-        run_progen2_score,
-    )
-
     sequences = ["MKTLVIVTGA"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(
@@ -732,8 +624,6 @@ def test_progen2_score_logits_serialization():
 @pytest.mark.uses_gpu
 def test_progen2_sample_logits_inference():
     """Test that sample() can return logits at inference layer."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-
     prompts = ["1MKTLV", "1EVQLVE"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 
@@ -761,8 +651,6 @@ def test_progen2_sample_logits_inference():
 @pytest.mark.uses_gpu
 def test_progen2_sample_logits_not_returned_by_default():
     """Test that sample() does not return logits when return_logits=False (default)."""
-    from bio_programming.tools.language_models.progen2 import ProGen2Model
-
     prompts = ["1MKTLV"]
     progen2_model = ProGen2Model(model_checkpoint="progen2-small")
 

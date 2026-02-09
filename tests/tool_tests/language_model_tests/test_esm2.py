@@ -7,6 +7,12 @@ Tests the ESM2 implementation
 import numpy as np
 import pytest
 
+from bio_programming.tools.masked_models.esm2 import (
+    ESM2ScoringConfig,
+    ESM2ScoringInput,
+    run_esm2_score,
+)
+from bio_programming.tools.masked_models.esm2.standalone.inference import ESM2Model
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 
@@ -16,7 +22,6 @@ from tests.tool_tests.tool_infra_tests.test_export_functionality import validate
 
 @pytest.mark.uses_gpu
 def test_esm2_forward_pass():
-    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
 
     sequences = ["TARGET"] * 10 + ["TEST"] * 30
 
@@ -54,8 +59,6 @@ def test_esm2_forward_pass():
 @pytest.mark.uses_gpu
 def test_esm2_score_inference():
     """Test ESM2Model.score() with comprehensive value validation."""
-    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
-
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
     model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
 
@@ -92,14 +95,8 @@ def test_esm2_score_inference():
 @pytest.mark.uses_gpu
 def test_esm2_score_tool():
     """Test the esm2 scoring tool with run_esm2_score."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
-    inputs = LanguageModelInput(sequences=sequences)
+    inputs = ESM2ScoringInput(sequences=sequences)
     config = ESM2ScoringConfig(
         model_checkpoint="esm2_t33_650M_UR50D",
         batch_size=32,
@@ -137,17 +134,11 @@ def test_esm2_score_tool():
 @pytest.mark.uses_gpu
 def test_esm2_score_different_sequences():
     """Test that model produces different perplexities for different sequences."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     # Different sequences should produce different perplexities
     seq1 = "MVLSPADKTNVKAAW"  # Natural-looking sequence
     seq2 = "AAAAAAAAAAAAAAAA"  # Homopolymer
 
-    inputs = LanguageModelInput(sequences=[seq1, seq2])
+    inputs = ESM2ScoringInput(sequences=[seq1, seq2])
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
@@ -165,13 +156,7 @@ def test_esm2_score_different_sequences():
 @pytest.mark.uses_gpu
 def test_esm2_score_metrics_consistency():
     """Test that scoring metrics are mathematically consistent."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
-    inputs = LanguageModelInput(sequences=["MVLSPADKTNVKAAW"])
+    inputs = ESM2ScoringInput(sequences=["MVLSPADKTNVKAAW"])
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
@@ -190,8 +175,6 @@ def test_esm2_score_metrics_consistency():
 @pytest.mark.uses_gpu
 def test_esm2_score_batched():
     """Test batched scoring with different batch sizes."""
-    from bio_programming.tools.language_models.esm2.standalone.inference import ESM2Model
-
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
     model = ESM2Model(model_checkpoint="esm2_t33_650M_UR50D")
 
@@ -210,14 +193,8 @@ def test_esm2_score_batched():
 @pytest.mark.uses_gpu
 def test_esm2_score_variable_length():
     """Test scoring sequences of different lengths."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     sequences = ["MK", "MKTA", "MKTAYIAK", "MKTAYIAKQRQISFVK"]
-    inputs = LanguageModelInput(sequences=sequences)
+    inputs = ESM2ScoringInput(sequences=sequences)
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
@@ -238,14 +215,8 @@ def test_esm2_score_variable_length():
 @pytest.mark.uses_gpu
 def test_esm2_score_single_sequence():
     """Test esm2 scoring with a single sequence (string input)."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     # Single sequence should work
-    inputs = LanguageModelInput(sequences="MKTAYIAKQRQISFVKSHFS")
+    inputs = ESM2ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
@@ -264,14 +235,8 @@ def test_esm2_score_single_sequence():
 @pytest.mark.uses_gpu
 def test_esm2_score_logits_disabled_by_default():
     """Test that logits are None when return_logits=False (default)."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
-    inputs = LanguageModelInput(sequences=sequences)
+    inputs = ESM2ScoringInput(sequences=sequences)
     config = ESM2ScoringConfig(
         model_checkpoint="esm2_t33_650M_UR50D",
         verbose=False,
@@ -289,14 +254,8 @@ def test_esm2_score_logits_disabled_by_default():
 @pytest.mark.uses_gpu
 def test_esm2_score_logits_enabled():
     """Test that logits are correctly returned when return_logits=True."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
-    inputs = LanguageModelInput(sequences=sequences)
+    inputs = ESM2ScoringInput(sequences=sequences)
     config = ESM2ScoringConfig(
         model_checkpoint="esm2_t33_650M_UR50D",
         verbose=False,
@@ -320,14 +279,8 @@ def test_esm2_score_logits_enabled():
 @pytest.mark.uses_gpu
 def test_esm2_score_logits_serialization():
     """Test that logits are properly serialized as nested lists."""
-    from bio_programming.tools.language_models.esm2 import (
-        ESM2ScoringConfig,
-        run_esm2_score,
-    )
-    from bio_programming.tools.language_models.schemas import LanguageModelInput
-
     sequences = ["MKTAYIAKQR"]
-    inputs = LanguageModelInput(sequences=sequences)
+    inputs = ESM2ScoringInput(sequences=sequences)
     config = ESM2ScoringConfig(
         model_checkpoint="esm2_t33_650M_UR50D",
         verbose=False,
