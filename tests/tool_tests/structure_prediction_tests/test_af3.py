@@ -14,9 +14,11 @@ from bio_programming.tools.structure_prediction import (
     AlphaFold3Input,
     Chain,
     StructurePredictionComplex,
-    run_af3,
+    run_alphafold3,
 )
-from bio_programming.tools.structure_prediction.af3 import af3 as af3_module
+from bio_programming.tools.structure_prediction.alphafold3 import (
+    alphafold3 as alphafold3_module,
+)
 
 
 @pytest.fixture
@@ -27,10 +29,10 @@ def mock_af3_inference(tmp_path):
     mock_metrics = {"avg_plddt": 0.95, "ptm": 0.8}
 
     # Mock use_modal_gpu to return False so tests run as if on local GPU
-    with patch.object(af3_module, "use_modal_gpu", return_value=False):
-        # Patch where it's USED (af3.py), not where it's DEFINED (inference.py)
+    with patch.object(alphafold3_module, "use_modal_gpu", return_value=False):
+        # Patch where it's used (alphafold3.py), not where it's defined (inference.py)
         with patch.object(
-            af3_module, "af3_inference", return_value=(dummy_pdb_path, mock_metrics)
+            alphafold3_module, "alphafold3_inference", return_value=(dummy_pdb_path, mock_metrics)
         ) as mock:
             yield mock
 
@@ -50,7 +52,7 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
-    run_af3(inputs, config)
+    run_alphafold3(inputs, config)
 
     # Extract arguments.
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
@@ -82,7 +84,7 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
-    run_af3(inputs, config)
+    run_alphafold3(inputs, config)
 
     # Extract arguments.
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
@@ -128,7 +130,7 @@ def test_af3_modifications_application(mock_af3_inference):
         use_msa=False,
     )
 
-    run_af3(inputs, config)
+    run_alphafold3(inputs, config)
 
     # Inspect generated JSON.
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
@@ -179,7 +181,7 @@ def test_af3_ligand_modifications_ignored(mock_af3_inference):
         use_msa=False,
     )
 
-    run_af3(inputs, config)
+    run_alphafold3(inputs, config)
 
     # Check JSON has no modifications field for ligand
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
