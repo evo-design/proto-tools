@@ -1,0 +1,51 @@
+[project]
+name = "bio-tools"
+version = "0.1.0"
+description = "Bioinformatics tools for bio-programming"
+readme = "env_dev_notes.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Bio Programming Team"}
+]
+
+requires-python = ">=3.12"
+
+# Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
+
+[tool.pytest.ini_options]
+# Run from bio_programming/bio_tools/ - requires parent bio-programming repo context.
+# pythonpath adds parent root so "bio_programming" and "tests.tool_tests" resolve.
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+pythonpath = ["../.."]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "asyncio: mark test as requiring asyncio",
+    "uses_gpu: mark test as requiring GPU",
+    "uses_cpu: mark test as CPU-only",
+    "slow: Slow tests that may take several minutes",
+    "integration: Integration tests",
+    "skip_ci: Skip test in GitHub Actions CI",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["bio_programming"]
