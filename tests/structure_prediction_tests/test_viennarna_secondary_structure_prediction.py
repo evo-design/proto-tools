@@ -6,13 +6,13 @@ Unit tests for ViennaRNA secondary structure prediction.
 
 import pytest
 
-from bio_programming.bio_tools.tools.structure_prediction import (
+from bio_tools.tools.structure_prediction import (
     ViennaRNAConfig,
     ViennaRNAInput,
     ViennaRNAOutput,
     run_viennarna,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 def test_basic_folding():

@@ -1,10 +1,12 @@
 """
 Unit tests for StructureEnsemble class.
 """
-import pytest
 from unittest.mock import Mock
 
-from bio_programming.bio_tools.entities.structures import Structure, StructureEnsemble
+import pytest
+
+from bio_tools.entities.structures import Structure, StructureEnsemble
+
 
 @pytest.fixture
 def sample_sequence():

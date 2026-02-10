@@ -10,26 +10,26 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_programming.bio_tools.tools.inverse_folding.proteinmpnn import (
+from bio_tools.entities.structures.structure import Structure
+from bio_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from bio_programming.bio_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
+from bio_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
 )
-from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import (
+from bio_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
+    SequenceScores,
     SequenceStructurePair,
 )
-from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import SequenceScores
-from bio_programming.bio_tools.entities.structures.structure import Structure
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
-TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
+TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 
 @pytest.fixture(scope="module")
@@ -325,7 +325,7 @@ class TestProteinMPNNScore:
         """
         Tests the caching functionality of ProteinMPNN scoring tool
         """
-        from bio_programming.bio_tools.tools.infra.tool_cache import (
+        from bio_tools.tools.infra.tool_cache import (
             ToolCache,
             _program_tool_cache,
             get_cache_info,
@@ -494,7 +494,7 @@ class TestProteinMPNNLogits:
         # Logits should be present with correct shape
         assert score.logits is not None, "Logits should not be None when return_logits=True"
         assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-        
+
         # Convert to ndarray for shape validation if it's a list
         logits_arr = np.array(score.logits)
         assert logits_arr.shape[0] == seq_len, f"Logits length should be {seq_len}, got {logits_arr.shape[0]}"
@@ -519,16 +519,16 @@ class TestProteinMPNNLogits:
         validate_output(output)
 
         score = output.scores[0]
-        
+
         # Logits should be serialized as nested lists (not tensors)
         assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
-        
+
         if isinstance(score.logits, list):
             # Verify nested list structure
             assert len(score.logits) > 0, "Logits list should not be empty"
             assert isinstance(score.logits[0], list), "Logits should be a list of lists"
             assert len(score.logits[0]) == len(ALPHAFOLD_VOCAB), f"Inner logits list should have {len(ALPHAFOLD_VOCAB)} elements (vocab size)"
-            
+
             # Verify all values are numeric
             for position_logits in score.logits:
                 for logit_value in position_logits:

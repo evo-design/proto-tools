@@ -4,18 +4,19 @@ test_ligandmpnn.py
 Tests for LigandMPNN sampling and scoring.
 """
 from pathlib import Path
+
 import pytest
 
-from bio_programming.bio_tools.tools.inverse_folding import (
+from bio_tools.entities.structures.structure import Structure
+from bio_tools.tools.inverse_folding import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
     run_ligandmpnn_sample,
 )
-from bio_programming.bio_tools.entities.structures.structure import Structure
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
-TEST_CIF_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin.cif"
+TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
 DEFAULT_CHECKPOINT = (
     Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
 )

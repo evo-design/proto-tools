@@ -7,8 +7,7 @@ Tests the ProGen2 implementation.
 import numpy as np
 import pytest
 
-from bio_programming.bio_tools.tools.utils import PROTEIN_AMINO_ACIDS
-from bio_programming.bio_tools.tools.causal_models.progen2 import (
+from bio_tools.tools.causal_models.progen2 import (
     ProGen2Model,
     ProGen2SampleConfig,
     ProGen2SampleInput,
@@ -17,8 +16,8 @@ from bio_programming.bio_tools.tools.causal_models.progen2 import (
     run_progen2_sample,
     run_progen2_score,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
-
+from bio_tools.tools.utils import PROTEIN_AMINO_ACIDS
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Sampling Tests
@@ -574,7 +573,7 @@ def test_progen2_score_logits_enabled():
     for seq, score in zip(sequences, result.scores):
         assert score.logits is not None, "Logits should not be None when return_logits=True"
         assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-        
+
         # Convert to ndarray for shape validation if it's a list
         logits_arr = np.array(score.logits)
         # ProGen2 includes start token, so logits length is seq_len + 1
@@ -597,16 +596,16 @@ def test_progen2_score_logits_serialization():
     validate_output(result)
 
     score = result.scores[0]
-    
+
     # Logits should be serialized as nested lists (not tensors)
     assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
-    
+
     if isinstance(score.logits, list):
         # Verify nested list structure
         assert len(score.logits) > 0, "Logits list should not be empty"
         assert isinstance(score.logits[0], list), "Logits should be a list of lists"
         assert len(score.logits[0]) == 30, "Inner logits list should have 30 elements (ProGen2 vocab size)"
-        
+
         # Verify all values are numeric
         for position_logits in score.logits:
             for logit_value in position_logits:
@@ -640,7 +639,7 @@ def test_progen2_sample_logits_inference():
     assert "logits" in result, "Result should contain 'logits' key"
     assert result["logits"] is not None, "Logits should not be None when return_logits=True"
     assert len(result["logits"]) == 2, f"Should have logits for 2 sequences, got {len(result['logits'])}"
-    
+
     # Verify logits are tensors (before serialization at inference layer)
     for i, logits in enumerate(result["logits"]):
         assert hasattr(logits, "shape"), f"Logits[{i}] should be a tensor with shape attribute"

@@ -1,0 +1,60 @@
+name: Verify Documentation autogeneration synced
+
+on:
+  pull_request:
+    paths:
+      # Tool READMEs (source for tool docs)
+      - 'bio_tools/tools/**/README.md'
+      # The generation script itself
+      - 'docs/generate_docs.py'
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install uv
+          uv venv
+          source .venv/bin/activate
+          uv pip install -e .
+
+      - name: Generate documentation
+        run: |
+          source .venv/bin/activate
+          python docs/generate_docs.py
+
+      - name: Check docs are in sync
+        run: |
+          if ! git diff --quiet docs/; then
+            echo "::error::Generated docs are out of sync with source files."
+            echo ""
+            echo "To fix this, you have two options:"
+            echo ""
+            echo "Option 1 (Recommended): Install pre-commit hooks"
+            echo "  pip install pre-commit"
+            echo "  pre-commit install"
+            echo "  # Docs will auto-generate on every commit"
+            echo ""
+            echo "Option 2: Manually generate docs"
+            echo "  python docs/generate_docs.py"
+            echo "  git add docs/"
+            echo "  git commit --amend --no-edit"
+            echo ""
+            echo "Changed files:"
+            git diff --name-only docs/
+            exit 1
+          fi
+          echo "✓ Generated docs are in sync"

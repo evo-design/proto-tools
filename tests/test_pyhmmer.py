@@ -1,7 +1,7 @@
 """
 test_pyhmmer.py
 
-Comprehensive tests for PyHMMER tools in bio_programming.bio_tools.tools.gene_annotation.pyhmmer
+Comprehensive tests for PyHMMER tools in bio_tools.tools.gene_annotation.pyhmmer
 """
 
 from pathlib import Path
@@ -11,46 +11,46 @@ import pytest
 from Bio import SeqIO
 
 # Public API imports
-from bio_programming.bio_tools.tools.gene_annotation.pyhmmer import (
+from bio_tools.tools.gene_annotation.pyhmmer import (
     PyHmmerOutput,
-    PyJackhmmerConfig,
-    PyJackhmmerInput,
     PyHmmscanConfig,
     PyHmmscanInput,
     PyHmmsearchConfig,
     PyHmmsearchInput,
+    PyJackhmmerConfig,
+    PyJackhmmerInput,
     PyNhmmerConfig,
     PyNhmmerInput,
     PyPhmmerConfig,
     PyPhmmerInput,
-    run_pyhmmer_jackhmmer,
     run_pyhmmer_hmmscan,
     run_pyhmmer_hmmsearch,
+    run_pyhmmer_jackhmmer,
     run_pyhmmer_nhmmer,
     run_pyhmmer_phmmer,
 )
 
 # Private helper functions (imported directly from module for testing)
-from bio_programming.bio_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
+from bio_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_dataframes,
     _convert_dtypes,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Sample Data for Testing
 # ============================================================================
 
 # Path to test HMM file
-TEST_HMM_FILE = Path(__file__).parent.parent / "dummy_data" / "test_multiple_hmm.hmm"
+TEST_HMM_FILE = Path(__file__).parent / "dummy_data" / "test_multiple_hmm.hmm"
 
 # Load test sequences and properly close the file handle
-TEST_FASTA_PATH = Path(__file__).parent.parent / "dummy_data" / "test_sequences_for_pyhmmer.fasta"
+TEST_FASTA_PATH = Path(__file__).parent / "dummy_data" / "test_sequences_for_pyhmmer.fasta"
 with open(TEST_FASTA_PATH, "r") as fasta_file:
     sequence_iterator = SeqIO.parse(fasta_file, "fasta")
     SAMPLE_SEQUENCES = [str(seq.seq) for seq in sequence_iterator]
 
-TEST_DNA_FASTA_PATH = Path(__file__).parent.parent / "dummy_data" / "test_dna_sequences.fna"
+TEST_DNA_FASTA_PATH = Path(__file__).parent / "dummy_data" / "test_dna_sequences.fna"
 with open(TEST_DNA_FASTA_PATH, "r") as dna_fasta_file:
     dna_sequence_iterator = SeqIO.parse(dna_fasta_file, "fasta")
     SAMPLE_DNA_SEQUENCES = [str(seq.seq) for seq in dna_sequence_iterator]

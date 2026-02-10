@@ -1,7 +1,7 @@
 """
 test_local_colabfold_search.py
 
-Tests for Local ColabFold MSA search tool in bio_programming.bio_tools.tools.sequence_alignment.colabfold_search
+Tests for Local ColabFold MSA search tool in bio_tools.tools.sequence_alignment.colabfold_search
 """
 
 import os
@@ -12,13 +12,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from bio_programming.bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchQuery,
     run_colabfold_search,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Test Data
@@ -411,7 +411,7 @@ class TestColabfoldSearchExecutionDebugDatabase:
             assert len(result.results[0].msa) == 425
 
 
-from bio_programming.bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     CHIMERA_COLABFOLD_DB_LOCATION,
 )
 

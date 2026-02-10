@@ -1,0 +1,147 @@
+{
+	"$schema": "https://mintlify.com/docs.json",
+	"theme": "almond",
+	"name": "Bio Tools",
+	"description": "Bioinformatics tools and computational biology infrastructure",
+	"colors": {
+		"primary": "#046e7a",
+		"light": "#8EBEC3",
+		"dark": "#344649"
+	},
+	"icons": {
+		"library": "lucide"
+	},
+	"fonts": {
+		"family": "Geist"
+	},
+	"logo": {
+		"light": "/assets/logo/logo-light.svg",
+		"dark": "/assets/logo/logo-dark.svg"
+	},
+	"favicon": "/favicon.svg",
+	"navbar": {
+		"links": [
+			{
+				"label": "GitHub",
+				"href": "https://github.com/evo-design/bio-tools"
+			}
+		]
+	},
+	"navigation": {
+		"tabs": [
+			{
+				"tab": "Documentation",
+				"groups": [
+					{
+						"group": "Getting Started",
+						"pages": [
+							"introduction",
+							"installation",
+							"quickstart"
+						]
+					}
+				]
+			},
+			{
+				"tab": "Tools",
+				"groups": [
+					{
+						"group": "Causal Models",
+						"pages": [
+							"tools/causal-models/evo2",
+							"tools/causal-models/progen2"
+						]
+					},
+					{
+						"group": "Gene Annotation",
+						"pages": [
+							"tools/gene-annotation/blast",
+							"tools/gene-annotation/mmseqs",
+							"tools/gene-annotation/pyhmmer"
+						]
+					},
+					{
+						"group": "Inverse Folding",
+						"pages": [
+							"tools/inverse-folding/ligandmpnn",
+							"tools/inverse-folding/proteinmpnn"
+						]
+					},
+					{
+						"group": "Masked Models",
+						"pages": [
+							"tools/masked-models/esm2",
+							"tools/masked-models/esm3"
+						]
+					},
+					{
+						"group": "ORF Prediction",
+						"pages": [
+							"tools/orf-prediction/orfipy",
+							"tools/orf-prediction/prodigal"
+						]
+					},
+					{
+						"group": "RNA Splicing",
+						"pages": [
+							"tools/rna-splicing/splice-transformer"
+						]
+					},
+					{
+						"group": "Sequence Alignment",
+						"pages": [
+							"tools/sequence-alignment/mafft"
+						]
+					},
+					{
+						"group": "Sequence Scoring",
+						"pages": [
+							"tools/sequence-scoring/alphagenome",
+							"tools/sequence-scoring/borzoi",
+							"tools/sequence-scoring/enformer"
+						]
+					},
+					{
+						"group": "Structure Design",
+						"pages": [
+							"tools/structure-design/rfdiffusion3"
+						]
+					},
+					{
+						"group": "Structure Dynamics",
+						"pages": [
+							"tools/structure-dynamics/bioemu"
+						]
+					},
+					{
+						"group": "Structure Prediction",
+						"pages": [
+							"tools/structure-prediction/alphafold3",
+							"tools/structure-prediction/boltz2",
+							"tools/structure-prediction/chai1",
+							"tools/structure-prediction/esmfold",
+							"tools/structure-prediction/protenix",
+							"tools/structure-prediction/viennarna"
+						]
+					}
+				]
+			}
+		]
+	},
+	"footer": {
+		"socials": {
+			"github": "https://github.com/evo-design/bio-tools"
+		}
+	},
+	"search": {
+		"prompt": "Search documentation..."
+	},
+	"contextual": {
+		"options": [
+			"copy",
+			"view",
+			"chatgpt",
+			"claude"
+		]
+	}
+}

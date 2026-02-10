@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bio-tools"
+name = "bio_tools"
 version = "0.1.0"
 description = "Bioinformatics tools for bio-programming"
 readme = "env_dev_notes.md"
@@ -23,6 +23,7 @@ dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "scipy>=1.10.0",
+    "torch>=2.0.0",
 
     # Bioinformatics
     "biopython>=1.81",
@@ -84,12 +85,11 @@ dev = [
 # Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
 
 [tool.pytest.ini_options]
-# Run from bio_programming/bio_tools/ - requires parent bio-programming repo context.
-# pythonpath adds parent root so "bio_programming" and "tests.tool_tests" resolve.
+# Run from bio-tools root directory
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
-pythonpath = ["../.."]
+pythonpath = ["."]
 python_functions = ["test_*"]
 addopts = [
     "-v",
@@ -173,4 +173,4 @@ ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["tools*", "entities*"]
+include = ["bio_tools*"]

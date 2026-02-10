@@ -7,7 +7,7 @@ Tests the ESM3 implementation
 import numpy as np
 import pytest
 
-from bio_programming.bio_tools.tools.masked_models.esm3 import (
+from bio_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsConfig,
     ESM3EmbeddingsInput,
     ESM3ScoringConfig,
@@ -18,7 +18,7 @@ from bio_programming.bio_tools.tools.masked_models.esm3 import (
     run_esm3_score,
     run_esm3_structure_prediction,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
 

@@ -5,7 +5,8 @@ Contains input data for ligand tests.
 """
 
 from pathlib import Path
-_prefix_path = Path(__file__).parent.parent.parent / "dummy_data" / "ligand_input_test_examples" 
+
+_prefix_path = Path(__file__).parent.parent / "dummy_data" / "ligand_input_test_examples"
 
 SINGLE_FRAGMENT_SMI = _prefix_path / "PubChem5284596.smi"
 SINGLE_FRAGMENT_2D_SDF = _prefix_path / "PubChem5284596_2D.sdf"
@@ -27,8 +28,3 @@ LIGAND_TEST_FILES = {
         "3d_sdf": MULTIPLE_FRAGMENT_3D_SDF,
     },
 }
-
-
-
-
-

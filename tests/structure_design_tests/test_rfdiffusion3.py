@@ -1,11 +1,13 @@
 """Test RFdiffusion3 structure design."""
-import pytest
 from pathlib import Path
-from bio_programming.bio_tools.tools.structure_design import (
-    run_rfdiffusion3,
-    RFdiffusion3Input,
+
+import pytest
+
+from bio_tools.tools.structure_design import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
+    RFdiffusion3Input,
+    run_rfdiffusion3,
 )
 
 DEFAULT_CHECKPOINT_DIR = Path.home() / ".foundry" / "checkpoints"
@@ -23,9 +25,9 @@ def test_rfdiffusion3_unconditional_design():
         diffusion_batch_size=1,
         num_timesteps=50  # Use fewer steps for faster testing
     )
-    
+
     output = run_rfdiffusion3(inputs, config)
-    
+
     # Validate output
     assert len(output.output_structures) > 0
     assert output[0].structure is not None
@@ -39,7 +41,7 @@ def test_rfdiffusion3_input_validation():
     # Should fail without design_specs or raw_json
     with pytest.raises(ValueError, match="Either 'design_specs'.*or 'raw_json'"):
         RFdiffusion3Input()
-    
+
     # Should fail without contig/length/raw_spec
     with pytest.raises(ValueError, match="At least one of.*must be provided"):
         RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec()])
@@ -52,10 +54,10 @@ def test_rfdiffusion3_json_spec_generation():
             RFdiffusion3DesignSpec(contig="50-80"),
         ]
     )
-    
+
     import json
     spec = json.loads(inputs.to_json_spec())
-    
+
     assert "spec-0" in spec
     assert "spec-1" in spec
     assert spec["spec-0"]["length"] == "100"

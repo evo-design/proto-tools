@@ -9,9 +9,7 @@ from datetime import datetime
 import pytest
 from pydantic import Field, ValidationError
 
-from tests.tool_tests.tool_infra_tests.test_export_functionality import (
-    MockToolOutputBase,
-)
+from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
 class SimpleToolOutput(MockToolOutputBase):

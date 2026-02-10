@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from bio_programming.bio_tools.entities.structures import BFactorType, Structure
+from bio_tools.entities.structures import BFactorType, Structure
 
-TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
-TEST_CIF_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin.cif"
+TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
 
 
 @pytest.fixture(scope="module")
