@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 from pydantic import ValidationError
 from bio_programming.tools.gene_annotation import (
-    online_blast,
-    local_blast,
-    create_blast_db,
+    run_online_blast_search,
+    run_local_blast_search,
+    run_create_blast_db,
     OnlineBlastInput,
     OnlineBlastConfig,
     LocalBlastInput,
@@ -185,7 +185,7 @@ def test_create_blast_db_execution():
             title="Test Database"
         )
 
-        result = create_blast_db(inputs, config)
+        result = run_create_blast_db(inputs, config)
         
         assert result.success is True
         assert Path(result.db_path).parent.resolve() == fasta_path.parent.resolve()
@@ -203,7 +203,7 @@ def test_online_blast_execution():
         additional_params={"hitlist_size": 5}
     )
 
-    result = online_blast(inputs, config)
+    result = run_online_blast_search(inputs, config)
     
     assert isinstance(result, BlastOutput)
     assert result.tool_id == "online-blast"
@@ -227,7 +227,7 @@ def test_local_blast_execution():
             num_threads=2
         )
 
-        result = local_blast(inputs, config)
+        result = run_local_blast_search(inputs, config)
         
         assert isinstance(result, BlastOutput)
         assert result.tool_id == "local-blast"
