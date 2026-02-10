@@ -10,6 +10,17 @@ authors = [
 
 requires-python = ">=3.12"
 
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "flake8>=6.0.0",
+    "Flake8-pyproject>=1.2.0",
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+]
+
 # Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
 
 [tool.pytest.ini_options]
@@ -49,3 +60,15 @@ profile = "black"
 multi_line_output = 3
 line_length = 88
 known_first_party = ["bio_programming"]
+
+[tool.flake8]
+select = ["F401", "F841"]
+exclude = [
+    ".venvs",
+    "*/.venvs",
+    "__pycache__",
+    ".git",
+    "build",
+    "dist",
+    "*.egg-info",
+]
