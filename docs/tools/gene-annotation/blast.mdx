@@ -188,7 +188,7 @@ Both tools return a `BlastOutput` object with two attributes:
 
 **Example 1: Search NCBI online (simplest)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import run_online_blast_search, OnlineBlastInput, OnlineBlastConfig
+from bio_programming_tools.tools.gene_annotation import run_online_blast_search, OnlineBlastInput, OnlineBlastConfig
 
 # Your DNA sequence
 inputs = OnlineBlastInput(query="ATGCGTAAACGATTGCAGTACGATCGATCG")
@@ -205,7 +205,7 @@ print(result.results_df.head())  # View top hits
 
 **Example 2: Create a local database and search it**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_create_blast_db, CreateBlastDbInput, CreateBlastDbConfig,
     run_local_blast_search, LocalBlastInput, LocalBlastConfig
 )

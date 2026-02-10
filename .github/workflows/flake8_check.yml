@@ -33,4 +33,4 @@ jobs:
         pip install -e ".[dev]"
 
     - name: Run Flake8
-      run: flake8 tools entities tests
+      run: flake8 bio_programming_tools tests

@@ -38,7 +38,7 @@ ESM3 is EvolutionaryScale's next-generation protein language model that combines
 
 ## Package Layout
 
-These are the primary modules in `bio_tools.tools.masked_models.esm3`:
+These are the primary modules in `bio_programming_tools.tools.masked_models.esm3`:
 - `esm3_embeddings.py`: embeddings + logits tool
 - `esm3_structure_prediction.py`: structure prediction tool
 - `esm3_sample.py`: sampling/mutation tool
@@ -190,7 +190,7 @@ Each `SequenceScores` entry includes:
 
 **Example 1: Extract embeddings**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm3 import ESM3EmbeddingsInput, ESM3EmbeddingsConfig, run_esm3_embeddings
+from bio_programming_tools.tools.masked_models.esm3 import ESM3EmbeddingsInput, ESM3EmbeddingsConfig, run_esm3_embeddings
 
 inputs = ESM3EmbeddingsInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
 config = ESM3EmbeddingsConfig(verbose=True)
@@ -202,7 +202,7 @@ print(f"Embedding dim: {len(result.mean_embeddings[0])}")
 
 **Example 2: Predict structure**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm3 import (
+from bio_programming_tools.tools.masked_models.esm3 import (
     ESM3StructurePredictionInput, ESM3StructurePredictionConfig, run_esm3_structure_prediction,
 )
 
@@ -226,7 +226,7 @@ with open("predicted.pdb", "w") as f:
 
 **Example 3: Sequence mutation**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm3 import ESM3SampleInput, ESM3SampleConfig, run_esm3_sample
+from bio_programming_tools.tools.masked_models.esm3 import ESM3SampleInput, ESM3SampleConfig, run_esm3_sample
 
 inputs = ESM3SampleInput(sequences=["MVLSPADKTNVKAAW"])
 
@@ -243,7 +243,7 @@ print(f"Mutated:  {result.sequences[0]}")
 
 **Example 4: Score sequences**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm3 import ESM3ScoringInput, ESM3ScoringConfig, run_esm3_score
+from bio_programming_tools.tools.masked_models.esm3 import ESM3ScoringInput, ESM3ScoringConfig, run_esm3_score
 
 inputs = ESM3ScoringInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
 config = ESM3ScoringConfig(batch_size=32)
@@ -254,7 +254,7 @@ print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
 
 **Example 5: Batch processing**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm3 import (
+from bio_programming_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsInput, ESM3EmbeddingsConfig, run_esm3_embeddings,
 )
 

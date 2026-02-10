@@ -25,7 +25,7 @@ class TestEnformerInputValidation:
 
     def test_enformer_input_valid(self):
         """Test valid Enformer input is accepted."""
-        from bio_tools.tools.sequence_scoring.enformer import EnformerInput
+        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
         sequence = generate_random_dna_sequence(ENFORMER_CONTEXT)
         inputs = EnformerInput(sequence=sequence)
@@ -33,7 +33,7 @@ class TestEnformerInputValidation:
 
     def test_enformer_input_invalid_length(self):
         """Test that sequences with invalid length are rejected."""
-        from bio_tools.tools.sequence_scoring.enformer import EnformerInput
+        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
         # Too short
         with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
@@ -45,7 +45,7 @@ class TestEnformerInputValidation:
 
     def test_enformer_config_valid(self):
         """Test valid Enformer config is accepted."""
-        from bio_tools.tools.sequence_scoring.enformer import EnformerConfig
+        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
 
         config = EnformerConfig(
             output_tracks=[0, 1, 2, 3],
@@ -57,7 +57,7 @@ class TestEnformerInputValidation:
 
     def test_enformer_config_invalid_species(self):
         """Test that invalid species is rejected."""
-        from bio_tools.tools.sequence_scoring.enformer import EnformerConfig
+        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
 
         with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
             EnformerConfig(output_tracks=[0], species="zebrafish")
@@ -69,7 +69,7 @@ class TestEnformerPrediction:
     @pytest.mark.uses_gpu
     def test_enformer_prediction_human(self):
         """Test Enformer prediction for human genome."""
-        from bio_tools.tools.sequence_scoring.enformer import (
+        from bio_programming_tools.tools.sequence_scoring.enformer import (
             EnformerConfig,
             EnformerInput,
             run_enformer,
@@ -102,7 +102,7 @@ class TestEnformerPrediction:
     @pytest.mark.uses_gpu
     def test_enformer_prediction_mouse(self):
         """Test Enformer prediction for mouse genome."""
-        from bio_tools.tools.sequence_scoring.enformer import (
+        from bio_programming_tools.tools.sequence_scoring.enformer import (
             EnformerConfig,
             EnformerInput,
             run_enformer,
@@ -127,7 +127,7 @@ class TestEnformerPrediction:
     @pytest.mark.uses_gpu
     def test_enformer_prediction_single_track(self):
         """Test Enformer prediction with single output track."""
-        from bio_tools.tools.sequence_scoring.enformer import (
+        from bio_programming_tools.tools.sequence_scoring.enformer import (
             EnformerConfig,
             EnformerInput,
             run_enformer,
@@ -151,7 +151,7 @@ class TestEnformerPrediction:
     @pytest.mark.uses_gpu
     def test_enformer_prediction_many_tracks(self):
         """Test Enformer prediction with many output tracks."""
-        from bio_tools.tools.sequence_scoring.enformer import (
+        from bio_programming_tools.tools.sequence_scoring.enformer import (
             EnformerConfig,
             EnformerInput,
             run_enformer,

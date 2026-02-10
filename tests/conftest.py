@@ -1,5 +1,5 @@
 """
-Test configuration for bio_tools test suite.
+Test configuration for bio_programming_tools test suite.
 
 Supports the same CLI options and markers as the main bio-programming tests:
   --cpu        Run only CPU tests
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from bio_tools import setup_logging
+from bio_programming_tools import setup_logging
 
 
 def pytest_addoption(parser):
@@ -78,13 +78,13 @@ def pytest_configure(config):
 
 def pytest_runtest_logstart(nodeid, location):
     """Log when a test starts (DEBUG level, file only)."""
-    logger = logging.getLogger("bio_tools.tests")
+    logger = logging.getLogger("bio_programming_tools.tests")
     logger.debug(f"TEST START: {nodeid}")
 
 
 def pytest_runtest_logreport(report):
     """Log test results (DEBUG level to avoid console output)."""
-    logger = logging.getLogger("bio_tools.tests")
+    logger = logging.getLogger("bio_programming_tools.tests")
 
     # Only log on the call phase (not setup/teardown)
     if report.when == "call":
@@ -99,7 +99,7 @@ def pytest_runtest_logreport(report):
 
 def pytest_sessionfinish(session, exitstatus):
     """Log test session summary at the end."""
-    logger = logging.getLogger("bio_tools.tests")
+    logger = logging.getLogger("bio_programming_tools.tests")
 
     # Get test statistics from the session
     test_reports = session.items
@@ -208,7 +208,7 @@ def setup_test_logging(request):
     # Use same log directory as application logs (logs/ in project root)
     project_root = Path(__file__).parent.parent
     log_dir = os.environ.get(
-        "BIO_TOOLS_LOG_DIR",
+        "BIO_PROGRAMMING_TOOLS_LOG_DIR",
         str(project_root / "logs")
     )
 
@@ -217,8 +217,8 @@ def setup_test_logging(request):
     k_expression = request.config.getoption("-k", default=None)
 
     # Clear any existing handlers first to prevent duplicate log files
-    bio_tools_logger = logging.getLogger("bio_tools")
-    bio_tools_logger.handlers.clear()
+    bio_programming_tools_logger = logging.getLogger("bio_programming_tools")
+    bio_programming_tools_logger.handlers.clear()
 
     # Create header with pytest command and timestamp
     pytest_command = " ".join(sys.argv)

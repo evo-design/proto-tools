@@ -168,7 +168,7 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 
 **Example 1: Basic gene prediction**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.prodigal import (
+from bio_programming_tools.tools.orf_prediction.prodigal import (
     run_prodigal_prediction, ProdigalInput, ProdigalConfig
 )
 
@@ -187,7 +187,7 @@ for orfs in result.predicted_orfs:
 
 **Example 2: Process multiple sequences**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.prodigal import (
+from bio_programming_tools.tools.orf_prediction.prodigal import (
     run_prodigal_prediction, ProdigalInput, ProdigalConfig
 )
 
@@ -212,7 +212,7 @@ for i, (count, orfs) in enumerate(zip(result.num_orfs_per_sequence,
 
 **Example 3: Complete circular genome**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.prodigal import (
+from bio_programming_tools.tools.orf_prediction.prodigal import (
     run_prodigal_prediction, ProdigalInput, ProdigalConfig
 )
 
@@ -233,7 +233,7 @@ print(f"Predicted {result.num_orfs} complete genes")
 
 **Example 4: Extract proteins for downstream analysis**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.prodigal import (
+from bio_programming_tools.tools.orf_prediction.prodigal import (
     run_prodigal_prediction, ProdigalInput, ProdigalConfig
 )
 

@@ -1,7 +1,7 @@
 {
 	"$schema": "https://mintlify.com/docs.json",
 	"theme": "almond",
-	"name": "Bio Tools",
+	"name": "Bio Programming Tools",
 	"description": "Bioinformatics tools and computational biology infrastructure",
 	"colors": {
 		"primary": "#046e7a",
@@ -23,7 +23,7 @@
 		"links": [
 			{
 				"label": "GitHub",
-				"href": "https://github.com/evo-design/bio-tools"
+				"href": "https://github.com/evo-design/bio-programming-tools"
 			}
 		]
 	},
@@ -130,7 +130,7 @@
 	},
 	"footer": {
 		"socials": {
-			"github": "https://github.com/evo-design/bio-tools"
+			"github": "https://github.com/evo-design/bio-programming-tools"
 		}
 	},
 	"search": {

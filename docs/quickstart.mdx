@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Get started with bio-tools in 5 minutes
+description: Get started with bio-programming-tools in 5 minutes
 icon: rocket
 ---
 
@@ -11,7 +11,7 @@ TODO: FINALIZE AFTER BASE ENV IS STABLE
 ## Installation
 
 ```bash bash icon="terminal"
-pip install bio-tools
+pip install bio-programming-tools
 ```
 
 ## Basic Usage
@@ -19,7 +19,7 @@ pip install bio-tools
 ### Structure Prediction
 
 ```python python icon="python"
-from bio_tools.tools.structure_prediction import run_esmfold, ESMFoldInput, ESMFoldConfig
+from bio_programming_tools.tools.structure_prediction import run_esmfold, ESMFoldInput, ESMFoldConfig
 
 # Predict structure
 input_data = ESMFoldInput(sequences=["MVLSPADKTN"])
@@ -35,7 +35,7 @@ structure.save("output.pdb")
 ### Inverse Folding
 
 ```python python icon="python"
-from bio_tools.tools.inverse_folding import (
+from bio_programming_tools.tools.inverse_folding import (
     run_proteinmpnn_sample,
     InverseFoldingInput,
     InverseFoldingConfig
@@ -54,8 +54,8 @@ for i, seq in enumerate(result[0].sequences):
 ### Gene Annotation
 
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import run_pyhmmer, PyHMMERInput, PyHMMERConfig
-from bio_tools.entities import Sequence
+from bio_programming_tools.tools.gene_annotation import run_pyhmmer, PyHMMERInput, PyHMMERConfig
+from bio_programming_tools.entities import Sequence
 
 # Search with HMM profiles
 query = Sequence(sequence="MVLSPADKTN", sequence_type="protein")
@@ -74,8 +74,8 @@ for hit in result.hits:
 ### Sequence Alignment
 
 ```python python icon="python"
-from bio_tools.tools.sequence_alignment import run_mafft, MAFFTInput, MAFFTConfig
-from bio_tools.entities import Sequence
+from bio_programming_tools.tools.sequence_alignment import run_mafft, MAFFTInput, MAFFTConfig
+from bio_programming_tools.entities import Sequence
 
 # Align sequences
 sequences = [
@@ -96,7 +96,7 @@ for aligned_seq in result.aligned_sequences:
 ### Working with Structures
 
 ```python python icon="python"
-from bio_tools.entities import Structure
+from bio_programming_tools.entities import Structure
 
 # Load from file
 structure = Structure(structure_filepath_or_content="protein.pdb")
@@ -118,21 +118,21 @@ config = ESMFoldConfig(device="cuda:1")
 # CPU fallback
 config = ESMFoldConfig(device="cpu")
 
-# Let bio-tools choose
+# Let bio-programming-tools choose
 config = ESMFoldConfig(device="cuda")  # Uses CUDA_VISIBLE_DEVICES
 ```
 
 ### Logging
 
 ```python python icon="python"
-from bio_tools import setup_logging
+from bio_programming_tools import setup_logging
 import logging
 
 # Enable logging
 setup_logging(level=logging.INFO)
 
 # Get logger
-from bio_tools import get_logger
+from bio_programming_tools import get_logger
 logger = get_logger(__name__)
 
 logger.info("Running prediction...")

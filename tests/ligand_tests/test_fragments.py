@@ -1,7 +1,7 @@
 import pytest
 from rdkit import Chem
 
-from bio_tools.entities.ligands import Fragment
+from bio_programming_tools.entities.ligands import Fragment
 from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 

@@ -9,13 +9,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from bio_tools.tools.orf_prediction import (
+from bio_programming_tools.tools.orf_prediction import (
     OrfipyConfig,
     OrfipyInput,
     OrfipyOutput,
     run_orfipy_prediction,
 )
-from bio_tools.tools.orf_prediction.orf import ORF
+from bio_programming_tools.tools.orf_prediction.orf import ORF
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Test data file paths
@@ -33,7 +33,7 @@ class TestOrfipyParsing:
             pytest.skip("Test data files not available")
 
         # Access the private parsing function for testing (import directly from standalone)
-        from bio_tools.tools.orf_prediction.orfipy.standalone.run import (
+        from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
             _parse_orfipy_results,
         )
 
@@ -75,7 +75,7 @@ class TestOrfipyParsing:
     def test_header_parsing(self, header, expected):
         """Test parsing of individual Orfipy headers."""
         # Access the private parsing function for testing (import directly from standalone)
-        from bio_tools.tools.orf_prediction.orfipy.standalone.run import (
+        from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
             _parse_orfipy_header as parse_header,
         )
 
@@ -214,7 +214,7 @@ class TestOrfipyIntegration:
 
     def test_sequence_ids_length_mismatch_raises(self):
         """Test that mismatched ID count raises ValueError."""
-        from bio_tools.tools.utils import resolve_sequence_ids
+        from bio_programming_tools.tools.utils import resolve_sequence_ids
         with pytest.raises(ValueError, match="must match"):
             resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
 

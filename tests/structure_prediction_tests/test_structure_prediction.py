@@ -10,9 +10,9 @@ import os
 import pytest
 from Bio import SeqIO
 
-from bio_tools.entities.structures import is_valid_structure
-from bio_tools.tools.infra.tool_cache import ToolCache
-from bio_tools.tools.structure_prediction import (
+from bio_programming_tools.entities.structures import is_valid_structure
+from bio_programming_tools.tools.infra.tool_cache import ToolCache
+from bio_programming_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     Boltz2Config,
@@ -249,7 +249,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
         # Configure MSA search mode if specified
         if use_msa and msa_search_mode is not None:
-            from bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+            from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
                 ColabfoldSearchConfig,
             )
 
@@ -331,7 +331,10 @@ def test_folding_cache():
     Tests the caching functionality of structure prediction tools using small
     toy examples with ESMFold
     """
-    from bio_tools.tools.infra.tool_cache import _program_tool_cache, get_cache_info
+    from bio_programming_tools.tools.infra.tool_cache import (
+        _program_tool_cache,
+        get_cache_info,
+    )
 
     # Create short test complexes
     complexes_first_pass = [["MAR"], ["GAR"], ["YTW"]]

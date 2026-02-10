@@ -57,9 +57,9 @@ jobs:
     - name: Test base installation
       run: |
         pip install -e .
-        python -c "import bio_tools; print('✓ bio_tools package import successful')"
-        python -c "from bio_tools import tools; print('✓ bio_tools.tools import successful')"
-        python -c "from bio_tools import entities; print('✓ bio_tools.entities import successful')"
+        python -c "import bio_programming_tools; print('✓ bio_programming_tools package import successful')"
+        python -c "from bio_programming_tools import tools; print('✓ bio_programming_tools.tools import successful')"
+        python -c "from bio_programming_tools import entities; print('✓ bio_programming_tools.entities import successful')"
 
     - name: Verify key dependencies
       run: |
@@ -80,5 +80,5 @@ jobs:
 
     - name: Check package metadata
       run: |
-        pip show bio_tools
+        pip show bio_programming_tools
         echo "✓ Package metadata verified"

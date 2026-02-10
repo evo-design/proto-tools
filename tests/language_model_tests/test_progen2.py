@@ -7,7 +7,7 @@ Tests the ProGen2 implementation.
 import numpy as np
 import pytest
 
-from bio_tools.tools.causal_models.progen2 import (
+from bio_programming_tools.tools.causal_models.progen2 import (
     ProGen2Model,
     ProGen2SampleConfig,
     ProGen2SampleInput,
@@ -16,7 +16,7 @@ from bio_tools.tools.causal_models.progen2 import (
     run_progen2_sample,
     run_progen2_score,
 )
-from bio_tools.tools.utils import PROTEIN_AMINO_ACIDS
+from bio_programming_tools.tools.utils import PROTEIN_AMINO_ACIDS
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================

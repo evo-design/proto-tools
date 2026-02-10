@@ -4,7 +4,7 @@ test_ccd_utils.py
 Test the CCD utilities module for mapping between SMILES and CCD codes.
 """
 
-from bio_tools.entities.ligands.ccd_utils import (
+from bio_programming_tools.entities.ligands.ccd_utils import (
     COMMON_MODIFICATIONS,
     get_canonical_component,
     get_ccd_description,

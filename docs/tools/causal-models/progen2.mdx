@@ -41,7 +41,7 @@ ProGen2 is Salesforce's autoregressive protein language model for de novo protei
 
 ## Package Layout
 
-Modules in `bio_tools.tools.causal_models.progen2`:
+Modules in `bio_programming_tools.tools.causal_models.progen2`:
 - `progen2_sample.py`: sampling/generation tool
 - `progen2_score.py`: scoring tool
 - `standalone/inference.py`: model wrapper and low-level inference
@@ -145,7 +145,7 @@ Each `SequenceScores` entry includes:
 
 **Example 1: Basic protein generation**
 ```python python icon="python"
-from bio_tools.tools.causal_models.progen2 import (
+from bio_programming_tools.tools.causal_models.progen2 import (
     run_progen2_sample, ProGen2SampleInput, ProGen2SampleConfig
 )
 
@@ -162,7 +162,7 @@ print(f"Generated: {result.sequences[0]}")
 
 **Example 2: Score sequences**
 ```python python icon="python"
-from bio_tools.tools.causal_models.progen2 import (
+from bio_programming_tools.tools.causal_models.progen2 import (
     run_progen2_score, ProGen2ScoringInput, ProGen2ScoringConfig
 )
 

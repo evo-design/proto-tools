@@ -200,7 +200,7 @@ MafftOutput(
 
 **Example 1: Basic alignment with auto method**
 ```python python icon="python"
-from bio_tools.tools.sequence_alignment import (
+from bio_programming_tools.tools.sequence_alignment import (
     run_mafft_align,
     MafftInput,
     MafftConfig
@@ -229,7 +229,7 @@ for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
 
 **Example 2: High-accuracy alignment for small dataset**
 ```python python icon="python"
-from bio_tools.tools.sequence_alignment import (
+from bio_programming_tools.tools.sequence_alignment import (
     run_mafft_align,
     MafftInput,
     MafftConfig
@@ -262,7 +262,7 @@ print(fasta_output)
 
 **Example 3: Analyze gap distribution**
 ```python python icon="python"
-from bio_tools.tools.sequence_alignment import (
+from bio_programming_tools.tools.sequence_alignment import (
     run_mafft_align,
     MafftInput,
     MafftConfig

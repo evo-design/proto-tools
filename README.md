@@ -1,7 +1,7 @@
-# `bio-programming-tools`
+# `bio_programming_tools`
 
-[![Lint Check](https://github.com/evo-design/bio_tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio_tools/actions/workflows/flake8_check.yml)
-[![Test Pip Install](https://github.com/evo-design/bio_tools/actions/workflows/test-pip-install.yml/badge.svg)](https://github.com/evo-design/bio_tools/actions/workflows/test-pip-install.yml)
+[![Lint Check](https://github.com/evo-design/bio_programming_tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio_programming_tools/actions/workflows/flake8_check.yml)
+[![Test Pip Install](https://github.com/evo-design/bio_programming_tools/actions/workflows/test-pip-install.yml/badge.svg)](https://github.com/evo-design/bio_programming_tools/actions/workflows/test-pip-install.yml)
 
 This repo contains the tool layer of the [`bio-programming`](https://github.com/evo-design/bio-programming/tree/main) project.
 
@@ -14,8 +14,8 @@ This repo contains the tool layer of the [`bio-programming`](https://github.com/
 
 ```bash
 # Using conda (recommended)
-conda create -n bio_tools python=3.12 -y
-conda activate bio_tools
+conda create -n bio_programming_tools python=3.12 -y
+conda activate bio_programming_tools
 pip install -e .
 
 # For development
@@ -25,8 +25,8 @@ pip install -e ".[dev]"
 ## Usage
 
 ```python
-from bio_tools.tools.infra import EnvManager
-from bio_tools.entities.structures import Structure
+from bio_programming_tools.tools.infra import EnvManager
+from bio_programming_tools.entities.structures import Structure
 
 # Use the tools and entities
 ```
