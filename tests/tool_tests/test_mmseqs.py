@@ -25,9 +25,9 @@ from bio_programming.tools.gene_annotation.mmseqs import (
     MmseqsSearchProteinsInput,
     MmseqsSearchProteinsOutput,
     MmseqsSequenceSearchResult,
-    mmseqs_clustering,
-    mmseqs_search_genomes,
-    mmseqs_search_proteins,
+    run_mmseqs_clustering,
+    run_mmseqs_search_genomes,
+    run_mmseqs_search_proteins,
 )
 
 # Private helper functions (imported directly from submodules for testing)
@@ -390,7 +390,7 @@ class TestMmseqs:
             mmseqs_db=str(db_file),
         )
         config = MmseqsSearchProteinsConfig(threads=2)
-        result = mmseqs_search_proteins(inputs, config)
+        result = run_mmseqs_search_proteins(inputs, config)
 
         # Validate output and export functionality
         validate_output(result)
@@ -411,7 +411,7 @@ class TestMmseqs:
             mmseqs_db=str(db_file),
         )
         config = MmseqsSearchProteinsConfig(threads=2)
-        result = mmseqs_search_proteins(inputs, config)
+        result = run_mmseqs_search_proteins(inputs, config)
 
         assert isinstance(result, MmseqsSearchProteinsOutput)
         assert result.success is True
@@ -430,7 +430,7 @@ class TestMmseqs:
         inputs = MmseqsClusteringInput(input_sequences=sequences)
         config = MmseqsClusteringConfig(min_seq_id=0.95)
 
-        result = mmseqs_clustering(inputs, config)
+        result = run_mmseqs_clustering(inputs, config)
 
         # Validate output and export functionality
         validate_output(result)
@@ -455,7 +455,7 @@ class TestMmseqs:
         inputs = MmseqsClusteringInput(input_sequences=sequences)
         config = MmseqsClusteringConfig(min_seq_id=0.95)
 
-        result = mmseqs_clustering(inputs, config)
+        result = run_mmseqs_clustering(inputs, config)
 
         assert result.num_clusters == 1
         assert all(r.cluster_id == result[0].cluster_id for r in result)
@@ -476,7 +476,7 @@ class TestMmseqs:
         inputs = MmseqsSearchGenomesInput(query_genomes=query_seqs, target_genomes=target_seqs)
         config = MmseqsSearchGenomesConfig()
 
-        result = mmseqs_search_genomes(inputs, config)
+        result = run_mmseqs_search_genomes(inputs, config)
 
         # Validate output and export functionality
         validate_output(result)
@@ -531,7 +531,7 @@ class TestEdgeCases:
             mmseqs_db=str(db_file),
         )
         config = MmseqsSearchProteinsConfig(threads=2)
-        result = mmseqs_search_proteins(inputs, config)
+        result = run_mmseqs_search_proteins(inputs, config)
 
         assert len(result) == 1
         assert result[0].num_hits >= 1
@@ -542,7 +542,7 @@ class TestEdgeCases:
             input_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"],
         )
         config = MmseqsClusteringConfig(min_seq_id=0.95)
-        result = mmseqs_clustering(inputs, config)
+        result = run_mmseqs_clustering(inputs, config)
 
         assert len(result) == 1
         assert result.num_clusters == 1

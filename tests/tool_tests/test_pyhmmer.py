@@ -23,11 +23,11 @@ from bio_programming.tools.gene_annotation.pyhmmer import (
     PyNhmmerInput,
     PyPhmmerConfig,
     PyPhmmerInput,
-    pyhmmer_jackhmmer,
-    pyhmmer_hmmscan,
-    pyhmmer_hmmsearch,
-    pyhmmer_nhmmer,
-    pyhmmer_phmmer,
+    run_pyhmmer_jackhmmer,
+    run_pyhmmer_hmmscan,
+    run_pyhmmer_hmmsearch,
+    run_pyhmmer_nhmmer,
+    run_pyhmmer_phmmer,
 )
 
 # Private helper functions (imported directly from module for testing)
@@ -239,7 +239,7 @@ class TestPyHmmsearchExecution:
             evalue_threshold=1000.0,  # Very permissive to allow hits
             domain_evalue_threshold=1000.0,  # Very permissive to allow hits
         )
-        result = pyhmmer_hmmsearch(inputs, config)
+        result = run_pyhmmer_hmmsearch(inputs, config)
 
         # Validate output and export functionality
         validate_output(result)
@@ -259,7 +259,7 @@ class TestPyHmmsearchExecution:
             evalue_threshold=1e-100,  # Extremely restrictive threshold
             domain_evalue_threshold=1e-100,  # Extremely restrictive domain threshold
         )
-        result = pyhmmer_hmmsearch(inputs, config)
+        result = run_pyhmmer_hmmsearch(inputs, config)
 
         assert result.success is True
         # With such restrictive thresholds, we should get no hits
@@ -275,7 +275,7 @@ class TestPyHmmscanExecution:
             sequences=SAMPLE_SEQUENCES,
         )
         config = PyHmmscanConfig()
-        result = pyhmmer_hmmscan(inputs, config)
+        result = run_pyhmmer_hmmscan(inputs, config)
 
         # Validate output and export functionality
         validate_output(result)
@@ -290,7 +290,7 @@ class TestPyPhmmerExecution:
             target_sequences=SAMPLE_SEQUENCES[2:],
         )
         config = PyPhmmerConfig()
-        result = pyhmmer_phmmer(inputs, config)
+        result = run_pyhmmer_phmmer(inputs, config)
 
         # Validate output (skip export check since test may have no hits)
         validate_output(result, check_export=False)
@@ -308,7 +308,7 @@ class TestPyNhmmerExecution:
             evalue_threshold=1000.0,
             domain_evalue_threshold=1000.0,
         )
-        result = pyhmmer_nhmmer(inputs, config)
+        result = run_pyhmmer_nhmmer(inputs, config)
 
         validate_output(result, check_export=False)
 
@@ -330,7 +330,7 @@ class TestPyJackhmmerExecution:
             evalue_threshold=1000.0,
             domain_evalue_threshold=1000.0,
         )
-        result = pyhmmer_jackhmmer(inputs, config)
+        result = run_pyhmmer_jackhmmer(inputs, config)
 
         validate_output(result, check_export=False)
 
