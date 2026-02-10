@@ -1,10 +1,12 @@
 # tests/test_ligands.py
-import pytest
 import tempfile
 from pathlib import Path
-from bio_programming.bio_tools.entities.ligands import Ligands, Fragment
-from bio_programming.bio_tools.entities.structures.utils import is_valid_structure
-from tests.tool_tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
+
+import pytest
+
+from bio_tools.entities.ligands import Fragment, Ligands
+from bio_tools.entities.structures.utils import is_valid_structure
+from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 
 @pytest.mark.skip_ci

@@ -1,17 +1,13 @@
 """
 test_msas.py
 
-Tests for MSA class in bio_programming.bio_tools.tools.sequence_alignment.msas
+Tests for MSA class in bio_tools.tools.sequence_alignment.msas
 """
 
 import pytest
 
-from bio_programming.bio_tools.tools.sequence_alignment.msas import (
-    MSA,
-    convert_a3m_to_fasta,
-)
-import bio_programming.bio_tools.tools.sequence_alignment.msas as msas_module
-
+import bio_tools.tools.sequence_alignment.msas as msas_module
+from bio_tools.tools.sequence_alignment.msas import MSA, convert_a3m_to_fasta
 
 # ============================================================================
 # Fixtures

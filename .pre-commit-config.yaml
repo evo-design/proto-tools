@@ -1,0 +1,43 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+#
+# Installation:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Manual run:
+#   pre-commit run --all-files
+
+repos:
+  # Auto-generate documentation from tool READMEs
+  - repo: local
+    hooks:
+      - id: generate-docs
+        name: Generate documentation
+        entry: bash -c 'cd "$GIT_PREFIX" && python docs/generate_docs.py'
+        language: system
+        pass_filenames: false
+        files: |
+          (?x)^(
+              bio_tools/tools/.*/README\.md|
+              docs/generate_docs\.py
+          )$
+        stages: [pre-commit]
+
+  # Import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict

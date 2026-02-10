@@ -10,15 +10,15 @@ from typing import List
 import pytest
 from pydantic import Field
 
-from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import (
+from bio_tools.entities.structures.structure import Structure
+from bio_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
-from bio_programming.bio_tools.entities.structures.structure import Structure
 
-TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
+TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 
 @pytest.fixture(scope="module")

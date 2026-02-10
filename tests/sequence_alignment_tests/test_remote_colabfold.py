@@ -12,12 +12,12 @@ import tempfile
 
 import pytest
 
-from bio_programming.bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     run_colabfold_search,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Test Data

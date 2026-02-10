@@ -1,24 +1,26 @@
 """
 test_blast.py
 
-Tests for BLAST tools in bio_programming.bio_tools.tools.gene_annotation.blast
+Tests for BLAST tools in bio_tools.tools.gene_annotation.blast
 """
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 from pydantic import ValidationError
-from bio_programming.bio_tools.tools.gene_annotation import (
-    run_online_blast_search,
-    run_local_blast_search,
-    run_create_blast_db,
-    OnlineBlastInput,
-    OnlineBlastConfig,
-    LocalBlastInput,
-    LocalBlastConfig,
-    CreateBlastDbInput,
-    CreateBlastDbConfig,
+
+from bio_tools.tools.gene_annotation import (
     BlastOutput,
+    CreateBlastDbConfig,
+    CreateBlastDbInput,
+    LocalBlastConfig,
+    LocalBlastInput,
+    OnlineBlastConfig,
+    OnlineBlastInput,
+    run_create_blast_db,
+    run_local_blast_search,
+    run_online_blast_search,
 )
 
 
@@ -137,7 +139,7 @@ def test_additional_params_type_validation():
 
 def test_blast_tools_registered():
     """Test that BLAST tools are registered in ToolRegistry."""
-    from bio_programming.bio_tools.tools.tool_registry import ToolRegistry
+    from bio_tools.tools.tool_registry import ToolRegistry
 
     all_tools = ToolRegistry.list_all()
 
@@ -157,7 +159,7 @@ def test_blast_tools_registered():
 
 def test_blast_config_schema_generation():
     """Test that config schemas are properly generated."""
-    from bio_programming.bio_tools.tools.tool_registry import ToolRegistry
+    from bio_tools.tools.tool_registry import ToolRegistry
 
     # Get schema for online BLAST (returns config schema)
     schema = ToolRegistry.get_schema("online-blast")
@@ -175,7 +177,7 @@ def test_create_blast_db_execution():
         # Create test FASTA
         fasta_path = Path(tmpdir) / "test.fasta"
         fasta_path.write_text(">seq1\nATGCGTAAA\n>seq2\nCCCGGGTTT\n")
-        
+
         # Create database
         inputs = CreateBlastDbInput(
             fasta=str(fasta_path)
@@ -186,7 +188,7 @@ def test_create_blast_db_execution():
         )
 
         result = run_create_blast_db(inputs, config)
-        
+
         assert result.success is True
         assert Path(result.db_path).parent.resolve() == fasta_path.parent.resolve()
         assert result.execution_time > 0
@@ -204,7 +206,7 @@ def test_online_blast_execution():
     )
 
     result = run_online_blast_search(inputs, config)
-    
+
     assert isinstance(result, BlastOutput)
     assert result.tool_id == "online-blast"
     # May or may not have hits depending on database state
@@ -216,7 +218,7 @@ def test_local_blast_execution():
     with tempfile.NamedTemporaryFile(mode='w', suffix='.fasta', delete=False) as f:
         f.write(">test\nATGCGTAAA\n")
         query_file = f.name
-    
+
     try:
         inputs = LocalBlastInput(
             query=query_file
@@ -228,7 +230,7 @@ def test_local_blast_execution():
         )
 
         result = run_local_blast_search(inputs, config)
-        
+
         assert isinstance(result, BlastOutput)
         assert result.tool_id == "local-blast"
         assert result.execution_time >= 0

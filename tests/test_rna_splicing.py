@@ -5,12 +5,17 @@ Test models for predicting RNA splicing (e.g., SpliceTransformer).
 """
 
 import pytest
-from bio_programming.bio_tools.tools.rna_splicing.splice_transformer import (
-    run_splice_transformer,
-    SpliceTransformerInput,
-    SpliceTransformerConfig,
-    TARGET_LENGTH as SPLICE_TRANSFORMER_TARGET_LENGTH,
+
+from bio_tools.tools.rna_splicing.splice_transformer import (
     CONTEXT_LENGTH as SPLICE_TRANSFORMER_CONTEXT_LENGTH,
+)
+from bio_tools.tools.rna_splicing.splice_transformer import (
+    TARGET_LENGTH as SPLICE_TRANSFORMER_TARGET_LENGTH,
+)
+from bio_tools.tools.rna_splicing.splice_transformer import (
+    SpliceTransformerConfig,
+    SpliceTransformerInput,
+    run_splice_transformer,
 )
 
 

@@ -1,7 +1,8 @@
 import pytest
 from rdkit import Chem
-from bio_programming.bio_tools.entities.ligands import Fragment
-from tests.tool_tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
+
+from bio_tools.entities.ligands import Fragment
+from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 
 @pytest.mark.skip_ci

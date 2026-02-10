@@ -1,0 +1,104 @@
+---
+title: Installation
+description: How to install bio-tools
+icon: download
+---
+
+TODO: FINALIZE AFTER BASE ENV IS STABLE
+
+# Installation
+
+## Requirements
+
+- Python 3.9+
+- Linux (required for most tools)
+- CUDA 11.8+ for GPU acceleration (recommended)
+
+## Install
+
+```bash bash icon="terminal"
+pip install bio-tools
+```
+
+## Development Installation
+
+```bash bash icon="terminal"
+git clone https://github.com/evo-design/bio-tools.git
+cd bio-tools
+pip install -e ".[dev]"
+```
+
+## GPU Support
+
+Install PyTorch with CUDA:
+
+```bash bash icon="terminal"
+# CUDA 11.8
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+# CUDA 12.1
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
+
+## Automatic Dependencies
+
+Tools manage their own dependencies using isolated virtual environments. These are created automatically on first use:
+
+- Model weights: `~/.cache/bio_tools/`
+- Virtual environments: `.venvs/` in project directory
+
+## Verification
+
+```python python icon="python"
+import bio_tools
+from bio_tools import setup_logging
+
+setup_logging()
+print(f"Version: {bio_tools.__version__}")
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash bash icon="terminal"
+export BIO_TOOLS_CACHE_DIR="/path/to/cache"
+export BIO_TOOLS_LOG_DIR="/path/to/logs"
+export CUDA_VISIBLE_DEVICES="0,1"
+```
+
+### Logging
+
+```python python icon="python"
+from bio_tools import setup_logging
+import logging
+
+setup_logging(
+    level=logging.INFO,
+    log_to_file=True,
+    log_to_console=True
+)
+```
+
+## Troubleshooting
+
+### CUDA Out of Memory
+
+Use smaller batch sizes or switch to CPU:
+
+```python python icon="python"
+config = ESMFoldConfig(batch_size=1)  # Smaller batch
+# or
+config = ESMFoldConfig(device="cpu")  # CPU mode
+```
+
+### Environment Issues
+
+Remove and recreate:
+
+```bash bash icon="terminal"
+rm -rf .venvs/
+rm -rf ~/.cache/bio_tools/
+```
+
+See individual tool documentation for tool-specific requirements.

@@ -7,7 +7,7 @@ Tests the ESM2 implementation
 import numpy as np
 import pytest
 
-from bio_programming.bio_tools.tools.masked_models.esm2 import (
+from bio_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2ScoringConfig,
@@ -15,7 +15,7 @@ from bio_programming.bio_tools.tools.masked_models.esm2 import (
     run_esm2_embeddings,
     run_esm2_score,
 )
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Embedding Tests

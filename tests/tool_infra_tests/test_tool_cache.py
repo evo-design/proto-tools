@@ -11,8 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from bio_programming.bio_tools.tools.utils import BaseConfig
-from bio_programming.bio_tools.tools.infra.tool_cache import (
+from bio_tools.tools.infra.tool_cache import (
     ToolCache,
     _get_obj_size,
     _program_tool_cache,
@@ -21,10 +20,9 @@ from bio_programming.bio_tools.tools.infra.tool_cache import (
     tool_cache,
     tool_cache_iterable,
 )
-from bio_programming.bio_tools.tools.infra.tool_io import BaseToolInput
-from tests.tool_tests.tool_infra_tests.test_export_functionality import (
-    MockToolOutputBase,
-)
+from bio_tools.tools.infra.tool_io import BaseToolInput
+from bio_tools.tools.utils import BaseConfig
+from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
 class TestToolCaching:
@@ -448,7 +446,7 @@ class TestToolCacheIterable:
             "iterable_test", TestIterableInput, TestIterableOutput
         )
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -504,7 +502,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("order_test", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -593,7 +591,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("verbose_iterable", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -644,7 +642,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("config_test", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -700,7 +698,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("all_cached_test", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -753,7 +751,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("partial_overlap_test", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",
@@ -816,7 +814,7 @@ class TestToolCacheIterable:
         # Mock ToolRegistry.get() to return mock spec
         mock_spec = self.mock_tool_registry_get("cache_info_test", TestInput, TestOutput)
 
-        with patch("bio_programming.bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
+        with patch("bio_tools.tools.infra.tool_cache.ToolRegistry.get", return_value=mock_spec):
             @tool_cache_iterable(
                 input_iterable_field="items",
                 output_iterable_field="results",

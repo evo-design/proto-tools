@@ -1,7 +1,0 @@
-# Evo2/Vortex installs are sensitive; see upstream repos if this fails.
-# https://github.com/ArcInstitute/evo2
-# https://github.com/Zymrael/vortex
-
-evo2
-vtx
-tqdm

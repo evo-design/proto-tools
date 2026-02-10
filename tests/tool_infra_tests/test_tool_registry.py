@@ -12,12 +12,10 @@ import time
 import pytest
 from pydantic import Field
 
-from bio_programming.bio_tools.tools.utils import BaseConfig, ConfigField
-from bio_programming.bio_tools.tools.infra.tool_io import BaseToolInput
-from bio_programming.bio_tools.tools.tool_registry import ToolRegistry, ToolSpec
-from tests.tool_tests.tool_infra_tests.test_export_functionality import (
-    MockToolOutputBase,
-)
+from bio_tools.tools.infra.tool_io import BaseToolInput
+from bio_tools.tools.tool_registry import ToolRegistry, ToolSpec
+from bio_tools.tools.utils import BaseConfig, ConfigField
+from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
 # Test fixtures: Mock tool inputs, configs and outputs
@@ -416,7 +414,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
 
 def test_tool_output_error_access_raises_exception(clean_registry):
     """Test that accessing unset fields on failed output raises ToolExecutionError"""
-    from bio_programming.bio_tools.tools.infra.tool_io import ToolExecutionError
+    from bio_tools.tools.infra.tool_io import ToolExecutionError
 
     @clean_registry.register(
         key="error-access-tool",
