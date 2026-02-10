@@ -20,7 +20,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-CCD_DATABASE_PATH = Path(__file__).parent / "data" / "Components-smiles-stereo-oe.smi"
+CCD_DATABASE_PATH = Path(__file__).parent / "ccd_maps" / "Components-smiles-stereo-oe.smi"
 
 
 def _ensure_ccd_database() -> None:
@@ -322,7 +322,7 @@ COMMON_MODIFICATIONS = {
 
 
 # Path to CCD parent mapping file
-CCD_PARENT_MAPPING_PATH = Path(__file__).parent / "data" / "ccd_to_og.csv"
+CCD_PARENT_MAPPING_PATH = Path(__file__).parent / "ccd_maps" / "ccd_to_og.csv"
 
 # Cache for the CCD parent mapping dataframe
 _CCD_PARENT_DF_CACHE: Optional[pd.DataFrame] = None
