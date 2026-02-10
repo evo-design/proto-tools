@@ -1,4 +1,4 @@
-# `bio_tools`
+# `bio-programming-tools`
 
 [![Lint Check](https://github.com/evo-design/bio_tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio_tools/actions/workflows/flake8_check.yml)
 [![Test Pip Install](https://github.com/evo-design/bio_tools/actions/workflows/test-pip-install.yml/badge.svg)](https://github.com/evo-design/bio_tools/actions/workflows/test-pip-install.yml)
