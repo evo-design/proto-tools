@@ -49,7 +49,7 @@ class TestProteinMPNNSample:
             ]
         )
         config = InverseFoldingConfig(
-            batch_size=10, temperature=1.0, seed=42, keep_on_gpu=False
+            batch_size=10, temperature=1.0, seed=42,
         )
         output = run_proteinmpnn_sample(input, config)
         assert (
@@ -107,7 +107,6 @@ class TestProteinMPNNSample:
             temperature=1.0,
             seed=42,
             excluded_amino_acids=["C"],
-            keep_on_gpu=False,
         )
 
         output = run_proteinmpnn_sample(input, config)
@@ -163,7 +162,7 @@ class TestProteinMPNNScore:
             ]
         )
         config = ProteinMPNNScoringConfig(
-            fixed_positions=fixed_positions, seed=42, keep_on_gpu=False, return_logits=True
+            fixed_positions=fixed_positions, seed=42, return_logits=True
         )
         output = run_proteinmpnn_score(input, config)
         assert (
@@ -194,7 +193,7 @@ class TestProteinMPNNScore:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False, return_logits=True)
+        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
         output = run_proteinmpnn_score(input, config)
         assert output.success
 
@@ -248,7 +247,7 @@ class TestProteinMPNNScore:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False)
+        config = ProteinMPNNScoringConfig(seed=42)
         output = run_proteinmpnn_score(input, config)
         assert output.success
 
@@ -271,7 +270,7 @@ class TestProteinMPNNScore:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False, return_logits=True)
+        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
         output = run_proteinmpnn_score(input, config)
 
         assert output.success
@@ -308,7 +307,7 @@ class TestProteinMPNNScore:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False, return_logits=True)
+        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
         output = run_proteinmpnn_score(input, config)
 
         assert output.success
@@ -369,7 +368,7 @@ class TestProteinMPNNScore:
                     ),
                 ]
             )
-            config = ProteinMPNNScoringConfig(seed=42, keep_on_gpu=False, return_logits=True)
+            config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
             output_first_pass = run_proteinmpnn_score(input_first_pass, config)
 
             # Verify first pass succeeded
@@ -461,11 +460,7 @@ class TestProteinMPNNLogits:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(
-            seed=42,
-            keep_on_gpu=False,
-            # return_logits defaults to False
-        )
+        config = ProteinMPNNScoringConfig(seed=42)
         output = run_proteinmpnn_score(input, config)
 
         assert output.success
@@ -488,11 +483,7 @@ class TestProteinMPNNLogits:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(
-            seed=42,
-            keep_on_gpu=False,
-            return_logits=True,
-        )
+        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
         output = run_proteinmpnn_score(input, config)
 
         assert output.success
@@ -521,11 +512,7 @@ class TestProteinMPNNLogits:
                 ),
             ]
         )
-        config = ProteinMPNNScoringConfig(
-            seed=42,
-            keep_on_gpu=False,
-            return_logits=True,
-        )
+        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
         output = run_proteinmpnn_score(input, config)
 
         assert output.success

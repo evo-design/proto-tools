@@ -415,7 +415,6 @@ class TestBatchedESMFoldInference:
         batched_input = ESMFoldInput(complexes=complexes)
         batched_config = ESMFoldConfig(
             max_batch_residues=10000,  # High limit to force all into one batch
-            keep_on_gpu=True,  # Keep on GPU for subsequent individual runs
         )
         batched_output = run_esmfold(batched_input, batched_config)
 
@@ -429,9 +428,7 @@ class TestBatchedESMFoldInference:
         for i, seq in enumerate(self.TEST_SEQUENCES):
             single_complex = [StructurePredictionComplex(chains=[seq])]
             single_input = ESMFoldInput(complexes=single_complex)
-            # Keep on GPU except for the last one
-            keep_on_gpu = i < len(self.TEST_SEQUENCES) - 1
-            single_config = ESMFoldConfig(keep_on_gpu=keep_on_gpu)
+            single_config = ESMFoldConfig()
             single_output = run_esmfold(single_input, single_config)
 
             assert single_output.success, f"Individual ESMFold failed for sequence {i}"
