@@ -13,8 +13,8 @@ from Bio import SeqIO
 from bio_programming.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
-    BoltzConfig,
-    BoltzInput,
+    Boltz2Config,
+    Boltz2Input,
     Chai1Config,
     Chai1Input,
     ESMFoldConfig,
@@ -24,7 +24,7 @@ from bio_programming.tools.structure_prediction import (
     StructurePredictionComplex,
     StructurePredictionOutput,
     run_alphafold3,
-    run_boltz,
+    run_boltz2,
     run_chai1,
     run_esmfold,
     run_protenix,
@@ -35,9 +35,9 @@ from tests.tool_tests.tool_infra_tests.test_export_functionality import validate
 
 STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig),
-    "af3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
+    "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
     "chai1": (run_chai1, Chai1Input, Chai1Config),
-    "boltz": (run_boltz, BoltzInput, BoltzConfig),
+    "boltz2": (run_boltz2, Boltz2Input, Boltz2Config),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
 }
 
@@ -290,7 +290,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         assert (
             "avg_plddt" in metrics
         ), f"'avg_plddt' not found in {predictor_name} metrics"
-        if predictor_name in ["af3", "alphafold3"]:
+        if predictor_name == "alphafold3":
             assert (
                 0 <= metrics["avg_plddt"] <= 100
             ), f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
