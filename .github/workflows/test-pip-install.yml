@@ -1,0 +1,83 @@
+name: Test Pip Install
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+      - '.github/workflows/test-pip-install.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+      - '.github/workflows/test-pip-install.yml'
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-pip-install:
+    # Only run on non-draft PRs
+    if: github.event.pull_request.draft == false
+    name: Test Pip Install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Upgrade pip
+      run: |
+        python -m pip install --upgrade pip
+
+    - name: Test base installation
+      run: |
+        pip install -e .
+        python -c "import tools; print('✓ tools package import successful')"
+        python -c "import entities; print('✓ entities package import successful')"
+
+    - name: Verify key dependencies
+      run: |
+        python -c "import pydantic; print('✓ pydantic')"
+        python -c "import numpy; print('✓ numpy')"
+        python -c "import pandas; print('✓ pandas')"
+        python -c "import scipy; print('✓ scipy')"
+        python -c "import Bio; print('✓ biopython')"
+        python -c "import biotite; print('✓ biotite')"
+        python -c "import gemmi; print('✓ gemmi')"
+        python -c "import rdkit; print('✓ rdkit')"
+        python -c "import py3Dmol; print('✓ py3Dmol')"
+        python -c "import pyfaidx; print('✓ pyfaidx')"
+        python -c "import matplotlib; print('✓ matplotlib')"
+        python -c "import yaml; print('✓ pyyaml')"
+        python -c "import requests; print('✓ requests')"
+        python -c "import tqdm; print('✓ tqdm')"
+
+    - name: Check package metadata
+      run: |
+        pip show bio-tools
+        echo "✓ Package metadata verified"

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bio-tools"
 version = "0.1.0"
@@ -10,15 +14,71 @@ authors = [
 
 requires-python = ">=3.12"
 
-dependencies = []
+# Core dependencies
+dependencies = [
+    # Core framework
+    "pydantic>=2.0.0",
+
+    # Scientific computing
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scipy>=1.10.0",
+
+    # Bioinformatics
+    "biopython>=1.81",
+    "biotite>=0.38.0",
+    "gemmi",
+
+    # Chemistry & structure
+    "rdkit",
+    "py3Dmol>=2.0.0",
+
+    # File parsing/indexing
+    "pyfaidx",
+
+    # Biology-specific tools
+    "promotercalculator>=1.0.0",
+
+    # Visualization & utilities
+    "matplotlib",
+    "openpyxl>=3.0.0",
+    "ipython",
+    "ipymol>=0.5",
+
+    # Utilities
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "tqdm>=4.65.0",
+]
 
 [project.optional-dependencies]
+
+# Development dependencies
 dev = [
+    # Testing
+    "pytest>=7.3.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+
+    # Code quality
+    "black>=23.0.0",
+    "isort>=5.12.0",
     "flake8>=6.0.0",
     "Flake8-pyproject>=1.2.0",
-    "pytest>=7.0.0",
-    "black>=23.0.0",
-    "isort>=5.0.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.3.0",
+
+    # Notebooks & interactive
+    "jupyter>=1.1.1",
+    "ipykernel>=6.25.0",
+    "ipywidgets>=8.0.0",
+
+    # Visualization
+    "matplotlib>=3.7.0",
+    "seaborn>=0.13.0",
+
+    # Documentation
+    "docstring-parser",
 ]
 
 # Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
@@ -54,12 +114,26 @@ log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 line-length = 88
 target-version = ['py312']
 include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \.venvs
+  | build
+  | dist
+)/
+'''
 
 [tool.isort]
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["bio_programming"]
+known_first_party = ["bio_tools"]
 
 [tool.flake8]
 select = ["F401", "F841"]
@@ -72,3 +146,31 @@ exclude = [
     "dist",
     "*.egg-info",
 ]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    # Bioinformatics packages
+    "biotite.*",
+    "gemmi.*",
+    "rdkit.*",
+    # Visualization
+    "py3Dmol.*",
+    "ipymol.*",
+    # Cloud & storage
+    "google.cloud.*",
+]
+ignore_missing_imports = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tools*", "entities*"]
