@@ -7,8 +7,6 @@ Tests the Evo2 implementation.
 import numpy as np
 import pytest
 
-from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
-
 # Import all evo2 modules at the module level to avoid re-importing vortex library
 # which registers PyTorch custom operations. Re-importing causes schema registration
 # errors in PyTorch 2.7+ when running multiple tests together (pytest --all).
@@ -21,8 +19,11 @@ from bio_programming.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
-from bio_programming.tools.causal_models.evo2.standalone.inference import _slice_cache
 
+# NOTE: This assumes Evo2 is installed in the base environment. We will need to
+# modify or remove these tests in branches where Evo2 uses the standalone venv.
+from bio_programming.tools.causal_models.evo2.standalone.inference import _slice_cache
+from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Sampling Tests
@@ -131,7 +132,7 @@ def test_evo2_sample_prompt_handling(prompt):
 def test_evo2_sample_prepend_prompt():
     """Test that prepend_prompt controls whether prompt is included."""
     prompt = "ATCGATCG"
-    
+
     # With prepend_prompt=True (default)
     result_with = run_evo2_sample(
         inputs=Evo2SampleInput(prompts=[prompt]),
@@ -689,7 +690,7 @@ def test_evo2_score_logits_enabled():
     for score in result.scores:
         assert score.logits is not None, "Logits should not be None when return_logits=True"
         assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-        
+
         # Convert to ndarray for shape validation if it's a list
         logits_arr = np.array(score.logits)
         # Evo2 uses byte-level tokenization, so seq_len may differ from raw length
@@ -712,16 +713,16 @@ def test_evo2_score_logits_serialization():
     validate_output(result)
 
     score = result.scores[0]
-    
+
     # Logits should be serialized as nested lists (not tensors)
     assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
-    
+
     if isinstance(score.logits, list):
         # Verify nested list structure
         assert len(score.logits) > 0, "Logits list should not be empty"
         assert isinstance(score.logits[0], list), "Logits should be a list of lists"
         assert len(score.logits[0]) == 512, "Inner logits list should have 512 elements (Evo2 byte-level vocab)"
-        
+
         # Verify all values are numeric
         for position_logits in score.logits:
             for logit_value in position_logits:
@@ -756,7 +757,7 @@ def test_evo2_sample_logits_inference():
     assert "logits" in result, "Result should contain 'logits' key"
     assert result["logits"] is not None, "Logits should not be None when return_logits=True"
     assert len(result["logits"]) == 2, f"Should have logits for 2 sequences, got {len(result['logits'])}"
-    
+
     # Verify logits are tensors (before serialization at inference layer)
     for i, logits in enumerate(result["logits"]):
         assert hasattr(logits, "shape"), f"Logits[{i}] should be a tensor with shape attribute"
