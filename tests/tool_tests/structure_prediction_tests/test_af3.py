@@ -9,14 +9,14 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming.tools.structure_prediction import (
+from bio_programming.bio_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     Chain,
     StructurePredictionComplex,
     run_alphafold3,
 )
-from bio_programming.tools.structure_prediction.alphafold3 import (
+from bio_programming.bio_tools.tools.structure_prediction.alphafold3 import (
     alphafold3 as alphafold3_module,
 )
 

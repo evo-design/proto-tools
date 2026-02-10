@@ -1,14 +1,14 @@
 """
 test_blast.py
 
-Tests for BLAST tools in bio_programming.tools.gene_annotation.blast
+Tests for BLAST tools in bio_programming.bio_tools.tools.gene_annotation.blast
 """
 
 import pytest
 import tempfile
 from pathlib import Path
 from pydantic import ValidationError
-from bio_programming.tools.gene_annotation import (
+from bio_programming.bio_tools.tools.gene_annotation import (
     run_online_blast_search,
     run_local_blast_search,
     run_create_blast_db,
@@ -137,7 +137,7 @@ def test_additional_params_type_validation():
 
 def test_blast_tools_registered():
     """Test that BLAST tools are registered in ToolRegistry."""
-    from bio_programming.tools.tool_registry import ToolRegistry
+    from bio_programming.bio_tools.tools.tool_registry import ToolRegistry
 
     all_tools = ToolRegistry.list_all()
 
@@ -157,7 +157,7 @@ def test_blast_tools_registered():
 
 def test_blast_config_schema_generation():
     """Test that config schemas are properly generated."""
-    from bio_programming.tools.tool_registry import ToolRegistry
+    from bio_programming.bio_tools.tools.tool_registry import ToolRegistry
 
     # Get schema for online BLAST (returns config schema)
     schema = ToolRegistry.get_schema("online-blast")

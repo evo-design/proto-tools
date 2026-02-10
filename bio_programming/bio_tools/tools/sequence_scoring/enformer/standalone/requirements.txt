@@ -1,0 +1,2 @@
+enformer-pytorch
+transformers==4.36.0

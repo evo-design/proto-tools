@@ -6,13 +6,13 @@ Tests for LigandMPNN sampling and scoring.
 from pathlib import Path
 import pytest
 
-from bio_programming.tools.inverse_folding import (
+from bio_programming.bio_tools.tools.inverse_folding import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
     run_ligandmpnn_sample,
 )
-from bio_programming.tools.structures.structure import ProteinStructure
+from bio_programming.bio_tools.entities.structures.structure import Structure
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin.cif"
@@ -23,14 +23,14 @@ DEFAULT_CHECKPOINT = (
 
 @pytest.fixture(scope="module")
 def cif_structure():
-    return ProteinStructure(structure_filepath_or_content=TEST_CIF_FILE)
+    return Structure(structure_filepath_or_content=TEST_CIF_FILE)
 
 
 class TestLigandMPNNSample:
     """Tests for LigandMPNN sampling."""
 
     @pytest.mark.uses_gpu
-    def test_ligandmpnn_sample_simple(self, cif_structure: ProteinStructure):
+    def test_ligandmpnn_sample_simple(self, cif_structure: Structure):
         """Test basic LigandMPNN sampling with a single structure."""
         input = InverseFoldingInput(
             inputs=[
@@ -53,7 +53,7 @@ class TestLigandMPNNSample:
 
     @pytest.mark.uses_gpu
     def test_ligandmpnn_sample_multiple_structures(
-        self, cif_structure: ProteinStructure
+        self, cif_structure: Structure
     ):
         """Test LigandMPNN sampling with multiple input structures."""
         input = InverseFoldingInput(

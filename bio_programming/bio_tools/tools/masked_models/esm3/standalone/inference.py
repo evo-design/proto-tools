@@ -1,0 +1,598 @@
+"""
+Local ESM3 inference implementation.
+"""
+from __future__ import annotations
+import json
+import math
+import sys
+from typing import List, Dict, Any, Literal, Optional, Tuple
+import torch
+import logging
+import math
+from logging import getLogger
+from typing import Any, Dict, List, Literal, Optional, Tuple
+
+import torch
+from tqdm import tqdm
+
+logger = getLogger(__name__)
+
+# Suppress esm library INFO logs
+logging.getLogger('esm').setLevel(logging.ERROR)
+logging.getLogger('esm.sdk').setLevel(logging.ERROR)
+
+AMINO_ACIDS_LIST: List[str] = list("ACDEFGHIKLMNPQRSTVWY")
+ESM3_MODEL_CHECKPOINTS = Literal[
+    "esm3_sm_open_v1",
+]
+
+class ESM3Model:
+    """
+    ESM3 model for protein sequence embeddings, logits, and structure prediction.
+
+    Multi-modal protein language model from EvolutionaryScale.
+    """
+
+    def __init__(self, model_checkpoint: ESM3_MODEL_CHECKPOINTS = "esm3_sm_open_v1"):
+        """
+        Initialize ESM3 model wrapper.
+
+        Args:
+            model_checkpoint: ESM3 checkpoint name (e.g., "esm3_sm_open_v1")
+        """
+        self._loaded = False
+        self.model_checkpoint = model_checkpoint
+        self.tokenizer = None
+        self.amino_acid_token_ids = None
+        self.device = None
+        self.model = None
+
+    def __call__(
+        self,
+        sequences: List[str],
+        batch_size: int = 128,
+        device: str = "cuda",
+        verbose: bool = False,
+        return_logits: bool = True,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Run ESM3 inference on protein sequences.
+
+        Args:
+            sequences: Protein sequences
+            batch_size: Batch size for processing
+            device: Device to run on
+            verbose: Whether to print progress
+            return_logits: Whether to return logits
+
+        Returns:
+            Dictionary with mean_embeddings, attention_masks, and optionally logits
+        """
+        # Lazy load on first call or device change
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        # Validate input sequences
+        if not sequences:
+            raise ValueError("ESM3Model.__call__ requires at least one sequence.")
+        if any(len(seq) == 0 for seq in sequences):
+            raise ValueError("ESM3Model.__call__ does not support empty sequences.")
+
+        # Get the max sequence length
+        max_seq_len = max(len(seq) for seq in sequences)
+
+        # Split the sequences into batches
+        batches = [
+            sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)
+        ]
+
+        all_mean_embeddings = []
+        all_logits = []
+        all_attention_masks = []
+
+        # For each batch
+        for batch_sequences in tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)):
+            # Tokenize the batch
+            batch_inputs = self.tokenizer(
+                batch_sequences,
+                add_special_tokens=True,
+                padding=True,
+                truncation=False,
+                return_tensors="pt",
+            )
+            # Move the inputs to the correct device
+            batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
+
+            # Forward pass
+            with torch.inference_mode():
+                batch_outputs = self.model(
+                    sequence_tokens=batch_inputs["input_ids"],
+                )
+
+                # Append the embeddings
+                embeddings = batch_outputs.embeddings[:, 1:-1, :] # Remove special tokens
+                attention_mask = batch_inputs["attention_mask"][:, 1:-1]
+
+                # Average over embeddings
+                masked_embeddings = embeddings * attention_mask.unsqueeze(-1)
+                seq_lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
+                batch_mean_embeddings = masked_embeddings.sum(dim=1) / seq_lengths
+                all_mean_embeddings.append(batch_mean_embeddings)
+
+                # Extract logits
+                logits = batch_outputs.sequence_logits[:, 1:-1, :] # Remove special tokens
+                # Only keep the logits corresponding to the amino acids
+                logits = logits[:, :, self.amino_acid_token_ids]
+
+                # Determine padding length
+                additional_padding_len = max_seq_len - embeddings.size(1)
+
+                if additional_padding_len > 0:
+                    # Pad attention_mask
+                    attention_mask = torch.nn.functional.pad(
+                        attention_mask, (0, additional_padding_len), value=0
+                    )
+                    # Pad logits
+                    logits = torch.nn.functional.pad(
+                        logits, (0, 0, 0, additional_padding_len), value=0.0
+                    )
+
+                # Save attention mask and logits
+                all_attention_masks.append(attention_mask)
+                all_logits.append(logits)
+
+        # Concatenate along the batch dimension
+        all_mean_embeddings = torch.cat(all_mean_embeddings, dim=0)
+        all_logits = torch.cat(all_logits, dim=0)
+        all_attention_masks = torch.cat(all_attention_masks, dim=0)
+
+        return {
+            "mean_embeddings": all_mean_embeddings,
+            "logits": all_logits if return_logits else None,
+            "attention_masks": all_attention_masks,
+        }
+
+    def predict_structure(
+        self,
+        sequences: List[str],
+        batch_size: int = 40,
+        device: str = "cuda",
+        verbose: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Predict 3D structures for protein sequences.
+
+        Args:
+            sequences: Protein sequences
+            batch_size: Batch size for structure prediction
+            device: Device to run on
+
+        Returns:
+            List of structure dictionaries
+        """
+        # Lazy import ESM3 dependencies
+        from esm.sdk.api import ESMProtein, GenerationConfig
+
+        # Lazy load on first call or device change
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        # Split the sequences into batches
+        max_batch_size = min(batch_size, len(sequences))
+        batches = [
+            sequences[i : i + max_batch_size]
+            for i in range(0, len(sequences), max_batch_size)
+        ]
+
+        all_structures = []
+
+        # For each batch
+        for batch_sequences in tqdm(batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)):
+            # Create protein and config objects
+            esm3_proteins = [ESMProtein(sequence=seq) for seq in batch_sequences]
+            structure_configs = [GenerationConfig(track="structure")] * len(
+                esm3_proteins
+            )
+
+            # Generate the structures
+            structures = self.model.batch_generate(
+                inputs=esm3_proteins,
+                configs=structure_configs,
+            )
+
+            # Unpack predicted structures
+            for struct in structures:
+                all_structures.append(
+                    {
+                        "sequence": struct.sequence,
+                        "pdb_string": struct.to_pdb_string(),
+                        "avg_plddt": struct.plddt.mean().item(),
+                        "ptm": struct.ptm.item(),
+                    }
+                )
+
+        return all_structures
+
+    def _select_positions(
+        self,
+        aa_logits: torch.Tensor,
+        attention_mask: torch.Tensor,
+        decoding_method: str,
+        num_mutations: int,
+        device: str,
+    ) -> torch.Tensor:
+        """Select positions for mutation (padding excluded)."""
+        device_obj = torch.device(device)
+        if decoding_method == "entropy":
+            probs = torch.softmax(aa_logits, dim=-1)
+            log_probs = torch.log_softmax(aa_logits, dim=-1)
+            scores = -torch.sum(probs * log_probs, dim=-1)
+        elif decoding_method == "max_logit":
+            scores = -torch.max(aa_logits, dim=-1)[0]
+        elif decoding_method == "random":
+            scores = torch.rand(aa_logits.shape[:-1], device=device_obj)
+        else:
+            raise ValueError(f"Unknown decoding_method: {decoding_method}")
+        scores = scores.masked_fill(~attention_mask.bool(), float("-inf"))
+
+        # Validate that num_mutations does not exceed the number of valid (non-padding) positions
+        valid_lengths = attention_mask.sum(dim=1)
+        min_valid = int(valid_lengths.min().item()) if valid_lengths.numel() > 0 else 0
+        if num_mutations > min_valid:
+            raise ValueError(f"num_mutations ({num_mutations}) cannot exceed the shortest sequence length ({min_valid}).")
+
+        position_probs = torch.softmax(scores, dim=1)
+        return torch.multinomial(position_probs, num_mutations, replacement=False)
+
+    def sample(
+        self,
+        sequences: List[str],
+        temperature: float,
+        decoding_method: str,
+        num_mutations: int,
+        batch_size: Optional[int] = None,
+        device: str = "cuda",
+        verbose: bool = False,
+        return_logits: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Sample or mutate protein sequences using ESM3.
+
+        Args:
+            sequences: List of protein sequences to mutate
+            temperature: Sampling temperature for amino acid selection
+            decoding_method: Method for selecting positions ("entropy", "max_logit", "random")
+            num_mutations: Number of positions to mutate per sequence
+            batch_size: Number of sequences to process per batch. If None, processes all at once.
+            device: Device to run on
+            verbose: Whether to print progress
+            return_logits: Whether to return logits used for sampling
+
+        Returns:
+            Dictionary with "sequences" (List[str]) and optionally "logits" (List[Tensor])
+        """
+        device_obj = torch.device(device)
+
+        # Lazy load on first call or device change
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        # Helper: Sample amino acids from logits
+        def sample_amino_acids(
+            seqs: List[str],
+            aa_logits: torch.Tensor,
+            target_positions: torch.Tensor,
+        ) -> List[str]:
+            batch_size, num_positions = target_positions.shape
+            batch_idx = torch.arange(batch_size, device=device_obj).unsqueeze(1)
+
+            target_logits = aa_logits[batch_idx, target_positions]
+            scaled_logits = target_logits / max(temperature, 1e-8)
+            token_probs = torch.softmax(scaled_logits, dim=2)
+
+            flat_probs = token_probs.view(-1, aa_logits.shape[-1])
+            sampled_aa_idx = torch.multinomial(flat_probs, 1).squeeze(1)
+            sampled_aa_idx = sampled_aa_idx.view(batch_size, num_positions)
+            
+            selected_positions_list = target_positions.tolist()
+            sampled_aa_idx_list = sampled_aa_idx.tolist()
+            
+            result = []
+            for orig_seq, pos_list, aa_idx_list in zip(seqs, selected_positions_list, sampled_aa_idx_list):
+                new_aas = [AMINO_ACIDS_LIST[idx] for idx in aa_idx_list]
+                mutated = orig_seq
+                for pos, new_aa in zip(pos_list, new_aas):
+                    mutated = mutated[:pos] + new_aa + mutated[pos + 1:]
+                result.append(mutated)
+            return result
+
+        # Run inference on sequences (always need logits for sampling)
+        effective_batch_size = batch_size if batch_size is not None else len(sequences)
+        outputs = self(
+            sequences=sequences,
+            batch_size=effective_batch_size,
+            device=device,
+            verbose=verbose,
+            return_logits=True,  # Always need logits for sampling
+        )
+        seq_logits = outputs["logits"].to(device_obj)
+        attention_masks = outputs["attention_masks"].to(device_obj)
+        target_positions = self._select_positions(
+            seq_logits, attention_masks, decoding_method, num_mutations, device
+        )
+        sampled_sequences = sample_amino_acids(sequences, seq_logits, target_positions)
+
+        return {
+            "sequences": sampled_sequences,
+            "logits": seq_logits.float() if return_logits else None,
+        }
+
+    def score(
+        self,
+        sequences: List[str],
+        batch_size: int = 32,
+        device: str = "cuda",
+        verbose: bool = False,
+        return_logits: bool = True,
+    ) -> Dict[str, List]:
+        """
+        Score protein sequences using ESM3 with MLM pseudo-perplexity.
+
+        Computes pseudo-perplexity by masking each position individually and
+        computing P(x_i | x_{-i}). Uses batching for efficiency. Requires L forward
+        passes per sequence of length L (batched).
+
+        Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
+        calculation using the industry-standard exclusion strategy. Only positions
+        with standard amino acids contribute to log-likelihood and perplexity.
+
+        Args:
+            sequences: List of protein sequences to score
+            batch_size: Number of masked variants to process per forward pass
+            device: Device to run on
+            verbose: Whether to print progress
+            return_logits: Whether to include logits in the output
+
+        Returns:
+            Dictionary with:
+                - "logits": List of logits tensors (seq_len, vocab_size=20) if return_logits=True
+                - "metrics": List of metric dicts with log_likelihood, avg_log_likelihood, perplexity
+                - "vocab": List of 20 standard amino acid characters
+        """
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        # Validate sequences for scoring
+        if not sequences:
+            raise ValueError("ESM3Model.score requires at least one non-empty sequence.")
+
+        all_logits = []
+        all_metrics = []
+
+        for seq in tqdm(sequences, desc="ESM3 scoring", unit="sequence", total=len(sequences)):
+            if len(seq) == 0:
+                raise ValueError("ESM3Model.score does not support empty sequences.")
+
+            # Compute MLM pseudo-perplexity and collect logits from masked positions
+            # Returns (log_prob, logits, valid_count) where valid_count excludes ambiguous AAs
+            log_prob, logits, valid_count = self._compute_mlm_score(seq, batch_size)
+
+            # Average over valid positions only (exclusion strategy for ambiguous AAs)
+            if valid_count == 0:
+                raise ValueError(f"No valid characters found for ESM3 scoring in sequence: {seq}")
+            avg_ll = log_prob / valid_count
+
+            all_logits.append(logits)
+            all_metrics.append({
+                "log_likelihood": log_prob,
+                "avg_log_likelihood": avg_ll,
+                "perplexity": math.exp(-avg_ll),
+            })
+
+        return {
+            "logits": all_logits if return_logits else None,
+            "metrics": all_metrics,
+            "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
+        }
+
+    def _compute_mlm_score(self, seq: str, batch_size: int) -> Tuple[float, torch.Tensor, int]:
+        """Compute MLM pseudo-perplexity by masking each position.
+
+        This method performs L forward passes (batched) for a sequence of length L,
+        collecting the logits P(aa | context without position i) at each masked position.
+
+        Ambiguous amino acids (X, B, Z, etc.) are excluded from the log-likelihood
+        calculation but their logits are still returned (with values only for
+        standard amino acids).
+
+        Args:
+            seq: Protein sequence
+            batch_size: Number of masked variants per forward pass
+
+        Returns:
+            Tuple of (total_log_probability, logits_tensor, valid_count) where:
+                - total_log_probability: Sum of log probs for standard AA positions only
+                - logits_tensor: Shape (seq_len, vocab_size=20) with AA-only logits
+                - valid_count: Number of standard AA positions (excludes ambiguous)
+        """
+        # Tokenize once
+        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")
+        original_ids = encoded["input_ids"].to(self.device)
+
+        # Create all masked variants (L variants for sequence of length L)
+        masked_ids = original_ids.repeat(len(seq), 1)
+        for pos in range(len(seq)):
+            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS token
+
+        # Get true token IDs directly from tokenized input
+        true_token_ids = original_ids[0, 1 : 1 + len(seq)] # Token positions: [BOS] + seq + [EOS]
+
+        # Create mask for valid (standard AA) positions - exclusion strategy
+        valid_mask = torch.tensor([aa in AMINO_ACIDS_LIST for aa in seq], device=self.device)
+        valid_count = int(valid_mask.sum().item())
+
+        # Initialize outputs
+        total_log_prob = 0.0
+        all_position_logits = []
+
+        # Process in batches
+        for batch_start in range(0, len(seq), batch_size):
+            batch_end = min(batch_start + batch_size, len(seq))
+            batch_ids = masked_ids[batch_start:batch_end]
+
+            with torch.inference_mode():
+                outputs = self.model(sequence_tokens=batch_ids)
+
+            # Extract logits at masked positions
+            batch_indices = torch.arange(batch_end - batch_start, device=self.device)
+            positions = torch.arange(batch_start, batch_end, device=self.device) + 1  # +1 for BOS
+            position_logits = outputs.sequence_logits[batch_indices, positions]
+
+            # Filter logits to AA-only (20 standard amino acids)
+            aa_position_logits = position_logits[:, self.amino_acid_token_ids]
+            all_position_logits.append(aa_position_logits)
+
+            # Compute log probs for scoring (only over standard AAs)
+            log_probs = torch.log_softmax(position_logits, dim=-1)
+
+            # Get log probs for the observed tokens at the masked positions
+            # Only include positions with standard AAs in the total (exclusion strategy)
+            batch_true_ids = true_token_ids[batch_start:batch_end]
+            true_log_probs = log_probs[batch_indices, batch_true_ids]
+
+            # Apply valid mask to exclude ambiguous AAs from log-likelihood
+            batch_valid_mask = valid_mask[batch_start:batch_end].float()
+            total_log_prob += (true_log_probs * batch_valid_mask).sum().item()
+
+        # Concatenate logits from all batches: (seq_len, vocab_size=20)
+        logits = torch.cat(all_position_logits, dim=0)
+        return total_log_prob, logits, valid_count
+
+    # ============================================================================
+    # Helper Functions
+    # ============================================================================
+    def load(self, device: str, verbose: bool = False):
+        """Load ESM3 model and tokenizer to device."""
+        # Lazy import ESM3 dependencies
+        from esm.models.esm3 import ESM3
+        from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
+
+        if verbose:
+            logger.info(f"Loading ESM3 model: {self.model_checkpoint} on {device}")
+
+        # Load model and tokenizer
+        self.model = ESM3.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
+        self.tokenizer = EsmSequenceTokenizer()
+
+        self.amino_acid_token_ids = torch.tensor(
+            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],
+            device=device
+        )
+        self.device = device
+        self._loaded = True
+
+        if verbose:
+            logger.info("ESM3 model loaded successfully")
+
+    def to_device(self, device: str):
+        """Move model to a different device."""
+        if not self._loaded:
+            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+
+        if self.device != device:
+            self.model = self.model.to(device)
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
+            self.device = device
+
+    def unload(self, verbose: bool = False):
+        """Move model to CPU to free GPU memory."""
+        if self._loaded and self.device != "cpu":
+            if verbose:
+                logger.info(f"Unloading {self.__class__.__name__} from GPU")
+
+            self.model = self.model.to("cpu")
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")
+            self.device = "cpu"
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+
+def _serialize_output(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "tolist"):
+        # .tolist() handles CPU transfer internally for CUDA tensors,
+        # avoiding an unnecessary intermediate CPU tensor allocation.
+        return value.tolist()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    return value
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    input_json_path = sys.argv[1]
+    output_json_path = sys.argv[2]
+
+    with open(input_json_path, "r") as f:
+        input_data = json.load(f)
+
+    operation = input_data.get("operation", "embeddings")
+    model_checkpoint = input_data.get("model_checkpoint", "esm3_sm_open_v1")
+    model = ESM3Model(model_checkpoint=model_checkpoint)
+
+    if operation in {"embeddings", "inference"}:
+        result = model(
+            sequences=input_data.get("sequences", []),
+            batch_size=input_data.get("batch_size", 128),
+            device=input_data.get("device", "cuda"),
+            verbose=input_data.get("verbose", False),
+            return_logits=input_data.get("return_logits", False),
+        )
+    elif operation == "sample":
+        result = model.sample(
+            sequences=input_data.get("sequences", []),
+            temperature=input_data.get("temperature", 1.0),
+            decoding_method=input_data.get("decoding_method", "entropy"),
+            num_mutations=input_data.get("num_mutations", 1),
+            batch_size=input_data.get("batch_size"),
+            device=input_data.get("device", "cuda"),
+            verbose=input_data.get("verbose", False),
+            return_logits=input_data.get("return_logits", False),
+        )
+    elif operation == "score":
+        result = model.score(
+            sequences=input_data.get("sequences", []),
+            batch_size=input_data.get("batch_size", 32),
+            device=input_data.get("device", "cuda"),
+            verbose=input_data.get("verbose", False),
+            return_logits=input_data.get("return_logits", False),
+        )
+    elif operation == "predict_structure":
+        result = model.predict_structure(
+            sequences=input_data.get("sequences", []),
+            batch_size=input_data.get("batch_size", 128),
+            device=input_data.get("device", "cuda"),
+            verbose=input_data.get("verbose", False),
+        )
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+    with open(output_json_path, "w") as f:
+        json.dump(_serialize_output(result), f)

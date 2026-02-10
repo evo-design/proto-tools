@@ -1,0 +1,2 @@
+# Dependencies installed via setup.sh for proper ordering
+# (torch with CUDA must be installed before flash-attn)

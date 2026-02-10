@@ -1,0 +1,4 @@
+protenix
+ninja
+nvidia-cuda-nvcc-cu12
+nvidia-cuda-runtime-cu12

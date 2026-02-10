@@ -1,0 +1,3 @@
+# RFdiffusion3 via foundry
+rc-foundry[rfd3]
+gemmi

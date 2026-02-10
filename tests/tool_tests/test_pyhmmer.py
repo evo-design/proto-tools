@@ -1,7 +1,7 @@
 """
 test_pyhmmer.py
 
-Comprehensive tests for PyHMMER tools in bio_programming.tools.gene_annotation.pyhmmer
+Comprehensive tests for PyHMMER tools in bio_programming.bio_tools.tools.gene_annotation.pyhmmer
 """
 
 from pathlib import Path
@@ -11,7 +11,7 @@ import pytest
 from Bio import SeqIO
 
 # Public API imports
-from bio_programming.tools.gene_annotation.pyhmmer import (
+from bio_programming.bio_tools.tools.gene_annotation.pyhmmer import (
     PyHmmerOutput,
     PyJackhmmerConfig,
     PyJackhmmerInput,
@@ -31,7 +31,7 @@ from bio_programming.tools.gene_annotation.pyhmmer import (
 )
 
 # Private helper functions (imported directly from module for testing)
-from bio_programming.tools.gene_annotation.pyhmmer.shared_data_models import (
+from bio_programming.bio_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_dataframes,
     _convert_dtypes,
 )

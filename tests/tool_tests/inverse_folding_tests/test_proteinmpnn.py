@@ -10,23 +10,23 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_programming.tools.inverse_folding.proteinmpnn import (
+from bio_programming.bio_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from bio_programming.tools.inverse_folding.proteinmpnn.standalone.inference import (
+from bio_programming.bio_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
 )
-from bio_programming.tools.inverse_folding.shared_data_models import (
+from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from bio_programming.tools.inverse_folding.shared_data_models import SequenceScores
-from bio_programming.tools.structures.structure import ProteinStructure
+from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import SequenceScores
+from bio_programming.bio_tools.entities.structures.structure import Structure
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -34,13 +34,13 @@ TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.
 
 @pytest.fixture(scope="module")
 def pdb_structure():
-    return ProteinStructure(structure_filepath_or_content=TEST_PDB_FILE)
+    return Structure(structure_filepath_or_content=TEST_PDB_FILE)
 
 
 class TestProteinMPNNSample:
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_sample_simple(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_sample_simple(self, pdb_structure: Structure):
         input = InverseFoldingInput(
             inputs=[
                 InverseFoldingStructureInput(structure=pdb_structure),
@@ -75,7 +75,7 @@ class TestProteinMPNNSample:
             )
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_sample_advanced_args(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_sample_advanced_args(self, pdb_structure: Structure):
         """
         A more complex tests that ensures that advanced config settings work as expected.
         Tests the following advanced config settings:
@@ -136,7 +136,7 @@ class TestProteinMPNNSample:
 class TestProteinMPNNScore:
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score(self, pdb_structure: Structure):
         original_sequence = pdb_structure.get_chain_sequence("A")
 
         # Randomly change a few positions to 'C'
@@ -181,7 +181,7 @@ class TestProteinMPNNScore:
         assert output.scores[0].perplexity < output.scores[1].perplexity
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_fields(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_fields(self, pdb_structure: Structure):
         """Test all scoring fields and their mathematical relationships."""
         original_sequence = pdb_structure.get_chain_sequence("A")
         seq_len = len(original_sequence)
@@ -236,7 +236,7 @@ class TestProteinMPNNScore:
         assert logits_arr.shape == (seq_len, len(ALPHAFOLD_VOCAB))
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_vocab(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_vocab(self, pdb_structure: Structure):
         """Test the vocab property on output (from each SequenceScores)."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
@@ -259,7 +259,7 @@ class TestProteinMPNNScore:
         assert output.scores[0].vocab == ALPHAFOLD_VOCAB
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_single_pair(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_single_pair(self, pdb_structure: Structure):
         """Test ProteinMPNN scoring with a single sequence-structure pair."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
@@ -280,7 +280,7 @@ class TestProteinMPNNScore:
         assert output.scores[0].logits is not None
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_batched(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_batched(self, pdb_structure: Structure):
         """Test batched scoring with multiple sequence-structure pairs."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
@@ -321,11 +321,11 @@ class TestProteinMPNNScore:
             assert "perplexity" in score.metrics
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_cache(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_cache(self, pdb_structure: Structure):
         """
         Tests the caching functionality of ProteinMPNN scoring tool
         """
-        from bio_programming.tools.tool_cache import (
+        from bio_programming.bio_tools.tools.infra.tool_cache import (
             ToolCache,
             _program_tool_cache,
             get_cache_info,
@@ -449,7 +449,7 @@ class TestProteinMPNNScore:
 class TestProteinMPNNLogits:
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_logits_disabled_by_default(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_logits_disabled_by_default(self, pdb_structure: Structure):
         """Test that logits are None when return_logits=False (default)."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
@@ -471,7 +471,7 @@ class TestProteinMPNNLogits:
             assert score.logits is None, "Logits should be None when return_logits=False"
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_logits_enabled(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_logits_enabled(self, pdb_structure: Structure):
         """Test that logits are correctly returned when return_logits=True."""
         original_sequence = pdb_structure.get_chain_sequence("A")
         seq_len = len(original_sequence)
@@ -501,7 +501,7 @@ class TestProteinMPNNLogits:
         assert logits_arr.shape[1] == len(ALPHAFOLD_VOCAB), f"ProteinMPNN vocab size should be {len(ALPHAFOLD_VOCAB)}, got {logits_arr.shape[1]}"
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_logits_serialization(self, pdb_structure: ProteinStructure):
+    def test_proteinmpnn_score_logits_serialization(self, pdb_structure: Structure):
         """Test that logits are properly serialized as nested lists."""
         original_sequence = pdb_structure.get_chain_sequence("A")
 
