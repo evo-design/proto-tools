@@ -8,13 +8,17 @@ import numpy as np
 import pytest
 
 from bio_programming.tools.masked_models.esm3 import (
+    ESM3EmbeddingsConfig,
+    ESM3EmbeddingsInput,
     ESM3ScoringConfig,
     ESM3ScoringInput,
+    ESM3StructurePredictionConfig,
+    ESM3StructurePredictionInput,
+    run_esm3_embeddings,
     run_esm3_score,
+    run_esm3_structure_prediction,
 )
-from bio_programming.tools.masked_models.esm3.standalone.inference import ESM3Model
 from tests.tool_tests.tool_infra_tests.test_export_functionality import validate_output
-
 
 GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
 
@@ -27,42 +31,41 @@ GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSR
 def test_esm3_forward_pass():
     sequences = ["TARGET"] * 10 + ["TEST"] * 30
 
-    esm3_model = ESM3Model()
+    inputs = ESM3EmbeddingsInput(sequences=sequences)
+    config = ESM3EmbeddingsConfig(batch_size=2, return_logits=True)
 
-    outputs = esm3_model(sequences, batch_size=2, device="cuda")
+    result = run_esm3_embeddings(inputs=inputs, config=config)
+    assert result.success, "ESM3 embeddings failed"
 
-    # Check mean embedding shape
-    assert outputs["mean_embeddings"].shape == (
+    # Check mean embedding shape (converted to numpy array for shape checking)
+    mean_embeddings = np.array(result.mean_embeddings)
+    assert mean_embeddings.shape == (
         40,
         1536,
     ), "Avg embedding shape is not correct"
 
     # Check attention mask shape
-    assert outputs["attention_masks"].shape == (
+    attention_masks = np.array(result.attention_masks)
+    assert attention_masks.shape == (
         40,
         6,
     ), "Attention mask shape is not correct"
 
     # Check logit shape
-    assert outputs["logits"].shape == (40, 6, 20), "Logit shape is not correct"
-
-    # Ensure output only contains these keys
-    assert set(outputs.keys()) == {
-        "mean_embeddings",
-        "attention_masks",
-        "logits",
-    }
+    logits = np.array(result.logits)
+    assert logits.shape == (40, 6, 20), "Logit shape is not correct"
 
 
 @pytest.mark.uses_gpu
 def test_esm3_predict_structure():
     sequences = [GFP] * 2
 
-    esm3_model = ESM3Model()
+    inputs = ESM3StructurePredictionInput(sequences=sequences)
+    config = ESM3StructurePredictionConfig(batch_size=2)
 
-    structures = esm3_model.predict_structure(sequences, batch_size=2, device="cuda")
+    result = run_esm3_structure_prediction(inputs=inputs, config=config)
 
-    assert len(structures) == 2
+    assert len(result.structures) == 2
 
 
 # ============================================================================
@@ -71,38 +74,43 @@ def test_esm3_predict_structure():
 
 @pytest.mark.uses_gpu
 def test_esm3_score_inference():
-    """Test ESM3Model.score() with comprehensive value validation."""
+    """Test run_esm3_score() with comprehensive value validation."""
     sequences = ["MKTAYIAKQR", "EVQLVESGGS"]
-    model = ESM3Model()
+    inputs = ESM3ScoringInput(sequences=sequences)
+    config = ESM3ScoringConfig(verbose=False, return_logits=True)
 
-    result = model.score(sequences=sequences, device="cuda", verbose=False, return_logits=True)
+    result = run_esm3_score(inputs=inputs, config=config)
 
-    assert "logits" in result and "metrics" in result and "vocab" in result
-    assert len(result["logits"]) == len(result["metrics"]) == 2
-    assert isinstance(result["vocab"], list)
+    assert len(result.scores) == 2
+    assert isinstance(result.vocab, list)
 
-    for seq, metrics, logits in zip(sequences, result["metrics"], result["logits"]):
+    for seq, score in zip(sequences, result.scores):
         # Validate metrics types
-        assert isinstance(metrics["log_likelihood"], float)
-        assert isinstance(metrics["avg_log_likelihood"], float)
-        assert isinstance(metrics["perplexity"], float)
+        assert isinstance(score.log_likelihood, float)
+        assert isinstance(score.avg_log_likelihood, float)
+        assert isinstance(score.perplexity, float)
 
         # Log likelihood should be negative (log probabilities are <= 0)
-        assert metrics["log_likelihood"] < 0, f"Log likelihood should be negative, got {metrics['log_likelihood']}"
+        assert (
+            score.log_likelihood < 0
+        ), f"Log likelihood should be negative, got {score.log_likelihood}"
 
         # Average log likelihood should be between log_likelihood and 0
-        assert metrics["log_likelihood"] <= metrics["avg_log_likelihood"] <= 0
+        assert score.log_likelihood <= score.avg_log_likelihood <= 0
 
         # Perplexity should be >= 1 (exp(0) = 1 is minimum when avg_ll = 0)
-        assert metrics["perplexity"] >= 1.0, f"Perplexity should be >= 1, got {metrics['perplexity']}"
+        assert score.perplexity >= 1.0, f"Perplexity should be >= 1, got {score.perplexity}"
 
         # Verify perplexity = exp(-avg_log_likelihood)
-        expected_ppl = np.exp(-metrics["avg_log_likelihood"])
-        np.testing.assert_allclose(metrics["perplexity"], expected_ppl, rtol=1e-5)
+        expected_ppl = np.exp(-score.avg_log_likelihood)
+        np.testing.assert_allclose(score.perplexity, expected_ppl, rtol=1e-5)
 
         # Logits shape: (seq_len, vocab_size=20 for standard amino acids)
+        logits = np.array(score.logits)
         assert logits.shape[0] == len(seq), f"Logits seq_len should be {len(seq)}, got {logits.shape[0]}"
-        assert logits.shape[1] == len(result["vocab"]), f"Vocab size should match vocab list, got {logits.shape[1]}"
+        assert logits.shape[1] == len(
+            result.vocab
+        ), f"Vocab size should match vocab list, got {logits.shape[1]}"
 
 
 @pytest.mark.uses_gpu
@@ -184,17 +192,17 @@ def test_esm3_score_metrics_consistency():
 def test_esm3_score_batched():
     """Test batched scoring with different batch sizes."""
     sequences = ["MKTAYIAKQR", "EVQLVESGGS", "MVLSPADKTN", "GSSGSSGSS"]
-    model = ESM3Model()
+    inputs = ESM3ScoringInput(sequences=sequences)
+    config = ESM3ScoringConfig(batch_size=2, verbose=False, return_logits=True)
 
-    # Test with batch_size=2
-    result = model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False, return_logits=True)
+    result = run_esm3_score(inputs=inputs, config=config)
 
-    assert len(result["metrics"]) == 4
-    assert len(result["logits"]) == 4
+    assert len(result.scores) == 4
 
-    for seq, metrics, logits in zip(sequences, result["metrics"], result["logits"]):
-        assert metrics["perplexity"] >= 1.0
-        assert metrics["log_likelihood"] < 0
+    for seq, score in zip(sequences, result.scores):
+        assert score.perplexity >= 1.0
+        assert score.log_likelihood < 0
+        logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
 
 
@@ -275,7 +283,7 @@ def test_esm3_score_logits_enabled():
     for seq, score in zip(sequences, result.scores):
         assert score.logits is not None, "Logits should not be None when return_logits=True"
         assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-        
+
         # Convert to ndarray for shape validation if it's a list
         logits_arr = np.array(score.logits)
         assert logits_arr.shape[0] == len(seq), f"Logits length should be {len(seq)}, got {logits_arr.shape[0]}"
@@ -296,16 +304,16 @@ def test_esm3_score_logits_serialization():
     validate_output(result)
 
     score = result.scores[0]
-    
+
     # Logits should be serialized as nested lists (not tensors)
     assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
-    
+
     if isinstance(score.logits, list):
         # Verify nested list structure
         assert len(score.logits) > 0, "Logits list should not be empty"
         assert isinstance(score.logits[0], list), "Logits should be a list of lists"
         assert len(score.logits[0]) == 20, "Inner logits list should have 20 elements (vocab size)"
-        
+
         # Verify all values are numeric
         for position_logits in score.logits:
             for logit_value in position_logits:
