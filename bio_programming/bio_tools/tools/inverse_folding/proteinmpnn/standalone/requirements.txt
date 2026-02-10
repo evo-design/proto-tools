@@ -1,0 +1,2 @@
+colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@v1.1.1
+# JAX with CUDA is installed by setup.sh (auto-detects CUDA 12 vs 13)

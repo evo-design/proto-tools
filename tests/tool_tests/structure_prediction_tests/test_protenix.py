@@ -7,7 +7,7 @@ Tests each of the 8 Protenix model variants with a simple protein input.
 
 import pytest
 
-from bio_programming.tools.structure_prediction import (
+from bio_programming.bio_tools.tools.structure_prediction import (
     Chain,
     ProtenixConfig,
     ProtenixInput,

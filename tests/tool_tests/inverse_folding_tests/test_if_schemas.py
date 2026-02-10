@@ -10,13 +10,13 @@ from typing import List
 import pytest
 from pydantic import Field
 
-from bio_programming.tools.inverse_folding.shared_data_models import (
+from bio_programming.bio_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
-from bio_programming.tools.structures.structure import ProteinStructure
+from bio_programming.bio_tools.entities.structures.structure import Structure
 
 TEST_PDB_FILE = Path(__file__).parent.parent.parent / "dummy_data" / "renin_af3.pdb"
 
@@ -31,11 +31,11 @@ class TestInverseFoldingStructure:
 
     def test_structure_from_pdb_filepath(self):
         structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE)
-        assert isinstance(structure.structure, ProteinStructure)
+        assert isinstance(structure.structure, Structure)
 
     def test_structure_from_pdb_content(self, pdb_file_content: str):
         structure = InverseFoldingStructureInput(structure=pdb_file_content)
-        assert isinstance(structure.structure, ProteinStructure)
+        assert isinstance(structure.structure, Structure)
 
     def test_structure_with_chain_ids(self):
         structure = InverseFoldingStructureInput(
@@ -78,7 +78,7 @@ class TestInverseFoldingInput:
             ]
         )
         assert len(input.inputs) == 3
-        assert all(isinstance(inp.structure, ProteinStructure) for inp in input.inputs)
+        assert all(isinstance(inp.structure, Structure) for inp in input.inputs)
 
     def test_input_from_pdb_content(self, pdb_file_content: str):
         input = InverseFoldingInput(
@@ -89,7 +89,7 @@ class TestInverseFoldingInput:
             ]
         )
         assert len(input.inputs) == 3
-        assert all(isinstance(inp.structure, ProteinStructure) for inp in input.inputs)
+        assert all(isinstance(inp.structure, Structure) for inp in input.inputs)
 
 
 class MockCustomDesignedSequences(DesignedSequences):

@@ -1,7 +1,7 @@
 """Test RFdiffusion3 structure design."""
 import pytest
 from pathlib import Path
-from bio_programming.tools.structure_design import (
+from bio_programming.bio_tools.tools.structure_design import (
     run_rfdiffusion3,
     RFdiffusion3Input,
     RFdiffusion3Config,

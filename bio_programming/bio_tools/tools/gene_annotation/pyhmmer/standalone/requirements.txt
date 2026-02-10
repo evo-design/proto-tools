@@ -1,0 +1,2 @@
+pyhmmer>=0.10.0
+pandas>=2.0.0

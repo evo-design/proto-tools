@@ -26,7 +26,7 @@ class TestAlphaGenome:
 
     def test_interval_prediction(self):
         """Test interval prediction with multiple output types."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomePredictIntervalConfig,
             AlphaGenomePredictIntervalInput,
             run_alphagenome_predict_interval,
@@ -58,7 +58,7 @@ class TestAlphaGenome:
 
     def test_variant_prediction(self):
         """Test variant prediction returns correct metadata and predictions."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomePredictVariantConfig,
             AlphaGenomePredictVariantInput,
             run_alphagenome_predict_variant,
@@ -94,7 +94,7 @@ class TestAlphaGenome:
 
     def test_sequence_prediction(self):
         """Test prediction from a raw DNA sequence string."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomePredictSequenceConfig,
             AlphaGenomePredictSequenceInput,
             run_alphagenome_predict_sequence,
@@ -122,7 +122,7 @@ class TestAlphaGenome:
 
     def test_variant_scoring(self):
         """Test variant scoring with default scorers."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreVariantConfig,
             AlphaGenomeScoreVariantInput,
             run_alphagenome_score_variant,
@@ -154,7 +154,7 @@ class TestAlphaGenome:
 
     def test_interval_scoring(self):
         """Test interval scoring with default scorers."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreIntervalConfig,
             AlphaGenomeScoreIntervalInput,
             run_alphagenome_score_interval,
@@ -182,7 +182,7 @@ class TestAlphaGenome:
 
     def test_ism(self):
         """Test ISM over a small sub-interval."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreISMInput,
             AlphaGenomeScoreISMConfig,
             run_alphagenome_score_ism_variants,
@@ -210,7 +210,7 @@ class TestAlphaGenome:
 
     def test_ism_with_variant_context(self):
         """Test ISM with an existing variant applied as background context."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreISMInput,
             AlphaGenomeScoreISMConfig,
             run_alphagenome_score_ism_variants,
@@ -241,7 +241,7 @@ class TestAlphaGenome:
 
     def test_full_context_interval_prediction(self):
         """Stress test: interval prediction at the maximum 1 Mb context length."""
-        from bio_programming.tools.sequence_scoring.alphagenome import (
+        from bio_programming.bio_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomePredictIntervalConfig,
             AlphaGenomePredictIntervalInput,
             run_alphagenome_predict_interval,

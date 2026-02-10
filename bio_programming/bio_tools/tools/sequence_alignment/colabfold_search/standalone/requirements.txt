@@ -1,0 +1,1 @@
+colabfold[alphafold] @ git+https://github.com/sokrypton/ColabFold
