@@ -16,8 +16,8 @@ This repo contains the tool layer of the [`bio-programming`](https://github.com/
 
 ```bash
 # Using conda (recommended)
-conda create -n bio_programming_tools python=3.12 -y
-conda activate bio_programming_tools
+conda create -n bio_tools python=3.12 -y
+conda activate bio_tools
 pip install -e .
 
 # For development
