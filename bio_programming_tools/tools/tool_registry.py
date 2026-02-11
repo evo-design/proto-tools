@@ -16,7 +16,7 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Type
 
-from pydantic import Field
+from pydantic import BaseModel, Field, field_serializer
 
 logger = logging.getLogger(__name__)
 
@@ -26,36 +26,56 @@ IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_dtype",
 ]
 
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
-from bio_programming_tools.tools.utils import BaseConfig, BaseRegistry, BaseSpec
+from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils import BaseConfig
 
 
-class ToolSpec(BaseSpec):
+class ToolSpec(BaseModel):
     """
     Specification for a registered tool.
 
-    Extends BaseSpec with tool-specific metadata for discovery and schema generation.
+    Stores tool metadata in the registry and is automatically serialized
+    by FastAPI to JSON for API/client integration.
     """
+
+    # Public fields - exposed in API
+    key: str = Field(description="Internal identifier (e.g., 'blast-search')")
+    label: str = Field(description="External UI display name (e.g., 'BLAST Search')")
+    description: str = Field(description="Detailed description of tool functionality")
+
+    # Configuration model - serialized as JSON Schema
+    config_model: Type[BaseModel] = Field(
+        description="Pydantic model for configuration validation and schema generation"
+    )
 
     # Private fields - excluded from serialization
     input_model: Type[BaseToolInput] = Field(exclude=True)
     output_model: Type[BaseToolOutput] = Field(exclude=True)
     function: Callable = Field(exclude=True)
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
 
-class ToolRegistry(BaseRegistry[ToolSpec]):
+    @field_serializer('config_model')
+    def serialize_config_model(self, config_model: Type[BaseModel]) -> Dict[str, Any]:
+        """Serialize config_model as standard JSON Schema."""
+        return config_model.model_json_schema()
+
+
+class ToolRegistry:
     """
     Registry for tool discovery and schema generation.
 
-    Inherits common registry functionality from BaseRegistry and adds
-    tool-specific metadata.
+    Provides discovery, schema generation, and factory methods for tools.
+    Registration happens at import time via the @tool decorator.
 
     Public Methods:
     - register(): Decorator to register tool functions
     - list_all(): List tools with metadata and schemas
-    - get(): Get tool spec by key (inherited)
-    - get_schema(): Get JSON schema for tool configuration (inherited)
-    - count(): Get number of registered tools (inherited)
+    - get(): Get tool spec by key
+    - get_schema(): Get JSON schema for tool configuration
+    - count(): Get number of registered tools
 
     Examples:
         Registration (in tool files):
@@ -68,24 +88,18 @@ class ToolRegistry(BaseRegistry[ToolSpec]):
         ...     description="Protein similarity search using BLAST",
         ... )
         ... def run_blast(config: BLASTConfig) -> BLASTOutput:
-        ...     # Tool implementation
         ...     pass
 
         API/Client Usage:
-        >>> # List all available tools
         >>> tools = ToolRegistry.list_all()
-        >>>
-        >>> # Get form schema
         >>> schema = ToolRegistry.get_schema("blast-search")
 
         Direct Usage:
-        >>> # Call tool function directly
         >>> from bio_programming_tools.tools.gene_annotation import run_blast, BLASTConfig
         >>> config = BLASTConfig(query_sequences=["MVLSP"], database="/data/nr")
         >>> result = run_blast(config)
     """
 
-    # Each registry subclass must have its own _registry dict
     _registry: Dict[str, ToolSpec] = {}
 
     @classmethod
@@ -117,22 +131,8 @@ class ToolRegistry(BaseRegistry[ToolSpec]):
 
         Returns:
             Decorator that wraps the function with metadata tracking
-
-        Examples:
-            >>> @tool(
-            ...     key="blast-search",
-            ...     label="BLAST Search",
-            ...     input=BLASTInput,
-            ...     config=BLASTConfig,
-            ...     output=BLASTOutput,
-            ...     description="Protein similarity search using BLAST",
-            ... )
-            ... def run_blast(inputs: BLASTInput, config: BLASTConfig) -> BLASTOutput:
-            ...     # Tool only needs to return result data
-            ...     return BLASTOutput(hits=[...])
         """
         def decorator(func: Callable):
-            # Prevent duplicate registration using base class helper
             cls._check_duplicate(key, func.__name__)
 
             @wraps(func)
@@ -223,19 +223,36 @@ class ToolRegistry(BaseRegistry[ToolSpec]):
         List all registered tools as Pydantic models.
 
         Returns list of ToolSpec models that FastAPI automatically serializes to JSON.
-        Each spec includes key, label, description, input_model (serialized as JSON Schema),
-        config_model (serialized as JSON Schema), output_model (serialized as JSON Schema),
-        and function.
 
         Returns:
             List of ToolSpec Pydantic models
-
-        Examples:
-            >>> tools = ToolRegistry.list_all()
-            >>> for spec in tools:
-            ...     print(f"{spec.label} ({spec.key})")
         """
         return list(cls._registry.values())
+
+    @classmethod
+    def get(cls, key: str) -> ToolSpec:
+        """
+        Get tool spec by key.
+
+        Args:
+            key: Tool identifier
+
+        Returns:
+            Tool specification object
+
+        Raises:
+            ValueError: If key not found in registry
+        """
+        if key not in cls._registry:
+            available = ", ".join(sorted(cls._registry.keys()))
+            raise ValueError(f"Unknown tool: '{key}'. Available tools: {available}")
+        return cls._registry[key]
+
+    @classmethod
+    def get_schema(cls, key: str) -> Dict[str, Any]:
+        """Get the JSON schema for a tool's configuration."""
+        spec = cls.get(key)
+        return spec.config_model.model_json_schema()
 
     @classmethod
     def get_input_schema(cls, key: str) -> Dict[str, Any]:
@@ -257,12 +274,34 @@ class ToolRegistry(BaseRegistry[ToolSpec]):
 
     @classmethod
     def get_schemas(cls, key: str) -> Dict[str, Dict[str, Any]]:
-        """Get both input and config schemas."""
+        """Get input, config, and output schemas."""
         return {
             "inputs": cls.get_input_schema(key),
             "config": cls.get_config_schema(key),
             "output": cls.get_output_schema(key),
         }
+
+    @classmethod
+    def count(cls) -> int:
+        """Get count of registered tools."""
+        return len(cls._registry)
+
+    @classmethod
+    def _check_duplicate(cls, key: str, attempted_name: str = None) -> None:
+        """
+        Check for duplicate registration.
+
+        Raises:
+            ValueError: If key already exists in registry
+        """
+        if key in cls._registry:
+            existing_label = cls._registry[key].label
+            error_msg = f"Tool '{key}' is already registered. Duplicate registration is not allowed."
+            if attempted_name:
+                error_msg += f"\nExisting: {existing_label}, Attempted: {attempted_name}"
+            else:
+                error_msg += f"\nExisting tool: {existing_label}"
+            raise ValueError(error_msg)
 
 
 def _re_emit_warnings(warning_list: List[Warning]) -> None:
@@ -273,5 +312,5 @@ def _re_emit_warnings(warning_list: List[Warning]) -> None:
         )
 
 
-# Alias for simpler decorator syntax: @tool(...) instead of @tool(...)
+# Alias for simpler decorator syntax: @tool(...) instead of @ToolRegistry.register(...)
 tool = ToolRegistry.register

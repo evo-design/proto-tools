@@ -5,7 +5,7 @@ from typing import Any, Dict, Literal, Optional
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
-from bio_programming_tools.tools.utils import calculate_gc_content
+from bio_programming_tools.utils import calculate_gc_content
 
 
 class ORF:

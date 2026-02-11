@@ -54,7 +54,7 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2
 )
 
 # Tool cache - decorator for caching tool results
-from .infra import (
+from bio_programming_tools.infra import (
     BaseToolOutput,
     clear_cache,
     clear_tool_cache,

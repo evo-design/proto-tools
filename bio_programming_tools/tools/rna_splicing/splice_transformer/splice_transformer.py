@@ -11,15 +11,15 @@ from pathlib import Path
 from typing import List, Literal
 
 import numpy as np
-from pydantic import Field, model_validator
+from pydantic import Field, field_serializer, model_validator
 
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.infra.tool_cache import tool_cache
+from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.infra import use_cloud_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 logger = logging.getLogger(__name__)
-from bio_programming_tools.tools.infra.tool_cache import tool_cache
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
-from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import NumpyArray, use_cloud_gpu
 
 # ============================================================================
 # Constants & Enums
@@ -171,7 +171,7 @@ class SpliceTransformerOutput(BaseToolOutput):
     per-position probabilities for splice site types and tissue-specific splicing.
 
     Attributes:
-        prediction (NumpyArray): Prediction tensor of shape ``(batch, target_length, 18)``
+        prediction (np.ndarray): Prediction tensor of shape ``(batch, target_length, 18)``
             where:
 
             - ``batch``: Number of input sequences
@@ -207,9 +207,13 @@ class SpliceTransformerOutput(BaseToolOutput):
             All probabilities are in the range [0, 1].
     """
 
-    prediction: NumpyArray = Field(
+    prediction: np.ndarray = Field(
         description="Matrix of (batch, target_length, 18)",
     )
+
+    @field_serializer('prediction')
+    def serialize_prediction(self, value: np.ndarray) -> list:
+        return value.tolist()
 
     @property
     def output_format_options(self) -> List[str]:
@@ -320,7 +324,7 @@ def run_splice_transformer(
         )
     else:
         # Local GPU/CPU via standalone venv
-        from bio_programming_tools.tools.infra.env_manager import EnvManager
+        from bio_programming_tools.infra.env_manager import EnvManager
 
         logger.debug(
             f"Using local device for SpliceTransformer inference (context_length={config.context_length})"

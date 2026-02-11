@@ -5,14 +5,15 @@ import logging
 from pathlib import Path
 from typing import Literal
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.infra.env_manager import EnvManager
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
     MaskedModelScoringOutput,
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+from bio_programming_tools.infra import use_cloud_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 from .standalone.inference import ESM2_MODEL_CHECKPOINTS
 

@@ -32,7 +32,7 @@ class BaseToolInput(BaseModel):
     All tools should extend this with tool-specific primary input fields.
 
     Parameters that are not primary inputs should use the
-    bio_programming_tools.tools.utils.BaseConfig class.
+    bio_programming_tools.utils.BaseConfig class.
     """
 
     model_config = ConfigDict(
@@ -96,6 +96,7 @@ class BaseToolOutput(BaseModel, ABC):
 
     model_config = ConfigDict(
         extra="forbid",
+        arbitrary_types_allowed=True,
         validate_assignment=True,
         use_enum_values=True,
         validate_default=True,

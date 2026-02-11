@@ -23,7 +23,7 @@ from typing import List, Literal, Optional
 from pydantic import model_validator
 
 from bio_programming_tools.entities.structures import BFactorType, Structure
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
+from bio_programming_tools.infra.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -35,7 +35,8 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import ConfigField, use_cloud_gpu
+from bio_programming_tools.infra import use_cloud_gpu
+from bio_programming_tools.utils import ConfigField
 
 logger = getLogger(__name__)
 
@@ -380,7 +381,7 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.infra.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="protenix")
 
