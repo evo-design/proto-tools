@@ -13,20 +13,56 @@ This repo contains the tool layer of the [`bio-programming`](https://github.com/
 ## Installation
 
 ```bash
-# Using conda (recommended)
-conda create -n bio_tools python=3.12 -y
-conda activate bio_tools
-pip install -e .
+# Set up a virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate
 
-# For development
-pip install -e ".[dev]"
+pip install -e .
 ```
+
 
 ## Usage
 
 ```python
-from bio_tools.tools.infra import EnvManager
-from bio_tools.entities.structures import Structure
+from bio_tools.tools.gene_annotation.blast.online_blast import (
+    run_online_blast_search, OnlineBlastInput, OnlineBlastConfig,
+)
 
-# Use the tools and entities
+inputs = OnlineBlastInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK...")
+config = OnlineBlastConfig(program="blastp", database="swissprot")
+result = run_online_blast_search(inputs, config)
+
+print(result.num_hits)
+print(result.results_df.head())
+```
+
+
+## Using with Claude Code
+
+This repo includes a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that lets you run bioinformatics analyses conversationally — no need to memorize APIs. Just launch `claude` from the repo root after installing:
+
+```bash
+claude
+```
+
+Claude automatically picks up the project instructions (`CLAUDE.md`) and the bio-tools skill. Ask it things like:
+
+```
+> BLAST this sequence against swissprot
+> Predict the structure of MKFLIL... with ESMFold
+> Fold MKFLIL... with ESMFold, redesign it with ProteinMPNN, then align the original and designed sequences with MAFFT
+> Fold this sequence, redesign it with inverse folding, and compare the original and designed sequences
+```
+
+It will write runnable scripts to `analyses/` or execute directly depending on context. See [`analyses/examples/`](analyses/examples/) for reference scripts.
+
+
+Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. See [`analyses/examples/`](analyses/examples/) for complete runnable scripts.
+
+## Development
+
+To run tests, linting, and other code quality tools, install with the dev extras:
+
+```bash
+pip install -e ".[dev]"
 ```
