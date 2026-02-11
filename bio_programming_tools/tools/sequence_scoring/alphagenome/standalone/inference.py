@@ -3,14 +3,12 @@ AlphaGenome standalone inference implementation for venv execution.
 """
 from __future__ import annotations
 
-import functools
 import json
 import logging
 import sys
 from typing import Any, List, Optional
 
 import jax
-import numpy as np
 from alphagenome.data import genome
 from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
@@ -184,7 +182,6 @@ class AlphaGenomeModel:
             organism=_ORGANISM_ENUMS[organism],
         )
 
-        _fixup_score_uns_keys(scores)
         df = variant_scorers_lib.tidy_scores(scores)
         return json.loads(df.to_json(orient="records"))
 
@@ -218,7 +215,6 @@ class AlphaGenomeModel:
             organism=_ORGANISM_ENUMS[organism],
         )
 
-        _fixup_score_uns_keys(scores)
         df = variant_scorers_lib.tidy_scores(scores)
         return json.loads(df.to_json(orient="records"))
 
@@ -273,7 +269,6 @@ class AlphaGenomeModel:
             interval_variant=interval_variant,
         )
 
-        _fixup_score_uns_keys(scores)
         df = variant_scorers_lib.tidy_scores(scores)
         return json.loads(df.to_json(orient="records"))
 
@@ -287,7 +282,6 @@ class AlphaGenomeModel:
 
         jax_device = jax.devices("gpu" if device == "cuda" else device)[0]
         self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
-        _patch_predict_device_put(self.model, jax_device)
         self.device = device
         self._loaded = True
 
@@ -326,45 +320,6 @@ class AlphaGenomeModel:
 # Helpers
 # ============================================================================
 
-def _patch_predict_device_put(model, device) -> None:
-    """Monkey-patch ``model._predict`` to explicitly ``device_put`` numpy args.
-
-    Upstream bug: ``DnaModel.score_interval`` passes raw numpy arrays for
-    ``sequence`` and ``organism_indices`` into a
-    ``jax.transfer_guard('disallow')`` block without wrapping them in
-    ``jax.device_put(...)`` first — unlike every other method
-    (``predict_interval``, ``predict_variant``, ``predict_sequence``,
-    ``score_variant``).
-
-    This causes a ``JaxRuntimeError: INVALID_ARGUMENT: Disallowed
-    host-to-device transfer`` at inference time.
-
-    Rather than patching the installed package (not reproducible), we wrap
-    ``_predict`` to explicitly ``device_put`` any numpy arrays before they
-    reach the jit boundary.  ``jax.device_put`` is an *explicit* transfer
-    and is always allowed, even inside a ``transfer_guard('disallow')``
-    context.  For call sites that already pass JAX arrays (all methods
-    except ``score_interval``), this is a no-op.
-
-    TODO: Remove once the upstream bug is fixed.
-    Ref: alphagenome_research/model/dna_model.py  score_interval lines 674-696
-    """
-    original_predict = model._predict
-
-    @functools.wraps(original_predict)
-    def _patched_predict(*args, **kwargs):
-        args = tuple(
-            jax.device_put(a, device) if isinstance(a, np.ndarray) else a
-            for a in args
-        )
-        kwargs = {
-            k: jax.device_put(v, device) if isinstance(v, np.ndarray) else v
-            for k, v in kwargs.items()
-        }
-        return original_predict(*args, **kwargs)
-
-    model._predict = _patched_predict
-
 
 def _serialize_data(value: Any) -> Any:
     """Recursively convert nested prediction objects into JSON-safe structures.
@@ -388,42 +343,6 @@ def _serialize_data(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return _serialize_data(vars(value))
     return str(value)
-
-def _fixup_score_uns_keys(scores):
-    """Fix key mismatches in AnnData between alphagenome_research and alphagenome.
-
-    alphagenome_research's ``score_variant``/``score_interval`` store
-    ``adata.uns['scored_interval']``, but the ``alphagenome`` dependency's
-    ``tidy_scores`` reads ``adata.uns['interval']``.
-
-    Similarly, gene-centric scorers in alphagenome_research put ``Strand``
-    (capital S) in ``adata.obs``, while ``alphagenome``'s ``tidy_anndata``
-    expects the lowercase ``strand`` column.
-
-    TODO: Remove this workaround once the upstream key mismatch is resolved.
-    """
-    for item in scores:
-        if isinstance(item, (list, tuple)):
-            _fixup_score_uns_keys(item)
-        elif hasattr(item, "uns"):
-            if "scored_interval" in item.uns and "interval" not in item.uns:
-                item.uns["interval"] = item.uns.pop("scored_interval")
-            # Normalize obs column: Strand -> strand
-            if hasattr(item, "obs") and "Strand" in item.obs.columns and "strand" not in item.obs.columns:
-                item.obs = item.obs.rename(columns={"Strand": "strand"})
-            # Fix gene_id column issues that crash upstream tidy_anndata.
-            if hasattr(item, "obs") and "gene_id" in item.obs.columns:
-                if len(item.obs) == 0:
-                    # Zero genes in interval: drop gene columns so tidy_anndata
-                    # falls through to its X.shape[0]==0 empty-result branch
-                    # instead of crashing on str.split(..., expand=True)[0].
-                    item.obs = item.obs.drop(
-                        columns=["gene_id", "strand", "Strand"], errors="ignore"
-                    )
-                else:
-                    # Non-empty obs with NaN gene_ids: coerce to string so
-                    # upstream .str accessor doesn't raise AttributeError.
-                    item.obs["gene_id"] = item.obs["gene_id"].fillna("").astype(str)
 
 
 def _resolve_variant_scorers(
