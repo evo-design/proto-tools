@@ -208,15 +208,19 @@ class EnvManager:
     def _get_clean_subprocess_env(self) -> Dict[str, str]:
         """
         Create a clean environment for subprocesses by removing Jupyter/IPython
-        specific variables that can cause issues.
+        specific variables and CUDA library paths that can cause issues.
 
         Jupyter notebooks set environment variables that are only valid within
         the Jupyter context. When these are inherited by subprocesses, they can
         cause errors. For example, MPLBACKEND='module://matplotlib_inline.backend_inline'
         causes matplotlib to fail in non-Jupyter contexts.
 
+        Additionally, LD_LIBRARY_PATH pointing to system CUDA libraries can
+        interfere with bundled CUDA libraries in packages like JAX and PyTorch,
+        causing them to fail to detect GPUs properly.
+
         Returns:
-            A copy of os.environ with problematic Jupyter variables removed.
+            A copy of os.environ with problematic variables removed.
         """
         JUPYTER_BLOCKLIST = {
             'MPLBACKEND',           # Jupyter matplotlib backend - causes immediate error
@@ -232,8 +236,12 @@ class EnvManager:
             'JUPYTER_PATH',
         }
 
+        CUDA_BLOCKLIST = {
+            'LD_LIBRARY_PATH',      # Can override bundled CUDA libraries in venv
+        }
+
         env = os.environ.copy()
-        for key in JUPYTER_BLOCKLIST:
+        for key in JUPYTER_BLOCKLIST | CUDA_BLOCKLIST:
             env.pop(key, None)
         return env
 
@@ -252,9 +260,9 @@ class EnvManager:
                     logger.info(f"Removing broken venv at {self.env_path}")
                     shutil.rmtree(self.env_path)
 
-            # create venv
+            # create venv with --copies to make it independent of base Python
             subprocess.run(
-                [sys.executable, "-m", "venv", str(self.env_path)], check=True
+                [sys.executable, "-m", "venv", "--copies", str(self.env_path)], check=True
             )
 
             # Check if setup script exists
