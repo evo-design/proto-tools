@@ -13,11 +13,10 @@ from typing import List, Literal
 import numpy as np
 from pydantic import Field, field_serializer, model_validator
 
-from bio_programming_tools.infra.tool_cache import tool_cache
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_modal_gpu
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +323,7 @@ def run_splice_transformer(
         )
     else:
         # Local GPU/CPU via standalone venv
-        from bio_programming_tools.infra.env_manager import EnvManager
+        from bio_programming_tools.utils.env_manager import EnvManager
 
         logger.debug(
             f"Using local device for SpliceTransformer inference (context_length={config.context_length})"

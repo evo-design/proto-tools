@@ -22,7 +22,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.infra.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
@@ -30,10 +30,10 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_modal_gpu
 from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_protein_chars,
+    use_modal_gpu,
 )
 
 
@@ -310,7 +310,7 @@ def run_esmfold(
         # Use local GPU execution via venv subprocess
         logger.debug("Using local GPU for ESMFold structure prediction...")
 
-        from bio_programming_tools.infra.env_manager import EnvManager
+        from bio_programming_tools.utils.env_manager import EnvManager
 
         venv_manager = EnvManager(model_name="esmfold")
 

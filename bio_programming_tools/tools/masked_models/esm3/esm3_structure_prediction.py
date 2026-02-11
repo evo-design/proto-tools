@@ -7,15 +7,14 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import Field
 
-from bio_programming_tools.infra.env_manager import EnvManager
-from bio_programming_tools.infra.tool_io import BaseToolOutput
+from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_modal_gpu
-from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField, use_modal_gpu
 
 from .standalone.inference import ESM3_MODEL_CHECKPOINTS
 

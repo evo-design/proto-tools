@@ -21,11 +21,10 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.infra.tool_cache import tool_cache
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_modal_gpu
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 logger = logging.getLogger(__name__)
 
@@ -572,7 +571,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config) -> R
     else:
         logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
-        from bio_programming_tools.infra.env_manager import EnvManager
+        from bio_programming_tools.utils.env_manager import EnvManager
 
         venv_manager = EnvManager(model_name="rfdiffusion3")
 

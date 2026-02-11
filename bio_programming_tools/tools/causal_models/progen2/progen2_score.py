@@ -11,11 +11,10 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.infra.env_manager import EnvManager
-from bio_programming_tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_modal_gpu
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 from .standalone.inference import PROGEN2_MODEL_CHECKPOINTS
 
