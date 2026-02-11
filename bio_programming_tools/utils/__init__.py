@@ -16,6 +16,8 @@ from .helpers import (
     return_invalid_dna_chars,
     return_invalid_nucleotide_chars,
     return_invalid_protein_chars,
+    return_invalid_rna_chars,
+    validate_smiles,
 )
 from .logging_config import get_logger, setup_logging
 from .tool_cache import (
@@ -39,6 +41,8 @@ __all__ = [
     "return_invalid_dna_chars",
     "return_invalid_nucleotide_chars",
     "return_invalid_protein_chars",
+    "return_invalid_rna_chars",
+    "validate_smiles",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",

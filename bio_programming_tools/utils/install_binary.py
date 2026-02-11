@@ -38,7 +38,7 @@ def _find_tool_config(tool_name: str) -> Path:
 
     Uses the same discovery pattern as EnvManager._determine_valid_model_name().
     """
-    tools_dir = Path(__file__).parent.parent  # infra's parent = tools
+    tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> bio_programming_tools/ -> tools/
 
     for item in tools_dir.rglob("*"):
         if (
