@@ -7,15 +7,14 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
     MaskedModelOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_cloud_gpu
-from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField, use_cloud_gpu
 
 from .standalone.inference import ESM2_MODEL_CHECKPOINTS
 

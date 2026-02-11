@@ -7,11 +7,10 @@ from typing import List, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.infra.env_manager import EnvManager
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_cloud_gpu
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
 
 from .standalone.inference import PROGEN2_MODEL_CHECKPOINTS
 

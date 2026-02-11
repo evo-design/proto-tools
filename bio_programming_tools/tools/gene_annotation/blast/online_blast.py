@@ -10,8 +10,8 @@ from Bio import SeqIO
 from Bio.Blast import NCBIWWW, NCBIXML
 from pydantic import ConfigDict, Field
 
-from bio_programming_tools.infra.tool_cache import tool_cache
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 

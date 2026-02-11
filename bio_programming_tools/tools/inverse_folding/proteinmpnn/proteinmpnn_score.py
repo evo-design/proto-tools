@@ -8,17 +8,16 @@ from typing import Dict, List, Optional
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.infra.env_manager import EnvManager
-from bio_programming_tools.infra.tool_cache import tool_cache_iterable
-from bio_programming_tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceScores,
     SequenceStructurePair,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.infra import use_cloud_gpu
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
 
 logger = logging.getLogger(__name__)
 

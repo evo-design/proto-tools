@@ -8,8 +8,8 @@ from typing import Dict, Literal
 import pandas as pd
 from pydantic import Field, field_validator
 
-from bio_programming_tools.infra.tool_cache import tool_cache
-from bio_programming_tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
@@ -159,7 +159,7 @@ def run_local_blast_search(inputs: LocalBlastInput, config: LocalBlastConfig) ->
         >>> result = run_local_blast_search(inputs, config)
         >>> print(f"Found {result.num_hits} hits")
     """
-    from bio_programming_tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="blast")
 

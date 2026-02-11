@@ -26,7 +26,7 @@ IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_dtype",
 ]
 
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.utils import BaseConfig
 
 

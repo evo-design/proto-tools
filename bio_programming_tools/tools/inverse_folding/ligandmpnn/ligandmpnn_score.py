@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceStructurePair,

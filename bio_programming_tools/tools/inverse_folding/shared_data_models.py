@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
 

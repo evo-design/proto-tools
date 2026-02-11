@@ -17,7 +17,7 @@ from typing import Any, Dict
 
 import numpy as np
 
-from .gpu import determine_visible_devices
+from .device import determine_visible_devices
 
 logger = getLogger(__name__)
 
