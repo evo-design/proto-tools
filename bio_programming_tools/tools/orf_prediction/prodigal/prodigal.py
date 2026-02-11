@@ -16,11 +16,11 @@ from typing import List
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import (
+from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     return_invalid_dna_chars,
@@ -341,7 +341,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig) -> Pr
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="prodigal")
 

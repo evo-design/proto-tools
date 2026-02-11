@@ -8,7 +8,7 @@ from typing import List, Tuple, Type
 
 import pytest
 
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 
 # Defines the maximum length of a field description in characters

@@ -6,9 +6,9 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 
 # ============================================================================
@@ -191,7 +191,7 @@ def run_create_blast_db(
         >>> print(f"Database created at: {result.db_path}")
     """
 
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     fasta_path = Path(inputs.fasta)
 

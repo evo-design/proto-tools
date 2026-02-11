@@ -6,8 +6,8 @@ from pathlib import Path
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 
 from .shared_data_models import AlphaGenomePredictConfig, AlphaGenomePredictOutput

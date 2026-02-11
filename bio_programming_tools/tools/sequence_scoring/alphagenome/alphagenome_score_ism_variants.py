@@ -7,7 +7,7 @@ from typing import Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.tools.tool_registry import tool
 
 from .alphagenome_score_variant import AlphaGenomeScoreVariantConfig

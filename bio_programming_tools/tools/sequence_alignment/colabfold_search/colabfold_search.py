@@ -17,11 +17,11 @@ from typing import Iterator, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +524,7 @@ def _cleanup_default_output_dir_if_cache_empty(
     if config._user_specified_output_dir:
         return
 
-    from bio_programming_tools.tools.infra.tool_cache import has_cached_entries
+    from bio_programming_tools.utils.tool_cache import has_cached_entries
 
     # Only cleanup if cache is empty (no entries to preserve)
     if has_cached_entries("colabfold-search"):
@@ -639,7 +639,7 @@ def _local_search(
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
 
     # Use EnvManager to run colabfold_search in isolated environment
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="colabfold_search")
 
@@ -731,7 +731,7 @@ def _remote_search(
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")
 
     # Use EnvManager to run remote search in isolated environment
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="colabfold_search")
 

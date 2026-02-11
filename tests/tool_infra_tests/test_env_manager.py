@@ -1,5 +1,5 @@
 """
-Tests for EnvManager class in bio_programming_tools.tools.infra.env_manager
+Tests for EnvManager class in bio_programming_tools.utils.env_manager
 
 These tests verify that venvs can be created successfully for all models
 with standalone directories. The venv creation tests are marked with @skip_ci
@@ -7,7 +7,7 @@ to avoid running in CI environments due to their resource-intensive nature.
 """
 import pytest
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 
 
 # List of all models with standalone directories

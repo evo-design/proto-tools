@@ -5,9 +5,9 @@ import logging
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 from .shared_data_models import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,

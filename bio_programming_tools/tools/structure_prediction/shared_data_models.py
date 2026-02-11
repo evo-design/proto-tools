@@ -12,8 +12,8 @@ from bio_programming_tools.entities.ligands.ccd_utils import (
     get_modifications_for_component,
 )
 from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
-from bio_programming_tools.tools.utils import (
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     detect_sequence_type,

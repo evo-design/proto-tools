@@ -15,10 +15,10 @@ import pandas as pd
 from Bio import SeqIO
 from pydantic import ConfigDict, Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 
 class SegmaskerInput(BaseToolInput):

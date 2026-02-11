@@ -11,7 +11,7 @@ import pytest
 from Bio import SeqIO
 
 from bio_programming_tools.entities.structures import is_valid_structure
-from bio_programming_tools.tools.infra.tool_cache import ToolCache
+from bio_programming_tools.utils.tool_cache import ToolCache
 from bio_programming_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -331,7 +331,7 @@ def test_folding_cache():
     Tests the caching functionality of structure prediction tools using small
     toy examples with ESMFold
     """
-    from bio_programming_tools.tools.infra.tool_cache import (
+    from bio_programming_tools.utils.tool_cache import (
         _program_tool_cache,
         get_cache_info,
     )

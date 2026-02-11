@@ -19,7 +19,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -32,7 +32,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField, use_modal_gpu
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
@@ -533,7 +533,7 @@ def run_chai1_on_complex(
         # Use local GPU execution via venv subprocess (required for dependency isolation)
         logger.debug("Using local GPU for Chai1 structure prediction...")
 
-        from bio_programming_tools.tools.infra.env_manager import EnvManager
+        from bio_programming_tools.utils.env_manager import EnvManager
 
         venv_manager = EnvManager(model_name="chai1")
 

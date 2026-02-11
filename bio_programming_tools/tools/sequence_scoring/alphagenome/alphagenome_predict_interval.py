@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.tools.tool_registry import tool
 
 from .shared_data_models import (

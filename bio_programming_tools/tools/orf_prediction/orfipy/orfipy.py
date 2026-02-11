@@ -13,11 +13,11 @@ from typing import List, Literal, Optional
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import (
+from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     resolve_sequence_ids,
@@ -345,7 +345,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig) -> OrfipyOu
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 

@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.infra.tool_cache import ToolCache, _program_tool_cache
+from bio_programming_tools.utils.tool_cache import ToolCache, _program_tool_cache
 from bio_programming_tools.tools.orf_prediction import (
     ORF,
     ProdigalConfig,
@@ -311,7 +311,7 @@ class TestProdigalRegistration:
 
     def test_tool_schema_generation(self):
         """Test that JSON schema is generated correctly."""
-        schema = ToolRegistry.get_schema("prodigal-prediction")
+        schema = ToolRegistry.get_config_schema("prodigal-prediction")
         assert "properties" in schema
         # Config fields should be in schema
         assert "meta_mode" in schema["properties"]
@@ -440,7 +440,7 @@ class TestProdigalCaching:
 
             # Patch the subprocess call to verify it's invoked only when not cached.
             # We use the real method as side_effect so real logic still runs.
-            from bio_programming_tools.tools.infra.env_manager import EnvManager
+            from bio_programming_tools.utils.env_manager import EnvManager
 
             real_call = EnvManager.call_standalone_script_in_venv
 

@@ -325,7 +325,7 @@ class TestProteinMPNNScore:
         """
         Tests the caching functionality of ProteinMPNN scoring tool
         """
-        from bio_programming_tools.tools.infra.tool_cache import (
+        from bio_programming_tools.utils.tool_cache import (
             ToolCache,
             _program_tool_cache,
             get_cache_info,

@@ -17,7 +17,7 @@ from typing import Any, Dict
 
 import numpy as np
 
-from bio_programming_tools.tools.utils import determine_visible_devices
+from .device import determine_visible_devices
 
 logger = getLogger(__name__)
 
@@ -56,8 +56,8 @@ class EnvManager:
             refresh: Whether to refresh the venv if it already exists
         """
         self.model_name = self._determine_valid_model_name(model_name)
-        # Get project root (three levels up: infra/ -> tools/ -> bio_programming_tools/ -> project_root/)
-        project_root = Path(__file__).parent.parent.parent.parent
+        # Get project root (three levels up: utils/ -> bio_programming_tools/ -> project_root/)
+        project_root = Path(__file__).parent.parent.parent
         venv_root = project_root / ".venvs"
         venv_root.mkdir(parents=True, exist_ok=True)
         self.env_path = venv_root / f"{model_name}_env"
@@ -87,8 +87,8 @@ class EnvManager:
         Helper function to determine if a provided model is a model that contains
         a 'standalone' subdirectory.
         """
-        # Get tools directory (two levels up from this file: infra/ -> tools/)
-        tools_dir = Path(__file__).parent.parent
+        # Get tools directory (utils/ -> bio_programming_tools/ -> tools/)
+        tools_dir = Path(__file__).parent.parent / "tools"
         available_models = []
 
         # Find all directories that contain a "standalone" subdirectory
@@ -120,8 +120,8 @@ class EnvManager:
         Raises:
             ValueError: If no valid setup.sh is found for the model
         """
-        # Get tools directory (two levels up from this file: infra/ -> tools/)
-        tools_dir = Path(__file__).parent.parent
+        # Get tools directory (utils/ -> bio_programming_tools/ -> tools/)
+        tools_dir = Path(__file__).parent.parent / "tools"
 
         # Find all directories that match the model name and have a standalone subdirectory
         matching_dirs = []

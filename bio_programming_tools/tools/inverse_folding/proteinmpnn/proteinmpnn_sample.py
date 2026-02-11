@@ -9,7 +9,7 @@ import numpy as np
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -17,7 +17,7 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import use_modal_gpu
+from bio_programming_tools.utils import use_modal_gpu
 
 logger = logging.getLogger(__name__)
 

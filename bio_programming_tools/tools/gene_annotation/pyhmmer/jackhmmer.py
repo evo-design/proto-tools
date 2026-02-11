@@ -6,9 +6,9 @@ from typing import List
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -103,7 +103,7 @@ def run_pyhmmer_jackhmmer(
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="pyhmmer")
 

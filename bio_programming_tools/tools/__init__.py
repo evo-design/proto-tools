@@ -53,14 +53,14 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2
     run_pyhmmer_phmmer,
 )
 
-# Tool cache - decorator for caching tool results
-from .infra import (
-    BaseToolOutput,
+# Tool cache and I/O
+from bio_programming_tools.utils.tool_cache import (
     clear_cache,
     clear_tool_cache,
     get_cache_info,
     tool_cache,
 )
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 # Inverse folding tools
 from .inverse_folding import (  # Shared Data Models (user-facing helpers only); ProteinMPNN; LigandMPNN

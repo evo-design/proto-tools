@@ -6,7 +6,7 @@ from typing import List
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.tool_registry import tool
 
 from .shared_data_models import (
@@ -115,7 +115,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig) -> PyPhmme
         ...         result.sequence_hits_df['evalue'] < 1e-10
         ...     ]
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     venv_manager = EnvManager(model_name="pyhmmer")
 

@@ -7,10 +7,10 @@ from typing import Iterator, List, Optional
 import pandas as pd
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import (
+from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     resolve_sequence_ids,
@@ -231,7 +231,7 @@ def run_mmseqs_search_genomes(
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 
     query_sequences = inputs.query_genomes
     target_sequences = inputs.target_genomes

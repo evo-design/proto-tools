@@ -20,8 +20,6 @@ from typing import Any, Callable, TypeVar
 
 from pydantic import BaseModel
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-
 logger = logging.getLogger(__name__)
 
 # Context variable for program-scoped cache
@@ -502,6 +500,8 @@ def tool_cache_iterable(
             )
 
             # Get the input and output pydantic model classes from the ToolRegistry
+            # Imported here to avoid circular import: utils -> tool_registry -> tools -> utils
+            from bio_programming_tools.tools.tool_registry import ToolRegistry
             tool_spec = ToolRegistry.get(actual_tool_name)
             input_model = tool_spec.input_model
             output_model = tool_spec.output_model

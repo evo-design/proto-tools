@@ -8,9 +8,9 @@ from typing import List, Literal, Union
 from pydantic import ConfigDict, Field, model_validator
 from tqdm import tqdm
 
-from bio_programming_tools.tools.infra.tool_io import BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 from .borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
 

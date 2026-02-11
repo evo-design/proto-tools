@@ -22,7 +22,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
-    from bio_programming_tools.tools.infra.env_manager import EnvManager
+    from bio_programming_tools.utils.env_manager import EnvManager
 except ModuleNotFoundError:
     print(f"ERROR: Could not import bio_programming_tools", file=sys.stderr)
     print(f"  Script location: {SCRIPT_DIR}", file=sys.stderr)

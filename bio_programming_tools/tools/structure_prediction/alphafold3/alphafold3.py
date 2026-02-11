@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.ligands import map_smiles_to_ccd_code
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.tools.infra.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
 )
@@ -32,7 +32,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField, use_modal_gpu
 
 from .inference import AlphaFold3JSON, alphafold3_inference
 

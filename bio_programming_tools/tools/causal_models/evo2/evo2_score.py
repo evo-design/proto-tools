@@ -10,9 +10,9 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 from .evo2_cache import get_cached_evo2_model
 from .standalone.inference import EVO2_MODEL_CHECKPOINTS
