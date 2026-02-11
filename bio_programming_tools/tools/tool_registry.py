@@ -74,7 +74,7 @@ class ToolRegistry:
     - register(): Decorator to register tool functions
     - list_all(): List tools with metadata and schemas
     - get(): Get tool spec by key
-    - get_schema(): Get JSON schema for tool configuration
+    - get_config_schema(): Get JSON schema for tool configuration
     - count(): Get number of registered tools
 
     Examples:
@@ -92,7 +92,7 @@ class ToolRegistry:
 
         API/Frontend Usage:
         >>> tools = ToolRegistry.list_all()
-        >>> schema = ToolRegistry.get_schema("blast-search")
+        >>> schema = ToolRegistry.get_config_schema("blast-search")
 
         Direct Usage:
         >>> from bio_programming_tools.tools.gene_annotation import run_blast, BLASTConfig
@@ -247,12 +247,6 @@ class ToolRegistry:
             available = ", ".join(sorted(cls._registry.keys()))
             raise ValueError(f"Unknown tool: '{key}'. Available tools: {available}")
         return cls._registry[key]
-
-    @classmethod
-    def get_schema(cls, key: str) -> Dict[str, Any]:
-        """Get the JSON schema for a tool's configuration."""
-        spec = cls.get(key)
-        return spec.config_model.model_json_schema()
 
     @classmethod
     def get_input_schema(cls, key: str) -> Dict[str, Any]:

@@ -95,7 +95,7 @@ Different tissues express different splice isoforms:
 
 | Field | Type | Shape | Description |
 |-------|------|-------|-------------|
-| prediction | NumpyArray | (batch, target_len, 18) | Per-position predictions |
+| prediction | np.ndarray | (batch, target_len, 18) | Per-position predictions |
 
 **Prediction channels:**
 | Index | Content |
