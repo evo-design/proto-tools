@@ -23,7 +23,6 @@ dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "scipy>=1.10.0",
-    "torch>=2.0.0",
 
     # Bioinformatics
     "biopython>=1.81",
