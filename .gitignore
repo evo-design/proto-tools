@@ -38,7 +38,6 @@ build/
 # AI tools
 .cursor/
 .cursorignore
-.claude/
 
 file_store/
 
