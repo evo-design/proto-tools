@@ -14,7 +14,7 @@ from typing import List
 import pytest
 from pydantic import Field
 
-from bio_tools.tools.infra.tool_io import BaseToolOutput
+from bio_programming_tools.tools.infra.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 

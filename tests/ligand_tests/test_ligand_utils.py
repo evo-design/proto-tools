@@ -2,7 +2,10 @@
 import pytest
 from rdkit import Chem
 
-from bio_tools.entities.ligands.utils import get_name_from_smiles, get_smiles_from_name
+from bio_programming_tools.entities.ligands.utils import (
+    get_name_from_smiles,
+    get_smiles_from_name,
+)
 
 
 @pytest.mark.skip_ci

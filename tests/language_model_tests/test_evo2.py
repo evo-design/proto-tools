@@ -10,7 +10,7 @@ import pytest
 # Import all evo2 modules at the module level to avoid re-importing vortex library
 # which registers PyTorch custom operations. Re-importing causes schema registration
 # errors in PyTorch 2.7+ when running multiple tests together (pytest --all).
-from bio_tools.tools.causal_models.evo2 import (
+from bio_programming_tools.tools.causal_models.evo2 import (
     Evo2Model,
     Evo2SampleConfig,
     Evo2SampleInput,
@@ -22,7 +22,9 @@ from bio_tools.tools.causal_models.evo2 import (
 
 # NOTE: This assumes Evo2 is installed in the base environment. We will need to
 # modify or remove these tests in branches where Evo2 uses the standalone venv.
-from bio_tools.tools.causal_models.evo2.standalone.inference import _slice_cache
+from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
+    _slice_cache,
+)
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================

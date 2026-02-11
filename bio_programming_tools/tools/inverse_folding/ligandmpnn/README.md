@@ -1,0 +1,129 @@
+# LigandMPNN
+
+## Overview
+LigandMPNN is an inverse-folding model for designing protein sequences conditioned
+on a protein backbone and nearby ligand/cofactor context.
+
+This tool exposes ligand-aware sequence sampling through:
+- `ligandmpnn-sample` (registered tool)
+- `run_ligandmpnn_sample(...)` (Python entry point)
+
+## Module Layout
+LigandMPNN now follows the same split structure used by `evo2`, `esm2`, `esm3`,
+and `proteinmpnn`:
+
+- `ligandmpnn_sample.py`:
+  - `LigandMPNNSequences`
+  - `run_ligandmpnn_sample`
+- `ligandmpnn_score.py`:
+  - `LigandMPNNScoringInput`
+  - `LigandMPNNScoringConfig`
+  - `run_ligandmpnn_score` (stub; not implemented)
+
+## When To Use
+- Design sequences for a fixed backbone where ligand/ion/cofactor context matters.
+- Preserve active-site constraints with `fixed_positions`.
+- Generate sequence libraries for ligand-binding scaffolds.
+
+If ligand context is not important, `proteinmpnn` is usually the better default.
+
+## Tool Matrix
+| Tool | Status | Input | Output |
+|------|--------|-------|--------|
+| `ligandmpnn-sample` | Available | `InverseFoldingInput` | `InverseFoldingOutput` |
+| `ligandmpnn-score` | Not registered yet | `LigandMPNNScoringInput` | `LigandMPNNScoringOutput` |
+
+## Important Parameters
+
+### Input (`InverseFoldingInput`)
+`InverseFoldingInput` wraps a list of `InverseFoldingStructureInput` objects:
+
+| Field | Type | Description |
+|------|------|-------------|
+| `inputs` | `List[InverseFoldingStructureInput]` | One entry per structure to design. |
+
+Each `InverseFoldingStructureInput` contains:
+
+| Field | Type | Description |
+|------|------|-------------|
+| `structure` | `Structure \| str \| Path` | Structure object, path, or PDB/CIF content. |
+| `chain_ids` | `Optional[List[str]]` | Chains to redesign. If `None`, all chains are used. |
+| `fixed_positions` | `Optional[Dict[str, List[int]]]` | 1-indexed residues to keep fixed per chain. |
+
+### Config (`InverseFoldingConfig`)
+| Field | Type | Default | Description |
+|------|------|---------|-------------|
+| `batch_size` | `int` | `1` | Number of sequences generated per structure. |
+| `temperature` | `float` | `0.1` | Sampling diversity control (`0.0` deterministic, higher = more diverse). |
+| `excluded_amino_acids` | `Optional[List[str]]` | `None` | Amino acids disallowed during design. |
+| `seed` | `int` | `42` | Random seed for reproducibility. |
+| `device` | `str` | `"cuda"` | Inference device (typically `"cuda"`). |
+| `verbose` | `bool` | `False` | Enable progress/status output. |
+
+### Temperature Guide
+| Temperature | Behavior | Use Case |
+|-------------|----------|----------|
+| `0.0` | Deterministic (argmax) | Single best-guess sequence |
+| `0.1` | Low diversity (default) | Conservative redesign |
+| `0.3-0.5` | Moderate diversity | Balanced exploration |
+| `0.7-1.0` | High diversity | Broad sequence search |
+
+## Output Specification
+
+### Sampling Output (`InverseFoldingOutput`)
+`run_ligandmpnn_sample` returns:
+
+| Field | Type | Description |
+|------|------|-------------|
+| `designed_sequences` | `List[LigandMPNNSequences]` | One per input structure, in input order. |
+
+Each `LigandMPNNSequences` contains:
+
+| Field | Type | Description |
+|------|------|-------------|
+| `sequences` | `List[str]` | Designed amino-acid sequences. |
+| `ligandmpnn_metrics` | `List[Dict[str, Any]]` | Per-sequence metrics returned by LigandMPNN. |
+
+## Execution Backends
+- the cloud runtime path (`use_cloud_gpu() == True`): routes to `LigandMPNNService`.
+- Local path: executes `standalone/inference.py` through `EnvManager("ligandmpnn")`.
+
+## Example Notebook
+Notebook in the same style as other tool notebooks:
+
+- `bio_programming_tools/tools/inverse_folding/ligandmpnn/examples/example.ipynb`
+
+## Quick Start (Sampling)
+```python
+from bio_programming_tools.tools.inverse_folding.ligandmpnn import run_ligandmpnn_sample
+from bio_programming_tools.tools.inverse_folding.shared_data_models import (
+    InverseFoldingConfig,
+    InverseFoldingInput,
+    InverseFoldingStructureInput,
+)
+
+inputs = InverseFoldingInput(
+    inputs=[
+        InverseFoldingStructureInput(
+            structure="/path/to/structure_with_ligand.cif",
+            chain_ids=["A"],
+            fixed_positions={"A": [45, 67, 89]},
+        )
+    ]
+)
+
+config = InverseFoldingConfig(
+    batch_size=10,
+    temperature=0.2,
+    excluded_amino_acids=["C"],
+    seed=42,
+)
+
+output = run_ligandmpnn_sample(inputs, config)
+print(output.designed_sequences[0].sequences[:3])
+```
+
+## Notes On Scoring
+`LigandMPNNScoringInput`, `LigandMPNNScoringConfig`, and
+`run_ligandmpnn_score(...)` are present for API compatibility, but scoring
+remains unimplemented (`TODO`) and is not currently registered as a tool.

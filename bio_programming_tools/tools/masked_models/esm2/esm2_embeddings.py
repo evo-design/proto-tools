@@ -1,0 +1,255 @@
+"""ESM2 embeddings tool."""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import List, Literal, Optional
+
+from pydantic import Field
+
+from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.tools.masked_models.shared_data_models import (
+    MaskedModelConfig,
+    MaskedModelInput,
+    MaskedModelOutput,
+)
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.tools.utils import ConfigField, use_cloud_gpu
+
+from .standalone.inference import ESM2_MODEL_CHECKPOINTS
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Data Models
+# ============================================================================
+# Input:
+ESM2EmbeddingsInput = MaskedModelInput
+
+# Output:
+class ESM2EmbeddingsOutput(MaskedModelOutput):
+    """Output from ESM2 protein language model inference.
+
+    This class encapsulates the results of ESM2 inference, providing sequence
+    embeddings, per-position logits, and attention masks for downstream analysis
+    and visualization.
+
+    Inherits from ``MaskedModelOutput``.
+
+    Attributes:
+        mean_embeddings (List[List[float]]): Mean-pooled sequence embeddings for
+            each input sequence. Shape: ``[num_sequences, embedding_dim]`` where
+            ``embedding_dim`` depends on the model variant (e.g., 1280 for
+            ``esm2_t33_650M_UR50D``). These embeddings capture the overall semantic
+            representation of each protein sequence and are useful for:
+
+            - Sequence similarity comparisons
+            - Clustering and classification tasks
+            - Downstream machine learning models
+            - Visualization via dimensionality reduction
+
+        num_sequences (int): Total number of sequences that were processed in the
+            inference run. This count matches the length of the input sequences list
+            and all output lists.
+
+        logits (List[List[List[float]]]): Per-position amino acid logits.
+            Shape: ``[num_sequences, seq_len, vocab_size]`` where ``vocab_size`` is 20.
+            Useful for:
+
+            - Identifying uncertain positions in sequences
+            - Guided protein design and mutagenesis
+            - Computing sequence likelihoods and perplexities
+            - Zero-shot variant effect prediction
+
+        attention_masks (List[List[int]]): Binary masks indicating valid positions
+            in each sequence. Shape: ``[num_sequences, seq_len]``. Values are:
+
+            - ``1``: Valid amino acid position
+            - ``0``: Padding position (for batched sequences of different lengths)
+
+            Use these masks to filter out padding when analyzing embeddings or logits.
+
+    Note:
+        All outputs are returned as nested Python lists (moved to CPU) for
+        serialization and downstream processing.
+    """
+    logits: Optional[List[List[List[float]]]] = Field(
+        default=None,
+        description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
+    )
+    attention_masks: List[List[int]] = Field(
+        description="Attention masks for each sequence (shape: [num_sequences, seq_len])",
+    )
+
+# Config:
+class ESM2EmbeddingsConfig(MaskedModelConfig):
+    """Configuration object for ESM2 protein language model.
+
+    This class defines configuration parameters for running ESM2 inference to
+    extract protein sequence embeddings and logits. ESM2 (Evolutionary Scale
+    Modeling 2) is a transformer-based protein language model trained on millions
+    of protein sequences.
+
+    Inherits from ``MaskedModelConfig``.
+
+    Attributes:
+        model_checkpoint (str): Name of the ESM2 model variant to use. Options:
+
+            - ``"esm2_t6_8M_UR50D"``: 8M parameters, 6 layers (fastest, 320-dim embeddings)
+            - ``"esm2_t12_35M_UR50D"``: 35M parameters, 12 layers (480-dim embeddings)
+            - ``"esm2_t30_150M_UR50D"``: 150M parameters, 30 layers (640-dim embeddings)
+            - ``"esm2_t33_650M_UR50D"``: 650M parameters, 33 layers (1280-dim embeddings, default)
+            - ``"esm2_t36_3B_UR50D"``: 3B parameters, 36 layers (2560-dim embeddings)
+            - ``"esm2_t48_15B_UR50D"``: 15B parameters, 48 layers (5120-dim embeddings, best quality)
+
+            Larger models provide higher quality embeddings and better predictions
+            but require more GPU memory and inference time. The 650M model offers
+            a good balance of quality and speed. Default: ``"esm2_t33_650M_UR50D"``.
+
+        batch_size (int): Number of sequences to process in parallel. Larger batches
+            improve throughput but require more GPU memory. Optimal values depend on
+            GPU memory, model size, and sequence lengths. Typical values range from
+            1 (safest) to 128 (faster, more memory). Default: 128.
+
+        device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
+            ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
+            like ``"cuda:0"``. Default: ``"cuda"``.
+
+        verbose (bool): Whether to print status messages during model execution,
+            including loading progress and timing information. Default: ``False``.
+
+        return_logits (bool): Whether to include per-position logits in the output.
+            When ``True``, returns logits for each sequence. When ``False``, only
+            returns metrics (saves memory and serialization time). Default: ``False``.
+
+    Note:
+        The model is loaded on-demand for each call.
+    """
+    model_checkpoint: Literal[ESM2_MODEL_CHECKPOINTS] = ConfigField(
+        title="ESM2 Model Checkpoint",
+        default="esm2_t33_650M_UR50D",
+        description="Name of the ESM2 model variant to use",
+    )
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Whether to include per-position logits in the output. Disable to save memory.",
+        advanced=True,
+    )
+
+
+# Output:
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+@tool(
+    key="esm2-embedding",
+    label="ESM2 Embeddings",
+    input=ESM2EmbeddingsInput,
+    config=ESM2EmbeddingsConfig,
+    output=ESM2EmbeddingsOutput,
+    description="Extract protein sequence embeddings and logits using ESM2",
+)
+def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig) -> ESM2EmbeddingsOutput:
+    """Extract protein sequence embeddings and logits using ESM2.
+
+    Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
+    logits for protein sequences. The model is automatically loaded on-demand.
+    Supports both local GPU
+    execution and distributed the cloud runtime GPU execution.
+
+    Args:
+        inputs (MaskedModelInput): Validated input containing one or more protein
+            sequences (amino acid sequences).
+        config (ESM2EmbeddingsConfig): Validated ESM2 configuration specifying model variant,
+            batch size, and device settings.
+
+    Returns:
+        ESM2EmbeddingsOutput: Structured output containing:
+            - ``mean_embeddings``: Mean-pooled embeddings for each sequence
+            - ``logits``: Per-position amino acid logits for each sequence
+            - ``attention_masks``: Binary masks for valid positions
+            - ``num_sequences``: Number of sequences processed
+
+    Examples:
+        >>> # Basic embedding extraction
+        >>> inputs = MaskedModelInput(
+        ...     sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"]
+        ... )
+        >>> config = ESM2EmbeddingsConfig(
+        ...     model_checkpoint="esm2_t33_650M_UR50D",
+        ...     batch_size=2,
+        ...     verbose=True
+        ... )
+        >>> result = run_esm2_embeddings(inputs, config)
+        >>> print(f"Processed {result.num_sequences} sequences")
+        >>> print(f"Embedding dimension: {len(result.mean_embeddings[0])}")
+        >>>
+        >>> # Analyze position-specific predictions
+        >>> import numpy as np
+        >>> logits_array = np.array(result.logits[0])  # First sequence
+        >>> predicted_tokens = np.argmax(logits_array, axis=-1)
+        >>>
+        >>> # Extract embeddings using smaller model on CPU
+        >>> config = ESM2EmbeddingsConfig(
+        ...     model_checkpoint="esm2_t6_8M_UR50D",
+        ...     device="cpu"
+        ... )
+        >>> result = run_esm2_embeddings(inputs, config)
+        >>>
+        >>> # Process large batch efficiently
+        >>> config = ESM2EmbeddingsConfig(batch_size=32)
+        >>> result = run_esm2_embeddings(inputs, config)
+
+    See Also:
+        - ESM2 GitHub Repository: https://github.com/facebookresearch/esm
+
+    Note:
+        - Larger models require more GPU memory but provide better representations
+        - the cloud runtime GPU execution is automatically used when configured via environment
+    """
+
+    if use_cloud_gpu():
+        logger.debug(f"Using the cloud runtime for ESM2 inference: {config.model_checkpoint}")
+        import _gpu_runtime
+
+        ESM2Service = _gpu_runtime.Cls.from_name("bio-programming", "ESM2Service")
+        outputs = ESM2Service().inference.remote(
+            sequences=inputs.sequences,
+            batch_size=config.batch_size,
+            model_checkpoint=config.model_checkpoint,
+            verbose=config.verbose,
+            return_logits=config.return_logits,
+        )
+    else:
+        logger.debug(f"Using local venv for ESM2 inference: {config.model_checkpoint}")
+        venv_manager = EnvManager("esm2")
+        script_path = Path(__file__).parent / "standalone" / "inference.py"
+        outputs = venv_manager.call_standalone_script_in_venv(
+            script_path=script_path,
+            input_dict={
+                "operation": "embeddings",
+                "sequences": inputs.sequences,
+                "batch_size": config.batch_size,
+                "model_checkpoint": config.model_checkpoint,
+                "device": config.device,
+                "verbose": config.verbose,
+                "return_logits": config.return_logits,
+            },
+            device=config.device,
+            verbose=config.verbose,
+        )
+
+    return ESM2EmbeddingsOutput(
+        metadata={
+            "model_checkpoint": config.model_checkpoint,
+            "num_sequences": len(inputs.sequences),
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "used_cloud": use_cloud_gpu(),
+        },
+        mean_embeddings=outputs["mean_embeddings"],
+        logits=outputs["logits"],
+        attention_masks=outputs["attention_masks"],
+        num_sequences=len(inputs.sequences),
+    )

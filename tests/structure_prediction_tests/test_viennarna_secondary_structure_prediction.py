@@ -6,7 +6,7 @@ Unit tests for ViennaRNA secondary structure prediction.
 
 import pytest
 
-from bio_tools.tools.structure_prediction import (
+from bio_programming_tools.tools.structure_prediction import (
     ViennaRNAConfig,
     ViennaRNAInput,
     ViennaRNAOutput,

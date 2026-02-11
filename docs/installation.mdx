@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: How to install bio-tools
+description: How to install bio-programming-tools
 icon: download
 ---
 
@@ -17,14 +17,14 @@ TODO: FINALIZE AFTER BASE ENV IS STABLE
 ## Install
 
 ```bash bash icon="terminal"
-pip install bio-tools
+pip install bio-programming-tools
 ```
 
 ## Development Installation
 
 ```bash bash icon="terminal"
-git clone https://github.com/evo-design/bio-tools.git
-cd bio-tools
+git clone https://github.com/evo-design/bio-programming-tools.git
+cd bio-programming-tools
 pip install -e ".[dev]"
 ```
 
@@ -44,17 +44,17 @@ pip install torch --index-url https://download.pytorch.org/whl/cu121
 
 Tools manage their own dependencies using isolated virtual environments. These are created automatically on first use:
 
-- Model weights: `~/.cache/bio_tools/`
+- Model weights: `~/.cache/bio_programming_tools/`
 - Virtual environments: `.venvs/` in project directory
 
 ## Verification
 
 ```python python icon="python"
-import bio_tools
-from bio_tools import setup_logging
+import bio_programming_tools
+from bio_programming_tools import setup_logging
 
 setup_logging()
-print(f"Version: {bio_tools.__version__}")
+print(f"Version: {bio_programming_tools.__version__}")
 ```
 
 ## Configuration
@@ -62,15 +62,15 @@ print(f"Version: {bio_tools.__version__}")
 ### Environment Variables
 
 ```bash bash icon="terminal"
-export BIO_TOOLS_CACHE_DIR="/path/to/cache"
-export BIO_TOOLS_LOG_DIR="/path/to/logs"
+export BIO_PROGRAMMING_TOOLS_CACHE_DIR="/path/to/cache"
+export BIO_PROGRAMMING_TOOLS_LOG_DIR="/path/to/logs"
 export CUDA_VISIBLE_DEVICES="0,1"
 ```
 
 ### Logging
 
 ```python python icon="python"
-from bio_tools import setup_logging
+from bio_programming_tools import setup_logging
 import logging
 
 setup_logging(
@@ -98,7 +98,7 @@ Remove and recreate:
 
 ```bash bash icon="terminal"
 rm -rf .venvs/
-rm -rf ~/.cache/bio_tools/
+rm -rf ~/.cache/bio_programming_tools/
 ```
 
 See individual tool documentation for tool-specific requirements.

@@ -1,0 +1,99 @@
+# BioEmu
+
+## Overview
+BioEmu samples protein conformational ensembles from sequence.
+
+- Tool key: `bioemu`
+- Input type: single-chain protein complexes
+- Output: `StructureEnsemble` objects (backbone conformations)
+
+## Module Structure
+BioEmu follows the same refactored tool layout as the newer tools.
+
+- `bioemu_sample.py`: data models, tool implementation, helpers
+- `standalone/inference.py`: standalone inference entrypoint
+- `standalone/setup.sh`: local venv setup script
+- `standalone/requirements.txt`: standalone dependencies
+- `examples/example.ipynb`: usage examples
+- `examples/example_output/`: example export directory
+
+## Python API
+```python
+from bio_programming_tools.tools.structure_dynamics.bioemu import (
+    BioEmuInput,
+    BioEmuConfig,
+    run_bioemu,
+)
+```
+
+## Input
+| Field | Type | Description |
+|---|---|---|
+| `complexes` | `List[StructurePredictionComplex]` | Must be single-chain protein complexes |
+
+## Config
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `num_samples` | `int` | `500` | Number of conformations per sequence |
+| `model_name` | `"bioemu-v1.0" \| "bioemu-v1.1"` | `"bioemu-v1.1"` | BioEmu model variant |
+| `filter_samples` | `bool` | `True` | Apply BioEmu sample filtering |
+| `batch_size` | `int` | `10` | BioEmu internal batch-size control |
+| `output_dir` | `Optional[str]` | `None` | Optional raw output directory |
+| `device` | `str` | `"cuda"` | Inference device |
+| `verbose` | `bool` | `False` | Verbose logging |
+
+## Output
+| Field | Type | Description |
+|---|---|---|
+| `ensembles` | `List[StructureEnsemble]` | One sampled ensemble per input complex |
+
+Metadata includes:
+
+- `num_complexes`
+- `total_structures`
+- `model_name`
+- `used_cloud`
+
+## Execution Modes
+- the cloud runtime path: calls `BioEmuService`.
+- Local path: runs `standalone/inference.py` inside `EnvManager("bioemu")`.
+
+## Quick Start
+```python
+from bio_programming_tools.tools.structure_prediction.shared_data_models import StructurePredictionComplex
+from bio_programming_tools.tools.structure_dynamics.bioemu import (
+    BioEmuInput,
+    BioEmuConfig,
+    run_bioemu,
+)
+
+complex_ = StructurePredictionComplex(
+    chains=[{"sequence": "MVLSPADKTNVKAAW", "entity_type": "protein"}],
+)
+
+inputs = BioEmuInput(complexes=[complex_])
+config = BioEmuConfig(num_samples=100, model_name="bioemu-v1.1")
+result = run_bioemu(inputs, config)
+
+print(len(result.ensembles[0].structures))
+```
+
+## Example Notebook
+Use:
+
+- `bio_programming_tools/tools/structure_dynamics/bioemu/examples/example.ipynb`
+
+The notebook demonstrates:
+
+1. Single-complex ensemble sampling
+2. Multiple-complex batch sampling
+3. Exporting outputs to `examples/example_output/`
+
+## Notes
+- BioEmu supports protein monomers only.
+- BioEmu outputs backbone ensemble structures.
+- Sequence lengths above ~500 residues may have reduced quality/performance.
+
+## References
+- https://www.science.org/doi/10.1126/science.adv9817
+- https://github.com/microsoft/bioemu

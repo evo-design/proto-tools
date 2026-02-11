@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bio_tools"
+name = "bio_programming_tools"
 version = "0.1.0"
 description = "Bioinformatics tools for bio-programming"
 readme = "env_dev_notes.md"
@@ -85,7 +85,7 @@ dev = [
 # Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
 
 [tool.pytest.ini_options]
-# Run from bio-tools root directory
+# Run from bio-programming-tools root directory
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -133,7 +133,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["bio_tools"]
+known_first_party = ["bio_programming_tools"]
 
 [tool.flake8]
 select = ["F401", "F841"]
@@ -173,4 +173,4 @@ ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["bio_tools*"]
+include = ["bio_programming_tools*"]

@@ -177,7 +177,7 @@ Different tissues express different splice isoforms:
 
 **Example 1: Basic splice site prediction**
 ```python python icon="python"
-from bio_tools.tools.rna_splicing.splice_transformer import (
+from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer, SpliceTransformerInput, SpliceTransformerConfig
 )
 import numpy as np
@@ -200,7 +200,7 @@ print(f"Prediction shape: {result.prediction.shape}")  # (1, 1000, 18)
 
 **Example 2: Find donor and acceptor sites**
 ```python python icon="python"
-from bio_tools.tools.rna_splicing.splice_transformer import (
+from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer, SpliceTransformerInput, SpliceTransformerConfig
 )
 import numpy as np
@@ -230,7 +230,7 @@ print(f"Donor sites: {donor_sites}")
 
 **Example 3: Tissue-specific analysis**
 ```python python icon="python"
-from bio_tools.tools.rna_splicing.splice_transformer import (
+from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer, SpliceTransformerInput, SpliceTransformerConfig,
     SpliceTransformerTissue, TISSUE_INDEX_OFFSET
 )
@@ -262,7 +262,7 @@ print(f"Brain-specific splice sites: {brain_specific}")
 
 **Example 4: Batch processing**
 ```python python icon="python"
-from bio_tools.tools.rna_splicing.splice_transformer import (
+from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer, SpliceTransformerInput, SpliceTransformerConfig
 )
 

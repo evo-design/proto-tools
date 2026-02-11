@@ -19,7 +19,7 @@ repos:
         pass_filenames: false
         files: |
           (?x)^(
-              bio_tools/tools/.*/README\.md|
+              bio_programming_tools/tools/.*/README\.md|
               docs/generate_docs\.py
           )$
         stages: [pre-commit]

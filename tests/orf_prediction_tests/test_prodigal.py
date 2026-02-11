@@ -11,15 +11,15 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from bio_tools.tools.infra.tool_cache import ToolCache, _program_tool_cache
-from bio_tools.tools.orf_prediction import (
+from bio_programming_tools.tools.infra.tool_cache import ToolCache, _program_tool_cache
+from bio_programming_tools.tools.orf_prediction import (
     ORF,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
     run_prodigal_prediction,
 )
-from bio_tools.tools.tool_registry import ToolRegistry
+from bio_programming_tools.tools.tool_registry import ToolRegistry
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
@@ -440,7 +440,7 @@ class TestProdigalCaching:
 
             # Patch the subprocess call to verify it's invoked only when not cached.
             # We use the real method as side_effect so real logic still runs.
-            from bio_tools.tools.infra.env_manager import EnvManager
+            from bio_programming_tools.tools.infra.env_manager import EnvManager
 
             real_call = EnvManager.call_standalone_script_in_venv
 
