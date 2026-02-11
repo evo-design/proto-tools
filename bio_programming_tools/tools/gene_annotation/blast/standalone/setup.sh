@@ -10,16 +10,16 @@ echo "Installing Python dependencies..."
 uv pip install -r requirements.txt
 
 echo "Downloading BLAST+ binaries..."
-# Walk up from this script's directory to find infra/install_binary.py at the tools/ root
+# Walk up from this script's directory to find utils/install_binary.py
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEARCH_DIR="$SCRIPT_DIR"
-while [ ! -f "$SEARCH_DIR/infra/install_binary.py" ]; do
+while [ ! -f "$SEARCH_DIR/utils/install_binary.py" ]; do
     SEARCH_DIR="$(dirname "$SEARCH_DIR")"
     if [ "$SEARCH_DIR" = "/" ]; then
-        echo "ERROR: Could not find infra/install_binary.py" >&2
+        echo "ERROR: Could not find utils/install_binary.py" >&2
         exit 1
     fi
 done
-python "$SEARCH_DIR/infra/install_binary.py" blast
+python "$SEARCH_DIR/utils/install_binary.py" blast
 
 echo "BLAST setup complete!"

@@ -27,7 +27,7 @@ else
     echo "  Also checked system PATH"
     echo ""
     echo "To set up mmseqs, run in Python:"
-    echo "  from bio_programming_tools.tools.infra.env_manager import EnvManager"
+    echo "  from bio_programming_tools.utils.env_manager import EnvManager"
     echo "  EnvManager('mmseqs')"
     exit 1
 fi

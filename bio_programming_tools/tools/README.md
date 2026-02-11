@@ -16,7 +16,7 @@ between local compute resources and cloud scaling based on their needs.
 ### Dependecy isolated local execution
 
 Models with complex dependencies are managed using the `EnvManager` class from
-`bio_programming_tools.tools.infra.env_manager`. The EnvManager automatically creates and manages
+`bio_programming_tools.utils.env_manager`. The EnvManager automatically creates and manages
 isolated virtual environments for each model.
 
 #### How it works
@@ -87,8 +87,8 @@ the binary for the current platform.
 
 #### How it works
 
-1. The tool's `setup.sh` calls `python ../../infra/install_binary.py <tool_name>`
-2. `infra/install_binary.py` discovers the tool's `standalone/binary_config.py`
+1. The tool's `setup.sh` walks up to find `utils/install_binary.py` and runs it
+2. `utils/install_binary.py` discovers the tool's `standalone/binary_config.py`
 3. It reads the platform-specific download URL from `binary_config.URLS`
 4. Downloads the archive and calls `binary_config.extract()` to install binaries
 5. Binaries are placed in the venv's `bin/` directory alongside the venv Python
@@ -123,7 +123,17 @@ def extract(archive_path: Path, bin_dir: Path) -> None:
 set -euo pipefail
 pip install uv
 uv pip install -r requirements.txt
-python "$(dirname "$0")/../../infra/install_binary.py" my_tool
+# Walk up to find utils/install_binary.py
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SEARCH_DIR="$SCRIPT_DIR"
+while [ ! -f "$SEARCH_DIR/utils/install_binary.py" ]; do
+    SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+    if [ "$SEARCH_DIR" = "/" ]; then
+        echo "ERROR: Could not find utils/install_binary.py" >&2
+        exit 1
+    fi
+done
+python "$SEARCH_DIR/utils/install_binary.py" my_tool
 ```
 
 3. In `standalone/run.py`, find binaries relative to the venv Python:
@@ -140,7 +150,7 @@ Supported platforms: macOS ARM64, macOS x86_64, Linux x86_64.
 ### Usage Example
 
 ```python
-from bio_programming_tools.tools.infra.env_manager import EnvManager
+from bio_programming_tools.utils.env_manager import EnvManager
 
 # Create/validate environment for a model
 env_manager = EnvManager("boltz2")
