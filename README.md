@@ -1,8 +1,7 @@
 # `bio_programming_tools`
 
 [![Lint Check](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml)
-[![Test Pip Install](https://github.com/evo-design/bio-programming-tools/actions/workflows/test-pip-install.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/test-pip-install.yml)
-[![CPU Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
+[![Run Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
 [![Verify Documentation autogeneration synced](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_check.yml)
 [![Validate Docs](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs.yml)
 

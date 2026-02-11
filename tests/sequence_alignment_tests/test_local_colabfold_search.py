@@ -6,6 +6,7 @@ Tests for Local ColabFold MSA search tool in bio_programming_tools.tools.sequenc
 
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -205,7 +206,7 @@ TEST_DB_DIR = os.path.join(
     os.path.dirname(__file__), "..", "dummy_data", "mini_mmseqs_db"
 )
 TEST_DB_SETUP_SCRIPT = os.path.join(
-    os.path.dirname(__file__), "..", "dummy_data", "create_mini_mmseqs_db.sh"
+    os.path.dirname(__file__), "..", "dummy_data", "create_mini_mmseqs_db.py"
 )
 
 
@@ -217,7 +218,7 @@ def setup_mini_database():
         print(f"   Running: {TEST_DB_SETUP_SCRIPT}")
         try:
             result = subprocess.run(
-                ["bash", TEST_DB_SETUP_SCRIPT],
+                [sys.executable, TEST_DB_SETUP_SCRIPT],
                 check=True,
                 capture_output=True,
                 text=True,

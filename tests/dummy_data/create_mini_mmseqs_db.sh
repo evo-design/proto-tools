@@ -6,9 +6,29 @@ WORKDIR="$(dirname "$0")/mini_mmseqs_db"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
-# Check if mmseqs is installed
-if ! command -v mmseqs >/dev/null 2>&1; then
-    echo "Error: mmseqs command not found in PATH. Please install MMseqs2."
+# Find mmseqs binary - try venv first, then system PATH
+MMSEQS=""
+
+# Try to find mmseqs in the bio-programming-tools venv
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Go up from tests/dummy_data to project root
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+VENV_MMSEQS="$PROJECT_ROOT/.venvs/mmseqs_env/bin/mmseqs"
+
+if [ -f "$VENV_MMSEQS" ]; then
+    MMSEQS="$VENV_MMSEQS"
+    echo "Using mmseqs from venv: $MMSEQS"
+elif command -v mmseqs >/dev/null 2>&1; then
+    MMSEQS="mmseqs"
+    echo "Using mmseqs from PATH"
+else
+    echo "Error: mmseqs command not found."
+    echo "  Looked for venv at: $VENV_MMSEQS"
+    echo "  Also checked system PATH"
+    echo ""
+    echo "To set up mmseqs, run in Python:"
+    echo "  from bio_programming_tools.tools.infra.env_manager import EnvManager"
+    echo "  EnvManager('mmseqs')"
     exit 1
 fi
 
