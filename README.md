@@ -46,7 +46,7 @@ print(result.results_df.head())
 
 ## Using with Claude Code
 
-This repo includes a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that lets you run bioinformatics analyses conversationally — no need to memorize APIs. Just launch `claude` from the repo root after installing:
+This repo includes a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that helps Claude discover and utilize the bio tools. Just launch `claude` from the repo root after installing:
 
 ```bash
 claude
@@ -57,7 +57,6 @@ Claude automatically picks up the project instructions (`CLAUDE.md`) and the bio
 ```
 > BLAST this sequence against swissprot
 > Predict the structure of MKFLIL... with ESMFold
-> Fold MKFLIL... with ESMFold, redesign it with ProteinMPNN, then align the original and designed sequences with MAFFT
 > Fold this sequence, redesign it with inverse folding, and compare the original and designed sequences
 ```
 
