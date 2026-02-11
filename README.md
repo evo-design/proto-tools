@@ -23,6 +23,7 @@ conda activate bio_programming_tools
 python -m venv .venv
 source .venv/bin/activate
 
+
 pip install -e .
 ```
 
@@ -30,8 +31,9 @@ pip install -e .
 ## Usage
 
 ```python
-from bio_programming_tools.tools.infra import EnvManager
-from bio_programming_tools.entities.structures import Structure
+from bio_tools.tools.gene_annotation.blast.online_blast import (
+    run_online_blast_search, OnlineBlastInput, OnlineBlastConfig,
+)
 
 inputs = OnlineBlastInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK...")
 config = OnlineBlastConfig(program="blastp", database="swissprot")
