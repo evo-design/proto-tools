@@ -7,9 +7,10 @@ from typing import Dict, List, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.tools.infra.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.infra.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.infra import use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 
 from .evo2_cache import get_cached_evo2_model
 from .standalone.inference import EVO2_MODEL_CHECKPOINTS

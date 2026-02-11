@@ -214,7 +214,7 @@ class TestOrfipyIntegration:
 
     def test_sequence_ids_length_mismatch_raises(self):
         """Test that mismatched ID count raises ValueError."""
-        from bio_programming_tools.tools.utils import resolve_sequence_ids
+        from bio_programming_tools.utils import resolve_sequence_ids
         with pytest.raises(ValueError, match="must match"):
             resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
 

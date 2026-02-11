@@ -9,7 +9,7 @@ from typing import List, Type, Union, get_args, get_origin
 import pytest
 
 from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.tools.utils import BaseConfig as ToolsBaseConfig
+from bio_programming_tools.utils import BaseConfig as ToolsBaseConfig
 
 # Defines the maximum length of a field title in characters
 MAX_FIELD_TITLE_LENGTH = 31

@@ -12,18 +12,18 @@ from bio_programming_tools.entities.structures import (
     Structure,
     StructureEnsemble,
 )
-from bio_programming_tools.tools.infra.env_manager import EnvManager
-from bio_programming_tools.tools.infra.tool_io import BaseToolOutput
+from bio_programming_tools.infra.env_manager import EnvManager
+from bio_programming_tools.infra.tool_io import BaseToolOutput
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
     StructurePredictionInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.tools.utils import (
+from bio_programming_tools.infra import use_modal_gpu
+from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_protein_chars,
-    use_modal_gpu,
 )
 
 logger = logging.getLogger(__name__)

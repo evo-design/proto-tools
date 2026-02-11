@@ -1,6 +1,7 @@
-"""Tool infrastructure: I/O, caching, env management, binary installation."""
+"""Tool infrastructure: I/O, caching, env management, GPU utilities, binary installation."""
 
 from .env_manager import EnvManager
+from .gpu import determine_visible_devices, number_of_available_gpus, use_modal_gpu
 from .tool_cache import (
     ToolCache,
     clear_cache,
@@ -22,4 +23,7 @@ __all__ = [
     "get_cache_info",
     "ToolCache",
     "EnvManager",
+    "use_modal_gpu",
+    "determine_visible_devices",
+    "number_of_available_gpus",
 ]
