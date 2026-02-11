@@ -216,7 +216,7 @@ Common metrics:
 
 **Example 1: Design sequences for a single-chain protein**
 ```python python icon="python"
-from bio_tools.tools.inverse_folding import (
+from bio_programming_tools.tools.inverse_folding import (
     run_proteinmpnn_sample,
     InverseFoldingInput,
     InverseFoldingConfig
@@ -244,7 +244,7 @@ for i, seq in enumerate(result[0].sequences):
 
 **Example 2: Design with fixed positions (preserve active site)**
 ```python python icon="python"
-from bio_tools.tools.inverse_folding import (
+from bio_programming_tools.tools.inverse_folding import (
     run_proteinmpnn_sample,
     InverseFoldingInput,
     InverseFoldingConfig
@@ -277,13 +277,13 @@ for seq, ppl in best_designs:
 
 **Example 3: Score sequence-structure compatibility**
 ```python python icon="python"
-from bio_tools.tools.inverse_folding.proteinmpnn import (
+from bio_programming_tools.tools.inverse_folding.proteinmpnn import (
     run_proteinmpnn_score,
     ProteinMPNNScoringInput,
     ProteinMPNNScoringConfig,
     SequenceStructurePair,
 )
-from bio_tools.entities.structures import Structure
+from bio_programming_tools.entities.structures import Structure
 
 # Load structure
 structure = Structure(structure_filepath_or_content="my_protein.pdb")
@@ -306,7 +306,7 @@ for i, score in enumerate(result.scores):
 
 **Example 4: Multi-chain complex design**
 ```python python icon="python"
-from bio_tools.tools.inverse_folding import (
+from bio_programming_tools.tools.inverse_folding import (
     run_proteinmpnn_sample,
     InverseFoldingInput,
     InverseFoldingConfig
@@ -336,7 +336,7 @@ for seq in result[0].sequences:
 **Example 5: Analyze per-position logits**
 ```python python icon="python"
 import numpy as np
-from bio_tools.tools.inverse_folding.proteinmpnn import (
+from bio_programming_tools.tools.inverse_folding.proteinmpnn import (
     run_proteinmpnn_score,
     ProteinMPNNScoringInput,
     ProteinMPNNScoringConfig,

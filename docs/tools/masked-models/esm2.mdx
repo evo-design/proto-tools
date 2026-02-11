@@ -200,7 +200,7 @@ These thresholds are heuristics. Use them comparatively and validate for your ta
 
 **Example 1: Extract embeddings for clustering**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm2 import (
+from bio_programming_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsInput, ESM2EmbeddingsConfig, run_esm2_embeddings,
 )
 import numpy as np
@@ -230,7 +230,7 @@ print(f"Cluster assignments: {kmeans.labels_}")
 
 **Example 2: Score sequences (pseudo-perplexity)**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm2 import ESM2ScoringInput, ESM2ScoringConfig, run_esm2_score
+from bio_programming_tools.tools.masked_models.esm2 import ESM2ScoringInput, ESM2ScoringConfig, run_esm2_score
 
 inputs = ESM2ScoringInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
 config = ESM2ScoringConfig(batch_size=32, verbose=False)
@@ -241,7 +241,7 @@ print(f"Perplexity: {result.scores[0].metrics['perplexity']:.3f}")
 
 **Example 3: Guided sequence mutation**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm2 import ESM2SampleInput, ESM2SampleConfig, run_esm2_sample
+from bio_programming_tools.tools.masked_models.esm2 import ESM2SampleInput, ESM2SampleConfig, run_esm2_sample
 
 # Starting sequence
 inputs = ESM2SampleInput(sequences=["MVLSPADKTNVKAAW"])
@@ -261,7 +261,7 @@ print(f"Mutated:  {result.sequences[0]}")
 
 **Example 4: Batch processing**
 ```python python icon="python"
-from bio_tools.tools.masked_models.esm2 import (
+from bio_programming_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsInput, ESM2EmbeddingsConfig, run_esm2_embeddings,
 )
 

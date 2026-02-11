@@ -1,7 +1,7 @@
 """
 test_mmseqs.py
 
-Comprehensive tests for MMseqs2 tools in bio_tools.tools.gene_annotation.mmseqs
+Comprehensive tests for MMseqs2 tools in bio_programming_tools.tools.gene_annotation.mmseqs
 """
 
 import shutil
@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 # Public API imports
-from bio_tools.tools.gene_annotation.mmseqs import (
+from bio_programming_tools.tools.gene_annotation.mmseqs import (
     MmseqsClusteringConfig,
     MmseqsClusteringInput,
     MmseqsClusteringOutput,
@@ -31,7 +31,7 @@ from bio_tools.tools.gene_annotation.mmseqs import (
 )
 
 # Private helper functions (imported directly from submodules for testing)
-from bio_tools.tools.gene_annotation.mmseqs.search_proteins import (
+from bio_programming_tools.tools.gene_annotation.mmseqs.search_proteins import (
     _build_sequence_search_results,
     _filter_top_hits,
     _parse_m8_output,

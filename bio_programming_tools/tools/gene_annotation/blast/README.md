@@ -1,0 +1,234 @@
+# BLAST
+
+## Overview
+BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides interfaces for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases.
+
+## When to Use This Tool
+
+**Primary use cases:**
+- Finding homologous sequences in databases
+- Identifying protein families and domains
+- Annotating newly sequenced genes
+
+**When to use Online vs. Local BLAST**
+- Online BLAST: Best for occasional, low-volume queries where you need access to the massive NCBI databases (nt/nr) without downloading terabytes of data.
+- Local BLAST: Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
+
+**When NOT to use this tool**
+- Whole Genome Alignment: Use tools like MUMmer or Minimap2 for aligning entire chromosomes.
+- Next-Gen Sequencing (NGS) Mapping: Use BWA or Bowtie2 for mapping millions of short reads to a reference.
+- Deep Homology Detection: If sequences are very distantly related (<20% identity), Hidden Markov Model tools like HMMER or HHblits are more sensitive.
+
+## Biological Background
+
+**What does this tool do?**
+BLAST finds regions of local similarity between sequences by comparing nucleotide or protein sequences to sequence databases like NCBI Genbank and calculates the statistical significance of matches.
+
+**Why is this important?**
+Sequence alignment is the first step in almost all bioinformatics workflows. It allows researchers to:
+- Infer functional relationships: If a new sequence resembles a known gene, they likely share a function.
+- Identify species: Map unknown DNA reads to specific organisms (metagenomics).
+- Detect off-targets: Ensure a primer or CRISPR guide only binds to the intended target.
+- Find evolutionary origins: Trace the phylogeny of a gene across species.
+
+**Scientific foundation**
+BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). It does not perform a full Smith-Waterman alignment (which is accurate but slow). Instead, it does:
+
+1. Seeding: Breaks the query into short "words" (k-mers) and finds exact matches in the database.
+2. Extension: Extends these matches in both directions until the alignment score drops below a threshold.
+3. Evaluation: Calculates an E-value (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
+
+## How It Works
+
+**Method overview:**
+The module exposes three distinct functions:
+
+`online-blast`: Submits a request to the NCBI QBLAST server via API. It handles the polling loop and retrieves results as XML, parsing them into a DataFrame.
+
+`local-blast`: Wraps the blastn, blastp, etc., command line tools. It executes the binary against a local database and parses the tabular output.
+
+`create-blast-db`: Wraps the makeblastdb command line tool. It takes a FASTA file and indexes it into binary files (.nhr, .nin, .nsq etc.) optimized for search.
+
+**The BLAST Program Matrix:**
+You must select the correct program based on your inputs:
+| Program | Query Type | Database Type | Use Case |
+|-----------|------|---------|-------------|
+| `blastn` | Nucleotide | Nucleotide | Gene identification, mapping oligonucleotides |
+| `blastp` | Protein | Protein | Protein function prediction, finding homologs |
+| `blastx` | Nucleotide | Protein | Coding sequence finding (translates query in 6 frames) |
+| `tblastn` | Protein | Nucleotide | Finding unannotated genes in genomic DNA (translates DB) |
+| `tblastx` | Nucleotide | Nucleotide | Gene prediction in divergent species (translates both) |
+
+ie. if you are searching a nucleotide sequence against a protein database, use `blastx`
+
+**Computational Requirements:**
+
+Online: Minimal local resources, but high latency (seconds to minutes per query) and rate-limited by NCBI.
+
+Local: CPU-intensive. RAM usage depends on database size.
+
+Storage: Local databases can be large (NCBI 'nt' is >100GB compressed; custom DBs are small).
+
+## Important Parameters
+
+### Input (What You're Searching)
+
+| Tool | Parameter | Type | Description |
+|------|-----------|------|-------------|
+| `online-blast` | `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. |
+| `local-blast` | `query` | `str` | Path to a FASTA file containing your query sequence(s). |
+
+### Configuration (How to Search)
+
+**Shared Parameters (Online & Local)**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `program` | `str` | `blastn` | The algorithm to use. Must match your query/database types (see Program Matrix above). |
+| `additional_params` | `dict` | `{}` | Advanced tuning options like `{"evalue": 1e-5, "word_size": 11}`. |
+
+**Online BLAST Specifics**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `database` | `str` | `nt` | Which NCBI database to search against (see table below). |
+
+Available online databases:
+| Database | Description |
+|----------|-------------|
+| `nt` | Nucleotide collection (all GenBank sequences) |
+| `nr` | Non-redundant protein sequences |
+| `refseq_rna` | NCBI RefSeq RNA sequences |
+| `refseq_protein` | NCBI RefSeq protein sequences |
+| `swissprot` | Curated protein sequences (high quality) |
+| `pdb` | Protein Data Bank sequences |
+
+**Local BLAST Specifics**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `local_db` | `str` | *Required* | Path to your database (created by `create-blast-db`). |
+| `num_threads` | `int` | `4` | Number of CPU cores to use. More = faster. |
+
+### Creating a Database (`create-blast-db`)
+
+Before running `local-blast`, you need a database. Use `create-blast-db` to make one from a FASTA file.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `fasta` | `str` | *Required* | Path to your FASTA file with sequences to index. |
+| `dbtype` | `str` | `nucl` | Type of sequences: `"nucl"` for DNA/RNA, `"prot"` for proteins. |
+| `out_prefix` | `str` | *auto* | Where to save the database. Defaults to same location as your FASTA. |
+| `title` | `str` | *None* | Optional human-readable name for the database. |
+
+## Output Specification
+
+Both tools return a `BlastOutput` object with two attributes:
+- `results_df`: A Pandas DataFrame with all hits (or empty if no matches)
+- `num_hits`: Total number of hits found
+
+**DataFrame Columns (standard "Outfmt 6"):**
+
+| Column | Description | Interpretation |
+|--------|-------------|----------------|
+| `qseqid` | Query ID | The ID of your input sequence. |
+| `sseqid` | Subject ID | The ID of the match in the database. |
+| `pident` | Percent Identity | % of exact matches. >95% usually implies same species/gene. |
+| `length` | Alignment Length | How long the matching region is. |
+| `mismatch` | Mismatches | Number of non-matching positions. |
+| `gapopen` | Gap Openings | Number of gaps introduced in the alignment. |
+| `qstart` | Query Start | Position in your sequence where the match begins. |
+| `qend` | Query End | Position in your sequence where the match ends. |
+| `sstart` | Subject Start | Position in the database sequence where the match begins. |
+| `send` | Subject End | Position in the database sequence where the match ends. |
+| `evalue` | Expect Value | **Crucial statistic.** The number of hits expected by chance. Lower is better. |
+| `bitscore` | Bit Score | Alignment score normalized for database size. Higher is better. |
+
+## Thresholds & Decision Boundaries
+
+- **High Confidence:** `evalue < 1e-50`, `pident > 90%`
+- **Homology Likely:** `evalue < 1e-5`, `pident > 30%` (for proteins)
+- **Noise/Chance:** `evalue > 0.01` (usually disregarded unless looking for very short motifs)
+
+## Best Practices & Gotchas
+
+**Parameter Tuning:**
+
+1. `evalue` (Expect Threshold):
+   - Default is usually 10.0 (very loose).
+   - Set to `1e-5` or `1e-3` to filter out random noise.
+
+2. `word_size`:
+   - Decrease this to find shorter/more divergent matches (increases runtime).
+   - Increase to speed up search for near-identical matches.
+
+3. `dust` / `soft_masking`:
+   - BLAST automatically masks low-complexity regions (e.g., "AAAAA"). If you are searching for repetitive motifs, you may need to disable masking in `additional_params`.
+
+**Common Mistakes:**
+
+1. **Mismatched DB/Program:** Trying to run `blastp` (protein query) against a Nucleotide database. You must use `tblastn` for this.
+
+2. **Online Latency:** Do not use `online-blast` inside a loop for 10,000 sequences. It will take days and NCBI may block your IP. Use `local-blast` for batch processing.
+
+3. **Interpreting Short Hits:** A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
+
+## References
+
+**Primary Citation:**
+- Altschul, S.F., Gish, W., Miller, W., Myers, E.W. & Lipman, D.J. (1990) "Basic local alignment search tool." *J. Mol. Biol.* 215:403-410.
+
+**Documentation:**
+- BLAST+ Manual: [https://www.ncbi.nlm.nih.gov/books/NBK279690/](https://www.ncbi.nlm.nih.gov/books/NBK279690/)
+- Biopython BLAST: [https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast](https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast)
+
+## Quick Start Examples
+
+**Example 1: Search NCBI online (simplest)**
+```python
+from bio_programming_tools.tools.gene_annotation import run_online_blast_search, OnlineBlastInput, OnlineBlastConfig
+
+# Your DNA sequence
+inputs = OnlineBlastInput(query="ATGCGTAAACGATTGCAGTACGATCGATCG")
+
+# Search the nucleotide database
+config = OnlineBlastConfig(program="blastn", database="nt")
+
+# Run the search (may take 30+ seconds)
+result = run_online_blast_search(inputs, config)
+
+print(f"Found {result.num_hits} matches!")
+print(result.results_df.head())  # View top hits
+```
+
+**Example 2: Create a local database and search it**
+```python
+from bio_programming_tools.tools.gene_annotation import (
+    run_create_blast_db, CreateBlastDbInput, CreateBlastDbConfig,
+    run_local_blast_search, LocalBlastInput, LocalBlastConfig
+)
+
+# Step 1: Create a database from your reference sequences
+db_input = CreateBlastDbInput(fasta="my_reference_genes.fasta")
+db_config = CreateBlastDbConfig(dbtype="nucl", title="My Gene Database")
+db_result = run_create_blast_db(db_input, db_config)
+
+print(f"Database created at: {db_result.db_path}")
+
+# Step 2: Search against your new database
+search_input = LocalBlastInput(query="my_query.fasta")
+search_config = LocalBlastConfig(
+    program="blastn",
+    local_db=db_result.db_path,  # Use the database we just created
+    num_threads=4
+)
+result = run_local_blast_search(search_input, search_config)
+
+# Filter for high-confidence hits
+good_hits = result.results_df[result.results_df['evalue'] < 1e-10]
+print(good_hits)
+```
+
+## Related Tools
+
+- `create-blast-db`: Create custom databases for `local-blast` (documented above).
+- `hmmer`: Use for detecting remote homologs using protein families (Profile HMMs).
+- `mmseqs`: Faster alternative to BLAST for very large-scale searches.
+- `muscle` / `mafft`: Use these to align the sequences *after* BLAST finds them (Multiple Sequence Alignment).

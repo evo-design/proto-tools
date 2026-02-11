@@ -10,17 +10,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_tools.entities.structures.structure import Structure
-from bio_tools.tools.inverse_folding.proteinmpnn import (
+from bio_programming_tools.entities.structures.structure import Structure
+from bio_programming_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from bio_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
+from bio_programming_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
 )
-from bio_tools.tools.inverse_folding.shared_data_models import (
+from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
@@ -325,7 +325,7 @@ class TestProteinMPNNScore:
         """
         Tests the caching functionality of ProteinMPNN scoring tool
         """
-        from bio_tools.tools.infra.tool_cache import (
+        from bio_programming_tools.tools.infra.tool_cache import (
             ToolCache,
             _program_tool_cache,
             get_cache_info,

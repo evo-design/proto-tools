@@ -204,7 +204,7 @@ All tools return a `PyHmmerOutput` object with two DataFrames:
 
 **Example 1: Search sequences against an HMM profile (hmmsearch)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_pyhmmer_hmmsearch,
     PyHmmsearchInput,
     PyHmmerConfig
@@ -234,7 +234,7 @@ if result.sequence_hits_df is not None:
 
 **Example 2: Annotate proteins with Pfam domains (hmmscan)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_pyhmmer_hmmscan,
     PyHmmscanInput,
     PyHmmerConfig
@@ -260,7 +260,7 @@ if result.domain_hits_df is not None:
 
 **Example 3: Sensitive protein-protein search (phmmer)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_pyhmmer_phmmer,
     PyPhmmerInput,
     PyHmmerConfig
@@ -295,7 +295,7 @@ if result.sequence_hits_df is not None:
 
 **Example 4: Sensitive nucleotide sequence search (nhmmer)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_pyhmmer_nhmmer,
     PyNhmmerInput,
     PyHmmerConfig
@@ -315,7 +315,7 @@ print(f"Found {result.num_sequence_hits} nucleotide hits")
 
 **Example 5: Iterative protein search (jackhmmer)**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_pyhmmer_jackhmmer,
     PyJackhmmerInput,
     PyJackhmmerConfig

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from bio_tools.entities.ligands import Fragment, Ligands
-from bio_tools.entities.structures.utils import is_valid_structure
+from bio_programming_tools.entities.ligands import Fragment, Ligands
+from bio_programming_tools.entities.structures.utils import is_valid_structure
 from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 

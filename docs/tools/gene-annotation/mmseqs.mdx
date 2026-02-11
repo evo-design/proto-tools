@@ -200,7 +200,7 @@ When `extract_representatives=True`, the DataFrame instead contains:
 
 **Example 1: Search protein sequences against a database**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_mmseqs_search_proteins,
     MmseqsSearchProteinsInput,
     MmseqsSearchProteinsConfig
@@ -223,7 +223,7 @@ print(result.results_df.head())
 
 **Example 2: Search using sequence strings directly**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_mmseqs_search_proteins,
     MmseqsSearchProteinsInput,
     MmseqsSearchProteinsConfig
@@ -244,7 +244,7 @@ print(good_hits)
 
 **Example 3: Genome-to-genome nucleotide search**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_mmseqs_search_genomes,
     MmseqsSearchGenomesInput,
     MmseqsSearchGenomesConfig
@@ -266,7 +266,7 @@ print(result.results_df.head())
 
 **Example 4: Cluster sequences to reduce redundancy**
 ```python python icon="python"
-from bio_tools.tools.gene_annotation import (
+from bio_programming_tools.tools.gene_annotation import (
     run_mmseqs_clustering,
     MmseqsClusteringInput,
     MmseqsClusteringConfig

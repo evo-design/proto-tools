@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Documentation generator for Bio Tools.
+Documentation generator for Bio Programming Tools.
 
 This script auto-generates Mintlify MDX documentation from tool README.md files.
 
@@ -34,8 +34,8 @@ EXCLUDED_TOOL_DIRS = {"__pycache__", "infra", "utils"}
 
 
 def discover_tool_categories() -> Dict[str, str]:
-    """Auto-discover tool categories from bio_tools/tools directory."""
-    tools_base = PROJECT_ROOT / "bio_tools" / "tools"
+    """Auto-discover tool categories from bio_programming_tools/tools directory."""
+    tools_base = PROJECT_ROOT / "bio_programming_tools" / "tools"
     categories = {}
 
     for item in sorted(tools_base.iterdir()):
@@ -56,7 +56,7 @@ def discover_tool_categories() -> Dict[str, str]:
         )
         if has_tool_readmes:
             slug = item.name.replace("_", "-")
-            categories[slug] = f"bio_tools/tools/{item.name}"
+            categories[slug] = f"bio_programming_tools/tools/{item.name}"
         else:
             print(f"  Skipped (no READMEs): {item.name}/ (checked: {', '.join(subdirs_checked) or 'no subdirs'})")
 
@@ -326,7 +326,7 @@ def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
 def main():
     """Main entry point for documentation generation."""
     print("=" * 60)
-    print("Bio Tools Documentation Generator")
+    print("Bio Programming Tools Documentation Generator")
     print("=" * 60)
 
     # Ensure docs directories exist

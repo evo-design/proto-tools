@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from bio_tools.entities.structures.structure import Structure
-from bio_tools.tools.inverse_folding import (
+from bio_programming_tools.entities.structures.structure import Structure
+from bio_programming_tools.tools.inverse_folding import (
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,

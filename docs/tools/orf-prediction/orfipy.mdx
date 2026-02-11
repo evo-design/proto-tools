@@ -145,7 +145,7 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 
 **Example 1: Basic ORF finding**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.orfipy import (
+from bio_programming_tools.tools.orf_prediction.orfipy import (
     run_orfipy_prediction, OrfipyInput, OrfipyConfig
 )
 
@@ -162,7 +162,7 @@ print(result.results_df)
 
 **Example 2: ATG-only starts**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.orfipy import (
+from bio_programming_tools.tools.orf_prediction.orfipy import (
     run_orfipy_prediction, OrfipyInput, OrfipyConfig
 )
 
@@ -178,7 +178,7 @@ print(f"Found {result.num_orfs} ATG-initiated ORFs")
 
 **Example 3: Forward strand only**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.orfipy import (
+from bio_programming_tools.tools.orf_prediction.orfipy import (
     run_orfipy_prediction, OrfipyInput, OrfipyConfig
 )
 
@@ -193,7 +193,7 @@ result = run_orfipy_prediction(inputs, config)
 
 **Example 4: Process multiple sequences**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.orfipy import (
+from bio_programming_tools.tools.orf_prediction.orfipy import (
     run_orfipy_prediction, OrfipyInput, OrfipyConfig
 )
 
@@ -216,7 +216,7 @@ for i, orfs in enumerate(result.predicted_orfs):
 
 **Example 5: Extract longest ORF per sequence**
 ```python python icon="python"
-from bio_tools.tools.orf_prediction.orfipy import (
+from bio_programming_tools.tools.orf_prediction.orfipy import (
     run_orfipy_prediction, OrfipyInput, OrfipyConfig
 )
 

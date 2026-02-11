@@ -12,7 +12,7 @@ import tempfile
 
 import pytest
 
-from bio_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     run_colabfold_search,

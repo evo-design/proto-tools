@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from bio_tools.entities.structures import Structure, StructureEnsemble
+from bio_programming_tools.entities.structures import Structure, StructureEnsemble
 
 
 @pytest.fixture

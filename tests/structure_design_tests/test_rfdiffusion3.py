@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from bio_tools.tools.structure_design import (
+from bio_programming_tools.tools.structure_design import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
