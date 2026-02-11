@@ -2,18 +2,32 @@
 Infrastructure utilities for bio_programming_tools.tools.
 
 GPU selection (local/the cloud runtime) and device visibility.
+
+GPU detection uses nvidia-smi rather than torch.cuda so that the
+orchestrator package works with a CPU-only PyTorch install (or no
+PyTorch at all).  Actual GPU workloads run inside isolated venvs
+that have their own CUDA-enabled PyTorch.
 """
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 
 
 def number_of_available_gpus() -> int:
-    """Returns the number of available GPUs."""
+    """Returns the number of available NVIDIA GPUs via nvidia-smi."""
     try:
-        import torch
-        return torch.cuda.device_count()
-    except ImportError:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if out.returncode == 0:
+            # nvidia-smi returns one line per GPU, each containing total count;
+            # the number of lines equals the number of GPUs.
+            return len(out.stdout.strip().splitlines())
+        return 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return 0
 
 
@@ -50,12 +64,8 @@ def use_cloud_gpu() -> bool:
 
 
 def _is_local_gpu_available() -> bool:
-    """Check if local GPU is available."""
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
+    """Check if a local NVIDIA GPU is available via nvidia-smi."""
+    return shutil.which("nvidia-smi") is not None and number_of_available_gpus() > 0
 
 
 def _is_cloud_available() -> bool:

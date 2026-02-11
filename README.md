@@ -8,10 +8,6 @@
 This repo contains the tool layer of the [`bio-programming`](https://github.com/evo-design/bio-programming/tree/main) project.
 
 
-> [!NOTE]
-> We currently in the process of transferring all of the infra from the `bio-programming` repo to this one. Note that some tests may not be passing on main at the moment.
-
-
 ## Installation
 
 ```bash
@@ -27,6 +23,27 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+## HuggingFace Authentication
+
+Some models are hosted in gated HuggingFace repositories that require both authentication and accepting the model's license/terms. The following models require this:
+
+| Model | HuggingFace Repo | Notes |
+|-------|-----------------|-------|
+| ESM3 | [EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1) | Requires accepting EvolutionaryScale license |
+| AlphaGenome | [google/alphagenome](https://huggingface.co/google/alphagenome) | Requires accepting Google DeepMind terms |
+
+To use these models:
+
+1. Create a [HuggingFace](https://huggingface.co) account
+2. Visit each model page above and **accept the license/terms**
+3. Create an [access token](https://huggingface.co/settings/tokens)
+4. Set the token in your environment:
+   ```bash
+   export HF_TOKEN=hf_...
+   # Or log in with: huggingface-cli login
+   ```
+
+The setup scripts for gated models will check for access and provide a clear error if authentication is missing.
 
 ## Usage
 
