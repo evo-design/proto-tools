@@ -37,12 +37,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
+    - name: Set up Python (non-Windows)
+      if: runner.os != 'Windows'
       uses: actions/setup-python@v4
       with:
         python-version: "3.12"
 
-    - name: Cache pip packages
+    - name: Set up WSL (Windows only)
+      if: runner.os == 'Windows'
+      uses: Vampire/setup-wsl@v3
+      with:
+        distribution: Ubuntu-22.04
+
+    - name: Install Python in WSL (Windows only)
+      if: runner.os == 'Windows'
+      shell: wsl-bash {0}
+      run: |
+        sudo apt-get update
+        sudo apt-get upgrade -y
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt-get update
+        sudo apt-get install -y --fix-missing python3.12 python3.12-venv python3-pip
+
+    - name: Cache pip packages (non-Windows)
+      if: runner.os != 'Windows'
       uses: actions/cache@v3
       with:
         path: ~/.cache/pip
@@ -50,18 +69,36 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Upgrade pip
+    - name: Upgrade pip (non-Windows)
+      if: runner.os != 'Windows'
       run: |
         python -m pip install --upgrade pip
 
-    - name: Test base installation
+    - name: Upgrade pip (WSL)
+      if: runner.os == 'Windows'
+      shell: wsl-bash {0}
+      run: |
+        python3.12 -m pip install --upgrade pip
+
+    - name: Test base installation (non-Windows)
+      if: runner.os != 'Windows'
       run: |
         pip install -e .
         python -c "import bio_programming_tools; print('✓ bio_programming_tools package import successful')"
         python -c "from bio_programming_tools import tools; print('✓ bio_programming_tools.tools import successful')"
         python -c "from bio_programming_tools import entities; print('✓ bio_programming_tools.entities import successful')"
 
-    - name: Verify key dependencies
+    - name: Test base installation (WSL)
+      if: runner.os == 'Windows'
+      shell: wsl-bash {0}
+      run: |
+        python3.12 -m pip install -e .
+        python3.12 -c "import bio_programming_tools; print('✓ bio_programming_tools package import successful')"
+        python3.12 -c "from bio_programming_tools import tools; print('✓ bio_programming_tools.tools import successful')"
+        python3.12 -c "from bio_programming_tools import entities; print('✓ bio_programming_tools.entities import successful')"
+
+    - name: Verify key dependencies (non-Windows)
+      if: runner.os != 'Windows'
       run: |
         python -c "import pydantic; print('✓ pydantic')"
         python -c "import numpy; print('✓ numpy')"
@@ -78,7 +115,34 @@ jobs:
         python -c "import requests; print('✓ requests')"
         python -c "import tqdm; print('✓ tqdm')"
 
-    - name: Check package metadata
+    - name: Verify key dependencies (WSL)
+      if: runner.os == 'Windows'
+      shell: wsl-bash {0}
+      run: |
+        python3.12 -c "import pydantic; print('✓ pydantic')"
+        python3.12 -c "import numpy; print('✓ numpy')"
+        python3.12 -c "import pandas; print('✓ pandas')"
+        python3.12 -c "import scipy; print('✓ scipy')"
+        python3.12 -c "import Bio; print('✓ biopython')"
+        python3.12 -c "import biotite; print('✓ biotite')"
+        python3.12 -c "import gemmi; print('✓ gemmi')"
+        python3.12 -c "import rdkit; print('✓ rdkit')"
+        python3.12 -c "import py3Dmol; print('✓ py3Dmol')"
+        python3.12 -c "import pyfaidx; print('✓ pyfaidx')"
+        python3.12 -c "import matplotlib; print('✓ matplotlib')"
+        python3.12 -c "import yaml; print('✓ pyyaml')"
+        python3.12 -c "import requests; print('✓ requests')"
+        python3.12 -c "import tqdm; print('✓ tqdm')"
+
+    - name: Check package metadata (non-Windows)
+      if: runner.os != 'Windows'
       run: |
         pip show bio_programming_tools
+        echo "✓ Package metadata verified"
+
+    - name: Check package metadata (WSL)
+      if: runner.os == 'Windows'
+      shell: wsl-bash {0}
+      run: |
+        python3.12 -m pip show bio_programming_tools
         echo "✓ Package metadata verified"

@@ -202,10 +202,10 @@ class TestColabfoldSearchInput:
 
 # Path to test database
 TEST_DB_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "dummy_data", "mini_mmseqs_db"
+    os.path.dirname(__file__), "..", "dummy_data", "mini_mmseqs_db"
 )
 TEST_DB_SETUP_SCRIPT = os.path.join(
-    os.path.dirname(__file__), "..", "..", "dummy_data", "create_mini_mmseqs_db.sh"
+    os.path.dirname(__file__), "..", "dummy_data", "create_mini_mmseqs_db.sh"
 )
 
 
