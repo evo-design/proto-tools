@@ -52,8 +52,8 @@ pre-commit run --all-files
 
 ### Two Main Packages
 
-- **`bio_tools/tools/`** — Wrappers around bioinformatics algorithms (BLAST, AlphaFold3, ESM2, etc.)
-- **`bio_tools/entities/`** — Core data structures: `Structure`/`StructureEnsemble` (protein/RNA) and `Ligands` (small molecules)
+- **`bio_programming_tools/tools/`** — Wrappers around bioinformatics algorithms (BLAST, AlphaFold3, ESM2, etc.)
+- **`bio_programming_tools/entities/`** — Core data structures: `Structure`/`StructureEnsemble` (protein/RNA) and `Ligands` (small molecules)
 
 ### Tool Pattern (Input/Config/Output)
 
@@ -66,11 +66,11 @@ Tools are registered via the `@tool()` decorator in `tool_registry.py`, which en
 
 ### Environment Isolation (EnvManager)
 
-Tools with complex or conflicting dependencies use isolated venvs managed by `EnvManager` (`bio_tools/tools/infra/env_manager.py`). Each such tool has a `standalone/` subdirectory containing `setup.sh`, optionally `requirements.txt`, and a `run.py` entry point. Venvs are created in `.venvs/{model_name}_env/`.
+Tools with complex or conflicting dependencies use isolated venvs managed by `EnvManager` (`bio_programming_tools/utils/env_manager.py`). Each such tool has a `standalone/` subdirectory containing `setup.sh`, optionally `requirements.txt`, and a `run.py` entry point. Venvs are created in `.venvs/{model_name}_env/`.
 
 ### Binary Tools
 
-Tools wrapping external C/C++ binaries (BLAST+, MMseqs2, MAFFT) use a `standalone/binary_config.py` that specifies platform-specific download URLs and extraction logic. The shared installer at `infra/install_binary.py` handles downloading. Binaries live in the venv's `bin/` directory.
+Tools wrapping external C/C++ binaries (BLAST+, MMseqs2, MAFFT) use a `standalone/binary_config.py` that specifies platform-specific download URLs and extraction logic. The shared installer at `bio_programming_tools/utils/install_binary.py` handles downloading. Binaries live in the venv's `bin/` directory.
 
 ### Tool Categories
 
@@ -87,7 +87,7 @@ Tools wrapping external C/C++ binaries (BLAST+, MMseqs2, MAFFT) use a `standalon
 | Masked LMs | ESM2, ESM3 |
 | Causal LMs | ProGen2, Evo2 |
 
-### Infrastructure Modules (`bio_tools/tools/infra/`)
+### Utility Modules (`bio_programming_tools/utils/`)
 
 - `env_manager.py` — Isolated venv creation and script execution
 - `install_binary.py` — Platform-aware binary downloading

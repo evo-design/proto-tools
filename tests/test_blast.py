@@ -162,7 +162,7 @@ def test_blast_config_schema_generation():
     from bio_programming_tools.tools.tool_registry import ToolRegistry
 
     # Get schema for online BLAST (returns config schema)
-    schema = ToolRegistry.get_schema("online-blast")
+    schema = ToolRegistry.get_config_schema("online-blast")
 
     assert "properties" in schema
     # Config fields should be in config schema

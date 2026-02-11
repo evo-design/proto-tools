@@ -311,7 +311,7 @@ class TestProdigalRegistration:
 
     def test_tool_schema_generation(self):
         """Test that JSON schema is generated correctly."""
-        schema = ToolRegistry.get_schema("prodigal-prediction")
+        schema = ToolRegistry.get_config_schema("prodigal-prediction")
         assert "properties" in schema
         # Config fields should be in schema
         assert "meta_mode" in schema["properties"]
