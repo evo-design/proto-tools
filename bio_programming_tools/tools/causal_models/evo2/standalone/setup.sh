@@ -19,14 +19,18 @@ echo ""
 echo "Installing uv package manager..."
 pip install uv
 
+echo "Installing torch..."
+uv pip install torch --torch-backend=auto
+
 echo "Installing flash-attn..."
-pip install flash-attn==2.8.0.post2
+# flash-attn's build step imports torch, so disable build isolation after torch is installed.
+uv pip install --no-build-isolation flash-attn==2.8.0.post2
 
 echo "Installing transformer-engine..."
-pip install transformer_engine[pytorch]==2.3.0
+uv pip install transformer_engine[pytorch]==2.3.0
 
 echo "Installing vortex..."
-pip install vtx
+uv pip install vtx
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt --torch-backend=auto
