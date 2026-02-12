@@ -4,97 +4,110 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-bio_tools is a modular bioinformatics tool library providing Python wrappers for 25+ biological sequence and structure analysis tools. It is the tool layer of the [bio-programming](https://github.com/evo-design/bio-programming/tree/main) project. The repo was recently restructured from the parent repo; some tests may not yet pass on main.
-
+bio_programming_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models.
 ## Build & Development Setup
 
-Assume `bio_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.
-
-For first-time manual setup only:
+Assume `bio_programming_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.
 
 ```bash
+# First-time setup only
 pip install -e ".[dev]"
 pre-commit install
-```
-
-## Common Commands
-
-```bash
-# Run tests (slow tests skipped by default)
-pytest
-
-# Run a single test file or filter by name
-pytest tests/test_blast.py
-pytest -k "blast"
-
-# Test flags
-pytest --cpu              # CPU-only tests
-pytest --gpu              # GPU-only tests
-pytest --all              # Include slow tests
-pytest --slow             # Only slow tests
-pytest --no-log-console   # Suppress console logging
-
-# Linting (CI only checks F401 unused imports and F841 unused variables)
-flake8 bio_tools tests
 
 # Formatting
-black bio_tools tests
-isort bio_tools tests
-
-# Type checking
-mypy bio_tools
-
-# Pre-commit hooks (isort, trailing whitespace, doc generation)
-pre-commit run --all-files
+black bio_programming_tools
+isort bio_programming_tools
 ```
 
 ## Architecture
 
-### Two Main Packages
+### Package Hierarchy
 
-- **`bio_programming_tools/tools/`** — Wrappers around bioinformatics algorithms (BLAST, AlphaFold3, ESM2, etc.)
-- **`bio_programming_tools/entities/`** — Core data structures: `Structure`/`StructureEnsemble` (protein/RNA) and `Ligands` (small molecules)
+```
+bio_programming_tools/
+├── tools/                          # All tool wrappers
+│   ├── {category}/                 # e.g., gene_annotation, structure_prediction
+│   │   ├── {tool_name}/            # e.g., blast, esmfold
+│   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
+│   │   │   ├── tool_name.py        # Implementation
+│   │   │   └── standalone/         # [optional] Isolated venv
+│   │   ├── shared_data_models.py   # [optional] Shared schemas
+│   │   └── __init__.py             # Re-exports from all tools in category
+│   ├── tool_registry.py            # @tool decorator and ToolRegistry
+│   └── __init__.py                 # Master re-export of all tools
+├── entities/                       # Data structures: Structure, Ligands
+└── utils/                          # Shared utilities
+```
 
-### Tool Pattern (Input/Config/Output)
+### Tool Registry — Quick Navigation
 
-Every tool follows a standardized pattern using Pydantic models:
-- **Input** (`BaseToolInput`) — primary data (sequences, structures)
-- **Config** (`BaseConfig`) — parameters (evalue, num_threads)
-- **Output** (`BaseToolOutput`) — results + metadata (tool_id, execution_time, success, errors)
+Every tool is registered via the `@tool()` decorator and discoverable through `ToolRegistry`. Tools are organized as `tools/{category}/{tool_name}/`.
 
-Tools are registered via the `@tool()` decorator in `tool_registry.py`, which enables automatic schema generation, metadata tracking, and unified error handling.
+**To find a tool's source code:**
+1. List category directories: `ls bio_programming_tools/tools/` — each subdirectory is a category
+2. List tools in a category: `ls bio_programming_tools/tools/{category}/` — each subdirectory is a tool
+3. Read the tool's `__init__.py` to see its exported classes and run function
+4. Each tool's main implementation is in `{tool_name}/{tool_name}.py` (or `{tool_name}/{operation}.py` for multi-operation tools)
 
-### Environment Isolation (EnvManager)
+**To programmatically discover all registered tools:**
+```python
+from bio_programming_tools.tools import ToolRegistry
+for spec in ToolRegistry.list_all():
+    print(f"{spec.key}: {spec.label} — {spec.description}")
+```
 
-Tools with complex or conflicting dependencies use isolated venvs managed by `EnvManager` (`bio_programming_tools/utils/env_manager.py`). Each such tool has a `standalone/` subdirectory containing `setup.sh`, optionally `requirements.txt`, and a `run.py` entry point. Venvs are created in `.venvs/{model_name}_env/`.
+**To get a tool's schemas:**
+```python
+ToolRegistry.get_schemas("tool-key")  # Returns input, config, output JSON schemas
+```
 
-### Binary Tools
+### The Universal Tool Pattern
 
-Tools wrapping external C/C++ binaries (BLAST+, MMseqs2, MAFFT) use a `standalone/binary_config.py` that specifies platform-specific download URLs and extraction logic. The shared installer at `bio_programming_tools/utils/install_binary.py` handles downloading. Binaries live in the venv's `bin/` directory.
+Every tool follows this exact pattern — no exceptions:
 
-### Tool Categories
+```python
+@tool(key="tool-key", label="Tool Label", input=ToolInput, config=ToolConfig, output=ToolOutput, description="...")
+def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
+```
 
-| Category | Examples |
+- **Input** (`BaseToolInput`) — primary data (sequences, structures, files). Uses `extra="forbid"`.
+- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`.
+- **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
+- **`@tool()`** decorator — handles error catching, timing, metadata population, registry.
+
+### Key File Paths
+
+| File | Provides |
 |---|---|
-| Gene Annotation | BLAST, MMseqs2, PyHMMER |
-| ORF Prediction | Orfipy, Prodigal |
-| Sequence Alignment | MAFFT, ColabFold Search |
-| Sequence Scoring | Enformer, Borzoi, AlphaGenome |
-| Inverse Folding | ProteinMPNN, LigandMPNN |
-| Structure Prediction | AlphaFold3, Boltz2, Chai1, ESMFold, Protenix, ViennaRNA |
-| Structure Design | RFDiffusion3 |
-| Structure Dynamics | BioEmu |
-| Masked LMs | ESM2, ESM3 |
-| Causal LMs | ProGen2, Evo2 |
+| `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
+| `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
+| `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
+| `utils/env_manager.py` | `EnvManager` for isolated venv execution |
+| `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
+| `tools/__init__.py` | Master export — all tools re-exported here |
 
-### Utility Modules (`bio_programming_tools/utils/`)
+## Naming Conventions
 
-- `env_manager.py` — Isolated venv creation and script execution
-- `install_binary.py` — Platform-aware binary downloading
-- `tool_cache.py` — Decorator-based result caching with TTL (`@tool_cache`)
-- `tool_io.py` — Base I/O classes (`BaseToolInput`, `BaseToolOutput`)
+- **Tool registry key**: kebab-case — `"evo2-sample"`, `"local-blast"`
+- **Run function**: `run_{tool_name}` — `run_evo2_sample`, `run_local_blast_search`
+- **Classes**: PascalCase — `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
+- **Directories**: snake_case — `evo2/`, `local_blast/`
+- **Files**: snake_case — `evo2_sample.py`, `local_blast.py`
+- **Code section headers**: `# ============================================================================`
 
-### Key Configuration
+## Rules When Implementing Tools
+
+- Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them
+- Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
+- All biological coordinates are **1-indexed, inclusive**
+- Use `from __future__ import annotations` at the top of every file
+- Use `logging.getLogger(__name__)` — never `print()`
+- Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
+- Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
+
+**Run `/implement-tool` for the complete tool implementation guide with step-by-step templates and examples.**
+
+## Configuration
 
 - Python >=3.12, Pydantic >=2.0
 - Black/isort line length: 88
@@ -104,68 +117,18 @@ Tools wrapping external C/C++ binaries (BLAST+, MMseqs2, MAFFT) use a `standalon
 
 ## Using bio_tools with Claude Code
 
-### Tool Discovery
-
 When a user asks to run a bioinformatics tool:
-1. Check the category table above to find the right directory under `bio_tools/tools/`
+1. Browse `bio_programming_tools/tools/` to find the right category and tool directory
 2. Read the tool's `README.md` for biological context, parameters, and examples
-3. Read the tool's Pydantic `Input`/`Config`/`Output` classes for the exact API
-4. All public symbols are re-exported from `bio_tools/tools/__init__.py`
-
-### Universal Call Pattern
-
-Every tool follows the same pattern:
+3. Read the tool's `Input`/`Config`/`Output` classes for the exact API
 
 ```python
-from bio_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
+from bio_programming_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
 
 inputs = {Tool}Input(...)   # Primary data: sequences, structures, files
 config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
 result = run_{tool}(inputs, config)
-
 # result.success, result.execution_time, result.errors, plus tool-specific fields
 ```
 
-### Output Rule
-
-Infer from context whether to **write a script** or **execute directly**:
-
-**Write a script** to `./analyses/{descriptive_name}_{YYYY-MM-DD}.py` when:
-- The user says "write", "create", "set up", "notebook", or similar authoring language
-- The task is a multi-step pipeline or expensive GPU job
-- The user will likely iterate on parameters or review before running
-- When unclear — default to writing a script (safer, reproducible)
-
-**Execute directly** (run inline via Bash, include code in the response) when:
-- The user says "what is", "how many", "show me", "quick", "find", or similar query language
-- The task is a simple one-off lookup or quick check
-- The answer is more important than the script
-
-In either case, always show the equivalent Python code so the user can reproduce the result. See `analyses/examples/` for reference scripts.
-
-### Script Structure
-
-Generated scripts should follow this structure:
-
-```python
-"""
-Brief description of what this analysis does.
-Generated: {date}
-"""
-from bio_tools.tools.{category}.{tool} import ...
-
-# --- Configuration (review these) ---
-# All parameters in one place with comments explaining choices
-
-# --- Run ---
-# Tool execution
-
-# --- Results ---
-# Parse and display output
-```
-
-For multi-step pipelines, use one script with `# === Step N: Description ===` section headers.
-
-### GPU Tools
-
-Some tools require GPU access. Tools that need GPU include: AlphaFold3, Boltz2, Chai1, ESMFold, Protenix, ESM2, ESM3, Evo2, ProGen2, Enformer, Borzoi, AlphaGenome, ProteinMPNN, LigandMPNN, RFDiffusion3, BioEmu. When writing scripts for these tools, note the GPU requirement in a comment at the top of the script.
+**Invoke the `bio-tools` skill for full workflow guidance** (script vs direct execution, script structure, GPU handling, output conventions).

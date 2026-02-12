@@ -2,12 +2,8 @@
 name: bio-tools
 description: >
   ALWAYS use this skill when the user asks to run, analyze, or write scripts
-  for ANY bioinformatics tool — including BLAST, MMseqs2, PyHMMER, MAFFT,
-  AlphaFold3, Boltz2, Chai1, ESMFold, Protenix, ProteinMPNN, LigandMPNN,
-  ESM2, ESM3, ProGen2, Evo2, ColabFold Search, Enformer, Borzoi, AlphaGenome,
-  RFDiffusion3, BioEmu, Orfipy, Prodigal, ViennaRNA, SpliceTransformer, or
-  any sequence/structure analysis. Invoke this skill FIRST before reading tool
-  source code or writing any analysis script.
+  for ANY bioinformatics tool or sequence/structure analysis. Invoke this skill
+  FIRST before reading tool source code or writing any analysis script.
 allowed-tools:
   - Read
   - Write
@@ -18,43 +14,67 @@ allowed-tools:
 
 # bio-tools skill
 
-You help users run bioinformatics analyses using the `bio_programming_tools` library.
+## Workflow
 
-## How to use a tool
+1. **Find the tool**: Browse `bio_programming_tools/tools/` to find the right category and tool directory, or use `ToolRegistry.list_all()` from `bio_programming_tools.tools` to discover available tools
+2. **Read README**: `bio_programming_tools/tools/{category}/{tool}/README.md` — has parameters, thresholds, biological context, and examples
+3. **Read notebook**: `bio_programming_tools/tools/{category}/{tool}/examples/example.ipynb` — has working code with exact imports and real output
+4. **Read API**: Read the tool's `Input`/`Config`/`Output` classes for the exact Pydantic schema
+5. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
 
-1. **Discover:** Glob for `bio_programming_tools/tools/*/*/README.md` to find all tools
-2. **Read README:** Read the matching tool's `README.md` — has parameters (with types
-   and defaults), thresholds, biological context, and quick-start examples
-3. **Read notebook:** Read the tool's `examples/example.ipynb` — has working code with
-   exact imports and real output examples
-4. **Call pattern:** `Input` → `Config` → `run_{tool}()` → `Output`
+Start with READMEs and notebooks for API details. Read `.py` source only if you need deeper implementation context.
 
-Do NOT read tool source code (.py files) for API details — the README and
-notebook already contain complete parameter tables and usage examples.
+## Universal Call Pattern
 
-**Important:** Do NOT activate a virtual environment (e.g. `source .venv/bin/activate`)
-before running tools. The package is already installed — just use `python3` directly.
+```python
+from bio_programming_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
 
-## Tool categories
+inputs = {Tool}Input(...)   # Primary data: sequences, structures, files
+config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
+result = run_{tool}(inputs, config)
+# result.success, result.execution_time, result.errors, plus tool-specific fields
+```
 
-Categories under `bio_programming_tools/tools/`: gene_annotation, orf_prediction,
-sequence_alignment, sequence_scoring, inverse_folding, structure_prediction,
-structure_design, structure_dynamics, masked_models, causal_models, rna_splicing
+## Script vs Direct Execution
 
-## Script vs direct execution
+Infer from context whether to **write a script** or **execute directly**:
 
-Infer from context:
+**Write a script** to `./analyses/{descriptive_name}_{YYYY-MM-DD}.py` when:
+- The user says "write", "create", "set up", "notebook", or similar authoring language
+- The task is a multi-step pipeline or expensive GPU job
+- The user will likely iterate on parameters or review before running
+- When unclear — default to writing a script (safer, reproducible)
 
-- **Write a script** (`analyses/{name}_{date}.py`): "write", "create", "set up",
-  multi-step pipelines, GPU jobs, or when unclear
-- **Execute directly** (inline via Bash): "what is", "how many", "show me",
-  "quick", simple lookups
+**Execute directly** (run inline via Bash, include code in the response) when:
+- The user says "what is", "how many", "show me", "quick", "find", or similar query language
+- The task is a simple one-off lookup or quick check
+- The answer is more important than the script
 
-Always show the equivalent Python code either way.
+In either case, always show the equivalent Python code so the user can reproduce the result. See `analyses/examples/` for reference scripts.
 
-## Key conventions
+## Script Structure
 
-- Every tool uses the pattern: `Input` → `Config` → `run_{tool}()` → `Output`
-- Check the tool's README for GPU requirements — note this in generated scripts
-- Multi-step pipelines use `# === Step N: Description ===` headers
-- All public symbols are re-exported from `bio_programming_tools.tools`
+Generated scripts should follow this structure:
+
+```python
+"""
+Brief description of what this analysis does.
+Generated: {date}
+"""
+from bio_programming_tools.tools.{category}.{tool} import ...
+
+# --- Configuration (review these) ---
+# All parameters in one place with comments explaining choices
+
+# --- Run ---
+# Tool execution
+
+# --- Results ---
+# Parse and display output
+```
+
+For multi-step pipelines, use one script with `# === Step N: Description ===` section headers.
+
+## GPU Tools
+
+Some tools require GPU access. To determine if a tool needs GPU, check its Config class for a `device` field (defaulting to `"cuda"`). When writing scripts for GPU tools, note the GPU requirement in a comment at the top of the script.
