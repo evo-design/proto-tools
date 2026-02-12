@@ -24,10 +24,10 @@ conda activate bio_tools
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -e . -v
+pip install .
 
 # For development
-pip install -e ".[dev]" -v
+pip install ".[dev]"
 ```
 
 ## HuggingFace Authentication
