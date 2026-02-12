@@ -41,7 +41,6 @@ RFdiffusion3 uses a denoising diffusion process operating on all atoms (backbone
 ## Execution Modes
 
 - **Local GPU**: Requires GPU with >=24GB VRAM (A100/H100 recommended for production)
-- **Modal GPU**: Supports batch generation via Modal deployment for high-throughput use
 - **Runtime**: ~1-10 minutes per design batch depending on size and complexity
 
 ## How It Works

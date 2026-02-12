@@ -68,7 +68,6 @@ Per-position logits indicate the model's confidence in each amino acid:
 
 ESM2 can run locally on GPU/CPU or remotely via Modal:
 - **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
-- **Modal GPU**: Used automatically when configured in the environment.
 
 ## How It Works
 

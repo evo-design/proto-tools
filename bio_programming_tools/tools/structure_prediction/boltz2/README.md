@@ -55,10 +55,9 @@ Confidence metrics include:
 
 ## Execution Modes
 
-Boltz2 requires GPU with >=40GB VRAM (H100 or A100-80GB recommended). It supports Modal cloud deployment for high-throughput or when local GPU is unavailable.
+Boltz2 requires GPU with >=40GB VRAM (H100 or A100-80GB recommended).
 
-- **Local execution**: Runs on local GPU. Best for single predictions and development. Runtime ~2-10 minutes per complex on H100/A100. Requires internet for remote MSA search mode.
-- **Modal execution**: Deploys to cloud GPUs via Modal. Best for high-throughput batch predictions. Requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
+- **Local execution**: Runs on local GPU. Runtime ~2-10 minutes per complex on H100/A100. Requires internet for remote MSA search mode.
 
 ## How It Works
 
@@ -219,7 +218,6 @@ for structure in result.structures:
 
 **Common mistakes:**
 1. **Disabling MSA:** `use_msa=False` reduces prediction accuracy significantly. MSAs provide critical evolutionary signals.
-2. **Using local mode on Modal:** Modal execution requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
 3. **Including glycans:** Boltz2 doesn't support glycans. Use Chai1 for glycoprotein structures.
 4. **Insufficient samples for flexible systems:** Protein-nucleic acid complexes often need 25+ samples to find good conformations.
 5. **Ignoring specialized metrics:** Use `ligand_iptm` for drug binding, `protein_iptm` for protein-protein, not just overall `confidence_score`.

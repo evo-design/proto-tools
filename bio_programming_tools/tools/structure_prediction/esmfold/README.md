@@ -45,10 +45,9 @@ ESMFold uses the ESM-2 protein language model to generate structure-aware embedd
 
 ## Execution Modes
 
-ESMFold requires GPU with >=16GB VRAM (24GB recommended for longer sequences). It supports Modal cloud deployment for high-throughput or when local GPU is unavailable.
+ESMFold requires GPU with >=16GB VRAM (24GB recommended for longer sequences).
 
-- **Local execution**: Runs on local GPU. Best for single predictions and development. Runtime ~5-30 seconds per monomer (100-400 residues) on A100 GPU; scales with sequence length squared.
-- **Modal execution**: Deploys to cloud GPUs via Modal. Best for high-throughput batch predictions.
+- **Local execution**: Runs on local GPU. Runtime ~5-30 seconds per monomer (100-400 residues) on A100 GPU; scales with sequence length squared.
 
 ## How It Works
 

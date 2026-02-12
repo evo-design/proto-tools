@@ -2,7 +2,7 @@
 
 ## Overview
 
-ProGen2 is Salesforce's autoregressive protein language model for de novo protein sequence generation and scoring. Unlike masked language models (ESM2/ESM3) that predict masked positions bidirectionally, ProGen2 generates proteins left-to-right from a prompt and provides autoregressive likelihood scoring. The tool supports local GPU execution via a standalone venv and optional Modal GPU execution.
+ProGen2 is Salesforce's autoregressive protein language model for de novo protein sequence generation and scoring. Unlike masked language models (ESM2/ESM3) that predict masked positions bidirectionally, ProGen2 generates proteins left-to-right from a prompt and provides autoregressive likelihood scoring. The tool supports local GPU execution via a standalone venv .
 
 ## When to Use This Tool
 
@@ -53,7 +53,6 @@ This learned distribution enables two key applications: **generation** (sampling
 ## Execution Modes
 
 - **Local execution**: Runs ProGen2 in an isolated venv via `EnvManager("progen2")`. Requires CUDA GPU.
-- **Modal execution**: Automatically used when Modal GPU is configured. Same API, remote GPU inference.
 
 ## How It Works
 
