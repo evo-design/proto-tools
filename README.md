@@ -1,3 +1,5 @@
+<img src="https://evodesign.org/images/logo.svg" alt="Evo Design Logo" width="120" align="left" style="margin-right: 15px;">
+
 # Tools Hub for Biological AI Models and Computational Biology
 [![Lint Check](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml)
 [![Run Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
@@ -28,6 +30,7 @@ pip install .
 
 # For development
 pip install ".[dev]"
+pre-commit install
 ```
 
 ## HuggingFace Authentication
@@ -105,4 +108,5 @@ To run tests, linting, and other code quality tools, install with the dev extras
 
 ```bash
 pip install -e ".[dev]"
+pre-commit install
 ```
