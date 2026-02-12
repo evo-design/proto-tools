@@ -4,7 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-bio_programming_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models.
+bio_programming_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models. It is a git submodule of [bio-programming](https://github.com/evo-design/bio-programming), mounted at `bio-programming-tools/`. It also works standalone.
+
+## Notes (`notes/`)
+
+Dynamic development notes. Consult when working in the repo. Update when you discover information worth preserving.
+
+- `dev.md` — Setup, pre-commit hooks, CI checks, docs generation, code quality tools.
+- `environment.md` — Platform compatibility matrix (Chimera H100, DGX Spark GB10) and per-tool venv status.
+
 ## Build & Development Setup
 
 Assume `bio_programming_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.

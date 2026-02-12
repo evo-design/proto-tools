@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "bio_programming_tools"
 version = "0.1.0"
 description = "Bioinformatics tools for bio-programming"
-readme = "env_dev_notes.md"
+readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "Bio Programming Team"}
