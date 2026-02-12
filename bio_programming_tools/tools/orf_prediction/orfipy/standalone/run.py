@@ -118,8 +118,11 @@ def _parse_orfipy_results(
                 "nucleotide_sequence": nt_sequence,
                 "amino_acid_length": len(clean_aa_sequence),
                 "nucleotide_length": len(nt_sequence),
-                "nucleotide_start": parsed_info["start"] + 1,  # orfipy native 0-indexed -> 1-indexed
-                "nucleotide_end": parsed_info["end"],  # orfipy native 0-indexed exclusive -> 1-indexed inclusive
+                "nucleotide_start": parsed_info["start"]
+                + 1,  # orfipy native 0-indexed -> 1-indexed
+                "nucleotide_end": parsed_info[
+                    "end"
+                ],  # orfipy native 0-indexed exclusive -> 1-indexed inclusive
             }
             data.append(orf_dict)
 
@@ -132,7 +135,9 @@ def _parse_orfipy_results(
 DNA_NUCLEOTIDES = {"A", "T", "C", "G"}
 
 
-def _run_single_orfipy(sequence: str, seq_id: str, config: dict) -> List[Dict[str, Any]]:
+def _run_single_orfipy(
+    sequence: str, seq_id: str, config: dict
+) -> List[Dict[str, Any]]:
     """Run Orfipy on a single DNA sequence string and return list of ORF dicts."""
 
     # Create temporary directory for isolated execution
@@ -154,6 +159,8 @@ def _run_single_orfipy(sequence: str, seq_id: str, config: dict) -> List[Dict[st
         cmd = [
             orfipy_bin,
             str(input_fasta),
+            "--outdir",
+            str(temp_dir),
             "--procs",
             str(config.get("threads", 4)),
             "--start",
