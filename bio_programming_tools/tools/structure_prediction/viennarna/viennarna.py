@@ -182,7 +182,7 @@ class ViennaRNAConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="viennarna",
+    key="viennarna-prediction",
     label="ViennaRNA Secondary Structure Prediction",
     input=ViennaRNAInput,
     config=ViennaRNAConfig,

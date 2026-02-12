@@ -27,7 +27,7 @@ tools/{category}/{tool_name}/
 ├── {tool_name}.py          # Input, Config, Output, run function (calls EnvManager)
 ├── standalone/
 │   ├── setup.sh            # Creates venv, installs deps
-│   ├── run.py              # JSON I/O entry point
+│   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
 │   ├── requirements.txt    # Python dependencies
 │   └── binary_config.py    # [optional] For external C/C++ binaries
 └── README.md
@@ -42,9 +42,9 @@ tools/{category}/
 │   ├── {tool_name}.py      # Extends shared models, calls EnvManager
 │   ├── standalone/
 │   │   ├── setup.sh
-│   │   ├── run.py
+│   │   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
 │   │   ├── requirements.txt
-│   │   └── binary_config.py  # [optional]
+│   │   └── binary_config.py   # [optional]
 │   └── README.md
 └── __init__.py
 ```
@@ -263,9 +263,9 @@ def run_{tool_name}(
 
 ## Step 3: Implementation Patterns
 
-### 3A: Standalone Tool (EnvManager)
+### 3A: Standalone CPU Tool (EnvManager)
 
-**Main tool file** — calls EnvManager:
+**Main tool file** — calls EnvManager with `run.py`:
 ```python
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     from bio_programming_tools.utils.env_manager import EnvManager
@@ -291,12 +291,13 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     )
 ```
 
-**standalone/run.py** — JSON I/O entry point:
+**standalone/run.py** (or **inference.py** for AI models) — JSON I/O entry point:
 ```python
 """
 {ToolName} standalone runner for EnvManager venv execution.
 Usage (called by EnvManager, not directly):
-    python run.py <input.json> <output.json>
+    python run.py <input.json> <output.json>  # CPU tools
+    python inference.py <input.json> <output.json>  # AI model tools
 """
 from __future__ import annotations
 
@@ -351,7 +352,7 @@ some-library>=1.0.0
 numpy>=1.24.0
 ```
 
-### 3B: GPU Tool with Modal Fallback
+### 3B: AI Model Tool with Modal Fallback (GPU)
 
 ```python
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
@@ -374,7 +375,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 
         venv_manager = EnvManager("{tool_name}")
         result = venv_manager.call_standalone_script_in_venv(
-            script_path=Path(__file__).parent / "standalone" / "run.py",
+            script_path=Path(__file__).parent / "standalone" / "inference.py",
             input_dict={
                 "operation": "run",
                 "sequences": inputs.sequences,
@@ -653,7 +654,8 @@ When in doubt, read these canonical examples:
 | Pattern | Example | File |
 |---|---|---|
 | Standalone + binary | BLAST | `tools/gene_annotation/blast/` |
-| Standalone run.py | BLAST | `tools/gene_annotation/blast/standalone/run.py` |
+| CPU standalone (run.py) | BLAST | `tools/gene_annotation/blast/standalone/run.py` |
+| AI model standalone (inference.py) | ESMFold | `tools/structure_prediction/esmfold/standalone/inference.py` |
 | GPU + Modal | Evo2 | `tools/causal_models/evo2/evo2_sample.py` |
 | Shared data models | Inverse Folding | `tools/inverse_folding/shared_data_models.py` |
 | Per-item caching | Orfipy | `tools/orf_prediction/orfipy/orfipy.py` |

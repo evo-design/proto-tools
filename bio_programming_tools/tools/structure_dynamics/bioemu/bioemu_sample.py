@@ -188,7 +188,7 @@ class BioEmuConfig(StructurePredictionConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="bioemu",
+    key="bioemu-sample",
     label="BioEmu Conformational Ensemble Sampling",
     input=BioEmuInput,
     config=BioEmuConfig,

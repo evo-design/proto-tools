@@ -40,9 +40,15 @@ Per-position logits indicate the model's confidence in each amino acid:
 - Comparing wild-type vs mutant logits predicts variant effects
 - Logits are returned over 20 canonical amino acids in fixed order: `ACDEFGHIKLMNPQRSTVWY`
 
-## How It Works
+## Tool Catalog
 
-**Model variants:**
+| Tool | Description | Output |
+|------|-------------|--------|
+| `esm2-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
+| `esm2-sample` | Mutate sequences using model | Modified sequences |
+| `esm2-score` | Score sequences via MLM pseudo-perplexity | Per-sequence metrics, optional logits |
+
+## Model Variants
 
 | Checkpoint | Parameters | Layers | Embedding Dim | Speed | Quality |
 |------------|------------|--------|---------------|-------|---------|
@@ -53,24 +59,49 @@ Per-position logits indicate the model's confidence in each amino acid:
 | `esm2_t36_3B_UR50D` | 3B | 36 | 2560 | Slow | Higher |
 | `esm2_t48_15B_UR50D` | 15B | 48 | 5120 | Slowest | Best |
 
-**Three tools:**
+**Model selection guidance:**
+1. **Default choice**: `esm2_t33_650M_UR50D` offers best quality/speed tradeoff for most tasks.
+2. **Memory constrained**: Use `esm2_t30_150M_UR50D` or smaller.
+3. **Maximum quality**: Use `esm2_t48_15B_UR50D` (requires >40GB GPU).
 
-| Tool | Description | Output |
-|------|-------------|--------|
-| `esm2-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
-| `esm2-sample` | Mutate sequences using model | Modified sequences |
-| `esm2-score` | Score sequences via MLM pseudo-perplexity | Per-sequence metrics, optional logits |
+## Execution Modes
 
-## Important Parameters
+ESM2 can run locally on GPU/CPU or remotely via Modal:
+- **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
+- **Modal GPU**: Used automatically when configured in the environment.
+
+## How It Works
+
+ESM2 is a masked language model (similar to BERT) trained on protein sequences. It learns to predict masked amino acids from surrounding context, capturing evolutionary and structural patterns.
+
+- **Embeddings**: Forward pass through the model produces per-position hidden states. Mean-pooling across positions yields a fixed-length sequence descriptor.
+- **Sampling**: Positions are selected by a decoding method (entropy, max_logit, or random), masked, and resampled from the model's predicted distribution at a given temperature.
+- **Scoring**: Each position is masked one at a time, and the model's log-probability of the true amino acid is recorded. Aggregated scores give pseudo-perplexity (lower = more "natural" sequence).
+
+## Input Parameters
 
 ### Embeddings Tool
 
-**Input:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `sequences` | `List[str]` | Protein sequences (amino acid strings) |
 
-**Configuration:**
+### Sampling Tool
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sequences` | `List[str]` | Protein sequences to mutate |
+
+### Scoring Tool
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sequences` | `List[str]` | Protein sequences to score |
+
+## Configuration
+
+### Embeddings Tool (`ESM2EmbeddingsConfig`)
+
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
@@ -79,9 +110,8 @@ Per-position logits indicate the model's confidence in each amino acid:
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 
-### Sampling Tool
+### Sampling Tool (`ESM2SampleConfig`)
 
-**Configuration:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
@@ -92,9 +122,8 @@ Per-position logits indicate the model's confidence in each amino acid:
 | `device` | `str` | `"cuda"` | Device for inference |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 
-### Scoring Tool
+### Scoring Tool (`ESM2ScoringConfig`)
 
-**Configuration:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
@@ -102,6 +131,15 @@ Per-position logits indicate the model's confidence in each amino acid:
 | `device` | `str` | `"cuda"` | Device for inference |
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
+
+### Parameter Guides
+
+**Temperature guide for sampling:**
+| Temperature | Behavior | Use Case |
+|-------------|----------|----------|
+| 0.5-0.7 | Conservative | Safer mutations |
+| 1.0 | Standard | Model distribution |
+| 1.5-2.0 | Creative | More diverse mutations |
 
 ## Output Specification
 
@@ -134,7 +172,7 @@ Per-position logits indicate the model's confidence in each amino acid:
 | `logits` | `List[List[float]]?` | Optional per-position logits (shape `[seq_len, 20]`) |
 | `vocab` | `List[str]?` | Amino acid order (AA-only) |
 
-## Thresholds and Decision Boundaries
+## Interpreting Results
 
 These thresholds are heuristics. Use them comparatively and validate for your task.
 
@@ -150,46 +188,10 @@ These thresholds are heuristics. Use them comparatively and validate for your ta
 - **Distant**: 0.5 - 0.7 (remote homology)
 - **Unrelated**: < 0.5
 
-**Temperature guide for sampling:**
-- **0.5-0.7**: Conservative, safer mutations
-- **1.0**: Standard model distribution
-- **1.5-2.0**: Creative, more diverse mutations
-
-## Best Practices and Gotchas
-
-**Model selection:**
-
-1. **Default choice**: `esm2_t33_650M_UR50D` offers best quality/speed tradeoff for most tasks.
-
-2. **Memory constrained**: Use `esm2_t30_150M_UR50D` or smaller.
-
-3. **Maximum quality**: Use `esm2_t48_15B_UR50D` (requires >40GB GPU).
-
-**Batch processing:**
-
-1. **Variable lengths**: Sequences are padded to batch max length - group similar-length sequences.
-
-2. **OOM errors**: Reduce `batch_size` or use smaller model.
-
-3. **Attention masks**: Always use masks to ignore padding positions in downstream analysis.
-
-**Embedding usage:**
-
-1. **Mean pooling**: `mean_embeddings` averages across sequence positions (ignoring padding).
-
-2. **Per-position**: Extract from hidden states for residue-level tasks.
-
-3. **Normalization**: Consider L2 normalizing embeddings for cosine similarity.
-
-**Common mistakes:**
-
-1. **Ignoring padding**: Always apply attention masks before averaging or analyzing logits.
-
-2. **Empty sequences**: ESM2 tools require at least one non-empty sequence.
-
-3. **Wrong vocab indices**: Tool logits are AA-only in order `ACDEFGHIKLMNPQRSTVWY` (no special tokens).
-
-4. **Mixing checkpoints**: Embeddings from different model sizes are NOT comparable.
+**For scoring (pseudo-perplexity):**
+- Lower perplexity indicates a more "natural" sequence according to the model
+- Compare perplexities across variants rather than interpreting absolute values
+- Perplexity is sensitive to sequence length; compare sequences of similar length
 
 ## Quick Start Examples
 
@@ -273,17 +275,50 @@ result = run_esm2_embeddings(inputs, config)
 print(f"Processed {result.num_sequences} sequences")
 ```
 
+## Best Practices & Gotchas
+
+**Batch processing:**
+
+1. **Variable lengths**: Sequences are padded to batch max length - group similar-length sequences.
+
+2. **OOM errors**: Reduce `batch_size` or use smaller model.
+
+3. **Attention masks**: Always use masks to ignore padding positions in downstream analysis.
+
+**Embedding usage:**
+
+1. **Mean pooling**: `mean_embeddings` averages across sequence positions (ignoring padding).
+
+2. **Per-position**: Extract from hidden states for residue-level tasks.
+
+3. **Normalization**: Consider L2 normalizing embeddings for cosine similarity.
+
+**Common mistakes:**
+
+1. **Ignoring padding**: Always apply attention masks before averaging or analyzing logits.
+
+2. **Empty sequences**: ESM2 tools require at least one non-empty sequence.
+
+3. **Wrong vocab indices**: Tool logits are AA-only in order `ACDEFGHIKLMNPQRSTVWY` (no special tokens).
+
+4. **Mixing checkpoints**: Embeddings from different model sizes are NOT comparable.
+
 ## References
 
 **Primary publication:**
-- Lin et al. (2023). "Evolutionary-scale prediction of atomic level protein structure with a language model". *Science*. [DOI: 10.1126/science.ade2574](https://doi.org/10.1126/science.ade2574)
+- Lin, Z. et al. (2023). "Evolutionary-scale prediction of atomic level protein structure with a language model." *Science*, 379(6637), 1123-1130. DOI: [10.1126/science.ade2574](https://doi.org/10.1126/science.ade2574)
 
-**Resources:**
+**Implementation:**
 - GitHub: [https://github.com/facebookresearch/esm](https://github.com/facebookresearch/esm)
 - Model hub: [https://huggingface.co/facebook](https://huggingface.co/facebook)
 
 ## Related Tools
 
+**Tools often used together:**
 - `esm3`: Newer generative model with structure prediction
-- `progen2`: Autoregressive protein generation
 - `inverse_folding/proteinmpnn`: Structure-conditioned sequence design
+- `mmseqs-clustering`: Cluster sequences before/after embedding analysis
+
+**Alternative tools:**
+- `progen2`: Autoregressive protein generation
+- `esm3`: Can also do embeddings, but ESM2 is faster for embedding-only tasks

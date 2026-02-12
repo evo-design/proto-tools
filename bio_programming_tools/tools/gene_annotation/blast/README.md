@@ -10,14 +10,15 @@ BLAST (Basic Local Alignment Search Tool) finds regions of similarity between bi
 - Identifying protein families and domains
 - Annotating newly sequenced genes
 
-**When to use Online vs. Local BLAST**
+**When to use Online vs. Local BLAST:**
 - Online BLAST: Best for occasional, low-volume queries where you need access to the massive NCBI databases (nt/nr) without downloading terabytes of data.
 - Local BLAST: Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
 
-**When NOT to use this tool**
+**When NOT to use this tool:**
 - Whole Genome Alignment: Use tools like MUMmer or Minimap2 for aligning entire chromosomes.
 - Next-Gen Sequencing (NGS) Mapping: Use BWA or Bowtie2 for mapping millions of short reads to a reference.
 - Deep Homology Detection: If sequences are very distantly related (<20% identity), Hidden Markov Model tools like HMMER or HHblits are more sensitive.
+- Large-Scale Searches: For searching millions of sequences, use MMseqs2 which is 100-1000x faster.
 
 ## Biological Background
 
@@ -31,23 +32,31 @@ Sequence alignment is the first step in almost all bioinformatics workflows. It 
 - Detect off-targets: Ensure a primer or CRISPR guide only binds to the intended target.
 - Find evolutionary origins: Trace the phylogeny of a gene across species.
 
-**Scientific foundation**
+**Scientific foundation:**
 BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). It does not perform a full Smith-Waterman alignment (which is accurate but slow). Instead, it does:
 
-1. Seeding: Breaks the query into short "words" (k-mers) and finds exact matches in the database.
-2. Extension: Extends these matches in both directions until the alignment score drops below a threshold.
-3. Evaluation: Calculates an E-value (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
+1. **Seeding**: Breaks the query into short "words" (k-mers) and finds exact matches in the database.
+2. **Extension**: Extends these matches in both directions until the alignment score drops below a threshold.
+3. **Evaluation**: Calculates an E-value (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
+
+## Tool Catalog
+
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `blast-online-search` | Queries NCBI QBLAST servers remotely via API | Occasional queries against massive NCBI databases (nt/nr) |
+| `blast-local-search` | Runs BLAST+ binaries against a local database | High-throughput pipelines, custom databases, proprietary sequences |
+| `blast-create-db` | Creates a local BLAST database from a FASTA file | Prerequisite for `blast-local-search` |
 
 ## How It Works
 
 **Method overview:**
 The module exposes three distinct functions:
 
-`online-blast`: Submits a request to the NCBI QBLAST server via API. It handles the polling loop and retrieves results as XML, parsing them into a DataFrame.
+`blast-online-search`: Submits a request to the NCBI QBLAST server via API. It handles the polling loop and retrieves results as XML, parsing them into a DataFrame.
 
-`local-blast`: Wraps the blastn, blastp, etc., command line tools. It executes the binary against a local database and parses the tabular output.
+`blast-local-search`: Wraps the blastn, blastp, etc., command line tools. It executes the binary against a local database and parses the tabular output.
 
-`create-blast-db`: Wraps the makeblastdb command line tool. It takes a FASTA file and indexes it into binary files (.nhr, .nin, .nsq etc.) optimized for search.
+`blast-create-db`: Wraps the makeblastdb command line tool. It takes a FASTA file and indexes it into binary files (.nhr, .nin, .nsq etc.) optimized for search.
 
 **The BLAST Program Matrix:**
 You must select the correct program based on your inputs:
@@ -59,7 +68,7 @@ You must select the correct program based on your inputs:
 | `tblastn` | Protein | Nucleotide | Finding unannotated genes in genomic DNA (translates DB) |
 | `tblastx` | Nucleotide | Nucleotide | Gene prediction in divergent species (translates both) |
 
-ie. if you are searching a nucleotide sequence against a protein database, use `blastx`
+i.e., if you are searching a nucleotide sequence against a protein database, use `blastx`.
 
 **Computational Requirements:**
 
@@ -69,16 +78,15 @@ Local: CPU-intensive. RAM usage depends on database size.
 
 Storage: Local databases can be large (NCBI 'nt' is >100GB compressed; custom DBs are small).
 
-## Important Parameters
-
-### Input (What You're Searching)
+## Input Parameters
 
 | Tool | Parameter | Type | Description |
 |------|-----------|------|-------------|
-| `online-blast` | `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. |
-| `local-blast` | `query` | `str` | Path to a FASTA file containing your query sequence(s). |
+| `blast-online-search` | `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. |
+| `blast-local-search` | `query` | `str` | Path to a FASTA file containing your query sequence(s). |
+| `blast-create-db` | `fasta` | `str` | Path to your FASTA file with sequences to index. |
 
-### Configuration (How to Search)
+## Configuration
 
 **Shared Parameters (Online & Local)**
 | Parameter | Type | Default | Description |
@@ -104,13 +112,10 @@ Available online databases:
 **Local BLAST Specifics**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `local_db` | `str` | *Required* | Path to your database (created by `create-blast-db`). |
+| `local_db` | `str` | *Required* | Path to your database (created by `blast-create-db`). |
 | `num_threads` | `int` | `4` | Number of CPU cores to use. More = faster. |
 
-### Creating a Database (`create-blast-db`)
-
-Before running `local-blast`, you need a database. Use `create-blast-db` to make one from a FASTA file.
-
+**Creating a Database (`blast-create-db`)**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `fasta` | `str` | *Required* | Path to your FASTA file with sequences to index. |
@@ -118,9 +123,34 @@ Before running `local-blast`, you need a database. Use `create-blast-db` to make
 | `out_prefix` | `str` | *auto* | Where to save the database. Defaults to same location as your FASTA. |
 | `title` | `str` | *None* | Optional human-readable name for the database. |
 
+### Parameter Guides
+
+**Program selection:**
+| Query Type | Database Type | Use Program |
+|------------|---------------|-------------|
+| Nucleotide | Nucleotide | `blastn` |
+| Protein | Protein | `blastp` |
+| Nucleotide | Protein | `blastx` |
+| Protein | Nucleotide | `tblastn` |
+| Nucleotide (translated) | Nucleotide (translated) | `tblastx` |
+
+**E-value interpretation:**
+| E-value | Meaning |
+|---------|---------|
+| `< 1e-50` | Near-certain homolog |
+| `< 1e-5` | Strong evidence of homology |
+| `< 0.01` | Possible homolog (inspect manually) |
+| `> 0.01` | Likely noise/chance |
+
+### Sweep Priorities
+
+1. `evalue` (via `additional_params`) — Most impactful; controls sensitivity vs noise tradeoff
+2. `program` — Must match query/database types; incorrect choice yields no results
+3. `word_size` (via `additional_params`) — Decrease to find shorter/more divergent matches (slower), increase for speed
+
 ## Output Specification
 
-Both tools return a `BlastOutput` object with two attributes:
+Both search tools return a `BlastOutput` object with two attributes:
 - `results_df`: A Pandas DataFrame with all hits (or empty if no matches)
 - `num_hits`: Total number of hits found
 
@@ -141,43 +171,16 @@ Both tools return a `BlastOutput` object with two attributes:
 | `evalue` | Expect Value | **Crucial statistic.** The number of hits expected by chance. Lower is better. |
 | `bitscore` | Bit Score | Alignment score normalized for database size. Higher is better. |
 
-## Thresholds & Decision Boundaries
+## Interpreting Results
 
 - **High Confidence:** `evalue < 1e-50`, `pident > 90%`
 - **Homology Likely:** `evalue < 1e-5`, `pident > 30%` (for proteins)
 - **Noise/Chance:** `evalue > 0.01` (usually disregarded unless looking for very short motifs)
 
-## Best Practices & Gotchas
-
-**Parameter Tuning:**
-
-1. `evalue` (Expect Threshold):
-   - Default is usually 10.0 (very loose).
-   - Set to `1e-5` or `1e-3` to filter out random noise.
-
-2. `word_size`:
-   - Decrease this to find shorter/more divergent matches (increases runtime).
-   - Increase to speed up search for near-identical matches.
-
-3. `dust` / `soft_masking`:
-   - BLAST automatically masks low-complexity regions (e.g., "AAAAA"). If you are searching for repetitive motifs, you may need to disable masking in `additional_params`.
-
-**Common Mistakes:**
-
-1. **Mismatched DB/Program:** Trying to run `blastp` (protein query) against a Nucleotide database. You must use `tblastn` for this.
-
-2. **Online Latency:** Do not use `online-blast` inside a loop for 10,000 sequences. It will take days and NCBI may block your IP. Use `local-blast` for batch processing.
-
-3. **Interpreting Short Hits:** A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
-
-## References
-
-**Primary Citation:**
-- Altschul, S.F., Gish, W., Miller, W., Myers, E.W. & Lipman, D.J. (1990) "Basic local alignment search tool." *J. Mol. Biol.* 215:403-410.
-
-**Documentation:**
-- BLAST+ Manual: [https://www.ncbi.nlm.nih.gov/books/NBK279690/](https://www.ncbi.nlm.nih.gov/books/NBK279690/)
-- Biopython BLAST: [https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast](https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast)
+**Key considerations:**
+- A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
+- E-values are database-size dependent: the same alignment score produces different E-values against different databases.
+- Bit scores are normalized and comparable across databases.
 
 ## Quick Start Examples
 
@@ -226,9 +229,45 @@ good_hits = result.results_df[result.results_df['evalue'] < 1e-10]
 print(good_hits)
 ```
 
+## Best Practices & Gotchas
+
+**Parameter Tuning:**
+
+1. `evalue` (Expect Threshold):
+   - Default is usually 10.0 (very loose).
+   - Set to `1e-5` or `1e-3` to filter out random noise.
+
+2. `word_size`:
+   - Decrease this to find shorter/more divergent matches (increases runtime).
+   - Increase to speed up search for near-identical matches.
+
+3. `dust` / `soft_masking`:
+   - BLAST automatically masks low-complexity regions (e.g., "AAAAA"). If you are searching for repetitive motifs, you may need to disable masking in `additional_params`.
+
+**Common Mistakes:**
+
+1. **Mismatched DB/Program:** Trying to run `blastp` (protein query) against a Nucleotide database. You must use `tblastn` for this.
+
+2. **Online Latency:** Do not use `blast-online-search` inside a loop for 10,000 sequences. It will take days and NCBI may block your IP. Use `blast-local-search` for batch processing.
+
+3. **Interpreting Short Hits:** A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
+
+## References
+
+**Primary Citation:**
+- Altschul, S.F., Gish, W., Miller, W., Myers, E.W. & Lipman, D.J. (1990) "Basic local alignment search tool." *J. Mol. Biol.* 215:403-410.
+
+**Documentation:**
+- BLAST+ Manual: [https://www.ncbi.nlm.nih.gov/books/NBK279690/](https://www.ncbi.nlm.nih.gov/books/NBK279690/)
+- Biopython BLAST: [https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast](https://biopython.org/DIST/docs/tutorial/Tutorial.html#chapter:blast)
+
 ## Related Tools
 
-- `create-blast-db`: Create custom databases for `local-blast` (documented above).
-- `hmmer`: Use for detecting remote homologs using protein families (Profile HMMs).
-- `mmseqs`: Faster alternative to BLAST for very large-scale searches.
+**Tools often used together:**
+- `blast-create-db`: Create custom databases for `blast-local-search`.
 - `muscle` / `mafft`: Use these to align the sequences *after* BLAST finds them (Multiple Sequence Alignment).
+- `pyhmmer-hmmscan`: Follow up BLAST hits with domain annotation for functional characterization.
+
+**Alternative tools:**
+- `mmseqs-search-proteins` / `mmseqs-search-genomes`: Faster alternative for very large-scale searches (100-1000x faster).
+- `pyhmmer-hmmsearch` / `pyhmmer-phmmer`: More sensitive for detecting remote homologs using profile HMMs.

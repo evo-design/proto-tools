@@ -17,15 +17,22 @@ ESM3 is EvolutionaryScale's next-generation protein language model that combines
 - Predict 3D structure from sequence alone
 
 **When NOT to use this tool:**
-- For DNA/RNA sequences: use Evo2 or genomic models
-- For highest-accuracy structures: use Boltz2, Chai1, or AlphaFold3
-- For structure-conditioned design: use ProteinMPNN
+- For DNA/RNA sequences: Use Evo2 or genomic models
+- For highest-accuracy structures: Use Boltz2, Chai1, or AlphaFold3
+- For structure-conditioned design: Use ProteinMPNN
 - For fast embeddings-only tasks at scale: ESM2 is typically faster
 
-## Model Variants
+## Biological Background
 
-**Available checkpoints:**
-- `esm3_sm_open_v1`: Small open-source ESM3 model (default)
+**What are protein language models?**
+Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. ESM3 extends this by jointly modeling sequence and structure, capturing:
+- **Sequence conservation**: Which residues are essential for function
+- **Co-evolution**: Pairs of residues that evolve together (often in contact)
+- **Structural constraints**: Patterns that define secondary/tertiary structure
+- **3D geometry**: Spatial relationships between residues
+
+**Why ESM3 over ESM2?**
+ESM3 adds structure prediction and generation capabilities. When you need both sequence analysis and structure prediction in a single model, ESM3 provides a unified framework. For pure sequence embedding tasks, ESM2 is often faster.
 
 ## Tool Catalog
 
@@ -36,30 +43,44 @@ ESM3 is EvolutionaryScale's next-generation protein language model that combines
 | `esm3-structure-prediction` | Predict 3D structure | PDB strings, pLDDT, pTM |
 | `esm3-score` | Score sequences with MLM pseudo-perplexity | Per-sequence metrics, optional logits |
 
-## Package Layout
+## Model Variants
 
-These are the primary modules in `bio_programming_tools.tools.masked_models.esm3`:
-- `esm3_embeddings.py`: embeddings + logits tool
-- `esm3_structure_prediction.py`: structure prediction tool
-- `esm3_sample.py`: sampling/mutation tool
-- `esm3_score.py`: scoring tool
-- `standalone/inference.py`: model wrapper and low-level inference
+| Checkpoint | Description | Default |
+|------------|-------------|---------|
+| `esm3_sm_open_v1` | Small open-source ESM3 model | Yes |
+
+Currently only the small open-source model is available. Larger models may become available through EvolutionaryScale's API.
 
 ## Execution Modes
 
 ESM3 can run locally or on Modal:
-- Local GPU/CPU loads the model on-demand
-- Modal GPU execution is used automatically when configured in the environment
+- **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
+- **Modal GPU**: Used automatically when configured in the environment.
 
-## Inputs
+## How It Works
 
-All tools take a tool-specific input (e.g., `ESM3EmbeddingsInput`, `ESM3ScoringInput`) with one or more protein sequences:
+ESM3 uses a transformer architecture that jointly models protein sequence and structure. Key differences from ESM2:
+- **Generative model**: Can generate new sequences and structures, not just analyze existing ones
+- **Structure tokens**: Encodes 3D structure as discrete tokens alongside sequence tokens
+- **Multi-track architecture**: Processes sequence, structure, and function information in parallel
+
+**Embeddings**: Forward pass produces per-position hidden states; mean-pooling yields fixed-length descriptors.
+
+**Sampling**: Positions are selected by decoding method (entropy, max_logit, or random), masked, and resampled from the model's distribution.
+
+**Scoring**: Each position is masked one at a time to compute log-probability of the true amino acid, yielding pseudo-perplexity.
+
+**Structure prediction**: The model predicts structure tokens from sequence, which are decoded into 3D coordinates with confidence scores (pLDDT, pTM).
+
+## Input Parameters
+
+All tools take a tool-specific input with one or more protein sequences:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `sequences` | `List[str]` | Protein sequences (amino acid strings) |
 
-## Configurations
+## Configuration
 
 ### Embeddings Tool (`ESM3EmbeddingsConfig`)
 
@@ -103,9 +124,18 @@ All tools take a tool-specific input (e.g., `ESM3EmbeddingsInput`, `ESM3ScoringI
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
 
-## Outputs
+### Parameter Guides
 
-### `ESM3EmbeddingsOutput` (Embeddings)
+**Temperature guide for sampling:**
+| Temperature | Behavior | Use Case |
+|-------------|----------|----------|
+| 0.5-0.7 | Conservative | Safer mutations |
+| 1.0 | Standard | Model distribution |
+| 1.5-2.0 | Creative | More diverse mutations |
+
+## Output Specification
+
+### ESM3EmbeddingsOutput (Embeddings)
 
 | Field | Type | Shape | Description |
 |-------|------|-------|-------------|
@@ -114,16 +144,16 @@ All tools take a tool-specific input (e.g., `ESM3EmbeddingsInput`, `ESM3ScoringI
 | `attention_masks` | `List[List[int]]` | `[num_seq, seq_len]` | Valid position masks |
 | `num_sequences` | `int` | - | Sequences processed |
 
-### `ESM3SampleOutput`
+### ESM3SampleOutput
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `sequences` | `List[str]` | Mutated protein sequences |
 | `logits` | `Optional[List[List[List[float]]]]` | Per-position logits (if requested) |
 
-**Supported export formats:** `fasta`, `txt`, `json`
+Supported export formats: `fasta`, `txt`, `json`
 
-### `ESM3StructurePredictionOutput`
+### ESM3StructurePredictionOutput
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -138,9 +168,9 @@ All tools take a tool-specific input (e.g., `ESM3EmbeddingsInput`, `ESM3ScoringI
 | `avg_plddt` | `float` | Average pLDDT (0-100) |
 | `ptm` | `float` | Predicted TM-score (0-1) |
 
-**Supported export formats:** `pdb`, `json`
+Supported export formats: `pdb`, `json`
 
-### `MaskedModelScoringOutput` (Scoring)
+### MaskedModelScoringOutput (Scoring)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -151,40 +181,32 @@ Each `SequenceScores` entry includes:
 - `logits`: per-position logits if `return_logits=True`
 - `vocab`: list of 20 standard amino acids if `return_logits=True`
 
-## Thresholds and Decision Boundaries
+## Interpreting Results
 
-**Structure prediction confidence:**
+**Structure prediction confidence (pLDDT):**
 | pLDDT | Interpretation |
 |-------|----------------|
-| `> 90` | Very high confidence |
-| `70-90` | High confidence |
-| `50-70` | Low confidence |
-| `&lt; 50` | Very low confidence (likely disordered) |
+| > 90 | Very high confidence |
+| 70-90 | High confidence |
+| 50-70 | Low confidence |
+| &lt; 50 | Very low confidence (likely disordered) |
 
 **pTM score:**
 | pTM | Interpretation |
 |-----|----------------|
-| `> 0.8` | High confidence in overall fold |
-| `0.5-0.8` | Moderate confidence |
-| `&lt; 0.5` | Low confidence |
+| > 0.8 | High confidence in overall fold |
+| 0.5-0.8 | Moderate confidence |
+| &lt; 0.5 | Low confidence |
 
-**Variant effect (same as ESM2):**
-- Logit difference `> 5`: likely deleterious
-- Logit difference `> 2`: possibly deleterious
+**Variant effect (logit difference):**
+- Logit difference > 5: likely deleterious
+- Logit difference > 2: possibly deleterious
+- Logit difference between -2 and 2: neutral
+- Logit difference < -2: possibly beneficial
 
-## Best Practices and Gotchas
-
-**Structure prediction:**
-- Use small `batch_size` values (1-4) to avoid OOM errors
-- Very long sequences (>1000 residues) may fail or be low confidence
-- Always check pLDDT and pTM before trusting the fold
-
-**Embeddings and scoring:**
-- Use `return_logits=False` unless you explicitly need logits
-
-**Sampling:**
-- Start with low `temperature` and small `num_mutations` for conservative edits
-- Use `decoding_method="entropy"` for natural-looking mutations
+**Scoring (pseudo-perplexity):**
+- Lower perplexity indicates a more "natural" sequence
+- Compare perplexities across variants rather than interpreting absolute values
 
 ## Quick Start Examples
 
@@ -271,15 +293,41 @@ result = run_esm3_embeddings(inputs, config)
 print(f"Processed {result.num_sequences} sequences")
 ```
 
+## Best Practices & Gotchas
+
+**Structure prediction:**
+- Use small `batch_size` values (1-4) to avoid OOM errors
+- Very long sequences (>1000 residues) may fail or be low confidence
+- Always check pLDDT and pTM before trusting the fold
+
+**Embeddings and scoring:**
+- Use `return_logits=False` unless you explicitly need logits (saves memory)
+
+**Sampling:**
+- Start with low `temperature` and small `num_mutations` for conservative edits
+- Use `decoding_method="entropy"` for natural-looking mutations
+
+**Common mistakes:**
+1. **Large batch_size for structures**: Structure prediction uses much more memory than embeddings. Use batch_size 1-4.
+2. **Ignoring confidence scores**: Always check pLDDT and pTM before using predicted structures.
+3. **Expecting ESM2-speed embeddings**: ESM3 is generally slower than ESM2 for embedding-only tasks.
+
 ## References
 
-**Resources:**
-- GitHub: https://github.com/evolutionaryscale/esm
-- EvolutionaryScale: https://www.evolutionaryscale.ai/
+**Primary publication:**
+- Hayes, T. et al. (2024). "Simulating 500 million years of evolution with a language model." *Science*. DOI: [10.1126/science.adk8946](https://doi.org/10.1126/science.adk8946)
+
+**Implementation:**
+- GitHub: [https://github.com/evolutionaryscale/esm](https://github.com/evolutionaryscale/esm)
+- EvolutionaryScale: [https://www.evolutionaryscale.ai/](https://www.evolutionaryscale.ai/)
 
 ## Related Tools
 
-- `esm2`: Faster embeddings-only model
+**Tools often used together:**
+- `esm2`: Faster embeddings-only model (use when you don't need structure)
+- `inverse_folding/proteinmpnn`: Structure-conditioned sequence design (use after structure prediction)
+- `boltz2-prediction`: Higher-accuracy structure prediction for validation
+
+**Alternative tools:**
 - `esmfold`: Dedicated structure prediction (based on ESM2)
 - `progen2`: Autoregressive protein generation
-- `inverse_folding/proteinmpnn`: Structure-conditioned sequence design

@@ -185,14 +185,14 @@ class SegmaskerOutput(BaseToolOutput):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="segmasker",
+    key="segmasker-score",
     label="Segmasker Low-Complexity Detection",
     input=SegmaskerInput,
     config=SegmaskerConfig,
     output=SegmaskerOutput,
     description="Detect low-complexity regions in protein sequences using NCBI segmasker",
 )
-@tool_cache("segmasker")
+@tool_cache("segmasker-score")
 def run_segmasker(
     inputs: SegmaskerInput,
     config: SegmaskerConfig,

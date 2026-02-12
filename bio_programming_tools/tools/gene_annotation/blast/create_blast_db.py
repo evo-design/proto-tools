@@ -154,7 +154,7 @@ class CreateBlastDbConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="create-blast-db",
+    key="blast-create-db",
     label="Create BLAST Database",
     input=CreateBlastDbInput,
     config=CreateBlastDbConfig,

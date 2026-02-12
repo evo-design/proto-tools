@@ -123,14 +123,14 @@ class LocalBlastConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="local-blast",
+    key="blast-local-search",
     label="Local BLAST",
     input=LocalBlastInput,
     config=LocalBlastConfig,
     output=LocalBlastOutput,
     description="Run BLAST+ locally and return results",
 )
-@tool_cache("local-blast")
+@tool_cache("blast-local-search")
 def run_local_blast_search(inputs: LocalBlastInput, config: LocalBlastConfig) -> LocalBlastOutput:
     """
     Run BLAST+ locally and return results as DataFrame.

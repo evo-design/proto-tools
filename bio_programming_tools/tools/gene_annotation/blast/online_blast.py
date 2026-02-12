@@ -193,14 +193,14 @@ class OnlineBlastConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="online-blast",
+    key="blast-online-search",
     label="Online BLAST Search (NCBI)",
     input=OnlineBlastInput,
     config=OnlineBlastConfig,
     output=OnlineBlastOutput,
     description="Submit query to online NCBI BLAST and return results",
 )
-@tool_cache("online-blast")
+@tool_cache("blast-online-search")
 def run_online_blast_search(inputs: OnlineBlastInput, config: OnlineBlastConfig) -> OnlineBlastOutput:
     """
     Submit query to online NCBI BLAST and return results as DataFrame.
