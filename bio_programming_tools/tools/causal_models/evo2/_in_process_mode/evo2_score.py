@@ -10,8 +10,8 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 from .evo2_cache import get_cached_evo2_model
@@ -142,12 +142,12 @@ class Evo2ScoringConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="evo2-score",
-    label="Evo2 Scoring",
+    key="evo2-score-in-process",
+    label="Evo2 Scoring (In-Process)",
     input=Evo2ScoringInput,
     config=Evo2ScoringConfig,
     output=Evo2ScoringOutput,
-    description="Score DNA sequences using Evo2 language model",
+    description="Score DNA sequences using Evo2 language model (in-process mode)",
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig
