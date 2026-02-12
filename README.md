@@ -83,6 +83,16 @@ It will write runnable scripts to `analyses/` or execute directly depending on c
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. See [`analyses/examples/`](analyses/examples/) for complete runnable scripts.
 
+## Adding a New Tool
+
+To implement a new biological AI model or bionformatics tool, use the Claude Code `/implement-tool` skill:
+
+```
+> /implement-tool
+```
+
+The skill is defined in [`.claude/commands/implement-tool.md`](.claude/commands/implement-tool.md) and can be used by any Claude Code instance working in this repo.
+
 ## Development
 
 To run tests, linting, and other code quality tools, install with the dev extras:
