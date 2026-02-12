@@ -8,7 +8,7 @@ bio_programming_tools is a modular computational biology and biological AI tool 
 
 ## Notes (`notes/`)
 
-Dynamic development notes. Consult when working in the repo. Update when you discover information worth preserving.
+Dynamic development notes. **Read these at the start of relevant tasks. Actively update them** when you discover new gotchas, resolve issues, or learn something future sessions should know — don't ask, just update and mention what you added.
 
 - `dev.md` — Setup, pre-commit hooks, CI checks, docs generation, code quality tools.
 - `environment.md` — Platform compatibility matrix (Chimera H100, DGX Spark GB10) and per-tool venv status.
