@@ -38,6 +38,7 @@ bio_programming_tools/
 │   │   ├── {tool_name}/            # e.g., blast, esmfold
 │   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
 │   │   │   ├── tool_name.py        # Implementation
+│   │   │   ├── cite.bib            # BibTeX citation for the tool
 │   │   │   └── standalone/         # [optional] Isolated venv
 │   │   ├── shared_data_models.py   # [optional] Shared schemas
 │   │   └── __init__.py             # Re-exports from all tools in category
@@ -67,6 +68,12 @@ for spec in ToolRegistry.list_all():
 **To get a tool's schemas:**
 ```python
 ToolRegistry.get_schemas("tool-key")  # Returns input, config, output JSON schemas
+```
+
+**To get a tool's citation:**
+```python
+ToolRegistry.get_citation("tool-key")  # Returns BibTeX string
+ToolRegistry.list_citations()          # Returns {tool_key: bibtex} for all tools
 ```
 
 ### The Universal Tool Pattern
@@ -112,6 +119,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 - Use `logging.getLogger(__name__)` — never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
+- Every tool directory must include a `cite.bib` file with the BibTeX citation for the underlying paper/tool
 
 **Run `/implement-tool` for the complete tool implementation guide with step-by-step templates and examples.**
 

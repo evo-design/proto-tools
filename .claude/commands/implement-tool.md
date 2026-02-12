@@ -25,6 +25,7 @@ You are implementing a new bioinformatics tool in the bio-programming-tools code
 tools/{category}/{tool_name}/
 ├── __init__.py
 ├── {tool_name}.py          # Input, Config, Output, run function (calls EnvManager)
+├── cite.bib                # BibTeX citation (required)
 ├── standalone/
 │   ├── setup.sh            # Creates venv, installs deps
 │   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -40,6 +41,7 @@ tools/{category}/
 ├── {tool_name}/
 │   ├── __init__.py
 │   ├── {tool_name}.py      # Extends shared models, calls EnvManager
+│   ├── cite.bib            # BibTeX citation (required)
 │   ├── standalone/
 │   │   ├── setup.sh
 │   │   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -521,6 +523,30 @@ How to interpret the output. What values mean biologically.
 - [Paper](https://doi.org/...)
 ```
 
+### Create the cite.bib File
+
+Every tool **must** have a `cite.bib` file with the BibTeX citation for the underlying tool/paper. This enables `ToolRegistry.get_citation("tool-key")` to return the citation.
+
+Create `tools/{category}/{tool_name}/cite.bib`:
+```bibtex
+@article{author2024toolname,
+  title={Title of the Paper},
+  author={Author, First and Author, Second and others},
+  journal={Journal Name},
+  volume={1},
+  number={1},
+  pages={1--10},
+  year={2024},
+  publisher={Publisher Name},
+  doi={10.1234/example.doi}
+}
+```
+
+**Important:**
+- Use the paper's DOI to find the correct BibTeX entry (most publishers provide this)
+- If multiple tools in the same directory cite the same paper, they share the same `cite.bib`
+- The BibTeX key format is typically `{firstauthor}{year}{toolname}` (e.g., `altschul1990blast`)
+
 ---
 
 ## Step 7: Write Tests
@@ -641,6 +667,7 @@ Before submitting, verify:
 - [ ] Google-style docstrings with Attributes (for classes) and Args/Returns/Examples (for functions)
 - [ ] `__init__.py` exports at all 4 levels
 - [ ] README.md in tool directory
+- [ ] cite.bib with BibTeX citation in tool directory
 - [ ] Tests written in `tests/tool_tests/` and passing
 - [ ] Tool runs successfully end-to-end (verified via Step 8B)
 - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)

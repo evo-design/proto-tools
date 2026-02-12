@@ -32,6 +32,7 @@ Parallelize exploration aggressively — launch multiple sub-agents to search di
 | Tool data models | `bio_programming_tools/tools/{category}/{tool}/__init__.py` | `tests/tool_infra_tests/` |
 | Standalone scripts | `bio_programming_tools/tools/{category}/{tool}/standalone/` | — |
 | Shared data models | `bio_programming_tools/tools/{category}/shared_data_models.py` | — |
+| Tool citations | `bio_programming_tools/tools/{category}/{tool}/cite.bib` | `tests/tool_infra_tests/test_citations.py` |
 | Tool registry | `bio_programming_tools/tools/tool_registry.py` | `tests/tool_infra_tests/` |
 | Caching | `bio_programming_tools/utils/tool_cache.py` | `tests/tool_infra_tests/` |
 | EnvManager | `bio_programming_tools/utils/env_manager.py` | `tests/tool_infra_tests/` |

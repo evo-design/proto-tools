@@ -14,11 +14,15 @@ import traceback
 import warnings
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Type
 
 from pydantic import BaseModel, Field, field_serializer
 
 logger = logging.getLogger(__name__)
+
+# Path to tools directory for citation file discovery
+TOOLS_DIR = Path(__file__).parent
 
 # List of warning message substrings to ignore (noisy warnings from dependencies)
 IGNORED_WARNING_SUBSTRINGS = [
@@ -26,8 +30,8 @@ IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_dtype",
 ]
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.utils import BaseConfig
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 class ToolSpec(BaseModel):
@@ -281,6 +285,46 @@ class ToolRegistry:
         return len(cls._registry)
 
     @classmethod
+    def get_citation(cls, key: str) -> str | None:
+        """
+        Get BibTeX citation for a tool by key.
+
+        Args:
+            key: Tool identifier (e.g., 'evo2-sample', 'blast-local-search')
+
+        Returns:
+            BibTeX citation string, or None if no citation file exists
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        # Validate tool exists
+        cls.get(key)
+
+        # Find and read citation file
+        cite_path = _find_citation_file(key)
+        if cite_path is None:
+            return None
+
+        return cite_path.read_text().strip()
+
+    @classmethod
+    def list_citations(cls) -> dict[str, str]:
+        """
+        Get all available citations as {tool_key: bibtex_string}.
+
+        Returns:
+            Dictionary mapping tool keys to their BibTeX citations.
+            Only includes tools that have cite.bib files.
+        """
+        citations = {}
+        for key in cls._registry:
+            citation = cls.get_citation(key)
+            if citation is not None:
+                citations[key] = citation
+        return citations
+
+    @classmethod
     def _check_duplicate(cls, key: str, attempted_name: str = None) -> None:
         """
         Check for duplicate registration.
@@ -304,6 +348,44 @@ def _re_emit_warnings(warning_list: List[Warning]) -> None:
         warnings.warn_explicit(
             w.message, w.category, w.filename, w.lineno, w.file, w.line
         )
+
+
+def _find_citation_file(tool_key: str) -> Path | None:
+    """
+    Find cite.bib for a tool by searching tool directories.
+
+    Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/).
+    Handles underscore/hyphen normalization.
+
+    Args:
+        tool_key: Tool registry key (e.g., 'evo2-sample', 'blast-local-search')
+
+    Returns:
+        Path to cite.bib file, or None if not found
+    """
+    # Normalize key: replace hyphens with underscores for directory matching
+    # Tool keys are kebab-case but directories are snake_case
+    normalized_key = tool_key.replace("-", "_")
+
+    # Search all category directories
+    for category_dir in TOOLS_DIR.iterdir():
+        if not category_dir.is_dir() or category_dir.name.startswith("_"):
+            continue
+
+        # Search tool directories within category
+        for tool_dir in category_dir.iterdir():
+            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
+                continue
+
+            # Check if the tool key starts with this tool directory name
+            # e.g., 'evo2_sample' starts with 'evo2', 'blast_local_search' starts with 'blast'
+            tool_name = tool_dir.name
+            if normalized_key.startswith(tool_name):
+                cite_path = tool_dir / "cite.bib"
+                if cite_path.exists():
+                    return cite_path
+
+    return None
 
 
 # Alias for simpler decorator syntax: @tool(...) instead of @ToolRegistry.register(...)

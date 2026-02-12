@@ -75,6 +75,20 @@ from bio_programming_tools.tools.{category}.{tool} import ...
 
 For multi-step pipelines, use one script with `# === Step N: Description ===` section headers.
 
+## Citations
+
+Every tool has a BibTeX citation accessible via `ToolRegistry.get_citation("tool-key")`. When writing analysis scripts or reports, include citations for the tools used:
+
+```python
+from bio_programming_tools.tools import ToolRegistry
+
+# Get citation for a specific tool
+bibtex = ToolRegistry.get_citation("alphafold3-prediction")
+
+# Get all citations
+all_citations = ToolRegistry.list_citations()  # {tool_key: bibtex_string}
+```
+
 ## GPU Tools
 
 Some tools require GPU access. To determine if a tool needs GPU, check its Config class for a `device` field (defaulting to `"cuda"`). When writing scripts for GPU tools, note the GPU requirement in a comment at the top of the script.
