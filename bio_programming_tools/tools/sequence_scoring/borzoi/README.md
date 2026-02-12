@@ -48,11 +48,11 @@ Use the single-replicate tool for iterative design and optimization. Use the ens
 
 ## Execution Modes
 
-Borzoi requires GPU acceleration for inference. Two execution backends are supported:
+Borzoi requires GPU acceleration for inference.
 
-| Mode | Backend | When Used | Setup |
-|------|---------|-----------|-------|
-| **Local venv** | Local CUDA GPU | Default when Modal is not configured | Requires NVIDIA GPU with CUDA |
+| Mode | Backend | Setup |
+|------|---------|-------|
+| **Local venv** | Local CUDA GPU | Requires NVIDIA GPU with CUDA |
 
 For ensemble mode, all 4 replicates run sequentially.
 

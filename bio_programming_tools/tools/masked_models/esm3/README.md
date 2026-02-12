@@ -48,7 +48,6 @@ Currently only the small open-source model is available. Larger models may becom
 
 ## Execution Modes
 
-ESM3 can run locally or on Modal:
 - **Local GPU/CPU**: Loads the model on-demand. Use `device="cuda"`, `"cpu"`, or `"mps"`.
 
 ## How It Works

@@ -48,9 +48,9 @@ Both models accept the same inputs and produce the same output format. v1.1 gene
 
 ## Execution Modes
 
-| Mode | Condition | Backend | Device |
-|------|-----------|---------|--------|
-| Local venv | `use_modal_gpu() == False` | `EnvManager("bioemu")` running `standalone/inference.py` | Local GPU (`cuda`) |
+| Mode | Backend | Device |
+|------|---------|--------|
+| Local venv | `EnvManager("bioemu")` running `standalone/inference.py` | Local GPU (`cuda`) |
 
 
 ## How It Works
@@ -137,7 +137,6 @@ Output metadata:
 | `num_complexes` | Number of input complexes processed |
 | `total_structures` | Total number of conformations generated across all complexes |
 | `model_name` | BioEmu model variant used |
-| `used_modal` | Whether Modal cloud GPU was used |
 
 Export formats: `pdb`, `json`
 

@@ -2,18 +2,11 @@
 
 This document describes the model implementations in the `bio_programming_tools/tools` directory.
 These include language models, structure prediction models, RNA splicing models, and sequence
-scoring models. Each model is implemented with support for both local execution and cloud deployment.
+scoring models. Each model is implemented with support for local execution via isolated virtual environments.
 
 ## Execution Modes
 
-Models in this directory support two execution modes:
-1. **Local Execution**: Using local devices with the option of isolated virtual environments managed by the [`EnvManager`](../env_manager.py)
-2. **Modal Deployment**: Cloud execution using Modal
-
-All models will support both execution modes (if possible), allowing users to choose
-between local compute resources and cloud scaling based on their needs.
-
-### Dependecy isolated local execution
+### Dependency Isolated Local Execution
 
 Models with complex dependencies are managed using the `EnvManager` class from
 `bio_programming_tools.utils.env_manager`. The EnvManager automatically creates and manages
@@ -44,7 +37,7 @@ Each model that uses the EnvManager should have this structure:
 tools/
 ├── masked_models/           # Masked/bidirectional language models (ESM2, ESM3)
 │   └── model_name/
-│       ├── __init__.py          # Model interface (local + modal)
+│       ├── __init__.py          # Model interface
 │       └── standalone/
 │           ├── setup.sh          # Dependency installation script
 │           ├── requirements.txt  # (optional) pip requirements
@@ -52,7 +45,7 @@ tools/
 │           └── ...              # Other model files
 ├── causal_models/           # Causal/autoregressive language models (Evo2, ProGen2)
 │   └── model_name/
-│       ├── __init__.py          # Model interface (local + modal)
+│       ├── __init__.py          # Model interface
 │       └── standalone/
 │           ├── setup.sh          # Dependency installation script
 │           ├── requirements.txt  # (optional) pip requirements
@@ -60,7 +53,7 @@ tools/
 │           └── ...              # Other model files
 ├── structure_prediction/
 │   └── model_name/
-│       ├── __init__.py          # Model interface (local + modal)
+│       ├── __init__.py          # Model interface
 │       └── standalone/
 │           ├── setup.sh          # Dependency installation script
 │           ├── requirements.txt  # (optional) pip requirements
@@ -163,11 +156,3 @@ result = env_manager.call_standalone_script_in_venv(
 )
 ```
 
-## Modal Deployment (Cloud Execution)
-
-Models can also be deployed on Modal for cloud execution. This is useful for:
-- Models requiring specific GPU types not available locally
-- Scaling to handle multiple concurrent requests
-- Offloading compute to reduce local resource usage
-Modal deployment configurations are typically defined in the model's `__init__.py`
-file alongside the local execution interface.

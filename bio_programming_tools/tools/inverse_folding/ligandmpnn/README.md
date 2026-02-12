@@ -46,9 +46,9 @@ This context is critical for designing functional enzymes, metalloprotein bindin
 
 ## Execution Modes
 
-| Mode | Condition | Backend | Device |
-|------|-----------|---------|--------|
-| Local venv | `use_modal_gpu() == False` | `EnvManager("ligandmpnn")` running `standalone/inference.py` | Local GPU (`cuda`) |
+| Mode | Backend | Device |
+|------|---------|--------|
+| Local venv | `EnvManager("ligandmpnn")` running `standalone/inference.py` | Local GPU (`cuda`) |
 
 
 ## How It Works

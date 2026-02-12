@@ -40,11 +40,11 @@ Each output track corresponds to a specific assay in a specific cell type or tis
 
 ## Execution Modes
 
-Enformer requires GPU acceleration for inference. Two execution backends are supported:
+Enformer requires GPU acceleration for inference.
 
-| Mode | Backend | When Used | Setup |
-|------|---------|-----------|-------|
-| **Local venv** | Local CUDA GPU | Default when Modal is not configured | Requires NVIDIA GPU with CUDA |
+| Mode | Backend | Setup |
+|------|---------|-------|
+| **Local venv** | Local CUDA GPU | Requires NVIDIA GPU with CUDA |
 
 
 
