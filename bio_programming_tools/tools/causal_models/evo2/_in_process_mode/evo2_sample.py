@@ -7,10 +7,11 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+
+from .evo2_cache import get_cached_evo2_model
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,11 @@ class Evo2SampleConfig(BaseConfig):
         device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
             Default: ``"cuda"``.
 
+        keep_on_gpu (bool): Whether to keep the model loaded on device memory after
+            generation completes. Set to ``True`` for multiple generation runs
+            (faster, uses GPU memory) or ``False`` to free GPU memory.
+            Default: ``True``.
+
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -338,6 +344,12 @@ class Evo2SampleConfig(BaseConfig):
         description="Device to run on",
         hidden=True,
     )
+    keep_on_gpu: bool = ConfigField(
+        title="Keep on GPU",
+        default=True,
+        description="Whether to keep model on device memory for future generation calls",
+        hidden=True,
+    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -446,46 +458,65 @@ def run_evo2_sample(
         }
 
     else:
-        # Local GPU - use standalone venv
-        logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
+        # Local GPU
+        # TODO: Refactor Evo2 to use standalone .venv after figuring out how to deal with kv caching.
+        logger.debug(f"Using local GPU for Evo2 sampling: {config.model_checkpoint}")
 
-        # Warn about KV cache limitation in venv mode (same as Modal)
-        if config.old_kv_cache is not None:
-            logger.warning(
-                "old_kv_cache provided but standalone venv execution does not support "
-                "KV caching. The cache will be ignored."
-            )
-
-        venv_manager = EnvManager("evo2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
-                "operation": "sample",
-                "prompts": inputs.prompts,
-                "model_checkpoint": config.model_checkpoint,
-                "local_path": config.local_path,
-                "top_k": config.top_k,
-                "top_p": config.top_p,
-                "temperature": config.temperature,
-                "num_tokens": config.num_tokens,
-                "cached_generation": config.cached_generation,
-                "force_prompt_threshold": config.force_prompt_threshold,
-                "max_seqlen": config.max_seqlen,
-                "print_generation": config.print_generation,
-                "stop_at_eos": config.stop_at_eos,
-                "batch_size": config.batch_size,
-                "device": config.device,
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            device=config.device,
-            verbose=config.verbose,
+        model = get_cached_evo2_model(
+            model_checkpoint=config.model_checkpoint,
+            local_path=config.local_path,
         )
 
-    # Serialize tensors to nested lists at tool boundary if needed
-    # Both Modal and EnvManager return pre-serialized lists; this handles edge cases
-    logits = result.get("logits")
+        # Check if old_kv_cache has sufficient capacity for continued generation
+        # Vortex doesn't support dynamically expanding the cache, so if the cache
+        # is too small, we must discard it and let vortex create a new one
+        old_kv_cache = config.old_kv_cache
+        max_seqlen = config.max_seqlen
+        if old_kv_cache is not None:
+            required_seqlen = len(inputs.prompts[0]) + config.num_tokens
+            cache_max_seqlen = old_kv_cache["mha"].max_seqlen
+            if cache_max_seqlen < required_seqlen:
+                logger.warning(
+                    f"KV cache max_seqlen ({cache_max_seqlen}) is insufficient for "
+                    f"continued generation (need {required_seqlen}). Discarding cache."
+                )
+                old_kv_cache = None
+            if max_seqlen is None:
+                max_seqlen = required_seqlen
+
+        # KV cache slicing needs to happen at tool layer for proper cache management
+        # Pass batch_size to inference layer for internal batching
+        batch_result = model.sample(
+            prompts=inputs.prompts,
+            top_k=config.top_k,
+            top_p=config.top_p,
+            temperature=config.temperature,
+            device=config.device,
+            num_tokens=config.num_tokens,
+            cached_generation=config.cached_generation,
+            force_prompt_threshold=config.force_prompt_threshold,
+            max_seqlen=max_seqlen,
+            print_generation=config.print_generation,
+            verbose=config.verbose,
+            stop_at_eos=config.stop_at_eos,
+            old_kv_cache=old_kv_cache,
+            batch_size=config.batch_size,
+            return_logits=config.return_logits,
+        )
+
+        result = {
+            "sequences": batch_result["sequences"],
+            "kv_caches": batch_result["kv_caches"],
+            "logits": batch_result["logits"],
+        }
+
+        # Move to CPU if requested (frees GPU memory)
+        if not config.keep_on_gpu:
+            model.unload()
+
+    # Serialize tensors to nested lists at tool boundary
+    # Local GPU returns torch tensors; Modal returns pre-serialized lists
+    logits = result["logits"]
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]
     elif hasattr(logits, "tolist"):
@@ -511,6 +542,6 @@ def run_evo2_sample(
             "used_modal": use_modal_gpu(),
         },
         sequences=result["sequences"],
-        kv_caches=result.get("kv_caches"),
+        kv_caches=result["kv_caches"],
         logits=logits,
     )
