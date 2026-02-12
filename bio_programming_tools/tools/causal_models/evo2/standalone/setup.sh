@@ -12,22 +12,21 @@ fi
 echo "Setting up Evo2 standalone environment..."
 
 echo "Prerequisites not installed by this script:"
-echo "  - CUDA-enabled PyTorch compatible with your NVIDIA drivers"
-echo "  - Python 3.12"
 echo "  - CUDA 12.1+ and cuDNN 9.3+"
 echo "  - GCC 9+ or Clang 10+ with C++17 support"
 echo ""
 
-echo "Installing prerequisites..."
-conda install -c nvidia cuda-nvcc cuda-cudart-dev
-conda install -c conda-forge transformer-engine-torch==2.3.0
+echo "Installing uv package manager..."
+pip install uv
+
+echo "Installing flash-attn..."
 pip install flash-attn==2.8.0.post2
+
+echo "Installing transformer-engine..."
+pip install transformer_engine[pytorch]==2.3.0
 
 echo "Installing vortex..."
 pip install vtx
-
-echo "Installing uv package manager..."
-pip install uv
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt --torch-backend=auto

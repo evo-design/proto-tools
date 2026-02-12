@@ -1,4 +1,3 @@
-from .evo2_cache import clear_evo2_cache, get_cached_evo2_model
 from .evo2_sample import (
     Evo2SampleConfig,
     Evo2SampleInput,
@@ -23,7 +22,4 @@ __all__ = [
     "Evo2ScoringConfig",
     "Evo2ScoringOutput",
     "run_evo2_score",
-    # Foundation layer - advanced usage (beam search, caching)
-    "clear_evo2_cache",
-    "get_cached_evo2_model",
 ]

@@ -86,7 +86,6 @@ Evo2/Vortex setup is complex. See:
 | `old_kv_cache` | `Optional[Dict]` | `None` | Continue generation from KV cache (local only) |
 | `batch_size` | `Optional[int]` | `None` | Prompts per batch (all if None) |
 | `device` | `str` | `cuda` | Device to run on |
-| `keep_on_gpu` | `bool` | `True` | Keep model loaded after call |
 | `print_generation` | `bool` | `True` | Print generation tokens (debug) |
 | `verbose` | `bool` | `False` | Verbose logging |
 | `return_logits` | `bool` | `False` | Include per-token logits |
@@ -99,7 +98,6 @@ Evo2/Vortex setup is complex. See:
 | `local_path` | `Optional[str]` | `None` | Local weights path (if not using HF) |
 | `batch_size` | `Optional[int]` | `None` | Sequences per batch |
 | `device` | `str` | `cuda` | Device to run on |
-| `keep_on_gpu` | `bool` | `False` | Keep model loaded after call |
 | `verbose` | `bool` | `False` | Verbose logging |
 | `return_logits` | `bool` | `False` | Include per-position logits |
 

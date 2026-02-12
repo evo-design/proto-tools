@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
 
@@ -11,10 +10,11 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.utils.env_manager import EnvManager
 from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+
+from .evo2_cache import get_cached_evo2_model
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,10 @@ class Evo2ScoringConfig(BaseConfig):
             If None, processes all sequences at once. Lower values reduce memory
             usage but may be slower. Default: ``None``.
 
+        keep_on_gpu (bool): Whether to keep the model loaded on device after
+            inference completes. Set to ``True`` for multiple scoring runs.
+            Default: ``False``.
+
         verbose (bool): Whether to print status messages during scoring.
             Default: ``False``.
 
@@ -113,6 +117,12 @@ class Evo2ScoringConfig(BaseConfig):
         ge=1,
         description="Max number of samples on the GPU at once",
         advanced=True,
+    )
+    keep_on_gpu: bool = ConfigField(
+        title="Keep on GPU",
+        default=False,
+        description="Whether to keep the model on device after scoring",
+        hidden=True,
     )
     verbose: bool = ConfigField(
         title="Verbose",
@@ -195,28 +205,26 @@ def run_evo2_score(
             return_logits=config.return_logits,
         )
     else:
-        logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
+        logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
 
-        venv_manager = EnvManager("evo2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
-                "operation": "score",
-                "sequences": inputs.sequences,
-                "model_checkpoint": config.model_checkpoint,
-                "local_path": config.local_path,
-                "device": config.device,
-                "verbose": config.verbose,
-                "batch_size": config.batch_size,
-                "return_logits": config.return_logits,
-            },
-            device=config.device,
-            verbose=config.verbose,
+        model = get_cached_evo2_model(
+            model_checkpoint=config.model_checkpoint,
+            local_path=config.local_path,
         )
 
-    # Serialize tensors to nested lists at tool boundary if needed
-    # Both the cloud runtime and EnvManager return pre-serialized lists; this handles edge cases
+        result = model.score(
+            sequences=inputs.sequences,
+            device=config.device,
+            verbose=config.verbose,
+            batch_size=config.batch_size,
+            return_logits=config.return_logits,
+        )
+
+        if not config.keep_on_gpu:
+            model.unload()
+
+    # Serialize tensors to nested lists at tool boundary
+    # Local GPU returns torch tensors; the cloud runtime returns pre-serialized lists
     logits = result["logits"]
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]

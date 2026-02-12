@@ -3,7 +3,9 @@ Local Evo2 inference implementation.
 """
 from __future__ import annotations
 
+import json
 import logging
+import sys
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import torch
@@ -443,3 +445,72 @@ def _split_cache(cache: Dict) -> List[Dict]:
     kv = next(iter(cache['mha'].key_value_memory_dict.values()))
     n_samples = kv.shape[0]
     return [_slice_cache(cache, i, i + 1) for i in range(n_samples)]
+
+
+def _serialize_output(value: Any) -> Any:
+    """Recursively serialize torch tensors and other non-JSON types to Python primitives."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    return value
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError(
+            "Usage: python inference.py <input_json_path> <output_json_path>"
+        )
+
+    input_json_path = sys.argv[1]
+    output_json_path = sys.argv[2]
+
+    with open(input_json_path, "r") as f:
+        input_data = json.load(f)
+
+    operation = input_data.get("operation", "sample")
+    model_checkpoint = input_data.get("model_checkpoint", "evo2_7b")
+    local_path = input_data.get("local_path")
+    model = Evo2Model(model_checkpoint=model_checkpoint, local_path=local_path)
+
+    if operation == "sample":
+        result = model.sample(
+            prompts=input_data.get("prompts", []),
+            top_k=input_data.get("top_k", 4),
+            top_p=input_data.get("top_p", 1.0),
+            temperature=input_data.get("temperature", 1.0),
+            device=input_data.get("device", "cuda"),
+            num_tokens=input_data.get("num_tokens", 32),
+            cached_generation=input_data.get("cached_generation", True),
+            force_prompt_threshold=input_data.get("force_prompt_threshold"),
+            max_seqlen=input_data.get("max_seqlen"),
+            print_generation=input_data.get("print_generation", True),
+            verbose=input_data.get("verbose", False),
+            stop_at_eos=input_data.get("stop_at_eos", True),
+            old_kv_cache=None,  # KV caching not supported in venv mode
+            batch_size=input_data.get("batch_size"),
+            return_logits=input_data.get("return_logits", False),
+        )
+        # KV caches are vortex GPU objects, not JSON-serializable
+        result["kv_caches"] = None
+    elif operation == "score":
+        result = model.score(
+            sequences=input_data.get("sequences", []),
+            device=input_data.get("device", "cuda"),
+            verbose=input_data.get("verbose", False),
+            batch_size=input_data.get("batch_size"),
+            return_logits=input_data.get("return_logits", False),
+        )
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+    with open(output_json_path, "w") as f:
+        json.dump(_serialize_output(result), f)

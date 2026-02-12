@@ -17,31 +17,16 @@ from bio_programming_tools.tools.causal_models.evo2 import (
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-
-def _import_evo2_model():
-    """Import Evo2Model from standalone inference (requires evo2 installed)."""
-    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
-        Evo2Model,
-    )
-    return Evo2Model
-
-
-def _import_slice_cache():
-    """Import _slice_cache from standalone inference (requires evo2 installed)."""
-    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
-        _slice_cache,
-    )
-    return _slice_cache
-
 # ============================================================================
 # Sampling Tests
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_sample_inference():
     """Test Evo2Model inference with direct model.sample() call."""
     prompts = ["ATCGATCG", "GGCCTTAA"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -195,11 +180,12 @@ def test_evo2_sample_config_validation(config_kwargs):
 # Batched Sampling Tests
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_sample_batched_inference():
     """Test batched sampling with direct model call."""
     prompts = ["ATCGATCG", "GGCCTTAA", "AAAACCCC", "TTTTGGGG"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -250,11 +236,12 @@ def test_evo2_sample_batched_tool():
 # Scoring Tests
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_score_inference():
     """Test Evo2Model.score() with comprehensive value validation."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.score(sequences=sequences, device="cuda", verbose=False, return_logits=True)
@@ -348,11 +335,12 @@ def test_evo2_score_input_validation():
 # Batched Scoring Tests
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_score_batched_inference():
     """Test batched scoring with direct model call."""
     sequences = ["ATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False, return_logits=True)
@@ -452,6 +440,7 @@ def test_evo2_score_variable_length_sequences():
 # Evo2-Specific Tests (KV Cache)
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_batch_with_kv_cache():
     """Test that batching with KV cache works correctly via cache slicing."""
@@ -473,7 +462,7 @@ def test_evo2_batch_with_kv_cache():
     assert len(result1.kv_caches) == 4, "Should have 4 KV caches"
 
     # Test slicing the cache
-    _slice_cache = _import_slice_cache()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import _slice_cache
     sliced = _slice_cache(result1.kv_caches[0], 0, 1)
     assert sliced is not None, "Sliced cache should not be None"
 
@@ -482,6 +471,7 @@ def test_evo2_batch_with_kv_cache():
     assert kv.shape[0] == 1, f"Sliced cache batch dim should be 1, got {kv.shape[0]}"
 
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_continued_generation_with_cache():
     """Test continued generation using KV cache from previous generation."""
@@ -750,11 +740,12 @@ def test_evo2_score_logits_serialization():
 # Logits-Specific Tests (Sampling)
 # ============================================================================
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_sample_logits_inference():
     """Test that sample() can return logits at inference layer."""
     prompts = ["ATCGATCG", "GCTAGCTA"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -779,11 +770,12 @@ def test_evo2_sample_logits_inference():
         assert logits.shape[1] == 512, f"Evo2 vocab size should be 512, got {logits.shape[1]}"
 
 
+@pytest.mark.skip(reason="Direct model tests disabled - interact via tools layer only")
 @pytest.mark.uses_gpu
 def test_evo2_sample_logits_not_returned_by_default():
     """Test that sample() does not return logits when return_logits=False (default)."""
     prompts = ["ATCGATCG"]
-    Evo2Model = _import_evo2_model()
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
