@@ -5,20 +5,16 @@ Segmasker tool for detecting low-complexity regions in protein sequences.
 from __future__ import annotations
 
 import os
-import subprocess
-import tempfile
-from io import StringIO
 from pathlib import Path
 from typing import List, Optional, Union
 
 import pandas as pd
-from Bio import SeqIO
 from pydantic import ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 class SegmaskerInput(BaseToolInput):
@@ -42,7 +38,7 @@ class SegmaskerInput(BaseToolInput):
         description="Protein sequence(s) to analyze for low-complexity regions"
     )
 
-    @field_validator('sequences', mode='before')
+    @field_validator("sequences", mode="before")
     @classmethod
     def normalize_sequences(cls, value) -> List[str]:
         """Normalize single string to list."""
@@ -50,7 +46,7 @@ class SegmaskerInput(BaseToolInput):
             return [value]
         return value
 
-    @field_validator('sequences')
+    @field_validator("sequences")
     @classmethod
     def validate_sequences(cls, sequences: List[str]) -> List[str]:
         """Validate sequences."""
@@ -67,10 +63,6 @@ class SegmaskerConfig(BaseConfig):
     are compositionally biased sequences that may interfere with homology searches.
 
     Attributes:
-        segmasker_path (str): Path to the NCBI segmasker executable. If segmasker
-            is in your PATH, use the default value. Otherwise, provide the full
-            path to the executable. Default: ``"segmasker"``.
-
         window (int): Window size for analyzing sequence complexity. The algorithm
             examines the sequence in sliding windows of this size. Larger windows
             are less sensitive to short low-complexity regions. Typical range: 12-20.
@@ -87,12 +79,6 @@ class SegmaskerConfig(BaseConfig):
             greater than ``locut``. Typical range: 2.5-3.8. Default: 3.4.
     """
 
-    segmasker_path: str = ConfigField(
-        title="Segmasker Path",
-        default="segmasker",
-        description="Path to NCBI segmasker executable",
-        hidden=True,
-    )
     window: int = ConfigField(
         title="Window Size",
         default=15,
@@ -152,7 +138,9 @@ class SegmaskerOutput(BaseToolOutput):
     low_complexity_counts: List[int] = Field(
         description="Number of low-complexity positions for each sequence"
     )
-    sequence_lengths: List[int] = Field(description="Length of each input sequence")
+    sequence_lengths: List[int] = Field(
+        description="Length of each input sequence"
+    )
     results_df: Optional[pd.DataFrame] = Field(
         default=None, description="DataFrame with detailed results"
     )
@@ -167,16 +155,19 @@ class SegmaskerOutput(BaseToolOutput):
     def output_format_default(self) -> str:
         return "csv"
 
-    def _export_output(self, export_path: Union[str, os.PathLike], file_format: str):
+    def _export_output(
+        self, export_path: Union[str, os.PathLike], file_format: str
+    ):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if self.results_df is None:
-            # Create a minimal DF with summary stats if full results are missing
-            df = pd.DataFrame({
-                "sequence_length": self.sequence_lengths,
-                "low_complexity_count": self.low_complexity_counts,
-                "low_complexity_fraction": self.low_complexity_fractions
-            })
+            df = pd.DataFrame(
+                {
+                    "sequence_length": self.sequence_lengths,
+                    "low_complexity_count": self.low_complexity_counts,
+                    "low_complexity_fraction": self.low_complexity_fractions,
+                }
+            )
         else:
             df = self.results_df
 
@@ -190,6 +181,9 @@ class SegmaskerOutput(BaseToolOutput):
             raise ValueError(f"Unsupported format: {file_format}")
 
 
+# ============================================================================
+# Tool Implementation
+# ============================================================================
 @tool(
     key="segmasker",
     label="Segmasker Low-Complexity Detection",
@@ -201,7 +195,7 @@ class SegmaskerOutput(BaseToolOutput):
 @tool_cache("segmasker")
 def run_segmasker(
     inputs: SegmaskerInput,
-    config: SegmaskerConfig
+    config: SegmaskerConfig,
 ) -> SegmaskerOutput:
     """Detect low-complexity regions in protein sequences using NCBI segmasker.
 
@@ -234,131 +228,36 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
+    from bio_programming_tools.utils.env_manager import EnvManager
 
-    # Check segmasker installation
-    try:
-        check_result = subprocess.run(
-            [config.segmasker_path, "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if check_result.returncode != 0:
-            raise FileNotFoundError
-    except (FileNotFoundError, subprocess.SubprocessError, subprocess.TimeoutExpired):
-        raise RuntimeError(
-            "NCBI segmasker not found or not working properly. Install with: conda install -c bioconda blast"
-        )
+    venv_manager = EnvManager(model_name="segmasker")
 
-    # Get sequence lengths
-    seq_lengths = [len(s) for s in inputs.sequences]
+    input_data = {
+        "sequences": inputs.sequences,
+        "config": {
+            "window": config.window,
+            "locut": config.locut,
+            "hicut": config.hicut,
+        },
+    }
 
-    # Handle all empty sequences
-    if all(length == 0 for length in seq_lengths):
-        return SegmaskerOutput(
-            metadata={"num_sequences": len(inputs.sequences), "all_empty": True},
-            low_complexity_fractions=[0.0] * len(inputs.sequences),
-            low_complexity_counts=[0] * len(inputs.sequences),
-            sequence_lengths=seq_lengths,
-        )
+    output_data = venv_manager.call_standalone_script_in_venv(
+        script_path=Path(__file__).parent / "standalone" / "run.py",
+        input_dict=input_data,
+        device="cpu",
+    )
 
-    # Use faster temp directory if available
-    tmp_dir = os.getenv("TMPDIR") or ("/dev/shm" if os.path.exists("/dev/shm") else None)
+    results_df = pd.DataFrame(output_data["results_data"])
 
-    # Create temporary FASTA with all sequences
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".fasta", dir=tmp_dir
-    ) as tmp_file:
-        for seq_idx, seq_str in enumerate(inputs.sequences):
-            # Use placeholder for empty sequences
-            seq_to_write = seq_str if len(seq_str) > 0 else "A"
-            tmp_file.write(f">seq_{seq_idx}\n{seq_to_write}\n")
-        # Ensure data is written before subprocess reads it
-        tmp_file.flush()
-        tmp_path = tmp_file.name
-
-        try:
-            # Run segmasker
-            cmd = [
-                config.segmasker_path,
-                "-in",
-                tmp_path,
-                "-outfmt",
-                "fasta",
-                "-window",
-                str(config.window),
-                "-locut",
-                str(config.locut),
-                "-hicut",
-                str(config.hicut),
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-
-            if result.returncode != 0:
-                raise RuntimeError(f"Segmasker failed: {result.stderr}")
-
-            # Parse output
-            seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))
-
-            if len(seq_records) != len(inputs.sequences):
-                raise RuntimeError(
-                    f"Segmasker returned {len(seq_records)} results but expected {len(inputs.sequences)}"
-                )
-
-            # Calculate fractions and counts
-            fractions = []
-            counts = []
-            results_data = []
-
-            for seq_idx, (original_seq, record) in enumerate(
-                zip(inputs.sequences, seq_records)
-            ):
-                # Handle empty sequences
-                if len(original_seq) == 0:
-                    fractions.append(0.0)
-                    counts.append(0)
-                    results_data.append(
-                        {
-                            "sequence_id": f"seq_{seq_idx}",
-                            "length": 0,
-                            "lowercase_count": 0,
-                            "low_complexity_fraction": 0.0,
-                        }
-                    )
-                    continue
-
-                masked_seq = str(record.seq)
-                lowercase_count = sum(1 for c in masked_seq if c.islower())
-                fraction = lowercase_count / len(original_seq)
-
-                fractions.append(fraction)
-                counts.append(lowercase_count)
-                results_data.append(
-                    {
-                        "sequence_id": f"seq_{seq_idx}",
-                        "length": len(original_seq),
-                        "lowercase_count": lowercase_count,
-                        "low_complexity_fraction": fraction,
-                    }
-                )
-
-            results_df = pd.DataFrame(results_data)
-
-            return SegmaskerOutput(
-                metadata={
-                    "num_sequences": len(inputs.sequences),
-                    "window": config.window,
-                    "locut": config.locut,
-                    "hicut": config.hicut,
-                },
-                low_complexity_fractions=fractions,
-                low_complexity_counts=counts,
-                sequence_lengths=seq_lengths,
-                results_df=results_df,
-            )
-
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Segmasker execution timed out after 60 seconds")
-
-        except Exception as e:
-            raise RuntimeError(f"Error running segmasker: {str(e)}")
+    return SegmaskerOutput(
+        metadata={
+            "num_sequences": len(inputs.sequences),
+            "window": config.window,
+            "locut": config.locut,
+            "hicut": config.hicut,
+        },
+        low_complexity_fractions=output_data["fractions"],
+        low_complexity_counts=output_data["counts"],
+        sequence_lengths=output_data["lengths"],
+        results_df=results_df,
+    )
