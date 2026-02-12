@@ -11,16 +11,18 @@ This repo contains the tool layer of the [`bio-programming`](https://github.com/
 ## Installation
 
 ```bash
-# Using conda
-conda create -n bio_programming_tools python=3.12 -y
-conda activate bio_programming_tools
+# Using conda (recommended)
+conda create -n bio_tools python=3.12 -y
+conda activate bio_tools
 
 # Or using venv
 python -m venv .venv
 source .venv/bin/activate
 
+pip install -e . -v
 
-pip install -e .
+# For development
+pip install -e ".[dev]" -v
 ```
 
 ## HuggingFace Authentication

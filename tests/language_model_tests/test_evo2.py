@@ -7,11 +7,7 @@ Tests the Evo2 implementation.
 import numpy as np
 import pytest
 
-# Import all evo2 modules at the module level to avoid re-importing vortex library
-# which registers PyTorch custom operations. Re-importing causes schema registration
-# errors in PyTorch 2.7+ when running multiple tests together (pytest --all).
 from bio_programming_tools.tools.causal_models.evo2 import (
-    Evo2Model,
     Evo2SampleConfig,
     Evo2SampleInput,
     Evo2ScoringConfig,
@@ -19,13 +15,23 @@ from bio_programming_tools.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
-
-# NOTE: This assumes Evo2 is installed in the base environment. We will need to
-# modify or remove these tests in branches where Evo2 uses the standalone venv.
-from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
-    _slice_cache,
-)
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+def _import_evo2_model():
+    """Import Evo2Model from standalone inference (requires evo2 installed)."""
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
+        Evo2Model,
+    )
+    return Evo2Model
+
+
+def _import_slice_cache():
+    """Import _slice_cache from standalone inference (requires evo2 installed)."""
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
+        _slice_cache,
+    )
+    return _slice_cache
 
 # ============================================================================
 # Sampling Tests
@@ -35,6 +41,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 def test_evo2_sample_inference():
     """Test Evo2Model inference with direct model.sample() call."""
     prompts = ["ATCGATCG", "GGCCTTAA"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -192,6 +199,7 @@ def test_evo2_sample_config_validation(config_kwargs):
 def test_evo2_sample_batched_inference():
     """Test batched sampling with direct model call."""
     prompts = ["ATCGATCG", "GGCCTTAA", "AAAACCCC", "TTTTGGGG"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -246,6 +254,7 @@ def test_evo2_sample_batched_tool():
 def test_evo2_score_inference():
     """Test Evo2Model.score() with comprehensive value validation."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.score(sequences=sequences, device="cuda", verbose=False, return_logits=True)
@@ -343,6 +352,7 @@ def test_evo2_score_input_validation():
 def test_evo2_score_batched_inference():
     """Test batched scoring with direct model call."""
     sequences = ["ATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.score(sequences=sequences, device="cuda", batch_size=2, verbose=False, return_logits=True)
@@ -463,6 +473,7 @@ def test_evo2_batch_with_kv_cache():
     assert len(result1.kv_caches) == 4, "Should have 4 KV caches"
 
     # Test slicing the cache
+    _slice_cache = _import_slice_cache()
     sliced = _slice_cache(result1.kv_caches[0], 0, 1)
     assert sliced is not None, "Sliced cache should not be None"
 
@@ -743,6 +754,7 @@ def test_evo2_score_logits_serialization():
 def test_evo2_sample_logits_inference():
     """Test that sample() can return logits at inference layer."""
     prompts = ["ATCGATCG", "GCTAGCTA"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(
@@ -771,6 +783,7 @@ def test_evo2_sample_logits_inference():
 def test_evo2_sample_logits_not_returned_by_default():
     """Test that sample() does not return logits when return_logits=False (default)."""
     prompts = ["ATCGATCG"]
+    Evo2Model = _import_evo2_model()
     evo2_model = Evo2Model(model_checkpoint="evo2_7b")
 
     result = evo2_model.sample(

@@ -10,7 +10,6 @@ from .progen2_score import (
     ProGen2ScoringOutput,
     run_progen2_score,
 )
-from .standalone.inference import ProGen2Model
 
 __all__ = [
     # Tools layer - sampling
@@ -23,6 +22,4 @@ __all__ = [
     "ProGen2ScoringConfig",
     "ProGen2ScoringOutput",
     "run_progen2_score",
-    # Foundation layer - advanced usage
-    "ProGen2Model",
 ]

@@ -14,9 +14,11 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
-from .standalone.inference import ESM3_MODEL_CHECKPOINTS
-
 logger = logging.getLogger(__name__)
+
+ESM3_MODEL_CHECKPOINTS = Literal[
+    "esm3_sm_open_v1",
+]
 
 # ============================================================================
 # Data Models

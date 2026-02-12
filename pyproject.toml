@@ -173,3 +173,6 @@ ignore_missing_imports = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["bio_programming_tools*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif"]

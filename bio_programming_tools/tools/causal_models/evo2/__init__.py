@@ -11,7 +11,6 @@ from .evo2_score import (
     Evo2ScoringOutput,
     run_evo2_score,
 )
-from .standalone.inference import Evo2Model
 
 __all__ = [
     # Tools layer - simple sampling interface
@@ -25,7 +24,6 @@ __all__ = [
     "Evo2ScoringOutput",
     "run_evo2_score",
     # Foundation layer - advanced usage (beam search, caching)
-    "Evo2Model",
     "clear_evo2_cache",
     "get_cached_evo2_model",
 ]

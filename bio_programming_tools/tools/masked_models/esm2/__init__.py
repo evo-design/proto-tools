@@ -16,7 +16,6 @@ from .esm2_score import (
     ESM2ScoringOutput,
     run_esm2_score,
 )
-from .standalone.inference import ESM2Model
 
 __all__ = [
     # Tools layer - embeddings
@@ -34,6 +33,4 @@ __all__ = [
     "ESM2ScoringConfig",
     "ESM2ScoringOutput",
     "run_esm2_score",
-    # Foundation layer - advanced usage
-    "ESM2Model",
 ]

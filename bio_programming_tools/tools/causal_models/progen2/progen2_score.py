@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
 
@@ -16,9 +16,16 @@ from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
-from .standalone.inference import PROGEN2_MODEL_CHECKPOINTS
-
 logger = logging.getLogger(__name__)
+
+PROGEN2_MODEL_CHECKPOINTS = Literal[
+    "progen2-small",
+    "progen2-medium",
+    "progen2-oas",
+    "progen2-large",
+    "progen2-BFD90",
+    "progen2-xlarge",
+]
 
 # ============================================================================
 # Data Models

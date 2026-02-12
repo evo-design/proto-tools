@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
@@ -12,9 +12,18 @@ from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
 from .evo2_cache import get_cached_evo2_model
-from .standalone.inference import EVO2_MODEL_CHECKPOINTS
 
 logger = logging.getLogger(__name__)
+
+EVO2_MODEL_CHECKPOINTS = Literal[
+    "evo2_7b",
+    "evo2_40b",
+    "evo2_7b_base",
+    "evo2_40b_base",
+    "evo2_1b_base",
+    "evo2_7b_262k",
+    "evo2_7b_microviridae",
+]
 
 # ============================================================================
 # Data Models

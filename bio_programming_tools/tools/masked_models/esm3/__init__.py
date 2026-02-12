@@ -22,7 +22,6 @@ from .esm3_structure_prediction import (
     ESM3StructurePredictionOutput,
     run_esm3_structure_prediction,
 )
-from .standalone.inference import ESM3Model
 
 __all__ = [
     # Tools layer - embeddings
@@ -45,6 +44,4 @@ __all__ = [
     "ESM3ScoringConfig",
     "ESM3ScoringOutput",
     "run_esm3_score",
-    # Foundation layer - advanced usage
-    "ESM3Model",
 ]

@@ -15,9 +15,16 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
 
-from .standalone.inference import ESM2_MODEL_CHECKPOINTS
-
 logger = logging.getLogger(__name__)
+
+ESM2_MODEL_CHECKPOINTS = Literal[
+    "esm2_t6_8M_UR50D",
+    "esm2_t12_35M_UR50D",
+    "esm2_t30_150M_UR50D",
+    "esm2_t33_650M_UR50D",
+    "esm2_t36_3B_UR50D",
+    "esm2_t48_15B_UR50D",
+]
 
 # ============================================================================
 # Data Models

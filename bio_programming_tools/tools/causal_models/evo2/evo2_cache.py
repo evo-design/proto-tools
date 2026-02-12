@@ -1,9 +1,20 @@
 """Model cache helpers for Evo2."""
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Literal, Optional
 
-from .standalone.inference import EVO2_MODEL_CHECKPOINTS, Evo2Model
+if TYPE_CHECKING:
+    from .standalone.inference import Evo2Model
+
+EVO2_MODEL_CHECKPOINTS = Literal[
+    "evo2_7b",
+    "evo2_40b",
+    "evo2_7b_base",
+    "evo2_40b_base",
+    "evo2_1b_base",
+    "evo2_7b_262k",
+    "evo2_7b_microviridae",
+]
 
 _evo2_model_cache: Dict[str, Evo2Model] = {}
 
@@ -13,6 +24,8 @@ def get_cached_evo2_model(
     local_path: Optional[str] = None,
 ) -> Evo2Model:
     """Get or create cached Evo2 model instance."""
+    from .standalone.inference import Evo2Model
+
     cache_key = f"{model_checkpoint}:{local_path}"
     if cache_key not in _evo2_model_cache:
         _evo2_model_cache[cache_key] = Evo2Model(
