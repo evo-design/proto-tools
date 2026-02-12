@@ -81,6 +81,11 @@ dev = [
     "docstring-parser",
 ]
 
+# Cloud deployment
+modal = [
+    "modal>=0.64.0",
+]
+
 # Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
 
 [tool.pytest.ini_options]
