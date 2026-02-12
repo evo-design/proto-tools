@@ -23,6 +23,8 @@ def get_cached_evo2_model(
     local_path: Optional[str] = None,
 ) -> Evo2Model:
     """Get or create cached Evo2 model instance."""
+    from .standalone.inference import Evo2Model
+
     cache_key = f"{model_checkpoint}:{local_path}"
     if cache_key not in _evo2_model_cache:
         _evo2_model_cache[cache_key] = Evo2Model(

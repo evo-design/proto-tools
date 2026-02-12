@@ -17,6 +17,22 @@ from bio_programming_tools.tools.causal_models.evo2 import (
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
+
+def _import_evo2_model():
+    """Import Evo2Model from standalone inference (requires evo2 installed)."""
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
+        Evo2Model,
+    )
+    return Evo2Model
+
+
+def _import_slice_cache():
+    """Import _slice_cache from standalone inference (requires evo2 installed)."""
+    from bio_programming_tools.tools.causal_models.evo2.standalone.inference import (
+        _slice_cache,
+    )
+    return _slice_cache
+
 # ============================================================================
 # Sampling Tests
 # ============================================================================
