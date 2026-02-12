@@ -90,6 +90,7 @@
 					{
 						"group": "Sequence Alignment",
 						"pages": [
+							"tools/sequence-alignment/colabfold-search",
 							"tools/sequence-alignment/mafft"
 						]
 					},
@@ -98,7 +99,8 @@
 						"pages": [
 							"tools/sequence-scoring/alphagenome",
 							"tools/sequence-scoring/borzoi",
-							"tools/sequence-scoring/enformer"
+							"tools/sequence-scoring/enformer",
+							"tools/sequence-scoring/segmasker"
 						]
 					},
 					{

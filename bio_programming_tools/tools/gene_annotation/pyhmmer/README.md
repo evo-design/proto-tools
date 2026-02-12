@@ -41,6 +41,16 @@ HMMER uses profile HMMs built from multiple sequence alignments:
 3. **Viterbi Algorithm**: Finds the most likely alignment path through the model.
 4. **E-value Calculation**: Uses extreme value distribution theory to estimate statistical significance, accounting for database size.
 
+## Tool Catalog
+
+| Tool | Query | Database | Use Case |
+|------|-------|----------|----------|
+| `pyhmmer-hmmsearch` | HMM profile(s) | Protein sequences | Find family members in a proteome |
+| `pyhmmer-hmmscan` | Protein sequence(s) | HMM database | Annotate domains in proteins |
+| `pyhmmer-phmmer` | Protein sequence(s) | Protein sequences | Sensitive homolog search without pre-built HMMs |
+| `pyhmmer-nhmmer` | Nucleotide sequence(s) | Nucleotide sequences | Sensitive DNA/RNA homolog search |
+| `pyhmmer-jackhmmer` | Protein sequence(s) | Protein sequences | Iterative homolog expansion search |
+
 ## How It Works
 
 **Method overview:**
@@ -56,15 +66,6 @@ The module exposes five distinct functions:
 
 `pyhmmer-jackhmmer`: Performs iterative protein sequence search against a protein database, refining the model over multiple rounds.
 
-**The Search Direction Matrix:**
-| Tool | Query | Database | Use Case |
-|------|-------|----------|----------|
-| `hmmsearch` | HMM profile(s) | Protein sequences | Find family members in a proteome |
-| `hmmscan` | Protein sequence(s) | HMM database | Annotate domains in proteins |
-| `phmmer` | Protein sequence(s) | Protein sequences | Sensitive homolog search without pre-built HMMs |
-| `nhmmer` | Nucleotide sequence(s) | Nucleotide sequences | Sensitive DNA/RNA homolog search |
-| `jackhmmer` | Protein sequence(s) | Protein sequences | Iterative homolog expansion search |
-
 **Computational Requirements:**
 
 Speed: Slower than BLAST for simple searches, but provides much better sensitivity for distant homologs.
@@ -75,9 +76,7 @@ RAM: Depends on HMM database size; Pfam-A (~20,000 HMMs) requires ~2GB RAM.
 
 Storage: HMM files are compact; Pfam-A is ~300MB.
 
-## Important Parameters
-
-### Input (What You're Searching)
+## Input Parameters
 
 | Tool | Parameter | Type | Description |
 |------|-----------|------|-------------|
@@ -92,7 +91,7 @@ Storage: HMM files are compact; Pfam-A is ~300MB.
 | `pyhmmer-jackhmmer` | `sequences` | `str` or `List[str]` | Query protein sequences. |
 | `pyhmmer-jackhmmer` | `target_sequences` | `str` or `List[str]` | Target protein sequences to search against. |
 
-### Configuration (How to Search)
+## Configuration
 
 **Shared Parameters (All Tools)**
 | Parameter | Type | Default | Description |
@@ -103,6 +102,25 @@ Storage: HMM files are compact; Pfam-A is ~300MB.
 | `domain_evalue_threshold` | `float` | `10.0` | E-value reporting threshold for domain-level hits. |
 | `domain_score_threshold` | `float` | `None` | Domain bit score threshold (overrides domain E-value if set). |
 | `max_iterations` (`pyhmmer-jackhmmer` only) | `int` | `5` | Maximum number of jackhmmer iterations. |
+
+### Parameter Guides
+
+**E-value thresholds:**
+| Threshold | Use Case |
+|-----------|----------|
+| `10.0` | Permissive exploration (default) |
+| `0.001` | High-confidence domain annotation |
+| `1e-10` | Stringent homology detection |
+
+**Score vs E-value:**
+- E-values are database-size dependent; scores are not.
+- For reproducible thresholds across different databases, use `score_threshold`.
+
+### Sweep Priorities
+
+1. `evalue_threshold` — Most impactful; controls overall sensitivity vs specificity tradeoff
+2. `domain_evalue_threshold` — Controls domain-level filtering independently from sequence-level
+3. `score_threshold` — Use when database-size-independent thresholds are needed
 
 ## Output Specification
 
@@ -137,7 +155,7 @@ All tools return a `PyHmmerOutput` object with two DataFrames:
 | `domain_score` | Domain Bit Score | Score for this specific domain alignment. |
 | `env_from` / `env_to` | Envelope coordinates | Broader region containing the domain. |
 
-## Thresholds & Decision Boundaries
+## Interpreting Results
 
 **For Sequence-Level Hits:**
 - **High Confidence:** `evalue < 1e-10`, `score > 50`
@@ -152,48 +170,6 @@ All tools return a `PyHmmerOutput` object with two DataFrames:
 **Interpreting E-values:**
 - E-value depends on database size. An E-value of 0.001 against Pfam (~20,000 HMMs) is more significant than the same E-value against a smaller custom database.
 - Always check `included` column—PyHMMER applies gathering thresholds when available.
-
-## Best Practices & Gotchas
-
-**Parameter Tuning:**
-
-1. `evalue_threshold`:
-   - Default `10.0` is permissive for exploration.
-   - Use `0.001` for high-confidence domain annotation.
-   - Use `1e-10` for stringent homology detection.
-
-2. `score_threshold` vs `evalue_threshold`:
-   - E-values are database-size dependent; scores are not.
-   - For reproducible thresholds across different databases, use `score_threshold`.
-
-3. `domain_evalue_threshold`:
-   - Set independently from sequence threshold.
-   - Multi-domain proteins may have a significant sequence E-value but individual weak domain hits.
-
-**Common Mistakes:**
-
-1. **Confusing hmmsearch vs hmmscan:**
-   - `hmmsearch`: You have an HMM, searching for matching *sequences*.
-   - `hmmscan`: You have *sequences*, searching for matching HMMs.
-   - Think: "What am I querying with?"
-
-2. **Ignoring Domain-Level Results:** The sequence-level hit might be significant, but always check which domains actually matched and their coordinates.
-
-3. **Not Using Gathering Thresholds:** For curated databases like Pfam, the `included` column reflects curated gathering thresholds. Trust these over raw E-values.
-
-4. **Protein vs Nucleotide:** `hmmsearch`, `hmmscan`, `phmmer`, and `jackhmmer` are protein workflows. `nhmmer` is for nucleotide sequences.
-
-5. **Single Sequence Queries:** For `phmmer`, searching one sequence against one sequence will likely fail. Use BLAST for simple pairwise alignment.
-
-## References
-
-**Primary Citation:**
-- Eddy, S.R. (2011). "Accelerated Profile HMM Searches." *PLOS Computational Biology* 7(10): e1002195. [DOI: 10.1371/journal.pcbi.1002195](https://doi.org/10.1371/journal.pcbi.1002195)
-
-**Documentation:**
-- PyHMMER: [https://pyhmmer.readthedocs.io/](https://pyhmmer.readthedocs.io/)
-- HMMER: [http://hmmer.org/](http://hmmer.org/)
-- Pfam Database: [https://www.ebi.ac.uk/interpro/](https://www.ebi.ac.uk/interpro/)
 
 ## Quick Start Examples
 
@@ -351,8 +327,54 @@ if result.domain_hits_df is not None:
     print(full_domains[['query_name', 'target_name', 'domain_score', 'coverage']])
 ```
 
+## Best Practices & Gotchas
+
+**Parameter Tuning:**
+
+1. `evalue_threshold`:
+   - Default `10.0` is permissive for exploration.
+   - Use `0.001` for high-confidence domain annotation.
+   - Use `1e-10` for stringent homology detection.
+
+2. `score_threshold` vs `evalue_threshold`:
+   - E-values are database-size dependent; scores are not.
+   - For reproducible thresholds across different databases, use `score_threshold`.
+
+3. `domain_evalue_threshold`:
+   - Set independently from sequence threshold.
+   - Multi-domain proteins may have a significant sequence E-value but individual weak domain hits.
+
+**Common Mistakes:**
+
+1. **Confusing hmmsearch vs hmmscan:**
+   - `hmmsearch`: You have an HMM, searching for matching *sequences*.
+   - `hmmscan`: You have *sequences*, searching for matching HMMs.
+   - Think: "What am I querying with?"
+
+2. **Ignoring Domain-Level Results:** The sequence-level hit might be significant, but always check which domains actually matched and their coordinates.
+
+3. **Not Using Gathering Thresholds:** For curated databases like Pfam, the `included` column reflects curated gathering thresholds. Trust these over raw E-values.
+
+4. **Protein vs Nucleotide:** `hmmsearch`, `hmmscan`, `phmmer`, and `jackhmmer` are protein workflows. `nhmmer` is for nucleotide sequences.
+
+5. **Single Sequence Queries:** For `phmmer`, searching one sequence against one sequence will likely fail. Use BLAST for simple pairwise alignment.
+
+## References
+
+**Primary Citation:**
+- Eddy, S.R. (2011). "Accelerated Profile HMM Searches." *PLOS Computational Biology* 7(10): e1002195. [DOI: 10.1371/journal.pcbi.1002195](https://doi.org/10.1371/journal.pcbi.1002195)
+
+**Documentation:**
+- PyHMMER: [https://pyhmmer.readthedocs.io/](https://pyhmmer.readthedocs.io/)
+- HMMER: [http://hmmer.org/](http://hmmer.org/)
+- Pfam Database: [https://www.ebi.ac.uk/interpro/](https://www.ebi.ac.uk/interpro/)
+
 ## Related Tools
 
-- `online-blast` / `local-blast`: Use for quick pairwise searches, broad database compatibility, or when HMM workflows are unnecessary.
+**Tools often used together:**
+- `blast-online-search` / `blast-local-search`: Run a quick BLAST first, then use PyHMMER for deeper analysis on hits of interest.
+- `mmseqs-clustering`: Cluster sequences before building HMMs to reduce redundancy.
+
+**Alternative tools:**
+- `blast-online-search` / `blast-local-search`: Use for quick pairwise searches, broad database compatibility, or when HMM workflows are unnecessary.
 - `mmseqs-search-proteins`: Use for fast large-scale protein searches (less sensitive but much faster).
-- `mmseqs-clustering`: Use to cluster sequences before building HMMs to reduce redundancy.

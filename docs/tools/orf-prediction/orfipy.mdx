@@ -17,9 +17,10 @@ ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identif
 - ORF finding in eukaryotic sequences (with custom parameters)
 
 **When NOT to use this tool:**
-- For accurate prokaryotic gene prediction: Use Prodigal
-- For eukaryotic gene prediction (with introns): Use Augustus/GeneMark
-- When you need RBS/promoter predictions: Use Prodigal
+- For accurate prokaryotic gene prediction: Use Prodigal instead.
+- For eukaryotic gene prediction (with introns): Use Augustus or GeneMark instead.
+- When you need RBS/promoter predictions: Use Prodigal instead.
+- When you need ML-based gene scoring: Use Prodigal instead (it scores coding potential via hexamer frequencies).
 
 ## Biological Background
 
@@ -47,99 +48,88 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 - Forward strand: Frames +1, +2, +3
 - Reverse strand: Frames -1, -2, -3
 
-## Important Parameters
-
-### Input
+## Input Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| sequences | str or List[str] | DNA sequence(s) to scan |
+| `sequences` | `str` or `List[str]` | DNA sequence(s) to scan |
 
-### Configuration
+## Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| start_codons | str | ATG,GTG,TTG | Comma-separated start codons |
-| stop_codons | str | TAA,TAG,TGA | Comma-separated stop codons |
-| strand | str | b | Strand to scan: f (forward), r (reverse), b (both) |
-| min_len | int | 0 | Minimum ORF length in nucleotides |
-| max_len | int | 10000 | Maximum ORF length in nucleotides |
-| include_stop | bool | True | Include stop codon in reported sequence |
-| translation_table | int | None | NCBI genetic code (1-33), None = standard |
-| threads | int | 4 | CPU threads per sequence |
+| `start_codons` | `str` | `ATG,GTG,TTG` | Comma-separated start codons |
+| `stop_codons` | `str` | `TAA,TAG,TGA` | Comma-separated stop codons |
+| `strand` | `str` | `b` | Strand to scan: `f` (forward), `r` (reverse), `b` (both) |
+| `min_len` | `int` | `0` | Minimum ORF length in nucleotides |
+| `max_len` | `int` | `10000` | Maximum ORF length in nucleotides |
+| `include_stop` | `bool` | `True` | Include stop codon in reported sequence |
+| `translation_table` | `int` | `None` | NCBI genetic code (1-33), None = standard |
+| `threads` | `int` | `4` | CPU threads per sequence |
 
-## Output Specification
+### Parameter Guides
 
-### ORFipyOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| predicted_orfs | List[List[Orf]] | ORFs per input sequence |
-| num_orfs | int | Total ORFs across all sequences (computed) |
-| results_df | DataFrame | All ORFs as DataFrame (computed) |
-
-### Orf object / DataFrame columns
-
-| Field | Type | Description |
-|-------|------|-------------|
-| parent_id | str | Parent sequence ID (seq_0, seq_1, etc.) |
-| orf_id | str | ORF identifier within parent |
-| strand | str | '+' or '-' |
-| frame | int | Reading frame (1, 2, or 3) |
-| amino_acid_sequence | str | Translated protein |
-| nucleotide_sequence | str | DNA sequence |
-| amino_acid_length | int | Protein length |
-| nucleotide_length | int | ORF length in bp |
-| nucleotide_start | int | Start position (1-indexed) |
-| nucleotide_end | int | End position (1-indexed) |
-
-## Thresholds and Decision Boundaries
+**Start codon selection:**
+| Setting | Codons | Use Case |
+|---------|--------|----------|
+| Standard | `ATG` | Eukaryotic sequences, strict filtering |
+| Prokaryotic (default) | `ATG,GTG,TTG` | Bacterial/archaeal sequences |
+| Custom | Any valid codons | Specialized genetic codes |
 
 **Length filtering guidelines:**
 | min_len | Approximate proteins | Use case |
 |---------|---------------------|----------|
-| 0 | All ORFs | Comprehensive analysis |
-| 150 | >50 aa | Filter very short ORFs |
-| 300 | >100 aa | Typical small proteins |
-| 600 | >200 aa | Substantial proteins only |
-| 900 | >300 aa | Large proteins only |
+| `0` | All ORFs | Comprehensive analysis |
+| `150` | >50 aa | Filter very short ORFs |
+| `300` | >100 aa | Typical small proteins |
+| `600` | >200 aa | Substantial proteins only |
+| `900` | >300 aa | Large proteins only |
+
+### Sweep Priorities
+
+1. `min_len` — Most impactful for controlling output volume and filtering noise
+2. `start_codons` — Controls whether alternative start codons are included
+3. `strand` — Reduce to `f` or `r` when coding strand is known
+
+## Output Specification
+
+**ORFipyOutput**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `predicted_orfs` | `List[List[Orf]]` | ORFs per input sequence |
+| `num_orfs` | `int` | Total ORFs across all sequences (computed) |
+| `results_df` | `DataFrame` | All ORFs as DataFrame (computed) |
+
+**Orf object / DataFrame columns**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `parent_id` | `str` | Parent sequence ID (seq_0, seq_1, etc.) |
+| `orf_id` | `str` | ORF identifier within parent |
+| `strand` | `str` | '+' or '-' |
+| `frame` | `int` | Reading frame (1, 2, or 3) |
+| `amino_acid_sequence` | `str` | Translated protein |
+| `nucleotide_sequence` | `str` | DNA sequence |
+| `amino_acid_length` | `int` | Protein length |
+| `nucleotide_length` | `int` | ORF length in bp |
+| `nucleotide_start` | `int` | Start position (1-indexed) |
+| `nucleotide_end` | `int` | End position (1-indexed) |
+
+## Interpreting Results
+
+**Length-based filtering:**
+- ORFs &lt; 150 nt (~50 aa) are usually spurious in prokaryotic contexts.
+- ORFs > 300 nt (~100 aa) are more likely to be real coding sequences.
+- The longest ORF per reading frame is often the best candidate for the real gene.
 
 **Codon variations:**
 - Standard: ATG only as start
-- Prokaryotic: ATG, GTG, TTG as starts
-- Custom: Any valid codons
+- Prokaryotic: ATG, GTG, TTG as starts (GTG and TTG account for ~15-20% of bacterial genes)
+- Custom: Any valid codons for specialized genetic codes
 
-## Best Practices and Gotchas
-
-**Start codon selection:**
-
-1. **Standard (ATG only)**: Use for eukaryotic sequences or strict filtering.
-
-2. **Prokaryotic (ATG,GTG,TTG)**: Default, includes alternative bacterial starts.
-
-3. **Custom codons**: Can specify any valid codons.
-
-**Length filtering:**
-
-1. **Very short ORFs**: min_len=0 includes tiny ORFs that are usually spurious.
-
-2. **Reasonable minimum**: min_len=150 (~50 aa) filters most noise.
-
-3. **Balance sensitivity/specificity**: Adjust based on your analysis goals.
-
-**Strand selection:**
-
-1. **Both strands (b)**: Default, finds ORFs on forward and reverse.
-
-2. **Single strand (f/r)**: Use when you know the coding strand.
-
-**Common mistakes:**
-
-1. **Confusing ORFs with genes**: Not all ORFs are functional genes.
-
-2. **No length filter**: Getting thousands of tiny spurious ORFs.
-
-3. **Wrong genetic code**: Using standard code for mitochondrial sequences.
+**ORF vs gene prediction:**
+ORFipy reports all ORFs matching your criteria — it does not score or rank them. For distinguishing real genes from spurious ORFs, use Prodigal or annotate ORF translations against protein databases with BLAST/HMMER.
 
 ## Quick Start Examples
 
@@ -232,6 +222,38 @@ for i, orfs in enumerate(result.predicted_orfs):
         print(f"Seq {i}: Longest ORF is {longest.amino_acid_length} aa")
 ```
 
+## Best Practices & Gotchas
+
+**Start codon selection:**
+
+1. **Standard (ATG only)**: Use for eukaryotic sequences or strict filtering.
+
+2. **Prokaryotic (ATG,GTG,TTG)**: Default, includes alternative bacterial starts.
+
+3. **Custom codons**: Can specify any valid codons.
+
+**Length filtering:**
+
+1. **Very short ORFs**: min_len=0 includes tiny ORFs that are usually spurious.
+
+2. **Reasonable minimum**: min_len=150 (~50 aa) filters most noise.
+
+3. **Balance sensitivity/specificity**: Adjust based on your analysis goals.
+
+**Strand selection:**
+
+1. **Both strands (b)**: Default, finds ORFs on forward and reverse.
+
+2. **Single strand (f/r)**: Use when you know the coding strand.
+
+**Common mistakes:**
+
+1. **Confusing ORFs with genes**: Not all ORFs are functional genes.
+
+2. **No length filter**: Getting thousands of tiny spurious ORFs.
+
+3. **Wrong genetic code**: Using standard code for mitochondrial sequences.
+
 ## References
 
 **Primary publication:**
@@ -242,6 +264,10 @@ for i, orfs in enumerate(result.predicted_orfs):
 
 ## Related Tools
 
-- prodigal: ML-based prokaryotic gene prediction (more accurate for bacteria)
-- blast: Annotate ORFs against databases
-- esm2: Score ORF translations with protein language model
+**Tools often used together:**
+- `blast-local-search` / `blast-online-search`: Annotate ORF translations against sequence databases to identify gene function.
+- `pyhmmer-hmmscan`: Annotate ORF translations with protein domain profiles from Pfam.
+- `esm2`: Score ORF translations with a protein language model to assess protein-likeness.
+
+**Alternative tools:**
+- `prodigal`: ML-based prokaryotic gene prediction — more accurate for bacteria/archaea but less flexible for custom ORF criteria.

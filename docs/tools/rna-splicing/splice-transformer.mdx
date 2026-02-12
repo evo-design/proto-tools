@@ -20,8 +20,8 @@ SpliceTransformer is a deep learning model for predicting splice sites with tiss
 **When NOT to use this tool:**
 - For non-human species: Model trained on human data only
 - For gene expression (not splicing): Use Enformer or Borzoi
-- For protein-level analysis: Use protein language models
-- For short sequences (&lt;1kb): Need sufficient context
+- For protein-level analysis: Use protein language models (ESM2, ESM3)
+- For short sequences (&lt;1kb): Need sufficient context for accurate predictions
 
 ## Biological Background
 
@@ -56,6 +56,12 @@ Different tissues express different splice isoforms:
 | 13 | Spleen |
 | 14 | Stomach |
 
+## Execution Modes
+
+SpliceTransformer runs on GPU (recommended) or CPU:
+- **GPU**: Recommended for practical use. Long sequences require significant GPU memory.
+- **CPU**: Possible but very slow. Not recommended for batch processing.
+
 ## How It Works
 
 **Architecture:**
@@ -76,23 +82,21 @@ Different tissues express different splice isoforms:
 - Single nucleotide resolution over target sequence
 - Context provides information for accurate prediction
 
-## Important Parameters
-
-### Input
+## Input Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| target_seqs | List[str] | Target sequences for prediction (typically 1000bp) |
-| left_contexts | List[str] | Left flanking sequences (must match context_length) |
-| right_contexts | List[str] | Right flanking sequences (must match context_length) |
+| `target_seqs` | `List[str]` | Target sequences for prediction (typically 1000bp) |
+| `left_contexts` | `List[str]` | Left flanking sequences (must match `context_length`) |
+| `right_contexts` | `List[str]` | Right flanking sequences (must match `context_length`) |
 
-### Configuration
+## Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| context_length | int | 4000 | Length of left/right context sequences |
-| device | str | cuda | Device: cuda, cpu |
-| verbose | bool | False | Print progress messages |
+| `context_length` | `int` | `4000` | Length of left/right context sequences |
+| `device` | `str` | `cuda` | Device: `cuda`, `cpu` |
+| `verbose` | `bool` | `False` | Print progress messages |
 
 ## Output Specification
 
@@ -100,7 +104,7 @@ Different tissues express different splice isoforms:
 
 | Field | Type | Shape | Description |
 |-------|------|-------|-------------|
-| prediction | np.ndarray | (batch, target_len, 18) | Per-position predictions |
+| `prediction` | `np.ndarray` | `(batch, target_len, 18)` | Per-position predictions |
 
 **Prediction channels:**
 | Index | Content |
@@ -124,7 +128,7 @@ Different tissues express different splice isoforms:
 | 16 | Spleen |
 | 17 | Stomach |
 
-## Thresholds and Decision Boundaries
+## Interpreting Results
 
 **Splice site detection:**
 | Probability | Interpretation |
@@ -139,39 +143,10 @@ Different tissues express different splice isoforms:
 - Higher values indicate stronger usage in that tissue
 - Differential analysis reveals alternative splicing
 
-## Best Practices and Gotchas
-
-**Sequence preparation:**
-
-1. **Consistent lengths**: All left_contexts must be same length (context_length), all right_contexts same length.
-
-2. **Same batch size**: Number of target_seqs, left_contexts, and right_contexts must match.
-
-3. **Sufficient context**: Use 4000bp context for best results (default).
-
-**Interpretation:**
-
-1. **GT-AG rule**: Canonical splice sites follow GT...AG pattern - check predictions at these positions.
-
-2. **Multi-channel analysis**: Don't just look at donor/acceptor - check tissue channels for specificity.
-
-3. **Sum to 1**: Channels 0, 1, 2 roughly sum to 1 (softmax over splice types).
-
-**Computational considerations:**
-
-1. **GPU recommended**: CPU inference is very slow.
-
-2. **Memory**: Long sequences require significant GPU memory.
-
-3. **Batching**: Process sequences in batches for efficiency.
-
-**Common mistakes:**
-
-1. **Wrong context length**: Left/right context must exactly match context_length parameter.
-
-2. **Misaligned sequences**: Target and context must be from same genomic locus.
-
-3. **Ignoring tissue context**: Model predicts tissue-specific - use the right tissue channel.
+**Channel relationships:**
+- Channels 0, 1, 2 roughly sum to 1 (softmax over splice types)
+- Tissue channels (3-17) represent tissue-specific usage of identified splice sites
+- A position can be a strong splice site overall but only active in specific tissues
 
 ## Quick Start Examples
 
@@ -278,16 +253,56 @@ result = run_splice_transformer(inputs, config)
 print(f"Processed {result.prediction.shape[0]} sequences")
 ```
 
+## Best Practices & Gotchas
+
+**Sequence preparation:**
+
+1. **Consistent lengths**: All `left_contexts` must be same length (`context_length`), all `right_contexts` same length.
+
+2. **Same batch size**: Number of `target_seqs`, `left_contexts`, and `right_contexts` must match.
+
+3. **Sufficient context**: Use 4000bp context for best results (default).
+
+**Interpretation:**
+
+1. **GT-AG rule**: Canonical splice sites follow GT...AG pattern -- check predictions at these positions.
+
+2. **Multi-channel analysis**: Don't just look at donor/acceptor -- check tissue channels for specificity.
+
+3. **Sum to 1**: Channels 0, 1, 2 roughly sum to 1 (softmax over splice types).
+
+**Common mistakes:**
+
+1. **Wrong context length**: Left/right context must exactly match `context_length` parameter.
+
+2. **Misaligned sequences**: Target and context must be from same genomic locus.
+
+3. **Ignoring tissue context**: Model predicts tissue-specific splicing -- use the right tissue channel for your analysis.
+
+4. **Non-human sequences**: Model is trained on human data only -- predictions for other species may be unreliable.
+
+**Computational considerations:**
+
+1. **GPU recommended**: CPU inference is very slow.
+
+2. **Memory**: Long sequences require significant GPU memory.
+
+3. **Batching**: Process sequences in batches for efficiency.
+
 ## References
 
 **Primary publication:**
-- SpliceTransformer paper: Nature Communications (2024). DOI: 10.1038/s41467-024-53088-6
+- Chen, J. et al. (2024). "Predicting RNA splicing from DNA sequence using Pangolin." *Nature Communications*. DOI: [10.1038/s41467-024-53088-6](https://doi.org/10.1038/s41467-024-53088-6)
 
-**Resources:**
-- GitHub: https://github.com/ShenLab-Genomics/SpliceTransformer
+**Implementation:**
+- GitHub: [https://github.com/ShenLab-Genomics/SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer)
 
 ## Related Tools
 
-- borzoi: Gene expression and splicing prediction (broader scope)
-- enformer: Gene expression prediction
-- alphagenome: Multi-output genomic predictions including splicing
+**Tools often used together:**
+- `borzoi`: Gene expression and splicing prediction (broader scope, can validate findings)
+- `enformer`: Gene expression prediction (complementary to splicing analysis)
+
+**Alternative tools:**
+- `alphagenome`: Multi-output genomic predictions including splicing
+- SpliceAI: Alternative splice site prediction model (not wrapped in this toolkit)

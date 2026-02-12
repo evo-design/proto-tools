@@ -144,17 +144,17 @@ def test_blast_tools_registered():
     all_tools = ToolRegistry.list_all()
 
     # Check all BLAST tools are registered
-    assert "online-blast" in {spec.key for spec in all_tools}
-    assert "local-blast" in {spec.key for spec in all_tools}
-    assert "create-blast-db" in {spec.key for spec in all_tools}
+    assert "blast-online-search" in {spec.key for spec in all_tools}
+    assert "blast-local-search" in {spec.key for spec in all_tools}
+    assert "blast-create-db" in {spec.key for spec in all_tools}
 
     # Convert to dict for easy access
     tools_dict = {spec.key: spec for spec in all_tools}
 
     # Check metadata
-    online_spec = tools_dict["online-blast"]
+    online_spec = tools_dict["blast-online-search"]
     assert online_spec.description == "Submit query to online NCBI BLAST and return results"
-    assert tools_dict.get("create-blast-db", None) is not None, "create-blast-db tool is not registered"
+    assert tools_dict.get("blast-create-db", None) is not None, "blast-create-db tool is not registered"
 
 
 def test_blast_config_schema_generation():
@@ -162,7 +162,7 @@ def test_blast_config_schema_generation():
     from bio_programming_tools.tools.tool_registry import ToolRegistry
 
     # Get schema for online BLAST (returns config schema)
-    schema = ToolRegistry.get_config_schema("online-blast")
+    schema = ToolRegistry.get_config_schema("blast-online-search")
 
     assert "properties" in schema
     # Config fields should be in config schema
@@ -208,7 +208,7 @@ def test_online_blast_execution():
     result = run_online_blast_search(inputs, config)
 
     assert isinstance(result, BlastOutput)
-    assert result.tool_id == "online-blast"
+    assert result.tool_id == "blast-online-search"
     # May or may not have hits depending on database state
     assert result.num_hits >= 0
 
@@ -232,7 +232,7 @@ def test_local_blast_execution():
         result = run_local_blast_search(inputs, config)
 
         assert isinstance(result, BlastOutput)
-        assert result.tool_id == "local-blast"
+        assert result.tool_id == "blast-local-search"
         assert result.execution_time >= 0
     finally:
         Path(query_file).unlink()

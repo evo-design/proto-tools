@@ -22,7 +22,7 @@ MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searchi
 - BLAST: Best for small-scale queries where you need access to NCBI's curated databases online, or when maximum sensitivity is required for very distant homologs.
 
 **When NOT to use this tool:**
-- Single Sequence Queries: If you're searching one sequence against NCBI, use `online-blast` instead.
+- Single Sequence Queries: If you're searching one sequence against NCBI, use `blast-online-search` instead.
 - Very Short Sequences: MMseqs2 may struggle with sequences &lt;30 amino acids or &lt;100 nucleotides.
 - Maximum Sensitivity Required: For detecting extremely distant homologs (&lt;20% identity), profile-based tools like HMMER or HHblits are more appropriate.
 
@@ -47,6 +47,14 @@ MMseqs2 uses a prefilter-align approach:
 4. **Clustering**: Uses a greedy set-cover algorithm to group sequences by similarity thresholds.
 
 This cascade dramatically reduces the search space while preserving sensitivity comparable to BLAST.
+
+## Tool Catalog
+
+| Tool | Input | Target | Use Case |
+|------|-------|--------|----------|
+| `mmseqs-search-proteins` | Protein sequences or FASTA | Protein database or FASTA | Fast protein-vs-database similarity search |
+| `mmseqs-search-genomes` | Nucleotide sequences or FASTA | Nucleotide sequences or FASTA | Genome-to-genome nucleotide comparisons |
+| `mmseqs-clustering` | Sequences or FASTA | N/A | Group similar sequences and extract representatives |
 
 ## How It Works
 
@@ -78,9 +86,7 @@ RAM: Depends on database size; uses memory-mapped files for efficiency.
 
 Storage: Databases are typically 2-3x the size of the input FASTA.
 
-## Important Parameters
-
-### Input (What You're Searching)
+## Input Parameters
 
 | Tool | Parameter | Type | Description |
 |------|-----------|------|-------------|
@@ -90,7 +96,7 @@ Storage: Databases are typically 2-3x the size of the input FASTA.
 | `mmseqs-search-genomes` | `target_genomes` | `str` or `List[str]` | Path to FASTA file OR list of nucleotide sequences. |
 | `mmseqs-clustering` | `input_sequences` | `str` or `List[str]` | Path to FASTA file OR list of sequences to cluster. |
 
-### Configuration (How to Search)
+## Configuration
 
 **Protein Search (`mmseqs-search-proteins`)**
 | Parameter | Type | Default | Description |
@@ -116,6 +122,28 @@ Storage: Databases are typically 2-3x the size of the input FASTA.
 | `output_dir` | `str` | *Required* | Directory for clustering results. |
 | `min_seq_id` | `float` | `0.60` | Minimum sequence identity threshold (0.0-1.0). |
 | `extract_representatives` | `bool` | `True` | If True, extract representative sequences to FASTA. |
+
+### Parameter Guides
+
+**Sensitivity tuning:**
+| Sensitivity | Speed | Use Case |
+|-------------|-------|----------|
+| `1.0` | Fastest | Near-identical matches only |
+| `4.0` | Default | Good balance for most protein searches |
+| `7.5` | Slowest | Maximum sensitivity, genome searches, distant homologs |
+
+**Clustering identity thresholds:**
+| min_seq_id | Description | Use Case |
+|------------|-------------|----------|
+| `0.95` | Near-identical | Removing duplicates, sequencing errors, isoforms |
+| `0.60` | Same family | Grouping proteins into functional families (default) |
+| `0.30` | Remote homologs | Very loose clustering for distant relationships |
+
+### Sweep Priorities
+
+1. `sensitivity` — Most impactful for search quality; higher values find more distant hits at the cost of speed
+2. `min_seq_id` (clustering) — Directly controls cluster granularity
+3. `only_top_hits` — Set to `False` when multiple hits per query are needed for downstream analysis
 
 ## Output Specification
 
@@ -145,7 +173,7 @@ When `extract_representatives=True`, the DataFrame instead contains:
 | `id_prompt` | Representative sequence ID |
 | `sequence` | Amino acid/nucleotide sequence |
 
-## Thresholds & Decision Boundaries
+## Interpreting Results
 
 **For Search Results:**
 - **High Confidence:** `evalue &lt; 1e-50`, `pident > 90%`
@@ -157,44 +185,8 @@ When `extract_representatives=True`, the DataFrame instead contains:
 - **Same protein family:** `min_seq_id = 0.50-0.70`
 - **Remote homologs:** `min_seq_id = 0.30` (loose clustering)
 
-## Best Practices
-
-**Parameter Tuning:**
-
-1. `sensitivity`:
-   - Default `4.0` is good for most protein searches.
-   - Use `7.5` for genome searches or finding distant homologs.
-   - Use `1.0` for very fast, low-sensitivity searches (e.g., near-identical matches only).
-
-2. `min_seq_id` (clustering):
-   - `0.95`: Removes near-duplicates (sequencing errors, isoforms).
-   - `0.60`: Groups proteins into functional families.
-   - `0.30`: Very loose clustering for remote homolog detection.
-
-3. `threads`:
-   - Set to the number of available CPU cores for best performance.
-   - MMseqs2 scales nearly linearly with thread count.
-
-**Common Mistakes:**
-
-1. **Database vs FASTA Confusion:** MMseqs2 can accept either a FASTA file or a pre-built database. For repeated searches, pre-build the database once with `mmseqs createdb` for efficiency.
-
-2. **Memory Issues:** If you run out of memory, increase the `split` parameter (e.g., `split=1` or `split=2`) to process the database in smaller chunks.
-
-3. **Mismatched Sequence Types:** Don't search protein sequences against a nucleotide database or vice versa. Use `search_type=3` for nucleotide searches.
-
-4. **Ignoring `only_top_hits`:** By default, only the best hit per query is returned. Set `only_top_hits=False` if you need all hits above threshold.
-
-5. **Clustering Interpretation:** The representative sequence is not necessarily the "best" sequence—it's the first sequence that covered the cluster during greedy set-cover.
-
-## References
-
-**Primary Citation:**
-- Steinegger, M. & Söding, J. (2017). "MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets." *Nature Biotechnology* 35, 1026–1028. [DOI: 10.1038/nbt.3988](https://doi.org/10.1038/nbt.3988)
-
-**Documentation:**
-- GitHub: [https://github.com/soedinglab/MMseqs2](https://github.com/soedinglab/MMseqs2)
-- User Guide: [https://mmseqs.com/latest/userguide.pdf](https://mmseqs.com/latest/userguide.pdf)
+**Clustering representative selection:**
+The representative sequence is not necessarily the "best" sequence—it's the first sequence that covered the cluster during greedy set-cover. Do not assume it is the longest or highest-quality member.
 
 ## Quick Start Examples
 
@@ -287,9 +279,51 @@ print(f"Largest cluster: {cluster_sizes.max()} sequences")
 print(f"Average cluster size: {cluster_sizes.mean():.1f}")
 ```
 
+## Best Practices & Gotchas
+
+**Parameter Tuning:**
+
+1. `sensitivity`:
+   - Default `4.0` is good for most protein searches.
+   - Use `7.5` for genome searches or finding distant homologs.
+   - Use `1.0` for very fast, low-sensitivity searches (e.g., near-identical matches only).
+
+2. `min_seq_id` (clustering):
+   - `0.95`: Removes near-duplicates (sequencing errors, isoforms).
+   - `0.60`: Groups proteins into functional families.
+   - `0.30`: Very loose clustering for remote homolog detection.
+
+3. `threads`:
+   - Set to the number of available CPU cores for best performance.
+   - MMseqs2 scales nearly linearly with thread count.
+
+**Common Mistakes:**
+
+1. **Database vs FASTA Confusion:** MMseqs2 can accept either a FASTA file or a pre-built database. For repeated searches, pre-build the database once with `mmseqs createdb` for efficiency.
+
+2. **Memory Issues:** If you run out of memory, increase the `split` parameter (e.g., `split=1` or `split=2`) to process the database in smaller chunks.
+
+3. **Mismatched Sequence Types:** Don't search protein sequences against a nucleotide database or vice versa. Use `search_type=3` for nucleotide searches.
+
+4. **Ignoring `only_top_hits`:** By default, only the best hit per query is returned. Set `only_top_hits=False` if you need all hits above threshold.
+
+5. **Clustering Interpretation:** The representative sequence is not necessarily the "best" sequence—it's the first sequence that covered the cluster during greedy set-cover.
+
+## References
+
+**Primary Citation:**
+- Steinegger, M. & Söding, J. (2017). "MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets." *Nature Biotechnology* 35, 1026–1028. [DOI: 10.1038/nbt.3988](https://doi.org/10.1038/nbt.3988)
+
+**Documentation:**
+- GitHub: [https://github.com/soedinglab/MMseqs2](https://github.com/soedinglab/MMseqs2)
+- User Guide: [https://mmseqs.com/latest/userguide.pdf](https://mmseqs.com/latest/userguide.pdf)
+
 ## Related Tools
 
-- `online-blast` / `local-blast`: Use for smaller-scale searches or when you need NCBI database access.
-- `hmmer`: Use for profile-based searches when detecting remote homologs (&lt;30% identity).
-- `diamond`: Another fast alternative to BLAST, particularly for translated searches (blastx/tblastn).
-- `cd-hit`: Alternative clustering tool with different algorithmic approach.
+**Tools often used together:**
+- `blast-online-search` / `blast-local-search`: Use BLAST for initial small-scale exploration, then switch to MMseqs2 for large-scale analysis.
+- `pyhmmer-hmmsearch` / `pyhmmer-hmmscan`: Use PyHMMER for profile-based follow-up on MMseqs2 hits requiring deeper homology analysis.
+
+**Alternative tools:**
+- `blast-online-search` / `blast-local-search`: Use for smaller-scale searches or when you need NCBI database access.
+- `pyhmmer-hmmsearch`: Use for profile-based searches when detecting remote homologs (&lt;30% identity).

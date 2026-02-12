@@ -6,25 +6,8 @@ description: "ESMFold is a fast protein structure prediction model from Meta AI 
 # ESMFold
 
 ## Overview
+
 ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a language model approach, without requiring multiple sequence alignments.
-
-## Biological Background
-
-**What does this tool measure/predict?**
-ESMFold predicts the 3D atomic coordinates of protein structures from amino acid sequences. It outputs full-atom protein structures with confidence scores for each residue (pLDDT) and overall structure quality metrics (pTM score).
-
-**Why is this important?**
-Protein structure determines function. Knowing whether a designed protein will fold into a stable, well-defined 3D structure is critical for:
-- Validating that designed proteins will actually fold (not be disordered)
-- Predicting whether domains will adopt intended conformations
-- Identifying flexible vs rigid regions
-- Evaluating oligomeric assembly states (dimers, trimers, etc.)
-- Screening out poorly-folded or aggregation-prone designs
-
-**Scientific foundation:**
-ESMFold uses the ESM-2 protein language model to generate structure-aware embeddings, which are then processed through a structure prediction head based on AlphaFold2's architecture. The model learns protein structure from sequence patterns alone, without needing evolutionary information (MSAs). Confidence metrics include:
-- **pLDDT** (predicted Local Distance Difference Test): Per-residue confidence score (0-100), where >90 indicates high confidence, 70-90 is moderate, and &lt;70 suggests disorder or low confidence.
-- **pTM** (predicted Template Modeling score): Overall structure accuracy (0-1), where >0.8 indicates high confidence in the global fold.
 
 ## When to Use This Tool
 
@@ -47,6 +30,31 @@ ESMFold uses the ESM-2 protein language model to generate structure-aware embedd
 - **ESMFold vs Boltz2:** Boltz2 handles heteromeric complexes and small molecules; ESMFold is better for homomeric oligomers and pure protein sequences.
 - **ESMFold vs RosettaFold:** Similar speed/accuracy tradeoff; ESMFold is more widely adopted and easier to deploy.
 
+## Biological Background
+
+**What does this tool measure/predict?**
+ESMFold predicts the 3D atomic coordinates of protein structures from amino acid sequences. It outputs full-atom protein structures with confidence scores for each residue (pLDDT) and overall structure quality metrics (pTM score).
+
+**Why is this important?**
+Protein structure determines function. Knowing whether a designed protein will fold into a stable, well-defined 3D structure is critical for:
+- Validating that designed proteins will actually fold (not be disordered)
+- Predicting whether domains will adopt intended conformations
+- Identifying flexible vs rigid regions
+- Evaluating oligomeric assembly states (dimers, trimers, etc.)
+- Screening out poorly-folded or aggregation-prone designs
+
+**Scientific foundation:**
+ESMFold uses the ESM-2 protein language model to generate structure-aware embeddings, which are then processed through a structure prediction head based on AlphaFold2's architecture. The model learns protein structure from sequence patterns alone, without needing evolutionary information (MSAs). Confidence metrics include:
+- **pLDDT** (predicted Local Distance Difference Test): Per-residue confidence score (0-100), where >90 indicates high confidence, 70-90 is moderate, and &lt;70 suggests disorder or low confidence.
+- **pTM** (predicted Template Modeling score): Overall structure accuracy (0-1), where >0.8 indicates high confidence in the global fold.
+
+## Execution Modes
+
+ESMFold requires GPU with >=16GB VRAM (24GB recommended for longer sequences). It supports the cloud runtime cloud deployment for high-throughput or when local GPU is unavailable.
+
+- **Local execution**: Runs on local GPU. Best for single predictions and development. Runtime ~5-30 seconds per monomer (100-400 residues) on A100 GPU; scales with sequence length squared.
+- **the cloud runtime execution**: Deploys to cloud GPUs via the cloud runtime. Best for high-throughput batch predictions.
+
 ## How It Works
 
 **Method overview:**
@@ -68,29 +76,30 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 - **Single conformation:** Predicts one structure, not conformational ensembles or dynamic regions
 - **MSA-free tradeoff:** Slightly lower accuracy than AlphaFold2 for well-characterized protein families
 
-**Computational requirements:**
-- **Hardware:** Requires GPU with ≥16GB VRAM (24GB recommended for longer sequences)
-- **Runtime:** ~5-30 seconds per monomer (100-400 residues) on A100 GPU; scales with sequence length²
-- **Scalability:** Can batch multiple predictions on a single GPU; use the cloud runtime deployment for high-throughput
+## Input Parameters
 
-## Important Parameters (for param sweeps)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `complexes` | `List[StructurePredictionComplex]` | *required* | List of protein complexes to predict; each complex can have multiple chains for homomers |
+| `n_replications` | `int` | `1` | Number of times to replicate each chain (2=dimer, 3=trimer, etc.); total residues must be <=2,400 |
+| `residue_idx_offset` | `int` | `512` | Offset for residue indexing; controls chain break tokens in model; rarely needs adjustment |
+| `chain_linker` | `int` | `25` | Number of residues between chains; affects inter-chain geometry |
 
-**Input parameters:**
+## Configuration
 
-| Parameter | Type | Default | Sweep Range | Description |
-|-----------|------|---------|-------------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | N/A | List of protein complexes to predict; each complex can have multiple chains for homomers |
-| `n_replications` | `int` | `1` | `1 - 6` | Number of times to replicate each chain (2=dimer, 3=trimer, etc.); total residues must be ≤2,400 |
-| `residue_idx_offset` | `int` | `512` | N/A | Offset for residue indexing; controls chain break tokens in model; rarely needs adjustment |
-| `chain_linker` | `int` | `25` | `10 - 100` | Number of residues between chains; affects inter-chain geometry |
+### Parameter Guides
 
-**Parameters to prioritize for sweeps:**
+| Parameter | Sweep Range | Notes |
+|-----------|-------------|-------|
+| `n_replications` | `1 - 6` | Determines assembly state; GPU memory increases linearly |
+| `chain_linker` | `10 - 100` | Affects packing geometry for multi-chain predictions |
+
+### Sweep Priorities
+
 1. **`n_replications`**: Most impactful for oligomer design; determines assembly state. Sweep 1-4 to find optimal oligomeric state.
 2. **`chain_linker`**: Affects packing geometry for multi-chain predictions; try 15, 25, 50 if default gives poor inter-chain contacts.
 
----
-
-**Output specification:**
+## Output Specification
 
 ```python python icon="python"
 # Return type: ESMFoldOutput
@@ -117,11 +126,53 @@ PredictedStructure(
 | `ptm` | `float` | `0.0 - 1.0` | Global fold confidence; >0.8 = reliable topology, &lt;0.5 = fold likely incorrect |
 | `per_residue_plddt` | `List[float]` | `0.0 - 1.0` each | Identifies flexible/disordered regions vs well-folded domains |
 
+## Interpreting Results
+
 **Thresholds & decision boundaries:**
 - **Excellent:** `avg_plddt > 0.9` — High confidence, well-folded structure suitable for most applications
-- **Acceptable:** `0.7 < avg_plddt ≤ 0.9` — Moderate confidence; some flexible or uncertain regions; review per-residue pLDDT
-- **Poor:** `avg_plddt ≤ 0.7` — Low confidence; likely disordered or poorly modeled; consider redesigning sequence
+- **Acceptable:** `0.7 < avg_plddt <= 0.9` — Moderate confidence; some flexible or uncertain regions; review per-residue pLDDT
+- **Poor:** `avg_plddt <= 0.7` — Low confidence; likely disordered or poorly modeled; consider redesigning sequence
 
+**Tips for interpreting output:**
+- Average pLDDT can hide poorly-folded regions. Always check `per_residue_plddt` to identify problem areas.
+- Low pLDDT regions may be biologically relevant (e.g., flexible linkers, disordered regions). Context matters.
+- Filter by `avg_plddt > 0.8` as a first-pass quality filter during optimization
+- Visualize structures (PyMOL, ChimeraX) colored by pLDDT to identify flexible regions
+- For oligomers, check whether inter-chain contacts look reasonable; ESMFold may not accurately predict interfaces
+
+## Quick Start Examples
+
+```python python icon="python"
+from bio_programming_tools.tools.structure_prediction.esmfold import (
+    run_esmfold_prediction,
+    ESMFoldPredictionInput,
+    ESMFoldPredictionConfig,
+)
+from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+    StructurePredictionComplex,
+    ProteinChain,
+)
+
+# Single protein prediction
+inputs = ESMFoldPredictionInput(
+    complexes=[
+        StructurePredictionComplex(
+            protein_chains=[ProteinChain(sequence="MKTVRQERLKSIVRI...")],
+        )
+    ]
+)
+config = ESMFoldPredictionConfig()
+result = run_esmfold_prediction(inputs, config)
+
+# Check results
+for structure in result.structures:
+    print(f"avg_pLDDT: {structure.avg_plddt:.3f}")
+    print(f"pTM: {structure.ptm:.3f}")
+
+# Dimer prediction
+config_dimer = ESMFoldPredictionConfig(n_replications=2)
+result_dimer = run_esmfold_prediction(inputs, config_dimer)
+```
 
 ## Best Practices & Gotchas
 
@@ -134,15 +185,10 @@ PredictedStructure(
   - High values (50-100): For loosely associated or distant chains
 
 **Common mistakes:**
-1. **Exceeding 2,400 residue limit:** Always check `n_replications × sequence_length ≤ 2400`. For a 600-residue protein, max n_replications = 4.
+1. **Exceeding 2,400 residue limit:** Always check `n_replications * sequence_length <= 2400`. For a 600-residue protein, max n_replications = 4.
 2. **Interpreting low pLDDT as "bad" sequences:** Low pLDDT regions may be biologically relevant (e.g., flexible linkers, disordered regions). Context matters.
 3. **Using ESMFold for heteromeric complexes:** ESMFold replicates the same sequence. For A-B dimers (different sequences), use Boltz2 or AlphaFold-Multimer.
 4. **Ignoring per-residue pLDDT:** Average pLDDT can hide poorly-folded regions. Always check `per_residue_plddt` to identify problem areas.
-
-**Tips for optimal results:**
-- **Filter by avg_plddt > 0.8** as a first-pass quality filter during optimization
-- **Visualize structures** (PyMOL, ChimeraX) colored by pLDDT to identify flexible regions
-- **Pre-filter sequences** with simple constraints (GC content, homopolymers) before running expensive structure predictions
 
 **Edge cases to watch for:**
 - **Very short sequences (&lt;30 aa):** May have low pLDDT due to lack of structural constraints; this is often biologically realistic (e.g., peptides are flexible)
@@ -170,6 +216,6 @@ PredictedStructure(
 - **`esm3`**: Generate protein sequences likely to fold well, then validate with ESMFold
 - **`esm2-embedding`**: Get sequence embeddings for similarity analysis; ESMFold uses ESM-2 internally
 
-**Alternative tools (similar function):**
+**Alternative tools:**
 - **`alphafold2`**: Slower but more accurate; use for final validation after ESMFold screening
 - **`boltz2`**: Handles heteromeric complexes and small molecules; use when you need protein-protein or protein-ligand interactions

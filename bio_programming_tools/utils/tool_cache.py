@@ -391,7 +391,7 @@ def tool_cache_iterable(
 
     Example:
         @tool(
-            key="esmfold",
+            key="esmfold-prediction",
             label="ESMFold Structure Prediction",
             input=ESMFoldInput,
             config=ESMFoldConfig,
@@ -403,7 +403,7 @@ def tool_cache_iterable(
         @tool_cache_iterable(
             input_iterable_field="complexes",
             output_iterable_field="structures",
-            tool_name="esmfold"
+            tool_name="esmfold-prediction"
         )
         def run_esmfold(
             inputs: ESMFoldInput,

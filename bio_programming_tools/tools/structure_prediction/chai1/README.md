@@ -1,7 +1,30 @@
 # Chai1
 
 ## Overview
+
 Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a diffusion-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy.
+
+## When to Use This Tool
+
+**Primary use cases:**
+- **Protein-ligand docking:** Predict how small molecules bind to protein targets without known experimental structures
+- **Drug discovery screening:** Rapidly evaluate binding poses for compound libraries
+- **Glycoprotein modeling:** Predict structures of proteins with attached glycan modifications
+- **Binding site analysis:** Understand ligand-induced conformational changes in proteins
+- **Lead optimization:** Evaluate how chemical modifications affect binding geometry
+
+**When NOT to use this tool:**
+- **DNA/RNA complexes:** Chai1 does not support nucleic acids — use Boltz2 instead
+- **Very large complexes (>2,048 residues):** Hard limit on total sequence length; split into domains or use AlphaFold2
+- **High-throughput pure protein screening:** ESMFold is faster for protein-only predictions without ligands
+- **Membrane protein in membrane context:** Does not model lipid bilayers
+- **Covalent inhibitors:** May not accurately model covalent bonds between ligand and protein
+
+**Comparison with alternatives:**
+- **Chai1 vs Boltz2:** Chai1 is optimized for protein-ligand-glycan systems; Boltz2 supports DNA/RNA but may be slower. Choose based on molecular types.
+- **Chai1 vs ESMFold:** ESMFold is 10-60x faster but protein-only. Use Chai1 when you need ligand binding predictions.
+- **Chai1 vs AutoDock/Glide:** Chai1 predicts binding poses without requiring a known protein structure; traditional docking requires experimental structures.
+- **Chai1 vs AlphaFold3:** Similar capabilities; Chai1 is open-source and locally deployable.
 
 ## Biological Background
 
@@ -27,27 +50,12 @@ Confidence metrics include:
 - **pTM** (predicted Template Modeling score): Overall structure accuracy (0-1), where >0.8 indicates high confidence in the global fold.
 - **ipTM** (interface pTM): Confidence in inter-chain interfaces (0-1), critical for multi-chain complexes.
 
-## When to Use This Tool
+## Execution Modes
 
-**Primary use cases:**
-- **Protein-ligand docking:** Predict how small molecules bind to protein targets without known experimental structures
-- **Drug discovery screening:** Rapidly evaluate binding poses for compound libraries
-- **Glycoprotein modeling:** Predict structures of proteins with attached glycan modifications
-- **Binding site analysis:** Understand ligand-induced conformational changes in proteins
-- **Lead optimization:** Evaluate how chemical modifications affect binding geometry
+Chai1 requires GPU with >=40GB VRAM (H100 recommended; can run on A100-80GB). It supports the cloud runtime cloud deployment for high-throughput or when local GPU is unavailable.
 
-**When NOT to use this tool:**
-- **DNA/RNA complexes:** Chai1 does not support nucleic acids—use Boltz2 instead
-- **Very large complexes (>2,048 residues):** Hard limit on total sequence length; split into domains or use AlphaFold2
-- **High-throughput pure protein screening:** ESMFold is faster for protein-only predictions without ligands
-- **Membrane protein in membrane context:** Does not model lipid bilayers
-- **Covalent inhibitors:** May not accurately model covalent bonds between ligand and protein
-
-**Comparison with alternatives:**
-- **Chai1 vs Boltz2:** Chai1 is optimized for protein-ligand-glycan systems; Boltz2 supports DNA/RNA but may be slower. Choose based on molecular types.
-- **Chai1 vs ESMFold:** ESMFold is 10-60x faster but protein-only. Use Chai1 when you need ligand binding predictions.
-- **Chai1 vs AutoDock/Glide:** Chai1 predicts binding poses without requiring a known protein structure; traditional docking requires experimental structures.
-- **Chai1 vs AlphaFold3:** Similar capabilities; Chai1 is open-source and locally deployable.
+- **Local execution**: Runs on local GPU. Best for single predictions and development. Runtime ~30-120 seconds per complex on H100.
+- **the cloud runtime execution**: Deploys to cloud GPUs via the cloud runtime. Best for high-throughput batch predictions. Requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
 
 ## How It Works
 
@@ -72,36 +80,40 @@ Chai1 employs a multi-stage architecture:
 - **No explicit water:** Does not model structural water molecules
 - **Glycan complexity:** Limited to standard glycan building blocks
 
-**Computational requirements:**
-- **Hardware:** Requires GPU with ≥40GB VRAM (H100 recommended); can run on A100-80GB
-- **Runtime:** ~30-120 seconds per complex depending on size and parameters on H100 GPU
-- **Scalability:** Processes complexes sequentially; use the cloud runtime deployment for high-throughput
+## Input Parameters
 
-## Important Parameters (for param sweeps)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `complexes` | `List[StructurePredictionComplex]` | *required* | List of complexes; each can have protein chains, ligands, and/or glycans |
+| `use_esm_embeddings` | `bool` | `True` | Use ESM-2 embeddings for improved protein representations |
+| `use_msa` | `bool` | `True` | Whether to generate and use MSAs for protein chains using ColabFold search |
+| `colabfold_search_config.search_mode` | `str` | `"remote"` | MSA search mode; `"remote"` uses ColabFold API, `"local"` uses local databases |
+| `colabfold_search_config.use_metagenomic` | `bool` | `False` | Include metagenomic sequences in MSA search for improved coverage |
+| `num_trunk_recycles` | `int` | `3` | Iterative refinement passes; more = better quality but slower |
+| `num_diffn_timesteps` | `int` | `200` | Denoising steps; more = finer structures but slower |
+| `num_diffn_samples` | `int` | `1` | Independent structure samples; best is returned |
+| `num_trunk_samples` | `int` | `1` | Trunk forward passes per diffusion sample |
+| `seed` | `int` | `42` | Random seed for reproducibility |
 
-**Input parameters:**
+## Configuration
 
-| Parameter | Type | Default | Sweep Range | Description |
-|-----------|------|---------|-------------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | N/A | List of complexes; each can have protein chains, ligands, and/or glycans |
-| `use_esm_embeddings` | `bool` | `True` | `True, False` | Use ESM-2 embeddings for improved protein representations |
-| `use_msa` | `bool` | `True` | `True, False` | Whether to generate and use MSAs for protein chains using ColabFold search |
-| `colabfold_search_config.search_mode` | `str` | `"remote"` | `"remote", "local"` | MSA search mode; `"remote"` uses ColabFold API, `"local"` uses local databases |
-| `colabfold_search_config.use_metagenomic` | `bool` | `False` | `True, False` | Include metagenomic sequences in MSA search for improved coverage |
-| `num_trunk_recycles` | `int` | `3` | `1 - 10` | Iterative refinement passes; more = better quality but slower |
-| `num_diffn_timesteps` | `int` | `200` | `100 - 500` | Denoising steps; more = finer structures but slower |
-| `num_diffn_samples` | `int` | `1` | `1 - 5` | Independent structure samples; best is returned |
-| `num_trunk_samples` | `int` | `1` | `1 - 3` | Trunk forward passes per diffusion sample |
-| `seed` | `int` | `42` | N/A | Random seed for reproducibility |
+### Parameter Guides
 
-**Parameters to prioritize for sweeps:**
+| Parameter | Sweep Range | Notes |
+|-----------|-------------|-------|
+| `use_esm_embeddings` | `True, False` | Always use `True` unless debugging |
+| `num_trunk_recycles` | `1 - 10` | Higher = more refined but slower |
+| `num_diffn_timesteps` | `100 - 500` | Higher = finer structures; 200 is good default |
+| `num_diffn_samples` | `1 - 5` | More samples explore binding pose diversity |
+| `num_trunk_samples` | `1 - 3` | Multiple trunk passes per diffusion sample |
+
+### Sweep Priorities
+
 1. **`use_esm_embeddings`**: Most impactful for protein structure quality. Always use `True` unless debugging.
 2. **`num_trunk_recycles`**: Affects structure refinement quality. Try 3, 5, 10 to balance speed vs accuracy.
 3. **`num_diffn_timesteps`**: For high-stakes predictions, increase to 400-500. Use 100-200 for rapid screening.
 
----
-
-**Output specification:**
+## Output Specification
 
 ```python
 # Return type: Chai1Output
@@ -127,10 +139,55 @@ metrics = {
 | `iptm` | `float` | `0.0 - 1.0` | Interface confidence; >0.8 = reliable interactions between chains |
 | `confidence_score` | `float` | `0.0 - 1.0` | Aggregate ranking score combining multiple metrics |
 
+## Interpreting Results
+
 **Thresholds & decision boundaries:**
 - **Excellent:** `avg_plddt > 90` and `iptm > 0.8` — High confidence; structure suitable for detailed analysis
-- **Acceptable:** `70 < avg_plddt ≤ 90` and `iptm > 0.6` — Moderate confidence; verify key interactions manually
-- **Poor:** `avg_plddt ≤ 70` or `iptm ≤ 0.6` — Low confidence; binding pose may be incorrect; consider redesigning
+- **Acceptable:** `70 < avg_plddt <= 90` and `iptm > 0.6` — Moderate confidence; verify key interactions manually
+- **Poor:** `avg_plddt <= 70` or `iptm <= 0.6` — Low confidence; binding pose may be incorrect; consider redesigning
+
+**Tips for interpreting output:**
+- For protein-ligand binding, `iptm` is more informative than `avg_plddt` about binding confidence
+- Filter by `iptm > 0.6` as a first-pass quality filter for binding predictions
+- Visualize binding poses (PyMOL, ChimeraX) colored by pLDDT to identify uncertain regions
+- Very small ligands (<10 atoms) may have high uncertainty; binding pose might be less reliable
+- Flexible ligands: predictions represent one conformation; actual binding may involve conformational sampling
+
+## Quick Start Examples
+
+```python
+from bio_programming_tools.tools.structure_prediction.chai1 import (
+    run_chai1_prediction,
+    Chai1PredictionInput,
+    Chai1PredictionConfig,
+)
+from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+    StructurePredictionComplex,
+    ProteinChain,
+    LigandChain,
+)
+
+# Protein-ligand complex prediction
+inputs = Chai1PredictionInput(
+    complexes=[
+        StructurePredictionComplex(
+            protein_chains=[ProteinChain(sequence="MKTVRQ...")],
+            ligand_chains=[LigandChain(sequence="CC(=O)Oc1ccccc1C(O)=O")],  # Aspirin SMILES
+        )
+    ]
+)
+config = Chai1PredictionConfig(
+    use_esm_embeddings=True,
+    num_trunk_recycles=3,
+    num_diffn_timesteps=200,
+)
+result = run_chai1_prediction(inputs, config)
+
+# Check results
+for structure in result.structures:
+    print(f"avg_pLDDT: {structure.metrics['avg_plddt']:.1f}")
+    print(f"ipTM: {structure.metrics.get('iptm', 'N/A')}")
+```
 
 ## Best Practices & Gotchas
 
@@ -152,13 +209,6 @@ metrics = {
 4. **Using default samples for critical predictions:** Increase `num_diffn_samples` to 3-5 for important binding pose predictions.
 5. **Wrong SMILES format for ligands:** Ensure ligand sequences are valid SMILES strings, not amino acid sequences.
 6. **Using local mode on the cloud runtime:** the cloud runtime execution requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
-
-**Tips for optimal results:**
-- **Always use ESM embeddings** (`use_esm_embeddings=True`) for best protein representation
-- **Filter by iptm > 0.6** as a first-pass quality filter for binding predictions
-- **Visualize binding poses** (PyMOL, ChimeraX) colored by pLDDT to identify uncertain regions
-- **Pre-validate SMILES** strings before submission to avoid parsing errors
-- **Trim large proteins** to binding site region (±15Å from expected binding location) if approaching 2,048 limit
 
 **Edge cases to watch for:**
 - **Very small ligands (<10 atoms):** May have high uncertainty; binding pose might be less reliable
@@ -187,7 +237,7 @@ metrics = {
 - **`esm2-embedding`**: Generate embeddings for sequence analysis; Chai1 uses ESM-2 internally for protein representation
 - **`esmfold`**: Quick protein-only structure validation before running expensive protein-ligand predictions
 
-**Alternative tools (similar function):**
+**Alternative tools:**
 - **`boltz2-prediction`**: Supports DNA/RNA complexes that Chai1 cannot handle; use for nucleic acid interactions
 - **`esmfold`**: Much faster for protein-only structures; use when no ligands/glycans needed
 - **`alphafold2`**: Higher accuracy for protein-only; use for final validation of protein folds

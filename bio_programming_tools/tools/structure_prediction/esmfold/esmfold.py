@@ -190,7 +190,7 @@ class ESMFoldConfig(StructurePredictionConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="esmfold",
+    key="esmfold-prediction",
     label="ESMFold Structure Prediction",
     input=ESMFoldInput,
     config=ESMFoldConfig,
@@ -200,7 +200,7 @@ class ESMFoldConfig(StructurePredictionConfig):
 @tool_cache_iterable(
     input_iterable_field="complexes",
     output_iterable_field="structures",
-    tool_name="esmfold",
+    tool_name="esmfold-prediction",
 )
 def run_esmfold(
     inputs: ESMFoldInput, config: ESMFoldConfig

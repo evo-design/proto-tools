@@ -186,7 +186,7 @@ class AlphaFold3Config(StructurePredictionConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="alphafold3",
+    key="alphafold3-prediction",
     label="AlphaFold3 Structure Prediction",
     input=AlphaFold3Input,
     config=AlphaFold3Config,
@@ -196,7 +196,7 @@ class AlphaFold3Config(StructurePredictionConfig):
 @tool_cache_iterable(
     input_iterable_field="complexes",
     output_iterable_field="structures",
-    tool_name="alphafold3",
+    tool_name="alphafold3-prediction",
 )
 def run_alphafold3(
     inputs: AlphaFold3Input, config: AlphaFold3Config
