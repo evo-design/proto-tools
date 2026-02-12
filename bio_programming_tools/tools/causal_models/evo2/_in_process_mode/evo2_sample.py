@@ -7,8 +7,8 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
 
 from .evo2_cache import get_cached_evo2_model
@@ -362,12 +362,12 @@ class Evo2SampleConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 @tool(
-    key="evo2-sample",
-    label="Evo2 Sampling",
+    key="evo2-sample-in-process",
+    label="Evo2 Sampling (In-Process)",
     input=Evo2SampleInput,
     config=Evo2SampleConfig,
     output=Evo2SampleOutput,
-    description="Sample DNA sequences using Evo2 language model",
+    description="Sample DNA sequences using Evo2 language model (in-process mode)",
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput, config: Evo2SampleConfig
