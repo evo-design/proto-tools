@@ -4,8 +4,14 @@
 [![Verify Documentation autogeneration synced](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_check.yml)
 [![Validate Docs](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs.yml)
 
-This repo contains the tool layer of the [`bio-programming`](https://github.com/evo-design/bio-programming/tree/main) project.
+## Related Repositories
 
+### Backend
+* [`bio-programming`](https://github.com/evo-design/bio-programming) – The primary backend repository (includes this repo as a submodule).
+
+### Frontend
+* [`bio-programming-tools-ui`](https://github.com/evo-design/bio-programming-tools-ui) – Mock UI specifically designed for demonstrating and testing these tools.
+* [`bio-programming-lang`](https://github.com/evo-design/bio-programming-lang) – The dedicated frontend interface for the biological programming language.
 
 ## Installation
 
