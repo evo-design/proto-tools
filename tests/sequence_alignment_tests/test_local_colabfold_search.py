@@ -423,6 +423,7 @@ from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_s
 )
 class TestColabfoldSearchExecutionFullDatabase:
 
+    @pytest.mark.only_chimera
     @pytest.mark.uses_gpu
     @pytest.mark.slow
     def test_gpu_acceleration(self):

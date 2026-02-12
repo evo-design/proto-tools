@@ -120,7 +120,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 - Python >=3.12, Pydantic >=2.0
 - Black/isort line length: 88
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)
-- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`
+- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`
 - Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
 
 ## Using bio_tools with Claude Code

@@ -22,6 +22,11 @@ import pytest
 from bio_programming_tools import setup_logging
 
 
+def is_on_chimera() -> bool:
+    """Check if running on the Chimera (arc-slurm) cluster."""
+    return os.environ.get("SLURM_CLUSTER_NAME") == "arc-slurm"
+
+
 def pytest_addoption(parser):
     """Add custom command line options to pytest."""
     parser.addoption(
@@ -200,6 +205,15 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+    # Skip only_chimera tests when not on Chimera cluster
+    if not is_on_chimera():
+        skip_not_chimera = pytest.mark.skip(
+            reason="Test requires Chimera cluster (SLURM_CLUSTER_NAME != 'arc-slurm')"
+        )
+        for item in items:
+            if "only_chimera" in item.keywords:
+                item.add_marker(skip_not_chimera)
 
 
 @pytest.fixture(scope="session", autouse=True)

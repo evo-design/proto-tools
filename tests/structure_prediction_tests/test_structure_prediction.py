@@ -43,6 +43,9 @@ STRUCTURE_PREDICTORS = {
 
 FAST_PREDICTORS = ["esmfold"]
 
+# Predictors that require Chimera cluster (hardcoded paths to /large_storage/hielab/brk/)
+CHIMERA_ONLY_PREDICTORS = ["alphafold3"]
+
 
 # =============================================================================
 # File Loading
@@ -193,6 +196,13 @@ def _generate_test_params():
 
             # Generate MSA variants if supported
             if _supports_msa(config_class):
+                # Collect marks for this predictor
+                marks = []
+                if predictor_name not in FAST_PREDICTORS:
+                    marks.append(pytest.mark.slow)
+                if predictor_name in CHIMERA_ONLY_PREDICTORS:
+                    marks.append(pytest.mark.only_chimera)
+
                 # Add remote MSA variant
                 params.append(
                     pytest.param(
@@ -201,11 +211,16 @@ def _generate_test_params():
                         True,  # use_msa
                         "remote",  # msa_search_mode
                         id=f"{test_name}-{predictor_name}-with_msa-remote",
-                        marks=(
-                            pytest.mark.slow if predictor_name not in FAST_PREDICTORS else ()
-                        ),
+                        marks=tuple(marks) if marks else (),
                     )
                 )
+
+            # Collect marks for this predictor (without_msa variant)
+            marks = []
+            if predictor_name not in FAST_PREDICTORS:
+                marks.append(pytest.mark.slow)
+            if predictor_name in CHIMERA_ONLY_PREDICTORS:
+                marks.append(pytest.mark.only_chimera)
 
             # Add without_msa variant (all predictors support this)
             params.append(
@@ -215,7 +230,7 @@ def _generate_test_params():
                     False,  # use_msa
                     None,  # msa_search_mode
                     id=f"{test_name}-{predictor_name}-without_msa",
-                    marks=pytest.mark.slow if predictor_name not in FAST_PREDICTORS else (),
+                    marks=tuple(marks) if marks else (),
                 )
             )
 
