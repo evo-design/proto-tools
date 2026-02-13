@@ -72,20 +72,73 @@ def slugify(text: str) -> str:
     return text.lower().replace("_", "-").replace(" ", "-")
 
 
-def escape_mdx(text: str) -> str:
-    """Escape characters that have special meaning in MDX.
+# Compiled patterns for escape_mdx
+_FENCE_RE = re.compile(r"(```[^\n]*\n.*?```)", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"(`[^`]+`)")
+_LT_RE = re.compile(r"<")
 
-    In MDX, `<` followed by a letter or number is interpreted as a JSX tag.
-    We need to escape `<` using HTML entity `&lt;` when it appears in text
-    (not inside code blocks or JSX tags).
+# JSX/HTML tags that are legitimate in Mintlify MDX and must not be escaped.
+_LEGITIMATE_TAG_RE = re.compile(
+    r"</?"
+    r"(?:"
+    # Mintlify components (PascalCase)
+    r"ParamField|ResponseField|Tabs?|Accordion(?:Group)?"
+    r"|Card(?:Group)?|CodeGroup|Expandable|Frame|Icon"
+    r"|Note|Info|Warning|Tip|Check|Snippet|Steps?|Tooltip"
+    # Standard HTML tags that may appear in README content
+    r"|br|sub|sup|details|summary|img|a|p|div|span|em|strong"
+    r"|table|thead|tbody|tr|th|td|ul|ol|li|hr|blockquote|pre|code"
+    r")"
+    r"(?:\s|>|/>)"
+)
+
+
+def escape_mdx(text: str) -> str:
+    """Escape angle brackets that break MDX parsing.
+
+    MDX interprets ``<`` as a JSX tag opener. This escapes ``<`` to ``&lt;``
+    in prose while preserving fenced code blocks, inline code spans, and
+    legitimate JSX/HTML tags (e.g. ``<ParamField>``, ``<br>``).
     """
     if not text:
         return text
-    # Escape < followed by a digit (e.g., <70 becomes &lt;70)
-    text = re.sub(r'<(\d)', r'&lt;\1', text)
-    # Escape < followed by space then digit (e.g., < 50 becomes &lt; 50)
-    text = re.sub(r'< (\d)', r'&lt; \1', text)
-    return text
+
+    # Split on fenced code blocks. Odd-indexed segments are code blocks.
+    segments = _FENCE_RE.split(text)
+
+    result: list[str] = []
+    for i, segment in enumerate(segments):
+        if i % 2 == 1:
+            result.append(segment)
+        else:
+            result.append(_escape_prose_segment(segment))
+
+    return "".join(result)
+
+
+def _escape_prose_segment(segment: str) -> str:
+    """Escape ``<`` in a prose segment, preserving inline code spans."""
+    parts = _INLINE_CODE_RE.split(segment)
+
+    result: list[str] = []
+    for j, part in enumerate(parts):
+        if j % 2 == 1:
+            result.append(part)
+        else:
+            result.append(_escape_angle_brackets(part))
+
+    return "".join(result)
+
+
+def _escape_angle_brackets(text: str) -> str:
+    """Replace ``<`` with ``&lt;`` unless it starts a legitimate tag."""
+
+    def _replace(match: re.Match) -> str:
+        if _LEGITIMATE_TAG_RE.match(text, match.start()):
+            return "<"
+        return "&lt;"
+
+    return _LT_RE.sub(_replace, text)
 
 
 # Language to icon mapping for Mintlify code blocks

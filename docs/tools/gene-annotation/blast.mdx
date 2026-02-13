@@ -152,9 +152,9 @@ See `BlastSearchConfig` class for the full list of supported parameters.
 **E-value interpretation:**
 | E-value | Meaning |
 |---------|---------|
-| `&lt; 1e-50` | Near-certain homolog |
-| `&lt; 1e-5` | Strong evidence of homology |
-| `&lt; 0.01` | Possible homolog (inspect manually) |
+| `< 1e-50` | Near-certain homolog |
+| `< 1e-5` | Strong evidence of homology |
+| `< 0.01` | Possible homolog (inspect manually) |
 | `> 0.01` | Likely noise/chance |
 
 ### Sweep Priorities
@@ -188,8 +188,8 @@ See `BlastSearchConfig` class for the full list of supported parameters.
 
 ## Interpreting Results
 
-- **High Confidence:** `evalue &lt; 1e-50`, `pident > 90%`
-- **Homology Likely:** `evalue &lt; 1e-5`, `pident > 30%` (for proteins)
+- **High Confidence:** `evalue < 1e-50`, `pident > 90%`
+- **Homology Likely:** `evalue < 1e-5`, `pident > 30%` (for proteins)
 - **Noise/Chance:** `evalue > 0.01` (usually disregarded unless looking for very short motifs)
 
 **Key considerations:**
@@ -241,7 +241,7 @@ search_config = BlastSearchConfig(
 result = run_blast_search(search_input, search_config)
 
 # Filter for high-confidence hits
-good_hits = result.results_df[result.results_df['evalue'] &lt; 1e-10]
+good_hits = result.results_df[result.results_df['evalue'] < 1e-10]
 print(good_hits)
 ```
 

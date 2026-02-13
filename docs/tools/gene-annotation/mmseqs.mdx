@@ -176,8 +176,8 @@ When `extract_representatives=True`, the DataFrame instead contains:
 ## Interpreting Results
 
 **For Search Results:**
-- **High Confidence:** `evalue &lt; 1e-50`, `pident > 90%`
-- **Homology Likely:** `evalue &lt; 1e-5`, `pident > 30%` (for proteins)
+- **High Confidence:** `evalue < 1e-50`, `pident > 90%`
+- **Homology Likely:** `evalue < 1e-5`, `pident > 30%` (for proteins)
 - **Noise/Chance:** `evalue > 0.01` (usually disregarded)
 
 **For Clustering:**
@@ -230,7 +230,7 @@ config = MmseqsSearchProteinsConfig(results_dir="results")
 result = run_mmseqs_search_proteins(inputs, config)
 
 # Filter for high-confidence hits
-good_hits = result.results_df[result.results_df['evalue'] &lt; 1e-10]
+good_hits = result.results_df[result.results_df['evalue'] < 1e-10]
 print(good_hits)
 ```
 

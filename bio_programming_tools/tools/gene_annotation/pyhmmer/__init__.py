@@ -18,7 +18,7 @@ from .jackhmmer import (
 )
 from .nhmmer import PyNhmmerConfig, PyNhmmerInput, PyNhmmerOutput, run_pyhmmer_nhmmer
 from .phmmer import PyPhmmerConfig, PyPhmmerInput, PyPhmmerOutput, run_pyhmmer_phmmer
-from .shared_data_models import (  # noqa: F401 (internal use only, not in __all__)
+from .shared_data_models import (  # noqa: F401
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
@@ -50,4 +50,6 @@ __all__ = [
     "PyJackhmmerConfig",
     "PyJackhmmerOutput",
     "run_pyhmmer_jackhmmer",
+    # Shared data models
+    "PyHmmerConfig",
 ]

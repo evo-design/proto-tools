@@ -6,7 +6,15 @@ from .causal_models import (  # Evo1; Evo2; ProGen2
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
+    Evo2SampleConfig,
+    Evo2SampleInput,
+    Evo2SampleOutput,
+    ProGen2SampleConfig,
+    ProGen2SampleInput,
+    ProGen2SampleOutput,
     run_evo1_sample,
+    run_evo2_sample,
+    run_progen2_sample,
 )
 
 # Tool cache and I/O
@@ -16,7 +24,7 @@ from bio_programming_tools.utils.tool_cache import (
     get_cache_info,
     tool_cache,
 )
-from bio_programming_tools.utils.tool_io import BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 # Gene annotation tools
 from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCED
@@ -48,6 +56,7 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
     MmseqsSearchProteinsInput,
     MmseqsSearchProteinsOutput,
     MmseqsSequenceSearchResult,
+    PyHmmerConfig,
     PyHmmscanConfig,
     PyHmmscanInput,
     PyHmmscanOutput,
@@ -79,7 +88,9 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
 )
 
 # Inverse folding tools
-from .inverse_folding import (  # Shared Data Models (user-facing helpers only); ProteinMPNN; LigandMPNN
+from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN
+    InverseFoldingConfig,
+    InverseFoldingInput,
     InverseFoldingStructureInput,
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,
@@ -181,6 +192,31 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
     run_segmasker,
 )
 
+# Masked model tools
+from .masked_models import (  # ESM2; ESM3
+    ESM2SampleConfig,
+    ESM2SampleInput,
+    ESM2SampleOutput,
+    ESM3SampleConfig,
+    ESM3SampleInput,
+    ESM3SampleOutput,
+    run_esm2_sample,
+    run_esm3_sample,
+)
+
+# RNA splicing tools
+from .rna_splicing import (
+    CONTEXT_LENGTH,
+    TARGET_LENGTH,
+    TISSUE_INDEX_OFFSET,
+    SpliceTransformerConfig,
+    SpliceTransformerInput,
+    SpliceTransformerOutput,
+    SpliceTransformerTissue,
+    SpliceTransformerType,
+    run_splice_transformer,
+)
+
 # Structure design tools
 from .structure_design import (
     RFdiffusion3Config,
@@ -218,6 +254,7 @@ from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Prote
     StructureMetricsInput,
     StructureMetricsOutput,
     StructurePredictionComplex,
+    StructurePredictionOutput,
     ViennaRNAConfig,
     ViennaRNAInput,
     ViennaRNAOutput,
@@ -234,6 +271,7 @@ from .tool_registry import ToolRegistry, ToolSpec, tool
 
 __all__ = [
     # Base classes and registry
+    "BaseToolInput",
     "BaseToolOutput",
     "ToolRegistry",
     "ToolSpec",
@@ -249,6 +287,16 @@ __all__ = [
     "Evo1SampleOutput",
     "run_evo1_sample",
     "EVO1_MODEL_NAMES",
+    # Evo2
+    "Evo2SampleConfig",
+    "Evo2SampleInput",
+    "Evo2SampleOutput",
+    "run_evo2_sample",
+    # ProGen2
+    "ProGen2SampleConfig",
+    "ProGen2SampleInput",
+    "ProGen2SampleOutput",
+    "run_progen2_sample",
     # BLAST
     "run_blast_search",
     "run_create_blast_db",
@@ -279,6 +327,7 @@ __all__ = [
     "PyJackhmmerInput",
     "PyJackhmmerConfig",
     "PyJackhmmerOutput",
+    "PyHmmerConfig",
     # MMseqs2 schema classes
     "MmseqsHit",
     "MmseqsSequenceSearchResult",
@@ -342,9 +391,11 @@ __all__ = [
     "LigandMPNNScoringConfig",
     "LigandMPNNScoringOutput",
     "LigandMPNNSequences",
-    # Inverse folding - Shared helpers
+    # Inverse folding - Shared
     "SequenceStructurePair",
     "InverseFoldingStructureInput",
+    "InverseFoldingConfig",
+    "InverseFoldingInput",
     "SequenceScores",
     # Structure prediction - AlphaFold3
     "run_alphafold3",
@@ -376,10 +427,11 @@ __all__ = [
     "ViennaRNAInput",
     "ViennaRNAConfig",
     "ViennaRNAOutput",
-    # Structure prediction - Shared helpers
+    # Structure prediction - Shared
     "Chain",
     "ChainModification",
     "StructurePredictionComplex",
+    "StructurePredictionOutput",
     # Structure prediction - Dispatch
     "predict_structures",
     # Structure dynamics - BioEmu
@@ -465,4 +517,24 @@ __all__ = [
     "RFdiffusion3Output",
     "RFdiffusion3DesignSpec",
     "RFdiffusion3Structure",
+    # Masked models - ESM2
+    "run_esm2_sample",
+    "ESM2SampleInput",
+    "ESM2SampleConfig",
+    "ESM2SampleOutput",
+    # Masked models - ESM3
+    "run_esm3_sample",
+    "ESM3SampleInput",
+    "ESM3SampleConfig",
+    "ESM3SampleOutput",
+    # RNA splicing - SpliceTransformer
+    "run_splice_transformer",
+    "SpliceTransformerInput",
+    "SpliceTransformerConfig",
+    "SpliceTransformerOutput",
+    "SpliceTransformerType",
+    "SpliceTransformerTissue",
+    "CONTEXT_LENGTH",
+    "TARGET_LENGTH",
+    "TISSUE_INDEX_OFFSET",
 ]

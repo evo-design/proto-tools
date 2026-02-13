@@ -32,6 +32,7 @@ from .mmseqs import (  # Schema classes; Protein search; Genome search; Clusteri
 
 # PyHMMER tools
 from .pyhmmer import (
+    PyHmmerConfig,
     PyHmmscanConfig,
     PyHmmscanInput,
     PyHmmscanOutput,
@@ -105,6 +106,7 @@ __all__ = [
     "PyJackhmmerInput",
     "PyJackhmmerConfig",
     "PyJackhmmerOutput",
+    "PyHmmerConfig",
     # MMseqs2 schema classes
     "MmseqsHit",
     "MmseqsSequenceSearchResult",

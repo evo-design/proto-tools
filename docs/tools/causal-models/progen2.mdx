@@ -70,7 +70,7 @@ This learned distribution enables two key applications: **generation** (sampling
 
 **Scoring (`progen2-score`):**
 1. The full sequence is passed through the model in a single forward pass.
-2. At each position t, the model computes log P(x_t | x_{<t}) -- the log probability of the actual token given the left context.
+2. At each position t, the model computes log P(x_t | x_{&lt;t}) -- the log probability of the actual token given the left context.
 3. These per-position log probabilities are summed to produce the total log-likelihood.
 4. Perplexity is computed as exp(-avg_log_likelihood), providing an interpretable measure of sequence plausibility.
 

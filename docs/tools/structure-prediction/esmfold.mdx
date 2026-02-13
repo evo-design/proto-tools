@@ -80,7 +80,7 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `complexes` | `List[StructurePredictionComplex]` | *required* | List of protein complexes to predict; each complex can have multiple chains for homomers |
-| `n_replications` | `int` | `1` | Number of times to replicate each chain (2=dimer, 3=trimer, etc.); total residues must be <=2,400 |
+| `n_replications` | `int` | `1` | Number of times to replicate each chain (2=dimer, 3=trimer, etc.); total residues must be &lt;=2,400 |
 | `residue_idx_offset` | `int` | `512` | Offset for residue indexing; controls chain break tokens in model; rarely needs adjustment |
 | `chain_linker` | `int` | `25` | Number of residues between chains; affects inter-chain geometry |
 

@@ -57,10 +57,11 @@ __all__ = [
     "ViennaRNAInput",
     "ViennaRNAConfig",
     "ViennaRNAOutput",
-    # Shared Data Models (user-facing helpers only)
+    # Shared Data Models
     "Chain",
     "ChainModification",
     "StructurePredictionComplex",
+    "StructurePredictionOutput",
     # Dispatch
     "predict_structures",
     # Structure Metrics

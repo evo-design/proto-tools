@@ -163,14 +163,14 @@ All tools return a `PyHmmerOutput` object with two DataFrames:
 ## Interpreting Results
 
 **For Sequence-Level Hits:**
-- **High Confidence:** `evalue &lt; 1e-10`, `score > 50`
-- **Likely Homolog:** `evalue &lt; 0.001`, `score > 25`
+- **High Confidence:** `evalue < 1e-10`, `score > 50`
+- **Likely Homolog:** `evalue < 0.001`, `score > 25`
 - **Marginal/Noise:** `evalue > 0.01` (inspect manually)
 
 **For Domain-Level Hits:**
-- **Confident Domain:** `i_evalue &lt; 1e-5`, `domain_score > 25`
-- **Possible Domain:** `i_evalue &lt; 0.001`
-- **Fragment/Noise:** `domain_score &lt; 15` or coverage &lt; 50% of HMM length
+- **Confident Domain:** `i_evalue < 1e-5`, `domain_score > 25`
+- **Possible Domain:** `i_evalue < 0.001`
+- **Fragment/Noise:** `domain_score < 15` or coverage &lt; 50% of HMM length
 
 **Interpreting E-values:**
 - E-value depends on database size. An E-value of 0.001 against Pfam (~20,000 HMMs) is more significant than the same E-value against a smaller custom database.
@@ -264,7 +264,7 @@ print(f"Found {result.num_sequence_hits} homologs")
 # Filter for significant hits
 if result.sequence_hits_df is not None:
     significant = result.sequence_hits_df[
-        result.sequence_hits_df['evalue'] &lt; 0.01
+        result.sequence_hits_df['evalue'] < 0.01
     ]
     print(significant[['target_name', 'evalue', 'score']])
 ```

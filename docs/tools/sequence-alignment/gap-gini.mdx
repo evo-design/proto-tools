@@ -111,7 +111,7 @@ No configuration parameters. The Gini coefficient computation is deterministic a
 
 **Tips for optimal results:**
 - Pair Gap Gini with percent identity filtering: first filter by identity, then use Gini to catch truncation artifacts among passing candidates
-- In the Cas9 pipeline, sequences pass if `identity ≥ threshold` AND `gap_gini &lt; 0.1`
+- In the Cas9 pipeline, sequences pass if `identity ≥ threshold` AND `gap_gini < 0.1`
 - For proteins with known multi-domain architecture, a moderate Gini score may be acceptable if the gap corresponds to a known variable region
 
 **Edge cases to watch for:**

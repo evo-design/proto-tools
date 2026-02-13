@@ -119,7 +119,7 @@ Enformer outputs are in **log(1 + x) transformed counts** space, matching the tr
 **For variant effect analysis**, compare predictions between reference and alternate sequences:
 - Compute the log2 fold change: `log2(alt_pred / ref_pred)` per bin and track
 - Focus on bins near the variant position (center of the window)
-- A fold change > 0.5 or < -0.5 in relevant tracks suggests a functional effect
+- A fold change > 0.5 or &lt; -0.5 in relevant tracks suggests a functional effect
 
 **For promoter/enhancer design**, maximize the predicted signal at the central bins for expression-related tracks (CAGE) or accessibility tracks (DNase/ATAC).
 

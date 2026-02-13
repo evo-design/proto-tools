@@ -131,7 +131,7 @@ RNAFoldResult(
 MFE interpretation depends heavily on sequence length. Use normalized metrics:
 - **Per-nucleotide MFE:** `mfe / len(sequence)` should be ~ -0.3 to -0.5 kcal/mol/nt for stable structures
 - **Unstable regions:** Per-nt MFE > -0.2 suggests less structured regions
-- **Highly stable:** Per-nt MFE < -0.5 indicates very stable structure (GC-rich)
+- **Highly stable:** Per-nt MFE &lt; -0.5 indicates very stable structure (GC-rich)
 
 **Tips for interpreting output:**
 - Always normalize MFE by sequence length for cross-sequence comparisons

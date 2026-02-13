@@ -32,10 +32,12 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (  # 
 )
 
 __all__ = [
-    # Shared Data Models (user-facing helpers only)
+    # Shared Data Models
     "SequenceScores",
     "SequenceStructurePair",
     "InverseFoldingStructureInput",
+    "InverseFoldingConfig",
+    "InverseFoldingInput",
     # ProteinMPNN
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",

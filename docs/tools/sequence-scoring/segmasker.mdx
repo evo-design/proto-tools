@@ -142,7 +142,7 @@ for i, (frac, count, length) in enumerate(zip(
     result.low_complexity_counts,
     result.sequence_lengths,
 )):
-    status = "PASS" if frac &lt; 0.15 else "FAIL"
+    status = "PASS" if frac < 0.15 else "FAIL"
     print(f"Seq {i}: {frac:.2f} ({count}/{length} residues) [{status}]")
 ```
 

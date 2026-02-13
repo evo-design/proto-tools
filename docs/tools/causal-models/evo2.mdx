@@ -72,7 +72,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 
 **Scoring (`evo2-score`):**
 1. The full DNA sequence is passed through the model in a single forward pass (batched if `batch_size` is set).
-2. At each position t, the model computes log P(x_t | x_{<t}) -- the log probability of the actual nucleotide given the left context.
+2. At each position t, the model computes log P(x_t | x_{&lt;t}) -- the log probability of the actual nucleotide given the left context.
 3. These per-position log probabilities are summed to produce total `log_likelihood` and averaged for `avg_log_likelihood`.
 4. Perplexity is computed as exp(-avg_log_likelihood).
 
