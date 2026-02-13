@@ -185,6 +185,7 @@ class Evo1SampleConfig(BaseConfig):
     config=Evo1SampleConfig,
     output=Evo1SampleOutput,
     description="Sample DNA sequences using Evo1 language model (in-process mode)",
+    uses_gpu=True,
 )
 def run_evo1_sample(
     inputs: Evo1SampleInput, config: Evo1SampleConfig

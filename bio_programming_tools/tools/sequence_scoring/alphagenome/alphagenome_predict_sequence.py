@@ -70,6 +70,7 @@ AlphaGenomePredictSequenceConfig = AlphaGenomePredictConfig
     config=AlphaGenomePredictSequenceConfig,
     output=AlphaGenomePredictSequenceOutput,
     description="Predict genomic signals from a raw DNA sequence using AlphaGenome open weights",
+    uses_gpu=True,
 )
 def run_alphagenome_predict_sequence(
     inputs: AlphaGenomePredictSequenceInput,

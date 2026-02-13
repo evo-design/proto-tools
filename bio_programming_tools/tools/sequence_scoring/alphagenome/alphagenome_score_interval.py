@@ -77,6 +77,7 @@ class AlphaGenomeScoreIntervalConfig(BaseConfig):
     config=AlphaGenomeScoreIntervalConfig,
     output=AlphaGenomeScoreIntervalOutput,
     description="Score genomic intervals with AlphaGenome using recommended interval scorers",
+    uses_gpu=True,
 )
 def run_alphagenome_score_interval(
     inputs: AlphaGenomeScoreIntervalInput,

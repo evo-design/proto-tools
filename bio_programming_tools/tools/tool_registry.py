@@ -46,6 +46,7 @@ class ToolSpec(BaseModel):
     key: str = Field(description="Internal identifier (e.g., 'blast-search')")
     label: str = Field(description="External UI display name (e.g., 'BLAST Search')")
     description: str = Field(description="Detailed description of tool functionality")
+    uses_gpu: bool = Field(default=False, description="Whether this tool requires a GPU")
 
     # Configuration model - serialized as JSON Schema
     config_model: Type[BaseModel] = Field(
@@ -115,6 +116,7 @@ class ToolRegistry:
         config: Type[BaseConfig],
         output: Type[BaseToolOutput],
         description: str,
+        uses_gpu: bool = False,
     ):
         """
         Decorator to register a tool function and wrap execution with metadata tracking.
@@ -132,6 +134,7 @@ class ToolRegistry:
             config: Pydantic model class for tool configuration validation
             output: Pydantic model class for tool output validation
             description: Readable description
+            uses_gpu: Whether this tool requires a GPU for execution
 
         Returns:
             Decorator that wraps the function with metadata tracking
@@ -213,6 +216,7 @@ class ToolRegistry:
                 key=key,
                 label=label,
                 description=description,
+                uses_gpu=uses_gpu,
                 input_model=input,
                 config_model=config,
                 output_model=output,
@@ -283,6 +287,16 @@ class ToolRegistry:
     def count(cls) -> int:
         """Get count of registered tools."""
         return len(cls._registry)
+
+    @classmethod
+    def list_gpu_tools(cls) -> List[ToolSpec]:
+        """List all registered tools that require a GPU."""
+        return [spec for spec in cls._registry.values() if spec.uses_gpu]
+
+    @classmethod
+    def list_cpu_tools(cls) -> List[ToolSpec]:
+        """List all registered tools that do not require a GPU."""
+        return [spec for spec in cls._registry.values() if not spec.uses_gpu]
 
     @classmethod
     def get_citation(cls, key: str) -> str | None:

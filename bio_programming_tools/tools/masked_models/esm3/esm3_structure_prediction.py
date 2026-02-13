@@ -150,6 +150,7 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
     config=ESM3StructurePredictionConfig,
     output=ESM3StructurePredictionOutput,
     description="Predict protein 3D structures using ESM3 generative model",
+    uses_gpu=True,
 )
 def run_esm3_structure_prediction(
     inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig

@@ -192,6 +192,7 @@ class ESM3SampleConfig(BaseConfig):
     config=ESM3SampleConfig,
     output=ESM3SampleOutput,
     description="Sample protein sequences using ESM3 language model",
+    uses_gpu=True,
 )
 def run_esm3_sample(
     inputs: ESM3SampleInput, config: ESM3SampleConfig

@@ -76,6 +76,7 @@ class AlphaGenomeScoreVariantConfig(BaseConfig):
     config=AlphaGenomeScoreVariantConfig,
     output=AlphaGenomeScoreVariantOutput,
     description="Score variant effects with AlphaGenome using recommended variant scorers",
+    uses_gpu=True,
 )
 def run_alphagenome_score_variant(
     inputs: AlphaGenomeScoreVariantInput,

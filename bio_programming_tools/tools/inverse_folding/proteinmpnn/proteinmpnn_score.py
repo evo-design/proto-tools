@@ -118,6 +118,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
     config=ProteinMPNNScoringConfig,
     output=ProteinMPNNScoringOutput,
     description="Score protein sequences using ProteinMPNN",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="sequence_structure_pairs",

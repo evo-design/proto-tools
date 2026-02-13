@@ -368,6 +368,7 @@ class Evo2SampleConfig(BaseConfig):
     config=Evo2SampleConfig,
     output=Evo2SampleOutput,
     description="Sample DNA sequences using Evo2 language model (in-process mode)",
+    uses_gpu=True,
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput, config: Evo2SampleConfig

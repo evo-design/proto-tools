@@ -55,6 +55,7 @@ class LigandMPNNSequences(DesignedSequences):
     config=LigandMPNNSampleConfig,
     output=LigandMPNNSampleOutput,
     description="Sample protein sequences using LigandMPNN",
+    uses_gpu=True,
 )
 @tool_cache("ligandmpnn-sample")
 def run_ligandmpnn_sample(

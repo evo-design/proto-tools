@@ -196,6 +196,7 @@ class ESMFoldConfig(StructurePredictionConfig):
     config=ESMFoldConfig,
     output=ESMFoldOutput,
     description="Protein structure prediction using ESMFold",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",

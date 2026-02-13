@@ -156,6 +156,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
     config=ESM2EmbeddingsConfig,
     output=ESM2EmbeddingsOutput,
     description="Extract protein sequence embeddings and logits using ESM2",
+    uses_gpu=True,
 )
 def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.

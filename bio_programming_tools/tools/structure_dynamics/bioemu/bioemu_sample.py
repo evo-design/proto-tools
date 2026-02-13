@@ -194,6 +194,7 @@ class BioEmuConfig(StructurePredictionConfig):
     config=BioEmuConfig,
     output=BioEmuOutput,
     description="Protein conformational ensemble sampling using BioEmu",
+    uses_gpu=True,
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""

@@ -486,3 +486,120 @@ def test_tool_output_successful_access_works(clean_registry):
     assert result.result == "Success!"
     assert result.tool_id == "success-access-tool"
     assert result.execution_time is not None
+
+
+def test_tool_registry_uses_gpu_default(clean_registry):
+    """Test that uses_gpu defaults to False."""
+
+    @clean_registry.register(
+        key="cpu-tool",
+        label="CPU Tool",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="CPU tool",
+    )
+    def cpu_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("cpu-tool")
+    assert spec.uses_gpu is False
+
+
+def test_tool_registry_uses_gpu_true(clean_registry):
+    """Test that uses_gpu=True is stored on ToolSpec."""
+
+    @clean_registry.register(
+        key="gpu-tool",
+        label="GPU Tool",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="GPU tool",
+        uses_gpu=True,
+    )
+    def gpu_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("gpu-tool")
+    assert spec.uses_gpu is True
+
+
+def test_tool_registry_list_gpu_tools(clean_registry):
+    """Test list_gpu_tools returns only GPU tools."""
+
+    @clean_registry.register(
+        key="gpu-1",
+        label="GPU 1",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="GPU 1",
+        uses_gpu=True,
+    )
+    def gpu_1(inputs, config):
+        return MockToolOutput(result="ok")
+
+    @clean_registry.register(
+        key="cpu-1",
+        label="CPU 1",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="CPU 1",
+    )
+    def cpu_1(inputs, config):
+        return MockToolOutput(result="ok")
+
+    @clean_registry.register(
+        key="gpu-2",
+        label="GPU 2",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="GPU 2",
+        uses_gpu=True,
+    )
+    def gpu_2(inputs, config):
+        return MockToolOutput(result="ok")
+
+    gpu_tools = clean_registry.list_gpu_tools()
+    cpu_tools = clean_registry.list_cpu_tools()
+
+    assert len(gpu_tools) == 2
+    assert len(cpu_tools) == 1
+    assert {s.key for s in gpu_tools} == {"gpu-1", "gpu-2"}
+    assert {s.key for s in cpu_tools} == {"cpu-1"}
+
+
+def test_gpu_tools_are_marked():
+    """Verify that known GPU tools are marked with uses_gpu=True in the real registry."""
+    gpu_tools = ToolRegistry.list_gpu_tools()
+    gpu_keys = {spec.key for spec in gpu_tools}
+
+    # At least 20 GPU tool registrations should exist
+    assert len(gpu_keys) >= 20
+
+    # Spot check known GPU tools
+    assert "esm2-embedding" in gpu_keys
+    assert "evo2-sample" in gpu_keys
+    assert "boltz2-prediction" in gpu_keys
+    assert "proteinmpnn-sample" in gpu_keys
+
+
+def test_cpu_tools_are_not_marked_gpu():
+    """Verify that known CPU tools are NOT marked uses_gpu in the real registry."""
+    cpu_tools = ToolRegistry.list_cpu_tools()
+    cpu_keys = {spec.key for spec in cpu_tools}
+
+    # Spot check known CPU tools
+    assert "blast-search" in cpu_keys
+    assert "mafft-align" in cpu_keys
+
+
+def test_uses_gpu_in_serialization():
+    """Verify that uses_gpu is included in ToolSpec serialization."""
+    spec = ToolRegistry.get("blast-search")
+    serialized = spec.model_dump()
+    assert "uses_gpu" in serialized
+    assert serialized["uses_gpu"] is False

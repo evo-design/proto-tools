@@ -109,6 +109,7 @@ class ESM2ScoringConfig(BaseConfig):
     config=ESM2ScoringConfig,
     output=ESM2ScoringOutput,
     description="Score protein sequences using ESM2 language model",
+    uses_gpu=True,
 )
 def run_esm2_score(
     inputs: ESM2ScoringInput, config: ESM2ScoringConfig

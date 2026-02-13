@@ -140,6 +140,7 @@ class ProGen2ScoringConfig(BaseConfig):
     config=ProGen2ScoringConfig,
     output=ProGen2ScoringOutput,
     description="Score protein sequences using ProGen2 language model",
+    uses_gpu=True,
 )
 def run_progen2_score(
     inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig

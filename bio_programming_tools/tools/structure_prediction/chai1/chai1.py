@@ -224,6 +224,7 @@ class Chai1Config(StructurePredictionConfig):
     config=Chai1Config,
     output=Chai1Output,
     description="Multi-modal structure prediction using Chai1",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",

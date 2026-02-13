@@ -109,6 +109,7 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantConfig
     config=AlphaGenomeScoreISMConfig,
     output=AlphaGenomeScoreISMOutput,
     description="Run in-silico mutagenesis with AlphaGenome variant scorers",
+    uses_gpu=True,
 )
 def run_alphagenome_score_ism_variants(
     inputs: AlphaGenomeScoreISMInput,

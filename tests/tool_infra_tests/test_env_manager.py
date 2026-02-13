@@ -10,33 +10,40 @@ import pytest
 from bio_programming_tools.utils.env_manager import EnvManager
 
 
-# List of all models with standalone directories
-MODELS_WITH_STANDALONE = [
-    "blast",
-    "mmseqs",
-    "pyhmmer",
-    "evo2",
-    "progen2",
-    "ligandmpnn",
-    "proteinmpnn",
-    "esm2",
-    "esm3",
-    "orfipy",
-    "prodigal",
-    "splice_transformer",
-    "colabfold_search",
-    "mafft",
+# Models that require a GPU
+GPU_MODELS = [
     "alphagenome",
-    "borzoi",
-    "enformer",
-    "rfdiffusion3",
     "bioemu",
     "boltz2",
+    "borzoi",
     "chai1",
+    "enformer",
+    "esm2",
+    "esm3",
     "esmfold",
+    "evo2",
+    "ligandmpnn",
+    "progen2",
+    "proteinmpnn",
     "protenix",
+    "rfdiffusion3",
+    "splice_transformer",
+]
+
+# Models that run on CPU only
+CPU_MODELS = [
+    "blast",
+    "colabfold_search",
+    "mafft",
+    "mmseqs",
+    "orfipy",
+    "prodigal",
+    "pyhmmer",
     "viennarna",
 ]
+
+# All models with standalone directories
+MODELS_WITH_STANDALONE = GPU_MODELS + CPU_MODELS
 
 
 class TestEnvManagerValidation:
@@ -88,22 +95,10 @@ class TestEnvManagerVenvCreation:
     Note: Created venvs are kept in .venvs/ directory after tests complete.
     """
 
-    @pytest.mark.parametrize("model_name", MODELS_WITH_STANDALONE)
-    def test_create_venv_for_model(self, model_name):
-        """
-        Test that a venv can be created successfully for each model.
+    def _verify_venv(self, model_name: str) -> None:
+        """Verify that a venv can be created and is functional for a model."""
+        import subprocess
 
-        This test:
-        1. Creates a venv using EnvManager (or reuses if already exists)
-        2. Verifies the venv directory exists
-        3. Verifies STATUS.txt indicates success
-        4. Verifies the Python executable exists and works
-
-        The venv is kept after the test completes (not cleaned up).
-
-        Args:
-            model_name: Name of the model to create venv for
-        """
         # Create/verify the venv (refresh=False means reuse if exists)
         env_manager = EnvManager(model_name=model_name, refresh=False)
 
@@ -135,12 +130,11 @@ class TestEnvManagerVenvCreation:
         )
 
         # Verify Python executable is functional
-        import subprocess
         result = subprocess.run(
             [str(python_exe), "--version"],
             capture_output=True,
             timeout=30,
-            check=False
+            check=False,
         )
 
         assert result.returncode == 0, (
@@ -155,3 +149,14 @@ class TestEnvManagerVenvCreation:
 
         # Log success for visibility during test runs
         print(f"\n✓ Successfully verified venv for {model_name} at {env_manager.env_path}")
+
+    @pytest.mark.uses_gpu
+    @pytest.mark.parametrize("model_name", GPU_MODELS)
+    def test_create_venv_for_gpu_model(self, model_name):
+        """Test venv creation for GPU models."""
+        self._verify_venv(model_name)
+
+    @pytest.mark.parametrize("model_name", CPU_MODELS)
+    def test_create_venv_for_cpu_model(self, model_name):
+        """Test venv creation for CPU models."""
+        self._verify_venv(model_name)

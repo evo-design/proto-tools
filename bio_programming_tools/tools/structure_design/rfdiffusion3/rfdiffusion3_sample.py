@@ -499,6 +499,7 @@ class RFdiffusion3Output(BaseToolOutput):
     config=RFdiffusion3Config,
     output=RFdiffusion3Output,
     description="De novo protein structure design using RFdiffusion3",
+    uses_gpu=True,
 )
 @tool_cache("rfdiffusion3-design")
 def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config) -> RFdiffusion3Output:

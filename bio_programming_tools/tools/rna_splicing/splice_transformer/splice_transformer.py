@@ -253,6 +253,7 @@ class SpliceTransformerOutput(BaseToolOutput):
     config=SpliceTransformerConfig,
     output=SpliceTransformerOutput,
     description="Tissue-specific splicing prediction using SpliceTransformer",
+    uses_gpu=True,
 )
 @tool_cache("splice-transformer-prediction")
 def run_splice_transformer(

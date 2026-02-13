@@ -40,6 +40,7 @@ AlphaGenomePredictVariantConfig = AlphaGenomePredictConfig
     config=AlphaGenomePredictVariantConfig,
     output=AlphaGenomePredictVariantOutput,
     description="Predict variant effects with AlphaGenome open weights",
+    uses_gpu=True,
 )
 def run_alphagenome_predict_variant(
     inputs: AlphaGenomePredictVariantInput,

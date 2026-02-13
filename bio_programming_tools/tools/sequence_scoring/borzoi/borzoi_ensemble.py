@@ -150,6 +150,7 @@ class BorzoiEnsembleConfig(BaseConfig):
     config=BorzoiEnsembleConfig,
     output=BorzoiEnsembleOutput,
     description="Regulatory activity prediction using all 4 Borzoi replicates",
+    uses_gpu=True,
 )
 def run_borzoi_ensemble(
     inputs: BorzoiInput, config: BorzoiEnsembleConfig

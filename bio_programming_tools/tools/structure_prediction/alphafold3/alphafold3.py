@@ -192,6 +192,7 @@ class AlphaFold3Config(StructurePredictionConfig):
     config=AlphaFold3Config,
     output=AlphaFold3Output,
     description="Protein structure prediction using AlphaFold3",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",

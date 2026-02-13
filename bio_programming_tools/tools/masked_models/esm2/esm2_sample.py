@@ -195,6 +195,7 @@ class ESM2SampleConfig(BaseConfig):
     config=ESM2SampleConfig,
     output=ESM2SampleOutput,
     description="Sample protein sequences using ESM2 language model",
+    uses_gpu=True,
 )
 def run_esm2_sample(
     inputs: ESM2SampleInput, config: ESM2SampleConfig

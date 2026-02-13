@@ -292,6 +292,7 @@ class ProGen2SampleConfig(BaseConfig):
     config=ProGen2SampleConfig,
     output=ProGen2SampleOutput,
     description="Sample protein sequences using ProGen2 language model",
+    uses_gpu=True,
 )
 def run_progen2_sample(
     inputs: ProGen2SampleInput, config: ProGen2SampleConfig

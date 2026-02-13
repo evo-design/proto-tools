@@ -233,6 +233,7 @@ class Boltz2Config(StructurePredictionConfig):
     config=Boltz2Config,
     output=Boltz2Output,
     description="Multi-modal structure prediction using Boltz2",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",

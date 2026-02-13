@@ -138,6 +138,7 @@ class Evo2ScoringConfig(BaseConfig):
     config=Evo2ScoringConfig,
     output=Evo2ScoringOutput,
     description="Score DNA sequences using Evo2 language model",
+    uses_gpu=True,
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig

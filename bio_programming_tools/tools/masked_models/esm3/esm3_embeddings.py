@@ -143,6 +143,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
     config=ESM3EmbeddingsConfig,
     output=ESM3EmbeddingsOutput,
     description="Extract protein sequence embeddings and logits using ESM3",
+    uses_gpu=True,
 )
 def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.

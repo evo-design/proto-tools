@@ -157,6 +157,7 @@ class EnformerConfig(BaseConfig):
     config=EnformerConfig,
     output=EnformerOutput,
     description="Gene expression and regulatory activity prediction using Enformer",
+    uses_gpu=True,
 )
 def run_enformer(inputs: EnformerInput, config: EnformerConfig) -> EnformerOutput:
     """Predict regulatory activity with Enformer.

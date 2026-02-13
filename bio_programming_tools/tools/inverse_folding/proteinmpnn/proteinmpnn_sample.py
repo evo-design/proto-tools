@@ -57,6 +57,7 @@ class ProteinMPNNSequences(DesignedSequences):
     config=ProteinMPNNSampleConfig,
     output=ProteinMPNNSampleOutput,
     description="Sample protein sequences using ProteinMPNN",
+    uses_gpu=True,
 )
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,

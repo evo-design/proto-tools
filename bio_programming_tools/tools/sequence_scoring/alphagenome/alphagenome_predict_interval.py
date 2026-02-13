@@ -40,6 +40,7 @@ AlphaGenomePredictIntervalConfig = AlphaGenomePredictConfig
     config=AlphaGenomePredictIntervalConfig,
     output=AlphaGenomePredictIntervalOutput,
     description="Predict genomic signals for a region using AlphaGenome open weights",
+    uses_gpu=True,
 )
 def run_alphagenome_predict_interval(
     inputs: AlphaGenomePredictIntervalInput,

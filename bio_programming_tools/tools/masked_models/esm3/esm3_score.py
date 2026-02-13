@@ -104,6 +104,7 @@ class ESM3ScoringConfig(BaseConfig):
     config=ESM3ScoringConfig,
     output=ESM3ScoringOutput,
     description="Score protein sequences using ESM3 language model",
+    uses_gpu=True,
 )
 def run_esm3_score(
     inputs: ESM3ScoringInput, config: ESM3ScoringConfig

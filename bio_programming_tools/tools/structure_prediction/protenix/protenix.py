@@ -311,6 +311,7 @@ class ProtenixConfig(StructurePredictionConfig):
     config=ProtenixConfig,
     output=ProtenixOutput,
     description="Multi-modal structure prediction using Protenix (open-source AlphaFold3)",
+    uses_gpu=True,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",

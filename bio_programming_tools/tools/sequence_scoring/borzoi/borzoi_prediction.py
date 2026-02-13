@@ -189,6 +189,7 @@ class BorzoiConfig(BaseConfig):
     config=BorzoiConfig,
     output=BorzoiOutput,
     description="Regulatory activity prediction using a single Borzoi replicate",
+    uses_gpu=True,
 )
 def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig) -> BorzoiOutput:
     """Predict regulatory activity using a single Borzoi replicate.
