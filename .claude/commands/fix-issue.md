@@ -123,7 +123,6 @@ After all checks pass, provide a concise summary:
 
 - For issues involving standalone scripts, test the standalone `run.py` separately: `python bio_programming_tools/tools/{category}/{tool}/standalone/run.py`
 - If the issue involves GPU tools, mark new tests with `@pytest.mark.uses_gpu`
-- If the issue involves Modal deployments, check `deployment/` in the parent bio-programming repo
 - When fixing tool data model issues, always verify the JSON schema output: `ToolRegistry.get_schemas("tool-key")`
 - Missing exports are a common source of "tool not found" issues — check the 4-level `__init__.py` export chain
 - If the issue references a tool README being wrong, update the README and run `pre-commit run --all-files` to regenerate docs

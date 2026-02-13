@@ -6,7 +6,7 @@ description: "BLAST (Basic Local Alignment Search Tool) finds regions of similar
 # BLAST
 
 ## Overview
-BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides interfaces for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases.
+BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides a unified interface for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases.
 
 ## When to Use This Tool
 
@@ -16,8 +16,8 @@ BLAST (Basic Local Alignment Search Tool) finds regions of similarity between bi
 - Annotating newly sequenced genes
 
 **When to use Online vs. Local BLAST:**
-- Online BLAST: Best for occasional, low-volume queries where you need access to the massive NCBI databases (nt/nr) without downloading terabytes of data.
-- Local BLAST: Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
+- Online BLAST (`search_mode="online"`): Best for occasional, low-volume queries where you need access to the massive NCBI databases (nt/nr) without downloading terabytes of data.
+- Local BLAST (`search_mode="local"`): Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
 
 **When NOT to use this tool:**
 - Whole Genome Alignment: Use tools like MUMmer or Minimap2 for aligning entire chromosomes.
@@ -48,18 +48,15 @@ BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). I
 
 | Tool | Description | Use Case |
 |------|-------------|----------|
-| `blast-online-search` | Queries NCBI QBLAST servers remotely via API | Occasional queries against massive NCBI databases (nt/nr) |
-| `blast-local-search` | Runs BLAST+ binaries against a local database | High-throughput pipelines, custom databases, proprietary sequences |
-| `blast-create-db` | Creates a local BLAST database from a FASTA file | Prerequisite for `blast-local-search` |
+| `blast-search` | Unified BLAST search supporting both online (NCBI) and local modes | Sequence homology search against any BLAST database |
+| `blast-create-db` | Creates a local BLAST database from a FASTA file | Prerequisite for local `blast-search` |
 
 ## How It Works
 
 **Method overview:**
-The module exposes three distinct functions:
+The module exposes two tools:
 
-`blast-online-search`: Submits a request to the NCBI QBLAST server via API. It handles the polling loop and retrieves results as XML, parsing them into a DataFrame.
-
-`blast-local-search`: Wraps the blastn, blastp, etc., command line tools. It executes the binary against a local database and parses the tabular output.
+`blast-search`: A unified search tool that dispatches to either online (NCBI QBLAST) or local (BLAST+ CLI) search based on the `search_mode` config parameter. Online mode submits requests to NCBI and parses XML results. Local mode executes BLAST+ binaries and parses tabular output.
 
 `blast-create-db`: Wraps the makeblastdb command line tool. It takes a FASTA file and indexes it into binary files (.nhr, .nin, .nsq etc.) optimized for search.
 
@@ -85,48 +82,61 @@ Storage: Local databases can be large (NCBI 'nt' is >100GB compressed; custom DB
 
 ## Input Parameters
 
-| Tool | Parameter | Type | Description |
-|------|-----------|------|-------------|
-| `blast-online-search` | `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. |
-| `blast-local-search` | `query` | `str` | Path to a FASTA file containing your query sequence(s). |
-| `blast-create-db` | `fasta` | `str` | Path to your FASTA file with sequences to index. |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. Automatically detected. |
+
+The input has strict type validation: if the value is an existing file path, it's treated as a FASTA file; otherwise it's validated as a raw sequence string containing only valid sequence characters.
 
 ## Configuration
 
-**Shared Parameters (Online & Local)**
+**Core Parameters**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `program` | `str` | `blastn` | The algorithm to use. Must match your query/database types (see Program Matrix above). |
-| `additional_params` | `dict` | `{}` | Advanced tuning options like `{"evalue": 1e-5, "word_size": 11}`. |
+| `search_mode` | `str` | `"online"` | `"online"` for NCBI servers, `"local"` for BLAST+ CLI |
+| `program` | `str` | `"blastn"` | BLAST algorithm (see Program Matrix above) |
 
-**Online BLAST Specifics**
+**Online-Only Parameters**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `database` | `str` | `nt` | Which NCBI database to search against (see table below). |
+| `database` | `str` | `"nt"` | NCBI database to search against |
+| `hitlist_size` | `int` | `None` | Number of hits to return (NCBI default: 50) |
+| `entrez_query` | `str` | `None` | Restrict search with an Entrez query |
+| `megablast` | `bool` | `None` | Use MegaBLAST algorithm (blastn only) |
 
-Available online databases:
-| Database | Description |
-|----------|-------------|
-| `nt` | Nucleotide collection (all GenBank sequences) |
-| `nr` | Non-redundant protein sequences |
-| `refseq_rna` | NCBI RefSeq RNA sequences |
-| `refseq_protein` | NCBI RefSeq protein sequences |
-| `swissprot` | Curated protein sequences (high quality) |
-| `pdb` | Protein Data Bank sequences |
-
-**Local BLAST Specifics**
+**Local-Only Parameters**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `local_db` | `str` | *Required* | Path to your database (created by `blast-create-db`). |
-| `num_threads` | `int` | `4` | Number of CPU cores to use. More = faster. |
+| `local_db` | `str` | *Required* | Path to local BLAST database (created by `blast-create-db`) |
+| `num_threads` | `int` | `4` | Number of CPU threads |
 
-**Creating a Database (`blast-create-db`)**
+**Scoring Parameters**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `fasta` | `str` | *Required* | Path to your FASTA file with sequences to index. |
-| `dbtype` | `str` | `nucl` | Type of sequences: `"nucl"` for DNA/RNA, `"prot"` for proteins. |
-| `out_prefix` | `str` | *auto* | Where to save the database. Defaults to same location as your FASTA. |
-| `title` | `str` | *None* | Optional human-readable name for the database. |
+| `evalue` | `float` | `None` | E-value threshold (BLAST default: 10.0) |
+| `word_size` | `int` | `None` | Word size for initial matches |
+| `gapopen` | `int` | `None` | Cost to open a gap |
+| `gapextend` | `int` | `None` | Cost to extend a gap |
+| `matrix` | `str` | `None` | Scoring matrix (BLOSUM62, PAM30, etc.) |
+| `reward` | `int` | `None` | Nucleotide match reward (blastn only) |
+| `penalty` | `int` | `None` | Nucleotide mismatch penalty (blastn only) |
+
+**Filtering Parameters**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `max_target_seqs` | `int` | `None` | Max aligned sequences to keep |
+| `max_hsps` | `int` | `None` | Max HSPs per query-subject pair |
+| `perc_identity` | `float` | `None` | Min percent identity (0-100) |
+| `qcov_hsp_perc` | `float` | `None` | Min query coverage per HSP (0-100) |
+
+**Search Parameters**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `task` | `str` | `None` | Task preset (megablast, blastn-short, blastp-fast, etc.) |
+| `ungapped` | `bool` | `None` | Perform ungapped alignment only |
+| `strand` | `str` | `None` | Query strand: both, plus, minus |
+
+See `BlastSearchConfig` class for the full list of supported parameters.
 
 ### Parameter Guides
 
@@ -149,13 +159,13 @@ Available online databases:
 
 ### Sweep Priorities
 
-1. `evalue` (via `additional_params`) — Most impactful; controls sensitivity vs noise tradeoff
+1. `evalue` — Most impactful; controls sensitivity vs noise tradeoff
 2. `program` — Must match query/database types; incorrect choice yields no results
-3. `word_size` (via `additional_params`) — Decrease to find shorter/more divergent matches (slower), increase for speed
+3. `word_size` — Decrease to find shorter/more divergent matches (slower), increase for speed
 
 ## Output Specification
 
-Both search tools return a `BlastOutput` object with two attributes:
+`blast-search` returns a `BlastSearchOutput` object with two attributes:
 - `results_df`: A Pandas DataFrame with all hits (or empty if no matches)
 - `num_hits`: Total number of hits found
 
@@ -191,16 +201,16 @@ Both search tools return a `BlastOutput` object with two attributes:
 
 **Example 1: Search NCBI online (simplest)**
 ```python python icon="python"
-from bio_programming_tools.tools.gene_annotation import run_online_blast_search, OnlineBlastInput, OnlineBlastConfig
+from bio_programming_tools.tools.gene_annotation import run_blast_search, BlastSearchInput, BlastSearchConfig
 
 # Your DNA sequence
-inputs = OnlineBlastInput(query="ATGCGTAAACGATTGCAGTACGATCGATCG")
+inputs = BlastSearchInput(query="ATGCGTAAACGATTGCAGTACGATCGATCG")
 
-# Search the nucleotide database
-config = OnlineBlastConfig(program="blastn", database="nt")
+# Search the nucleotide database (online by default)
+config = BlastSearchConfig(program="blastn", database="nt")
 
 # Run the search (may take 30+ seconds)
-result = run_online_blast_search(inputs, config)
+result = run_blast_search(inputs, config)
 
 print(f"Found {result.num_hits} matches!")
 print(result.results_df.head())  # View top hits
@@ -210,7 +220,7 @@ print(result.results_df.head())  # View top hits
 ```python python icon="python"
 from bio_programming_tools.tools.gene_annotation import (
     run_create_blast_db, CreateBlastDbInput, CreateBlastDbConfig,
-    run_local_blast_search, LocalBlastInput, LocalBlastConfig
+    run_blast_search, BlastSearchInput, BlastSearchConfig
 )
 
 # Step 1: Create a database from your reference sequences
@@ -221,13 +231,14 @@ db_result = run_create_blast_db(db_input, db_config)
 print(f"Database created at: {db_result.db_path}")
 
 # Step 2: Search against your new database
-search_input = LocalBlastInput(query="my_query.fasta")
-search_config = LocalBlastConfig(
+search_input = BlastSearchInput(query="my_query.fasta")
+search_config = BlastSearchConfig(
+    search_mode="local",
     program="blastn",
-    local_db=db_result.db_path,  # Use the database we just created
+    local_db=db_result.db_path,
     num_threads=4
 )
-result = run_local_blast_search(search_input, search_config)
+result = run_blast_search(search_input, search_config)
 
 # Filter for high-confidence hits
 good_hits = result.results_df[result.results_df['evalue'] &lt; 1e-10]
@@ -247,13 +258,13 @@ print(good_hits)
    - Increase to speed up search for near-identical matches.
 
 3. `dust` / `soft_masking`:
-   - BLAST automatically masks low-complexity regions (e.g., "AAAAA"). If you are searching for repetitive motifs, you may need to disable masking in `additional_params`.
+   - BLAST automatically masks low-complexity regions (e.g., "AAAAA"). If you are searching for repetitive motifs, you may need to disable masking.
 
 **Common Mistakes:**
 
 1. **Mismatched DB/Program:** Trying to run `blastp` (protein query) against a Nucleotide database. You must use `tblastn` for this.
 
-2. **Online Latency:** Do not use `blast-online-search` inside a loop for 10,000 sequences. It will take days and NCBI may block your IP. Use `blast-local-search` for batch processing.
+2. **Online Latency:** Do not use `blast-search` with `search_mode="online"` inside a loop for 10,000 sequences. It will take days and NCBI may block your IP. Use `search_mode="local"` for batch processing.
 
 3. **Interpreting Short Hits:** A 100% identity match over only 20 base pairs usually has a poor E-value and may be biologically meaningless. Always check `length` alongside `pident`.
 
@@ -269,7 +280,7 @@ print(good_hits)
 ## Related Tools
 
 **Tools often used together:**
-- `blast-create-db`: Create custom databases for `blast-local-search`.
+- `blast-create-db`: Create custom databases for local `blast-search`.
 - `muscle` / `mafft`: Use these to align the sequences *after* BLAST finds them (Multiple Sequence Alignment).
 - `pyhmmer-hmmscan`: Follow up BLAST hits with domain annotation for functional characterization.
 

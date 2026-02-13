@@ -290,7 +290,7 @@ class ToolRegistry:
         Get BibTeX citation for a tool by key.
 
         Args:
-            key: Tool identifier (e.g., 'evo2-sample', 'blast-local-search')
+            key: Tool identifier (e.g., 'evo2-sample', 'blast-search')
 
         Returns:
             BibTeX citation string, or None if no citation file exists
@@ -358,7 +358,7 @@ def _find_citation_file(tool_key: str) -> Path | None:
     Handles underscore/hyphen normalization.
 
     Args:
-        tool_key: Tool registry key (e.g., 'evo2-sample', 'blast-local-search')
+        tool_key: Tool registry key (e.g., 'evo2-sample', 'blast-search')
 
     Returns:
         Path to cite.bib file, or None if not found
@@ -378,7 +378,7 @@ def _find_citation_file(tool_key: str) -> Path | None:
                 continue
 
             # Check if the tool key starts with this tool directory name
-            # e.g., 'evo2_sample' starts with 'evo2', 'blast_local_search' starts with 'blast'
+            # e.g., 'evo2_sample' starts with 'evo2', 'blast_search' starts with 'blast'
             tool_name = tool_dir.name
             if normalized_key.startswith(tool_name):
                 cite_path = tool_dir / "cite.bib"

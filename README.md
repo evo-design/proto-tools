@@ -58,13 +58,13 @@ The setup scripts for gated models will check for access and provide a clear err
 ## Usage
 
 ```python
-from bio_tools.tools.gene_annotation.blast.online_blast import (
-    run_online_blast_search, OnlineBlastInput, OnlineBlastConfig,
+from bio_programming_tools.tools.gene_annotation.blast import (
+    run_blast_search, BlastSearchInput, BlastSearchConfig,
 )
 
-inputs = OnlineBlastInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK...")
-config = OnlineBlastConfig(program="blastp", database="swissprot")
-result = run_online_blast_search(inputs, config)
+inputs = BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTK...")
+config = BlastSearchConfig(program="blastp", database="swissprot")
+result = run_blast_search(inputs, config)
 
 print(result.num_hits)
 print(result.results_df.head())

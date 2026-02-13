@@ -29,7 +29,7 @@ class TestGetCitation:
 
     def test_get_citation_contains_doi(self):
         """Citations should contain DOI when available"""
-        citation = ToolRegistry.get_citation("blast-local-search")
+        citation = ToolRegistry.get_citation("blast-search")
         assert "doi=" in citation
 
     def test_get_citation_multiple_tools_same_directory(self):

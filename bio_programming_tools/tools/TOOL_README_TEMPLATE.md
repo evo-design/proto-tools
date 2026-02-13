@@ -129,17 +129,15 @@
 | `{checkpoint_1}` | <!-- size --> | <!-- relative speed --> | <!-- relative quality --> | <!-- when to use; any caveats --> |
 
 ## Execution Modes
-<!-- [If Applicable — include for GPU tools with Modal support or multiple runtimes] | Audience: Engineers
+<!-- [If Applicable — include for GPU tools with multiple runtimes] | Audience: Engineers
    Describe how the tool behaves in different execution environments.
    Call out any features that differ between modes (e.g., caching, network access).
 
    Example from Evo2:
    - **Local GPU:** Loads model on-demand. Supports KV caching for iterative generation.
-   - **Modal (remote GPU):** Used automatically when configured. Does NOT support KV
-     cache reuse between calls.
    - **CPU:** Possible but extremely slow. Use only for testing with small inputs.
 
-   Delete this section entirely for CPU-only tools with no Modal support.
+   Delete this section entirely for CPU-only tools.
 -->
 
 ## How It Works
@@ -176,7 +174,7 @@
 <!-- Include specific hardware requirements and realistic timing estimates. -->
 - **Hardware:** <!-- GPU/CPU, VRAM requirements (e.g., "GPU with >=16GB VRAM; 24GB recommended for longer sequences") -->
 - **Runtime:** <!-- Typical execution time with example (e.g., "~5-30s per protein (100-400 residues) on A100 GPU") -->
-- **Scalability:** <!-- Batch support, parallelization, Modal deployment notes -->
+- **Scalability:** <!-- Batch support, parallelization notes -->
 
 ## Input Parameters
 <!-- [Required] | Audience: Engineers, Agents

@@ -1,0 +1,897 @@
+"""Unified BLAST search tool supporting both online (NCBI) and local modes."""
+from __future__ import annotations
+
+import io
+import logging
+import re
+from pathlib import Path
+from typing import List, Literal, Optional
+
+import pandas as pd
+from pydantic import ConfigDict, Field, model_validator
+
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+
+logger = logging.getLogger(__name__)
+
+BLAST_PROGRAMS = Literal["blastn", "blastp", "blastx", "tblastn", "tblastx"]
+BLAST_DATABASES = Literal[
+    "nt",  # Nucleotide collection
+    "nr",  # Non-redundant protein sequences
+    "refseq_rna",  # RefSeq RNA sequences
+    "refseq_protein",  # RefSeq protein sequences
+    "swissprot",  # Swiss-Prot protein sequences
+    "pdb",  # Protein Data Bank
+    "pataa",  # Patent protein sequences
+    "patnt",  # Patent nucleotide sequences
+]
+SCORING_MATRICES = Literal[
+    "BLOSUM45",
+    "BLOSUM50",
+    "BLOSUM62",
+    "BLOSUM80",
+    "BLOSUM90",
+    "PAM30",
+    "PAM70",
+    "PAM250",
+]
+BLAST_TASKS = Literal[
+    "megablast",
+    "dc-megablast",
+    "blastn",
+    "blastn-short",
+    "blastp",
+    "blastp-short",
+    "blastp-fast",
+    "blastx",
+    "blastx-fast",
+    "tblastn",
+    "tblastn-fast",
+]
+
+# Simple heuristic for raw sequence detection: only contains valid
+# nucleotide/protein characters plus common whitespace.
+_SEQUENCE_CHARS = re.compile(r"^[A-Za-z*\-\s]+$")
+_BLAST_COLS = [
+    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+    "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+]
+
+
+# ============================================================================
+# Data Models
+# ============================================================================
+# Input:
+class BlastSearchInput(BaseToolInput):
+    """Input for BLAST search.
+
+    The ``query`` field accepts either a raw sequence string or a path to a
+    FASTA file. Validation distinguishes between the two: if the value points
+    to an existing file it is treated as a FASTA path; otherwise it is treated
+    as a raw sequence string.
+
+    Attributes:
+        query (str): A raw nucleotide/protein sequence (e.g. ``"ATGCGTAAA"``)
+            or a path to a FASTA file.
+        query_type (str): Automatically set to ``"sequence"`` or ``"fasta_path"``
+            during validation. Read-only — do not set manually.
+    """
+
+    query: str = Field(
+        description=(
+            "Query sequence string or path to a FASTA file containing "
+            "query sequence(s)"
+        ),
+    )
+    query_type: Literal["sequence", "fasta_path"] = Field(
+        default="sequence",
+        description=(
+            "Auto-inferred query type: 'sequence' for raw string, "
+            "'fasta_path' for a file path."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def infer_query_type(self) -> BlastSearchInput:
+        """Classify query as a raw sequence or a FASTA file path."""
+        path = Path(self.query)
+        if path.exists() and path.is_file():
+            object.__setattr__(self, "query_type", "fasta_path")
+        else:
+            # Not a file — treat as raw sequence. Validate characters.
+            cleaned = self.query.strip()
+            if not cleaned:
+                raise ValueError("Query sequence cannot be empty")
+            if not _SEQUENCE_CHARS.match(cleaned):
+                raise ValueError(
+                    f"Query does not look like a valid sequence (contains "
+                    f"unexpected characters) and is not an existing file path: "
+                    f"{self.query!r}"
+                )
+            object.__setattr__(self, "query_type", "sequence")
+        return self
+
+
+# Output:
+class BlastSearchOutput(BaseToolOutput):
+    """Output from BLAST search.
+
+    Attributes:
+        results_df (Optional[pd.DataFrame]): Standard BLAST tabular results
+            with columns: qseqid, sseqid, pident, length, mismatch, gapopen,
+            qstart, qend, sstart, send, evalue, bitscore.
+        num_hits (int): Total number of alignment hits found.
+    """
+
+    results_df: Optional[pd.DataFrame] = Field(
+        default=None,
+        description="DataFrame with BLAST results",
+    )
+    num_hits: int = Field(
+        default=0,
+        description="Number of BLAST hits found",
+    )
+
+    @property
+    def output_format_options(self) -> List[str]:
+        return ["csv", "json"]
+
+    @property
+    def output_format_default(self) -> str:
+        return "csv"
+
+    def _export_output(self, export_path: str | Path, file_format: str):
+        import warnings
+
+        if self.results_df is None or len(self.results_df) == 0:
+            warnings.warn(
+                "No BLAST results to export. The search returned no hits.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
+
+        path = Path(export_path).with_suffix(f".{file_format}")
+
+        if file_format == "csv":
+            self.results_df.to_csv(path, index=False)
+        elif file_format == "json":
+            self.results_df.to_json(path, orient="records", indent=2)
+        else:
+            raise ValueError(f"Unsupported format: {file_format}")
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+# Config:
+class BlastSearchConfig(BaseConfig):
+    """Configuration for BLAST search.
+
+    Controls search mode (online vs local), BLAST program selection, scoring
+    parameters, filtering thresholds, and output options. Parameters that only
+    apply to one search mode are documented as such and are ignored when using
+    the other mode.
+
+    Attributes:
+        search_mode: ``"online"`` routes to NCBI QBLAST; ``"local"`` runs
+            BLAST+ CLI against a local database.
+        program: BLAST algorithm (blastn, blastp, blastx, tblastn, tblastx).
+        database: NCBI database to search (online mode only).
+        local_db: Path to a local BLAST database (local mode only, required).
+        num_threads: CPU threads for local search.
+        evalue: E-value threshold.
+        max_target_seqs: Max aligned sequences to keep.
+        max_hsps: Max HSPs per query-subject pair.
+        word_size: Word size for initial matches.
+        gapopen: Cost to open a gap.
+        gapextend: Cost to extend a gap.
+        matrix: Scoring matrix for protein searches.
+        reward: Nucleotide match reward (blastn only).
+        penalty: Nucleotide mismatch penalty (blastn only).
+        task: BLAST task for optimized defaults.
+        perc_identity: Minimum percent identity filter.
+        qcov_hsp_perc: Minimum query coverage per HSP.
+        threshold: Min word score for lookup table (protein only).
+        comp_based_stats: Composition-based statistics mode (protein only).
+        soft_masking: Use soft masking for initial matches.
+        lcase_masking: Treat lowercase in FASTA as masked.
+        dust: Low-complexity filter for nucleotide queries (blastn only).
+        seg: Low-complexity filter for protein queries.
+        ungapped: Perform ungapped alignment only.
+        strand: Query strand(s) to search (nucleotide queries only).
+        query_gencode: Genetic code for translating query (blastx/tblastx).
+        db_gencode: Genetic code for translating DB (tblastn/tblastx).
+        window_size: Multiple-hits window size.
+        xdrop_ungap: X-dropoff for ungapped extensions.
+        xdrop_gap: X-dropoff for preliminary gapped extensions.
+        xdrop_gap_final: X-dropoff for final gapped alignment.
+        use_sw_tback: Compute Smith-Waterman alignments (protein only).
+        culling_limit: Delete hits enveloped by better hits.
+        best_hit_overhang: Best-hit algorithm overhang value.
+        best_hit_score_edge: Best-hit algorithm score edge value.
+        subject_besthit: Only report best hit per subject.
+        entrez_query: Restrict online search with an Entrez query.
+        hitlist_size: Number of hits to return (online mode only).
+        megablast: Use MegaBLAST algorithm (online mode, blastn only).
+    """
+
+    # TODO: Add conditional rendering for the frontend so that online-only
+    # and local-only params are shown/hidden based on the selected search_mode.
+    # Online-only: database, entrez_query, hitlist_size, megablast
+    # Local-only: local_db, num_threads
+
+    # --- Mode selection ---
+    search_mode: Literal["online", "local"] = ConfigField(
+        default="online",
+        title="Search Mode",
+        description=(
+            'Search mode: "online" queries NCBI servers, '
+            '"local" runs BLAST+ against a local database'
+        ),
+    )
+    program: BLAST_PROGRAMS = ConfigField(
+        default="blastn",
+        title="BLAST Program",
+        description="BLAST algorithm to use for the search",
+    )
+
+    # --- Online-only ---
+    database: BLAST_DATABASES = ConfigField(
+        default="nt",
+        title="NCBI Database",
+        description=(
+            "NCBI database to search against (online mode only). "
+            "Ignored when search_mode is 'local'."
+        ),
+        advanced=True,
+    )
+    entrez_query: Optional[str] = ConfigField(
+        default=None,
+        title="Entrez Query",
+        description=(
+            "Restrict online search with an Entrez query "
+            "(e.g. 'Homo sapiens[Organism]'). Online only."
+        ),
+        advanced=True,
+    )
+    hitlist_size: Optional[int] = ConfigField(
+        default=None,
+        title="Hit List Size",
+        description=(
+            "Number of database sequences to return. "
+            "Defaults to 50 on NCBI. Online mode only."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    megablast: Optional[bool] = ConfigField(
+        default=None,
+        title="Use MegaBLAST",
+        description=(
+            "Use MegaBLAST algorithm for blastn searches (online mode only). "
+            "Ignored when search_mode is 'local'."
+        ),
+        advanced=True,
+    )
+
+    # --- Local-only ---
+    local_db: Optional[str] = ConfigField(
+        default=None,
+        title="Local BLAST Database",
+        description=(
+            "Path to a local BLAST database (no file extensions). "
+            "Required for local mode."
+        ),
+    )
+    num_threads: int = ConfigField(
+        default=4,
+        ge=1,
+        title="Number of Threads",
+        description="Number of CPU threads for local BLAST search",
+        advanced=True,
+    )
+
+    # --- Scoring parameters ---
+    evalue: Optional[float] = ConfigField(
+        default=None,
+        title="E-value Threshold",
+        description=(
+            "Expectation value threshold for reporting hits. "
+            "Default is 10.0 in both online and local BLAST."
+        ),
+        gt=0,
+    )
+    word_size: Optional[int] = ConfigField(
+        default=None,
+        title="Word Size",
+        description=(
+            "Length of initial exact match. "
+            "Defaults: 28 (megablast), 11 (blastn), 3 (protein)."
+        ),
+        ge=2,
+        advanced=True,
+    )
+    gapopen: Optional[int] = ConfigField(
+        default=None,
+        title="Gap Open Cost",
+        description=(
+            "Cost to open a gap. "
+            "Defaults: 5 (blastn), 11 (protein programs)."
+        ),
+        ge=0,
+        advanced=True,
+    )
+    gapextend: Optional[int] = ConfigField(
+        default=None,
+        title="Gap Extend Cost",
+        description=(
+            "Cost to extend a gap. Not supported for tblastx. "
+            "Defaults: 2 (blastn), 1 (blastp/blastx/tblastn)."
+        ),
+        ge=0,
+        advanced=True,
+    )
+    matrix: Optional[SCORING_MATRICES] = ConfigField(
+        default=None,
+        title="Scoring Matrix",
+        description=(
+            "Substitution matrix for protein alignments. "
+            "Not applicable to blastn. Default: BLOSUM62."
+        ),
+        advanced=True,
+    )
+    reward: Optional[int] = ConfigField(
+        default=None,
+        title="Nucleotide Match Reward",
+        description=(
+            "Reward for a nucleotide match (blastn only). "
+            "Default: 1 (megablast), 2 (blastn/dc-megablast)."
+        ),
+        ge=0,
+        advanced=True,
+    )
+    penalty: Optional[int] = ConfigField(
+        default=None,
+        title="Nucleotide Mismatch Penalty",
+        description=(
+            "Penalty for nucleotide mismatch (blastn only). "
+            "Must be negative. Default: -2 or -3."
+        ),
+        le=0,
+        advanced=True,
+    )
+    threshold: Optional[int] = ConfigField(
+        default=None,
+        title="Word Score Threshold",
+        description=(
+            "Minimum word score for BLAST lookup table (protein only). "
+            "Default: 11-13 depending on program."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    comp_based_stats: Optional[Literal[0, 1, 2, 3]] = ConfigField(
+        default=None,
+        title="Composition-Based Statistics",
+        description=(
+            "Composition-based score adjustment (protein). "
+            "0=off, 1=stats, 2=adjust (default), 3=unconditional."
+        ),
+        advanced=True,
+    )
+
+    # --- Filtering parameters ---
+    max_target_seqs: Optional[int] = ConfigField(
+        default=None,
+        title="Max Target Sequences",
+        description=(
+            "Maximum number of aligned sequences to keep. "
+            "Default: 500 (local mode)."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    max_hsps: Optional[int] = ConfigField(
+        default=None,
+        title="Max HSPs",
+        description=(
+            "Maximum number of HSPs (high-scoring segment pairs) per "
+            "query-subject pair. Default: no limit."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    perc_identity: Optional[float] = ConfigField(
+        default=None,
+        title="Percent Identity Cutoff",
+        description=(
+            "Minimum percent identity for reported alignments (0-100). "
+            "Most useful for blastn."
+        ),
+        ge=0,
+        le=100,
+        advanced=True,
+    )
+    qcov_hsp_perc: Optional[float] = ConfigField(
+        default=None,
+        title="Query Coverage Per HSP",
+        description="Minimum query coverage percentage per HSP (0-100).",
+        ge=0,
+        le=100,
+        advanced=True,
+    )
+    culling_limit: Optional[int] = ConfigField(
+        default=None,
+        title="Culling Limit",
+        description=(
+            "Delete hits enveloped by at least this many "
+            "higher-scoring hits."
+        ),
+        ge=0,
+        advanced=True,
+    )
+    best_hit_overhang: Optional[float] = ConfigField(
+        default=None,
+        title="Best Hit Overhang",
+        description=(
+            "Best Hit algorithm overhang value (>0 and <0.5). "
+            "Incompatible with culling_limit."
+        ),
+        gt=0,
+        lt=0.5,
+        advanced=True,
+    )
+    best_hit_score_edge: Optional[float] = ConfigField(
+        default=None,
+        title="Best Hit Score Edge",
+        description=(
+            "Best Hit algorithm score edge value (>0 and <0.5). "
+            "Incompatible with culling_limit."
+        ),
+        gt=0,
+        lt=0.5,
+        advanced=True,
+    )
+    subject_besthit: Optional[bool] = ConfigField(
+        default=None,
+        title="Subject Best Hit",
+        description="Only report the best hit per subject sequence.",
+        advanced=True,
+    )
+
+    # --- Masking parameters ---
+    soft_masking: Optional[bool] = ConfigField(
+        default=None,
+        title="Soft Masking",
+        description=(
+            "Apply filtering as soft masks (for seeding only). "
+            "Default: true (blastn), false (protein programs)."
+        ),
+        advanced=True,
+    )
+    lcase_masking: Optional[bool] = ConfigField(
+        default=None,
+        title="Lowercase Masking",
+        description="Treat lowercase letters in FASTA input as masked.",
+        advanced=True,
+    )
+    dust: Optional[str] = ConfigField(
+        default=None,
+        title="DUST Filter",
+        description=(
+            "Low-complexity filter for nucleotide queries. "
+            "Values: 'yes', 'no', or 'level window linker'."
+        ),
+        advanced=True,
+    )
+    seg: Optional[str] = ConfigField(
+        default=None,
+        title="SEG Filter",
+        description=(
+            "Low-complexity filter for protein queries. "
+            "Values: 'yes', 'no', or 'window locut hicut'."
+        ),
+        advanced=True,
+    )
+
+    # --- Search parameters ---
+    task: Optional[BLAST_TASKS] = ConfigField(
+        default=None,
+        title="BLAST Task",
+        description=(
+            "Task preset that sets optimized default parameters "
+            "(e.g. megablast, blastp-fast, blastx-fast)."
+        ),
+        advanced=True,
+    )
+    ungapped: Optional[bool] = ConfigField(
+        default=None,
+        title="Ungapped Alignment",
+        description="Perform ungapped alignment only.",
+        advanced=True,
+    )
+    strand: Optional[Literal["both", "plus", "minus"]] = ConfigField(
+        default=None,
+        title="Query Strand",
+        description=(
+            "Query strand(s) to search: 'both', 'plus', or 'minus'. "
+            "Only for blastn, blastx, tblastx."
+        ),
+        advanced=True,
+    )
+    query_gencode: Optional[int] = ConfigField(
+        default=None,
+        title="Query Genetic Code",
+        description=(
+            "Genetic code for translating the query sequence. "
+            "Only for blastx and tblastx. Default: 1 (Standard)."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    db_gencode: Optional[int] = ConfigField(
+        default=None,
+        title="Database Genetic Code",
+        description=(
+            "Genetic code for translating database sequences. "
+            "Only for tblastn/tblastx. Default: 1."
+        ),
+        ge=1,
+        advanced=True,
+    )
+    window_size: Optional[int] = ConfigField(
+        default=None,
+        title="Window Size",
+        description=(
+            "Multiple-hits window size for combining initial word hits."
+        ),
+        ge=0,
+        advanced=True,
+    )
+    xdrop_ungap: Optional[float] = ConfigField(
+        default=None,
+        title="X-dropoff Ungapped",
+        description="X-dropoff value (in bits) for ungapped extensions.",
+        advanced=True,
+    )
+    xdrop_gap: Optional[float] = ConfigField(
+        default=None,
+        title="X-dropoff Gapped",
+        description=(
+            "X-dropoff value (in bits) for preliminary gapped extensions."
+        ),
+        advanced=True,
+    )
+    xdrop_gap_final: Optional[float] = ConfigField(
+        default=None,
+        title="X-dropoff Final",
+        description="X-dropoff value (in bits) for final gapped alignment.",
+        advanced=True,
+    )
+    use_sw_tback: Optional[bool] = ConfigField(
+        default=None,
+        title="Smith-Waterman Traceback",
+        description=(
+            "Compute locally optimal Smith-Waterman alignments. "
+            "Only for blastp, blastx, tblastn."
+        ),
+        advanced=True,
+    )
+
+    # Fields that only apply to online mode
+    _online_only_fields: tuple = (
+        "database",
+        "entrez_query",
+        "hitlist_size",
+        "megablast",
+    )
+    # Fields that only apply to local mode
+    _local_only_fields: tuple = (
+        "local_db",
+        "num_threads",
+    )
+
+    @model_validator(mode="after")
+    def validate_mode_requirements(self) -> BlastSearchConfig:
+        """Validate that mode-specific required fields are provided and
+        warn about mode-inappropriate parameters.
+
+        Raises ``ValueError`` for hard errors (e.g. missing ``local_db``
+        in local mode) and logs warnings for fields that will be ignored.
+        """
+        if self.search_mode == "local" and not self.local_db:
+            raise ValueError(
+                "local_db is required when search_mode is 'local'"
+            )
+
+        # Warn when online-only params are set in local mode
+        if self.search_mode == "local":
+            for field_name in self._online_only_fields:
+                value = getattr(self, field_name)
+                default = BlastSearchConfig.model_fields[field_name].default
+                if value != default:
+                    logger.warning(
+                        "Config field '%s' is online-only and will be "
+                        "ignored in local search mode.",
+                        field_name,
+                    )
+
+        # Warn when local-only params are set in online mode
+        if self.search_mode == "online":
+            for field_name in self._local_only_fields:
+                value = getattr(self, field_name)
+                default = BlastSearchConfig.model_fields[field_name].default
+                if value != default:
+                    logger.warning(
+                        "Config field '%s' is local-only and will be "
+                        "ignored in online search mode.",
+                        field_name,
+                    )
+
+        return self
+
+
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+@tool(
+    key="blast-search",
+    label="BLAST Search",
+    input=BlastSearchInput,
+    config=BlastSearchConfig,
+    output=BlastSearchOutput,
+    description="Search sequences against BLAST databases (online or local)",
+)
+@tool_cache("blast-search")
+def run_blast_search(
+    inputs: BlastSearchInput, config: BlastSearchConfig
+) -> BlastSearchOutput:
+    """Search sequences against BLAST databases.
+
+    Dispatches to online (NCBI QBLAST) or local (BLAST+ CLI) search
+    based on ``config.search_mode``.
+
+    Args:
+        inputs: Validated BLAST search input.
+        config: Validated BLAST search configuration.
+
+    Returns:
+        Structured output with BLAST results DataFrame.
+
+    Raises:
+        RuntimeError: If the BLAST search fails.
+
+    Examples:
+        >>> from bio_programming_tools.tools.gene_annotation import (
+        ...     run_blast_search, BlastSearchInput, BlastSearchConfig
+        ... )
+        >>> inputs = BlastSearchInput(query="ATGCGTAAA")
+        >>> config = BlastSearchConfig(program="blastn", database="nt")
+        >>> result = run_blast_search(inputs, config)
+        >>> print(f"Found {result.num_hits} hits")
+    """
+    if config.search_mode == "local":
+        return _local_search(inputs, config)
+    return _online_search(inputs, config)
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+def _online_search(
+    inputs: BlastSearchInput, config: BlastSearchConfig
+) -> BlastSearchOutput:
+    """Submit query to NCBI QBLAST and return results."""
+    from Bio import SeqIO
+    from Bio.Blast import NCBIWWW, NCBIXML
+
+    # Resolve query sequence
+    if inputs.query_type == "fasta_path":
+        seq_record = next(SeqIO.parse(inputs.query, "fasta"))
+        query_seq = str(seq_record.seq)
+    else:
+        query_seq = inputs.query
+
+    # Build qblast keyword arguments from typed config fields.
+    # Mapping: config field name → qblast kwarg name.
+    _QBLAST_PARAM_MAP = {
+        "evalue": "expect",
+        "hitlist_size": "hitlist_size",
+        "word_size": "word_size",
+        "matrix": "matrix_name",
+        "reward": "nucl_reward",
+        "penalty": "nucl_penalty",
+        "threshold": "threshold",
+        "comp_based_stats": "composition_based_statistics",
+        "perc_identity": "perc_ident",
+        "entrez_query": "entrez_query",
+        "megablast": "megablast",
+        "ungapped": "ungapped_alignment",
+        "lcase_masking": "lcase_mask",
+        "query_gencode": "genetic_code",
+        "db_gencode": "db_genetic_code",
+    }
+    qblast_kwargs: dict = {
+        qblast_key: getattr(config, config_field)
+        for config_field, qblast_key in _QBLAST_PARAM_MAP.items()
+        if getattr(config, config_field) is not None
+    }
+
+    # gapcosts requires combining two fields into a single string
+    if config.gapopen is not None or config.gapextend is not None:
+        go = config.gapopen if config.gapopen is not None else 11
+        ge = config.gapextend if config.gapextend is not None else 1
+        qblast_kwargs["gapcosts"] = f"{go} {ge}"
+
+    handle = NCBIWWW.qblast(
+        program=config.program,
+        database=config.database,
+        sequence=query_seq,
+        format_type="XML",
+        **qblast_kwargs,
+    )
+
+    raw_xml = handle.read()
+    handle.close()
+
+    blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))
+    results_df = _blast_results_to_df(blast_records)
+
+    return BlastSearchOutput(
+        metadata={
+            "search_mode": "online",
+            "program": config.program,
+            "database": config.database,
+            "query_length": len(query_seq),
+        },
+        results_df=results_df,
+        num_hits=len(results_df),
+    )
+
+
+def _local_search(
+    inputs: BlastSearchInput, config: BlastSearchConfig
+) -> BlastSearchOutput:
+    """Run BLAST+ locally against a local database."""
+    import tempfile
+
+    from bio_programming_tools.utils.env_manager import EnvManager
+
+    venv_manager = EnvManager(model_name="blast")
+
+    # If query is a raw sequence, write it to a temp FASTA file
+    if inputs.query_type == "sequence":
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".fasta", delete=False
+        )
+        tmp.write(f">query\n{inputs.query}\n")
+        tmp.close()
+        query_path = tmp.name
+    else:
+        query_path = inputs.query
+
+    # Build CLI params from typed config fields.
+    # These config fields map 1:1 to BLAST+ CLI flags (same name).
+    _CLI_PARAMS = (
+        "evalue",
+        "word_size",
+        "gapopen",
+        "gapextend",
+        "matrix",
+        "reward",
+        "penalty",
+        "threshold",
+        "comp_based_stats",
+        "max_target_seqs",
+        "max_hsps",
+        "perc_identity",
+        "qcov_hsp_perc",
+        "culling_limit",
+        "best_hit_overhang",
+        "best_hit_score_edge",
+        "subject_besthit",
+        "soft_masking",
+        "lcase_masking",
+        "dust",
+        "seg",
+        "task",
+        "ungapped",
+        "strand",
+        "query_gencode",
+        "db_gencode",
+        "window_size",
+        "xdrop_ungap",
+        "xdrop_gap",
+        "xdrop_gap_final",
+        "use_sw_tback",
+    )
+    cli_params: dict = {
+        name: getattr(config, name)
+        for name in _CLI_PARAMS
+        if getattr(config, name) is not None
+    }
+
+    input_data = {
+        "operation": "local_blast",
+        "program": config.program,
+        "query_path": query_path,
+        "db": config.local_db,
+        "num_threads": config.num_threads,
+        "additional_params": cli_params,
+    }
+
+    try:
+        output_data = venv_manager.call_standalone_script_in_venv(
+            script_path=Path(__file__).parent / "standalone" / "run.py",
+            input_dict=input_data,
+            device="cpu",
+        )
+    finally:
+        # Clean up temp file if we created one
+        if inputs.query_type == "sequence":
+            Path(query_path).unlink(missing_ok=True)
+
+    # Parse raw tabular output into DataFrame
+    raw_output = output_data["stdout"]
+    if not raw_output.strip():
+        results_df = pd.DataFrame(columns=_BLAST_COLS)
+    else:
+        results_df = pd.read_csv(
+            io.StringIO(raw_output), sep="\t", names=_BLAST_COLS
+        )
+
+    return BlastSearchOutput(
+        metadata={
+            "search_mode": "local",
+            "program": config.program,
+            "database": config.local_db,
+            "num_threads": config.num_threads,
+        },
+        results_df=results_df,
+        num_hits=len(results_df),
+    )
+
+
+def _blast_results_to_df(blast_records) -> pd.DataFrame:
+    """Convert Biopython BLAST records to a standard tabular DataFrame.
+
+    Produces the same 12-column layout as BLAST+ ``-outfmt 6`` so that
+    online and local results are directly comparable.
+
+    Args:
+        blast_records: List of Bio.Blast.Record objects from NCBIXML.parse.
+
+    Returns:
+        DataFrame with standard BLAST tabular columns.
+    """
+    hits = []
+    for record in blast_records:
+        query_id = record.query.split()[0]
+        for alignment in record.alignments:
+            for hsp in alignment.hsps:
+                align_len = getattr(hsp, "align_length", len(hsp.match))
+                ident = hsp.identities if isinstance(hsp.identities, int) else 0
+                gaps = getattr(hsp, "gaps", 0)
+                gaps = gaps if isinstance(gaps, int) else 0
+                gap_opens = sum(
+                    len(re.findall(r"-+", seq)) for seq in (hsp.query, hsp.sbjct)
+                )
+                hits.append({
+                    "qseqid": query_id,
+                    "sseqid": getattr(alignment, "accession", alignment.hit_id),
+                    "pident": (ident / align_len * 100) if align_len > 0 else 0,
+                    "length": align_len,
+                    "mismatch": align_len - ident - gaps,
+                    "gapopen": gap_opens,
+                    "qstart": hsp.query_start,
+                    "qend": hsp.query_end,
+                    "sstart": hsp.sbjct_start,
+                    "send": hsp.sbjct_end,
+                    "evalue": hsp.expect,
+                    "bitscore": hsp.bits,
+                })
+
+    return pd.DataFrame(hits) if hits else pd.DataFrame(columns=_BLAST_COLS)

@@ -9,9 +9,20 @@ from .causal_models import (  # Evo1; Evo2; ProGen2
     run_evo1_sample,
 )
 
+# Tool cache and I/O
+from bio_programming_tools.utils.tool_cache import (
+    clear_cache,
+    clear_tool_cache,
+    get_cache_info,
+    tool_cache,
+)
+from bio_programming_tools.utils.tool_io import BaseToolOutput
+
 # Gene annotation tools
 from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCED
-    BlastOutput,
+    BlastSearchConfig,
+    BlastSearchInput,
+    BlastSearchOutput,
     CrisprArray,
     CrisprRepeatSpacer,
     CrisprTracrConfig,
@@ -20,9 +31,6 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
     CreateBlastDbConfig,
     CreateBlastDbInput,
     CreateBlastDbOutput,
-    LocalBlastConfig,
-    LocalBlastInput,
-    LocalBlastOutput,
     MincedConfig,
     MincedInput,
     MincedOutput,
@@ -40,9 +48,6 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
     MmseqsSearchProteinsInput,
     MmseqsSearchProteinsOutput,
     MmseqsSequenceSearchResult,
-    OnlineBlastConfig,
-    OnlineBlastInput,
-    OnlineBlastOutput,
     PyHmmscanConfig,
     PyHmmscanInput,
     PyHmmscanOutput,
@@ -59,29 +64,19 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
     PyPhmmerInput,
     PyPhmmerOutput,
     TracrPrediction,
+    run_blast_search,
     run_create_blast_db,
     run_crispr_tracr,
-    run_local_blast_search,
     run_minced,
     run_mmseqs_clustering,
     run_mmseqs_search_genomes,
     run_mmseqs_search_proteins,
-    run_online_blast_search,
     run_pyhmmer_hmmscan,
     run_pyhmmer_hmmsearch,
     run_pyhmmer_jackhmmer,
     run_pyhmmer_nhmmer,
     run_pyhmmer_phmmer,
 )
-
-# Tool cache and I/O
-from bio_programming_tools.utils.tool_cache import (
-    clear_cache,
-    clear_tool_cache,
-    get_cache_info,
-    tool_cache,
-)
-from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 # Inverse folding tools
 from .inverse_folding import (  # Shared Data Models (user-facing helpers only); ProteinMPNN; LigandMPNN
@@ -255,19 +250,14 @@ __all__ = [
     "run_evo1_sample",
     "EVO1_MODEL_NAMES",
     # BLAST
-    "run_online_blast_search",
-    "run_local_blast_search",
+    "run_blast_search",
     "run_create_blast_db",
-    "OnlineBlastInput",
-    "OnlineBlastConfig",
-    "OnlineBlastOutput",
-    "LocalBlastInput",
-    "LocalBlastConfig",
-    "LocalBlastOutput",
+    "BlastSearchInput",
+    "BlastSearchConfig",
+    "BlastSearchOutput",
     "CreateBlastDbInput",
     "CreateBlastDbConfig",
     "CreateBlastDbOutput",
-    "BlastOutput",
     # PyHMMER
     "run_pyhmmer_hmmsearch",
     "run_pyhmmer_hmmscan",

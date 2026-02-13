@@ -24,7 +24,7 @@ ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein s
 - Build sequence profiles for downstream analysis (e.g., coevolution, specificity prediction)
 
 **Do NOT use when you need to:**
-- Search for specific sequence hits with E-value statistics -- use BLAST (`blast-local-search`)
+- Search for specific sequence hits with E-value statistics -- use BLAST (`blast-search`)
 - Align a small set of known sequences to each other -- use Clustal Omega or MUSCLE
 - Perform structural alignment of 3D structures -- use Foldseek (`foldseek-search`)
 - Search for remote homologs below the twilight zone -- use HHblits or jackhmmer for iterative profile searches
@@ -248,6 +248,6 @@ if msa is not None:
 - **Conservation scoring** -- Use MSA column statistics to identify conserved positions in designed proteins
 
 **Alternatives for sequence search:**
-- **BLAST** (`blast-local-search`) -- Traditional sequence search with E-value statistics; better for targeted homolog identification
+- **BLAST** (`blast-search`) -- Traditional sequence search with E-value statistics; better for targeted homolog identification
 - **Foldseek** (`foldseek-search`) -- Structure-based search; finds remote homologs that sequence search misses
 - **HHblits** -- Iterative profile-based search; higher sensitivity for remote homologs but slower

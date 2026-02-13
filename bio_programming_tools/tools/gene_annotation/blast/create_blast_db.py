@@ -6,9 +6,9 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 # ============================================================================
@@ -51,7 +51,7 @@ class CreateBlastDbOutput(BaseToolOutput):
     Attributes:
         db_path (str): The base path to the generated BLAST database files (without
             file extensions). This path can be used directly as the value for
-            the ``local_db`` parameter in ``LocalBlastConfig``. For example, if
+            the ``local_db`` parameter in ``BlastSearchConfig``. For example, if
             ``db_path`` is ``"/data/mydb"``, ``makeblastdb`` will have created
             multiple files like ``"/data/mydb.nhr"``, ``"/data/mydb.nin"``,
             ``"/data/mydb.nsq"`` (for nucleotide databases) or similar extensions

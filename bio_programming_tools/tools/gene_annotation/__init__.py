@@ -1,18 +1,13 @@
 # BLAST tools
 from .blast import (
-    BlastOutput,
+    BlastSearchConfig,
+    BlastSearchInput,
+    BlastSearchOutput,
     CreateBlastDbConfig,
     CreateBlastDbInput,
     CreateBlastDbOutput,
-    LocalBlastConfig,
-    LocalBlastInput,
-    LocalBlastOutput,
-    OnlineBlastConfig,
-    OnlineBlastInput,
-    OnlineBlastOutput,
+    run_blast_search,
     run_create_blast_db,
-    run_local_blast_search,
-    run_online_blast_search,
 )
 
 # MMseqs2 tools
@@ -81,18 +76,13 @@ from .minced import (
 
 __all__ = [
     # BLAST
-    "run_online_blast_search",
-    "run_local_blast_search",
+    "run_blast_search",
     "run_create_blast_db",
-    "OnlineBlastInput",
-    "OnlineBlastConfig",
-    "LocalBlastInput",
-    "LocalBlastConfig",
+    "BlastSearchInput",
+    "BlastSearchConfig",
+    "BlastSearchOutput",
     "CreateBlastDbInput",
     "CreateBlastDbConfig",
-    "BlastOutput",
-    "OnlineBlastOutput",
-    "LocalBlastOutput",
     "CreateBlastDbOutput",
     # PyHMMER
     "run_pyhmmer_hmmsearch",

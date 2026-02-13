@@ -354,39 +354,24 @@ some-library>=1.0.0
 numpy>=1.24.0
 ```
 
-### 3B: AI Model Tool with Modal Fallback (GPU)
+### 3B: AI Model Tool (GPU)
 
 ```python
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    from bio_programming_tools.utils import use_modal_gpu
+    from bio_programming_tools.utils.env_manager import EnvManager
 
-    if use_modal_gpu():
-        # Remote GPU execution via Modal
-        logger.debug("Using Modal for {ToolName}")
-        import modal
-
-        ToolService = modal.Cls.from_name("bio-programming", "{ToolName}Service")
-        result = ToolService().run.remote(
-            sequences=inputs.sequences,
-            param1=config.param1,
-        )
-    else:
-        # Local GPU execution
-        logger.debug("Using local GPU for {ToolName}")
-        from bio_programming_tools.utils.env_manager import EnvManager
-
-        venv_manager = EnvManager("{tool_name}")
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=Path(__file__).parent / "standalone" / "inference.py",
-            input_dict={
-                "operation": "run",
-                "sequences": inputs.sequences,
-                "param1": config.param1,
-                "device": config.device,
-            },
-            device=config.device,
-            verbose=config.verbose,
-        )
+    venv_manager = EnvManager("{tool_name}")
+    result = venv_manager.call_standalone_script_in_venv(
+        script_path=Path(__file__).parent / "standalone" / "inference.py",
+        input_dict={
+            "operation": "run",
+            "sequences": inputs.sequences,
+            "param1": config.param1,
+            "device": config.device,
+        },
+        device=config.device,
+        verbose=config.verbose,
+    )
 
     return ToolOutput(results=result["results"])
 ```
@@ -683,7 +668,7 @@ When in doubt, read these canonical examples:
 | Standalone + binary | BLAST | `tools/gene_annotation/blast/` |
 | CPU standalone (run.py) | BLAST | `tools/gene_annotation/blast/standalone/run.py` |
 | AI model standalone (inference.py) | ESMFold | `tools/structure_prediction/esmfold/standalone/inference.py` |
-| GPU + Modal | Evo2 | `tools/causal_models/evo2/evo2_sample.py` |
+| GPU standalone | Evo2 | `tools/causal_models/evo2/evo2_sample.py` |
 | Shared data models | Inverse Folding | `tools/inverse_folding/shared_data_models.py` |
 | Per-item caching | Orfipy | `tools/orf_prediction/orfipy/orfipy.py` |
 | Scoring tool | Evo2 Score | `tools/causal_models/evo2/evo2_score.py` |

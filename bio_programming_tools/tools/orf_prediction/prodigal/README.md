@@ -283,7 +283,7 @@ print(df[['parent_id', 'orf_id', 'amino_acid_length', 'strand']])
 ## Related Tools
 
 **Tools often used together:**
-- `blast-local-search` / `blast-online-search`: Annotate predicted proteins against sequence databases.
+- `blast-search`: Annotate predicted proteins against sequence databases.
 - `pyhmmer-hmmscan`: Annotate predicted proteins with protein domain profiles from Pfam.
 - `esm2`: Score predicted proteins with a protein language model.
 

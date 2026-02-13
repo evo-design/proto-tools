@@ -17,7 +17,7 @@ MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searchi
 - BLAST: Best for small-scale queries where you need access to NCBI's curated databases online, or when maximum sensitivity is required for very distant homologs.
 
 **When NOT to use this tool:**
-- Single Sequence Queries: If you're searching one sequence against NCBI, use `blast-online-search` instead.
+- Single Sequence Queries: If you're searching one sequence against NCBI, use `blast-search` instead.
 - Very Short Sequences: MMseqs2 may struggle with sequences <30 amino acids or <100 nucleotides.
 - Maximum Sensitivity Required: For detecting extremely distant homologs (<20% identity), profile-based tools like HMMER or HHblits are more appropriate.
 
@@ -316,9 +316,9 @@ print(f"Average cluster size: {cluster_sizes.mean():.1f}")
 ## Related Tools
 
 **Tools often used together:**
-- `blast-online-search` / `blast-local-search`: Use BLAST for initial small-scale exploration, then switch to MMseqs2 for large-scale analysis.
+- `blast-search`: Use BLAST for initial small-scale exploration, then switch to MMseqs2 for large-scale analysis.
 - `pyhmmer-hmmsearch` / `pyhmmer-hmmscan`: Use PyHMMER for profile-based follow-up on MMseqs2 hits requiring deeper homology analysis.
 
 **Alternative tools:**
-- `blast-online-search` / `blast-local-search`: Use for smaller-scale searches or when you need NCBI database access.
+- `blast-search`: Use for smaller-scale searches or when you need NCBI database access.
 - `pyhmmer-hmmsearch`: Use for profile-based searches when detecting remote homologs (<30% identity).

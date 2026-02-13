@@ -1,0 +1,3 @@
+qseqid,sseqid,pident,length,mismatch,gapopen,qstart,qend,sstart,send,evalue,bitscore
+query_hbb,sp|P68871|HBB_HUMAN,100.0,147,0,0,1,147,1,147,1.39e-111,301
+query_hbb,sp|P69905|HBA_HUMAN,43.448,145,74,3,4,146,3,141,5.419999999999999e-38,114

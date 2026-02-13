@@ -175,7 +175,7 @@ result.export("/path/to/output", file_format="csv")
 ## Related Tools
 
 **Often used together:**
-- **BLAST** (`blast-local-search`) -- Segmasker scores inform whether sequences need masking before homology search
+- **BLAST** (`blast-search`) -- Segmasker scores inform whether sequences need masking before homology search
 - **Inverse folding tools** (`ligandmpnn-sample`, `proteinmpnn-sample`) -- Screen designed sequences for compositional bias
 
 **Alternatives for related tasks:**

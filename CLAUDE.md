@@ -103,11 +103,11 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 
 ## Naming Conventions
 
-- **Tool registry key**: `{tool}-{action}` kebab-case — `"evo2-sample"`, `"blast-local-search"`, `"alphafold3-prediction"`. Every key must have an action suffix.
-- **Run function**: `run_{tool_name}` — `run_evo2_sample`, `run_local_blast_search`
+- **Tool registry key**: `{tool}-{action}` kebab-case — `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`. Every key must have an action suffix.
+- **Run function**: `run_{tool_name}` — `run_evo2_sample`, `run_blast_search`
 - **Classes**: PascalCase — `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
-- **Directories**: snake_case — `evo2/`, `local_blast/`
-- **Files**: snake_case — `evo2_sample.py`, `local_blast.py`
+- **Directories**: snake_case — `evo2/`, `blast/`
+- **Files**: snake_case — `evo2_sample.py`, `blast_search.py`
 - **Code section headers**: `# ============================================================================`
 
 ## Rules When Implementing Tools
