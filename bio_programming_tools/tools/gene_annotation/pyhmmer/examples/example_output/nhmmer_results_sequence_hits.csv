@@ -1,2 +1,2 @@
 query_name,query_accession,query_description,query_idx,target_name,target_accession,target_description,evalue,score,bias,sum_score,reported,included,pvalue,num_domains
-0,,,0,0,-,-,1.2665344012759648e-36,112.83876037597656,-9.489822387695312,112.83876037597656,True,True,1.2665344012759648e-36,1
+0,,,0,0,-,-,1.2665341837399674e-36,112.83876037597656,-9.489822387695312,112.83876037597656,True,True,1.2665341837399674e-36,1

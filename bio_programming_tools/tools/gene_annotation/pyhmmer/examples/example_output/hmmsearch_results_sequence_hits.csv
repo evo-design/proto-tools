@@ -1,3 +1,3 @@
 query_name,query_accession,query_description,query_idx,target_name,target_accession,target_description,evalue,score,bias,sum_score,reported,included,pvalue,num_domains
-Barwin,PF00967.24,Barwin family,1,0,-,-,2.083647369249138e-05,11.68843936920166,0.009281158447265625,10.80788803100586,True,True,1.041823684624569e-05,1
+Barwin,PF00967.24,Barwin family,1,0,-,-,2.0836431144500433e-05,11.68844223022461,0.009281158447265625,10.80788803100586,True,True,1.0418215572250217e-05,1
 IPK,PF03770.23,Inositol polyphosphate kinase,2,0,-,-,6.497566867598274e-50,156.78285217285156,0.031890869140625,156.22836303710938,True,True,3.248783433799137e-50,1

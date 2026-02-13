@@ -1,3 +1,3 @@
 query_name,query_accession,query_description,query_idx,target_name,target_accession,target_description,hmm_length,hmm_from,hmm_to,target_from,target_to,target_length,c_evalue,i_evalue,domain_score,domain_bias,domain_idx,env_from,env_to,envelope_score,domain_included,domain_reported,domain_pvalue
 0,,,0,IPK,PF03770.23,Inositol polyphosphate kinase,191,1,190,252,462,472,9.610519611085098e-50,1.9221039222170196e-49,156.22836303710938,0.031886945895027025,0,252,463,148.30994616420338,True,True,4.805259805542549e-50
-0,,,0,Barwin,PF00967.24,Barwin family,119,38,71,189,222,472,3.906320130904692e-05,7.812640261809384e-05,10.80788803100586,0.009281745792366748,0,180,256,4.100849605561387,True,True,1.953160065452346e-05
+0,,,0,Barwin,PF00967.24,Barwin family,119,38,71,189,222,472,3.906320130904692e-05,7.812640261809384e-05,10.80788803100586,0.009281745792366748,0,180,256,4.100849949526689,True,True,1.953160065452346e-05
