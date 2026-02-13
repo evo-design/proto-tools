@@ -208,6 +208,18 @@ Tools that need external binaries (not available via pip) use `utils/install_bin
 
 Existing tools using `install_binary`: blast, mafft, mmseqs, segmasker, minced.
 
+## Gotchas: Micromamba CUDA Toolkit in Venvs
+
+When tools need CUDA toolkit + cuDNN installed locally via micromamba (e.g., evo2, protenix):
+
+- **micromamba stores everything as symlinks** to its package cache. Never filter out symlinks when searching for `.so` files.
+- **EnvManager strips `LD_LIBRARY_PATH`** from subprocess environments (CUDA blocklist). Use `ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)` in `sitecustomize.py` to preload CUDA libs instead.
+- **glibc caches `LD_LIBRARY_PATH` at process startup**. Setting it in `sitecustomize.py` has no effect on subsequent `dlopen()` calls — must use `ctypes.CDLL` preloading.
+- **CUDA version mismatch**: micromamba may install a different CUDA version (e.g., 12.9) than what torch bundles (e.g., 12.6). If transformer-engine is compiled against 12.9 headers, it must use 12.9 runtime libs. Preload them in `sitecustomize.py` BEFORE torch is imported.
+- **nvtx3 headers**: `cuda-nvtx` from micromamba may install headers under `nsight-compute/` instead of the standard include path. Use a `find + ln -s` to create the symlink.
+- **flash-attn**: prefer versions with prebuilt wheels (check PyPI for your Python + torch + CUDA combo). Source builds require `psutil ninja packaging setuptools wheel numpy` installed first.
+- **transformer-engine**: requires `--no-build-isolation` because its setup.py imports torch.
+
 ---
 
 ## Code Quality
