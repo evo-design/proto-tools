@@ -1,5 +1,4 @@
 #!/bin/bash
-# Setup script for MinCED standalone environment
 set -euo pipefail
 
 echo "Setting up MinCED standalone environment..."
@@ -10,7 +9,17 @@ pip install uv
 echo "Installing Python dependencies..."
 uv pip install -r requirements.txt
 
-echo "Installing MinCED via conda..."
-conda install -y -c bioconda minced
+echo "Downloading MinCED..."
+# Walk up from this script's directory to find utils/install_binary.py
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SEARCH_DIR="$SCRIPT_DIR"
+while [ ! -f "$SEARCH_DIR/utils/install_binary.py" ]; do
+    SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+    if [ "$SEARCH_DIR" = "/" ]; then
+        echo "ERROR: Could not find utils/install_binary.py" >&2
+        exit 1
+    fi
+done
+python "$SEARCH_DIR/utils/install_binary.py" minced
 
 echo "MinCED setup complete!"

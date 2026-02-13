@@ -107,9 +107,6 @@ def _run_single_minced(
             f.write(f">{seq_id}\n{clean_seq}\n")
 
         minced_bin = str(Path(sys.prefix) / "bin" / "minced")
-        if not Path(minced_bin).exists():
-            import shutil
-            minced_bin = shutil.which("minced") or minced_bin
         cmd = [
             minced_bin,
             "-minNR", str(min_nr),
