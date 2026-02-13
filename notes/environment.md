@@ -33,7 +33,10 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 
 | Category | Tool | GPU Version | Status | Notes |
 |----------|------|-------------|--------|-------|
+| Causal Models | evo1 | N/A | Not Tested | |
 | Gene Annotation | blast | N/A (no GPU) | Working | 11/11 tests pass |
+| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires conda env with Python 3.8 + sklearn 0.22; macOS arm64 needs CONDA_SUBDIR=osx-64 |
+| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR directly into venv bin/ |
 | Gene Annotation | mmseqs | N/A (no GPU) | Working | 29/29 tests pass |
 | Gene Annotation | pyhmmer | N/A (no GPU) | Working | 21/21 tests pass |
 | Inverse Folding | ligandmpnn | latest+cu126 | Working | 2/2 tests pass |
@@ -45,10 +48,12 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | ORF Prediction | orfipy | N/A (no GPU) | Working | 19/19 tests pass |
 | ORF Prediction | prodigal | N/A (no GPU) | Working | 29/29 tests pass |
 | RNA Splicing | splice_transformer | latest+cu126 | Working | 2/2 tests pass |
+| Sequence Alignment | gap_gini | N/A (no GPU) | Not Tested | Pure Python; no external deps |
 | Sequence Alignment | run_colabfold_search | N/A (no GPU) | Working | 22/22 tests pass |
 | Sequence Alignment | mafft | N/A (no GPU) | Working | 40/40 tests pass |
 | Sequence Scoring | enformer | 2.6.0+cu126 | Working | 8/8 tests pass |
 | Sequence Scoring | borzoi | 2.6.0+cu126 | Working | 14/14 tests pass |
+| Sequence Scoring | segmasker | N/A (no GPU) | Not Tested | Requires NCBI BLAST+ segmasker binary |
 | Sequence Scoring | alphagenome | N/A | Not Working | 0/8 pass; 8 failing (tested before fixes in [#8](https://github.com/google-deepmind/alphagenome_research/issues/8) and [#10](https://github.com/google-deepmind/alphagenome_research/issues/10)) |
 | Structure Design | rfdiffusion3 | latest+cu126 | Working | 3/3 tests pass |
 | Structure Dynamics | bioemu | latest+cu126 | Working | 13/13 tests pass |
@@ -56,6 +61,7 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | Structure Prediction | boltz | 2.10.0+cu130 | Working | Works |
 | Structure Prediction | chai | 2.6.0+cu126 | Working | Works |
 | Structure Prediction | protenix | 2.7.1+cu128 | Working | 9/9 tests pass |
+| Structure Prediction | structure_metrics | N/A (no GPU) | Not Tested | Pure Python (BioPython); no external deps |
 | Structure Prediction | viennarna | N/A (no GPU) | Working | 6/6 tests pass |
 
 
@@ -88,7 +94,10 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 
 | Category | Tool | GPU Version | Status | Notes |
 |----------|------|-------------|--------|-------|
+| Causal Models | evo1 | N/A | Not Tested | |
 | Gene Annotation | blast | N/A (no GPU) | Working | Works |
+| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires conda env with Python 3.8 + sklearn 0.22 |
+| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR directly into venv bin/ |
 | Gene Annotation | mmseqs | N/A (no GPU) | Working | Works |
 | Gene Annotation | pyhmmer | N/A (no GPU) | Working | Works |
 | Inverse Folding | ligandmpnn | latest+cu130 | Working |  |
@@ -100,10 +109,12 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | ORF Prediction | orfipy | N/A (no GPU) | Working | Fixed: run.py now uses `Path(sys.prefix) / "bin" / "orfipy"` |
 | ORF Prediction | prodigal | N/A (no GPU) | Working | Works |
 | RNA Splicing | splice_transformer | latest+cu130 | Working | Needed venv refresh; CPU tests always passed |
+| Sequence Alignment | gap_gini | N/A (no GPU) | Not Tested | Pure Python; no external deps |
 | Sequence Alignment | run_colabfold_search | N/A (no GPU) | Working | Works |
 | Sequence Alignment | mafft | N/A (no GPU) | Not Working | pip package ships x86_64 ELF binaries in libexec/; platform incompatible |
 | Sequence Scoring | enformer | 2.10.0+cu130 | Working | Needed venv refresh |
 | Sequence Scoring | borzoi | 2.7.1+cu128 | Working | flash-attn skipped on aarch64; auto-falls back to standard borzoi model; 18/18 tests pass |
+| Sequence Scoring | segmasker | N/A (no GPU) | Not Tested | Requires NCBI BLAST+ segmasker binary |
 | Sequence Scoring | alphagenome | N/A | Not Working | JAX-based; `jax[cuda12_local]` doesn't support aarch64 |
 | Structure Design | rfdiffusion3 | latest+cu130 | Working | 5/5 tests pass |
 | Structure Dynamics | bioemu | latest+cu130 | Not Working | Setup works but inference script exit code 1; pre-existing issue |
@@ -111,4 +122,5 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | Structure Prediction | boltz | 2.10.0+cu130 | Not Working | Setup works but inference stalls indefinitely |
 | Structure Prediction | chai | 2.6.0+cu126 | Not Working | `chai_lab==0.6.1` pins `torch<2.7` which lacks sm_121 support; pre-compiled TorchScript ESM2 model incompatible |
 | Structure Prediction | protenix | 2.7.1+cu128 | Not Working | Setup arch-generalized but JIT compilation fails: protenix hardcodes sm_70/sm_80, needs sm_121 |
+| Structure Prediction | structure_metrics | N/A (no GPU) | Not Tested | Pure Python (BioPython); no external deps |
 | Structure Prediction | viennarna | N/A (no GPU) | Working | 8/8 tests pass |
