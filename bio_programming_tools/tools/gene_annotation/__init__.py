@@ -59,6 +59,26 @@ from .pyhmmer import (
     run_pyhmmer_phmmer,
 )
 
+# CRISPRtracrRNA tools
+from .crispr_tracr import (
+    CrisprTracrConfig,
+    CrisprTracrInput,
+    CrisprTracrOutput,
+    TracrPrediction,
+    run_crispr_tracr,
+)
+
+# MinCED tools
+from .minced import (
+    CrisprArray,
+    CrisprRepeatSpacer,
+    MincedConfig,
+    MincedInput,
+    MincedOutput,
+    MincedSequenceResult,
+    run_minced,
+)
+
 __all__ = [
     # BLAST
     "run_online_blast_search",
@@ -115,4 +135,18 @@ __all__ = [
     "MmseqsClusteringInput",
     "MmseqsClusteringConfig",
     "MmseqsClusteringOutput",
+    # CRISPRtracrRNA
+    "run_crispr_tracr",
+    "CrisprTracrInput",
+    "CrisprTracrConfig",
+    "CrisprTracrOutput",
+    "TracrPrediction",
+    # MinCED
+    "run_minced",
+    "MincedInput",
+    "MincedConfig",
+    "MincedOutput",
+    "MincedSequenceResult",
+    "CrisprArray",
+    "CrisprRepeatSpacer",
 ]

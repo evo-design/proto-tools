@@ -1,0 +1,6 @@
+# Evo1 dependencies
+# https://github.com/evo-design/evo
+# Note: torch is installed in setup.sh before this file.
+
+evo-model
+tqdm

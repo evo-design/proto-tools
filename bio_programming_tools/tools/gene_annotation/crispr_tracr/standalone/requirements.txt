@@ -1,0 +1,3 @@
+# Minimal deps for run.py (CRISPRtracrRNA's venv Python 3.12).
+# CRISPRidentify's heavy deps (sklearn, h5py, etc.) are in conda_deps
+# with Python 3.8 to match the pickled model format.

@@ -7,7 +7,7 @@ description: "Evo2 is Arc Institute's genome-scale DNA language model for sequen
 
 ## Overview
 
-Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local GPU/CPU execution and optional Modal GPU execution, with KV caching for efficient long generations in local mode.
+Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local GPU/CPU execution with KV caching for efficient long generations.
 
 ## When to Use This Tool
 
@@ -60,7 +60,6 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 ## Execution Modes
 
 - **Local execution**: Loads the model on-demand via `EnvManager("evo2")`. Supports KV caching for iterative/long generations. Requires CUDA GPU.
-- **Modal execution**: Automatically used when Modal GPU is configured. Same API but does **not** support KV cache reuse across calls.
 
 ## How It Works
 
@@ -69,7 +68,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 2. At each step, the model predicts a probability distribution over the next byte given all preceding bytes. Evo2 uses a StripedHyena/Vortex architecture for efficient long-context generation.
 3. The next token is sampled according to temperature, top-k, and top-p settings.
 4. Generation continues for `num_tokens` steps or until an EOS token is encountered (if `stop_at_eos=True`).
-5. With `cached_generation=True` (local only), the model stores KV caches for efficient continuation. The returned `kv_caches` can be passed as `old_kv_cache` in subsequent calls.
+5. With `cached_generation=True` , the model stores KV caches for efficient continuation. The returned `kv_caches` can be passed as `old_kv_cache` in subsequent calls.
 
 **Scoring (`evo2-score`):**
 1. The full DNA sequence is passed through the model in a single forward pass (batched if `batch_size` is set).
@@ -104,11 +103,11 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | `top_k` | `int` | `4` | Top-k sampling limit |
 | `top_p` | `float` | `1.0` | Nucleus sampling threshold |
 | `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `cached_generation` | `bool` | `True` | Use KV caching (local only) |
+| `cached_generation` | `bool` | `True` | Use KV caching  |
 | `force_prompt_threshold` | `Optional[int]` | `None` | Prefill tokens before prompt forcing |
 | `max_seqlen` | `Optional[int]` | `None` | Max sequence length for KV cache |
 | `stop_at_eos` | `bool` | `True` | Stop at end-of-sequence token |
-| `old_kv_cache` | `Optional[Dict]` | `None` | Continue from previous KV cache (local only) |
+| `old_kv_cache` | `Optional[Dict]` | `None` | Continue from previous KV cache  |
 | `batch_size` | `Optional[int]` | `None` | Prompts per GPU batch (all if None) |
 | `device` | `str` | `cuda` | Inference device |
 | `return_logits` | `bool` | `False` | Include per-token logits in output |
@@ -142,7 +141,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 |-------|------|-------------|
 | `sequences` | `List[str]` | Generated DNA sequences |
 | `logits` | `Optional[List]` | Per-token logits (if requested) |
-| `kv_caches` | `Optional[List[Dict]]` | KV caches for continued generation (local only) |
+| `kv_caches` | `Optional[List[Dict]]` | KV caches for continued generation  |
 
 Export formats: `fasta`, `txt`, `json`
 
@@ -219,7 +218,7 @@ for i, seq in enumerate(result.sequences):
     print(f"Sequence {i+1}: {len(seq)} bp")
 ```
 
-**Example 3: Continue generation with KV cache (local only)**
+**Example 3: Continue generation with KV cache **
 ```python python icon="python"
 from bio_programming_tools.tools.causal_models.evo2 import (
     run_evo2_sample, Evo2SampleInput, Evo2SampleConfig
@@ -273,7 +272,7 @@ print(f"Logits shape: {len(result.scores[0].logits)} positions")
 
 - **Prompt design**: Longer, biologically meaningful prompts (e.g., a known promoter, start codon context) give the model better context than short random sequences. ATG-starting prompts bias toward coding sequence generation.
 - **Batching**: For maximum throughput, all prompts in a batch should have the same length. Mixed-length prompts still work but may be padded internally.
-- **KV caching**: Use `cached_generation=True` (default) for long sequences in local mode. KV caching stores intermediate attention states to avoid recomputation, but is **not available in Modal execution mode**.
+- **KV caching**: Use `cached_generation=True` (default) for long sequences. KV caching stores intermediate attention states to avoid recomputation.
 - **Memory management**: Evo2 7B requires significant GPU memory. Reduce `batch_size` if you encounter OOM errors. The 40B model requires multi-GPU setups.
 - **Tokenization**: Evo2 uses byte-level tokenization (vocab_size=512). DNA bases map to ASCII values: A=65, C=67, G=71, T=84, N=78. Non-DNA bytes in the vocabulary are valid tokens but rarely generated.
 - **num_tokens vs. max_length**: Unlike ProGen2's `max_length` (total including prompt), Evo2's `num_tokens` specifies only the newly generated tokens. The output sequence length is `len(prompt) + num_tokens` (with `prepend_prompt=True`).

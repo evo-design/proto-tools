@@ -17,6 +17,13 @@ from .shared_data_models import (  # noqa: F401
     StructurePredictionInput,
     StructurePredictionOutput,
 )
+from .structure_metrics import (
+    StructureMetrics,
+    StructureMetricsConfig,
+    StructureMetricsInput,
+    StructureMetricsOutput,
+    run_structure_metrics,
+)
 from .viennarna import ViennaRNAConfig, ViennaRNAInput, ViennaRNAOutput, run_viennarna
 
 __all__ = [
@@ -56,4 +63,10 @@ __all__ = [
     "StructurePredictionComplex",
     # Dispatch
     "predict_structures",
+    # Structure Metrics
+    "run_structure_metrics",
+    "StructureMetrics",
+    "StructureMetricsInput",
+    "StructureMetricsConfig",
+    "StructureMetricsOutput",
 ]

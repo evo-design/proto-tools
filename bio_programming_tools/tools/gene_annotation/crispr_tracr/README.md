@@ -1,0 +1,223 @@
+# CRISPRtracrRNA
+
+## Overview
+CRISPRtracrRNA predicts tracrRNA (trans-activating CRISPR RNA) sequences from nucleotide CRISPR loci using covariance models and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via IntaRNA.
+
+## Biological Background
+
+**What does this tool measure/predict?**
+This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for Type II CRISPR-Cas systems — it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with Cas9 to guide DNA cleavage.
+
+**Why is this important?**
+For a CRISPR-Cas9 system to function, three components must be present: the Cas9 protein, the crRNA (from the CRISPR array), and the tracrRNA. Detecting the tracrRNA is essential for:
+- Confirming that a CRISPR locus encodes a complete, functional Type II system
+- Designing single-guide RNAs (sgRNAs) by fusing crRNA and tracrRNA sequences
+- Validating generated CRISPR systems (e.g., from Evo1) for functional completeness
+- Discovering novel CRISPR-Cas9 systems in metagenomic data
+
+**Scientific foundation:**
+CRISPRtracrRNA uses Infernal covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure — similar to profile HMMs but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses IntaRNA to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
+
+## When to Use This Tool
+
+**Primary use cases:**
+- Validating that a CRISPR locus contains a tracrRNA (functional Type II system confirmation)
+- Predicting tracrRNA in novel or generated CRISPR sequences
+- Extracting anti-repeat interaction information for sgRNA design
+- Screening metagenomic contigs for complete CRISPR-Cas9 systems
+
+**When NOT to use this tool:**
+- For detecting CRISPR arrays (repeats/spacers): use `minced-crispr` first
+- For identifying Cas protein genes: use Prodigal + PyHMMER
+- For Type I or Type III CRISPR systems: these do not use tracrRNA (though `model_type="all"` will search broadly)
+- For designing guide RNAs from known tracrRNA: use specialized sgRNA design tools
+
+**Comparison with alternatives:**
+- **Manual anti-repeat search**: Simple BLAST of the CRISPR repeat against flanking regions; fast but misses structural features
+- **CRISPRtracrRNA**: Uses covariance models that capture both sequence and secondary structure, providing higher sensitivity and E-value scoring
+
+## How It Works
+
+**Method overview:**
+The tool operates in two stages:
+1. **tracrRNA detection**: Infernal's `cmsearch` is used to search the input sequence against pre-built covariance models of known tracrRNA families. This identifies candidate tracrRNA regions with E-value scores.
+2. **Anti-repeat interaction prediction**: IntaRNA predicts the RNA-RNA interaction between the identified tracrRNA and the CRISPR repeat, computing an anti-repeat similarity x coverage score.
+
+**Key assumptions:**
+- Input sequences are nucleotide DNA from CRISPR loci (typically a few kb surrounding a CRISPR array)
+- The tool expects the presence of Type II CRISPR system components (when using `model_type="II"`)
+- Pre-built covariance models and IntaRNA must be installed in the environment
+
+**Limitations:**
+- Requires Infernal and IntaRNA to be installed (handled via the standalone environment)
+- Covariance model search can be slow for very long sequences (>100 kb)
+- Detection sensitivity depends on similarity to known tracrRNA families in the model database
+- Novel tracrRNA variants highly divergent from known families may be missed
+
+**Computational requirements:**
+- **Hardware:** CPU only; no GPU required
+- **Runtime:** ~10-60 seconds per sequence depending on length and model type
+- **Scalability:** Processes sequences independently; scales linearly
+
+## Important Parameters
+
+**Input parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `sequences` | `List[str]` | *Required* | Nucleotide sequence(s) to predict tracrRNA from |
+| `sequence_ids` | `Optional[List[str]]` | `None` | Optional sequence identifiers (defaults to seq_0, seq_1, ...) |
+
+**Configuration parameters:**
+
+| Parameter | Type | Default | Sweep Range | Description |
+|-----------|------|---------|-------------|-------------|
+| `model_type` | `Literal["II", "all"]` | `"II"` | N/A | CRISPR model type: `"II"` for Type II only (faster), `"all"` for comprehensive search |
+
+**Parameters to prioritize for sweeps:**
+1. **`model_type`**: Use `"II"` for most Cas9-related work (faster and more specific). Use `"all"` when the CRISPR system type is unknown or when searching for non-Type II tracrRNA-like elements.
+
+---
+
+**Output specification:**
+
+```python
+# Return type: CrisprTracrOutput
+{
+    "predictions": [
+        {
+            "sequence_id": str,
+            "tracr_start": int | None,          # Start position
+            "tracr_end": int | None,            # End position
+            "tracr_hit": str | None,            # Hit description
+            "interaction_energy": float | None, # IntaRNA energy (kcal/mol, complete_run)
+            "anti_repeat_similarity_coverage_multiplication": float | None,
+            "intarna_anti_repeat_interaction": str | None,
+        },
+        ...
+    ]
+}
+```
+
+**Key output fields:**
+
+| Field | Type | Range | Interpretation |
+|-------|------|-------|----------------|
+| `tracr_start` / `tracr_end` | `int` | Sequence coordinates | Genomic position of predicted tracrRNA |
+| `interaction_energy` | `float` | < 0 kcal/mol | IntaRNA interaction energy; more negative = stronger (complete_run mode) |
+| `anti_repeat_similarity_coverage_multiplication` | `float` | 0.0 - 1.0 | Combined similarity x coverage of anti-repeat interaction |
+| `intarna_anti_repeat_interaction` | `str` | — | Predicted RNA-RNA interaction structure |
+
+**Properties:**
+- `TracrPrediction.has_tracr`: `True` if a tracrRNA was detected
+- `CrisprTracrOutput.num_with_tracr`: Count of sequences with detected tracrRNA
+
+**Supported export formats:** `csv`, `json`
+
+**Thresholds & decision boundaries (complete_run mode):**
+- **Strong interaction:** `interaction_energy < -5.0` kcal/mol — strong anti-repeat/tracrRNA duplex
+- **Moderate interaction:** `-5.0 <= interaction_energy < -2.0` — plausible tracrRNA
+- **Weak interaction:** `interaction_energy >= -2.0` — unlikely to form stable duplex
+- **No detection:** `tracr_start is None` — no tracrRNA found; the locus may not contain a Type II system
+
+## Best Practices & Gotchas
+
+**Parameter tuning:**
+- **`model_type`**:
+  - `"II"` (default): Faster, searches only Type II tracrRNA models. Use this when you know (or expect) a Type II CRISPR-Cas9 system.
+  - `"all"`: Comprehensive search across all CRISPR types. Use when the system type is unknown or for exploratory analysis.
+
+**Common mistakes:**
+1. **Running on isolated CRISPR arrays**: The tracrRNA is typically located near but outside the CRISPR array. Ensure your input sequence includes sufficient flanking regions (~5 kb on either side of the array).
+2. **Expecting results for Type I/III systems**: Type I and Type III CRISPR systems do not use tracrRNA. If MinCED detects a CRISPR array but CRISPRtracrRNA finds nothing, the locus may be a non-Type II system.
+3. **Interpreting E-value without context**: Very short sequences may produce artificially low E-values. Always check that the predicted tracrRNA length and anti-repeat interaction are biologically plausible.
+
+**Tips for optimal results:**
+- Run MinCED first to confirm CRISPR array presence, then run CRISPRtracrRNA on the broader locus
+- Include at least 5 kb of flanking sequence around the CRISPR array
+- Cross-reference the anti-repeat interaction with the CRISPR repeat consensus from MinCED
+- Use the `anti_repeat_similarity_coverage_multiplication` score as a secondary filter alongside E-value
+
+**Edge cases to watch for:**
+- Sequences with no CRISPR array nearby: the tool may still detect tracrRNA-like structures, but without a corresponding array they may not be functional
+- Multiple tracrRNA candidates: only the best hit is reported per sequence
+- Very long input sequences (>100 kb): may be slow; consider splitting into smaller regions around detected CRISPR loci
+
+## References
+
+**Primary publication:**
+- Mitrofanov, A., Alkhnbashi, O.S., Shmakov, S.A., Makarova, K.S., Koonin, E.V. & Backofen, R. (2022). "CRISPRtracrRNA: robust approach for CRISPR tracrRNA detection." *Bioinformatics* 38(Supplement_2):ii42-ii48. [DOI: 10.1093/bioinformatics/btac466](https://doi.org/10.1093/bioinformatics/btac466)
+- Summary: Introduces the CRISPRtracrRNA tool that uses Infernal covariance models for tracrRNA detection and IntaRNA for anti-repeat interaction prediction, achieving high sensitivity across diverse CRISPR-Cas systems.
+
+**Implementation:**
+- GitHub: [https://github.com/BackofenLab/CRISPRtracrRNA](https://github.com/BackofenLab/CRISPRtracrRNA)
+
+**Additional resources:**
+- Infernal: [http://eddylab.org/infernal/](http://eddylab.org/infernal/)
+- IntaRNA: [http://rna.informatik.uni-freiburg.de/IntaRNA/](http://rna.informatik.uni-freiburg.de/IntaRNA/)
+
+## Quick Start Examples
+
+**Example 1: Predict tracrRNA in a CRISPR locus**
+```python
+from bio_programming_tools.tools.gene_annotation.crispr_tracr import (
+    run_crispr_tracr, CrisprTracrInput, CrisprTracrConfig
+)
+
+inputs = CrisprTracrInput(
+    sequences=["ATGCGT...your_crispr_locus_sequence...GCATCG"],
+    sequence_ids=["locus_1"],
+)
+config = CrisprTracrConfig(model_type="II")
+
+result = run_crispr_tracr(inputs, config)
+
+for pred in result.predictions:
+    if pred.has_tracr:
+        print(f"{pred.sequence_id}: tracrRNA at {pred.tracr_start}-{pred.tracr_end}")
+        print(f"  Interaction energy: {pred.interaction_energy} kcal/mol")
+        print(f"  Anti-repeat score: {pred.anti_repeat_similarity_coverage_multiplication:.3f}")
+        print(f"  Interaction: {pred.intarna_anti_repeat_interaction}")
+    else:
+        print(f"{pred.sequence_id}: no tracrRNA detected")
+```
+
+**Example 2: Batch screening with interaction energy filtering**
+```python
+from bio_programming_tools.tools.gene_annotation.crispr_tracr import (
+    run_crispr_tracr, CrisprTracrInput, CrisprTracrConfig
+)
+
+inputs = CrisprTracrInput(
+    sequences=[seq1, seq2, seq3],
+    sequence_ids=["candidate_A", "candidate_B", "candidate_C"],
+)
+config = CrisprTracrConfig(model_type="II")
+
+result = run_crispr_tracr(inputs, config)
+
+print(f"{result.num_with_tracr} of {len(result.predictions)} sequences have tracrRNA")
+for pred in result.predictions:
+    if pred.has_tracr and pred.interaction_energy is not None and pred.interaction_energy < -5.0:
+        print(f"  {pred.sequence_id}: STRONG ({pred.interaction_energy:.2f} kcal/mol)")
+    elif pred.has_tracr:
+        print(f"  {pred.sequence_id}: WEAK ({pred.interaction_energy} kcal/mol)")
+    else:
+        print(f"  {pred.sequence_id}: NO tracrRNA")
+```
+
+## Related Tools
+
+**Tools often used together:**
+- **`minced-crispr`**: Detect CRISPR arrays first, then run CRISPRtracrRNA on flanking regions
+- **`prodigal`**: Find Cas protein ORFs near CRISPR loci
+- **`pyhmmer-hmmsearch`**: Confirm Cas9 identity using HMM profiles
+- **`evo1-sample`**: Generate CRISPR loci that can be validated with this tool
+
+**Alternative tools (similar function):**
+- **Manual anti-repeat BLAST**: Simple but misses structural features that covariance models capture
+- **CRISPRCasFinder**: Web-based comprehensive CRISPR annotation; includes tracrRNA detection but not available as a local Python library
+
+---
+**Maintenance notes:**
+- Last updated: 2025-06-01

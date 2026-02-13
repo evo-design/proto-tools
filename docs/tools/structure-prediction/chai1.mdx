@@ -57,10 +57,9 @@ Confidence metrics include:
 
 ## Execution Modes
 
-Chai1 requires GPU with >=40GB VRAM (H100 recommended; can run on A100-80GB). It supports Modal cloud deployment for high-throughput or when local GPU is unavailable.
+Chai1 requires GPU with >=40GB VRAM (H100 recommended; can run on A100-80GB).
 
-- **Local execution**: Runs on local GPU. Best for single predictions and development. Runtime ~30-120 seconds per complex on H100.
-- **Modal execution**: Deploys to cloud GPUs via Modal. Best for high-throughput batch predictions. Requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
+- **Local execution**: Runs on local GPU. Runtime ~30-120 seconds per complex on H100.
 
 ## How It Works
 
@@ -213,7 +212,6 @@ for structure in result.structures:
 3. **Ignoring iptm for complexes:** For protein-ligand binding, `iptm` is more informative than `avg_plddt` about binding confidence.
 4. **Using default samples for critical predictions:** Increase `num_diffn_samples` to 3-5 for important binding pose predictions.
 5. **Wrong SMILES format for ligands:** Ensure ligand sequences are valid SMILES strings, not amino acid sequences.
-6. **Using local mode on Modal:** Modal execution requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
 
 **Edge cases to watch for:**
 - **Very small ligands (&lt;10 atoms):** May have high uncertainty; binding pose might be less reliable

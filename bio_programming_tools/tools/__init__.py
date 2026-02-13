@@ -1,14 +1,32 @@
 # Base classes and registry
 
+# Causal model tools
+from .causal_models import (  # Evo1; Evo2; ProGen2
+    EVO1_MODEL_NAMES,
+    Evo1SampleConfig,
+    Evo1SampleInput,
+    Evo1SampleOutput,
+    run_evo1_sample,
+)
+
 # Gene annotation tools
-from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2
+from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCED
     BlastOutput,
+    CrisprArray,
+    CrisprRepeatSpacer,
+    CrisprTracrConfig,
+    CrisprTracrInput,
+    CrisprTracrOutput,
     CreateBlastDbConfig,
     CreateBlastDbInput,
     CreateBlastDbOutput,
     LocalBlastConfig,
     LocalBlastInput,
     LocalBlastOutput,
+    MincedConfig,
+    MincedInput,
+    MincedOutput,
+    MincedSequenceResult,
     MmseqsClusteringConfig,
     MmseqsClusteringInput,
     MmseqsClusteringOutput,
@@ -40,8 +58,11 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2
     PyPhmmerConfig,
     PyPhmmerInput,
     PyPhmmerOutput,
+    TracrPrediction,
     run_create_blast_db,
+    run_crispr_tracr,
     run_local_blast_search,
+    run_minced,
     run_mmseqs_clustering,
     run_mmseqs_search_genomes,
     run_mmseqs_search_proteins,
@@ -106,10 +127,14 @@ from .sequence_alignment import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchOutput,
+    GapGiniConfig,
+    GapGiniInput,
+    GapGiniOutput,
     MafftConfig,
     MafftInput,
     MafftOutput,
     run_colabfold_search,
+    run_gap_gini,
     run_mafft_align,
 )
 
@@ -175,7 +200,7 @@ from .structure_design import (
 from .structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
 
 # Structure prediction tools
-from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Shared Data Models (user-facing helpers only); Dispatch
+from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
     AlphaFold3Config,
     AlphaFold3Input,
     AlphaFold3Output,
@@ -193,6 +218,10 @@ from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Prote
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
+    StructureMetrics,
+    StructureMetricsConfig,
+    StructureMetricsInput,
+    StructureMetricsOutput,
     StructurePredictionComplex,
     ViennaRNAConfig,
     ViennaRNAInput,
@@ -203,6 +232,7 @@ from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Prote
     run_chai1,
     run_esmfold,
     run_protenix,
+    run_structure_metrics,
     run_viennarna,
 )
 from .tool_registry import ToolRegistry, ToolSpec, tool
@@ -218,6 +248,12 @@ __all__ = [
     "clear_cache",
     "clear_tool_cache",
     "get_cache_info",
+    # Evo1
+    "Evo1SampleConfig",
+    "Evo1SampleInput",
+    "Evo1SampleOutput",
+    "run_evo1_sample",
+    "EVO1_MODEL_NAMES",
     # BLAST
     "run_online_blast_search",
     "run_local_blast_search",
@@ -271,6 +307,20 @@ __all__ = [
     "MmseqsClusteringInput",
     "MmseqsClusteringConfig",
     "MmseqsClusteringOutput",
+    # CRISPRtracrRNA
+    "run_crispr_tracr",
+    "CrisprTracrInput",
+    "CrisprTracrConfig",
+    "CrisprTracrOutput",
+    "TracrPrediction",
+    # MinCED
+    "run_minced",
+    "MincedInput",
+    "MincedConfig",
+    "MincedOutput",
+    "MincedSequenceResult",
+    "CrisprArray",
+    "CrisprRepeatSpacer",
     # ORF prediction - Orfipy
     "OrfipyInput",
     "OrfipyConfig",
@@ -405,8 +455,19 @@ __all__ = [
     "ColabfoldSearchInput",
     "ColabfoldSearchConfig",
     "ColabfoldSearchOutput",
+    # Sequence alignment - Gap Gini
+    "run_gap_gini",
+    "GapGiniInput",
+    "GapGiniConfig",
+    "GapGiniOutput",
     # Sequence alignment - Shared helpers
     "MSA",
+    # Structure prediction - Structure Metrics
+    "run_structure_metrics",
+    "StructureMetrics",
+    "StructureMetricsInput",
+    "StructureMetricsConfig",
+    "StructureMetricsOutput",
     # Structure design - RFdiffusion3
     "run_rfdiffusion3",
     "RFdiffusion3Input",

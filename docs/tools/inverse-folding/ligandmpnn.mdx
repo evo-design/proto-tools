@@ -12,7 +12,7 @@ LigandMPNN is an inverse folding model that designs protein sequences conditione
 - **Tool key**: `ligandmpnn-sample`
 - **Input**: Protein structures (PDB/CIF) with optional chain and position constraints
 - **Output**: Designed amino acid sequences with per-sequence metrics
-- **Execution**: GPU required (Modal cloud or local venv)
+- **Execution**: GPU required
 
 ## When to Use This Tool
 
@@ -51,12 +51,10 @@ This context is critical for designing functional enzymes, metalloprotein bindin
 
 ## Execution Modes
 
-| Mode | Condition | Backend | Device |
-|------|-----------|---------|--------|
-| Modal (cloud GPU) | `use_modal_gpu() == True` | `LigandMPNNService` on Modal | Remote GPU |
-| Local venv | `use_modal_gpu() == False` | `EnvManager("ligandmpnn")` running `standalone/inference.py` | Local GPU (`cuda`) |
+| Mode | Backend | Device |
+|------|---------|--------|
+| Local venv | `EnvManager("ligandmpnn")` running `standalone/inference.py` | Local GPU (`cuda`) |
 
-Both modes produce identical results. Modal is used in production deployments; local venv is used for development and testing.
 
 ## How It Works
 
@@ -223,7 +221,7 @@ result.export("/path/to/output_dir", file_format="json")
 - **Include ligands in your PDB.** LigandMPNN's advantage over ProteinMPNN is ligand-aware design. If your PDB does not contain HETATM records for ligands/ions, LigandMPNN reduces to ProteinMPNN and you should use ProteinMPNN directly (it is faster).
 - **Fix catalytic residues.** For enzymes, always fix known catalytic residues using `fixed_positions`. LigandMPNN respects ligand context but does not guarantee catalytic geometry without explicit constraints.
 - **Temperature 0.1 is a safe default.** Start with the default and increase only if you need more diversity. Very high temperatures (>0.5) produce sequences that may not fold.
-- **GPU is required.** LigandMPNN runs on GPU via Modal or local CUDA. CPU execution is technically possible but impractically slow for typical batch sizes.
+- **GPU is required.** LigandMPNN runs on GPU via CUDA. CPU execution is technically possible but impractically slow for typical batch sizes.
 - **Chain IDs must exist in the structure.** If you specify `chain_ids` that are not present in the PDB, validation will raise an error with the available chains listed.
 - **Positions are 1-indexed.** Fixed positions follow biological convention (first residue = position 1), not 0-indexed.
 - **Scoring is not yet implemented.** The `ligandmpnn-score` tool key exists as a stub but is not functional. Use `proteinmpnn-score` for scoring protein-only contexts.

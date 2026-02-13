@@ -32,12 +32,31 @@ class TestOrfipyParsing:
         if not ORFIPY_AA_FILE.exists() or not ORFIPY_NT_FILE.exists():
             pytest.skip("Test data files not available")
 
-        # Access the private parsing function for testing (import directly from standalone)
+        from Bio import SeqIO
         from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
-            _parse_orfipy_results,
+            _parse_orfipy_header,
         )
 
-        results = _parse_orfipy_results(ORFIPY_AA_FILE, ORFIPY_NT_FILE, "dna_seq_1")
+        aa_records = list(SeqIO.parse(str(ORFIPY_AA_FILE), "fasta"))
+        nt_records = list(SeqIO.parse(str(ORFIPY_NT_FILE), "fasta"))
+        assert len(aa_records) == len(nt_records)
+
+        results = []
+        for aa_record, nt_record in zip(aa_records, nt_records):
+            parsed_info = _parse_orfipy_header(aa_record.description)
+            if parsed_info:
+                results.append({
+                    "parent_id": "dna_seq_1",
+                    "orf_id": parsed_info["orf_id"],
+                    "strand": parsed_info["strand"],
+                    "frame": parsed_info["frame"],
+                    "amino_acid_sequence": str(aa_record.seq).rstrip("*"),
+                    "nucleotide_sequence": str(nt_record.seq),
+                    "amino_acid_length": len(str(aa_record.seq).rstrip("*")),
+                    "nucleotide_length": len(str(nt_record.seq)),
+                    "nucleotide_start": parsed_info["start"] + 1,
+                    "nucleotide_end": parsed_info["end"],
+                })
 
         assert len(results) == 4  # Based on test data
 

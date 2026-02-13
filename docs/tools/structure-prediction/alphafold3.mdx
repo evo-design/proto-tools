@@ -62,10 +62,9 @@ Confidence metrics include:
 
 ## Execution Modes
 
-AlphaFold3 requires GPU with >=40GB VRAM (A100-40GB minimum; H100/A100-80GB recommended). It supports Modal cloud deployment for high-throughput or when local GPU is unavailable.
+AlphaFold3 requires GPU with >=40GB VRAM (A100-40GB minimum; H100/A100-80GB recommended).
 
-- **Local execution**: Runs on local GPU. Best for single predictions and development. Requires model weights (~1GB) and optionally local MSA databases.
-- **Modal execution**: Deploys to cloud GPUs via Modal. Best for high-throughput batch predictions. Requires `colabfold_search_config.search_mode="remote"` when `use_msa=True`.
+- **Local execution**: Runs on local GPU. Requires model weights (~1GB) and optionally local MSA databases.
 
 **Two-stage workflow**: MSA generation (when enabled) runs separately from inference (GPU-intensive). Runtime ranges from ~30 minutes to several hours depending on complex size and MSA generation settings.
 

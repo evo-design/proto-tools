@@ -13,7 +13,7 @@ Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts
 - **Input**: Multi-chain complexes (protein, DNA, RNA, ligand) with optional modifications
 - **Output**: 3D structures in mmCIF format with confidence metrics (pTM, ipTM, pLDDT, GPDE)
 - **MSA support**: Automatic via ColabFold search (optional)
-- **GPU required**: Yes (local venv only, no Modal support)
+- **GPU required**: Yes
 
 ## When to Use This Tool
 
@@ -257,7 +257,7 @@ result.export("protenix_output/", file_format="pdb")
 ## Best Practices & Gotchas
 
 - **MSA improves accuracy significantly**: Keep `use_msa=True` for natural proteins. Only disable for designed sequences, orphan proteins, or when speed is critical.
-- **No Modal support**: Protenix runs on local GPU only. Ensure you have a CUDA-capable GPU with sufficient VRAM (~16-24 GB for base models, ~8 GB for mini/tiny).
+- Ensure you have a CUDA-capable GPU with sufficient VRAM (~16-24 GB for base models, ~8 GB for mini/tiny).
 - **CUDA isolation**: Protenix uses a fully isolated CUDA environment managed via micromamba. If you encounter CUDA compilation errors, check the `$VENV_PATH/cuda_env` directory.
 - **Batch complexes for efficiency**: Pass multiple complexes in a single `run_protenix` call rather than calling the function repeatedly. This avoids reloading the model for each complex.
 - **Increase samples for flexible complexes**: Protein-ligand docking and antibody-antigen complexes benefit from higher `num_diffusion_samples` (7-10) to explore binding poses.

@@ -1,0 +1,182 @@
+---
+title: "Gap Gini"
+description: "Gap Gini computes a Gini coefficient over gap run-lengths in pairwise sequence alignments to detect ..."
+---
+
+# Gap Gini
+
+## Overview
+Gap Gini computes a Gini coefficient over gap run-lengths in pairwise sequence alignments to detect truncation artifacts. A high Gini score indicates that gaps are concentrated in one region (characteristic of truncated sequences), while a low score indicates evenly distributed gaps (typical of genuine sequence divergence).
+
+## Biological Background
+
+**What does this tool measure/predict?**
+Gap Gini measures the inequality of gap distribution in a pairwise alignment. It answers the question: are gaps spread evenly across the alignment (suggesting real evolutionary divergence) or concentrated in one block (suggesting one sequence is truncated relative to the other)?
+
+**Why is this important?**
+When comparing generated sequences to reference proteins via alignment, a global identity score alone can be misleading. A sequence that is 60% identical to a reference but has all its gaps concentrated at the C-terminus is likely a truncation artifact — it matches well over its length but is missing a large functional domain. The Gap Gini score catches this pattern, which raw percent identity does not.
+
+**Scientific foundation:**
+The Gini coefficient is a statistical measure of inequality originally introduced by Corrado Gini (1912) for income distribution analysis. It ranges from 0 (perfect equality — all values identical) to 1 (maximum inequality — all value concentrated in one element). Applied to gap run-lengths in alignments:
+- **Gini ≈ 0**: Many small, evenly distributed gaps → genuine sequence divergence
+- **Gini → 1**: One or a few large gap blocks → truncation or large deletion
+
+## When to Use This Tool
+
+**Primary use cases:**
+- Filtering generated protein sequences that are truncated relative to a reference
+- Quality control of pairwise alignments to detect structural incompleteness
+- Post-alignment screening in protein design pipelines
+
+**When NOT to use this tool:**
+- For measuring overall alignment quality: use percent identity or bit scores instead
+- For multiple sequence alignments: this tool operates on pairwise alignments only (exactly 2 sequences)
+- For detecting insertions vs. deletions: the Gini score is symmetric and does not distinguish directionality
+- When gaps are expected (e.g., comparing proteins with known domain insertions)
+
+**Comparison with alternatives:**
+- **Percent identity**: Measures overall similarity but misses truncation patterns
+- **Alignment length ratio**: Simple length comparison catches extreme truncations but misses partial ones
+- **Gap Gini**: Specifically detects concentrated gap patterns indicative of truncation; complements identity-based filtering
+
+## How It Works
+
+**Method overview:**
+For each sequence in a pairwise alignment, the tool identifies runs of consecutive gap characters (`-`) and computes the Gini coefficient over the list of run-lengths. The final score is the maximum Gini coefficient across both sequences, capturing truncation in either direction. If a sequence has no gaps, its Gini is 0; if it has a single contiguous gap block, its Gini approaches 1.
+
+The Gini coefficient is computed as:
+
+    G = (Σ_i Σ_j |x_i - x_j|) / (2n Σ_i x_i)
+
+where x_i are the gap run-lengths and n is the number of runs.
+
+**Key assumptions:**
+- Input is a FASTA-formatted pairwise alignment string containing exactly 2 sequences
+- Gap characters are represented as `-`
+- The tool is deterministic — no randomness or configuration parameters
+
+**Limitations:**
+- Only works on pairwise alignments (exactly 2 sequences per input)
+- Does not consider the biological context of gaps (e.g., known domain boundaries)
+- A high Gini score does not always mean truncation — it could indicate a genuine large indel
+- Very short alignments with few gaps may produce unstable Gini estimates
+
+**Computational requirements:**
+- **Hardware:** CPU only; pure NumPy computation
+- **Runtime:** Microseconds per alignment
+- **Scalability:** Linear in number of alignments; trivially parallelizable
+
+## Important Parameters
+
+**Input parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `alignments` | `List[str]` | *Required* | FASTA-formatted pairwise alignment strings (2 sequences each) |
+
+**Configuration parameters:**
+
+No configuration parameters. The Gini coefficient computation is deterministic and parameter-free.
+
+---
+
+**Output specification:**
+
+```python python icon="python"
+# Return type: GapGiniOutput
+{
+    "gini_scores": [0.05, 0.87, 0.12, ...]  # One score per input alignment
+}
+```
+
+**Key output fields:**
+
+| Field | Type | Range | Interpretation |
+|-------|------|-------|----------------|
+| `gini_scores` | `List[float]` | `0.0 - 1.0` | Per-alignment Gini scores (max across both sequences) |
+
+**Supported export formats:** `csv`, `json`
+
+**Thresholds & decision boundaries:**
+- **Good (&lt; 0.1)**: Gaps are evenly distributed; alignment reflects genuine sequence divergence. Used as threshold in the Cas9 generation pipeline (`GAP_GINI_THRESHOLD = 0.1`).
+- **Moderate (0.1 - 0.3)**: Some gap concentration; may warrant manual inspection
+- **Truncated (≥ 0.3)**: Gaps are highly concentrated; strong indicator of sequence truncation or a large deletion
+
+## Best Practices & Gotchas
+
+**Common mistakes:**
+1. **Passing unaligned sequences**: The tool expects pre-aligned sequences in FASTA format with gap characters. Raw sequences without gaps will trivially score 0.
+2. **Using with multiple sequence alignments**: Each input must contain exactly 2 sequences. Split MSAs into pairwise alignments first.
+3. **Interpreting Gini in isolation**: A low Gini score means gaps are evenly distributed, not that the alignment is good. Always combine with identity thresholds.
+
+**Tips for optimal results:**
+- Pair Gap Gini with percent identity filtering: first filter by identity, then use Gini to catch truncation artifacts among passing candidates
+- In the Cas9 pipeline, sequences pass if `identity ≥ threshold` AND `gap_gini &lt; 0.1`
+- For proteins with known multi-domain architecture, a moderate Gini score may be acceptable if the gap corresponds to a known variable region
+
+**Edge cases to watch for:**
+- Alignments with no gaps in either sequence: Gini score is 0.0 (no gap runs to measure)
+- Alignments where one sequence is entirely gaps: Gini score is 0.0 (single run, Gini of a single element is 0)
+- Very short alignments (&lt;20 residues): Gini scores may be unreliable
+
+## References
+
+**Primary publication:**
+- No publication for this specific tool. Gap Gini is a custom metric implemented for the Cas9 generation pipeline.
+- The Gini coefficient concept: Gini, C. (1912). "Variabilità e mutabilità." Reprinted in Pizetti, E. & Salvemini, T. (1955). *Memorie di metodologica statistica*.
+
+**Implementation:**
+- Pure NumPy implementation within this module (no external dependencies beyond NumPy)
+
+## Quick Start Examples
+
+**Example 1: Score a single alignment**
+```python python icon="python"
+from bio_programming_tools.tools.sequence_alignment.gap_gini import (
+    run_gap_gini, GapGiniInput, GapGiniConfig
+)
+
+# FASTA-formatted pairwise alignment
+alignment = """>reference
+MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH
+>candidate
+MVLSPADKTNVKAAWGKVGA--------------------TYFPHFDLSH"""
+
+inputs = GapGiniInput(alignments=[alignment])
+config = GapGiniConfig()
+
+result = run_gap_gini(inputs, config)
+print(f"Gap Gini score: {result.gini_scores[0]:.3f}")
+# High score → concentrated gap → likely truncation
+```
+
+**Example 2: Batch filtering in a pipeline**
+```python python icon="python"
+from bio_programming_tools.tools.sequence_alignment.gap_gini import (
+    run_gap_gini, GapGiniInput, GapGiniConfig
+)
+
+GAP_GINI_THRESHOLD = 0.1
+
+inputs = GapGiniInput(alignments=[aln1, aln2, aln3, aln4])
+config = GapGiniConfig()
+
+result = run_gap_gini(inputs, config)
+
+for i, score in enumerate(result.gini_scores):
+    status = "PASS" if score < GAP_GINI_THRESHOLD else "FAIL (truncated)"
+    print(f"Alignment {i}: gini={score:.3f} → {status}")
+```
+
+## Related Tools
+
+**Tools often used together:**
+- **`muscle` / `mafft`**: Generate the pairwise alignments that Gap Gini scores
+- **`local-blast`**: Find reference sequences to align against before computing Gap Gini
+- **`structure-metrics`**: Complementary structural quality filter (detects artifacts Gap Gini cannot)
+
+**Alternative tools (similar function):**
+- **Alignment length ratio**: Simpler truncation check (generated_length / reference_length); less sensitive than Gap Gini for partial truncations
+
+---
+**Maintenance notes:**

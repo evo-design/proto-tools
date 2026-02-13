@@ -1,3 +1,10 @@
+from .evo1 import (
+    EVO1_MODEL_NAMES,
+    Evo1SampleConfig,
+    Evo1SampleInput,
+    Evo1SampleOutput,
+    run_evo1_sample,
+)
 from .evo2 import (
     Evo2SampleConfig,
     Evo2SampleInput,
@@ -20,6 +27,12 @@ from .progen2 import (
 )
 
 __all__ = [
+    # Evo1
+    "Evo1SampleConfig",
+    "Evo1SampleInput",
+    "Evo1SampleOutput",
+    "run_evo1_sample",
+    "EVO1_MODEL_NAMES",
     # Evo2
     "Evo2SampleConfig",
     "Evo2SampleInput",

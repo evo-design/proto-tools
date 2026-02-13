@@ -42,15 +42,15 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 # ============================================================================
 
 # Path to test HMM file
-TEST_HMM_FILE = Path(__file__).parent / "dummy_data" / "test_multiple_hmm.hmm"
+TEST_HMM_FILE = Path(__file__).parent.parent / "dummy_data" / "test_multiple_hmm.hmm"
 
 # Load test sequences and properly close the file handle
-TEST_FASTA_PATH = Path(__file__).parent / "dummy_data" / "test_sequences_for_pyhmmer.fasta"
+TEST_FASTA_PATH = Path(__file__).parent.parent / "dummy_data" / "test_sequences_for_pyhmmer.fasta"
 with open(TEST_FASTA_PATH, "r") as fasta_file:
     sequence_iterator = SeqIO.parse(fasta_file, "fasta")
     SAMPLE_SEQUENCES = [str(seq.seq) for seq in sequence_iterator]
 
-TEST_DNA_FASTA_PATH = Path(__file__).parent / "dummy_data" / "test_dna_sequences.fna"
+TEST_DNA_FASTA_PATH = Path(__file__).parent.parent / "dummy_data" / "test_dna_sequences.fna"
 with open(TEST_DNA_FASTA_PATH, "r") as dna_fasta_file:
     dna_sequence_iterator = SeqIO.parse(dna_fasta_file, "fasta")
     SAMPLE_DNA_SEQUENCES = [str(seq.seq) for seq in dna_sequence_iterator]

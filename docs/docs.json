@@ -48,6 +48,7 @@
 					{
 						"group": "Causal Models",
 						"pages": [
+							"tools/causal-models/evo1",
 							"tools/causal-models/evo2",
 							"tools/causal-models/progen2"
 						]
@@ -56,6 +57,8 @@
 						"group": "Gene Annotation",
 						"pages": [
 							"tools/gene-annotation/blast",
+							"tools/gene-annotation/crispr-tracr",
+							"tools/gene-annotation/minced",
 							"tools/gene-annotation/mmseqs",
 							"tools/gene-annotation/pyhmmer"
 						]
@@ -91,6 +94,7 @@
 						"group": "Sequence Alignment",
 						"pages": [
 							"tools/sequence-alignment/colabfold-search",
+							"tools/sequence-alignment/gap-gini",
 							"tools/sequence-alignment/mafft"
 						]
 					},
@@ -123,6 +127,7 @@
 							"tools/structure-prediction/chai1",
 							"tools/structure-prediction/esmfold",
 							"tools/structure-prediction/protenix",
+							"tools/structure-prediction/structure-metrics",
 							"tools/structure-prediction/viennarna"
 						]
 					}

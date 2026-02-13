@@ -70,97 +70,49 @@ def _parse_orfipy_header(header: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _parse_orfipy_results(
-    aa_fasta: str | Path, nt_fasta: str | Path, seq_id: str
-) -> List[Dict[str, Any]]:
-    """
-    Parse Orfipy peptide and nucleotide FASTA files into a list of ORF dicts.
-
-    Args:
-        aa_fasta: Path to Orfipy amino acid FASTA output.
-        nt_fasta: Path to Orfipy nucleotide FASTA output.
-        seq_id: Sequence identifier to assign as parent_id.
-
-    Returns:
-        List of dicts, each representing an ORF with keys: parent_id, orf_id,
-        amino_acid_sequence, nucleotide_sequence, amino_acid_length,
-        nucleotide_length, nucleotide_start, nucleotide_end, strand, frame.
-
-    Raises:
-        ValueError: If the number of amino acid and nucleotide records don't match.
-    """
-    from Bio import SeqIO
-
-    aa_records = list(SeqIO.parse(str(aa_fasta), "fasta"))
-    nt_records = list(SeqIO.parse(str(nt_fasta), "fasta"))
-
-    # Ensure we have matching records
-    if len(aa_records) != len(nt_records):
-        raise ValueError(
-            f"Mismatch between amino acid ({len(aa_records)}) and nucleotide ({len(nt_records)}) records"
-        )
-
-    data = []
-
-    for aa_record, nt_record in zip(aa_records, nt_records):
-        parsed_info = _parse_orfipy_header(aa_record.description)
-        if parsed_info:  # Skip malformed headers
-            # Remove only trailing stop codon marker (*) if present
-            clean_aa_sequence = str(aa_record.seq).rstrip("*")
-            nt_sequence = str(nt_record.seq)
-
-            orf_dict = {
-                "parent_id": seq_id,
-                "orf_id": parsed_info["orf_id"],
-                "strand": parsed_info["strand"],
-                "frame": parsed_info["frame"],
-                "amino_acid_sequence": clean_aa_sequence,
-                "nucleotide_sequence": nt_sequence,
-                "amino_acid_length": len(clean_aa_sequence),
-                "nucleotide_length": len(nt_sequence),
-                "nucleotide_start": parsed_info["start"]
-                + 1,  # orfipy native 0-indexed -> 1-indexed
-                "nucleotide_end": parsed_info[
-                    "end"
-                ],  # orfipy native 0-indexed exclusive -> 1-indexed inclusive
-            }
-            data.append(orf_dict)
-
-    return data
-
-
 # =============================================================================
 # Subprocess Execution
 # =============================================================================
 DNA_NUCLEOTIDES = {"A", "T", "C", "G"}
 
 
-def _run_single_orfipy(
-    sequence: str, seq_id: str, config: dict
-) -> List[Dict[str, Any]]:
-    """Run Orfipy on a single DNA sequence string and return list of ORF dicts."""
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+def run_orfipy(input_data: dict) -> dict:
+    """Run Orfipy ORF prediction on one or more sequences.
 
-    # Create temporary directory for isolated execution
+    Args:
+        input_data: Dict with keys: sequences, sequence_ids, config
+
+    Returns:
+        Dict with key: predicted_orfs (list of list of ORF dicts)
+    """
+    sequences = input_data["sequences"]
+    sequence_ids = input_data["sequence_ids"]
+    config = input_data.get("config", {})
+
+    if not sequences:
+        return {"predicted_orfs": []}
+
+    # Batch all sequences into a single orfipy call for performance.
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
 
-        # Create input FASTA for single sequence
+        # Write all sequences to one FASTA file
         input_fasta = temp_dir / "input.fasta"
-        clean_seq = "".join(c for c in sequence.upper() if c in DNA_NUCLEOTIDES)
         with open(input_fasta, "w") as f:
-            f.write(f">seq_0\n{clean_seq}\n")
+            for i, seq in enumerate(sequences):
+                clean_seq = "".join(c for c in seq.upper() if c in DNA_NUCLEOTIDES)
+                f.write(f">seq_{i}\n{clean_seq}\n")
 
-        # Define output file paths (temp)
         aa_path = temp_dir / "orfipy_aa.faa"
         nt_path = temp_dir / "orfipy_nt.fna"
 
-        # Build command (use venv's orfipy binary via sys.prefix)
         orfipy_bin = str(Path(sys.prefix) / "bin" / "orfipy")
         cmd = [
             orfipy_bin,
             str(input_fasta),
-            "--outdir",
-            str(temp_dir),
             "--procs",
             str(config.get("threads", 4)),
             "--start",
@@ -184,38 +136,52 @@ def _run_single_orfipy(
         if config.get("translation_table") is not None:
             cmd.extend(["--table", str(config["translation_table"])])
 
-        # Execute orfipy
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(
-                f"Orfipy failed for sequence '{seq_id}' with code {proc.returncode}: {proc.stderr}"
+                f"Orfipy failed with code {proc.returncode}: {proc.stderr}"
             )
 
-        # Parse results
-        orfs = _parse_orfipy_results(aa_path, nt_path, seq_id)
-        return orfs
+        # Parse all results and group by parent sequence
+        from Bio import SeqIO
 
+        aa_records = list(SeqIO.parse(str(aa_path), "fasta")) if aa_path.exists() else []
+        nt_records = list(SeqIO.parse(str(nt_path), "fasta")) if nt_path.exists() else []
 
-# =============================================================================
-# Main Entry Point
-# =============================================================================
-def run_orfipy(input_data: dict) -> dict:
-    """Run Orfipy ORF prediction on one or more sequences.
+        if len(aa_records) != len(nt_records):
+            raise ValueError(
+                f"Mismatch between amino acid ({len(aa_records)}) and nucleotide ({len(nt_records)}) records"
+            )
 
-    Args:
-        input_data: Dict with keys: sequences, sequence_ids, config
+        # Group ORFs by parent sequence index
+        orfs_by_seq: Dict[int, List[Dict[str, Any]]] = {i: [] for i in range(len(sequences))}
+        for aa_record, nt_record in zip(aa_records, nt_records):
+            parsed_info = _parse_orfipy_header(aa_record.description)
+            if not parsed_info:
+                continue
+            parent_id = parsed_info["parent_id"]  # e.g. "seq_0"
+            try:
+                seq_idx = int(parent_id.replace("seq_", ""))
+            except (ValueError, AttributeError):
+                continue
 
-    Returns:
-        Dict with key: predicted_orfs (list of list of ORF dicts)
-    """
-    sequences = input_data["sequences"]
-    sequence_ids = input_data["sequence_ids"]
-    config = input_data.get("config", {})
+            clean_aa_sequence = str(aa_record.seq).rstrip("*")
+            nt_sequence = str(nt_record.seq)
+            orf_dict = {
+                "parent_id": sequence_ids[seq_idx],
+                "orf_id": parsed_info["orf_id"],
+                "strand": parsed_info["strand"],
+                "frame": parsed_info["frame"],
+                "amino_acid_sequence": clean_aa_sequence,
+                "nucleotide_sequence": nt_sequence,
+                "amino_acid_length": len(clean_aa_sequence),
+                "nucleotide_length": len(nt_sequence),
+                "nucleotide_start": parsed_info["start"] + 1,
+                "nucleotide_end": parsed_info["end"],
+            }
+            orfs_by_seq[seq_idx].append(orf_dict)
 
-    predicted_orfs = []
-    for seq, seq_id in zip(sequences, sequence_ids):
-        result = _run_single_orfipy(seq, seq_id, config)
-        predicted_orfs.append(result)
+        predicted_orfs = [orfs_by_seq[i] for i in range(len(sequences))]
 
     return {"predicted_orfs": predicted_orfs}
 
