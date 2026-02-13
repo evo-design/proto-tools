@@ -133,14 +133,10 @@ from .sequence_alignment import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchOutput,
-    GapGiniConfig,
-    GapGiniInput,
-    GapGiniOutput,
     MafftConfig,
     MafftInput,
     MafftOutput,
     run_colabfold_search,
-    run_gap_gini,
     run_mafft_align,
 )
 
@@ -497,11 +493,6 @@ __all__ = [
     "ColabfoldSearchInput",
     "ColabfoldSearchConfig",
     "ColabfoldSearchOutput",
-    # Sequence alignment - Gap Gini
-    "run_gap_gini",
-    "GapGiniInput",
-    "GapGiniConfig",
-    "GapGiniOutput",
     # Sequence alignment - Shared helpers
     "MSA",
     # Structure prediction - Structure Metrics

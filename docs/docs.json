@@ -94,7 +94,6 @@
 						"group": "Sequence Alignment",
 						"pages": [
 							"tools/sequence-alignment/colabfold-search",
-							"tools/sequence-alignment/gap-gini",
 							"tools/sequence-alignment/mafft"
 						]
 					},

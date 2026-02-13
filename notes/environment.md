@@ -48,7 +48,6 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | ORF Prediction | orfipy | N/A (no GPU) | Working | 19/19 tests pass |
 | ORF Prediction | prodigal | N/A (no GPU) | Working | 29/29 tests pass |
 | RNA Splicing | splice_transformer | latest+cu126 | Working | 2/2 tests pass |
-| Sequence Alignment | gap_gini | N/A (no GPU) | Not Tested | Pure Python; no external deps |
 | Sequence Alignment | run_colabfold_search | N/A (no GPU) | Working | 22/22 tests pass |
 | Sequence Alignment | mafft | N/A (no GPU) | Working | 40/40 tests pass |
 | Sequence Scoring | enformer | 2.6.0+cu126 | Working | 8/8 tests pass |
@@ -109,7 +108,6 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | ORF Prediction | orfipy | N/A (no GPU) | Working | Fixed: run.py now uses `Path(sys.prefix) / "bin" / "orfipy"` |
 | ORF Prediction | prodigal | N/A (no GPU) | Working | Works |
 | RNA Splicing | splice_transformer | latest+cu130 | Working | Needed venv refresh; CPU tests always passed |
-| Sequence Alignment | gap_gini | N/A (no GPU) | Not Tested | Pure Python; no external deps |
 | Sequence Alignment | run_colabfold_search | N/A (no GPU) | Working | Works |
 | Sequence Alignment | mafft | N/A (no GPU) | Not Working | pip package ships x86_64 ELF binaries in libexec/; platform incompatible |
 | Sequence Scoring | enformer | 2.10.0+cu130 | Working | Needed venv refresh |

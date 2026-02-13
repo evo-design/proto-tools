@@ -183,7 +183,6 @@ for m in result.metrics:
 
 **Tools often used together:**
 - **`esmfold`**: Predict structures from protein sequences, then analyze with Structure Metrics
-- **`gap-gini`**: Complementary sequence-level truncation filter
 - **`prodigal`**: Find ORFs in generated DNA before structure prediction
 
 **Alternative tools (similar function):**
