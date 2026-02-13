@@ -1,0 +1,4 @@
+parent_id,orf_id,strand,frame,amino_acid_sequence,nucleotide_sequence,amino_acid_length,nucleotide_length,nucleotide_start,nucleotide_end,metrics,id,gc_content
+gene_alpha,ORF.1,+,1,MPKFGPKFGPKFG,ATGCCCAAATTTGGGCCCAAATTTGGGCCCAAATTTGGGTAG,13,42,1,42,{},gene_alpha_ORF.1,47.61904761904762
+gene_beta,ORF.1,+,1,MFPGKFPG,ATGTTTCCCGGGAAATTTCCCGGGTAA,8,27,1,27,{},gene_beta_ORF.1,48.148148148148145
+gene_gamma,ORF.1,+,1,MKPGKFPGKFPGKFPG,ATGAAACCCGGGAAATTTCCCGGGAAATTTCCCGGGAAATTTCCCGGGTAG,16,51,1,51,{},gene_gamma_ORF.1,50.98039215686274
