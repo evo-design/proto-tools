@@ -29,14 +29,14 @@ This file contains notes on platform compatibility with our current `setup.sh` s
   - Symbol resolution issues with libnvJitLink.so.12 (`__nvJitLinkGetErrorLogSize_12_9`)
 
 ### Venv Status
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-02-12
 
 | Category | Tool | GPU Version | Status | Notes |
 |----------|------|-------------|--------|-------|
 | Causal Models | evo1 | N/A | Not Tested | |
 | Gene Annotation | blast | N/A (no GPU) | Working | 11/11 tests pass |
-| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires conda env with Python 3.8 + sklearn 0.22; macOS arm64 needs CONDA_SUBDIR=osx-64 |
-| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR directly into venv bin/ |
+| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires nested conda env (Python 3.8 + sklearn 0.22 + 20 bioinformatics tools) |
+| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR into venv bin/ |
 | Gene Annotation | mmseqs | N/A (no GPU) | Working | 29/29 tests pass |
 | Gene Annotation | pyhmmer | N/A (no GPU) | Working | 21/21 tests pass |
 | Inverse Folding | ligandmpnn | latest+cu126 | Working | 2/2 tests pass |
@@ -90,14 +90,14 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 - **CUDA 13.0**: Newest CUDA version — resolves to `cu130` or `cu128` builds
 
 ### Venv Status
-**Last Updated:** 2026-02-08
+**Last Updated:** 2026-02-12
 
 | Category | Tool | GPU Version | Status | Notes |
 |----------|------|-------------|--------|-------|
 | Causal Models | evo1 | N/A | Not Tested | |
 | Gene Annotation | blast | N/A (no GPU) | Working | Works |
-| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires conda env with Python 3.8 + sklearn 0.22 |
-| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR directly into venv bin/ |
+| Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires nested conda env (Python 3.8 + sklearn 0.22 + 20 bioinformatics tools); arm64 needs CONDA_SUBDIR=osx-64 |
+| Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR into venv bin/ |
 | Gene Annotation | mmseqs | N/A (no GPU) | Working | Works |
 | Gene Annotation | pyhmmer | N/A (no GPU) | Working | Works |
 | Inverse Folding | ligandmpnn | latest+cu130 | Working |  |
