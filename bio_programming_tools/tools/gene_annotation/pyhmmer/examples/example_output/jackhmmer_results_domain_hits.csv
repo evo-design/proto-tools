@@ -1,0 +1,3 @@
+query_name,query_accession,query_description,query_idx,target_name,target_accession,target_description,hmm_length,hmm_from,hmm_to,target_from,target_to,target_length,c_evalue,i_evalue,domain_score,domain_bias,domain_idx,env_from,env_to,envelope_score,domain_included,domain_reported,domain_pvalue
+0,,,0,0,-,-,83,1,83,1,83,84,8.875102778948621e-54,1.331265416842293e-53,166.98362731933594,0.8083954212914617,0,1,83,159.9990758609226,True,True,4.4375513894743104e-54
+0,,,0,1,-,-,83,3,79,3,83,84,1.2942544650850034e-42,1.941381697627505e-42,131.21083068847656,0.08442520304252703,0,1,84,123.4516893808344,True,True,6.471272325425017e-43
