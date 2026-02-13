@@ -26,6 +26,8 @@ tools/{category}/{tool_name}/
 ├── __init__.py
 ├── {tool_name}.py          # Input, Config, Output, run function (calls EnvManager)
 ├── cite.bib                # BibTeX citation (required)
+├── examples/
+│   └── example.ipynb       # Working example notebook (required)
 ├── standalone/
 │   ├── setup.sh            # Creates venv, installs deps
 │   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -42,6 +44,8 @@ tools/{category}/
 │   ├── __init__.py
 │   ├── {tool_name}.py      # Extends shared models, calls EnvManager
 │   ├── cite.bib            # BibTeX citation (required)
+│   ├── examples/
+│   │   └── example.ipynb   # Working example notebook (required)
 │   ├── standalone/
 │   │   ├── setup.sh
 │   │   ├── run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -534,9 +538,29 @@ Create `tools/{category}/{tool_name}/cite.bib`:
 
 ---
 
-## Step 7: Write Tests
+## Step 7: Create the Example Notebook
+
+Create `tools/{category}/{tool_name}/examples/example.ipynb` with:
+
+1. **Markdown title cell** with tool name, brief description, and link to paper
+2. **Import cell** with exact imports from `bio_programming_tools.tools.{category}.{tool_name}`
+3. **API reference cells** with markdown tables documenting Input/Config/Output fields
+4. **Execution cells** showing realistic usage with example data
+5. **Export cell** demonstrating `result.export()`
+
+Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/examples/example.ipynb`). Key conventions:
+- Use `bio-programming` kernel with Python 3.12
+- Include API reference tables with Field, Type, Default, Description columns
+- Use realistic biological data (real sequences, not lorem ipsum)
+- Show result inspection (printing key fields, accessing metrics)
+
+---
+
+## Step 8: Write Tests
 
 Create `tests/tool_tests/test_{tool_name}.py`:
+
+
 
 ```python
 """Tests for {ToolName} tool."""
@@ -586,7 +610,7 @@ class Test{ToolName}GPU:
 
 ---
 
-## Step 8: Verify by Running the Tool
+## Step 9: Verify by Running the Tool
 
 After implementing, do BOTH of the following:
 
@@ -653,6 +677,7 @@ Before submitting, verify:
 - [ ] `__init__.py` exports at all 4 levels
 - [ ] README.md in tool directory
 - [ ] cite.bib with BibTeX citation in tool directory
+- [ ] `examples/example.ipynb` with working code, API reference tables, and example output
 - [ ] Tests written in `tests/tool_tests/` and passing
 - [ ] Tool runs successfully end-to-end (verified via Step 8B)
 - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)

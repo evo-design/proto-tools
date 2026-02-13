@@ -39,6 +39,8 @@ bio_programming_tools/
 │   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
 │   │   │   ├── tool_name.py        # Implementation
 │   │   │   ├── cite.bib            # BibTeX citation for the tool
+│   │   │   ├── examples/           # Example notebook
+│   │   │   │   └── example.ipynb   # Working example with imports and output
 │   │   │   └── standalone/         # [optional] Isolated venv
 │   │   ├── shared_data_models.py   # [optional] Shared schemas
 │   │   └── __init__.py             # Re-exports from all tools in category
@@ -120,6 +122,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
 - Every tool directory must include a `cite.bib` file with the BibTeX citation for the underlying paper/tool
+- Every tool directory must include an `examples/example.ipynb` notebook with working code, exact imports, API reference tables, and example output
 
 **Run `/implement-tool` for the complete tool implementation guide with step-by-step templates and examples.**
 
