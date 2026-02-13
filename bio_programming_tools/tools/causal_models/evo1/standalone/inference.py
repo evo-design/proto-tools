@@ -7,6 +7,7 @@ generation to ``evo.generation.generate()``.
 Usage (called by EnvManager, not directly):
     python inference.py <input.json> <output.json>
 """
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ import sys
 from typing import Any, Dict, List, Literal, Optional
 
 import torch
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,108 @@ class Evo1Model:
         assert len(all_sequences) == len(prompts)
         return {"sequences": all_sequences, "scores": all_scores}
 
+    def score(
+        self,
+        sequences: List[str],
+        batch_size: Optional[int] = None,
+        return_logits: bool = False,
+        verbose: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Score DNA sequences by computing autoregressive log-likelihood.
+
+        Uses ``evo.scoring.prepare_batch`` and ``evo.scoring.logits_to_logprobs``
+        which handle BOS prepending/trimming internally.
+
+        Args:
+            sequences: DNA sequences to score.
+            batch_size: Number of sequences per batch. If None, processes all at once.
+            return_logits: Whether to include per-position logits in the output.
+            verbose: Whether to print progress.
+
+        Returns:
+            Dictionary with keys:
+                - ``"logits"``: List of per-sequence tensors (seq_len, vocab_size)
+                  if return_logits=True, else None.
+                - ``"metrics"``: List of dicts with ``log_likelihood``,
+                  ``avg_log_likelihood``, ``perplexity`` per sequence.
+                - ``"vocab"``: List of 512 byte-level token characters.
+        """
+        if not self._loaded:
+            self.load(self.device, verbose=verbose)
+
+        if not sequences:
+            raise ValueError("Cannot score empty sequence list")
+
+        from evo.scoring import logits_to_logprobs, prepare_batch
+
+        # Evo1 uses same byte-level vocab as Evo2 (CharLevelTokenizer, 512 tokens)
+        vocab_size = 512
+        vocab = [chr(j) for j in range(vocab_size)]
+
+        effective_batch_size = batch_size or len(sequences)
+        batches = [
+            sequences[i : i + effective_batch_size]
+            for i in range(0, len(sequences), effective_batch_size)
+        ]
+
+        all_logits = []
+        all_metrics = []
+
+        with torch.inference_mode():
+            for batch_idx, batch_seqs in enumerate(
+                tqdm(batches, desc="Evo1 Sequence Scoring", unit="batch")
+            ):
+                if verbose:
+                    logger.info(
+                        f"Processing batch {batch_idx + 1}/{len(batches)} "
+                        f"({len(batch_seqs)} sequences)"
+                    )
+
+                seq_lengths = [len(s) for s in batch_seqs]
+
+                # prepare_batch prepends BOS and pads to max length
+                input_ids, _ = prepare_batch(
+                    batch_seqs,
+                    self.tokenizer,
+                    prepend_bos=True,
+                    device=self.device,
+                )
+
+                # Forward pass: (batch, length, vocab_size)
+                logits, _ = self.model(input_ids)
+
+                if verbose:
+                    logger.info(
+                        f"Scored batch of {input_ids.shape[0]}, "
+                        f"logits shape: {logits.shape}"
+                    )
+
+                # logits_to_logprobs handles BOS trim and shift-gather
+                # Returns (batch, seq_len) per-position log-probs
+                logprobs = logits_to_logprobs(logits, input_ids, trim_bos=True)
+
+                for i, length in enumerate(seq_lengths):
+                    seq_logprobs = logprobs[i, :length].float()
+                    all_metrics.append(
+                        {
+                            "log_likelihood": seq_logprobs.sum().item(),
+                            "avg_log_likelihood": seq_logprobs.mean().item(),
+                            "perplexity": torch.exp(-seq_logprobs.mean()).item(),
+                        }
+                    )
+                    # Store full logits (unshifted) for the sequence positions
+                    # logits has BOS-prepended length, so positions 0..length-1
+                    # correspond to predictions for positions 1..length
+                    # We return logits for the original sequence length
+                    all_logits.append(logits[i, :length, :].cpu())
+
+        return {
+            "logits": all_logits if return_logits else None,
+            "metrics": all_metrics,
+            "vocab": vocab,
+        }
+
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load Evo1 model and tokenizer."""
         if verbose:
@@ -168,15 +272,31 @@ if __name__ == "__main__":
         device=input_data.get("device", "cuda"),
     )
 
-    result = model.sample(
-        prompts=input_data.get("prompts", []),
-        num_tokens=input_data.get("num_tokens", 100),
-        top_k=input_data.get("top_k", 4),
-        temperature=input_data.get("temperature", 1.0),
-        top_p=input_data.get("top_p", 1.0),
-        batch_size=input_data.get("batch_size"),
-        verbose=input_data.get("verbose", False),
-    )
+    operation = input_data.get("operation", "sample")
+
+    if operation == "sample":
+        result = model.sample(
+            prompts=input_data.get("prompts", []),
+            num_tokens=input_data.get("num_tokens", 100),
+            top_k=input_data.get("top_k", 4),
+            temperature=input_data.get("temperature", 1.0),
+            top_p=input_data.get("top_p", 1.0),
+            batch_size=input_data.get("batch_size"),
+            verbose=input_data.get("verbose", False),
+        )
+    elif operation == "score":
+        result = model.score(
+            sequences=input_data.get("sequences", []),
+            batch_size=input_data.get("batch_size"),
+            return_logits=input_data.get("return_logits", False),
+            verbose=input_data.get("verbose", False),
+        )
+        # Serialize tensors for JSON output
+        if result["logits"] is not None:
+            result["logits"] = [t.tolist() for t in result["logits"]]
+    else:
+        print(f"Unknown operation: {operation}", file=sys.stderr)
+        sys.exit(1)
 
     with open(output_json_path, "w") as f:
         json.dump(result, f)

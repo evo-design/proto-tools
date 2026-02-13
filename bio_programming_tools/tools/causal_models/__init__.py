@@ -3,7 +3,11 @@ from .evo1 import (
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
+    Evo1ScoringConfig,
+    Evo1ScoringInput,
+    Evo1ScoringOutput,
     run_evo1_sample,
+    run_evo1_score,
 )
 from .evo2 import (
     Evo2SampleConfig,
@@ -32,6 +36,10 @@ __all__ = [
     "Evo1SampleInput",
     "Evo1SampleOutput",
     "run_evo1_sample",
+    "Evo1ScoringConfig",
+    "Evo1ScoringInput",
+    "Evo1ScoringOutput",
+    "run_evo1_score",
     "EVO1_MODEL_NAMES",
     # Evo2
     "Evo2SampleConfig",
