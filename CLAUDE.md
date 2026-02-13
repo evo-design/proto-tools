@@ -92,6 +92,17 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 - **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
 - **`@tool()`** decorator — handles error catching, timing, metadata population, registry.
 
+### Binary Installation (`install_binary.py`)
+
+Tools that need external binaries (not available via pip) must use the shared `utils/install_binary.py` utility — never raw `curl`/`wget` in `setup.sh`.
+
+1. Create `standalone/binary_config.py` with:
+   - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
+   - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into the venv's `bin/`
+2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <tool_name>` (see blast or mmseqs for the standard pattern)
+
+For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys and generate any wrapper scripts in `extract()`.
+
 ### Key File Paths
 
 | File | Provides |
@@ -100,6 +111,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
 | `utils/env_manager.py` | `EnvManager` for isolated venv execution |
+| `utils/install_binary.py` | Shared binary downloader for standalone venvs |
 | `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
 | `tools/__init__.py` | Master export — all tools re-exported here |
 

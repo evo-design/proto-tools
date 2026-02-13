@@ -197,6 +197,19 @@ This will:
 
 ---
 
+## Binary Installation
+
+Tools that need external binaries (not available via pip) use `utils/install_binary.py`. Never download binaries with raw `curl`/`wget` in `setup.sh`.
+
+### Adding a binary to a tool
+
+1. Create `standalone/binary_config.py` with `URLS` dict and `extract()` function (see `blast` or `mmseqs` for examples)
+2. Add the standard `install_binary.py` call block to `setup.sh` (same block used by blast, mafft, mmseqs, segmasker)
+
+Existing tools using `install_binary`: blast, mafft, mmseqs, segmasker, minced.
+
+---
+
 ## Code Quality
 
 The project uses several tools to maintain code quality:
