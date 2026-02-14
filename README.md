@@ -73,13 +73,17 @@ print(result.results_df.head())
 
 ## Using with Claude Code
 
-This repo includes a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that helps Claude discover and utilize the bio tools. Just launch `claude` from the repo root after installing:
+This repo includes [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for both users running tools and developers extending the library. Launch `claude` from the repo root:
 
 ```bash
 claude
 ```
 
-Claude automatically picks up the project instructions (`CLAUDE.md`) and the bio-tools skill. Ask it things like:
+### For users (running tools)
+
+- **bio-tools** — workflow for running, analyzing, and writing scripts for any bioinformatics tool (discovery, script generation, GPU handling, output conventions)
+
+Ask Claude things like:
 
 ```
 > BLAST this sequence against swissprot
@@ -89,18 +93,15 @@ Claude automatically picks up the project instructions (`CLAUDE.md`) and the bio
 
 It will write runnable scripts to `analyses/` or execute directly depending on context. See [`analyses/examples/`](analyses/examples/) for reference scripts.
 
+### For developers (extending the tool library)
+
+Commands (invoked with `/command-name`):
+
+- **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
+- **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. See [`analyses/examples/`](analyses/examples/) for complete runnable scripts.
-
-## Adding a New Tool
-
-To implement a new biological AI model or bionformatics tool, use the Claude Code `/implement-tool` skill:
-
-```
-> /implement-tool
-```
-
-The skill is defined in [`.claude/commands/implement-tool.md`](.claude/commands/implement-tool.md) and can be used by any Claude Code instance working in this repo.
 
 ## Development
 

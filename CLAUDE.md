@@ -163,3 +163,16 @@ result = run_{tool}(inputs, config)
 ```
 
 **Invoke the `bio-tools` skill for full workflow guidance** (script vs direct execution, script structure, GPU handling, output conventions).
+
+## Skills (`.claude/skills/`) & Commands (`.claude/commands/`)
+
+### For users (running tools)
+
+- **bio-tools** — workflow for running, analyzing, and writing scripts for any bioinformatics tool (discovery, script generation, GPU handling, output conventions)
+
+### For developers (extending the tool library)
+
+Commands (invoked with `/command-name [args]`):
+
+- **`/fix-issue <number>`** — full GitHub issue fix lifecycle for bio-programming-tools (read issue, explore, reproduce, fix, test, verify)
+- **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
