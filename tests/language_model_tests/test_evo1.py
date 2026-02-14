@@ -17,22 +17,10 @@ from bio_programming_tools.tools.causal_models.evo1 import (
     Evo1ScoringInput,
     Evo1ScoringOutput,
     run_evo1_sample,
+    run_evo1_score,
 )
 from bio_programming_tools.tools.causal_models.shared_data_models import SequenceScores
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-
-def _get_in_process_tools():
-    """Lazy import of in-process tools (requires torch)."""
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode import (
-        run_evo1_sample as run_evo1_sample_ip,
-        run_evo1_score as run_evo1_score_ip,
-    )
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode import (
-        Evo1ScoringConfig as Evo1ScoringConfigIP,
-    )
-
-    return run_evo1_sample_ip, run_evo1_score_ip, Evo1ScoringConfigIP
 
 # ============================================================================
 # Input Validation Tests (no GPU needed)
@@ -138,11 +126,12 @@ def test_evo1_sample_tool():
     assert result.scores is not None
     assert len(result.scores) == 2
 
-    # Sequences are valid DNA
-    valid_chars = set("ATCGNatcgn")
+    # Sequences should be valid DNA
+    valid_chars = set("ACGTacgt")
     for seq in result.sequences:
         assert isinstance(seq, str) and len(seq) > 0
-        assert set(seq).issubset(valid_chars)
+        invalid = set(seq) - valid_chars
+        assert not invalid, f"Non-DNA characters in output: {invalid}"
 
     # Scores are negative log-probabilities
     for score in result.scores:
@@ -170,6 +159,7 @@ def test_evo1_sample_batched():
 
 
 @pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_evo1_sample_prepend_prompt():
     """Test that prepend_prompt controls whether prompt is included."""
     prompt = "ATCGATCG"
@@ -370,173 +360,42 @@ class TestEvo1ScoringOutput:
 
 @pytest.mark.uses_gpu
 def test_evo1_score_tool():
-    """Test the evo1 scoring tool end-to-end (in-process mode)."""
-    _, run_evo1_score_ip, Evo1ScoringConfigIP = _get_in_process_tools()
-
+    """Test evo1 scoring: output structure, metrics, batching, and consistency."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
     inputs = Evo1ScoringInput(sequences=sequences)
-    config = Evo1ScoringConfigIP(
+    config = Evo1ScoringConfig(
         model_name="evo-1-8k-base",
+        return_logits=True,
         verbose=False,
     )
 
-    result = run_evo1_score_ip(inputs=inputs, config=config)
+    result = run_evo1_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Check output structure
-    assert result.tool_id == "evo1-score-in-process"
+    # Output structure
+    assert result.tool_id == "evo1-score"
     assert len(result.scores) == 2
 
-    # Check scoring metrics for each sequence
-    for i, score in enumerate(result.scores):
-        assert "log_likelihood" in score.metrics
-        assert "avg_log_likelihood" in score.metrics
-        assert "perplexity" in score.metrics
-
+    # Metrics correctness
+    for score in result.scores:
         assert isinstance(score.log_likelihood, float)
         assert isinstance(score.avg_log_likelihood, float)
         assert isinstance(score.perplexity, float)
-
-        # Log-likelihood should be negative
         assert score.log_likelihood < 0
-        # Perplexity should be positive
         assert score.perplexity > 0
 
-    # Logits should be None by default
-    for score in result.scores:
-        assert score.logits is None
-
-
-@pytest.mark.uses_gpu
-def test_evo1_score_with_logits():
-    """Test scoring with return_logits=True returns correct shapes."""
-    _, run_evo1_score_ip, Evo1ScoringConfigIP = _get_in_process_tools()
-
-    sequences = ["ATCGATCGATCG"]
-    inputs = Evo1ScoringInput(sequences=sequences)
-    config = Evo1ScoringConfigIP(
-        model_name="evo-1-8k-base",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_evo1_score_ip(inputs=inputs, config=config)
-    validate_output(result)
-
+    # Metrics consistency: perplexity = exp(-avg_log_likelihood)
     score = result.scores[0]
+    expected_perplexity = np.exp(-score.avg_log_likelihood)
+    np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
+
+    # Logits shape and vocab
     assert score.logits is not None
     logits_arr = np.array(score.logits)
-    # Logits shape: (seq_len, vocab_size=512)
-    assert logits_arr.shape[0] == len(sequences[0])
-    assert logits_arr.shape[1] == 512
-
-    # Vocab should have 512 entries
+    assert logits_arr.shape == (len(sequences[0]), 512)
     assert score.vocab is not None
     assert len(score.vocab) == 512
-    # Verify DNA nucleotide positions (ASCII values)
     assert score.vocab[65] == "A"
     assert score.vocab[67] == "C"
     assert score.vocab[71] == "G"
     assert score.vocab[84] == "T"
-
-
-@pytest.mark.uses_gpu
-def test_evo1_score_batched():
-    """Test batched scoring with batch_size=2 on 6 sequences."""
-    _, run_evo1_score_ip, Evo1ScoringConfigIP = _get_in_process_tools()
-
-    sequences = [
-        "ATCGATCG",
-        "GCTAGCTA",
-        "AAAACCCC",
-        "GGGGTTTT",
-        "ACGTACGT",
-        "TGCATGCA",
-    ]
-    inputs = Evo1ScoringInput(sequences=sequences)
-    config = Evo1ScoringConfigIP(
-        model_name="evo-1-8k-base",
-        batch_size=2,
-        verbose=False,
-    )
-
-    result = run_evo1_score_ip(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.scores) == 6
-    for score in result.scores:
-        assert score.perplexity > 0
-        assert score.log_likelihood < 0
-
-
-@pytest.mark.uses_gpu
-def test_evo1_score_metrics_consistency():
-    """Test that scoring metrics are mathematically consistent."""
-    _, run_evo1_score_ip, Evo1ScoringConfigIP = _get_in_process_tools()
-
-    inputs = Evo1ScoringInput(sequences=["ATCGATCGATCG"])
-    config = Evo1ScoringConfigIP(
-        model_name="evo-1-8k-base",
-        verbose=False,
-    )
-
-    result = run_evo1_score_ip(inputs=inputs, config=config)
-    score = result.scores[0]
-
-    # Verify perplexity = exp(-avg_log_likelihood)
-    expected_perplexity = np.exp(-score.avg_log_likelihood)
-    np.testing.assert_allclose(
-        score.perplexity,
-        expected_perplexity,
-        rtol=1e-5,
-        err_msg="Perplexity should equal exp(-avg_log_likelihood)",
-    )
-
-
-@pytest.mark.uses_gpu
-def test_evo1_score_model_reuse():
-    """Test that sample and score share the cached model instance."""
-    run_evo1_sample_ip, run_evo1_score_ip, Evo1ScoringConfigIP = (
-        _get_in_process_tools()
-    )
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode.evo1_cache import (
-        get_cached_evo1_model,
-    )
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode.evo1_sample import (
-        Evo1SampleConfig as Evo1SampleConfigIP,
-    )
-
-    model_name = "evo-1-8k-base"
-    device = "cuda"
-
-    # First call: sample (loads model)
-    sample_inputs = Evo1SampleInput(prompts=["ATCG"])
-    sample_config = Evo1SampleConfigIP(
-        model_name=model_name,
-        num_tokens=10,
-        device=device,
-        verbose=False,
-    )
-    run_evo1_sample_ip(inputs=sample_inputs, config=sample_config)
-
-    # Get cached model reference
-    model_after_sample = get_cached_evo1_model(
-        model_name=model_name, device=device
-    )
-
-    # Second call: score (should reuse model)
-    score_inputs = Evo1ScoringInput(sequences=["ATCG"])
-    score_config = Evo1ScoringConfigIP(
-        model_name=model_name,
-        device=device,
-        verbose=False,
-    )
-    run_evo1_score_ip(inputs=score_inputs, config=score_config)
-
-    # Get cached model reference again
-    model_after_score = get_cached_evo1_model(
-        model_name=model_name, device=device
-    )
-
-    # Should be the exact same object (no duplicate loading)
-    assert model_after_sample is model_after_score

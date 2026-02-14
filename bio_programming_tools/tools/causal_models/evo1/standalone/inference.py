@@ -109,7 +109,11 @@ class Evo1Model:
             all_scores.extend(scores)
 
         assert len(all_sequences) == len(prompts)
-        return {"sequences": all_sequences, "scores": all_scores}
+        # Convert numpy floats to native Python floats for JSON serialization
+        return {
+            "sequences": all_sequences,
+            "scores": [float(s) for s in all_scores],
+        }
 
     def score(
         self,
