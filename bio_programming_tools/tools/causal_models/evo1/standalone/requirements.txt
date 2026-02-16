@@ -4,7 +4,7 @@
 # flash-attn is pinned here to ensure pre-built wheels exist for the torch version
 # pinned in setup.sh. Update both together when bumping versions.
 
-evo-model
+evo-model>=0.5
 flash-attn==2.8.0.post2
-transformers>=4.48,<5
+transformers>=4.48
 tqdm

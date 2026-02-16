@@ -29,11 +29,11 @@ This file contains notes on platform compatibility with our current `setup.sh` s
   - Symbol resolution issues with libnvJitLink.so.12 (`__nvJitLinkGetErrorLogSize_12_9`)
 
 ### Venv Status
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-02-16
 
 | Category | Tool | GPU Version | Status | Notes |
 |----------|------|-------------|--------|-------|
-| Causal Models | evo1 | N/A | Not Tested | |
+| Causal Models | evo1 | 2.7.1+cu128 | Working | 29/30 tests pass (1 skipped: slow); evo-model 0.5, transformers 5.1.0, numpy 2.4.2 |
 | Gene Annotation | blast | N/A (no GPU) | Working | 11/11 tests pass |
 | Gene Annotation | crispr_tracr | N/A (no GPU) | Not Tested | Requires nested conda env (Python 3.8 + sklearn 0.22 + 20 bioinformatics tools) |
 | Gene Annotation | minced | N/A (no GPU) | Not Tested | Java tool; setup.sh downloads JAR into venv bin/ |
