@@ -56,10 +56,7 @@ class EnvManager:
             refresh: Whether to refresh the venv if it already exists
         """
         self.model_name = self._determine_valid_model_name(model_name)
-        # Get project root (three levels up: utils/ -> bio_programming_tools/ -> project_root/)
-        project_root = Path(__file__).parent.parent.parent
-        venv_root = project_root / ".venvs"
-        venv_root.mkdir(parents=True, exist_ok=True)
+        venv_root = self._get_venvs_root()
         self.env_path = venv_root / f"{model_name}_env"
         self.setup_script = self._find_setup_script(model_name)
 
@@ -81,6 +78,32 @@ class EnvManager:
             logger.debug(
                 f"Venv for {model_name} already exists and setup was successful at {self.env_path}"
             )
+
+    @staticmethod
+    def _get_venvs_root() -> Path:
+        """
+        Determine the .venvs root directory.
+
+        For editable installs (pip install -e .), finds the project root by
+        walking up from this file looking for pyproject.toml, then uses
+        project_root/.venvs/.
+
+        For non-editable installs (pip install .), the package is copied into
+        site-packages and there's no project root. Falls back to a user-level
+        cache directory: $XDG_CACHE_HOME/bio_programming_tools/.venvs/ or
+        ~/.cache/bio_programming_tools/.venvs/.
+        """
+        for parent in Path(__file__).resolve().parents:
+            if (parent / "pyproject.toml").exists():
+                venvs = parent / ".venvs"
+                venvs.mkdir(parents=True, exist_ok=True)
+                return venvs
+        cache_home = Path(
+            os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
+        )
+        venvs = cache_home / "bio_programming_tools" / ".venvs"
+        venvs.mkdir(parents=True, exist_ok=True)
+        return venvs
 
     def _determine_valid_model_name(self, model_name: str):
         """
@@ -243,8 +266,20 @@ class EnvManager:
             'LD_LIBRARY_PATH',      # Can override bundled CUDA libraries in venv
         }
 
+        CONDA_BLOCKLIST = {
+            'CONDA_PREFIX',         # Points to conda env; can confuse pip/uv
+            'CONDA_DEFAULT_ENV',    # Active conda env name
+            'CONDA_PYTHON_EXE',    # Conda's Python, not the venv's
+            'CONDA_PROMPT_MODIFIER',
+            'CONDA_SHLVL',
+            'CONDA_EXE',
+            '_CE_CONDA',
+            '_CONDA_EXE',
+            '_CONDA_ROOT',
+        }
+
         env = os.environ.copy()
-        for key in JUPYTER_BLOCKLIST | CUDA_BLOCKLIST:
+        for key in JUPYTER_BLOCKLIST | CUDA_BLOCKLIST | CONDA_BLOCKLIST:
             env.pop(key, None)
         return env
 
