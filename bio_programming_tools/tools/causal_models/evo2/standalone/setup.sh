@@ -112,13 +112,21 @@ uv pip install --no-build-isolation flash-attn==2.8.3
 
 echo "Installing transformer-engine..."
 # transformer-engine's build step imports torch, so disable build isolation.
-uv pip install --no-build-isolation "transformer_engine[pytorch]==2.3.0"
+# TE >=2.5.0 includes pyproject.toml with __legacy__ build backend, fixing
+# a build_tools import issue that broke source builds with 2.3.0.
+uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0"
 
 echo "Installing vortex..."
 uv pip install vtx
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt --torch-backend=auto
+
+echo "Upgrading triton..."
+# torch 2.6.0 pins triton==3.2.0, which has a PY_SSIZE_T_CLEAN bug causing
+# runtime failures with conda-forge Python 3.12. Upgrade AFTER all other installs
+# to prevent uv from downgrading it back to 3.2.0 via torch's dependency.
+uv pip install --upgrade triton
 
 # ============================================================================
 # Generate sitecustomize.py to preload CUDA libs at Python startup
