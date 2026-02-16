@@ -76,6 +76,7 @@ def slugify(text: str) -> str:
 _FENCE_RE = re.compile(r"(```[^\n]*\n.*?```)", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"(`[^`]+`)")
 _LT_RE = re.compile(r"<")
+_CURLY_RE = re.compile(r"[{}]")
 
 # JSX/HTML tags that are legitimate in Mintlify MDX and must not be escaped.
 _LEGITIMATE_TAG_RE = re.compile(
@@ -131,14 +132,20 @@ def _escape_prose_segment(segment: str) -> str:
 
 
 def _escape_angle_brackets(text: str) -> str:
-    """Replace ``<`` with ``&lt;`` unless it starts a legitimate tag."""
+    """Replace ``<`` with ``&lt;`` unless it starts a legitimate tag.
+
+    Also escapes curly braces (``{``/``}``) to ``\\{``/``\\}`` so MDX
+    does not interpret them as JSX expression delimiters.
+    """
 
     def _replace(match: re.Match) -> str:
         if _LEGITIMATE_TAG_RE.match(text, match.start()):
             return "<"
         return "&lt;"
 
-    return _LT_RE.sub(_replace, text)
+    result = _LT_RE.sub(_replace, text)
+    result = _CURLY_RE.sub(lambda m: "\\" + m.group(), result)
+    return result
 
 
 # Language to icon mapping for Mintlify code blocks
