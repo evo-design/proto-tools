@@ -173,6 +173,21 @@ def run_mafft_alignment(
     }
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    sequences = input_dict["sequences"]
+    sequence_ids = input_dict.get(
+        "sequence_ids", [f"seq_{i}" for i in range(len(sequences))]
+    )
+    return run_mafft_alignment(
+        sequences=sequences,
+        sequence_ids=sequence_ids,
+        align_method=input_dict.get("align_method", "auto"),
+        max_iterations=input_dict.get("max_iterations", 0),
+        threads=input_dict.get("threads", 1),
+    )
+
+
 def main():
     """Main entry point for standalone MAFFT runner."""
     if len(sys.argv) != 3:

@@ -186,6 +186,11 @@ def run_orfipy(input_data: dict) -> dict:
     return {"predicted_orfs": predicted_orfs}
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_orfipy(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================

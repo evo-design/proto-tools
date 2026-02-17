@@ -269,6 +269,22 @@ class ColabFoldSearchWrapper:
         )
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    wrapper = ColabFoldSearchWrapper()
+    return wrapper(
+        query_fasta_path=input_dict["query_fasta_path"],
+        msa_db_dir=input_dict["msa_db_dir"],
+        output_dir=input_dict["output_dir"],
+        num_threads=input_dict["num_threads"],
+        use_metagenomic_db=input_dict["use_metagenomic_db"],
+        sensitivity=input_dict.get("sensitivity"),
+        database_name=input_dict.get("database_name"),
+        use_gpu=input_dict.get("use_gpu", False),
+        verbose=input_dict.get("verbose", True),
+    )
+
+
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:

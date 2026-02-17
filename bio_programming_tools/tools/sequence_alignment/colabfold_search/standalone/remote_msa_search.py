@@ -181,6 +181,18 @@ class ColabFoldRemoteSearchWrapper:
         logger.debug("ColabFold remote search initialized")
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    wrapper = ColabFoldRemoteSearchWrapper()
+    return wrapper(
+        sequences=input_dict["sequences"],
+        sequence_ids=input_dict["sequence_ids"],
+        output_dir=input_dict["output_dir"],
+        use_metagenomic_db=input_dict.get("use_metagenomic_db", False),
+        verbose=input_dict.get("verbose", True),
+    )
+
+
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:

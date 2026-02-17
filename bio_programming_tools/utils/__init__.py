@@ -5,6 +5,18 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 """
 from .base_config import BaseConfig, ConfigField
 from .device import determine_visible_devices, number_of_available_gpus, use_cloud_gpu
+from .system_info import (
+    capture_parent_env,
+    capture_subprocess_env,
+    clear_captured_env,
+    collect_system_info,
+    get_captured_env,
+    get_git_info,
+    get_gpu_info,
+    get_parent_process_env,
+    get_platform_id,
+    get_platform_info,
+)
 from .tool_instance import ToolInstance
 from .helpers import (
     DNA_NUCLEOTIDES,
@@ -34,6 +46,18 @@ __all__ = [
     # Config
     "BaseConfig",
     "ConfigField",
+    # System info
+    "get_platform_info",
+    "get_gpu_info",
+    "get_parent_process_env",
+    "get_platform_id",
+    "get_git_info",
+    "collect_system_info",
+    # Environment capture
+    "capture_parent_env",
+    "capture_subprocess_env",
+    "get_captured_env",
+    "clear_captured_env",
     # Helpers & sequence validation
     "resolve_sequence_ids",
     "calculate_gc_content",

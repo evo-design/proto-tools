@@ -94,6 +94,11 @@ def run_structure_metrics(input_data: dict) -> dict:
     return {"metrics": metrics}
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_structure_metrics(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
