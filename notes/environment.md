@@ -44,7 +44,7 @@ This file contains notes on platform compatibility with our current `setup.sh` s
 | Language Models | esm2 | 2.6.0+cu126 | Working | 11/11 tests pass |
 | Language Models | esm3 | N/A | Working | 12/12 tests pass |
 | Language Models | progen2 | CPU only | Working | 30/30 tests pass |
-| Language Models | evo2 | N/A | Working | 32/32 tests pass |
+| Language Models | evo2 | 2.6.0+cu126 | Working | 32/32 tests pass; micromamba CUDA toolkit + cuDNN; sitecustomize.py preloads CUDA libs |
 | ORF Prediction | orfipy | N/A (no GPU) | Working | 19/19 tests pass |
 | ORF Prediction | prodigal | N/A (no GPU) | Working | 29/29 tests pass |
 | RNA Splicing | splice_transformer | latest+cu126 | Working | 2/2 tests pass |

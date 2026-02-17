@@ -9,25 +9,117 @@ if [ "$ARCH" = "aarch64" ]; then
     exit 1
 fi
 
+MAMBA_PLATFORM="linux-64"
+CUDA_TARGET="x86_64-linux"
+
 echo "Setting up Evo2 standalone environment..."
 
 echo "Prerequisites not installed by this script:"
-echo "  - CUDA 12.1+ and cuDNN 9.3+"
 echo "  - GCC 9+ or Clang 10+ with C++17 support"
 echo ""
 
 echo "Installing uv package manager..."
 pip install uv
 
+# ============================================================================
+# Install micromamba for managing CUDA toolkit + cuDNN
+# ============================================================================
+echo "Installing micromamba..."
+MAMBA_ROOT="$VENV_PATH/micromamba"
+mkdir -p "$MAMBA_ROOT"
+
+if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
+    echo "Downloading micromamba..."
+    if ! curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" \
+        | tar -xvj -C "$MAMBA_ROOT" bin/micromamba; then
+        echo "ERROR: Failed to download or extract micromamba"
+        exit 1
+    fi
+fi
+
+if [ ! -x "$MAMBA_ROOT/bin/micromamba" ]; then
+    chmod +x "$MAMBA_ROOT/bin/micromamba"
+fi
+
+export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
+eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"
+
+echo "Installing CUDA toolkit and cuDNN via micromamba..."
+micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+    cuda-toolkit \
+    cuda-nvcc \
+    cuda-cudart-dev \
+    cudnn \
+    cuda-nvtx
+
+export CUDA_HOME="$VENV_PATH/cuda_env"
+echo "Using local CUDA installation at: $CUDA_HOME"
+
+# ============================================================================
+# Create header symlinks for PyTorch's cpp_extension and transformer-engine
+# ============================================================================
+CUDA_TARGETS_DIR="$CUDA_HOME/targets/${CUDA_TARGET}/include"
+if [ -d "$CUDA_TARGETS_DIR" ]; then
+    for header_dir in cuda thrust cub; do
+        if [ -d "$CUDA_TARGETS_DIR/$header_dir" ] && [ ! -e "$CUDA_HOME/include/$header_dir" ]; then
+            ln -s "$CUDA_TARGETS_DIR/$header_dir" "$CUDA_HOME/include/$header_dir"
+        fi
+    done
+fi
+
+# nvtx3 headers may be installed under nsight-compute; symlink to standard include path
+if [ ! -e "$CUDA_HOME/include/nvtx3" ]; then
+    NVTX_SRC=$(find "$CUDA_HOME" -path "*/nvtx/include/nvtx3" -type d 2>/dev/null | head -1)
+    if [ -n "$NVTX_SRC" ]; then
+        ln -s "$NVTX_SRC" "$CUDA_HOME/include/nvtx3"
+        echo "Symlinked nvtx3 headers from $NVTX_SRC"
+    fi
+fi
+
+# Fix broken libcudart.so symlink (micromamba may install different version)
+if [ -L "$CUDA_HOME/lib/libcudart.so" ] && [ ! -e "$CUDA_HOME/lib/libcudart.so" ]; then
+    rm -f "$CUDA_HOME/lib/libcudart.so"
+    ACTUAL_CUDART=$(ls "$CUDA_HOME/lib"/libcudart.so.12* 2>/dev/null | head -1)
+    if [ -n "$ACTUAL_CUDART" ]; then
+        ln -s "$(basename "$ACTUAL_CUDART")" "$CUDA_HOME/lib/libcudart.so"
+        echo "Fixed libcudart.so symlink -> $(basename "$ACTUAL_CUDART")"
+    fi
+fi
+
+# Set compilation environment variables
+export PATH="$VENV_PATH/bin:$CUDA_HOME/bin:$PATH"
+CUDA_TARGETS_INCLUDE="$CUDA_HOME/targets/${CUDA_TARGET}/include"
+export CPATH="${CPATH:+$CPATH:}$CUDA_HOME/include:$CUDA_TARGETS_INCLUDE"
+export CXXFLAGS="${CXXFLAGS:-} -I$CUDA_HOME/include -I$CUDA_TARGETS_INCLUDE"
+export LDFLAGS="${LDFLAGS:-} -L$CUDA_HOME/lib"
+export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$CUDA_HOME/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$CUDA_HOME/lib"
+
+echo "NVCC: $(which nvcc) ($(nvcc --version | tail -1))"
+
+# ============================================================================
+# Install Python packages
+# ============================================================================
 echo "Installing torch..."
-uv pip install torch --torch-backend=auto
+uv pip install torch==2.6.0 --torch-backend=auto
+
+echo "Installing build dependencies..."
+uv pip install psutil ninja packaging setuptools wheel numpy
 
 echo "Installing flash-attn..."
-# flash-attn's build step imports torch, so disable build isolation after torch is installed.
-uv pip install --no-build-isolation flash-attn==2.8.0.post2
+# flash-attn's build step imports torch, so disable build isolation.
+uv pip install --no-build-isolation flash-attn==2.8.3
 
 echo "Installing transformer-engine..."
-uv pip install transformer_engine[pytorch]==2.3.0
+# transformer-engine's build step imports torch, so disable build isolation.
+# TE >=2.5.0 includes pyproject.toml with __legacy__ build backend, fixing
+# a build_tools import issue that broke source builds with 2.3.0.
+# Clean uv's sdist cache for TE before building. TE's setup.py deletes its own
+# build_tools/ directory after a successful build (cleanup step), which corrupts
+# the cached sdist source. A subsequent build for a different Python version
+# would reuse the dirty cache and fail with "No module named 'build_tools'".
+uv cache clean transformer-engine-torch
+uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0"
 
 echo "Installing vortex..."
 uv pip install vtx
@@ -35,6 +127,53 @@ uv pip install vtx
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt --torch-backend=auto
 
+echo "Upgrading triton..."
+# torch 2.6.0 pins triton==3.2.0, which has a PY_SSIZE_T_CLEAN bug causing
+# runtime failures with conda-forge Python 3.12. Upgrade AFTER all other installs
+# to prevent uv from downgrading it back to 3.2.0 via torch's dependency.
+uv pip install --upgrade triton
+
+# ============================================================================
+# Generate sitecustomize.py to preload CUDA libs at Python startup
+# ============================================================================
+# transformer-engine is compiled against cuda_env's CUDA headers, so it must
+# use cuda_env's runtime libs (cublas, cudnn, etc.), not torch's bundled ones.
+# EnvManager strips LD_LIBRARY_PATH, so we use ctypes.CDLL preloading instead.
+SITE_PACKAGES=$($PYTHON_EXE -c "import site; print(site.getsitepackages()[0])")
+cat > "$SITE_PACKAGES/sitecustomize.py" <<'SITECUSTOMIZE'
+# Auto-generated CUDA environment setup for Evo2 venv
+import os
+import glob
+import site
+import ctypes
+
+sp = site.getsitepackages()[0]
+venv_root = os.path.normpath(os.path.join(sp, "..", "..", ".."))
+cuda_home = os.path.join(venv_root, "cuda_env")
+
+os.environ["CUDA_HOME"] = cuda_home
+os.environ["PATH"] = f"{venv_root}/bin:{cuda_home}/bin:" + os.environ.get("PATH", "")
+
+# Pre-load CUDA libs from cuda_env so transformer-engine uses matching versions.
+# Must happen before torch is imported, so the dynamic linker won't load torch's
+# bundled (potentially version-mismatched) libs later.
+# Note: micromamba stores libs as symlinks to package cache — do not filter them out.
+_cuda_lib = os.path.join(cuda_home, "lib")
+for pattern in ["libcudnn*.so.*", "libcublas.so.*", "libcublasLt.so.*",
+                "libcusparse*.so.*", "libnvrtc*.so.*"]:
+    for lib_path in sorted(glob.glob(os.path.join(_cuda_lib, pattern)), reverse=True):
+        basename = os.path.basename(lib_path)
+        so_idx = basename.find(".so.")
+        if so_idx >= 0:
+            ver_part = basename[so_idx + 4:]
+            if ver_part.count(".") >= 1:  # fully versioned (e.g. .so.12.9.1.4)
+                try:
+                    ctypes.CDLL(lib_path, mode=ctypes.RTLD_GLOBAL)
+                except OSError:
+                    pass
+SITECUSTOMIZE
+
+echo ""
 echo "If installation fails, follow upstream setup guides:"
 echo "  - https://github.com/ArcInstitute/evo2"
 echo "  - https://github.com/Zymrael/vortex"
