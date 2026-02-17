@@ -257,7 +257,7 @@ print(f"ISM scores: {len(result.scores)} records")
 
 - **Context length matters**: AlphaGenome supports 5 context lengths (2 KB to 1 MB). The 1 MB window captures the most distal regulatory effects. Shorter windows are faster but miss long-range interactions. Non-matching interval lengths are automatically resized.
 - **First run is slow**: Model weights are downloaded from Hugging Face on first use. Subsequent runs load from the local cache.
-- **GPU required**: AlphaGenome requires a CUDA GPU. 
+- **GPU required**: AlphaGenome requires a CUDA GPU.
 - **Variant position validation**: The variant position must fall within `[interval_start, interval_end)`. The ISM sub-interval must be fully contained within the main interval.
 - **Scorer selection**: Passing `None` for `variant_scorers` or `interval_scorers` uses all recommended scorers, which provides comprehensive coverage but is slower. Specify individual scorers when you only need specific assay types.
 - **ISM sub-intervals**: Keep ISM windows small (tens to low hundreds of bp). Each position generates 3 alternate allele predictions, so computation scales linearly with window size.
