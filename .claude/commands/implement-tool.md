@@ -19,12 +19,12 @@ You are implementing a new bioinformatics tool in the bio-programming-tools code
 
 ## Step 1: Tool Architecture
 
-**Always use the standalone pattern** — every tool runs in an isolated venv via EnvManager:
+**Always use the standalone pattern** — every tool runs in an isolated venv via ToolInstance:
 
 ```
 tools/{category}/{tool_name}/
 ├── __init__.py
-├── {tool_name}.py          # Input, Config, Output, run function (calls EnvManager)
+├── {tool_name}.py          # Input, Config, Output, run function (calls ToolInstance)
 ├── cite.bib                # BibTeX citation (required)
 ├── examples/
 │   └── example.ipynb       # Working example notebook (required)
@@ -42,7 +42,7 @@ tools/{category}/
 ├── shared_data_models.py   # Shared Input/Config/Output base classes
 ├── {tool_name}/
 │   ├── __init__.py
-│   ├── {tool_name}.py      # Extends shared models, calls EnvManager
+│   ├── {tool_name}.py      # Extends shared models, calls ToolInstance
 │   ├── cite.bib            # BibTeX citation (required)
 │   ├── examples/
 │   │   └── example.ipynb   # Working example notebook (required)
@@ -269,25 +269,24 @@ def run_{tool_name}(
 
 ## Step 3: Implementation Patterns
 
-### 3A: Standalone CPU Tool (EnvManager)
+### 3A: Standalone CPU Tool (ToolInstance)
 
-**Main tool file** — calls EnvManager with `run.py`:
+**Main tool file** — calls ToolInstance with `run.py`:
 ```python
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="{tool_name}")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "operation": "{operation_name}",
         "sequences": inputs.sequences,
         "param1": config.param1,
+        "device": config.device,
     }
 
-    output_data = venv_manager.call_standalone_script_in_venv(
+    output_data = ToolInstance.dispatch(
+        "{tool_name}",
+        input_data,
         script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device=config.device,
         verbose=config.verbose,
     )
 
@@ -300,8 +299,8 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 **standalone/run.py** (or **inference.py** for AI models) — JSON I/O entry point:
 ```python
 """
-{ToolName} standalone runner for EnvManager venv execution.
-Usage (called by EnvManager, not directly):
+{ToolName} standalone runner for ToolInstance venv execution.
+Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>  # CPU tools
     python inference.py <input.json> <output.json>  # AI model tools
 """
@@ -362,24 +361,23 @@ numpy>=1.24.0
 
 ```python
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager("{tool_name}")
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "inference.py",
-        input_dict={
+    result = ToolInstance.dispatch(
+        "{tool_name}",
+        {
             "operation": "run",
             "sequences": inputs.sequences,
             "param1": config.param1,
             "device": config.device,
         },
-        device=config.device,
+        script_path=Path(__file__).parent / "standalone" / "inference.py",
         verbose=config.verbose,
+        reload_on=type(config).reload_fields(),  # Restart worker if device/checkpoint changes
     )
 
     return ToolOutput(results=result["results"])
 ```
-
 ---
 
 ## Step 4: Caching
