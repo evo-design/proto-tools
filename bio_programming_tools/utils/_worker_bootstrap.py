@@ -50,24 +50,40 @@ def _build_legacy_dispatch(module: Any) -> Any:
 
     Most standalone scripts define top-level functions named like
     ``run_local_blast``.  We route by the ``operation`` key in the input dict.
+
+    When there is exactly one ``run_*`` function and no ``operation`` key,
+    we auto-route to it as a convenience for simple single-operation scripts.
     """
+    # Pre-scan for run_* functions so we can auto-route single-function modules.
+    run_funcs = {
+        name: getattr(module, name)
+        for name in dir(module)
+        if name.startswith("run_") and callable(getattr(module, name))
+    }
 
     def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         """Route input_dict to the right run_{operation} function in the module."""
         operation = input_dict.get("operation")
-        if operation is None:
+
+        if operation is not None:
+            func_name = f"run_{operation}"
+            func = run_funcs.get(func_name)
+            if func is not None:
+                return func(input_dict)
             raise ValueError(
-                "Input dict must contain an 'operation' key for legacy dispatch"
+                f"Cannot dispatch operation '{operation}' — no function "
+                f"'{func_name}' found in {module.__name__}"
             )
 
-        func_name = f"run_{operation}"
-        func = getattr(module, func_name, None)
-        if func is not None:
+        # No operation key — auto-route if there's exactly one run_* function.
+        if len(run_funcs) == 1:
+            func = next(iter(run_funcs.values()))
             return func(input_dict)
 
+        available = ", ".join(sorted(run_funcs)) or "(none)"
         raise ValueError(
-            f"Cannot dispatch operation '{operation}' — no function "
-            f"'run_{operation}' found in {module.__name__}"
+            f"Input dict must contain an 'operation' key for legacy dispatch "
+            f"(module has {len(run_funcs)} run_* functions: {available})"
         )
 
     return dispatch

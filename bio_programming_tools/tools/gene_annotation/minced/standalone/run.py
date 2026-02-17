@@ -165,6 +165,11 @@ def run_minced(input_data: dict) -> dict:
     return {"results": results}
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_minced(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================

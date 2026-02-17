@@ -423,6 +423,11 @@ def run_crispr_tracr(input_data: dict) -> dict:
     return {"predictions": predictions}
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_crispr_tracr(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================

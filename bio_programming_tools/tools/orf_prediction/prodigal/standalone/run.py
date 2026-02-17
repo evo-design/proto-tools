@@ -135,6 +135,11 @@ def run_prodigal(input_data: dict) -> dict:
     return {"predicted_orfs": all_results}
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_prodigal(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================

@@ -8,26 +8,61 @@ Supports the same CLI options and markers as the main bio-programming tests:
   --slow       Run only slow tests
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
+  --env-report[=PATH]  Run venv smoke tests and generate compatibility report
 """
+
+from __future__ import annotations
 
 import functools
 import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from bio_programming_tools import setup_logging
+from bio_programming_tools.utils.system_info import (
+    capture_parent_env,
+    collect_system_info,
+    get_captured_env,
+    get_platform_id,
+)
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 
 def is_on_chimera() -> bool:
     """Check if running on the Chimera (arc-slurm) cluster."""
-    return os.environ.get("SLURM_CLUSTER_NAME") == "arc-slurm"
+    # First check environment variable (set by some SLURM configs)
+    cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
+    if cluster_name == "arc-slurm":
+        return True
+
+    # If SLURM_JOB_ID is set, we're on SLURM - query scontrol for cluster name
+    if os.environ.get("SLURM_JOB_ID"):
+        try:
+            result = subprocess.run(
+                ["scontrol", "show", "config"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                # Parse "ClusterName = arc-slurm" from output
+                import re
+
+                match = re.search(r"ClusterName\s*=\s*(\S+)", result.stdout)
+                if match:
+                    return match.group(1) == "arc-slurm"
+        except Exception:
+            pass
+
+    return False
 
 
 @functools.cache
@@ -39,6 +74,361 @@ def _gpu_available() -> bool:
     return shutil.which("nvidia-smi") is not None
 
 
+# ============================================================================
+# Environment Report Collector
+# ============================================================================
+@dataclass
+class ToolTestResult:
+    """Result of a single tool smoke test."""
+
+    tool_name: str
+    category: str
+    test_name: str
+    status: str  # "passed", "failed", "skipped"
+    duration_seconds: float
+    requires_gpu: bool
+    venv_path: str | None
+    venv_status: str  # "success", "build_failed", "not_found"
+    error_message: str | None
+
+
+@dataclass
+class EnvReportCollector:
+    """Collects test results for environment compatibility report."""
+
+    output_path: Path | None = None
+    results: list[ToolTestResult] = field(default_factory=list)
+    _test_start_times: dict[str, float] = field(default_factory=dict)
+
+    def record_start(self, nodeid: str) -> None:
+        """Record when a test starts."""
+        import time
+
+        self._test_start_times[nodeid] = time.time()
+
+    def record_result(
+        self,
+        nodeid: str,
+        outcome: str,
+        *,
+        has_gpu_marker: bool = False,
+        error_message: str | None = None,
+    ) -> None:
+        """Record a test result."""
+        import time
+
+        # Calculate duration
+        start_time = self._test_start_times.pop(nodeid, time.time())
+        duration = time.time() - start_time
+
+        # Parse tool info from nodeid
+        # Example: tests/language_model_tests/test_esm2.py::test_esm2_score_inference
+        tool_name, category = self._parse_tool_from_nodeid(nodeid)
+        if not tool_name:
+            return  # Not a recognizable tool test
+
+        # Determine venv path and status
+        venv_path, venv_status = self._get_venv_info(tool_name)
+
+        self.results.append(
+            ToolTestResult(
+                tool_name=tool_name,
+                category=category,
+                test_name=nodeid,
+                status=outcome,
+                duration_seconds=round(duration, 2),
+                requires_gpu=has_gpu_marker,
+                venv_path=venv_path,
+                venv_status=venv_status,
+                error_message=error_message,
+            )
+        )
+
+    def _parse_tool_from_nodeid(self, nodeid: str) -> tuple[str | None, str | None]:
+        """Extract tool name and category from test nodeid."""
+        # Pattern: tests/{category}_tests/test_{tool}.py::...
+        # or: tests/test_{category}.py::...
+        match = re.search(r"test_(\w+)\.py", nodeid)
+        if not match:
+            return None, None
+
+        test_file = match.group(1)
+
+        # Map test file names to tool names and categories
+        # This handles cases where test file name differs from tool directory name
+        tool_mappings = {
+            "esm2": ("esm2", "masked_models"),
+            "esm3": ("esm3", "masked_models"),
+            "evo1": ("evo1", "causal_models"),
+            "evo2": ("evo2", "causal_models"),
+            "progen2": ("progen2", "causal_models"),
+            "blast": ("blast", "gene_annotation"),
+            "mmseqs": ("mmseqs", "gene_annotation"),
+            "pyhmmer": ("pyhmmer", "gene_annotation"),
+            "minced": ("minced", "gene_annotation"),
+            "crispr_tracr": ("crispr_tracr", "gene_annotation"),
+            "mafft": ("mafft", "sequence_alignment"),
+            "local_colabfold_search": ("colabfold_search", "sequence_alignment"),
+            "enformer": ("enformer", "sequence_scoring"),
+            "borzoi": ("borzoi", "sequence_scoring"),
+            "alphagenome": ("alphagenome", "sequence_scoring"),
+            "orfipy": ("orfipy", "orf_prediction"),
+            "prodigal": ("prodigal", "orf_prediction"),
+            "rna_splicing": ("splice_transformer", "rna_splicing"),
+            "proteinmpnn": ("proteinmpnn", "inverse_folding"),
+            "ligandmpnn": ("ligandmpnn", "inverse_folding"),
+            "esmfold": ("esmfold", "structure_prediction"),
+            "structure_prediction": ("structure_prediction", "structure_prediction"),
+            "structure_metrics": ("structure_metrics", "structure_prediction"),
+            "viennarna_secondary_structure_prediction": (
+                "viennarna",
+                "structure_prediction",
+            ),
+            "protenix": ("protenix", "structure_prediction"),
+            "rfdiffusion3": ("rfdiffusion3", "structure_design"),
+            "bioemu": ("bioemu", "structure_dynamics"),
+        }
+
+        if test_file in tool_mappings:
+            return tool_mappings[test_file]
+
+        # Fallback: use test file name as tool name
+        return test_file, "unknown"
+
+    def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
+        """Get venv path and status for a tool."""
+        project_root = Path(__file__).parent.parent
+        venvs_dir = project_root / ".venvs"
+
+        # Look for venv with tool name
+        for venv_dir in venvs_dir.glob(f"*{tool_name}*"):
+            if venv_dir.is_dir():
+                # Check if venv has python executable
+                python_path = venv_dir / "bin" / "python"
+                if python_path.exists():
+                    return str(venv_dir), "success"
+                return str(venv_dir), "build_failed"
+
+        return None, "not_found"
+
+    def finalize_and_write(self) -> Path | None:
+        """Write the report to disk as a README.md and return the path."""
+        if not self.results:
+            return None
+
+        # Collect system info
+        system_info = collect_system_info()
+        git_info = system_info["git_info"]
+        platform = system_info["platform"]
+        gpu = system_info["gpu"]
+        parent_env = system_info["parent_process_env"]
+
+        # Build summary
+        passed = sum(1 for r in self.results if r.status == "passed")
+        failed = sum(1 for r in self.results if r.status == "failed")
+        skipped = sum(1 for r in self.results if r.status == "skipped")
+        total = len(self.results)
+
+        # Group results by category
+        by_category: dict[str, list[ToolTestResult]] = {}
+        for r in self.results:
+            by_category.setdefault(r.category, []).append(r)
+
+        # Build README content
+        lines: list[str] = []
+
+        # Header with badges
+        pass_rate = int(100 * passed / total) if total > 0 else 0
+        if pass_rate >= 80:
+            rate_color = "brightgreen"
+        elif pass_rate >= 50:
+            rate_color = "yellow"
+        else:
+            rate_color = "red"
+
+        # Determine cluster/environment name for title
+        cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
+        if cluster_name == "arc-slurm":
+            env_name = "Chimera"
+        elif "dgx" in platform['hostname'].lower() or "spark" in platform['hostname'].lower():
+            env_name = "DGX Spark"
+        else:
+            env_name = f"{platform['os']} {platform['architecture']}"
+
+        lines.append(f"# {env_name} Environment Report")
+        lines.append("")
+        lines.append(
+            f"![Pass Rate](https://img.shields.io/badge/pass_rate-{pass_rate}%25-{rate_color})"
+            f" ![Passed](https://img.shields.io/badge/passed-{passed}-brightgreen)"
+            f" ![Failed](https://img.shields.io/badge/failed-{failed}-red)"
+            f" ![Skipped](https://img.shields.io/badge/skipped-{skipped}-lightgrey)"
+        )
+        lines.append("")
+
+        # Platform info table
+        lines.append("## Platform")
+        lines.append("")
+        lines.append("| Property | Value |")
+        lines.append("|----------|-------|")
+        lines.append(f"| **OS** | {platform['os']} {platform['os_version']} |")
+        lines.append(f"| **Architecture** | {platform['architecture']} |")
+        lines.append(f"| **Hostname** | `{platform['hostname']}` |")
+        lines.append(f"| **Python** | {platform['python_version']} |")
+        lines.append(f"| **RAM** | {platform['ram_gb']:.1f} GB |")
+
+        # GPU info
+        if gpu["available"]:
+            devices = ", ".join(d["name"] for d in gpu["devices"]) or "Unknown"
+            lines.append(f"| **GPU** | {gpu['count']}× {devices} |")
+            if gpu["cuda_version"]:
+                lines.append(f"| **CUDA** | {gpu['cuda_version']} |")
+        else:
+            lines.append("| **GPU** | None |")
+
+        # Parent environment
+        if parent_env["type"] == "mamba":
+            lines.append(f"| **Mamba Env** | `{parent_env['name']}` |")
+        elif parent_env["type"] == "conda":
+            lines.append(f"| **Conda Env** | `{parent_env['name']}` |")
+        elif parent_env["type"] == "venv":
+            lines.append(f"| **Venv** | `{parent_env['prefix']}` |")
+
+        lines.append("")
+
+        # Git info
+        lines.append("## Git")
+        lines.append("")
+        lines.append(f"- **Commit**: `{git_info['commit']}`")
+        lines.append(f"- **Branch**: `{git_info['branch']}`")
+        lines.append(f"- **Dirty**: {'Yes' if git_info['dirty'] else 'No'}")
+        lines.append("")
+
+        # Environment variables
+        captured_env = get_captured_env()
+        if captured_env["parent_env"] or captured_env["subprocess_env"]:
+            lines.append("## Environment Variables")
+            lines.append("")
+
+            if captured_env["parent_env"]:
+                lines.append("### Parent Process Environment")
+                lines.append("")
+                lines.append("```")
+                for key in sorted(captured_env["parent_env"].keys()):
+                    value = captured_env["parent_env"][key]
+                    # Truncate long values (like PATH)
+                    if len(value) > 200:
+                        value = value[:200] + "..."
+                    lines.append(f"{key}={value}")
+                lines.append("```")
+                lines.append("")
+
+            if captured_env["subprocess_env"]:
+                lines.append("### Subprocess Environment (passed to tools)")
+                lines.append("")
+                lines.append("```")
+                for key in sorted(captured_env["subprocess_env"].keys()):
+                    value = captured_env["subprocess_env"][key]
+                    # Truncate long values (like PATH)
+                    if len(value) > 200:
+                        value = value[:200] + "..."
+                    lines.append(f"{key}={value}")
+                lines.append("```")
+                lines.append("")
+
+        # Results by category
+        lines.append("## Results by Category")
+        lines.append("")
+
+        for category in sorted(by_category.keys()):
+            results = by_category[category]
+            cat_passed = sum(1 for r in results if r.status == "passed")
+            cat_total = len(results)
+
+            # Category header with mini badge
+            lines.append(f"### {category.replace('_', ' ').title()} ({cat_passed}/{cat_total})")
+            lines.append("")
+            lines.append("| Tool | Status | Requires GPU | Venv build succeeded | Duration |")
+            lines.append("|------|--------|--------------|----------------------|----------|")
+
+            for r in sorted(results, key=lambda x: x.tool_name):
+                # Status emoji
+                if r.status == "passed":
+                    status = "✅ Pass"
+                elif r.status == "failed":
+                    status = "❌ Fail"
+                else:
+                    status = "⏭️ Skip"
+
+                # Duration formatting
+                duration = f"{r.duration_seconds:.1f}s" if r.status != "skipped" else "—"
+
+                # GPU indicator
+                gpu_req = "yes" if r.requires_gpu else "no"
+
+                # Venv status
+                if r.venv_status == "success":
+                    venv = "✅"
+                elif r.venv_status == "build_failed":
+                    venv = "❌"
+                else:
+                    venv = "—"
+
+                lines.append(f"| `{r.tool_name}` | {status} | {gpu_req} | {venv} | {duration} |")
+
+            lines.append("")
+
+        # Failure details section
+        failures = [r for r in self.results if r.status == "failed" and r.error_message]
+        if failures:
+            lines.append("## Failure Details")
+            lines.append("")
+
+            for r in failures:
+                lines.append(f"### ❌ `{r.tool_name}`")
+                lines.append("")
+                lines.append(f"**Test**: `{r.test_name}`")
+                lines.append("")
+                lines.append("```")
+                lines.append(r.error_message)
+                lines.append("```")
+                lines.append("")
+
+        # Footer
+        lines.append("---")
+        lines.append(
+            f"*Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+            f"by `pytest --env-report`*"
+        )
+
+        # Determine output path
+        if self.output_path:
+            output_path = self.output_path
+            # Ensure .md extension
+            if output_path.suffix != ".md":
+                output_path = output_path.with_suffix(".md")
+        else:
+            # Default: notes/environments/{platform_id}.md
+            project_root = Path(__file__).parent.parent
+            env_dir = project_root / "notes" / "environments"
+            env_dir.mkdir(parents=True, exist_ok=True)
+            platform_id = get_platform_id(include_date=False, include_commit=False)
+            output_path = env_dir / f"{platform_id}.md"
+
+        # Write report
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            f.write("\n".join(lines))
+
+        return output_path
+
+
+# Global collector instance (set in pytest_configure if --env-report is used)
+_env_report_collector: EnvReportCollector | None = None
+
+
+# ============================================================================
+# Pytest Hooks
+# ============================================================================
 def pytest_addoption(parser):
     """Add custom command line options to pytest."""
     parser.addoption(
@@ -78,17 +468,27 @@ def pytest_addoption(parser):
         help="Disable console logging during tests",
     )
     parser.addoption(
-        "--run-all-venvs",
-        action="store_true",
+        "--env-report",
+        nargs="?",
+        const=True,
         default=False,
-        help="Run one smoke test per standalone-venv tool (overrides --cpu, slow, skip_ci)",
+        help=(
+            "Run venv smoke tests and generate platform compatibility report. "
+            "Cleans .venvs/ first, overrides --cpu/--gpu/--slow/skip_ci filters. "
+            "Optionally specify output path: --env-report=path/to/report.md"
+        ),
     )
 
 
 def pytest_configure(config):
     """Configure pytest with custom markers and options."""
+    global _env_report_collector
+
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
+    config.addinivalue_line(
+        "markers", "run_all_venvs: mark test as a venv smoke test for --env-report"
+    )
 
     # Set environment variable to indicate we're in pytest
     # This prevents setup_logging() from creating timestamped files during test imports
@@ -98,11 +498,46 @@ def pytest_configure(config):
     if config.getoption("--skip-ci"):
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
+    # Handle --env-report
+    env_report_opt = config.getoption("--env-report")
+    if env_report_opt:
+        # Parse output path if provided
+        output_path = None
+        if isinstance(env_report_opt, str):
+            output_path = Path(env_report_opt)
+
+        # Initialize collector
+        _env_report_collector = EnvReportCollector(output_path=output_path)
+
+        # Capture parent process environment before any tools run
+        capture_parent_env()
+
+        # Clean .venvs/ directory to force fresh rebuilds
+        project_root = Path(__file__).parent.parent
+        venvs_dir = project_root / ".venvs"
+        if venvs_dir.exists():
+            logger = logging.getLogger("bio_programming_tools.tests")
+            logger.warning(
+                f"Cleaning {venvs_dir} for fresh venv rebuilds "
+                "(this may take a while on network filesystems)..."
+            )
+            # Use subprocess instead of shutil.rmtree to avoid NFS hang issues
+            subprocess.run(
+                ["rm", "-rf", str(venvs_dir)],
+                check=False,
+                capture_output=True,
+            )
+            logger.warning(f"Finished cleaning {venvs_dir}")
+
 
 def pytest_runtest_logstart(nodeid, location):
     """Log when a test starts (DEBUG level, file only)."""
     logger = logging.getLogger("bio_programming_tools.tests")
     logger.debug(f"TEST START: {nodeid}")
+
+    # Record start time for env report
+    if _env_report_collector is not None:
+        _env_report_collector.record_start(nodeid)
 
 
 def pytest_runtest_logreport(report):
@@ -120,8 +555,53 @@ def pytest_runtest_logreport(report):
                 logger.debug(f"Error Traceback:\n{report.longreprtext}")
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Hook to capture test results for env report."""
+    outcome = yield
+    report = outcome.get_result()
+
+    # Only record final outcome (call phase for pass/fail, setup/teardown for errors)
+    if _env_report_collector is not None:
+        # Only record tests marked with run_all_venvs
+        if "run_all_venvs" not in item.keywords:
+            return
+
+        # Determine outcome
+        if report.when == "call":
+            if report.passed:
+                status = "passed"
+                error_msg = None
+            elif report.failed:
+                status = "failed"
+                error_msg = str(report.longrepr) if report.longrepr else None
+            elif report.skipped:
+                status = "skipped"
+                error_msg = str(report.longrepr) if report.longrepr else None
+            else:
+                return
+
+            # Check for GPU marker
+            has_gpu = "uses_gpu" in item.keywords
+
+            _env_report_collector.record_result(
+                item.nodeid,
+                status,
+                has_gpu_marker=has_gpu,
+                error_message=error_msg,
+            )
+        elif report.when == "setup" and report.failed:
+            # Setup failure
+            _env_report_collector.record_result(
+                item.nodeid,
+                "failed",
+                has_gpu_marker="uses_gpu" in item.keywords,
+                error_message=f"Setup failed: {report.longrepr}",
+            )
+
+
 def pytest_sessionfinish(session, exitstatus):
-    """Log test session summary at the end."""
+    """Log test session summary at the end and write env report if requested."""
     logger = logging.getLogger("bio_programming_tools.tests")
 
     # Get test statistics from the session
@@ -129,15 +609,15 @@ def pytest_sessionfinish(session, exitstatus):
     num_collected = len(test_reports)
 
     # Count passed and failed tests from the terminal reporter
-    if hasattr(session.config, 'pluginmanager'):
-        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+    if hasattr(session.config, "pluginmanager"):
+        terminalreporter = session.config.pluginmanager.get_plugin("terminalreporter")
         if terminalreporter:
             stats = terminalreporter.stats
 
-            passed = len(stats.get('passed', []))
-            failed = len(stats.get('failed', []))
-            skipped = len(stats.get('skipped', []))
-            errors = len(stats.get('error', []))
+            passed = len(stats.get("passed", []))
+            failed = len(stats.get("failed", []))
+            skipped = len(stats.get("skipped", []))
+            errors = len(stats.get("error", []))
 
             # Build summary message
             summary_lines = [
@@ -154,14 +634,14 @@ def pytest_sessionfinish(session, exitstatus):
             # Add list of failed tests if any
             if failed > 0:
                 summary_lines.append("\nFailed tests:")
-                failed_reports = stats.get('failed', [])
+                failed_reports = stats.get("failed", [])
                 for report in failed_reports:
                     summary_lines.append(f"  - {report.nodeid}")
 
             # Add list of error tests if any
             if errors > 0:
                 summary_lines.append("\nTests with errors:")
-                error_reports = stats.get('error', [])
+                error_reports = stats.get("error", [])
                 for report in error_reports:
                     summary_lines.append(f"  - {report.nodeid}")
 
@@ -171,17 +651,28 @@ def pytest_sessionfinish(session, exitstatus):
             summary_message = "\n".join(summary_lines)
             logger.info(summary_message)
 
+    # Write env report if collector is active
+    if _env_report_collector is not None:
+        report_path = _env_report_collector.finalize_and_write()
+        if report_path:
+            logger.info(f"\n--env-report: Compatibility report written to {report_path}")
+            print(f"\n[env-report] Report written to: {report_path}")
+
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
-    # --run-all-venvs: keep only venv smoke tests, skip everything else
-    if config.getoption("--run-all-venvs"):
-        skip_not_venv = pytest.mark.skip(
-            reason="--run-all-venvs: not a venv smoke test"
-        )
+    # --env-report: keep only venv smoke tests, skip everything else
+    if config.getoption("--env-report"):
+        skip_not_venv = pytest.mark.skip(reason="--env-report: not a venv smoke test")
+        skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
+        gpu_available = _gpu_available()
+
         for item in items:
             if "run_all_venvs" not in item.keywords:
                 item.add_marker(skip_not_venv)
+            elif "uses_gpu" in item.keywords and not gpu_available:
+                # Skip GPU tests on platforms without GPU, but still include in report
+                item.add_marker(skip_no_gpu)
         return
 
     # Auto-mark all tests as CPU-only unless explicitly marked as GPU
@@ -250,8 +741,7 @@ def setup_test_logging(request):
     # Use same log directory as application logs (logs/ in project root)
     project_root = Path(__file__).parent.parent
     log_dir = os.environ.get(
-        "BIO_PROGRAMMING_TOOLS_LOG_DIR",
-        str(project_root / "logs")
+        "BIO_PROGRAMMING_TOOLS_LOG_DIR", str(project_root / "logs")
     )
 
     # Get options from command line
@@ -273,9 +763,11 @@ def setup_test_logging(request):
     if k_expression:
         # Sanitize the -k expression to make it filename-safe
         # Replace spaces with underscores, remove special characters
-        sanitized = re.sub(r'[^\w\s-]', '', k_expression)  # Remove special chars except spaces, hyphens, underscores
-        sanitized = re.sub(r'\s+', '_', sanitized)  # Replace spaces with underscores
-        sanitized = sanitized.strip('_')  # Remove leading/trailing underscores
+        sanitized = re.sub(
+            r"[^\w\s-]", "", k_expression
+        )  # Remove special chars except spaces, hyphens, underscores
+        sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
+        sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
         log_filename = f"pytest_{sanitized}.log"
     else:
         # Use timestamp for the log file

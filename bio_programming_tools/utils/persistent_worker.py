@@ -59,8 +59,14 @@ _BLOCKED_ENV_VARS = _JUPYTER_BLOCKLIST | _CUDA_BLOCKLIST | _CONDA_BLOCKLIST
 
 def _clean_env(device: str = "cpu") -> dict[str, str]:
     """Build a clean env dict for subprocess execution."""
+    from .system_info import capture_subprocess_env
+
     env = {k: v for k, v in os.environ.items() if k not in _BLOCKED_ENV_VARS}
     env["CUDA_VISIBLE_DEVICES"] = determine_visible_devices(device=device)
+
+    # Capture for environment reporting
+    capture_subprocess_env(env)
+
     return env
 
 

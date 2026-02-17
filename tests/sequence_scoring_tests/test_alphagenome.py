@@ -26,6 +26,7 @@ _SCORE_MID = _SCORE // 2  # 262_144 – centre of the scoring interval
 
 
 @pytest.mark.slow
+@pytest.mark.uses_gpu
 class TestAlphaGenome:
     """GPU tests for AlphaGenome sequence scoring tools."""
 

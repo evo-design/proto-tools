@@ -154,6 +154,11 @@ def run_segmasker(input_data: dict) -> dict:
         Path(tmp_path).unlink(missing_ok=True)
 
 
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for persistent-worker execution."""
+    return run_segmasker(input_dict)
+
+
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
