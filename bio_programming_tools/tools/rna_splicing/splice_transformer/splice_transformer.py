@@ -134,9 +134,6 @@ class SpliceTransformerConfig(BaseConfig):
             ``"cpu"`` (CPU execution), or specific GPU devices like ``"cuda:0"``.
             GPU is strongly recommended for acceptable inference speed. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during model execution,
-            including loading progress and timing information. Default: ``False``.
-
     Note:
         The context length determines the receptive field for splice site prediction.
         Standard value is 4000bp, which balances accuracy and computational cost.
@@ -146,6 +143,7 @@ class SpliceTransformerConfig(BaseConfig):
         title="Context Length",
         default=CONTEXT_LENGTH,
         description="Context length on both left and right of target sequence.",  # All sequences in left_contexts and right_contexts must be this length
+        reload_on_change=True,
     )
     device: str = (
         ConfigField(  # TODO: Device management should be managed elsewhere eventually
@@ -154,12 +152,6 @@ class SpliceTransformerConfig(BaseConfig):
             description="Device to run the model on (e.g., 'cuda', 'cpu')",
             hidden=True,
         )
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
-        hidden=True,
     )
 
 
@@ -259,6 +251,7 @@ class SpliceTransformerOutput(BaseToolOutput):
 def run_splice_transformer(
     inputs: SpliceTransformerInput,
     config: SpliceTransformerConfig,
+    instance=None,
 ) -> SpliceTransformerOutput:
     """Predict splice sites in RNA/DNA sequences using SpliceTransformer.
 
@@ -324,13 +317,11 @@ def run_splice_transformer(
         )
     else:
         # Local GPU/CPU via standalone venv
-        from bio_programming_tools.utils.env_manager import EnvManager
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
         logger.debug(
             f"Using local device for SpliceTransformer inference (context_length={config.context_length})"
         )
-
-        venv_manager = EnvManager(model_name="splice_transformer")
 
         input_data = {
             "target_seqs": inputs.target_seqs,
@@ -341,10 +332,12 @@ def run_splice_transformer(
             "verbose": config.verbose,
         }
 
-        output_data = venv_manager.call_standalone_script_in_venv(
-            script_path=Path(__file__).parent / "standalone" / "run.py",
-            input_dict=input_data,
-            device=config.device,
+        output_data = ToolInstance.dispatch(
+            "splice_transformer",
+            input_data,
+            instance=instance,
+            verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
         prediction = np.array(output_data["prediction"])

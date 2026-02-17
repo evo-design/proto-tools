@@ -12,9 +12,13 @@ from bio_programming_tools.tools.structure_prediction import (
     ViennaRNAOutput,
     run_viennarna,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
+_persistent_tool = make_persistent_fixture("viennarna", gpu=False)
 
+
+@pytest.mark.run_all_venvs
 def test_basic_folding():
     """Test basic RNA folding with a simple hairpin sequence."""
     # Classic hairpin: GCGC...GCGC should form a stem-loop

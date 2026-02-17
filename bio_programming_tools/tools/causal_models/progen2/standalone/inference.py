@@ -377,47 +377,58 @@ def _serialize_output(value: Any) -> Any:
     return value
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: ProGen2Model | None = None
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
-        input_data = json.load(f)
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = ProGen2Model(
+            model_checkpoint=input_dict.get("model_checkpoint", "progen2-large"),
+            local_path=input_dict.get("local_path"),
+        )
 
-    operation = input_data.get("operation", "sample")
-    model_checkpoint = input_data.get("model_checkpoint", "progen2-large")
-    local_path = input_data.get("local_path")
-    model = ProGen2Model(model_checkpoint=model_checkpoint, local_path=local_path)
-
+    operation = input_dict.get("operation", "sample")
     if operation == "sample":
-        result = model.sample(
-            prompts=input_data.get("prompts", []),
-            temperature=input_data.get("temperature", 0.2),
-            top_p=input_data.get("top_p", 0.95),
-            top_k=input_data.get("top_k", 0),
-            max_length=input_data.get("max_length", 256),
-            num_return_sequences=input_data.get("num_return_sequences", 1),
-            truncate_at_stop=input_data.get("truncate_at_stop", True),
-            strip_special_tokens=input_data.get("strip_special_tokens", True),
-            prepend_prompt=input_data.get("prepend_prompt", True),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            batch_size=input_data.get("batch_size"),
-            return_logits=input_data.get("return_logits", False),
+        return _model.sample(
+            prompts=input_dict.get("prompts", []),
+            temperature=input_dict.get("temperature", 0.2),
+            top_p=input_dict.get("top_p", 0.95),
+            top_k=input_dict.get("top_k", 0),
+            max_length=input_dict.get("max_length", 256),
+            num_return_sequences=input_dict.get("num_return_sequences", 1),
+            truncate_at_stop=input_dict.get("truncate_at_stop", True),
+            strip_special_tokens=input_dict.get("strip_special_tokens", True),
+            prepend_prompt=input_dict.get("prepend_prompt", True),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            batch_size=input_dict.get("batch_size"),
+            return_logits=input_dict.get("return_logits", False),
         )
     elif operation == "score":
-        result = model.score(
-            sequences=input_data.get("sequences", []),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            batch_size=input_data.get("batch_size"),
-            return_logits=input_data.get("return_logits", False),
+        return _model.score(
+            sequences=input_dict.get("sequences", []),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            batch_size=input_dict.get("batch_size"),
+            return_logits=input_dict.get("return_logits", False),
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
 
-    with open(output_json_path, "w") as f:
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
         json.dump(_serialize_output(result), f)

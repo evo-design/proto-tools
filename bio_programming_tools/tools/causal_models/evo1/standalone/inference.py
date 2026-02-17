@@ -4,7 +4,7 @@ Local Evo1 inference implementation.
 Uses the ``evo-model`` pip package (``from evo import Evo``) and delegates
 generation to ``evo.generation.generate()``.
 
-Usage (called by EnvManager, not directly):
+Usage (called by ToolInstance, not directly):
     python inference.py <input.json> <output.json>
 """
 
@@ -255,52 +255,57 @@ class Evo1Model:
 
 
 # =============================================================================
-# Entry point (called by EnvManager.call_standalone_script_in_venv)
+# Dispatch entry point
 # =============================================================================
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
-            file=sys.stderr,
+
+_model: Evo1Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = Evo1Model(
+            model_name=input_dict.get("model_name", "evo-1-8k-base"),
+            device=input_dict.get("device", "cuda"),
         )
-        sys.exit(1)
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
-        input_data = json.load(f)
-
-    model = Evo1Model(
-        model_name=input_data.get("model_name", "evo-1-8k-base"),
-        device=input_data.get("device", "cuda"),
-    )
-
-    operation = input_data.get("operation", "sample")
+    operation = input_dict.get("operation", "sample")
 
     if operation == "sample":
-        result = model.sample(
-            prompts=input_data.get("prompts", []),
-            num_tokens=input_data.get("num_tokens", 100),
-            top_k=input_data.get("top_k", 4),
-            temperature=input_data.get("temperature", 1.0),
-            top_p=input_data.get("top_p", 1.0),
-            batch_size=input_data.get("batch_size"),
-            verbose=input_data.get("verbose", False),
+        return _model.sample(
+            prompts=input_dict.get("prompts", []),
+            num_tokens=input_dict.get("num_tokens", 100),
+            top_k=input_dict.get("top_k", 4),
+            temperature=input_dict.get("temperature", 1.0),
+            top_p=input_dict.get("top_p", 1.0),
+            batch_size=input_dict.get("batch_size"),
+            verbose=input_dict.get("verbose", False),
         )
     elif operation == "score":
-        result = model.score(
-            sequences=input_data.get("sequences", []),
-            batch_size=input_data.get("batch_size"),
-            return_logits=input_data.get("return_logits", False),
-            verbose=input_data.get("verbose", False),
+        result = _model.score(
+            sequences=input_dict.get("sequences", []),
+            batch_size=input_dict.get("batch_size"),
+            return_logits=input_dict.get("return_logits", False),
+            verbose=input_dict.get("verbose", False),
         )
-        # Serialize tensors for JSON output
         if result["logits"] is not None:
             result["logits"] = [t.tolist() for t in result["logits"]]
+        return result
     else:
-        print(f"Unknown operation: {operation}", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError(f"Unknown operation: {operation}")
 
-    with open(output_json_path, "w") as f:
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError(
+            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>"
+        )
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
         json.dump(result, f)

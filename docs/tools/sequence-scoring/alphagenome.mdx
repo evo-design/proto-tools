@@ -9,7 +9,7 @@ description: "AlphaGenome is Google DeepMind's multi-task genomic foundation mod
 
 AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
 
-This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`EnvManager("alphagenome")`).
+This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`ToolInstance("alphagenome")`).
 
 ## When to Use This Tool
 

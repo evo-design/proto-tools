@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
 
 from .alphagenome_score_variant import AlphaGenomeScoreVariantConfig
@@ -114,6 +113,7 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantConfig
 def run_alphagenome_score_ism_variants(
     inputs: AlphaGenomeScoreISMInput,
     config: AlphaGenomeScoreISMConfig,
+    instance=None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run in-silico mutagenesis using AlphaGenome variant scorers.
 
@@ -136,12 +136,12 @@ def run_alphagenome_score_ism_variants(
         input_dict["reference_bases"] = inputs.reference_bases
         input_dict["alternate_bases"] = inputs.alternate_bases
 
-    venv_manager = EnvManager("alphagenome")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict=input_dict,
-        device=config.device,
+    input_dict["device"] = config.device
+    result = ToolInstance.dispatch(
+        "alphagenome",
+        input_dict,
+        instance=instance,
+        reload_on=type(config).reload_fields(),
     )
 
     return AlphaGenomeScoreISMOutput(scores=result)

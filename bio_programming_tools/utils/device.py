@@ -10,9 +10,12 @@ that have their own CUDA-enabled PyTorch.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def number_of_available_gpus() -> int:
@@ -51,7 +54,7 @@ def use_cloud_gpu() -> bool:
     if _is_local_gpu_available():
         return False
     elif _is_cloud_available():
-        print("Local GPU not available, falling back to the cloud runtime")
+        logger.info("Local GPU not available, falling back to the cloud runtime")
         return True
     else:
         raise RuntimeError(
@@ -77,7 +80,7 @@ def _is_cloud_available() -> bool:
         _gpu_runtime.App("test-auth")
         return True
     except (ImportError, Exception) as e:
-        print(f"the cloud runtime not available: {e}")
+        logger.debug("the cloud runtime not available: %s", e)
         return False
 
 
@@ -95,8 +98,15 @@ def determine_visible_devices(device: int | str) -> str:
         return "0"
 
     # If CUDA is specified with a number, set the specified device to be visible
-    elif hasattr(device, "startswith") and device.startswith("cuda:"):
-        return device.replace("cuda:", "")
+    elif isinstance(device, str) and device.startswith("cuda:"):
+        device_index = int(device.split(":", 1)[1])
+        num_gpus = number_of_available_gpus()
+        if device_index >= num_gpus:
+            raise ValueError(
+                f"Device index {device_index} is greater than the number of "
+                f"available GPUs ({num_gpus})"
+            )
+        return str(device_index)
 
     else:
         try:

@@ -84,6 +84,7 @@ class TestProdigalInput:
 class TestProdigalPrediction:
     """Test Prodigal gene prediction functionality."""
 
+    @pytest.mark.run_all_venvs
     def test_simple_gene_prediction(self):
         """Test prediction on a simple sequence."""
         sequence = "ATGCGTAAATAA"
@@ -438,13 +439,14 @@ class TestProdigalCaching:
             inputs = ProdigalInput(input_sequences=sequence)
             config = ProdigalConfig()
 
-            # Patch the subprocess call to verify it's invoked only when not cached.
-            # We use the real method as side_effect so real logic still runs.
-            from bio_programming_tools.utils.env_manager import EnvManager
+            # Patch ToolInstance.dispatch to verify it's invoked only when
+            # not cached.  We use the real method as side_effect so real
+            # logic still runs.
+            from bio_programming_tools.utils.tool_instance import ToolInstance
 
-            real_call = EnvManager.call_standalone_script_in_venv
+            real_dispatch = ToolInstance.dispatch
 
-            with patch.object(EnvManager, "call_standalone_script_in_venv", side_effect=real_call, autospec=True) as mock_call:
+            with patch.object(ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True) as mock_call:
                 # First call - should Compute
                 result1 = run_prodigal_prediction(inputs, config)
                 assert result1.success is True
@@ -454,7 +456,7 @@ class TestProdigalCaching:
                 orfs1 = result1.predicted_orfs[0]
 
                 # Second call - same inputs - should Cache Hit
-                # call_standalone_script_in_venv should NOT be called again
+                # ToolInstance.dispatch should NOT be called again
                 result2 = run_prodigal_prediction(inputs, config)
                 assert result2.success is True
                 assert mock_call.call_count == 1  # Still 1

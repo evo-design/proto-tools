@@ -1,7 +1,6 @@
 """PyHMMER phmmer tool — search protein sequences against protein sequences."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List
 
 from pydantic import Field, field_validator
@@ -70,7 +69,7 @@ PyPhmmerConfig = PyHmmerConfig
     description="Search protein sequences against protein database using PyHMMER",
 )
 @tool_cache("pyhmmer-phmmer")
-def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig) -> PyPhmmerOutput:
+def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance=None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
     This function implements the phmmer algorithm, which performs iterative
@@ -115,25 +114,21 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig) -> PyPhmme
         ...         result.sequence_hits_df['evalue'] < 1e-10
         ...     ]
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="pyhmmer")
-
-    input_data = {
-        "operation": "phmmer",
-        "sequences": inputs.sequences,
-        "target_sequences": inputs.target_sequences,
-        "num_threads": config.num_threads,
-        "evalue_threshold": config.evalue_threshold,
-        "score_threshold": config.score_threshold,
-        "domain_evalue_threshold": config.domain_evalue_threshold,
-        "domain_score_threshold": config.domain_score_threshold,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "pyhmmer",
+        {
+            "operation": "phmmer",
+            "sequences": inputs.sequences,
+            "target_sequences": inputs.target_sequences,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
+        },
+        instance=instance,
     )
 
     # Convert results to DataFrames

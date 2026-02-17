@@ -182,8 +182,6 @@ class InverseFoldingConfig(BaseConfig):
         seed (int): Random seed to use for sampling. Defaults to 42.
 
         device (str): Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution), or specific GPU devices like 'cuda:0'. Defaults to 'cuda'.
-
-        verbose (bool): Whether to print status messages during execution. Defaults to False.
     """
 
     batch_size: int = ConfigField(
@@ -226,12 +224,6 @@ class InverseFoldingConfig(BaseConfig):
         examples=["cuda", "cpu"],
     )
 
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
-        hidden=True,
-    )
 
 
 class DesignedSequences(BaseModel, ABC):

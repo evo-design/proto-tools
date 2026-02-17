@@ -8,13 +8,13 @@ scoring models. Each model is implemented with support for local execution via i
 
 ### Dependency Isolated Local Execution
 
-Models with complex dependencies are managed using the `EnvManager` class from
-`bio_programming_tools.utils.env_manager`. The EnvManager automatically creates and manages
+Models with complex dependencies are managed using the `ToolInstance` class from
+`bio_programming_tools.utils.tool_instance`. ToolInstance automatically creates and manages
 isolated virtual environments for each model.
 
 #### How it works
 
-1. **Model Discovery**: The EnvManager scans this directory tree for any subdirectory
+1. **Model Discovery**: ToolInstance scans this directory tree for any subdirectory
    that contains a `standalone/` folder.
 
 2. **Virtual Environment Creation**: For each model, it creates a dedicated venv in
@@ -27,11 +27,11 @@ isolated virtual environments for each model.
    successful or contains error details.
 
 5. **Script Execution**: Model scripts run in their isolated environments via
-   `call_standalone_script_in_venv()`.
+   `ToolInstance.dispatch()`.
 
 ### Model Structure
 
-Each model that uses the EnvManager should have this structure:
+Each model that uses ToolInstance should have this structure:
 
 ```
 tools/
@@ -143,16 +143,13 @@ Supported platforms: macOS ARM64, macOS x86_64, Linux x86_64.
 ### Usage Example
 
 ```python
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
-# Create/validate environment for a model
-env_manager = EnvManager("boltz2")
+# One-shot dispatch (ephemeral subprocess)
+result = ToolInstance.dispatch("boltz2", input_dict={"param": "value"})
 
-# Run a script in the model's environment
-result = env_manager.call_standalone_script_in_venv(
-    script_path=Path("path/to/script.py"),
-    input_dict={"param": "value"},
-    device="cuda:0"
-)
+# Auto-persist mode (keeps workers alive across calls, cleaned up on exit)
+with ToolInstance.persist():
+    result = ToolInstance.dispatch("boltz2", input_dict={"param": "value"})
 ```
 

@@ -203,7 +203,8 @@ class MmseqsSearchGenomesConfig(BaseConfig):
     description="Execute nucleotide genome-to-genome search workflow",
 )
 def run_mmseqs_search_genomes(
-    inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig
+    inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig,
+    instance=None,
 ) -> MmseqsSearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
 
@@ -231,7 +232,7 @@ def run_mmseqs_search_genomes(
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     query_sequences = inputs.query_genomes
     target_sequences = inputs.target_genomes
@@ -239,24 +240,20 @@ def run_mmseqs_search_genomes(
     target_ids = resolve_sequence_ids(target_sequences, inputs.target_ids)
     num_queries = len(query_sequences)
 
-    venv_manager = EnvManager(model_name="mmseqs")
-
-    input_data = {
-        "operation": "genome_search",
-        "query_sequences": query_sequences,
-        "query_ids": query_ids,
-        "target_sequences": target_sequences,
-        "target_ids": target_ids,
-        "search_type": config.search_type,
-        "threads": config.threads,
-        "sensitivity": config.sensitivity,
-        "m8_columns": M8_COLUMNS,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "mmseqs",
+        {
+            "operation": "genome_search",
+            "query_sequences": query_sequences,
+            "query_ids": query_ids,
+            "target_sequences": target_sequences,
+            "target_ids": target_ids,
+            "search_type": config.search_type,
+            "threads": config.threads,
+            "sensitivity": config.sensitivity,
+            "m8_columns": M8_COLUMNS,
+        },
+        instance=instance,
     )
 
     # Parse results

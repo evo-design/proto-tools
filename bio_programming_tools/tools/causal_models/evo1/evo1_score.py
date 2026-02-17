@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
@@ -14,7 +13,7 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 
 logger = logging.getLogger(__name__)
@@ -67,7 +66,6 @@ class Evo1ScoringConfig(BaseConfig):
         batch_size (Optional[int]): Number of sequences to process per batch.
             If None, processes all sequences at once. Default: ``None``.
         device (str): Device to run the model on. Default: ``"cuda"``.
-        verbose (bool): Whether to print status messages. Default: ``False``.
         return_logits (bool): Whether to include per-position logits in the
             output. Default: ``False``.
 
@@ -80,6 +78,7 @@ class Evo1ScoringConfig(BaseConfig):
         title="Model Name",
         default="evo-1-8k-base",
         description="Evo1 model checkpoint to use",
+        reload_on_change=True,
     )
     batch_size: Optional[int] = ConfigField(
         title="Batch Size",
@@ -92,12 +91,6 @@ class Evo1ScoringConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
         hidden=True,
     )
     return_logits: bool = ConfigField(
@@ -121,7 +114,7 @@ class Evo1ScoringConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo1_score(
-    inputs: Evo1ScoringInput, config: Evo1ScoringConfig
+    inputs: Evo1ScoringInput, config: Evo1ScoringConfig, instance=None,
 ) -> Evo1ScoringOutput:
     """Score DNA sequences using Evo1 autoregressive language model.
 
@@ -159,11 +152,9 @@ def run_evo1_score(
     """
     logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
 
-    venv_manager = EnvManager("evo1")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict={
+    result = ToolInstance.dispatch(
+        "evo1",
+        {
             "operation": "score",
             "sequences": inputs.sequences,
             "model_name": config.model_name,
@@ -172,12 +163,12 @@ def run_evo1_score(
             "batch_size": config.batch_size,
             "return_logits": config.return_logits,
         },
-        device=config.device,
+        instance=instance,
         verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
     )
 
     # Serialize tensors to nested lists at tool boundary if needed
-    # EnvManager returns pre-serialized lists; this handles edge cases
     logits = result["logits"]
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]

@@ -114,7 +114,7 @@ class StructureMetricsConfig(BaseConfig):
     description="Compute structural quality metrics (longest alpha helix, gyration radius) from PDB files",
 )
 def run_structure_metrics(
-    inputs: StructureMetricsInput, config: StructureMetricsConfig
+    inputs: StructureMetricsInput, config: StructureMetricsConfig, instance=None,
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
 
@@ -137,19 +137,14 @@ def run_structure_metrics(
         >>> print(result.metrics[0].longest_alpha_helix)
         >>> print(result.metrics[0].gyration_radius)
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="structure_metrics")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "pdb_paths": inputs.pdb_paths,
     }
 
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
-        verbose=False,
+    output_data = ToolInstance.dispatch(
+        "structure_metrics", input_data, instance=instance,
     )
 
     metrics = [StructureMetrics(**m) for m in output_data["metrics"]]

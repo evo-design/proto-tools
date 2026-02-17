@@ -142,47 +142,51 @@ class Chai1Model:
         logger.debug("Chai1 initialized successfully")
 
 
-# Standalone script entry point for venv execution
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: Chai1Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = Chai1Model()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        return _model(
+            fasta_file=Path(input_dict["fasta_file"]),
+            output_dir=Path(input_dict["output_dir"]),
+            use_esm_embeddings=input_dict.get("use_esm_embeddings", True),
+            msa_directory=(
+                Path(input_dict["msa_directory"])
+                if input_dict.get("msa_directory")
+                else None
+            ),
+            num_trunk_recycles=input_dict.get("num_trunk_recycles", 3),
+            num_diffn_timesteps=input_dict.get("num_diffn_timesteps", 200),
+            num_diffn_samples=input_dict.get("num_diffn_samples", 1),
+            num_trunk_samples=input_dict.get("num_trunk_samples", 1),
+            seed=input_dict.get("seed", 42),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     import json
 
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    # Get the input and output json paths
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    # Read input json
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Create model and run inference
-    model = Chai1Model()
+    result = dispatch(input_data)
 
-    # Build kwargs for model call
-    model_kwargs = {
-        "fasta_file": Path(input_data["fasta_file"]),
-        "output_dir": Path(input_data["output_dir"]),
-        "use_esm_embeddings": input_data["use_esm_embeddings"],
-        "msa_directory": (
-            Path(input_data["msa_directory"])
-            if input_data.get("msa_directory")
-            else None
-        ),
-        "num_trunk_recycles": input_data["num_trunk_recycles"],
-        "num_diffn_timesteps": input_data["num_diffn_timesteps"],
-        "num_diffn_samples": input_data["num_diffn_samples"],
-        "num_trunk_samples": input_data["num_trunk_samples"],
-        "seed": input_data["seed"],
-        "device": input_data.get("device", "cuda"),
-        "verbose": True,
-    }
-
-    result = model(**model_kwargs)
-
-    # Write the output to a json file
-    with open(output_json_path, "w") as f:
+    with open(sys.argv[2], "w") as f:
         json.dump(result, f)

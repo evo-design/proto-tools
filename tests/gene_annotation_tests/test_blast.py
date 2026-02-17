@@ -21,6 +21,10 @@ from bio_programming_tools.tools.gene_annotation import (
 from bio_programming_tools.tools.gene_annotation.blast.blast_search import (
     _blast_results_to_df,
 )
+from tests.conftest import make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("blast", gpu=False)
+
 
 # ── Test data ──────────────────────────────────────────────────────────────
 
@@ -392,6 +396,7 @@ def test_blast_config_schema():
 class TestLocalBlastn:
     """End-to-end local blastn tests against a temporary nucleotide database."""
 
+    @pytest.mark.run_all_venvs
     def test_exact_match(self, nucl_blast_db):
         """Exact subsequence from the database → 100% identity hit."""
         query = (

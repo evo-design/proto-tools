@@ -184,17 +184,28 @@ def run_bioemu_batch(input_data: Dict[str, Any]) -> Dict[str, Any]:
     return {"results": results}
 
 
+# ============================================================================
+# Dispatch
+# ============================================================================
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    operation = input_dict.get("operation", "sample")
+    if operation == "sample":
+        return run_bioemu_batch(input_dict)
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as handle:
+    with open(sys.argv[1], "r") as handle:
         input_payload = json.load(handle)
 
-    output_payload = run_bioemu_batch(input_payload)
+    output_payload = dispatch(input_payload)
 
-    with open(output_json_path, "w") as handle:
+    with open(sys.argv[2], "w") as handle:
         json.dump(output_payload, handle)

@@ -234,32 +234,39 @@ class RFdiffusion3Model:
                 return f.read()
         return file_path.read_text()
 
-# Standalone script entry point for venv execution
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: RFdiffusion3Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = RFdiffusion3Model()
+
+    kwargs = dict(input_dict)
+    kwargs.pop("operation", None)
+    rfdiffusion3_input_json = kwargs.pop("input_json_path")
+    rfdiffusion3_output_dir = kwargs.pop("output_dir")
+
+    return _model(
+        input_json_path=rfdiffusion3_input_json,
+        output_dir=rfdiffusion3_output_dir,
+        verbose=kwargs.pop("verbose", False),
+        **kwargs,
+    )
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    # Get the input and output json paths
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    # Read input json
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Extract required args, pass everything else as cli_kwargs
-    rfdiffusion3_input_json = input_data.pop("input_json_path")
-    rfdiffusion3_output_dir = input_data.pop("output_dir")
+    result = dispatch(input_data)
 
-    # Create model and run inference
-    model = RFdiffusion3Model()
-    output_data = model(
-        input_json_path=rfdiffusion3_input_json,
-        output_dir=rfdiffusion3_output_dir,
-        verbose=True,
-        **input_data,  # All other args pass through
-    )
-
-    # Write the output to a json file
-    with open(output_json_path, "w") as f:
-        json.dump(output_data, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

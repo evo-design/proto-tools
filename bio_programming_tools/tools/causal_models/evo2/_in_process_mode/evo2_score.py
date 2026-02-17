@@ -81,9 +81,6 @@ class Evo2ScoringConfig(BaseConfig):
             inference completes. Set to ``True`` for multiple scoring runs.
             Default: ``False``.
 
-        verbose (bool): Whether to print status messages during scoring.
-            Default: ``False``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -124,12 +121,6 @@ class Evo2ScoringConfig(BaseConfig):
         description="Whether to keep the model on device after scoring",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -151,7 +142,8 @@ class Evo2ScoringConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo2_score(
-    inputs: Evo2ScoringInput, config: Evo2ScoringConfig
+    inputs: Evo2ScoringInput, config: Evo2ScoringConfig,
+    instance=None,
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.
 

@@ -1,0 +1,1285 @@
+"""Tests for ToolInstance."""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import subprocess
+import sys
+import textwrap
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from bio_programming_tools.utils.tool_instance import (
+    ToolInstance,
+    _active_cache,
+    _instances,
+    _persist_mode,
+    _scope_override,
+)
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+def _make_fake_instance(
+    tool_name: str = "esm2",
+    device: str = "cpu",
+) -> ToolInstance:
+    """Create a ToolInstance with fake paths, bypassing __init__."""
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.tool_name = tool_name
+    inst.device = device
+    inst.venv_path = Path("/fake/venv")
+    inst.script_path = Path("/fake/inference.py")
+    inst._venv_ready = True
+    inst._cache_keys = set()
+    inst._instance_lock = threading.Lock()
+    inst._worker = None
+    inst._reload_params = {}
+    return inst
+
+
+@pytest.fixture(autouse=True)
+def clear_instance_cache():
+    """Ensure the singleton cache and build-failure set are clean for each test."""
+    _instances.clear()
+    ToolInstance._build_failures.clear()
+    _scope_override.set(None)
+    _persist_mode.set(False)
+    yield
+    _scope_override.set(None)
+    _persist_mode.set(False)
+    # Also stop any workers that were created
+    for inst in list(_instances.values()):
+        inst.shutdown()
+    _instances.clear()
+    ToolInstance._build_failures.clear()
+
+
+# ============================================================================
+# Tests
+# ============================================================================
+class TestToolInstanceFactory:
+    """Test the singleton factory pattern."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_get_returns_same_instance(self, mock_init: MagicMock):
+        """ToolInstance.get() should return the same instance for same args."""
+        inst1 = ToolInstance.get("esm2")
+        inst2 = ToolInstance.get("esm2")
+        assert inst1 is inst2
+        assert mock_init.call_count == 1  # Only constructed once
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_default_key_is_tool_name(self, mock_init: MagicMock):
+        """Without instance_name, cache key should be tool_name."""
+        ToolInstance.get("esm2")
+        assert "esm2" in _instances
+        assert len(_instances) == 1
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_get_different_tool_creates_new(self, mock_init: MagicMock):
+        """Different tool name should create a new instance."""
+        inst1 = ToolInstance.get("esm2")
+        inst2 = ToolInstance.get("blast")
+        assert inst1 is not inst2
+        assert mock_init.call_count == 2
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_explicit_instance_name_creates_named_instance(self, mock_init: MagicMock):
+        """Explicit instance_name caches under that name."""
+        inst = ToolInstance.get("esm2", instance_name="my-esm2")
+        assert "my-esm2" in _instances
+        assert inst is _instances["my-esm2"]
+        # Default key should not exist
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_same_instance_name_returns_same_instance(self, mock_init: MagicMock):
+        """Two calls with the same instance_name return the same object."""
+        inst1 = ToolInstance.get("esm2", instance_name="worker-1")
+        inst2 = ToolInstance.get("esm2", instance_name="worker-1")
+        assert inst1 is inst2
+        assert mock_init.call_count == 1
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_different_instance_names_create_separate_instances(
+        self, mock_init: MagicMock
+    ):
+        """Different instance_name values create separate instances."""
+        inst1 = ToolInstance.get("esm2", instance_name="worker-1")
+        inst2 = ToolInstance.get("esm2", instance_name="worker-2")
+        assert inst1 is not inst2
+        assert mock_init.call_count == 2
+        assert "worker-1" in _instances
+        assert "worker-2" in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_named_and_default_are_independent(self, mock_init: MagicMock):
+        """A named instance and the default instance are separate objects."""
+        default = ToolInstance.get("esm2")
+        named = ToolInstance.get("esm2", instance_name="my-esm2")
+        assert default is not named
+        assert "esm2" in _instances
+        assert "my-esm2" in _instances
+
+    def test_clear_all(self):
+        """clear_all() should empty the cache."""
+        with patch.object(ToolInstance, "__init__", return_value=None):
+            ToolInstance.get("esm2")
+            assert len(_instances) == 1
+            ToolInstance.clear_all()
+            assert len(_instances) == 0
+
+
+class TestToolNameValidation:
+    """Test tool name validation and discovery."""
+
+    def test_valid_tool_name(self):
+        """Known tool names should validate."""
+        # Just test validation, not full init
+        assert ToolInstance._validate_tool_name("esm2") == "esm2"
+        assert ToolInstance._validate_tool_name("blast") == "blast"
+
+    def test_invalid_tool_name(self):
+        """Unknown tool names should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid tool name"):
+            ToolInstance._validate_tool_name("nonexistent_tool_xyz")
+
+
+class TestScriptDiscovery:
+    """Test standalone script and setup.sh discovery."""
+
+    def test_find_setup_script(self):
+        """Should find setup.sh for known tools."""
+        path = ToolInstance._find_setup_script("esm2")
+        assert path.name == "setup.sh"
+        assert path.exists()
+
+    def test_find_script_inference(self):
+        """Tools with inference.py should find it."""
+        path = ToolInstance._find_script("esm2")
+        assert path.name == "inference.py"
+        assert path.exists()
+
+    def test_find_script_run(self):
+        """Tools with run.py should find it."""
+        path = ToolInstance._find_script("blast")
+        assert path.name == "run.py"
+        assert path.exists()
+
+    def test_find_script_nonexistent(self):
+        """Should raise for nonexistent tools."""
+        with pytest.raises(ValueError, match="No standalone script found"):
+            ToolInstance._find_script("nonexistent_tool_xyz")
+
+
+class TestRunMethod:
+    """Test the run() method dispatching."""
+
+    @patch.object(ToolInstance, "_run_persistent")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_run_uses_persistent(
+        self, mock_init: MagicMock, mock_persistent: MagicMock
+    ):
+        """run() should delegate to _run_persistent."""
+        mock_persistent.return_value = {"result": "ok"}
+
+        inst = ToolInstance.get("esm2")
+        inst.script_path = Path("/fake/inference.py")
+        inst._instance_lock = threading.Lock()
+        result = inst.run({"operation": "score"})
+
+        assert result == {"result": "ok"}
+        mock_persistent.assert_called_once()
+
+
+
+class TestDispatch:
+    """Test the dispatch() classmethod."""
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_runs_oneshot_when_no_cache(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """dispatch() should use _oneshot when no cached instance exists."""
+        mock_oneshot.return_value = {"result": "ok"}
+        result = ToolInstance.dispatch("esm2", {"op": "score", "device": "cuda"})
+        assert result == {"result": "ok"}
+        mock_oneshot.assert_called_once_with(
+            "esm2",
+            {"op": "score", "device": "cuda"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+        )
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_uses_cached_instance(self, mock_init: MagicMock):
+        """dispatch() should use a cached persistent instance when available."""
+        inst = ToolInstance.get("esm2")
+        inst.run = MagicMock(return_value={"result": "cached"})
+
+        result = ToolInstance.dispatch("esm2", {"op": "score", "device": "cuda"})
+        assert result == {"result": "cached"}
+        inst.run.assert_called_once_with(
+            {"op": "score", "device": "cuda"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+            reload_on=None,
+        )
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_respects_instance_string_key(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """dispatch() should look up by string instance key when provided."""
+        mock_oneshot.return_value = {"result": "oneshot"}
+
+        # Cache under "esm2" (default key), but dispatch with custom key
+        inst = ToolInstance.get("esm2")
+        inst.run = MagicMock()
+
+        result = ToolInstance.dispatch("esm2", {"op": "score"}, instance="other-key")
+        # Should NOT use cached "esm2" — key mismatch
+        assert result == {"result": "oneshot"}
+        inst.run.assert_not_called()
+
+    def test_dispatch_with_tool_instance_object(self):
+        """dispatch() should use a ToolInstance object directly when passed."""
+        inst = _make_fake_instance()
+        inst.run = MagicMock(return_value={"result": "direct"})
+
+        result = ToolInstance.dispatch("esm2", {"op": "score"}, instance=inst)
+        assert result == {"result": "direct"}
+        inst.run.assert_called_once_with(
+            {"op": "score"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+            reload_on=None,
+        )
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_passes_script_path(self, mock_init: MagicMock):
+        """dispatch() should forward script_path to cached instance."""
+        inst = ToolInstance.get("esm2")
+        inst.run = MagicMock(return_value={"result": "ok"})
+
+        ToolInstance.dispatch("esm2", {}, script_path="/custom/script.py", verbose=True)
+        inst.run.assert_called_once_with(
+            {},
+            script_path="/custom/script.py",
+            verbose=True,
+            timeout=600,
+            reload_on=None,
+        )
+
+
+class TestOneshot:
+    """Test the _oneshot() classmethod."""
+
+    @patch.object(ToolInstance, "_run_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_oneshot_does_not_cache(self, mock_init: MagicMock, mock_run: MagicMock):
+        """_oneshot() should not leave anything in _instances."""
+        mock_run.return_value = {"result": "ok"}
+        # Need script_path set for _oneshot to work
+        with patch.object(
+            ToolInstance, "script_path", Path("/fake/inference.py"), create=True
+        ):
+            ToolInstance._oneshot("esm2", {"op": "score"})
+        assert len(_instances) == 0
+
+    @patch.object(ToolInstance, "_run_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_oneshot_calls_run_oneshot(self, mock_init: MagicMock, mock_run: MagicMock):
+        """_oneshot() should call _run_oneshot, not _run_persistent."""
+        mock_run.return_value = {"result": "ephemeral"}
+        with patch.object(
+            ToolInstance, "script_path", Path("/fake/inference.py"), create=True
+        ):
+            result = ToolInstance._oneshot("esm2", {"op": "score"})
+        assert result == {"result": "ephemeral"}
+        mock_run.assert_called_once()
+
+    def test_oneshot_injects_tool_venv_path(self):
+        """_run_oneshot() should set TOOL_VENV_PATH in the subprocess env."""
+        inst = _make_fake_instance()
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.run",
+        ) as mock_run:
+            mock_run.return_value = MagicMock()
+            # Will fail on output read, but we only care about the env arg
+            try:
+                inst._run_oneshot(
+                    {"op": "score"},
+                    script_path=Path("/fake/inference.py"),
+                )
+            except Exception:
+                pass
+
+            env = mock_run.call_args.kwargs["env"]
+            assert env["TOOL_VENV_PATH"] == "/fake/venv"
+
+
+class TestPersistTool:
+    """Test the persist_tool() context manager."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_creates_cached_instance(self, mock_init: MagicMock):
+        """Instance should be in _instances during the block."""
+        with ToolInstance.persist_tool("esm2") as inst:
+            assert "esm2" in _instances
+            assert _instances["esm2"] is inst
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_cleans_up_on_exit(self, mock_init: MagicMock):
+        """Instance should be removed from _instances after the block."""
+        with ToolInstance.persist_tool("esm2"):
+            pass
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_cleans_up_on_exception(self, mock_init: MagicMock):
+        """Instance should be removed even if an exception occurs."""
+        with pytest.raises(RuntimeError):
+            with ToolInstance.persist_tool("esm2"):
+                raise RuntimeError("boom")
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_calls_shutdown(self, mock_init: MagicMock):
+        """Worker stop() should be called on exit."""
+        with ToolInstance.persist_tool("esm2") as inst:
+            mock_worker = MagicMock()
+            inst._worker = mock_worker
+        mock_worker.stop.assert_called_once()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_evicts_from_cache(self, mock_init: MagicMock):
+        """shutdown() should remove itself from _instances."""
+        inst = ToolInstance.get("esm2")
+        assert "esm2" in _instances
+        inst.shutdown()
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_with_instance_name(self, mock_init: MagicMock):
+        """Custom instance_name should be used as cache key."""
+        with ToolInstance.persist_tool("esm2", instance_name="my-esm2") as inst:
+            assert "my-esm2" in _instances
+            assert "esm2" not in _instances
+            assert _instances["my-esm2"] is inst
+        assert "my-esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_anonymous_caches_when_slot_open(self, mock_init: MagicMock):
+        """Single anonymous persistent should cache under tool_name."""
+        with ToolInstance.persist_tool("esm2") as inst:
+            assert "esm2" in _instances
+            assert _instances["esm2"] is inst
+            # Implicit dispatch should find it
+            inst.run = MagicMock(return_value={"result": "cached"})
+            result = ToolInstance.dispatch("esm2", {"op": "score"})
+            assert result == {"result": "cached"}
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_anonymous_skips_cache_when_slot_taken(
+        self, mock_init: MagicMock
+    ):
+        """Second anonymous persistent for same tool should not cache."""
+        with ToolInstance.persist_tool("esm2") as inst_a:
+            assert "esm2" in _instances
+            assert _instances["esm2"] is inst_a
+
+            with ToolInstance.persist_tool("esm2") as inst_b:
+                # inst_b should NOT be in the cache
+                assert _instances["esm2"] is inst_a  # first one still there
+                assert inst_b is not inst_a
+
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persistent_anonymous_second_is_different_object(
+        self, mock_init: MagicMock
+    ):
+        """Two anonymous persistent instances are distinct objects."""
+        with ToolInstance.persist_tool("esm2") as inst_a:
+            with ToolInstance.persist_tool("esm2") as inst_b:
+                assert inst_a is not inst_b
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_tool_does_not_cache_other_tools(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """dispatch() for a different tool should use one-shot, not auto-cache."""
+        mock_oneshot.return_value = {"result": "oneshot"}
+
+        with ToolInstance.persist_tool("esm2"):
+            assert "esm2" in _instances
+
+            # Dispatch a *different* tool — should NOT be cached
+            result = ToolInstance.dispatch("blast", {"op": "search"})
+            assert result == {"result": "oneshot"}
+            mock_oneshot.assert_called_once()
+            assert "blast" not in _instances
+
+            # The named tool is still the only cached one
+            assert list(_instances.keys()) == ["esm2"]
+
+
+class TestScope:
+    """Test the scope() context manager."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_scope_isolates_cache(self, mock_init: MagicMock):
+        """Instances created inside scope() should not leak out."""
+        ToolInstance.get("esm2")
+        assert "esm2" in _instances
+
+        with ToolInstance.scope():
+            assert len(_active_cache()) == 0  # clean scoped cache
+            ToolInstance.get("blast")
+            assert "blast" in _active_cache()
+
+        # After scope: blast gone, esm2 still in global
+        assert "blast" not in _instances
+        assert "esm2" in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_scope_calls_shutdown_on_exit(self, mock_init: MagicMock):
+        """scope() should shutdown instances created inside on exit."""
+        with ToolInstance.scope():
+            inst = ToolInstance.get("esm2")
+            assert "esm2" in _active_cache()
+            mock_worker = MagicMock()
+            inst._worker = mock_worker
+
+        mock_worker.stop.assert_called_once()
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_scope_restores_on_exception(self, mock_init: MagicMock):
+        """scope() should restore cache even if an exception occurs inside."""
+        ToolInstance.get("esm2")
+
+        with pytest.raises(RuntimeError):
+            with ToolInstance.scope():
+                ToolInstance.get("blast")
+                raise RuntimeError("boom")
+
+        assert "esm2" in _instances
+        assert "blast" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_scope_nestable(self, mock_init: MagicMock):
+        """Nested scope() calls should work correctly."""
+        ToolInstance.get("esm2")
+
+        with ToolInstance.scope():
+            ToolInstance.get("blast")
+
+            with ToolInstance.scope():
+                assert len(_active_cache()) == 0
+                ToolInstance.get("chai1")
+                assert "chai1" in _active_cache()
+
+            # Inner scope exited: chai1 gone, blast restored
+            assert "blast" in _active_cache()
+            assert "chai1" not in _active_cache()
+
+        # Outer scope exited: blast gone, esm2 still in global
+        assert "esm2" in _instances
+        assert "blast" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_scope_does_not_affect_other_threads(self, mock_init: MagicMock):
+        """scope() on one thread should not affect another thread's cache."""
+        barrier = threading.Barrier(2)
+        other_thread_saw_global = [False]
+
+        def other_thread():
+            barrier.wait()
+            # This thread is not inside any scope — should see _instances
+            other_thread_saw_global[0] = _active_cache() is _instances
+
+        ToolInstance.get("esm2")
+
+        with ToolInstance.scope():
+            t = threading.Thread(target=other_thread)
+            t.start()
+            barrier.wait()
+            t.join()
+
+        assert other_thread_saw_global[0]
+
+
+class TestPersist:
+    """Test the persist() context manager (auto-cache everything mode)."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_auto_caches_on_dispatch(self, mock_init: MagicMock):
+        """dispatch() inside persist() should auto-cache instead of one-shot."""
+        with ToolInstance.persist():
+            cache = _active_cache()
+            assert len(cache) == 0
+
+            with patch.object(ToolInstance, "run", return_value={"result": "ok"}):
+                result = ToolInstance.dispatch("esm2", {"op": "score"})
+
+            assert result == {"result": "ok"}
+            assert "esm2" in cache
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_reuses_cached_instance(self, mock_init: MagicMock):
+        """Second dispatch to same tool reuses the auto-cached instance."""
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                ToolInstance.dispatch("esm2", {"op": "score"})
+                ToolInstance.dispatch("esm2", {"op": "score"})
+
+            cache = _active_cache()
+            assert "esm2" in cache
+            assert mock_init.call_count == 1
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_cleans_up_on_exit(self, mock_init: MagicMock):
+        """All auto-cached instances should be shut down on block exit."""
+        mock_workers = []
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                ToolInstance.dispatch("esm2", {"op": "score"})
+                ToolInstance.dispatch("blast", {"op": "search"})
+
+            cache = _active_cache()
+            for inst in cache.values():
+                w = MagicMock()
+                inst._worker = w
+                mock_workers.append(w)
+
+        for w in mock_workers:
+            w.stop.assert_called_once()
+        assert len(_instances) == 0
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_cleans_up_on_exception(self, mock_init: MagicMock):
+        """Auto-cached instances should be cleaned up even on exception."""
+        with pytest.raises(RuntimeError):
+            with ToolInstance.persist():
+                with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                    ToolInstance.dispatch("esm2", {"op": "score"})
+                raise RuntimeError("boom")
+        assert len(_instances) == 0
+        assert not _persist_mode.get()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_does_not_pollute_global_cache(self, mock_init: MagicMock):
+        """Auto-cached instances should not appear in the global cache."""
+        ToolInstance.get("blast")
+
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                ToolInstance.dispatch("esm2", {"op": "score"})
+            assert "esm2" in _active_cache()
+            assert "blast" not in _active_cache()
+
+        assert "blast" in _instances
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_nestable(self, mock_init: MagicMock):
+        """Nested persist() blocks should each get their own scope."""
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                ToolInstance.dispatch("esm2", {"op": "score"})
+
+                with ToolInstance.persist():
+                    ToolInstance.dispatch("blast", {"op": "search"})
+                    assert "blast" in _active_cache()
+                    assert "esm2" not in _active_cache()
+
+                assert "esm2" in _active_cache()
+                assert "blast" not in _active_cache()
+
+        assert len(_instances) == 0
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_uses_oneshot_outside_persist(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """Without persist(), dispatch() should still use one-shot."""
+        mock_oneshot.return_value = {"result": "ok"}
+        ToolInstance.dispatch("esm2", {"op": "score"})
+        mock_oneshot.assert_called_once()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_mode_flag_reset_on_exit(self, mock_init: MagicMock):
+        """_persist_mode should be False after the block exits."""
+        assert not _persist_mode.get()
+        with ToolInstance.persist():
+            assert _persist_mode.get()
+        assert not _persist_mode.get()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_thread_isolation(self, mock_init: MagicMock):
+        """persist() in one thread should not affect another thread."""
+        barrier = threading.Barrier(2)
+        other_thread_persist = [None]
+
+        def other_thread():
+            barrier.wait()
+            other_thread_persist[0] = _persist_mode.get()
+
+        with ToolInstance.persist():
+            t = threading.Thread(target=other_thread)
+            t.start()
+            barrier.wait()
+            t.join()
+
+        assert other_thread_persist[0] is False
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_multiple_tools(self, mock_init: MagicMock):
+        """Multiple different tools should each get auto-cached."""
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                ToolInstance.dispatch("esm2", {"op": "score"})
+                ToolInstance.dispatch("blast", {"op": "search"})
+                ToolInstance.dispatch("esm2", {"op": "score"})
+
+            cache = _active_cache()
+            assert "esm2" in cache
+            assert "blast" in cache
+            assert len(cache) == 2
+            assert mock_init.call_count == 2
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_persist_with_nested_persist_tool(self, mock_init: MagicMock):
+        """persist_tool(tool_name) inside persist() should coexist correctly.
+
+        The persist_tool instance lives in the persist scope's cache. When
+        persist_tool() exits, its instance is cleaned up, but the auto-cached
+        instance from persist() survives until the outer block exits.
+        """
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"r": 1}):
+                # Auto-cached by persist mode
+                ToolInstance.dispatch("esm2", {"op": "score"})
+                assert "esm2" in _active_cache()
+
+                # Explicit persistent for a different tool
+                with ToolInstance.persist_tool("blast"):
+                    assert "blast" in _active_cache()
+                    ToolInstance.dispatch("blast", {"op": "search"})
+
+                # persist_tool() exited — blast cleaned up, esm2 still alive
+                assert "blast" not in _active_cache()
+                assert "esm2" in _active_cache()
+
+                # esm2 still works via persist auto-cache
+                ToolInstance.dispatch("esm2", {"op": "score"})
+
+        # persist() exited — everything cleaned up
+        assert len(_instances) == 0
+
+
+class TestShutdownInstance:
+    """Test the shutdown_instance() classmethod for targeted instance eviction."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_removes_instance(self, mock_init: MagicMock):
+        """shutdown_instance() should remove the instance from the cache."""
+        ToolInstance.get("esm2")
+        assert "esm2" in _instances
+        ToolInstance.shutdown_instance("esm2")
+        assert "esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_calls_shutdown(self, mock_init: MagicMock):
+        """shutdown_instance() should call shutdown() on the evicted instance."""
+        inst = ToolInstance.get("esm2")
+        mock_worker = MagicMock()
+        inst._worker = mock_worker
+        ToolInstance.shutdown_instance("esm2")
+        mock_worker.stop.assert_called_once()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_leaves_others(self, mock_init: MagicMock):
+        """Shutting down one instance should not affect others."""
+        ToolInstance.get("esm2")
+        ToolInstance.get("blast")
+        assert len(_instances) == 2
+        ToolInstance.shutdown_instance("esm2")
+        assert "esm2" not in _instances
+        assert "blast" in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_nonexistent_is_noop(self, mock_init: MagicMock):
+        """shutdown_instance() on a missing key should not raise."""
+        ToolInstance.shutdown_instance("nonexistent")  # should not raise
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_with_named_key(self, mock_init: MagicMock):
+        """shutdown_instance() should use the explicit cache key."""
+        ToolInstance.get("esm2", instance_name="my-esm2")
+        assert "my-esm2" in _instances
+        ToolInstance.shutdown_instance("my-esm2")
+        assert "my-esm2" not in _instances
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_shutdown_instance_then_get_creates_fresh(self, mock_init: MagicMock):
+        """After shutdown_instance(), get() should create a fresh instance."""
+        inst1 = ToolInstance.get("esm2")
+        inst1._worker = None
+        ToolInstance.shutdown_instance("esm2")
+        inst2 = ToolInstance.get("esm2")
+        assert inst1 is not inst2
+        assert mock_init.call_count == 2
+
+
+class TestDeviceRestart:
+    """Test that persistent workers restart on device change."""
+
+    def test_persistent_worker_restarts_on_device_change(self):
+        """Changing device in input_dict should stop old worker and start new."""
+        inst = _make_fake_instance()
+        inst._reload_params = {"device": "cpu"}
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        inst._worker = mock_worker
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        ) as MockPW:
+            new_worker = MagicMock()
+            new_worker.send.return_value = {"result": "ok"}
+            MockPW.return_value = new_worker
+
+            result = inst._run_persistent({"device": "cuda"})
+
+        mock_worker.stop.assert_called_once()
+        assert inst.device == "cuda"
+        MockPW.assert_called_once_with(
+            tool_name="esm2",
+            venv_path=Path("/fake/venv"),
+            script_path=Path("/fake/inference.py"),
+            device="cuda",
+        )
+        assert result == {"result": "ok"}
+
+    def test_persistent_worker_no_restart_same_device(self):
+        """Same device should reuse existing worker without restart."""
+        inst = _make_fake_instance(device="cuda")
+        inst._reload_params = {"device": "cuda"}
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        mock_worker.send.return_value = {"result": "ok"}
+        inst._worker = mock_worker
+
+        result = inst._run_persistent({"device": "cuda"})
+
+        mock_worker.stop.assert_not_called()
+        mock_worker.send.assert_called_once_with({"device": "cuda"}, timeout=None)
+        assert result == {"result": "ok"}
+
+    @patch.object(ToolInstance, "_oneshot")
+    def test_dispatch_forwards_input_dict_to_oneshot(self, mock_oneshot: MagicMock):
+        """dispatch() should forward input_dict (with device) to _oneshot."""
+        mock_oneshot.return_value = {"result": "ok"}
+        ToolInstance.dispatch("esm2", {"op": "score", "device": "cuda"})
+        mock_oneshot.assert_called_once_with(
+            "esm2",
+            {"op": "score", "device": "cuda"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+        )
+
+    @patch.object(ToolInstance, "_oneshot")
+    def test_dispatch_without_device_in_input_dict(self, mock_oneshot: MagicMock):
+        """dispatch() without device in input_dict should still forward."""
+        mock_oneshot.return_value = {"result": "ok"}
+        ToolInstance.dispatch("blast", {"op": "search"})
+        mock_oneshot.assert_called_once_with(
+            "blast",
+            {"op": "search"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+        )
+
+
+class TestReloadOnChange:
+    """Test generalized reload_on parameter tracking."""
+
+    def test_persistent_worker_restarts_on_reload_param_change(self):
+        """Changing a tracked reload param should restart the worker."""
+        inst = _make_fake_instance(device="cuda")
+        inst._reload_params = {
+            "device": "cuda",
+            "model_checkpoint": "esm2_t33_650M_UR50D",
+        }
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        inst._worker = mock_worker
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        ) as MockPW:
+            new_worker = MagicMock()
+            new_worker.send.return_value = {"result": "ok"}
+            MockPW.return_value = new_worker
+
+            result = inst._run_persistent(
+                {"device": "cuda", "model_checkpoint": "esm2_t36_3B_UR50D"},
+                reload_on={"device", "model_checkpoint"},
+            )
+
+        mock_worker.stop.assert_called_once()
+        MockPW.assert_called_once()
+        assert inst._reload_params == {
+            "device": "cuda",
+            "model_checkpoint": "esm2_t36_3B_UR50D",
+        }
+        assert result == {"result": "ok"}
+
+    def test_persistent_worker_no_restart_same_reload_params(self):
+        """Same reload params should reuse existing worker."""
+        inst = _make_fake_instance(device="cuda")
+        inst._reload_params = {
+            "device": "cuda",
+            "model_checkpoint": "esm2_t33_650M_UR50D",
+        }
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        mock_worker.send.return_value = {"result": "ok"}
+        inst._worker = mock_worker
+
+        result = inst._run_persistent(
+            {"device": "cuda", "model_checkpoint": "esm2_t33_650M_UR50D"},
+            reload_on={"device", "model_checkpoint"},
+        )
+
+        mock_worker.stop.assert_not_called()
+        assert result == {"result": "ok"}
+
+    def test_reload_on_defaults_to_device(self):
+        """When reload_on is not passed, only device change triggers restart."""
+        inst = _make_fake_instance()
+        inst._reload_params = {"device": "cpu"}
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        mock_worker.send.return_value = {"result": "ok"}
+        inst._worker = mock_worker
+
+        # Change model_checkpoint but not device — no restart (not tracked)
+        inst._run_persistent(
+            {"device": "cpu", "model_checkpoint": "esm2_t36_3B_UR50D"},
+        )
+        mock_worker.stop.assert_not_called()
+
+        # Now change device — should restart
+        with patch(
+            "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        ) as MockPW:
+            new_worker = MagicMock()
+            new_worker.send.return_value = {"result": "ok"}
+            MockPW.return_value = new_worker
+
+            inst._run_persistent({"device": "cuda"})
+
+        mock_worker.stop.assert_called_once()
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_forwards_reload_on(self, mock_init: MagicMock):
+        """dispatch() should forward reload_on to cached instance.run()."""
+        inst = ToolInstance.get("esm2")
+        inst.run = MagicMock(return_value={"result": "ok"})
+
+        reload_fields = {"device", "model_checkpoint"}
+        ToolInstance.dispatch(
+            "esm2",
+            {"op": "score", "device": "cuda"},
+            reload_on=reload_fields,
+        )
+        inst.run.assert_called_once_with(
+            {"op": "score", "device": "cuda"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+            reload_on=reload_fields,
+        )
+
+
+class TestReloadFieldsClassmethod:
+    """Test BaseConfig.reload_fields() classmethod."""
+
+    def test_base_config_reload_fields_includes_device(self):
+        """BaseConfig.reload_fields() should return {'device'}."""
+        from bio_programming_tools.utils.base_config import BaseConfig
+
+        assert BaseConfig.reload_fields() == {"device"}
+
+    def test_subclass_inherits_device(self):
+        """Subclass without extra reload fields inherits device."""
+        from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+
+        class MyConfig(BaseConfig):
+            param: int = ConfigField(default=1, description="test")
+
+        assert MyConfig.reload_fields() == {"device"}
+
+    def test_subclass_with_reload_on_change(self):
+        """Subclass with reload_on_change=True includes those fields."""
+        from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+
+        class MyConfig(BaseConfig):
+            model_checkpoint: str = ConfigField(
+                default="default",
+                description="model",
+                reload_on_change=True,
+            )
+
+        assert MyConfig.reload_fields() == {"device", "model_checkpoint"}
+
+    def test_reload_fields_excludes_non_reload(self):
+        """Fields without reload_on_change are excluded."""
+        from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+
+        class MyConfig(BaseConfig):
+            reload_me: str = ConfigField(
+                default="a",
+                description="r",
+                reload_on_change=True,
+            )
+            leave_me: str = ConfigField(default="b", description="l")
+
+        fields = MyConfig.reload_fields()
+        assert "reload_me" in fields
+        assert "device" in fields
+        assert "leave_me" not in fields
+
+
+class TestTimeout:
+    """Test timeout enforcement across the ToolInstance call chain."""
+
+    def test_oneshot_timeout_raises(self):
+        """_run_oneshot() should convert subprocess.TimeoutExpired to TimeoutError."""
+        inst = _make_fake_instance()
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
+        ):
+            with pytest.raises(TimeoutError, match="timed out after 10s"):
+                inst._run_oneshot(
+                    {"op": "score"},
+                    script_path=Path("/fake/inference.py"),
+                    timeout=10,
+                )
+
+    def test_persistent_timeout_raises(self):
+        """_run_persistent() should propagate TimeoutError from the worker."""
+        inst = _make_fake_instance()
+        inst._reload_params = {"device": "cpu"}
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        mock_worker.send.side_effect = TimeoutError("timed out")
+        inst._worker = mock_worker
+
+        with pytest.raises(TimeoutError, match="timed out"):
+            inst._run_persistent({"device": "cpu"}, timeout=30)
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_reads_timeout_from_input_dict(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """dispatch() should extract timeout from input_dict and forward it."""
+        mock_oneshot.return_value = {"result": "ok"}
+        ToolInstance.dispatch("esm2", {"op": "score", "timeout": 60})
+        mock_oneshot.assert_called_once_with(
+            "esm2",
+            {"op": "score", "timeout": 60},
+            script_path=None,
+            verbose=False,
+            timeout=60,
+        )
+
+    @patch.object(ToolInstance, "_oneshot")
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_dispatch_defaults_timeout_to_600(
+        self, mock_init: MagicMock, mock_oneshot: MagicMock
+    ):
+        """dispatch() should default timeout to 600 when not in input_dict."""
+        mock_oneshot.return_value = {"result": "ok"}
+        ToolInstance.dispatch("esm2", {"op": "score"})
+        mock_oneshot.assert_called_once_with(
+            "esm2",
+            {"op": "score"},
+            script_path=None,
+            verbose=False,
+            timeout=600,
+        )
+
+    def test_send_timeout_kills_worker(self):
+        """PersistentWorker.send() should kill the worker on timeout."""
+        from bio_programming_tools.utils.persistent_worker import PersistentWorker
+
+        worker = PersistentWorker.__new__(PersistentWorker)
+        worker.tool_name = "esm2"
+        worker._lock = __import__("threading").Lock()
+
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None  # alive
+        mock_process.stdin = MagicMock()
+        mock_process.stdout = MagicMock()
+        mock_process.stdout.fileno.return_value = 99
+        worker._process = mock_process
+        worker._stderr_lines = []
+
+        with patch("bio_programming_tools.utils.persistent_worker.select") as mock_sel:
+            mock_sel.select.return_value = ([], [], [])  # timeout — nothing ready
+
+            with pytest.raises(TimeoutError, match="timed out after 5s"):
+                worker.send({"op": "score"}, timeout=5)
+
+        # Worker should have been stopped (process set to None)
+        assert worker._process is None
+
+
+class TestThreadSafety:
+    """Test that concurrent access to the ToolInstance cache is safe."""
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_concurrent_get_returns_same_instance(self, mock_init: MagicMock):
+        """Many threads calling get() should all receive the same instance."""
+        num_threads = 10
+        barrier = threading.Barrier(num_threads)
+        results: list[ToolInstance] = [None] * num_threads
+
+        def worker(idx: int):
+            barrier.wait()  # all threads start together
+            results[idx] = ToolInstance.get("esm2")
+
+        with ThreadPoolExecutor(max_workers=num_threads) as pool:
+            futures = [pool.submit(worker, i) for i in range(num_threads)]
+            for f in futures:
+                f.result()
+
+        # All threads should have gotten the same object
+        assert all(r is results[0] for r in results)
+        assert len(_instances) == 1
+        # __init__ called at most twice (double-check loser creates then discards)
+        assert mock_init.call_count <= 2
+
+    @patch.object(ToolInstance, "__init__", return_value=None)
+    def test_concurrent_dispatch_with_cached_instance(self, mock_init: MagicMock):
+        """Many threads dispatching to the same cached instance should succeed."""
+        inst = ToolInstance.get("esm2")
+        inst.run = MagicMock(return_value={"result": "ok"})
+
+        num_threads = 10
+        barrier = threading.Barrier(num_threads)
+        errors: list[Exception] = []
+
+        def worker():
+            barrier.wait()
+            try:
+                result = ToolInstance.dispatch("esm2", {"op": "score"})
+                assert result == {"result": "ok"}
+            except Exception as e:
+                errors.append(e)
+
+        with ThreadPoolExecutor(max_workers=num_threads) as pool:
+            futures = [pool.submit(worker) for _ in range(num_threads)]
+            for f in futures:
+                f.result()
+
+        assert errors == [], f"Dispatch errors: {errors}"
+        assert inst.run.call_count == num_threads
+
+
+class TestCreateVenv:
+    """Test _create_venv() edge cases."""
+
+    def test_failure_writes_status_and_raises(self, tmp_path: Path):
+        """_create_venv() should write FAILED status and raise on setup.sh failure."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.tool_name = "fake_tool"
+        inst.device = "cpu"
+        inst.venv_path = tmp_path / "fake_env"
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = 42
+        mock_proc.communicate.return_value = ("", "setup failed!")
+
+        def _create_venv_dir(*args, **kwargs):
+            """Simulate 'python -m venv' creating the directory."""
+            inst.venv_path.mkdir(parents=True, exist_ok=True)
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.run",
+            side_effect=_create_venv_dir,
+        ), patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.Popen",
+            return_value=mock_proc,
+        ):
+            with pytest.raises(RuntimeError, match="may not be compatible"):
+                inst._create_venv()
+
+        status = (inst.venv_path / "STATUS.txt").read_text()
+        assert status.startswith("FAILED")
+        assert "42" in status
+        assert "Setup hash:" in status
+
+    def test_build_failure_prevents_retry_in_process(self, tmp_path: Path):
+        """After _create_venv fails, _ensure_venv raises immediately on retry."""
+        inst = _make_fake_instance()
+        inst._venv_ready = False
+        inst.venv_path = tmp_path / "fake_env"
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
+
+        with patch.object(
+            ToolInstance, "_is_venv_ok", return_value=False
+        ), patch.object(
+            ToolInstance,
+            "_create_venv",
+            side_effect=RuntimeError(
+                "'fake_tool' may not be compatible with your system. "
+                "setup.sh failed (exit 1)."
+            ),
+        ) as mock_create:
+            with pytest.raises(RuntimeError, match="setup.sh failed"):
+                inst._ensure_venv()
+
+            mock_create.assert_called_once()
+
+            # Second call should fail fast without calling _create_venv again
+            with pytest.raises(RuntimeError, match="may not be compatible"):
+                inst._ensure_venv()
+
+            assert mock_create.call_count == 1
+
+    def test_stale_failure_warns_and_retries(self, tmp_path: Path, caplog):
+        """A FAILED STATUS.txt with matching hash logs a warning and retries."""
+        inst = _make_fake_instance()
+        inst._venv_ready = False
+        inst.venv_path = tmp_path / "fake_env"
+        inst.venv_path.mkdir()
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        setup_hash = hashlib.sha256(
+            inst.setup_script.read_bytes()
+        ).hexdigest()[:16]
+        status_file = inst.venv_path / "STATUS.txt"
+        status_file.write_text(
+            f"FAILED\n\n"
+            f"Return code: 1\n"
+            f"Command: {inst.setup_script}\n"
+            f"Setup hash: {setup_hash}\n"
+            f"Timestamp: 2025-01-01\n\n"
+            f"STDERR:\npip install exploded\n"
+        )
+
+        with patch.object(
+            ToolInstance, "_is_venv_ok", return_value=False
+        ), patch.object(
+            ToolInstance, "_create_venv"
+        ) as mock_create, caplog.at_level(logging.WARNING):
+            inst._ensure_venv()
+
+        mock_create.assert_called_once()
+        assert "previously failed to build" in caplog.text
+        assert setup_hash in caplog.text
+
+    def test_changed_setup_hash_logs_info_and_retries(self, tmp_path: Path, caplog):
+        """A FAILED STATUS.txt with a different hash logs info and retries."""
+        inst = _make_fake_instance()
+        inst._venv_ready = False
+        inst.venv_path = tmp_path / "fake_env"
+        inst.venv_path.mkdir()
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho fixed\n")
+
+        status_file = inst.venv_path / "STATUS.txt"
+        status_file.write_text(
+            "FAILED\n\n"
+            "Return code: 1\n"
+            "Command: setup.sh\n"
+            "Setup hash: 0000000000000000\n"
+            "Timestamp: 2025-01-01\n\n"
+            "STDERR:\n\n"
+        )
+
+        with patch.object(
+            ToolInstance, "_is_venv_ok", return_value=False
+        ), patch.object(
+            ToolInstance, "_create_venv"
+        ) as mock_create, caplog.at_level(logging.INFO):
+            inst._ensure_venv()
+
+        mock_create.assert_called_once()
+        assert "setup.sh changed" in caplog.text
+
+    def test_build_failures_cleared_between_tests(self):
+        """The autouse fixture clears _build_failures so tests are isolated."""
+        # The fixture already ran — _build_failures should be empty
+        assert len(ToolInstance._build_failures) == 0
+        ToolInstance._build_failures["some_tool"] = "test error"
+        # Next test will see it cleared by the fixture
+
+
+class TestRunOneshotOutput:
+    """Test _run_oneshot() end-to-end with a real temp script."""
+
+    def test_run_oneshot_reads_output(self, tmp_path: Path):
+        """_run_oneshot() should return the parsed output JSON."""
+        script = tmp_path / "echo_script.py"
+        script.write_text(textwrap.dedent("""\
+            import json, sys
+            input_path, output_path = sys.argv[1], sys.argv[2]
+            with open(input_path) as f:
+                data = json.load(f)
+            result = {"echo": data}
+            with open(output_path, "w") as f:
+                json.dump(result, f)
+        """))
+
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.tool_name = "test"
+        inst.device = "cpu"
+        # Use current Python as the "venv" python
+        python_dir = Path(sys.executable).parent
+        inst.venv_path = python_dir.parent
+        inst.script_path = script
+        inst._venv_ready = True
+
+        result = inst._run_oneshot(
+            {"hello": "world"},
+            script_path=script,
+        )
+        assert result == {"echo": {"hello": "world"}}

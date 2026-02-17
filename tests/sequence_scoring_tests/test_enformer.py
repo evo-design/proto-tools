@@ -7,7 +7,12 @@ Tests for Enformer regulatory activity prediction tool.
 import pytest
 from pydantic import ValidationError
 
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("enformer")
+
 
 # Enformer constants
 ENFORMER_CONTEXT = 196_608
@@ -66,6 +71,7 @@ class TestEnformerInputValidation:
 class TestEnformerPrediction:
     """Tests for Enformer prediction functionality."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.uses_gpu
     def test_enformer_prediction_human(self):
         """Test Enformer prediction for human genome."""

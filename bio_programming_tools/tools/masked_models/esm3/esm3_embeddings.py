@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
@@ -124,6 +123,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
         title="ESM3 Model Checkpoint",
         default="esm3_sm_open_v1",
         description="ESM3 model checkpoint to use",
+        reload_on_change=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -145,7 +145,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
     description="Extract protein sequence embeddings and logits using ESM3",
     uses_gpu=True,
 )
-def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig) -> ESM3EmbeddingsOutput:
+def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig, instance=None) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
     Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
@@ -206,13 +206,11 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
             return_logits=config.return_logits,
         )
     else:
-        # Local venv execution
-        logger.debug(f"Using local venv for ESM3 inference: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm3")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        outputs = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        # Local execution
+        logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")
+        outputs = ToolInstance.dispatch(
+            "esm3",
+            {
                 "operation": "embeddings",
                 "sequences": inputs.sequences,
                 "batch_size": config.batch_size,
@@ -221,8 +219,9 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ESM3EmbeddingsOutput(

@@ -10,7 +10,6 @@ import hashlib
 import logging
 import os
 import tempfile
-from pathlib import Path
 from typing import List, Optional
 
 from pydantic import field_validator, model_validator
@@ -231,7 +230,7 @@ class Chai1Config(StructurePredictionConfig):
     output_iterable_field="structures",
     tool_name="chai1-prediction",
 )
-def run_chai1(inputs: Chai1Input, config: Chai1Config) -> Chai1Output:
+def run_chai1(inputs: Chai1Input, config: Chai1Config, instance=None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.
 
     Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,
@@ -303,7 +302,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config) -> Chai1Output:
     results = []
 
     for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)):
-        results.append(run_chai1_on_complex(comp=comp, config=config))
+        results.append(run_chai1_on_complex(comp=comp, config=config, instance=instance))
     return Chai1Output(
         structures=results,
     )
@@ -490,7 +489,9 @@ def _serialize_pqt_files(pqt_dir: str) -> dict[str, bytes]:
 
 
 def run_chai1_on_complex(
-    comp: StructurePredictionComplex, config: Chai1Config
+    comp: StructurePredictionComplex,
+    config: Chai1Config,
+    instance=None,
 ) -> Structure:
     """
     Run Chai1 structure prediction on a single complex. This function is wrapped
@@ -534,9 +535,7 @@ def run_chai1_on_complex(
         # Use local GPU execution via venv subprocess (required for dependency isolation)
         logger.debug("Using local GPU for Chai1 structure prediction...")
 
-        from bio_programming_tools.utils.env_manager import EnvManager
-
-        venv_manager = EnvManager(model_name="chai1")
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
         # Create temporary directory for inputs and outputs
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -581,10 +580,11 @@ def run_chai1_on_complex(
             }
 
             # Call the inference script with the venv activated
-            result = venv_manager.call_standalone_script_in_venv(
-                script_path=Path(__file__).parent / "standalone" / "inference.py",
-                input_dict=input_data,
-                device=config.device,
+            input_data["device"] = config.device
+            result = ToolInstance.dispatch(
+                "chai1",
+                input_data,
+                instance=instance,
                 verbose=config.verbose,
             )
 

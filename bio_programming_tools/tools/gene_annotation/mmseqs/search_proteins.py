@@ -270,7 +270,8 @@ class MmseqsSearchProteinsConfig(BaseConfig):
     description="Search protein sequences using MMseqs2 with per-sequence results",
 )
 def run_mmseqs_search_proteins(
-    inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig
+    inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig,
+    instance=None,
 ) -> MmseqsSearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
 
@@ -300,29 +301,25 @@ def run_mmseqs_search_proteins(
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequences = inputs.query_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
 
-    venv_manager = EnvManager(model_name="mmseqs")
-
-    input_data = {
-        "operation": "protein_search",
-        "sequences": sequences,
-        "sequence_ids": sequence_ids,
-        "mmseqs_db": inputs.mmseqs_db,
-        "threads": config.threads,
-        "split": config.split,
-        "sensitivity": config.sensitivity,
-        "m8_columns": M8_COLUMNS,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "mmseqs",
+        {
+            "operation": "protein_search",
+            "sequences": sequences,
+            "sequence_ids": sequence_ids,
+            "mmseqs_db": inputs.mmseqs_db,
+            "threads": config.threads,
+            "split": config.split,
+            "sensitivity": config.sensitivity,
+            "m8_columns": M8_COLUMNS,
+        },
+        instance=instance,
     )
 
     # Parse results

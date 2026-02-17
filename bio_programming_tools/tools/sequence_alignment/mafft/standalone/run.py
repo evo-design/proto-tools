@@ -121,11 +121,20 @@ def run_mafft_alignment(
         # Add input file
         cmd.append(str(input_fasta))
 
-        # Set up environment - point MAFFT_BINARIES to our venv's libexec
-        # The mafft script uses this to find its auxiliary binaries
+        # Set up environment for MAFFT auxiliary binaries.
+        # Pre-built binaries need MAFFT_BINARIES pointing to the venv's libexec/.
+        # Source-compiled binaries have the correct path baked into the script,
+        # so we only set the env var when the pre-built libexec layout exists.
         env = os.environ.copy()
         libexec_dir = Path(sys.executable).parent.parent / "libexec"
-        env["MAFFT_BINARIES"] = str(libexec_dir)
+        libexec_mafft_dir = libexec_dir / "mafft"
+        if libexec_dir.exists() and not libexec_mafft_dir.exists():
+            # Pre-built layout: binaries are directly in libexec/
+            env["MAFFT_BINARIES"] = str(libexec_dir)
+        else:
+            # Source-compiled layout (libexec/mafft/) or missing — let
+            # the mafft script use its built-in path.
+            env.pop("MAFFT_BINARIES", None)
 
         # Run MAFFT (output goes to stdout)
         try:

@@ -7,7 +7,12 @@ Tests for Borzoi regulatory activity prediction tool.
 import pytest
 from pydantic import ValidationError
 
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("borzoi")
+
 
 # Borzoi constants
 BORZOI_CONTEXT = 524_288
@@ -95,6 +100,7 @@ class TestBorzoiInputValidation:
 class TestBorzoiPrediction:
     """Tests for Borzoi single-replicate prediction functionality."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.uses_gpu
     def test_borzoi_prediction_human(self):
         """Test Borzoi prediction for human genome."""

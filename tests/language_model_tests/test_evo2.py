@@ -15,7 +15,11 @@ from bio_programming_tools.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("evo2")
 
 
 def _import_evo2_model():
@@ -77,6 +81,7 @@ def test_evo2_sample_inference():
     assert len(result["kv_caches"]) == 2
 
 
+@pytest.mark.run_all_venvs
 @pytest.mark.uses_gpu
 def test_evo2_sample_tool():
     """Test the evo2 sampling tool with run_evo2_sample."""

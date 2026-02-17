@@ -4,7 +4,7 @@ This directory contains the setup for running ColabFold MSA search in an isolate
 
 ## Overview
 
-ColabFold requires AlphaFold dependencies that may conflict with other packages in the main environment. This standalone setup uses the `EnvManager` system to:
+ColabFold requires AlphaFold dependencies that may conflict with other packages in the main environment. This standalone setup uses the `ToolInstance` system to:
 
 1. Create an isolated virtual environment (`.venvs/colabfold_search_env`)
 2. Install ColabFold with all its dependencies
@@ -12,7 +12,7 @@ ColabFold requires AlphaFold dependencies that may conflict with other packages 
 
 ## Setup
 
-The virtual environment is created automatically on first use of the `colabfold_search` tool. The `EnvManager` will:
+The virtual environment is created automatically on first use of the `colabfold_search` tool. `ToolInstance` will:
 
 1. Create a new venv at `.venvs/colabfold_search_env`
 2. Run `setup.sh` to install dependencies from `requirements.txt`

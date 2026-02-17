@@ -17,7 +17,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +107,13 @@ class Evo1SampleConfig(BaseConfig):
         prepend_prompt: Whether to prepend prompt to output.
         batch_size: Number of prompts per GPU batch.
         device: Device to run on.
-        verbose: Whether to print verbose output.
     """
 
     model_name: EVO1_MODEL_NAMES = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
         description="Evo1 model checkpoint to use",
+        reload_on_change=True,
     )
     top_k: int = ConfigField(
         title="Top K",
@@ -159,12 +159,6 @@ class Evo1SampleConfig(BaseConfig):
         description="Device to run on",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print verbose output",
-        hidden=True,
-    )
 
 
 # ============================================================================
@@ -180,7 +174,7 @@ class Evo1SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo1_sample(
-    inputs: Evo1SampleInput, config: Evo1SampleConfig
+    inputs: Evo1SampleInput, config: Evo1SampleConfig, instance=None,
 ) -> Evo1SampleOutput:
     """Sample DNA sequences using the Evo1 language model.
 
@@ -204,11 +198,9 @@ def run_evo1_sample(
     """
     logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
 
-    venv_manager = EnvManager("evo1")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict={
+    result = ToolInstance.dispatch(
+        "evo1",
+        {
             "model_name": config.model_name,
             "prompts": inputs.prompts,
             "num_tokens": config.num_tokens,
@@ -219,8 +211,9 @@ def run_evo1_sample(
             "device": config.device,
             "verbose": config.verbose,
         },
-        device=config.device,
+        instance=instance,
         verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
     )
 
     sequences = result["sequences"]

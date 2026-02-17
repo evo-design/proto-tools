@@ -138,6 +138,7 @@ class TestOrfipyParsing:
 class TestOrfipyIntegration:
     """Integration tests for the complete Orfipy tool."""
 
+    @pytest.mark.run_all_venvs
     def test_full_workflow(self):
         """Test complete workflow from input to output."""
         # Create input and config and run

@@ -50,7 +50,7 @@ Both models accept the same inputs and produce the same output format. v1.1 gene
 
 | Mode | Backend | Device |
 |------|---------|--------|
-| Local venv | `EnvManager("bioemu")` running `standalone/inference.py` | Local GPU (`cuda`) |
+| Local venv | `ToolInstance("bioemu")` running `standalone/inference.py` | Local GPU (`cuda`) |
 
 
 ## How It Works

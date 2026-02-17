@@ -3,7 +3,7 @@ Evo1 DNA sequence sampling (in-process mode).
 
 Loads the Evo1 model directly into the current Python process for
 interactive use and development. For production/CI use the default
-EnvManager-based tool (key: ``evo1-sample``).
+ToolInstance-based tool (key: ``evo1-sample``).
 """
 
 from __future__ import annotations
@@ -109,7 +109,6 @@ class Evo1SampleConfig(BaseConfig):
         batch_size: Number of prompts per GPU batch.
         device: Device to run on.
         keep_on_gpu: Whether to keep model loaded after generation.
-        verbose: Whether to print verbose output.
     """
 
     model_name: EVO1_MODEL_NAMES = ConfigField(
@@ -165,12 +164,6 @@ class Evo1SampleConfig(BaseConfig):
         title="Keep on GPU",
         default=True,
         description="Whether to keep model on device memory after generation",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print verbose output",
         hidden=True,
     )
 

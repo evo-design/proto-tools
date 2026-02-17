@@ -291,9 +291,6 @@ class RFdiffusion3Config(BaseConfig):
         ckpt_path (str): String containing the path and file name of the checkpoint
             path you want to use (default: rfd3).
 
-        verbose (bool): Whether to print status messages during execution.
-            Default: False.
-
         input_dir (Optional[str]): Optional directory containing input files for
             local execution. If not set, input files are written to a temporary directory.
 
@@ -350,12 +347,6 @@ class RFdiffusion3Config(BaseConfig):
         description="String containing the path and file name of the checkpoint path you want to use (default: rfd3).",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
-        hidden=True,
-    )
     input_dir: Optional[str] = ConfigField(
         title="Input Directory",
         default=None,
@@ -366,6 +357,12 @@ class RFdiffusion3Config(BaseConfig):
         title="Output Directory",
         default=None,
         description="Optional output directory for local execution outputs",
+        hidden=True,
+    )
+    device: str = ConfigField(
+        title="Device",
+        default="cuda",
+        description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
     )
 
@@ -502,7 +499,7 @@ class RFdiffusion3Output(BaseToolOutput):
     uses_gpu=True,
 )
 @tool_cache("rfdiffusion3-design")
-def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config) -> RFdiffusion3Output:
+def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance=None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
     Uses RFdiffusion3, a diffusion-based generative model, to design novel
@@ -572,9 +569,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config) -> R
     else:
         logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
-        from bio_programming_tools.utils.env_manager import EnvManager
-
-        venv_manager = EnvManager(model_name="rfdiffusion3")
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir = Path(temp_dir)
@@ -594,9 +589,11 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config) -> R
                 "output_dir": str(output_dir),
                 **config.get_cli_kwargs(),
             }
-            output_data = venv_manager.call_standalone_script_in_venv(
-                script_path=Path(__file__).parent / "standalone" / "inference.py",
-                input_dict=input_data,
+            input_data["device"] = config.device
+            output_data = ToolInstance.dispatch(
+                "rfdiffusion3",
+                input_data,
+                instance=instance,
                 verbose=config.verbose,
             )
 

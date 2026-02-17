@@ -9,9 +9,15 @@ from bio_programming_tools.tools.structure_design import (
     RFdiffusion3Input,
     run_rfdiffusion3,
 )
+from tests.conftest import make_persistent_fixture
 
 DEFAULT_CHECKPOINT_DIR = Path.home() / ".foundry" / "checkpoints"
 
+
+_persistent_tool = make_persistent_fixture("rfdiffusion3")
+
+
+@pytest.mark.run_all_venvs
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_unconditional_design():

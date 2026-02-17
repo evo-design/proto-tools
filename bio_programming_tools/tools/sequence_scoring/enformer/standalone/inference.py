@@ -103,34 +103,62 @@ class EnformerModel:
         return prediction
 
 
-# Standalone script entry point for venv execution
+def _serialize_output(value):
+    """Recursively serialize tensors and arrays to JSON-safe types."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: EnformerModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = EnformerModel()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        prediction = _model(
+            sequence=input_dict["sequence"],
+            output_tracks=input_dict["output_tracks"],
+            species=input_dict.get("species", "human"),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+        return {
+            "prediction": prediction,
+            "applied_species": input_dict.get("species", "human"),
+        }
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Create model
-    model = EnformerModel()
+    result = dispatch(input_data)
 
-    # Run inference
-    prediction = model(
-        sequence=input_data["sequence"],
-        output_tracks=input_data["output_tracks"],
-        species=input_data.get("species", "human"),
-        device=input_data.get("device", "cuda"),
-        verbose=input_data.get("verbose", False),
-    )
-
-    # Prepare output
-    output_data = {
-        "prediction": prediction.tolist() if hasattr(prediction, "tolist") else prediction,
-        "applied_species": input_data.get("species", "human"),
-    }
-
-    with open(output_json_path, "w") as f:
-        json.dump(output_data, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(_serialize_output(result), f)

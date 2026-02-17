@@ -15,7 +15,12 @@ from bio_programming_tools.tools.masked_models.esm2 import (
     run_esm2_embeddings,
     run_esm2_score,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("esm2")
+
 
 # ============================================================================
 # Embedding Tests
@@ -49,6 +54,7 @@ def test_esm2_forward_pass():
 # Scoring Tests
 # ============================================================================
 
+@pytest.mark.run_all_venvs
 @pytest.mark.uses_gpu
 def test_esm2_score_inference():
     """Test run_esm2_score() with comprehensive value validation."""

@@ -300,9 +300,6 @@ class ColabfoldSearchConfig(BaseConfig):
             When enabled, uses all available GPUs for search. Default: False.
             TODO: This is currently not working due to issue with GPU flag in local_msa_search.py
 
-        verbose (bool): Whether to print progress messages and colabfold_search
-            output during execution. Useful for debugging and monitoring long-running
-            searches. Default: False.
     """
 
     search_mode: Literal["local", "remote"] = ConfigField(
@@ -356,13 +353,6 @@ class ColabfoldSearchConfig(BaseConfig):
     #     description="Enable GPU-accelerated search using MMseqs2-GPU (requires GPU databases to be set up with GPU=1)",
     #     hidden=True,
     # )
-    verbose: bool = ConfigField(
-        title="Verbose Output",
-        default=False,
-        description="Print progress messages during execution",
-        hidden=True,
-    )
-
     # Private field to track if user specified custom db_dir
     _user_specified_db_dir: bool = False
     # Private field to track if user specified custom output_dir
@@ -436,7 +426,8 @@ class ColabfoldSearchConfig(BaseConfig):
     description="Generate Multiple Sequence Alignments using ColabFold local database search",
 )
 def run_colabfold_search(
-    inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig
+    inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig,
+    instance=None,
 ) -> ColabfoldSearchOutput:
     """Generate MSAs for protein sequences using ColabFold search, with options
     for online and local execution.
@@ -491,9 +482,9 @@ def run_colabfold_search(
     os.makedirs(msa_out_dir, exist_ok=True)
 
     if config.search_mode == "local":
-        return _local_search(sequences, sequence_ids, config, msa_out_dir)
+        return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
     elif config.search_mode == "remote":
-        return _remote_search(sequences, sequence_ids, config, msa_out_dir)
+        return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
     else:
         raise ValueError(f"Invalid search mode: {config.search_mode}")
 
@@ -632,16 +623,15 @@ def _local_search(
     sequence_ids: List[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,
+    instance=None,
 ) -> ColabfoldSearchOutput:
     """
     Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
     """
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
 
-    # Use EnvManager to run colabfold_search in isolated environment
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="colabfold_search")
+    # Use ToolInstance to run colabfold_search in isolated environment
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Get the standalone script path
     standalone_script = Path(__file__).parent / "standalone" / "local_msa_search.py"
@@ -673,10 +663,11 @@ def _local_search(
         }
 
         # Execute colabfold_search via standalone script
-        output_data = venv_manager.call_standalone_script_in_venv(
+        output_data = ToolInstance.dispatch(
+            "colabfold_search",
+            input_data,
+            instance=instance,
             script_path=standalone_script,
-            input_dict=input_data,
-            device="cpu",  # ColabFold search is CPU-based (or optional GPU)
             verbose=config.verbose,
         )
 
@@ -724,16 +715,15 @@ def _remote_search(
     sequence_ids: List[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,
+    instance=None,
 ) -> ColabfoldSearchOutput:
     """
     Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
     """
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")
 
-    # Use EnvManager to run remote search in isolated environment
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="colabfold_search")
+    # Use ToolInstance to run remote search in isolated environment
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Get the standalone script path
     standalone_script = Path(__file__).parent / "standalone" / "remote_msa_search.py"
@@ -748,10 +738,11 @@ def _remote_search(
     }
 
     # Execute remote search via standalone script
-    output_data = venv_manager.call_standalone_script_in_venv(
+    output_data = ToolInstance.dispatch(
+        "colabfold_search",
+        input_data,
+        instance=instance,
         script_path=standalone_script,
-        input_dict=input_data,
-        device="cpu",  # Remote search doesn't use local compute
         verbose=config.verbose,
     )
 

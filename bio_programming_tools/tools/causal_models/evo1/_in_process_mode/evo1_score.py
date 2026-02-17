@@ -77,7 +77,6 @@ class Evo1ScoringConfig(BaseConfig):
             scoring. Default: ``True``.
         return_logits (bool): Whether to include per-position logits in the
             output. Default: ``False``.
-        verbose (bool): Whether to print status messages. Default: ``False``.
     """
 
     model_name: EVO1_MODEL_NAMES = ConfigField(
@@ -109,12 +108,6 @@ class Evo1ScoringConfig(BaseConfig):
         default=False,
         description="Whether to include per-position logits in the output. Disable to save memory.",
         advanced=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
     )
 
 

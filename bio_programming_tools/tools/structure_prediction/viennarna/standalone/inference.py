@@ -4,6 +4,8 @@ Standalone inference script for ViennaRNA secondary structure prediction.
 This script provides a standalone interface for ViennaRNA that can be executed
 in an isolated virtual environment with JSON-based I/O.
 """
+from __future__ import annotations
+
 import json
 import logging
 import sys
@@ -152,27 +154,36 @@ class ViennaRNAModel:
 
 
 # ============================================================================
+# Dispatch
+# ============================================================================
+_model: ViennaRNAModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = ViennaRNAModel()
+
+    kwargs = dict(input_dict)
+    operation = kwargs.pop("operation", "predict")
+    if operation == "predict":
+        return _model(**kwargs)
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
+# ============================================================================
 # Standalone Entry Point
 # ============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    # Read input json
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Create model and run inference
-    model = ViennaRNAModel()
-    result = model(**input_data)
+    result = dispatch(input_data)
 
-    # Write output to json file
-    with open(output_json_path, "w") as f:
-        json.dump(result, f, indent=2)
-
-    logger.info(f"ViennaRNA inference complete. Results written to {output_json_path}")
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

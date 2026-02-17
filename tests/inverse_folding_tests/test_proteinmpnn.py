@@ -27,9 +27,13 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     SequenceScores,
     SequenceStructurePair,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+
+
+_persistent_tool = make_persistent_fixture("proteinmpnn")
 
 
 @pytest.fixture(scope="module")
@@ -39,6 +43,7 @@ def pdb_structure():
 
 class TestProteinMPNNSample:
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.uses_gpu
     def test_proteinmpnn_sample_simple(self, pdb_structure: Structure):
         input = InverseFoldingInput(

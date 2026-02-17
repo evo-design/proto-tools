@@ -301,7 +301,7 @@ class ProdigalOutput(BaseToolOutput):
     output=ProdigalOutput,
     description="Prokaryotic ORF and gene prediction using Prodigal",
 )
-def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig) -> ProdigalOutput:
+def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, instance=None) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
     Uses pyrodigal Python bindings for  gene prediction in bacterial and archaeal
@@ -341,24 +341,20 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig) -> Pr
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="prodigal")
-
-    input_data = {
-        "sequences": inputs.input_sequences,
-        "config": {
-            "meta_mode": config.meta_mode,
-            "closed_ends": config.closed_ends,
-            "num_threads": config.num_threads,
-            "translation_table": config.translation_table,
+    output_data = ToolInstance.dispatch(
+        "prodigal",
+        {
+            "sequences": inputs.input_sequences,
+            "config": {
+                "meta_mode": config.meta_mode,
+                "closed_ends": config.closed_ends,
+                "num_threads": config.num_threads,
+                "translation_table": config.translation_table,
+            },
         },
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+        instance=instance,
     )
 
     # Reconstruct ORF objects from returned dicts

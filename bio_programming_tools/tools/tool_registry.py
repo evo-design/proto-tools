@@ -31,6 +31,7 @@ IGNORED_WARNING_SUBSTRINGS = [
 ]
 
 from bio_programming_tools.utils import BaseConfig
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
@@ -143,7 +144,7 @@ class ToolRegistry:
             cls._check_duplicate(key, func.__name__)
 
             @wraps(func)
-            def wrapper(inputs: BaseToolInput, config: BaseConfig) -> BaseToolOutput:
+            def wrapper(inputs: BaseToolInput, config: BaseConfig, instance: ToolInstance | None = None) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
                 start_time = time.time()
                 logger.debug(f"Tool {key}: starting execution")
@@ -155,7 +156,7 @@ class ToolRegistry:
 
                     try:
                         # Execute the tool function
-                        result = func(inputs, config)
+                        result = func(inputs, config, instance)
 
                         # Populate metadata fields
                         result.tool_id = key

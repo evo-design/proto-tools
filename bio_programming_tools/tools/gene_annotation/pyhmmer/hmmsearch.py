@@ -70,7 +70,7 @@ PyHmmsearchConfig = PyHmmerConfig
     description="Search HMM profile(s) against sequences using PyHMMER",
 )
 @tool_cache("pyhmmer-hmmsearch")
-def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig) -> PyHmmsearchOutput:
+def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig, instance=None) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
     This function implements the hmmsearch algorithm, searching one or more HMM
@@ -115,25 +115,21 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig) -
         ...         result.domain_hits_df['domain_score'] > 50
         ...     ]
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="pyhmmer")
-
-    input_data = {
-        "operation": "hmmsearch",
-        "hmm_path": str(inputs.hmm),
-        "sequences": inputs.sequences,
-        "num_threads": config.num_threads,
-        "evalue_threshold": config.evalue_threshold,
-        "score_threshold": config.score_threshold,
-        "domain_evalue_threshold": config.domain_evalue_threshold,
-        "domain_score_threshold": config.domain_score_threshold,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "pyhmmer",
+        {
+            "operation": "hmmsearch",
+            "hmm_path": str(inputs.hmm),
+            "sequences": inputs.sequences,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
+        },
+        instance=instance,
     )
 
     # Convert results to DataFrames

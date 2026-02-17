@@ -70,7 +70,7 @@ PyHmmscanConfig = PyHmmerConfig
     description="Search sequences against HMM database using PyHMMER",
 )
 @tool_cache("pyhmmer-hmmscan")
-def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig) -> PyHmmscanOutput:
+def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instance=None) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
     This function implements the hmmscan algorithm, searching protein sequences
@@ -117,25 +117,21 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig) -> PyHm
         ...         ]['query_name'].tolist()
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="pyhmmer")
-
-    input_data = {
-        "operation": "hmmscan",
-        "hmm_db_path": str(inputs.hmm_db),
-        "sequences": inputs.sequences,
-        "num_threads": config.num_threads,
-        "evalue_threshold": config.evalue_threshold,
-        "score_threshold": config.score_threshold,
-        "domain_evalue_threshold": config.domain_evalue_threshold,
-        "domain_score_threshold": config.domain_score_threshold,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "pyhmmer",
+        {
+            "operation": "hmmscan",
+            "hmm_db_path": str(inputs.hmm_db),
+            "sequences": inputs.sequences,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
+        },
+        instance=instance,
     )
 
     # Convert results to DataFrames

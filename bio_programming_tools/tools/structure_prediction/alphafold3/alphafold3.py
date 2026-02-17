@@ -200,7 +200,8 @@ class AlphaFold3Config(StructurePredictionConfig):
     tool_name="alphafold3-prediction",
 )
 def run_alphafold3(
-    inputs: AlphaFold3Input, config: AlphaFold3Config
+    inputs: AlphaFold3Input, config: AlphaFold3Config,
+    instance=None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
 

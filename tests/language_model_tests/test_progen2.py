@@ -2,7 +2,7 @@
 test_progen2.py
 
 Tests the ProGen2 implementation via the tool layer (run_progen2_sample / run_progen2_score).
-All tests use the EnvManager-based tool functions rather than direct ProGen2Model instantiation.
+All tests use the ToolInstance-based tool functions rather than direct ProGen2Model instantiation.
 """
 
 import numpy as np
@@ -17,12 +17,18 @@ from bio_programming_tools.tools.causal_models.progen2 import (
     run_progen2_score,
 )
 from bio_programming_tools.utils import PROTEIN_AMINO_ACIDS
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("progen2")
+
 
 # ============================================================================
 # Sampling Tests
 # ============================================================================
 
+@pytest.mark.run_all_venvs
 @pytest.mark.uses_gpu
 def test_progen2_sample_basic():
     """Test basic ProGen2 sampling via run_progen2_sample."""

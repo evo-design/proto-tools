@@ -1,5 +1,5 @@
 """
-CRISPRtracrRNA standalone runner for EnvManager venv execution.
+CRISPRtracrRNA standalone runner for ToolInstance venv execution.
 
 Wraps the CRISPRtracrRNA.py tool from the Backofen Lab to predict
 tracrRNA sequences from nucleotide CRISPR loci.
@@ -8,7 +8,7 @@ Supports parallel execution: sequences are split into batches, each
 running in its own temp directory with a symlinked CWD to avoid file
 contention from CRISPRtracrRNA's intermediate files.
 
-Usage (called by EnvManager, not directly):
+Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
 
@@ -424,7 +424,7 @@ def run_crispr_tracr(input_data: dict) -> dict:
 
 
 # =============================================================================
-# Entry point (called by EnvManager.call_standalone_script_in_venv)
+# Entry point (called by ToolInstance)
 # =============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:

@@ -17,7 +17,6 @@ import string
 import tempfile
 import warnings
 from logging import getLogger
-from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -144,11 +143,6 @@ class Boltz2Config(StructurePredictionConfig):
             prediction. Automatically set to the minimum of available CPU cores or 4.
             Must be at least 1. Default: ``min(cpu_count, 4)``.
 
-        devices (str): Comma-separated list of GPU device IDs for multi-GPU execution
-            (e.g., ``"0"`` for single GPU or ``"0,1"`` for two GPUs). Note that Boltz2
-            uses ``devices`` instead of the inherited ``device`` parameter.
-            Default: ``"0"``.
-
         verbose (bool): Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
@@ -195,14 +189,6 @@ class Boltz2Config(StructurePredictionConfig):
         description="Number of workers for prediction",
         hidden=True,
     )
-    # TODO: Device management should be managed elsewhere eventually
-    devices: str = ConfigField(
-        title="Devices",
-        default="0",
-        description="Comma-separated list of device IDs (e.g., '0' or '0,1')",
-        hidden=True,
-    )
-
     @model_validator(mode="after")
     def sync_nested_config(self):
         """Sync verbose flag with nested colabfold_search_config."""
@@ -240,7 +226,7 @@ class Boltz2Config(StructurePredictionConfig):
     output_iterable_field="structures",
     tool_name="boltz2-prediction",
 )
-def run_boltz2(inputs: Boltz2Input, config: Boltz2Config) -> Boltz2Output:
+def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance=None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.
 
     Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures
@@ -346,7 +332,8 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config) -> Boltz2Output:
         yaml_content = inputs.to_yaml(i, single_sequence_mode=single_sequence_mode)
         results.append(
             run_boltz2_on_complex(
-                yaml_content=yaml_content, config=config, sp_complex=inputs.complexes[i]
+                yaml_content=yaml_content, config=config, sp_complex=inputs.complexes[i],
+                instance=instance,
             )
         )
     return Boltz2Output(structures=results)
@@ -506,6 +493,7 @@ def run_boltz2_on_complex(
     yaml_content: str,
     config: Boltz2Config,
     sp_complex,
+    instance=None,
 ) -> Structure:
     """
     Run Boltz2 structure prediction on a single complex. This function is wrapped
@@ -556,9 +544,7 @@ def run_boltz2_on_complex(
         if config.verbose:
             logger.info("Using local GPU for Boltz2 structure prediction...")
 
-        from bio_programming_tools.utils.env_manager import EnvManager
-
-        venv_manager = EnvManager(model_name="boltz2")
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = os.path.join(temp_dir, "boltz2_output")
@@ -626,13 +612,14 @@ def run_boltz2_on_complex(
                 "sampling_steps": config.sampling_steps,
                 "diffusion_samples": config.diffusion_samples,
                 "num_workers": config.num_workers,
+                "device": config.device,
             }
 
             # Call the inference script
-            output_data = venv_manager.call_standalone_script_in_venv(
-                script_path=Path(__file__).parent / "standalone" / "inference.py",
-                input_dict=input_data,
-                device=config.devices,
+            output_data = ToolInstance.dispatch(
+                "boltz2",
+                input_data,
+                instance=instance,
                 verbose=config.verbose,
             )
 

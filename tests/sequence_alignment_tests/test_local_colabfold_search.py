@@ -247,6 +247,7 @@ def setup_mini_database():
 class TestColabfoldSearchExecutionDebugDatabase:
     """End-to-end tests using real run_colabfold_search command with test database."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.skip_ci
     def test_finding_self_in_database(self):
         """Test end-to-end search with a single sequence against test database."""

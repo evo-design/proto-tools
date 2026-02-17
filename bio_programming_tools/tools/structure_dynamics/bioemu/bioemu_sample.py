@@ -12,7 +12,7 @@ from bio_programming_tools.entities.structures import (
     Structure,
     StructureEnsemble,
 )
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
@@ -162,6 +162,7 @@ class BioEmuConfig(StructurePredictionConfig):
         default="bioemu-v1.1",
         description="BioEmu model variant to use",
         advanced=True,
+        reload_on_change=True,
     )
     filter_samples: bool = ConfigField(
         title="Filter Samples",
@@ -196,7 +197,7 @@ class BioEmuConfig(StructurePredictionConfig):
     description="Protein conformational ensemble sampling using BioEmu",
     uses_gpu=True,
 )
-def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig) -> BioEmuOutput:
+def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance=None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
     if use_cloud_gpu():
         import _gpu_runtime
@@ -219,11 +220,9 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig) -> BioEmuOutput:
     else:
         logger.debug("Using local venv for BioEmu conformational sampling")
 
-        venv_manager = EnvManager("bioemu")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        output = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        output = ToolInstance.dispatch(
+            "bioemu",
+            {
                 "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
                 "num_samples": config.num_samples,
                 "model_name": config.model_name,
@@ -233,8 +232,9 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig) -> BioEmuOutput:
                 "output_dir": config.output_dir,
                 "verbose": config.verbose,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
         raw_results = output["results"]
 

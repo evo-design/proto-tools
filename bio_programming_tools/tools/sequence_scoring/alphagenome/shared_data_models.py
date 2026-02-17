@@ -233,6 +233,7 @@ class AlphaGenomePredictConfig(BaseConfig):
         default=DEFAULT_ALPHAGENOME_MODEL_VERSION,
         description="AlphaGenome Hugging Face model version",
         advanced=True,
+        reload_on_change=True,
     )
     requested_outputs: List[OutputTypeName] = ConfigField(
         title="Requested Outputs",

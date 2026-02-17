@@ -180,7 +180,8 @@ class MmseqsClusteringConfig(BaseConfig):
     description="Perform sequence clustering using MMseqs2 to reduce redundancy",
 )
 def run_mmseqs_clustering(
-    inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig
+    inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig,
+    instance=None,
 ) -> MmseqsClusteringOutput:
     """Perform sequence clustering using MMseqs2.
 
@@ -208,25 +209,21 @@ def run_mmseqs_clustering(
         >>> for i, r in enumerate(result):
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequences = inputs.input_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
 
-    venv_manager = EnvManager(model_name="mmseqs")
-
-    input_data = {
-        "operation": "clustering",
-        "sequences": sequences,
-        "sequence_ids": sequence_ids,
-        "min_seq_id": config.min_seq_id,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "mmseqs",
+        {
+            "operation": "clustering",
+            "sequences": sequences,
+            "sequence_ids": sequence_ids,
+            "min_seq_id": config.min_seq_id,
+        },
+        instance=instance,
     )
 
     # Parse cluster assignments

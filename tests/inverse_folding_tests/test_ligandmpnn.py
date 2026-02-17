@@ -14,12 +14,16 @@ from bio_programming_tools.tools.inverse_folding import (
     InverseFoldingStructureInput,
     run_ligandmpnn_sample,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
 DEFAULT_CHECKPOINT = (
     Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
 )
+
+
+_persistent_tool = make_persistent_fixture("ligandmpnn")
 
 
 @pytest.fixture(scope="module")
@@ -30,6 +34,7 @@ def cif_structure():
 class TestLigandMPNNSample:
     """Tests for LigandMPNN sampling."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.uses_gpu
     def test_ligandmpnn_sample_simple(self, cif_structure: Structure):
         """Test basic LigandMPNN sampling with a single structure."""

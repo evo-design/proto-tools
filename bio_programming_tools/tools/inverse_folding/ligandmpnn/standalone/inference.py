@@ -183,67 +183,84 @@ class LigandMPNNModel:
             torch.cuda.empty_cache()
 
 
-# Standalone script entry point for venv execution
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+def _serialize_output(value: Any) -> Any:
+    """Recursively serialize tensors and arrays to JSON-safe types."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
-        input_data = json.load(f)
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: LigandMPNNModel | None = None
 
-    # Get operation type
-    operation = input_data.get("operation", "sample")
 
-    # Handle pdb_contents -> temp file for standalone execution
-    pdb_contents = input_data.get("pdb_contents")
-    pdb_structure = input_data.get("pdb_structure")
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = LigandMPNNModel(
+            checkpoint_path=input_dict.get("checkpoint_path"),
+        )
+
+    # Handle pdb_contents -> temp file
+    pdb_contents = input_dict.get("pdb_contents")
+    pdb_structure = input_dict.get("pdb_structure")
 
     with tempfile.TemporaryDirectory() as temp_dir:
         if pdb_contents and not pdb_structure:
-            # Write contents to temp file
             pdb_path = Path(temp_dir) / "input.pdb"
             pdb_path.write_text(pdb_contents)
             pdb_structure = str(pdb_path)
 
-        # Create model
-        model = LigandMPNNModel()
-
+        operation = input_dict.get("operation", "sample")
         if operation == "sample":
-            result = model.sample(
+            return _model.sample(
                 pdb_structure=pdb_structure,
-                chain_ids=input_data.get("chain_ids", []),
-                batch_size=input_data.get("batch_size", 1),
-                temperature=input_data.get("temperature", DEFAULT_TEMPERATURE),
-                fixed_positions=input_data.get("fixed_positions"),
-                excluded_amino_acids=input_data.get("excluded_amino_acids"),
-                seed=input_data.get("seed", DEFAULT_SEED),
-                device=input_data.get("device", "cuda"),
-                verbose=True,
+                chain_ids=input_dict.get("chain_ids", []),
+                batch_size=input_dict.get("batch_size", 1),
+                temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
+                fixed_positions=input_dict.get("fixed_positions"),
+                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
+                seed=input_dict.get("seed", DEFAULT_SEED),
+                device=input_dict.get("device", "cuda"),
+                verbose=input_dict.get("verbose", False),
             )
         elif operation == "score":
-            result = model.score(
+            return _model.score(
                 pdb_structure=pdb_structure,
-                chain_ids=input_data.get("chain_ids", []),
-                sequence=input_data.get("sequence"),
-                fixed_positions=input_data.get("fixed_positions"),
-                seed=input_data.get("seed", DEFAULT_SEED),
-                device=input_data.get("device", "cuda"),
-                verbose=True,
+                chain_ids=input_dict.get("chain_ids", []),
+                sequence=input_dict.get("sequence"),
+                fixed_positions=input_dict.get("fixed_positions"),
+                seed=input_dict.get("seed", DEFAULT_SEED),
+                device=input_dict.get("device", "cuda"),
+                verbose=input_dict.get("verbose", False),
             )
-
-            # Convert logits to list for JSON serialization
-            logits = result["logits"]
-            if hasattr(logits, "tolist"):
-                logits = logits.tolist()
-            result = {
-                "logits": logits,
-                "metrics": result["metrics"],
-            }
         else:
-            raise ValueError(f"Unknown operation: {operation}. Must be 'sample' or 'score'.")
+            raise ValueError(f"Unknown operation: {operation}")
 
-    with open(output_json_path, "w") as f:
-        json.dump(result, f)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
+        json.dump(_serialize_output(result), f)

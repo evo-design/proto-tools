@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List
 
 import numpy as np
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -62,6 +61,7 @@ class ProteinMPNNSequences(DesignedSequences):
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
     config: ProteinMPNNSampleConfig,
+    instance=None,
 ) -> ProteinMPNNSampleOutput:
     """Sample protein sequences using ProteinMPNN.
 
@@ -108,9 +108,6 @@ def run_proteinmpnn_sample(
         # Local venv execution
         logger.debug("Using local venv for ProteinMPNN sampling")
 
-        venv_manager = EnvManager("proteinmpnn")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-
         for inp in tqdm(
             inputs.inputs,
             desc="ProteinMPNN sampling",
@@ -128,10 +125,10 @@ def run_proteinmpnn_sample(
                 "seed": config.seed,
                 "device": config.device,
             }
-            result = venv_manager.call_standalone_script_in_venv(
-                script_path=script_path,
-                input_dict=input_dict,
-                device=config.device,
+            result = ToolInstance.dispatch(
+                "proteinmpnn",
+                input_dict,
+                instance=instance,
                 verbose=config.verbose,
             )
             designed_sequences.append(

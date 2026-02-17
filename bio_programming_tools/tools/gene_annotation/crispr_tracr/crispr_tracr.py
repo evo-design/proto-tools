@@ -170,7 +170,7 @@ class CrisprTracrConfig(BaseConfig):
     description="Predict tracrRNA sequences from nucleotide CRISPR loci",
 )
 def run_crispr_tracr(
-    inputs: CrisprTracrInput, config: CrisprTracrConfig
+    inputs: CrisprTracrInput, config: CrisprTracrConfig, instance=None,
 ) -> CrisprTracrOutput:
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
 
@@ -192,11 +192,9 @@ def run_crispr_tracr(
         >>> result = run_crispr_tracr(inputs, config)
         >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
-
-    venv_manager = EnvManager(model_name="crispr_tracr")
 
     num_workers = config.num_workers
     if num_workers is None:
@@ -213,11 +211,8 @@ def run_crispr_tracr(
         },
     }
 
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
-        verbose=False,
+    output_data = ToolInstance.dispatch(
+        "crispr_tracr", input_data, instance=instance,
     )
 
     predictions = [TracrPrediction(**p) for p in output_data["predictions"]]

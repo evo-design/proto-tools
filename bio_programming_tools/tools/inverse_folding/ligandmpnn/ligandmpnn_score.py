@@ -46,8 +46,6 @@ class LigandMPNNScoringConfig(BaseConfig):
 
         device: Device to run the model on.
 
-        verbose: Whether to print status messages during execution.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -73,12 +71,6 @@ class LigandMPNNScoringConfig(BaseConfig):
         hidden=True,
     )
 
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,

@@ -144,7 +144,7 @@ class MafftConfig(BaseConfig):
     output=MafftOutput,
     description="Multiple sequence alignment (MSA) using MAFFT (Multiple Alignment using Fast Fourier Transform)",
 )
-def run_mafft_align(inputs: MafftInput, config: MafftConfig) -> MafftOutput:
+def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance=None) -> MafftOutput:
     """Perform multiple sequence alignment using MAFFT.
 
     Aligns input sequences using MAFFT with the specified method and
@@ -172,14 +172,11 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig) -> MafftOutput:
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.sequence_ids[i]}: {seq}")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
-
-    # Create EnvManager for MAFFT standalone environment
-    venv_manager = EnvManager(model_name="mafft")
 
     # Prepare input data for standalone script
     input_data = {
@@ -190,11 +187,11 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig) -> MafftOutput:
         "threads": config.threads,
     }
 
-    # Call standalone script in isolated venv
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "mafft",
+        input_data,
+        instance=instance,
+        verbose=config.verbose,
     )
 
     # Extract results from output

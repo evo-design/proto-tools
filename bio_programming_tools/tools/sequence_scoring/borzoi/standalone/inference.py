@@ -134,54 +134,82 @@ class BorzoiModel:
         return prediction
 
 
-# Standalone script entry point for venv execution
+def _serialize_output(value):
+    """Recursively serialize tensors and arrays to JSON-safe types."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: BorzoiModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        species = input_dict.get("species", "human")
+        replicate = input_dict.get("replicate", "0")
+        use_flash_attn = input_dict.get("use_flash_attn", True)
+
+        # Auto-detect flash-attn availability
+        if use_flash_attn:
+            try:
+                import flash_attn  # noqa: F401
+            except ImportError:
+                logger.warning(
+                    "flash-attn not installed — falling back to "
+                    "use_flash_attn=False (standard borzoi model)"
+                )
+                use_flash_attn = False
+
+        _model = BorzoiModel(
+            species=species,
+            replicate=replicate,
+            use_flash_attn=use_flash_attn,
+        )
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        prediction = _model(
+            sequence=input_dict["sequence"],
+            output_tracks=input_dict["output_tracks"],
+            avg_output_tracks=input_dict.get("avg_output_tracks", True),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+        return {
+            "prediction": prediction,
+            "applied_species": _model.species,
+            "applied_replicate": _model.replicate,
+        }
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Extract initialization parameters
-    species = input_data.get("species", "human")
-    replicate = input_data.get("replicate", "0")
-    use_flash_attn = input_data.get("use_flash_attn", True)
+    result = dispatch(input_data)
 
-    # Auto-detect flash-attn availability
-    if use_flash_attn:
-        try:
-            import flash_attn  # noqa: F401
-        except ImportError:
-            logger.warning(
-                "flash-attn not installed — falling back to use_flash_attn=False (standard borzoi model)"
-            )
-            use_flash_attn = False
-
-    # Create model
-    model = BorzoiModel(
-        species=species,
-        replicate=replicate,
-        use_flash_attn=use_flash_attn,
-    )
-
-    # Run inference
-    prediction = model(
-        sequence=input_data["sequence"],
-        output_tracks=input_data["output_tracks"],
-        avg_output_tracks=input_data.get("avg_output_tracks", True),
-        device=input_data.get("device", "cuda"),
-        verbose=input_data.get("verbose", False),
-    )
-
-    # Prepare output
-    output_data = {
-        "prediction": prediction.tolist() if hasattr(prediction, "tolist") else prediction,
-        "applied_species": species,
-        "applied_replicate": replicate,
-    }
-
-    with open(output_json_path, "w") as f:
-        json.dump(output_data, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(_serialize_output(result), f)

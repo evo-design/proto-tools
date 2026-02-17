@@ -1,13 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-ARCH=$(uname -m)
-if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: MAFFT is not supported on aarch64."
-    echo "The mafft pip package ships x86_64 ELF binaries in libexec/ which cannot run on aarch64."
-    exit 1
-fi
-
 echo "Setting up MAFFT standalone environment..."
 
 echo "Installing uv package manager..."

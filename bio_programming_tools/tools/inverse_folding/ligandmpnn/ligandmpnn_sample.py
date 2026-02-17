@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any, Dict, List
 
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -61,6 +60,7 @@ class LigandMPNNSequences(DesignedSequences):
 def run_ligandmpnn_sample(
     inputs: LigandMPNNSampleInput,
     config: LigandMPNNSampleConfig,
+    instance=None,
 ) -> LigandMPNNSampleOutput:
     """Sample protein sequences using LigandMPNN.
 
@@ -103,9 +103,6 @@ def run_ligandmpnn_sample(
             )
     else:
         # Local venv execution
-        venv_manager = EnvManager("ligandmpnn")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-
         for inp in tqdm(
             inputs.inputs,
             desc="LigandMPNN sampling",
@@ -122,10 +119,10 @@ def run_ligandmpnn_sample(
                 "seed": config.seed,
                 "device": config.device,
             }
-            result = venv_manager.call_standalone_script_in_venv(
-                script_path=script_path,
-                input_dict=input_dict,
-                device=config.device,
+            result = ToolInstance.dispatch(
+                "ligandmpnn",
+                input_dict,
+                instance=instance,
                 verbose=config.verbose,
             )
             designed_sequences.append(

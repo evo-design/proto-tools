@@ -152,8 +152,6 @@ class ViennaRNAConfig(BaseConfig):
         no_lonely_pairs (bool): Disallow lonely base pairs (helices of length 1).
             This can reduce artifacts in structure prediction. Default: False.
 
-        verbose (bool): Whether to print status messages during execution.
-            Default: False.
     """
     temperature: float = ConfigField(
         title="Temperature",
@@ -172,11 +170,6 @@ class ViennaRNAConfig(BaseConfig):
         description="Disallow lonely base pairs (helices of length 1)",
         advanced=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Print status messages",
-    )
 
 # ============================================================================
 # Tool Implementation
@@ -192,6 +185,7 @@ class ViennaRNAConfig(BaseConfig):
 def run_viennarna(
     inputs: ViennaRNAInput,
     config: ViennaRNAConfig,
+    instance=None,
 ) -> ViennaRNAOutput:
     """
     Predict RNA secondary structures using ViennaRNA's MFE algorithm.
@@ -236,9 +230,7 @@ def run_viennarna(
     """
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
 
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="viennarna")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Prepare input data for inference script
     input_data = {
@@ -250,10 +242,10 @@ def run_viennarna(
     }
 
     # Call the inference script in the isolated venv
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "inference.py",
-        input_dict=input_data,
-        device="cpu",  # ViennaRNA doesn't use GPU
+    output_data = ToolInstance.dispatch(
+        "viennarna",
+        input_data,
+        instance=instance,
         verbose=config.verbose,
     )
 
