@@ -1,5 +1,5 @@
 from .evo1_sample import (
-    EVO1_MODEL_NAMES,
+    EVO1_MODEL_CHECKPOINTS,
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
@@ -21,5 +21,5 @@ __all__ = [
     "Evo1ScoringConfig",
     "Evo1ScoringOutput",
     "run_evo1_score",
-    "EVO1_MODEL_NAMES",
+    "EVO1_MODEL_CHECKPOINTS",
 ]

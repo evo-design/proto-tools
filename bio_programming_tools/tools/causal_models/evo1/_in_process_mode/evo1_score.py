@@ -25,7 +25,7 @@ from .evo1_cache import get_cached_evo1_model
 
 logger = logging.getLogger(__name__)
 
-EVO1_MODEL_NAMES = Literal[
+EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1-8k-base",
     "evo-1-131k-base",
     "evo-1-8k-crispr",
@@ -79,7 +79,7 @@ class Evo1ScoringConfig(BaseConfig):
             output. Default: ``False``.
     """
 
-    model_name: EVO1_MODEL_NAMES = ConfigField(
+    model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
         description="Evo1 model checkpoint to use",

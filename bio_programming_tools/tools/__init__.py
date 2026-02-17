@@ -2,7 +2,7 @@
 
 # Causal model tools
 from .causal_models import (  # Evo1; Evo2; ProGen2
-    EVO1_MODEL_NAMES,
+    EVO1_MODEL_CHECKPOINTS,
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
@@ -290,7 +290,7 @@ __all__ = [
     "Evo1ScoringInput",
     "Evo1ScoringOutput",
     "run_evo1_score",
-    "EVO1_MODEL_NAMES",
+    "EVO1_MODEL_CHECKPOINTS",
     # Evo2
     "Evo2SampleConfig",
     "Evo2SampleInput",

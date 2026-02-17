@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-EVO1_MODEL_NAMES = Literal[
+EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1-8k-base",
     "evo-1-131k-base",
     "evo-1-8k-crispr",
@@ -40,7 +40,7 @@ class Evo1Model:
 
     def __init__(
         self,
-        model_name: EVO1_MODEL_NAMES = "evo-1-8k-base",
+        model_name: EVO1_MODEL_CHECKPOINTS = "evo-1-8k-base",
         device: str = "cuda",
     ):
         self.model_name = model_name
