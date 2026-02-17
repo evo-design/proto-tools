@@ -35,7 +35,7 @@ Parallelize exploration aggressively — launch multiple sub-agents to search di
 | Tool citations | `bio_programming_tools/tools/{category}/{tool}/cite.bib` | `tests/tool_infra_tests/test_citations.py` |
 | Tool registry | `bio_programming_tools/tools/tool_registry.py` | `tests/tool_infra_tests/` |
 | Caching | `bio_programming_tools/utils/tool_cache.py` | `tests/tool_infra_tests/` |
-| EnvManager | `bio_programming_tools/utils/env_manager.py` | `tests/tool_infra_tests/` |
+| ToolInstance | `bio_programming_tools/utils/tool_instance.py` | `tests/tool_infra_tests/` |
 | Entities (Structure, Ligands) | `bio_programming_tools/entities/` | `tests/structure_tests/`, `tests/ligand_tests/` |
 
 ### Test File Locations
