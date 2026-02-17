@@ -47,6 +47,7 @@ def test_splice_transformer_cpu() -> None:
     _test_splice_transformer(device="cpu")
 
 
+@pytest.mark.run_all_venvs
 @pytest.mark.uses_gpu
 def test_splice_transformer_gpu():
     """Test SpliceTransformer on gpu."""

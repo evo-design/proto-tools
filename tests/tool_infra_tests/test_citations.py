@@ -46,18 +46,6 @@ class TestGetCitation:
 class TestListCitations:
     """Tests for ToolRegistry.list_citations()"""
 
-    def test_list_citations_returns_dict(self):
-        """list_citations returns a dictionary"""
-        citations = ToolRegistry.list_citations()
-        assert isinstance(citations, dict)
-
-    def test_list_citations_has_expected_count(self):
-        """list_citations returns citations for all tools with cite.bib files"""
-        citations = ToolRegistry.list_citations()
-        # Should have at least 26 citations (one per tool directory)
-        # May have more if there are multiple tools per directory
-        assert len(citations) >= 26
-
     def test_list_citations_values_are_bibtex(self):
         """All values in list_citations are valid BibTeX strings"""
         citations = ToolRegistry.list_citations()

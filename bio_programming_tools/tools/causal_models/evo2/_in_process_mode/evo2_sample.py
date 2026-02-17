@@ -210,10 +210,6 @@ class Evo2SampleConfig(BaseConfig):
             real-time as they are generated. Useful for debugging and monitoring
             progress. Default: ``True``.
 
-        verbose (bool): Whether to print detailed status messages during generation,
-            including model loading, memory usage, and timing information.
-            Default: ``False``.
-
         stop_at_eos (bool): Whether to stop generation when an end-of-sequence
             (EOS) token is encountered. If ``True``, generation terminates early
             for sequences that naturally end. If ``False``, always generates exactly
@@ -311,12 +307,6 @@ class Evo2SampleConfig(BaseConfig):
         description="Whether to print generation tokens",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print verbose output",
-        hidden=True,
-    )
     stop_at_eos: bool = ConfigField(
         title="Stop at EOS",
         default=True,
@@ -371,7 +361,8 @@ class Evo2SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo2_sample(
-    inputs: Evo2SampleInput, config: Evo2SampleConfig
+    inputs: Evo2SampleInput, config: Evo2SampleConfig,
+    instance=None,
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
 

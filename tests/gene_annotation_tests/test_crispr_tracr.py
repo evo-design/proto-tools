@@ -23,12 +23,15 @@ from bio_programming_tools.tools.gene_annotation.crispr_tracr import (
     TracrPrediction,
     run_crispr_tracr,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
 )
 
 # Checked-in positive-control FASTA files.
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "crispr_tracr"
+
+_persistent_tool = make_persistent_fixture("crispr_tracr", gpu=False)
 
 
 # ============================================================================
@@ -300,6 +303,7 @@ class TestStandaloneRunnerConfig:
 class TestCrisprTracrIntegration:
     """Integration tests that require the CRISPRtracrRNA tool."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.skip_ci
     def test_run_crispr_tracr(self):
         """Run CRISPRtracrRNA on a test sequence."""

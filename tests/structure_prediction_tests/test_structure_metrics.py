@@ -19,9 +19,12 @@ from bio_programming_tools.tools.structure_prediction.structure_metrics import (
     StructureMetricsOutput,
     run_structure_metrics,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
 )
+
+_persistent_tool = make_persistent_fixture("structure_metrics", gpu=False)
 
 
 # ============================================================================
@@ -145,6 +148,7 @@ class TestStructureMetricsExport:
 class TestStructureMetricsIntegration:
     """Integration tests that require biotite and real PDB files."""
 
+    @pytest.mark.run_all_venvs
     @pytest.mark.skip_ci
     def test_run_structure_metrics_on_pdb(self, tmp_path):
         """Run structure metrics on a minimal PDB file."""

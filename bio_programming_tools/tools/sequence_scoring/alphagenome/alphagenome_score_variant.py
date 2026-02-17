@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Literal, Optional
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
@@ -46,6 +45,7 @@ class AlphaGenomeScoreVariantConfig(BaseConfig):
         default=DEFAULT_ALPHAGENOME_MODEL_VERSION,
         description="AlphaGenome Hugging Face model version",
         advanced=True,
+        reload_on_change=True,
     )
     variant_scorers: Optional[List[VariantScorerName]] = ConfigField(
         title="Variant Scorers",
@@ -81,13 +81,12 @@ class AlphaGenomeScoreVariantConfig(BaseConfig):
 def run_alphagenome_score_variant(
     inputs: AlphaGenomeScoreVariantInput,
     config: AlphaGenomeScoreVariantConfig,
+    instance=None,
 ) -> AlphaGenomeScoreVariantOutput:
     """Score variant effects using AlphaGenome variant scorers."""
-    venv_manager = EnvManager("alphagenome")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict={
+    result = ToolInstance.dispatch(
+        "alphagenome",
+        {
             "operation": "score_variant",
             "chromosome": inputs.chromosome,
             "interval_start": inputs.interval_start,
@@ -98,8 +97,10 @@ def run_alphagenome_score_variant(
             "variant_scorers": config.variant_scorers,
             "organism": config.organism,
             "model_version": config.model_version,
+            "device": config.device,
         },
-        device=config.device,
+        instance=instance,
+        reload_on=type(config).reload_fields(),
     )
 
     return AlphaGenomeScoreVariantOutput(scores=result)

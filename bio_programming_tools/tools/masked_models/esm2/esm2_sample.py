@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
@@ -139,6 +139,7 @@ class ESM2SampleConfig(BaseConfig):
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
         description="Name of the ESM2 model variant to use",
+        reload_on_change=True,
     )
     temperature: float = ConfigField(
         title="Sampling Temperature",
@@ -171,12 +172,6 @@ class ESM2SampleConfig(BaseConfig):
         description="Device to run on",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -198,7 +193,8 @@ class ESM2SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_esm2_sample(
-    inputs: ESM2SampleInput, config: ESM2SampleConfig
+    inputs: ESM2SampleInput, config: ESM2SampleConfig,
+    instance=None,
 ) -> ESM2SampleOutput:
     """Sample or mutate protein sequences using ESM2 language model.
 
@@ -272,12 +268,10 @@ def run_esm2_sample(
             return_logits=config.return_logits,
         )
     else:
-        logger.debug(f"Using local venv for ESM2 sampling: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
+        result = ToolInstance.dispatch(
+            "esm2",
+            {
                 "operation": "sample",
                 "sequences": inputs.sequences,
                 "temperature": config.temperature,
@@ -289,8 +283,9 @@ def run_esm2_sample(
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ESM2SampleOutput(

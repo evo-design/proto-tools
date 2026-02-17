@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
@@ -136,6 +136,7 @@ class ESM3SampleConfig(BaseConfig):
         title="Model Checkpoint",
         default="esm3_sm_open_v1",
         description="ESM3 model checkpoint to use",
+        reload_on_change=True,
     )
     temperature: float = ConfigField(
         title="Sampling Temperature",
@@ -168,12 +169,6 @@ class ESM3SampleConfig(BaseConfig):
         description="Device to run on",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -195,7 +190,8 @@ class ESM3SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_esm3_sample(
-    inputs: ESM3SampleInput, config: ESM3SampleConfig
+    inputs: ESM3SampleInput, config: ESM3SampleConfig,
+    instance=None,
 ) -> ESM3SampleOutput:
     """Sample or mutate protein sequences using ESM3 language model.
 
@@ -273,13 +269,11 @@ def run_esm3_sample(
             return_logits=config.return_logits,
         )
     else:
-        # Local venv execution
-        logger.debug(f"Using local venv for ESM3 sampling: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm3")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        # Local execution
+        logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
+        result = ToolInstance.dispatch(
+            "esm3",
+            {
                 "operation": "sample",
                 "sequences": inputs.sequences,
                 "temperature": config.temperature,
@@ -291,8 +285,9 @@ def run_esm3_sample(
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ESM3SampleOutput(

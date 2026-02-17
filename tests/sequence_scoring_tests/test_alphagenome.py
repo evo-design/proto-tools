@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pytest
 
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+
+_persistent_tool = make_persistent_fixture("alphagenome")
+
 
 # Smallest supported context length (fastest inference for predictions).
 _SHORT = 2_048
@@ -26,6 +31,7 @@ class TestAlphaGenome:
 
     # --- Interval Prediction ---
 
+    @pytest.mark.run_all_venvs
     def test_interval_prediction(self):
         """Test interval prediction with multiple output types."""
         from bio_programming_tools.tools.sequence_scoring.alphagenome import (

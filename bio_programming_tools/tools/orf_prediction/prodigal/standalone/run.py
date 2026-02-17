@@ -1,10 +1,10 @@
 """
-Prodigal standalone runner for EnvManager venv execution.
+Prodigal standalone runner for ToolInstance venv execution.
 
 Handles prokaryotic gene prediction via pyrodigal Python bindings.
-Communicates via JSON input/output files (EnvManager pattern).
+Communicates via JSON input/output files (ToolInstance pattern).
 
-Usage (called by EnvManager, not directly):
+Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
 
@@ -136,7 +136,7 @@ def run_prodigal(input_data: dict) -> dict:
 
 
 # =============================================================================
-# Entry point (called by EnvManager.call_standalone_script_in_venv)
+# Entry point (called by ToolInstance)
 # =============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:

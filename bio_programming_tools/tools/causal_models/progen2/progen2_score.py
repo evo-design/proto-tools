@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
@@ -11,7 +10,7 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
@@ -79,9 +78,6 @@ class ProGen2ScoringConfig(BaseConfig):
             If None, processes all sequences at once. Lower values reduce memory
             usage but may be slower. Default: ``None``.
 
-        verbose (bool): Whether to print status messages during scoring.
-            Default: ``False``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -96,12 +92,14 @@ class ProGen2ScoringConfig(BaseConfig):
         title="Model Checkpoint",
         default="progen2-large",
         description="ProGen2 model checkpoint to use",
+        reload_on_change=True,
     )
     local_path: Optional[str] = ConfigField(
         title="Local Model Path",
         default=None,
         description="Path to local model weights",
         hidden=True,
+        reload_on_change=True,
     )
     device: str = ConfigField(
         title="Device",
@@ -115,12 +113,6 @@ class ProGen2ScoringConfig(BaseConfig):
         ge=1,
         description="Max number of samples on the GPU at once",
         advanced=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -143,7 +135,8 @@ class ProGen2ScoringConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_progen2_score(
-    inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig
+    inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig,
+    instance=None,
 ) -> ProGen2ScoringOutput:
     """Score protein sequences using ProGen2 autoregressive language model.
 
@@ -203,11 +196,9 @@ def run_progen2_score(
         )
     else:
         logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")
-        venv_manager = EnvManager("progen2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        result = ToolInstance.dispatch(
+            "progen2",
+            {
                 "operation": "score",
                 "sequences": inputs.sequences,
                 "model_checkpoint": config.model_checkpoint,
@@ -217,8 +208,9 @@ def run_progen2_score(
                 "batch_size": config.batch_size,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     logits = result.get("logits")

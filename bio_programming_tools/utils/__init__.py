@@ -5,7 +5,7 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 """
 from .base_config import BaseConfig, ConfigField
 from .device import determine_visible_devices, number_of_available_gpus, use_modal_gpu
-from .env_manager import EnvManager
+from .tool_instance import ToolInstance
 from .helpers import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
@@ -57,8 +57,8 @@ __all__ = [
     "clear_tool_cache",
     "get_cache_info",
     "ToolCache",
-    # Env management
-    "EnvManager",
+    # Tool instance management
+    "ToolInstance",
     # Device
     "use_modal_gpu",
     "determine_visible_devices",

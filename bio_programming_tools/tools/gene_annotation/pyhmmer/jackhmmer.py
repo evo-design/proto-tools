@@ -1,7 +1,6 @@
 """PyHMMER jackhmmer tool — iterative protein sequence search."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List
 
 from pydantic import Field, field_validator
@@ -90,7 +89,8 @@ PyJackhmmerOutput = PyHmmerOutput
 )
 @tool_cache("pyhmmer-jackhmmer")
 def run_pyhmmer_jackhmmer(
-    inputs: PyJackhmmerInput, config: PyJackhmmerConfig
+    inputs: PyJackhmmerInput, config: PyJackhmmerConfig,
+    instance=None,
 ) -> PyJackhmmerOutput:
     """Iteratively search protein sequences against protein database using PyHMMER.
 
@@ -103,26 +103,22 @@ def run_pyhmmer_jackhmmer(
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="pyhmmer")
-
-    input_data = {
-        "operation": "jackhmmer",
-        "sequences": inputs.sequences,
-        "target_sequences": inputs.target_sequences,
-        "max_iterations": config.max_iterations,
-        "num_threads": config.num_threads,
-        "evalue_threshold": config.evalue_threshold,
-        "score_threshold": config.score_threshold,
-        "domain_evalue_threshold": config.domain_evalue_threshold,
-        "domain_score_threshold": config.domain_score_threshold,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "pyhmmer",
+        {
+            "operation": "jackhmmer",
+            "sequences": inputs.sequences,
+            "target_sequences": inputs.target_sequences,
+            "max_iterations": config.max_iterations,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
+        },
+        instance=instance,
     )
 
     sequence_hits_df, domain_hits_df = _build_dataframes(

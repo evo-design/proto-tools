@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import Field
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
@@ -137,6 +137,7 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
         title="ESM3 Model Checkpoint",
         default="esm3_sm_open_v1",
         description="ESM3 model checkpoint to use",
+        reload_on_change=True,
     )
 
 
@@ -153,7 +154,8 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
     uses_gpu=True,
 )
 def run_esm3_structure_prediction(
-    inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig
+    inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig,
+    instance=None,
 ) -> ESM3StructurePredictionOutput:
     """Predict protein 3D structures using ESM3 generative model.
 
@@ -220,13 +222,11 @@ def run_esm3_structure_prediction(
             verbose=config.verbose,
         )
     else:
-        # Local venv execution
-        logger.debug(f"Using local venv for ESM3 structure prediction: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm3")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        structures = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        # Local execution
+        logger.debug(f"Using local for ESM3 structure prediction: {config.model_checkpoint}")
+        structures = ToolInstance.dispatch(
+            "esm3",
+            {
                 "operation": "predict_structure",
                 "sequences": inputs.sequences,
                 "batch_size": config.batch_size,
@@ -234,8 +234,9 @@ def run_esm3_structure_prediction(
                 "device": config.device,
                 "verbose": config.verbose,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ESM3StructurePredictionOutput(

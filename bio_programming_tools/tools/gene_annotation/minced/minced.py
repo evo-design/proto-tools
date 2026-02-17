@@ -204,7 +204,7 @@ class MincedConfig(BaseConfig):
     output=MincedOutput,
     description="Detect CRISPR arrays in nucleotide sequences using MinCED",
 )
-def run_minced(inputs: MincedInput, config: MincedConfig) -> MincedOutput:
+def run_minced(inputs: MincedInput, config: MincedConfig, instance=None) -> MincedOutput:
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
 
     Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
@@ -226,11 +226,9 @@ def run_minced(inputs: MincedInput, config: MincedConfig) -> MincedOutput:
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
-
-    venv_manager = EnvManager(model_name="minced")
 
     input_data = {
         "sequences": inputs.sequences,
@@ -241,11 +239,8 @@ def run_minced(inputs: MincedInput, config: MincedConfig) -> MincedOutput:
         },
     }
 
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
-        verbose=False,
+    output_data = ToolInstance.dispatch(
+        "minced", input_data, instance=instance,
     )
 
     results = []

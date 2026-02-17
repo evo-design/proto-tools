@@ -464,53 +464,63 @@ def _serialize_output(value: Any) -> Any:
     return value
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: Evo2Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = Evo2Model(
+            model_checkpoint=input_dict.get("model_checkpoint", "evo2_7b"),
+            local_path=input_dict.get("local_path"),
         )
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
-        input_data = json.load(f)
-
-    operation = input_data.get("operation", "sample")
-    model_checkpoint = input_data.get("model_checkpoint", "evo2_7b")
-    local_path = input_data.get("local_path")
-    model = Evo2Model(model_checkpoint=model_checkpoint, local_path=local_path)
-
+    operation = input_dict.get("operation", "sample")
     if operation == "sample":
-        result = model.sample(
-            prompts=input_data.get("prompts", []),
-            top_k=input_data.get("top_k", 4),
-            top_p=input_data.get("top_p", 1.0),
-            temperature=input_data.get("temperature", 1.0),
-            device=input_data.get("device", "cuda"),
-            num_tokens=input_data.get("num_tokens", 32),
-            cached_generation=input_data.get("cached_generation", True),
-            force_prompt_threshold=input_data.get("force_prompt_threshold"),
-            max_seqlen=input_data.get("max_seqlen"),
-            print_generation=input_data.get("print_generation", True),
-            verbose=input_data.get("verbose", False),
-            stop_at_eos=input_data.get("stop_at_eos", True),
+        result = _model.sample(
+            prompts=input_dict.get("prompts", []),
+            top_k=input_dict.get("top_k", 4),
+            top_p=input_dict.get("top_p", 1.0),
+            temperature=input_dict.get("temperature", 1.0),
+            device=input_dict.get("device", "cuda"),
+            num_tokens=input_dict.get("num_tokens", 32),
+            cached_generation=input_dict.get("cached_generation", True),
+            force_prompt_threshold=input_dict.get("force_prompt_threshold"),
+            max_seqlen=input_dict.get("max_seqlen"),
+            print_generation=input_dict.get("print_generation", True),
+            verbose=input_dict.get("verbose", False),
+            stop_at_eos=input_dict.get("stop_at_eos", True),
             old_kv_cache=None,  # KV caching not supported in venv mode
-            batch_size=input_data.get("batch_size"),
-            return_logits=input_data.get("return_logits", False),
+            batch_size=input_dict.get("batch_size"),
+            return_logits=input_dict.get("return_logits", False),
         )
         # KV caches are vortex GPU objects, not JSON-serializable
         result["kv_caches"] = None
+        return result
     elif operation == "score":
-        result = model.score(
-            sequences=input_data.get("sequences", []),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            batch_size=input_data.get("batch_size"),
-            return_logits=input_data.get("return_logits", False),
+        return _model.score(
+            sequences=input_dict.get("sequences", []),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            batch_size=input_dict.get("batch_size"),
+            return_logits=input_dict.get("return_logits", False),
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
 
-    with open(output_json_path, "w") as f:
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
         json.dump(_serialize_output(result), f)

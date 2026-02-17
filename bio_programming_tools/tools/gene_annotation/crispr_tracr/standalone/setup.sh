@@ -26,30 +26,62 @@ echo "Creating isolated conda environment (Python 3.8 + scikit-learn 0.22)..."
 echo "CRISPRidentify's pickled models require sklearn 0.22 (incompatible with 3.12)."
 echo "Using $VIRTUAL_ENV/conda_deps to avoid polluting base env..."
 
-# Detect platform: scikit-learn 0.22 and vmatch only have x86_64 builds.
-# On macOS arm64, force osx-64 packages and run via Rosetta 2.
-CONDA_EXTRA_ARGS=()
+# Detect platform for micromamba download and package installation.
+# scikit-learn 0.22, vmatch, and several bioconda tools only have x86_64
+# builds.  On macOS arm64 we force osx-64 packages and run via Rosetta 2.
+# Linux aarch64 is unsupported because there is no transparent x86_64
+# emulation layer equivalent to Rosetta.
 ARCH=$(uname -m)
 OS=$(uname -s)
-if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
-    echo "Detected macOS arm64 — using osx-64 packages via Rosetta 2..."
-    export CONDA_SUBDIR=osx-64
-    CONDA_EXTRA_ARGS=(--platform osx-64)
+
+if [ "$OS" = "Linux" ] && [ "$ARCH" != "x86_64" ]; then
+    echo "ERROR: CRISPRtracrRNA requires x86_64 bioconda packages (vmatch, etc.)" >&2
+    echo "       that are not available on Linux $ARCH." >&2
+    exit 1
 fi
 
-conda create -p "$VIRTUAL_ENV/conda_deps" -y -c conda-forge -c bioconda \
-    "${CONDA_EXTRA_ARGS[@]}" \
+# Platform for downloading micromamba binary
+if [ "$OS" = "Linux" ]; then
+    MAMBA_PLATFORM="linux-64"
+elif [ "$OS" = "Darwin" ]; then
+    if [ "$ARCH" = "arm64" ]; then
+        MAMBA_PLATFORM="osx-arm64"
+    else
+        MAMBA_PLATFORM="osx-64"
+    fi
+else
+    echo "Unsupported platform: $OS $ARCH"
+    exit 1
+fi
+
+# Platform for package installation (force x86_64 on macOS arm64)
+MAMBA_EXTRA_ARGS=()
+if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
+    echo "Detected macOS arm64 — using osx-64 packages via Rosetta 2..."
+    MAMBA_EXTRA_ARGS=(--platform osx-64)
+fi
+
+# Install micromamba if not already available
+MAMBA_ROOT="$VIRTUAL_ENV/micromamba"
+MAMBA_BIN="$MAMBA_ROOT/bin/micromamba"
+if [ ! -x "$MAMBA_BIN" ]; then
+    echo "Installing micromamba ($MAMBA_PLATFORM)..."
+    mkdir -p "$MAMBA_ROOT/bin"
+    curl -fsSL "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" | tar -xvj -C "$MAMBA_ROOT/bin" --strip-components=1 bin/micromamba
+fi
+
+# Initialize micromamba for this shell
+export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
+eval "$("$MAMBA_BIN" shell hook -s posix)"
+
+echo "Creating conda environment with micromamba..."
+"$MAMBA_BIN" create -p "$VIRTUAL_ENV/conda_deps" -y -c conda-forge -c bioconda \
+    "${MAMBA_EXTRA_ARGS[@]}" \
     python=3.8 \
     scikit-learn=0.22.1 \
     "numpy<1.24" h5py dill networkx pyyaml regex requests biopython pandas scipy joblib python-levenshtein \
     intarna infernal prodigal hmmer viennarna \
     vmatch clustalo blast fasta3
-
-# Pin the subdir so future conda operations in this env stay x86_64
-if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
-    mkdir -p "$VIRTUAL_ENV/conda_deps"
-    echo "subdir: osx-64" >> "$VIRTUAL_ENV/conda_deps/.condarc"
-fi
 
 echo "Applying upstream patches..."
 python3 -c "

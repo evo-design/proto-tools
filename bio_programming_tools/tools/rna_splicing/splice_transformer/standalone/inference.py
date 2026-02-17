@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import sys
 from typing import List
 
 import numpy as np
@@ -194,3 +196,63 @@ class SpliceTransformerModel:
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
+
+def _serialize_output(value):
+    """Recursively serialize tensors and arrays to JSON-safe types."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: SpliceTransformerModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = SpliceTransformerModel(
+            context_length=input_dict.get("context_length", 4000),
+        )
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        prediction = _model(
+            target_seqs=input_dict["target_seqs"],
+            left_contexts=input_dict["left_contexts"],
+            right_contexts=input_dict["right_contexts"],
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+        return {"prediction": prediction}
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
+        json.dump(_serialize_output(result), f)

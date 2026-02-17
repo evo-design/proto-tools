@@ -47,7 +47,6 @@ class CausalModelScoringConfig(BaseConfig):
     Attributes:
         batch_size: Number of sequences to process in each batch.
         device: Device to run the model on.
-        verbose: Whether to print status messages.
     """
 
     batch_size: int = ConfigField(
@@ -60,12 +59,6 @@ class CausalModelScoringConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
         hidden=True,
     )
 
@@ -222,19 +215,12 @@ class CausalModelSampleConfig(BaseConfig):
 
     Attributes:
         device: Device to run the model on.
-        verbose: Whether to print status messages.
     """
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
         hidden=True,
     )
 

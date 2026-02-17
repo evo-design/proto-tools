@@ -27,7 +27,6 @@ pip install -e ".[dev]"
 pre-commit install
 
 # Formatting
-black bio_programming_tools
 isort bio_programming_tools
 ```
 
@@ -96,6 +95,42 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 - **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
 - **`@tool()`** decorator — handles error catching, timing, metadata population, registry.
 
+### Tool Execution & Persistence (ToolInstance)
+
+Tools run in **isolated virtual environments** via `ToolInstance` (`utils/tool_instance.py`). This keeps heavy dependencies (PyTorch, ESM, etc.) out of the main environment.
+
+**One-shot (default):** Each `run_*` call spins up an ephemeral subprocess — safe, no leaked processes or GPU memory. Every call pays the full model load cost. Device is read from `config.device` (a `BaseConfig` field, default `"cpu"`; GPU tool configs override to `"cuda"`).
+
+**Opt-in persistence:** For batch workloads where model loading dominates runtime, keep the worker subprocess alive across calls:
+
+```python
+# Auto-persist everything (recommended) — all tools auto-cached, cleaned up on exit
+with ToolInstance.persist():
+    for seq in sequences:
+        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
+
+# Tool-specific persistence — for named instances / multi-GPU
+with ToolInstance.persist_tool("esmfold"):
+    for seq in sequences:
+        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
+
+# Manual persistence — for long-running sessions
+tool = ToolInstance.get("esmfold")
+result = run_esmfold(inputs, config)
+tool.shutdown()
+```
+
+Tool wrappers accept an `instance=` parameter to route calls to a specific instance (useful for multi-GPU):
+
+```python
+with ToolInstance.persist_tool("esmfold", instance_name="gpu0"):
+    result = run_esmfold(inputs, config, instance="gpu0")
+```
+
+Persistent workers auto-restart when any `reload_on_change` config field changes between calls (device, model checkpoint, etc.). Mark fields with `ConfigField(..., reload_on_change=True)` and pass `reload_on=type(config).reload_fields()` to `dispatch()`.
+
+See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthrough with timing data.
+
 ### Binary Installation (`install_binary.py`)
 
 Tools that need external binaries (not available via pip) must use the shared `utils/install_binary.py` utility — never raw `curl`/`wget` in `setup.sh`.
@@ -114,7 +149,7 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 | `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
-| `utils/env_manager.py` | `EnvManager` for isolated venv execution |
+| `utils/tool_instance.py` | `ToolInstance` — isolated venv execution with opt-in persistence |
 | `utils/install_binary.py` | Shared binary downloader for standalone venvs |
 | `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
 | `tools/__init__.py` | Master export — all tools re-exported here |
@@ -145,7 +180,8 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 ## Configuration
 
 - Python >=3.12, Pydantic >=2.0
-- Black/isort line length: 88
+- Do **not** run `black` on this project — formatting is handled manually
+- isort line length: 88
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`
 - Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
@@ -164,6 +200,16 @@ inputs = {Tool}Input(...)   # Primary data: sequences, structures, files
 config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
 result = run_{tool}(inputs, config)
 # result.success, result.execution_time, result.errors, plus tool-specific fields
+```
+
+For batch workloads or loops calling the same tool repeatedly, use `ToolInstance.persist()` to avoid reloading the model on every call:
+
+```python
+from bio_programming_tools.utils.tool_instance import ToolInstance
+
+with ToolInstance.persist():
+    for seq in sequences:
+        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
 ```
 
 **Invoke the `bio-tools` skill for full workflow guidance** (script vs direct execution, script structure, GPU handling, output conventions).

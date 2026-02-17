@@ -249,34 +249,49 @@ class ProtenixModel:
         )
 
 
-# Standalone script entry point for venv execution
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: ProtenixModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+
+    # Store checkpoints in the venv directory so they're cleaned up with the venv
+    venv_path = os.environ.get("TOOL_VENV_PATH")
+    if venv_path:
+        os.environ["PROTENIX_ROOT_DIR"] = venv_path
+
+    if _model is None:
+        _model = ProtenixModel()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        return _model(
+            input_json_path=input_dict["input_json_path"],
+            output_dir=input_dict["output_dir"],
+            model_name=input_dict.get("model_name", "protenix_base_default_v1.0.0"),
+            seeds=input_dict.get("seeds", "0"),
+            num_diffusion_samples=input_dict.get("num_diffusion_samples", 5),
+            num_diffusion_steps=input_dict.get("num_diffusion_steps", 200),
+            num_pairformer_cycles=input_dict.get("num_pairformer_cycles", 10),
+            use_msa=input_dict.get("use_msa", True),
+            verbose=input_dict.get("verbose", False),
+        )
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    model = ProtenixModel()
+    result = dispatch(input_data)
 
-    model_kwargs = {
-        "input_json_path": input_data["input_json_path"],
-        "output_dir": input_data["output_dir"],
-        "model_name": input_data["model_name"],
-        "seeds": input_data["seeds"],
-        "num_diffusion_samples": input_data["num_diffusion_samples"],
-        "num_diffusion_steps": input_data["num_diffusion_steps"],
-        "num_pairformer_cycles": input_data["num_pairformer_cycles"],
-        "use_msa": input_data["use_msa"],
-        "verbose": True,
-    }
-
-    results = model(**model_kwargs)
-
-    with open(output_json_path, "w") as f:
-        json.dump(results, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

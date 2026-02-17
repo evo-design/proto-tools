@@ -10,9 +10,11 @@ Supports the same CLI options and markers as the main bio-programming tests:
   --no-log-console  Disable console logging during tests
 """
 
+import functools
 import logging
 import os
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,11 +22,21 @@ from pathlib import Path
 import pytest
 
 from bio_programming_tools import setup_logging
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 
 def is_on_chimera() -> bool:
     """Check if running on the Chimera (arc-slurm) cluster."""
     return os.environ.get("SLURM_CLUSTER_NAME") == "arc-slurm"
+
+
+@functools.cache
+def _gpu_available() -> bool:
+    """Check if a GPU is likely available (without importing torch)."""
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if cvd is not None and cvd.strip() == "":
+        return False
+    return shutil.which("nvidia-smi") is not None
 
 
 def pytest_addoption(parser):
@@ -64,6 +76,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Disable console logging during tests",
+    )
+    parser.addoption(
+        "--run-all-venvs",
+        action="store_true",
+        default=False,
+        help="Run one smoke test per standalone-venv tool (overrides --cpu, slow, skip_ci)",
     )
 
 
@@ -156,6 +174,16 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
+    # --run-all-venvs: keep only venv smoke tests, skip everything else
+    if config.getoption("--run-all-venvs"):
+        skip_not_venv = pytest.mark.skip(
+            reason="--run-all-venvs: not a venv smoke test"
+        )
+        for item in items:
+            if "run_all_venvs" not in item.keywords:
+                item.add_marker(skip_not_venv)
+        return
+
     # Auto-mark all tests as CPU-only unless explicitly marked as GPU
     for item in items:
         # If no GPU marker found, mark as CPU
@@ -276,3 +304,38 @@ def setup_test_logging(request):
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_tool_instances():
+    """Final safety net — kill any stray ToolInstance workers at session end."""
+    yield
+    ToolInstance.clear_all()
+
+
+# ============================================================================
+# Persistent tool fixture factory
+# ============================================================================
+def make_persistent_fixture(tool_name: str, *, gpu: bool = True):
+    """Create a module-scoped autouse fixture that wraps tests in persistence.
+
+    Parameters
+    ----------
+    tool_name : str
+        Tool name passed to ``ToolInstance.persist_tool()``.
+    gpu : bool
+        When *True* (default), the fixture skips persistence when no
+        GPU is available: ``--cpu`` flag, ``CUDA_VISIBLE_DEVICES=""``,
+        or ``nvidia-smi`` not found.  When *False* (CPU-only tools),
+        persistence is always active.
+    """
+
+    @pytest.fixture(scope="module", autouse=True)
+    def _persistent_tool(request):
+        if gpu and (request.config.getoption("--cpu") or not _gpu_available()):
+            yield
+            return
+        with ToolInstance.persist_tool(tool_name):
+            yield
+
+    return _persistent_tool

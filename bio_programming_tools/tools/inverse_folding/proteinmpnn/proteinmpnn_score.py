@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
@@ -58,9 +57,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
             ``"cpu"`` (CPU execution). Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution.
-            Default: ``False``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -94,12 +90,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         examples=["cuda", "cpu"],
     )
 
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -128,6 +118,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
 def run_proteinmpnn_score(
     inputs: ProteinMPNNScoringInput,
     config: ProteinMPNNScoringConfig,
+    instance=None,
 ) -> ProteinMPNNScoringOutput:
     """Score protein sequences using ProteinMPNN structure-conditioned model.
 
@@ -205,9 +196,6 @@ def run_proteinmpnn_score(
         # Local venv execution
         logger.debug("Using local venv for ProteinMPNN scoring")
 
-        venv_manager = EnvManager("proteinmpnn")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-
         for sequence_structure_pair in tqdm(
             inputs.sequence_structure_pairs,
             desc="ProteinMPNN scoring",
@@ -224,10 +212,10 @@ def run_proteinmpnn_score(
                 "device": config.device,
                 "return_logits": config.return_logits,
             }
-            result = venv_manager.call_standalone_script_in_venv(
-                script_path=script_path,
-                input_dict=input_dict,
-                device=config.device,
+            result = ToolInstance.dispatch(
+                "proteinmpnn",
+                input_dict,
+                instance=instance,
                 verbose=config.verbose,
             )
             scores.append(

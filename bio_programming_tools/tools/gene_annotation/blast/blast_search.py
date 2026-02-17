@@ -647,7 +647,8 @@ class BlastSearchConfig(BaseConfig):
 )
 @tool_cache("blast-search")
 def run_blast_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig
+    inputs: BlastSearchInput, config: BlastSearchConfig,
+    instance=None,
 ) -> BlastSearchOutput:
     """Search sequences against BLAST databases.
 
@@ -674,7 +675,7 @@ def run_blast_search(
         >>> print(f"Found {result.num_hits} hits")
     """
     if config.search_mode == "local":
-        return _local_search(inputs, config)
+        return _local_search(inputs, config, instance=instance)
     return _online_search(inputs, config)
 
 
@@ -753,14 +754,13 @@ def _online_search(
 
 
 def _local_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig
+    inputs: BlastSearchInput, config: BlastSearchConfig,
+    instance=None,
 ) -> BlastSearchOutput:
     """Run BLAST+ locally against a local database."""
     import tempfile
 
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="blast")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # If query is a raw sequence, write it to a temp FASTA file
     if inputs.query_type == "sequence":
@@ -824,10 +824,10 @@ def _local_search(
     }
 
     try:
-        output_data = venv_manager.call_standalone_script_in_venv(
-            script_path=Path(__file__).parent / "standalone" / "run.py",
-            input_dict=input_data,
-            device="cpu",
+        output_data = ToolInstance.dispatch(
+            "blast",
+            input_data,
+            instance=instance,
         )
     finally:
         # Clean up temp file if we created one

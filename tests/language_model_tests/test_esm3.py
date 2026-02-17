@@ -18,9 +18,13 @@ from bio_programming_tools.tools.masked_models.esm3 import (
     run_esm3_score,
     run_esm3_structure_prediction,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
+
+
+_persistent_tool = make_persistent_fixture("esm3")
 
 
 # ============================================================================
@@ -72,6 +76,7 @@ def test_esm3_predict_structure():
 # Scoring Tests
 # ============================================================================
 
+@pytest.mark.run_all_venvs
 @pytest.mark.uses_gpu
 def test_esm3_score_inference():
     """Test run_esm3_score() with comprehensive value validation."""

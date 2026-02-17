@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
@@ -136,6 +135,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
         description="Name of the ESM2 model variant to use",
+        reload_on_change=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -158,7 +158,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
     description="Extract protein sequence embeddings and logits using ESM2",
     uses_gpu=True,
 )
-def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig) -> ESM2EmbeddingsOutput:
+def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig, instance=None) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.
 
     Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
@@ -230,12 +230,10 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
             return_logits=config.return_logits,
         )
     else:
-        logger.debug(f"Using local venv for ESM2 inference: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        outputs = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
+        outputs = ToolInstance.dispatch(
+            "esm2",
+            {
                 "operation": "embeddings",
                 "sequences": inputs.sequences,
                 "batch_size": config.batch_size,
@@ -244,8 +242,9 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ESM2EmbeddingsOutput(

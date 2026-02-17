@@ -17,7 +17,6 @@ import os
 import string
 import tempfile
 from logging import getLogger
-from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import model_validator
@@ -225,6 +224,7 @@ class ProtenixConfig(StructurePredictionConfig):
         title="Model Name",
         default="protenix_base_default_v1.0.0",
         description="Protenix model variant to use for structure prediction",
+        reload_on_change=True,
     )
 
     seeds: List[int] = ConfigField(
@@ -319,7 +319,8 @@ class ProtenixConfig(StructurePredictionConfig):
     tool_name="protenix-prediction",
 )
 def run_protenix(
-    inputs: ProtenixInput, config: ProtenixConfig
+    inputs: ProtenixInput, config: ProtenixConfig,
+    instance=None,
 ) -> ProtenixOutput:
     """Predict 3D structures using Protenix.
 
@@ -381,13 +382,7 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="protenix")
-
-    # Set PROTENIX_ROOT_DIR to store checkpoints in the venv directory
-    # This ensures checkpoints are removed when the venv is deleted
-    os.environ["PROTENIX_ROOT_DIR"] = str(venv_manager.env_path)
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")
@@ -423,11 +418,13 @@ def run_protenix(
         # Call the inference script (single batched call)
         logger.info(f"Running Protenix prediction for {len(inputs.complexes)} complex(es)...")
 
-        output_data = venv_manager.call_standalone_script_in_venv(
-            script_path=Path(__file__).parent / "standalone" / "inference.py",
-            input_dict=input_data,
-            device=config.device,
+        input_data["device"] = config.device
+        output_data = ToolInstance.dispatch(
+            "protenix",
+            input_data,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     # Parse results for each complex

@@ -162,7 +162,8 @@ class CreateBlastDbConfig(BaseConfig):
     description="Create a local BLAST database from a FASTA file",
 )
 def run_create_blast_db(
-    inputs: CreateBlastDbInput, config: CreateBlastDbConfig
+    inputs: CreateBlastDbInput, config: CreateBlastDbConfig,
+    instance=None,
 ) -> CreateBlastDbOutput:
     """
     Create a local BLAST database from a FASTA file.
@@ -191,7 +192,7 @@ def run_create_blast_db(
         >>> print(f"Database created at: {result.db_path}")
     """
 
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     fasta_path = Path(inputs.fasta)
 
@@ -201,21 +202,17 @@ def run_create_blast_db(
     else:
         out_prefix = str(fasta_path.with_suffix(""))
 
-    venv_manager = EnvManager(model_name="blast")
-
-    input_data = {
-        "operation": "create_blast_db",
-        "fasta_path": str(fasta_path),
-        "dbtype": config.dbtype,
-        "out_prefix": out_prefix,
-        "title": config.title,
-        "additional_params": config.additional_params,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "blast",
+        {
+            "operation": "create_blast_db",
+            "fasta_path": str(fasta_path),
+            "dbtype": config.dbtype,
+            "out_prefix": out_prefix,
+            "title": config.title,
+            "additional_params": config.additional_params,
+        },
+        instance=instance,
     )
 
     return CreateBlastDbOutput(

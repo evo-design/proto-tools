@@ -414,6 +414,39 @@ def _resize_interval(
 
 
 # ============================================================================
+# Dispatch
+# ============================================================================
+_OPERATIONS = {
+    "predict_interval",
+    "predict_variant",
+    "predict_sequence",
+    "score_variant",
+    "score_interval",
+    "score_ism_variants",
+}
+
+_model: AlphaGenomeModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+
+    kwargs = dict(input_dict)
+    operation = kwargs.pop("operation")
+    model_version = kwargs.pop("model_version", "all_folds")
+
+    if _model is None:
+        _model = AlphaGenomeModel(model_version=model_version)
+
+    if operation not in _OPERATIONS:
+        raise ValueError(f"Unsupported operation: {operation!r}")
+
+    method = getattr(_model, operation)
+    return method(**kwargs)
+
+
+# ============================================================================
 # Standalone script entry point for venv execution
 # ============================================================================
 
@@ -421,30 +454,10 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    operation = input_data.pop("operation")
-    model_version = input_data.pop("model_version", "all_folds")
-    model = AlphaGenomeModel(model_version=model_version)
+    result = dispatch(input_data)
 
-    if operation == "predict_interval":
-        output_data = model.predict_interval(**input_data)
-    elif operation == "predict_variant":
-        output_data = model.predict_variant(**input_data)
-    elif operation == "predict_sequence":
-        output_data = model.predict_sequence(**input_data)
-    elif operation == "score_variant":
-        output_data = model.score_variant(**input_data)
-    elif operation == "score_interval":
-        output_data = model.score_interval(**input_data)
-    elif operation == "score_ism_variants":
-        output_data = model.score_ism_variants(**input_data)
-    else:
-        raise ValueError(f"Unsupported operation: {operation!r}")
-
-    with open(output_json_path, "w") as f:
-        json.dump(output_data, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

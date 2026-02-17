@@ -306,35 +306,42 @@ def _allow_tf32():
 
 
 # ============================================================================
+# Dispatch
+# ============================================================================
+_model: ESMFoldModel | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = ESMFoldModel()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        results = _model(
+            batch_data=input_dict["batch_data"],
+            residue_idx_offset=input_dict["residue_idx_offset"],
+            chain_linker=input_dict["chain_linker"],
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+        return {"results": results}
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
+# ============================================================================
 # Standalone Script Entry Point
 # ============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    # Read input json
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Create model and run inference
-    model = ESMFoldModel()
+    result = dispatch(input_data)
 
-    # Build kwargs for model call
-    model_kwargs = {
-        "batch_data": input_data["batch_data"],
-        "residue_idx_offset": input_data["residue_idx_offset"],
-        "chain_linker": input_data["chain_linker"],
-        "device": input_data.get("device", "cuda"),
-        "verbose": True,
-    }
-
-    results = model(**model_kwargs)
-
-    # Write output to json file
-    with open(output_json_path, "w") as f:
-        json.dump({"results": results}, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

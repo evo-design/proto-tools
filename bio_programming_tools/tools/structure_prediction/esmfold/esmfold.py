@@ -12,7 +12,6 @@ from __future__ import annotations
 import io
 import logging
 import string
-from pathlib import Path
 from typing import Any, Dict, List
 
 from Bio import PDB
@@ -204,7 +203,8 @@ class ESMFoldConfig(StructurePredictionConfig):
     tool_name="esmfold-prediction",
 )
 def run_esmfold(
-    inputs: ESMFoldInput, config: ESMFoldConfig
+    inputs: ESMFoldInput, config: ESMFoldConfig,
+    instance=None,
 ) -> ESMFoldOutput:
     """Predict protein 3D structures using ESMFold.
 
@@ -311,9 +311,7 @@ def run_esmfold(
         # Use local GPU execution via venv subprocess
         logger.debug("Using local GPU for ESMFold structure prediction...")
 
-        from bio_programming_tools.utils.env_manager import EnvManager
-
-        venv_manager = EnvManager(model_name="esmfold")
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
         # Process each sub-batch through standalone script
         # Use tqdm to show progress over individual structures, not batches
@@ -335,10 +333,11 @@ def run_esmfold(
             }
 
             # Call the inference script
-            output_data = venv_manager.call_standalone_script_in_venv(
-                script_path=Path(__file__).parent / "standalone" / "inference.py",
-                input_dict=input_data,
-                device=config.device,
+            input_data["device"] = config.device
+            output_data = ToolInstance.dispatch(
+                "esmfold",
+                input_data,
+                instance=instance,
                 verbose=config.verbose,
             )
 

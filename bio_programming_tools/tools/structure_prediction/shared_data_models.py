@@ -751,20 +751,11 @@ class StructurePredictionConfig(BaseConfig):
             Structure prediction is computationally intensive and strongly benefits
             from GPU acceleration. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during model execution,
-            including loading progress, prediction steps, and timing information.
-            Default: ``False``.
     """
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
         hidden=True,
     )
 

@@ -210,34 +210,34 @@ class TestHelpers:
 class TestRunBioEmu:
     """Integration-style tests for run_bioemu."""
 
-    def test_local_execution_uses_env_manager(
+    @pytest.mark.run_all_venvs
+    def test_local_execution_uses_tool_instance(
         self,
         single_chain_complex: StructurePredictionComplex,
         sample_pdb_content: str,
     ):
-        """Test local execution through EnvManager standalone boundary."""
+        """Test local execution through ToolInstance standalone boundary."""
         bioemu_input = BioEmuInput(complexes=[single_chain_complex])
         bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
-
-        mock_venv_manager = Mock()
-        mock_venv_manager.call_standalone_script_in_venv.return_value = {
-            "results": [
-                {
-                    "pdb_frames": [sample_pdb_content] * 10,
-                    "num_frames": 10,
-                    "num_residues": len(single_chain_complex.chains[0].sequence),
-                }
-            ]
-        }
 
         with patch(
             "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
             return_value=False,
         ):
             with patch(
-                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.EnvManager",
-                return_value=mock_venv_manager,
-            ):
+                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+            ) as mock_cls:
+                mock_cls.dispatch.return_value = {
+                    "results": [
+                        {
+                            "pdb_frames": [sample_pdb_content] * 10,
+                            "num_frames": 10,
+                            "num_residues": len(
+                                single_chain_complex.chains[0].sequence
+                            ),
+                        }
+                    ]
+                }
                 result = run_bioemu(bioemu_input, bioemu_config)
 
         assert isinstance(result, BioEmuOutput)
@@ -246,8 +246,8 @@ class TestRunBioEmu:
         assert result.metadata["num_complexes"] == 1
         assert result.metadata["total_structures"] == 10
 
-        call_kwargs = mock_venv_manager.call_standalone_script_in_venv.call_args.kwargs
-        assert call_kwargs["input_dict"]["sequences"] == [
+        call_args = mock_cls.dispatch.call_args
+        assert call_args[0][1]["sequences"] == [
             single_chain_complex.chains[0].sequence
         ]
 
@@ -260,30 +260,31 @@ class TestRunBioEmu:
         bioemu_input = BioEmuInput(complexes=[single_chain_complex, single_chain_complex])
         bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
-        mock_venv_manager = Mock()
-        mock_venv_manager.call_standalone_script_in_venv.return_value = {
-            "results": [
-                {
-                    "pdb_frames": [sample_pdb_content] * 3,
-                    "num_frames": 3,
-                    "num_residues": len(single_chain_complex.chains[0].sequence),
-                },
-                {
-                    "pdb_frames": [sample_pdb_content] * 7,
-                    "num_frames": 7,
-                    "num_residues": len(single_chain_complex.chains[0].sequence),
-                },
-            ]
-        }
-
         with patch(
             "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
             return_value=False,
         ):
             with patch(
-                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.EnvManager",
-                return_value=mock_venv_manager,
-            ):
+                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+            ) as mock_cls:
+                mock_cls.dispatch.return_value = {
+                    "results": [
+                        {
+                            "pdb_frames": [sample_pdb_content] * 3,
+                            "num_frames": 3,
+                            "num_residues": len(
+                                single_chain_complex.chains[0].sequence
+                            ),
+                        },
+                        {
+                            "pdb_frames": [sample_pdb_content] * 7,
+                            "num_frames": 7,
+                            "num_residues": len(
+                                single_chain_complex.chains[0].sequence
+                            ),
+                        },
+                    ]
+                }
                 result = run_bioemu(bioemu_input, bioemu_config)
 
         assert len(result.ensembles) == 2

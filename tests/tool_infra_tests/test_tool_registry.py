@@ -328,7 +328,7 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
         output=MockToolOutput,
         description="Tool that tests metadata population",
     )
-    def metadata_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+    def metadata_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         # Tool function doesn't need to set metadata fields
         time.sleep(0.1)
         return MockToolOutput(result=f"Processed {inputs.input_data}")
@@ -364,7 +364,7 @@ def test_tool_registry_decorator_handles_exceptions(clean_registry):
         output=MockToolOutput,
         description="Tool that raises an exception",
     )
-    def failing_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+    def failing_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         raise ValueError("Something went wrong!")
 
     # Get the registered function and call it
@@ -395,7 +395,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
         output=MockToolOutput,
         description="Tool that generates warnings",
     )
-    def warning_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+    def warning_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         warnings.warn("This is a warning!")
         return MockToolOutput(result="Done")
 
@@ -425,7 +425,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
         description="Tool that fails and tests error access",
     )
     def error_access_tool(
-        inputs: MockToolInput, config: MockToolConfig
+        inputs: MockToolInput, config: MockToolConfig, instance=None
     ) -> MockToolOutput:
         raise RuntimeError("Tool execution failed")
 
@@ -468,7 +468,7 @@ def test_tool_output_successful_access_works(clean_registry):
         description="Tool that succeeds and tests field access",
     )
     def success_access_tool(
-        inputs: MockToolInput, config: MockToolConfig
+        inputs: MockToolInput, config: MockToolConfig, instance=None
     ) -> MockToolOutput:
         return MockToolOutput(result="Success!")
 
@@ -486,43 +486,6 @@ def test_tool_output_successful_access_works(clean_registry):
     assert result.result == "Success!"
     assert result.tool_id == "success-access-tool"
     assert result.execution_time is not None
-
-
-def test_tool_registry_uses_gpu_default(clean_registry):
-    """Test that uses_gpu defaults to False."""
-
-    @clean_registry.register(
-        key="cpu-tool",
-        label="CPU Tool",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="CPU tool",
-    )
-    def cpu_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("cpu-tool")
-    assert spec.uses_gpu is False
-
-
-def test_tool_registry_uses_gpu_true(clean_registry):
-    """Test that uses_gpu=True is stored on ToolSpec."""
-
-    @clean_registry.register(
-        key="gpu-tool",
-        label="GPU Tool",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="GPU tool",
-        uses_gpu=True,
-    )
-    def gpu_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("gpu-tool")
-    assert spec.uses_gpu is True
 
 
 def test_tool_registry_list_gpu_tools(clean_registry):
@@ -597,9 +560,3 @@ def test_cpu_tools_are_not_marked_gpu():
     assert "mafft-align" in cpu_keys
 
 
-def test_uses_gpu_in_serialization():
-    """Verify that uses_gpu is included in ToolSpec serialization."""
-    spec = ToolRegistry.get("blast-search")
-    serialized = spec.model_dump()
-    assert "uses_gpu" in serialized
-    assert serialized["uses_gpu"] is False

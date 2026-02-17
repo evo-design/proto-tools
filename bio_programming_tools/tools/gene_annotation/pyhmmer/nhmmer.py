@@ -1,7 +1,6 @@
 """PyHMMER nhmmer tool — search nucleotide sequences against nucleotide sequences."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List
 
 from pydantic import Field, field_validator
@@ -70,7 +69,7 @@ PyNhmmerConfig = PyHmmerConfig
     description="Search nucleotide sequences against nucleotide database using PyHMMER",
 )
 @tool_cache("pyhmmer-nhmmer")
-def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig) -> PyNhmmerOutput:
+def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance=None) -> PyNhmmerOutput:
     """Search nucleotide sequences against nucleotide database using PyHMMER.
 
     Args:
@@ -82,25 +81,21 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig) -> PyNhmme
     Returns:
         PyNhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-    venv_manager = EnvManager(model_name="pyhmmer")
-
-    input_data = {
-        "operation": "nhmmer",
-        "sequences": inputs.sequences,
-        "target_sequences": inputs.target_sequences,
-        "num_threads": config.num_threads,
-        "evalue_threshold": config.evalue_threshold,
-        "score_threshold": config.score_threshold,
-        "domain_evalue_threshold": config.domain_evalue_threshold,
-        "domain_score_threshold": config.domain_score_threshold,
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "pyhmmer",
+        {
+            "operation": "nhmmer",
+            "sequences": inputs.sequences,
+            "target_sequences": inputs.target_sequences,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
+        },
+        instance=instance,
     )
 
     sequence_hits_df, domain_hits_df = _build_dataframes(

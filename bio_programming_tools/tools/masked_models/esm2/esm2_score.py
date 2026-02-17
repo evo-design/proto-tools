@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Literal
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
     MaskedModelScoringOutput,
@@ -72,6 +71,7 @@ class ESM2ScoringConfig(BaseConfig):
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
         description="ESM2 model checkpoint to use",
+        reload_on_change=True,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -83,12 +83,6 @@ class ESM2ScoringConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run the model on",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
         hidden=True,
     )
     return_logits: bool = ConfigField(
@@ -112,7 +106,8 @@ class ESM2ScoringConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_esm2_score(
-    inputs: ESM2ScoringInput, config: ESM2ScoringConfig
+    inputs: ESM2ScoringInput, config: ESM2ScoringConfig,
+    instance=None,
 ) -> ESM2ScoringOutput:
     """Score protein sequences using ESM2 language model.
 
@@ -176,12 +171,10 @@ def run_esm2_score(
             return_logits=config.return_logits,
         )
     else:
-        logger.debug(f"Using local venv for ESM2 scoring: {config.model_checkpoint}")
-        venv_manager = EnvManager("esm2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        logger.debug(f"Using local for ESM2 scoring: {config.model_checkpoint}")
+        result = ToolInstance.dispatch(
+            "esm2",
+            {
                 "operation": "score",
                 "sequences": inputs.sequences,
                 "batch_size": config.batch_size,
@@ -190,8 +183,9 @@ def run_esm2_score(
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     sequence_scores = [

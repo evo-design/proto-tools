@@ -7,7 +7,7 @@ from typing import List, Literal, Union
 
 from pydantic import ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
@@ -120,19 +120,12 @@ class EnformerConfig(BaseConfig):
         output_tracks (List[int]): Track indices to extract from the Enformer output.
         species (Literal["human", "mouse"]): Species track head to use.
         device (str): Device used for inference.
-        verbose (bool): Whether to print status logs.
     """
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
         hidden=True,
     )
     output_tracks: List[int] = ConfigField(
@@ -144,6 +137,7 @@ class EnformerConfig(BaseConfig):
         default="human",
         description="Species track head to use",
         advanced=True,
+        reload_on_change=True,
     )
 
 
@@ -159,7 +153,7 @@ class EnformerConfig(BaseConfig):
     description="Gene expression and regulatory activity prediction using Enformer",
     uses_gpu=True,
 )
-def run_enformer(inputs: EnformerInput, config: EnformerConfig) -> EnformerOutput:
+def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance=None) -> EnformerOutput:
     """Predict regulatory activity with Enformer.
 
     Args:
@@ -185,19 +179,18 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig) -> EnformerOutpu
     else:
         logger.debug("Using local venv for Enformer prediction")
 
-        venv_manager = EnvManager("enformer")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        result = ToolInstance.dispatch(
+            "enformer",
+            {
                 "sequence": inputs.sequence,
                 "output_tracks": config.output_tracks,
                 "species": config.species,
                 "device": config.device,
                 "verbose": config.verbose,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return EnformerOutput(

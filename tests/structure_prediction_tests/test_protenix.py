@@ -14,10 +14,15 @@ from bio_programming_tools.tools.structure_prediction import (
     StructurePredictionComplex,
     run_protenix,
 )
+from tests.conftest import make_persistent_fixture
+
+
+_persistent_tool = make_persistent_fixture("protenix")
+
 
 # All 8 Protenix model variants
 PROTENIX_MODEL_VARIANTS = [
-    "protenix_base_default_v1.0.0",  # Default base model (highest accuracy)
+    pytest.param("protenix_base_default_v1.0.0", marks=pytest.mark.run_all_venvs),
     "protenix_base_20250630_v1.0.0",  # Base with newer training data
     "protenix_base_default_v0.5.0",  # Earlier base version
     "protenix_base_constraint_v0.5.0",  # Supports constraints

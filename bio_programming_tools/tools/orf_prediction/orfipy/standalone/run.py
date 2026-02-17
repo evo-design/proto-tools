@@ -1,10 +1,10 @@
 """
-Orfipy standalone runner for EnvManager venv execution.
+Orfipy standalone runner for ToolInstance venv execution.
 
 Handles ORF prediction via the orfipy CLI tool and FASTA output parsing.
-Communicates via JSON input/output files (EnvManager pattern).
+Communicates via JSON input/output files (ToolInstance pattern).
 
-Usage (called by EnvManager, not directly):
+Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
 
@@ -187,7 +187,7 @@ def run_orfipy(input_data: dict) -> dict:
 
 
 # =============================================================================
-# Entry point (called by EnvManager.call_standalone_script_in_venv)
+# Entry point (called by ToolInstance)
 # =============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:

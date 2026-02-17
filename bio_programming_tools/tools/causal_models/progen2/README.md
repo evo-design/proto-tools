@@ -52,7 +52,7 @@ This learned distribution enables two key applications: **generation** (sampling
 
 ## Execution Modes
 
-- **Local execution**: Runs ProGen2 in an isolated venv via `EnvManager("progen2")`. Requires CUDA GPU.
+- **Local execution**: Runs ProGen2 in an isolated venv via `ToolInstance("progen2")`. Requires CUDA GPU.
 
 ## How It Works
 

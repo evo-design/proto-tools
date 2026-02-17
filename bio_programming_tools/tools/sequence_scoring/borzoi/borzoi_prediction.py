@@ -7,7 +7,7 @@ from typing import List, Literal, Union
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
@@ -126,19 +126,12 @@ class BorzoiConfig(BaseConfig):
         avg_output_tracks (bool): Whether to average selected tracks.
         use_flash_attn (bool): Whether to run FlashAttention-backed models.
         device (str): Device used for inference (inherited).
-        verbose (bool): Whether to print status logs (inherited).
     """
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
         hidden=True,
     )
     output_tracks: List[int] = ConfigField(
@@ -149,12 +142,14 @@ class BorzoiConfig(BaseConfig):
         title="Species",
         default="human",
         description="Species model to use",
+        reload_on_change=True,
     )
     replicate: Literal["0", "1", "2", "3"] = ConfigField(
         title="Replicate",
         default="0",
         description="Replicate ID to run",
         advanced=True,
+        reload_on_change=True,
     )
     avg_output_tracks: bool = ConfigField(
         title="Average Tracks",
@@ -167,6 +162,7 @@ class BorzoiConfig(BaseConfig):
         default=True,
         description="Whether to use FlashAttention models",
         hidden=True,
+        reload_on_change=True,
     )
 
     @model_validator(mode="after")
@@ -191,7 +187,7 @@ class BorzoiConfig(BaseConfig):
     description="Regulatory activity prediction using a single Borzoi replicate",
     uses_gpu=True,
 )
-def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig) -> BorzoiOutput:
+def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance=None) -> BorzoiOutput:
     """Predict regulatory activity using a single Borzoi replicate.
 
     Args:
@@ -223,11 +219,9 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig) -> BorzoiOutput:
     else:
         logger.debug("Using local venv for Borzoi prediction")
 
-        venv_manager = EnvManager("borzoi")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        result = ToolInstance.dispatch(
+            "borzoi",
+            {
                 "sequence": inputs.sequence,
                 "output_tracks": config.output_tracks,
                 "species": config.species,
@@ -237,8 +231,9 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig) -> BorzoiOutput:
                 "device": config.device,
                 "verbose": config.verbose,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return BorzoiOutput(

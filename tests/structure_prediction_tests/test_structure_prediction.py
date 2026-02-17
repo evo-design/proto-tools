@@ -12,6 +12,7 @@ from Bio import SeqIO
 
 from bio_programming_tools.entities.structures import is_valid_structure
 from bio_programming_tools.utils.tool_cache import ToolCache
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -181,6 +182,9 @@ def _generate_test_params():
     """
     Generate all valid test parameter combinations.
 
+    Outer loop is predictor_name so all tests for one predictor run together,
+    enabling per-predictor worker release to free GPU memory between models.
+
     Filters out incompatible combinations based on:
     - Input class SUPPORTED_ENTITY_TYPES
     - Input class ALLOWS_CHAIN_MODIFICATIONS
@@ -188,8 +192,8 @@ def _generate_test_params():
     """
     params = []
 
-    for test_name, complexes in TEST_COMPLEXES.items():
-        for predictor_name, (_, input_class, config_class) in STRUCTURE_PREDICTORS.items():
+    for predictor_name, (_, input_class, config_class) in STRUCTURE_PREDICTORS.items():
+        for test_name, complexes in TEST_COMPLEXES.items():
             # Skip if complexes are not compatible with this predictor
             if not _is_compatible_input_for_test(complexes, input_class):
                 continue
@@ -221,6 +225,12 @@ def _generate_test_params():
                 marks.append(pytest.mark.slow)
             if predictor_name in CHIMERA_ONLY_PREDICTORS:
                 marks.append(pytest.mark.only_chimera)
+            # One smoke test per venv tool for --run-all-venvs
+            if (
+                test_name == "two_complex"
+                and predictor_name in ("esmfold", "boltz2", "chai1")
+            ):
+                marks.append(pytest.mark.run_all_venvs)
 
             # Add without_msa variant (all predictors support this)
             params.append(
@@ -238,11 +248,53 @@ def _generate_test_params():
 
 
 # =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _persistent_tool_instances(request):
+    """Keep tool workers alive across tests within this module.
+
+    Structure prediction tests reuse GPU models across test cases.
+    The persistent scope ensures workers stay cached for the duration
+    of this module and are cleaned up on exit.
+    """
+    if request.config.getoption("--cpu"):
+        yield
+        return
+    with ToolInstance.scope():
+        yield
+
+
+@pytest.fixture
+def _release_between_predictors(request):
+    """Release tool workers when switching to a different predictor.
+
+    Works inside the module-scoped ToolInstance.scope() from conftest.py.
+    When predictor_name changes between consecutive tests, shuts down the
+    previous predictor's worker so GPU memory is freed before the next
+    model loads.  Then caches the new predictor so dispatch() finds it.
+
+    Not autouse — only parametrized tests have callspec.params. Applied
+    via @pytest.mark.usefixtures on test_folding only.
+    """
+    prev = getattr(request.module, "_active_predictor", None)
+    predictor_name = request.node.callspec.params["predictor_name"]
+    if prev is not None and prev != predictor_name:
+        ToolInstance.shutdown_instance(prev)
+    ToolInstance.get(predictor_name)
+    request.module._active_predictor = predictor_name
+    yield
+
+
+# =============================================================================
 # Primary Folding Test
 # =============================================================================
 
 
 @pytest.mark.uses_gpu
+@pytest.mark.usefixtures("_release_between_predictors")
 @pytest.mark.parametrize(
     "test_name,predictor_name,use_msa,msa_search_mode",
     _generate_test_params(),

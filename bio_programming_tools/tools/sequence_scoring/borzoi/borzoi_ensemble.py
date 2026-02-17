@@ -93,19 +93,12 @@ class BorzoiEnsembleConfig(BaseConfig):
         avg_output_tracks (bool): Whether to average selected tracks.
         use_flash_attn (bool): Whether to run FlashAttention-backed models.
         device (str): Device used for inference.
-        verbose (bool): Whether to print status logs.
     """
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages during execution",
         hidden=True,
     )
     output_tracks: List[int] = ConfigField(
@@ -153,7 +146,8 @@ class BorzoiEnsembleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_borzoi_ensemble(
-    inputs: BorzoiInput, config: BorzoiEnsembleConfig
+    inputs: BorzoiInput, config: BorzoiEnsembleConfig,
+    instance=None,
 ) -> BorzoiEnsembleOutput:
     """Predict regulatory activity using all Borzoi replicates.
 

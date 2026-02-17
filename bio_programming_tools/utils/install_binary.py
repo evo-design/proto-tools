@@ -1,7 +1,7 @@
 """
 Shared utility for downloading platform-specific bioinformatics binaries into a venv.
 
-Called from standalone/setup.sh scripts during EnvManager venv creation.
+Called from standalone/setup.sh scripts during ToolInstance venv creation.
 Each tool provides its own `binary_config.py` in its standalone/ directory with:
     URLS: dict mapping (system, machine) tuples to download URLs
     extract(archive_path, bin_dir): function to extract binaries from the archive
@@ -36,7 +36,7 @@ _ARCH_ALIASES: dict[str, str] = {
 def _find_tool_config(tool_name: str) -> Path:
     """Find a tool's binary_config.py by scanning for standalone/ directories.
 
-    Uses the same discovery pattern as EnvManager._determine_valid_model_name().
+    Uses the same discovery pattern as ToolInstance._determine_valid_model_name().
     """
     tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> bio_programming_tools/ -> tools/
 

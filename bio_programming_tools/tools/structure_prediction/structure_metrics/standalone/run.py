@@ -1,10 +1,10 @@
 """
-Structure metrics standalone runner for EnvManager venv execution.
+Structure metrics standalone runner for ToolInstance venv execution.
 
 Computes longest alpha helix length and gyration radius from PDB files
 using biotite for SSE annotation and structural analysis.
 
-Usage (called by EnvManager, not directly):
+Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
 
@@ -95,7 +95,7 @@ def run_structure_metrics(input_data: dict) -> dict:
 
 
 # =============================================================================
-# Entry point (called by EnvManager.call_standalone_script_in_venv)
+# Entry point (called by ToolInstance)
 # =============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:

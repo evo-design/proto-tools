@@ -114,12 +114,13 @@ def test_tool_config_consistency(config_model: Type):
                 "Remove the 'hidden' flag."
             )
 
-    # DOCUMENTATION CHECK: Ensure that all fields are mentioned in the docstring
-    missing_fields = _find_missing_fields_in_docstring(
-        docstring, config_model.model_fields.keys()
-    )
+    # DOCUMENTATION CHECK: Every field must appear in at least one docstring
+    # in the MRO (the class itself or a superclass). This mirrors how
+    # documentation generation would collect field descriptions.
+    missing_fields = _find_undocumented_fields(config_model)
     assert len(missing_fields) == 0, (
-        f"{config_model.__name__} is missing the following fields in the docstring: {missing_fields}. "
+        f"{config_model.__name__} is missing the following fields in the docstring "
+        f"(not found in any superclass docstring either): {missing_fields}. "
         "Add: Field(..., description='Brief explanation for tooltip')"
     )
 
@@ -139,12 +140,18 @@ def _field_description_is_valid(description: str) -> str:
     return ""
 
 
-def _find_missing_fields_in_docstring(docstring: str, field_names: List[str]) -> List[str]:
+def _find_undocumented_fields(config_model: Type) -> List[str]:
     """
-    Find missing fields in the docstring.
+    Return field names that don't appear in any docstring across the MRO.
     """
-    missing_fields = []
-    for field_name in field_names:
-        if field_name not in docstring:
-            missing_fields.append(field_name)
-    return missing_fields
+    # Collect all docstrings from the class and its superclasses
+    all_docs = ""
+    for cls in config_model.__mro__:
+        if cls.__doc__:
+            all_docs += cls.__doc__
+
+    missing = []
+    for field_name in config_model.model_fields:
+        if field_name not in all_docs:
+            missing.append(field_name)
+    return missing

@@ -5,7 +5,6 @@ Segmasker tool for detecting low-complexity regions in protein sequences.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from typing import List, Optional, Union
 
 import pandas as pd
@@ -196,6 +195,7 @@ class SegmaskerOutput(BaseToolOutput):
 def run_segmasker(
     inputs: SegmaskerInput,
     config: SegmaskerConfig,
+    instance=None,
 ) -> SegmaskerOutput:
     """Detect low-complexity regions in protein sequences using NCBI segmasker.
 
@@ -228,9 +228,7 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
-
-    venv_manager = EnvManager(model_name="segmasker")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "sequences": inputs.sequences,
@@ -241,10 +239,10 @@ def run_segmasker(
         },
     }
 
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+    output_data = ToolInstance.dispatch(
+        "segmasker",
+        input_data,
+        instance=instance,
     )
 
     results_df = pd.DataFrame(output_data["results_data"])

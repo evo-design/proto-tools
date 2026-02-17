@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
@@ -191,9 +191,6 @@ class ProGen2SampleConfig(BaseConfig):
         batch_size (Optional[int]): Number of prompts to sample at once on the GPU.
             If not provided, puts all prompts on the GPU. Default: ``None``.
 
-        verbose (bool): Whether to print detailed status messages during generation,
-            including model loading and timing information. Default: ``False``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -210,12 +207,14 @@ class ProGen2SampleConfig(BaseConfig):
         default="progen2-large",
         title="Model Checkpoint",
         description="ProGen2 model checkpoint to use",
+        reload_on_change=True,
     )
     local_path: Optional[str] = ConfigField(
         default=None,
         title="Local Model Path",
         description="Path to local model weights (if None, downloads from HuggingFace)",
         hidden=True,
+        reload_on_change=True,
     )
     temperature: float = ConfigField(
         default=0.2,
@@ -268,12 +267,6 @@ class ProGen2SampleConfig(BaseConfig):
         description="Max number of samples on the GPU at once",
         advanced=True,
     )
-    verbose: bool = ConfigField(
-        default=False,
-        title="Verbose",
-        description="Whether to print verbose output",
-        hidden=True,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
@@ -295,7 +288,8 @@ class ProGen2SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_progen2_sample(
-    inputs: ProGen2SampleInput, config: ProGen2SampleConfig
+    inputs: ProGen2SampleInput, config: ProGen2SampleConfig,
+    instance=None,
 ) -> ProGen2SampleOutput:
     """Generate protein sequences using ProGen2 autoregressive language model.
 
@@ -346,7 +340,7 @@ def run_progen2_sample(
     Note:
         - ProGen2 uses '1' as start token and '2' as stop token
         - Raw amino acid sequences are automatically normalized (start token prepended)
-        - Local execution runs inside a standalone venv via EnvManager
+        - Local execution runs inside a standalone venv via ToolInstance
 
     See Also:
         - HuggingFace: https://huggingface.co/hugohrban/
@@ -375,11 +369,9 @@ def run_progen2_sample(
         )
     else:
         logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
-        venv_manager = EnvManager("progen2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        result = ToolInstance.dispatch(
+            "progen2",
+            {
                 "operation": "sample",
                 "prompts": inputs.prompts,
                 "model_checkpoint": config.model_checkpoint,
@@ -396,8 +388,9 @@ def run_progen2_sample(
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device="cuda",
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     return ProGen2SampleOutput(

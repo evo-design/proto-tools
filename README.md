@@ -70,6 +70,23 @@ print(result.num_hits)
 print(result.results_df.head())
 ```
 
+### Persistent Execution
+
+For batch workloads, keep the model loaded across calls to avoid redundant load times:
+
+```python
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.tools.structure_prediction.esmfold import (
+    run_esmfold, ESMFoldInput, ESMFoldConfig,
+)
+
+# Model loads once, reused across all calls in the block
+with ToolInstance.persist():
+    for seq in sequences:
+        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
+```
+
+See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthrough with timing comparisons.
 
 ## Using with Claude Code
 
@@ -110,4 +127,14 @@ To run tests, linting, and other code quality tools, install with the dev extras
 ```bash
 pip install -e ".[dev]"
 pre-commit install
+```
+
+### Testing
+
+```bash
+pytest                          # Fast tests (skips slow)
+pytest --cpu                    # CPU tests only
+pytest --all                    # Include slow tests
+pytest --run-all-venvs          # One smoke test per standalone venv tool
+pytest --run-all-venvs --cpu    # CPU venv smoke tests only
 ```

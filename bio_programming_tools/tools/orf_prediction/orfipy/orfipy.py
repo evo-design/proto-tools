@@ -309,7 +309,7 @@ class OrfipyOutput(BaseToolOutput):
     output=OrfipyOutput,
     description="ORF (Open Reading Frame) prediction using Orfipy",
 )
-def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig) -> OrfipyOutput:
+def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance=None) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
     Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
@@ -345,31 +345,27 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig) -> OrfipyOu
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-    from bio_programming_tools.utils.env_manager import EnvManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
-    venv_manager = EnvManager(model_name="orfipy")
-
-    input_data = {
-        "sequences": inputs.sequences,
-        "sequence_ids": sequence_ids,
-        "config": {
-            "threads": config.threads,
-            "start_codons": config.start_codons,
-            "stop_codons": config.stop_codons,
-            "strand": config.strand,
-            "min_len": config.min_len,
-            "max_len": config.max_len,
-            "include_stop": config.include_stop,
-            "translation_table": config.translation_table,
+    output_data = ToolInstance.dispatch(
+        "orfipy",
+        {
+            "sequences": inputs.sequences,
+            "sequence_ids": sequence_ids,
+            "config": {
+                "threads": config.threads,
+                "start_codons": config.start_codons,
+                "stop_codons": config.stop_codons,
+                "strand": config.strand,
+                "min_len": config.min_len,
+                "max_len": config.max_len,
+                "include_stop": config.include_stop,
+                "translation_table": config.translation_table,
+            },
         },
-    }
-
-    output_data = venv_manager.call_standalone_script_in_venv(
-        script_path=Path(__file__).parent / "standalone" / "run.py",
-        input_dict=input_data,
-        device="cpu",
+        instance=instance,
         verbose=False,
     )
 

@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
 
 from .shared_data_models import (
@@ -45,13 +44,12 @@ AlphaGenomePredictVariantConfig = AlphaGenomePredictConfig
 def run_alphagenome_predict_variant(
     inputs: AlphaGenomePredictVariantInput,
     config: AlphaGenomePredictVariantConfig,
+    instance=None,
 ) -> AlphaGenomePredictVariantOutput:
     """Predict variant effects using AlphaGenome open weights."""
-    venv_manager = EnvManager("alphagenome")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict={
+    result = ToolInstance.dispatch(
+        "alphagenome",
+        {
             "operation": "predict_variant",
             "chromosome": inputs.chromosome,
             "interval_start": inputs.interval_start,
@@ -63,8 +61,10 @@ def run_alphagenome_predict_variant(
             "ontology_terms": config.ontology_terms,
             "organism": config.organism,
             "model_version": config.model_version,
+            "device": config.device,
         },
-        device=config.device,
+        instance=instance,
+        reload_on=type(config).reload_fields(),
     )
 
     return AlphaGenomePredictVariantOutput(

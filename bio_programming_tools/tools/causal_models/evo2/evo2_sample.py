@@ -7,7 +7,7 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
@@ -209,10 +209,6 @@ class Evo2SampleConfig(BaseConfig):
             real-time as they are generated. Useful for debugging and monitoring
             progress. Default: ``True``.
 
-        verbose (bool): Whether to print detailed status messages during generation,
-            including model loading, memory usage, and timing information.
-            Default: ``False``.
-
         stop_at_eos (bool): Whether to stop generation when an end-of-sequence
             (EOS) token is encountered. If ``True``, generation terminates early
             for sequences that naturally end. If ``False``, always generates exactly
@@ -248,12 +244,14 @@ class Evo2SampleConfig(BaseConfig):
         title="Model Checkpoint",
         default="evo2_7b",
         description="Evo2 model checkpoint to use",
+        reload_on_change=True,
     )
     local_path: Optional[str] = ConfigField(
         title="Local Checkpoint Path",
         default=None,
         description="Optional path to local model weights",
         hidden=True,
+        reload_on_change=True,
     )
     # vortex sampling params
     top_k: int = ConfigField(
@@ -305,12 +303,6 @@ class Evo2SampleConfig(BaseConfig):
         description="Whether to print generation tokens",
         hidden=True,
     )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print verbose output",
-        hidden=True,
-    )
     stop_at_eos: bool = ConfigField(
         title="Stop at EOS",
         default=True,
@@ -359,7 +351,8 @@ class Evo2SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo2_sample(
-    inputs: Evo2SampleInput, config: Evo2SampleConfig
+    inputs: Evo2SampleInput, config: Evo2SampleConfig,
+    instance=None,
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
 
@@ -457,11 +450,9 @@ def run_evo2_sample(
                 "KV caching. The cache will be ignored."
             )
 
-        venv_manager = EnvManager("evo2")
-        script_path = Path(__file__).parent / "standalone" / "inference.py"
-        result = venv_manager.call_standalone_script_in_venv(
-            script_path=script_path,
-            input_dict={
+        result = ToolInstance.dispatch(
+            "evo2",
+            {
                 "operation": "sample",
                 "prompts": inputs.prompts,
                 "model_checkpoint": config.model_checkpoint,
@@ -480,12 +471,13 @@ def run_evo2_sample(
                 "verbose": config.verbose,
                 "return_logits": config.return_logits,
             },
-            device=config.device,
+            instance=instance,
             verbose=config.verbose,
+            reload_on=type(config).reload_fields(),
         )
 
     # Serialize tensors to nested lists at tool boundary if needed
-    # Both Modal and EnvManager return pre-serialized lists; this handles edge cases
+    # Both Modal and ToolInstance return pre-serialized lists; this handles edge cases
     logits = result.get("logits")
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]

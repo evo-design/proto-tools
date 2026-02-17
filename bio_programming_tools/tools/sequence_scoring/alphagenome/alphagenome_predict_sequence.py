@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.env_manager import EnvManager
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 
@@ -75,21 +74,22 @@ AlphaGenomePredictSequenceConfig = AlphaGenomePredictConfig
 def run_alphagenome_predict_sequence(
     inputs: AlphaGenomePredictSequenceInput,
     config: AlphaGenomePredictSequenceConfig,
+    instance=None,
 ) -> AlphaGenomePredictSequenceOutput:
     """Predict genomic features from a raw DNA sequence using AlphaGenome."""
-    venv_manager = EnvManager("alphagenome")
-    script_path = Path(__file__).parent / "standalone" / "inference.py"
-    result = venv_manager.call_standalone_script_in_venv(
-        script_path=script_path,
-        input_dict={
+    result = ToolInstance.dispatch(
+        "alphagenome",
+        {
             "operation": "predict_sequence",
             "sequence": inputs.sequence,
             "requested_outputs": config.requested_outputs,
             "ontology_terms": config.ontology_terms,
             "organism": config.organism,
             "model_version": config.model_version,
+            "device": config.device,
         },
-        device=config.device,
+        instance=instance,
+        reload_on=type(config).reload_fields(),
     )
 
     seq_len = len(inputs.sequence)

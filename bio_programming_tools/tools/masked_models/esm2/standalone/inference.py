@@ -480,49 +480,60 @@ def _serialize_output(value: Any) -> Any:
     return value
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: ESM2Model | None = None
 
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
-        input_data = json.load(f)
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = ESM2Model(
+            model_checkpoint=input_dict.get("model_checkpoint", "esm2_t33_650M_UR50D"),
+        )
 
-    operation = input_data.get("operation", "embeddings")
-    model_checkpoint = input_data.get("model_checkpoint", "esm2_t33_650M_UR50D")
-    model = ESM2Model(model_checkpoint=model_checkpoint)
-
-    if operation in {"embeddings", "inference"}:
-        result = model(
-            sequences=input_data.get("sequences", []),
-            batch_size=input_data.get("batch_size", 128),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            return_logits=input_data.get("return_logits", False),
+    operation = input_dict.get("operation", "embeddings")
+    if operation in ("embeddings", "inference"):
+        return _model(
+            sequences=input_dict.get("sequences", []),
+            batch_size=input_dict.get("batch_size", 128),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            return_logits=input_dict.get("return_logits", False),
         )
     elif operation == "sample":
-        result = model.sample(
-            sequences=input_data.get("sequences", []),
-            temperature=input_data.get("temperature", 1.0),
-            decoding_method=input_data.get("decoding_method", "entropy"),
-            num_mutations=input_data.get("num_mutations", 1),
-            batch_size=input_data.get("batch_size"),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            return_logits=input_data.get("return_logits", False),
+        return _model.sample(
+            sequences=input_dict.get("sequences", []),
+            temperature=input_dict.get("temperature", 1.0),
+            decoding_method=input_dict.get("decoding_method", "entropy"),
+            num_mutations=input_dict.get("num_mutations", 1),
+            batch_size=input_dict.get("batch_size"),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            return_logits=input_dict.get("return_logits", False),
         )
     elif operation == "score":
-        result = model.score(
-            sequences=input_data.get("sequences", []),
-            batch_size=input_data.get("batch_size", 32),
-            device=input_data.get("device", "cuda"),
-            verbose=input_data.get("verbose", False),
-            return_logits=input_data.get("return_logits", False),
+        return _model.score(
+            sequences=input_dict.get("sequences", []),
+            batch_size=input_dict.get("batch_size", 32),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+            return_logits=input_dict.get("return_logits", False),
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
 
-    with open(output_json_path, "w") as f:
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    result = dispatch(input_data)
+
+    with open(sys.argv[2], "w") as f:
         json.dump(_serialize_output(result), f)

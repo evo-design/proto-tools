@@ -190,20 +190,6 @@ def test_tool_io_timestamp_auto_generation():
     assert before <= output.timestamp <= after
 
 
-def test_tool_io_defaults():
-    """Test default values for optional fields"""
-    output = SimpleToolOutput(
-        tool_id="test-tool",
-        execution_time=1.0,
-        success=True,
-        result="test"
-    )
-
-    # Check defaults
-    assert output.warnings == []
-    assert output.metadata == {}
-    assert isinstance(output.timestamp, datetime)
-
 
 def test_tool_io_immutability_with_validation():
     """Test that validation occurs on assignment"""

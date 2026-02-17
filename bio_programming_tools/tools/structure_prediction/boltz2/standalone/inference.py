@@ -185,37 +185,41 @@ class Boltz2Model:
         )
 
 
-# Standalone script entry point for venv execution
+# ============================================================================
+# Dispatch
+# ============================================================================
+_model: Boltz2Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = Boltz2Model()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        return _model(
+            input_yaml_path=input_dict["input_yaml_path"],
+            output_dir=input_dict["output_dir"],
+            recycling_steps=input_dict.get("recycling_steps", 10),
+            sampling_steps=input_dict.get("sampling_steps", 200),
+            diffusion_samples=input_dict.get("diffusion_samples", 25),
+            num_workers=input_dict.get("num_workers", 4),
+            verbose=input_dict.get("verbose", False),
+        )
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    # Get the input and output json paths
-    input_json_path = sys.argv[1]
-    output_json_path = sys.argv[2]
-
-    # Read input json
-    with open(input_json_path, "r") as f:
+    with open(sys.argv[1], "r") as f:
         input_data = json.load(f)
 
-    # Create model and run inference
-    model = Boltz2Model()
+    result = dispatch(input_data)
 
-    # Build kwargs for model call
-    model_kwargs = {
-        "input_yaml_path": input_data["input_yaml_path"],
-        "output_dir": input_data["output_dir"],
-        "recycling_steps": input_data["recycling_steps"],
-        "sampling_steps": input_data["sampling_steps"],
-        "diffusion_samples": input_data["diffusion_samples"],
-        "num_workers": input_data["num_workers"],
-        "verbose": True,
-    }
-
-    output_data = model(**model_kwargs)
-
-    # Write the output to a json file
-    with open(output_json_path, "w") as f:
-        json.dump(output_data, f)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)
