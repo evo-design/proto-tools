@@ -114,6 +114,11 @@ echo "Installing transformer-engine..."
 # transformer-engine's build step imports torch, so disable build isolation.
 # TE >=2.5.0 includes pyproject.toml with __legacy__ build backend, fixing
 # a build_tools import issue that broke source builds with 2.3.0.
+# Clean uv's sdist cache for TE before building. TE's setup.py deletes its own
+# build_tools/ directory after a successful build (cleanup step), which corrupts
+# the cached sdist source. A subsequent build for a different Python version
+# would reuse the dirty cache and fail with "No module named 'build_tools'".
+uv cache clean transformer-engine-torch
 uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0"
 
 echo "Installing vortex..."
