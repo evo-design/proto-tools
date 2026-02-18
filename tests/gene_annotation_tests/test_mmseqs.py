@@ -377,7 +377,7 @@ class TestInputValidation:
 class TestMmseqs:
     """Integration tests requiring MMseqs2 installation."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_mmseqs_search_proteins_execution(self, temp_dir):
         """Test mmseqs_search_proteins execution with sequences."""
         db_file = temp_dir / "database.faa"

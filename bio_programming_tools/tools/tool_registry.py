@@ -46,6 +46,7 @@ class ToolSpec(BaseModel):
     # Public fields - exposed in API
     key: str = Field(description="Internal identifier (e.g., 'blast-search')")
     label: str = Field(description="External UI display name (e.g., 'BLAST Search')")
+    category: str = Field(description="Tool category (e.g., 'gene_annotation')")
     description: str = Field(description="Detailed description of tool functionality")
     uses_gpu: bool = Field(default=False, description="Whether this tool requires a GPU")
 
@@ -113,6 +114,7 @@ class ToolRegistry:
         cls,
         key: str,
         label: str,
+        category: str,
         input: Type[BaseToolInput],
         config: Type[BaseConfig],
         output: Type[BaseToolOutput],
@@ -131,6 +133,7 @@ class ToolRegistry:
         Args:
             key: Unique identifier (e.g., "blast-search", "esm3-embedding")
             label: Readable display name (e.g., "BLAST Search", "ESM3 Embedding")
+            category: Tool category matching directory name (e.g., "gene_annotation")
             input: Pydantic model class for primary input validation
             config: Pydantic model class for tool configuration validation
             output: Pydantic model class for tool output validation
@@ -216,6 +219,7 @@ class ToolRegistry:
             cls._registry[key] = ToolSpec(
                 key=key,
                 label=label,
+                category=category,
                 description=description,
                 uses_gpu=uses_gpu,
                 input_model=input,
@@ -298,6 +302,30 @@ class ToolRegistry:
     def list_cpu_tools(cls) -> List[ToolSpec]:
         """List all registered tools that do not require a GPU."""
         return [spec for spec in cls._registry.values() if not spec.uses_gpu]
+
+    @classmethod
+    def get_tool_categories(cls) -> Dict[str, str]:
+        """
+        Get mapping of tool names to their categories.
+
+        Extracts tool name from registry key (e.g., 'blast-search' -> 'blast')
+        and maps to category. Handles multi-word tool names like 'colabfold_search'.
+
+        Returns:
+            Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
+        """
+        tool_categories: Dict[str, str] = {}
+        for spec in cls._registry.values():
+            # Extract tool name from key: 'blast-search' -> 'blast'
+            # Handle multi-part names: 'colabfold-search' -> 'colabfold_search'
+            key_parts = spec.key.split("-")
+            if len(key_parts) >= 2:
+                # Join all but last part (the action) with underscores
+                tool_name = "_".join(key_parts[:-1])
+            else:
+                tool_name = spec.key
+            tool_categories[tool_name] = spec.category
+        return tool_categories
 
     @classmethod
     def get_citation(cls, key: str) -> str | None:

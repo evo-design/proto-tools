@@ -18,7 +18,6 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -32,6 +31,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
@@ -219,6 +219,7 @@ class Chai1Config(StructurePredictionConfig):
 @tool(
     key="chai1-prediction",
     label="Chai1 Structure Prediction",
+    category="structure_prediction",
     input=Chai1Input,
     config=Chai1Config,
     output=Chai1Output,

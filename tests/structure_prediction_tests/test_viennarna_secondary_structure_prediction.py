@@ -18,7 +18,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _persistent_tool = make_persistent_fixture("viennarna", gpu=False)
 
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 def test_basic_folding():
     """Test basic RNA folding with a simple hairpin sequence."""
     # Classic hairpin: GCGC...GCGC should form a stem-loop

@@ -186,6 +186,7 @@ class SegmaskerOutput(BaseToolOutput):
 @tool(
     key="segmasker-score",
     label="Segmasker Low-Complexity Detection",
+    category="sequence_scoring",
     input=SegmaskerInput,
     config=SegmaskerConfig,
     output=SegmaskerOutput,

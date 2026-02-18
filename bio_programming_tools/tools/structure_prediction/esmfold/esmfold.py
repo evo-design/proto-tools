@@ -21,7 +21,6 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
@@ -34,6 +33,7 @@ from bio_programming_tools.utils import (
     return_invalid_protein_chars,
     use_cloud_gpu,
 )
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 
 # ============================================================================
@@ -191,6 +191,7 @@ class ESMFoldConfig(StructurePredictionConfig):
 @tool(
     key="esmfold-prediction",
     label="ESMFold Structure Prediction",
+    category="structure_prediction",
     input=ESMFoldInput,
     config=ESMFoldConfig,
     output=ESMFoldOutput,

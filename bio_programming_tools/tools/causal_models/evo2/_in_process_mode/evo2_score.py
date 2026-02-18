@@ -11,8 +11,8 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_io import BaseToolInput
 
 from .evo2_cache import get_cached_evo2_model
 
@@ -135,6 +135,7 @@ class Evo2ScoringConfig(BaseConfig):
 @tool(
     key="evo2-score-in-process",
     label="Evo2 Scoring (In-Process)",
+    category="causal_models",
     input=Evo2ScoringInput,
     config=Evo2ScoringConfig,
     output=Evo2ScoringOutput,

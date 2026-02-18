@@ -54,7 +54,7 @@ def test_esm2_forward_pass():
 # Scoring Tests
 # ============================================================================
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.uses_gpu
 def test_esm2_score_inference():
     """Test run_esm2_score() with comprehensive value validation."""

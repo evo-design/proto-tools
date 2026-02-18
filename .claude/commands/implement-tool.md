@@ -224,6 +224,7 @@ class {ToolName}Output(BaseToolOutput):
 @tool(
     key="{tool-key}",
     label="{Tool Display Label}",
+    category="{category}",
     input={ToolName}Input,
     config={ToolName}Config,
     output={ToolName}Output,
@@ -671,7 +672,7 @@ Before submitting, verify:
 - [ ] Config extends `BaseConfig`, uses `ConfigField()` (not bare Field)
 - [ ] Output extends `BaseToolOutput`, does NOT redeclare inherited metadata fields
 - [ ] Output implements `output_format_options`, `output_format_default`, `_export_output()`
-- [ ] `@tool()` decorator has all 6 kwargs: key, label, input, config, output, description
+- [ ] `@tool()` decorator has all 7 kwargs: key, label, category, input, config, output, description
 - [ ] Run function signature: `def run_*(inputs: *Input, config: *Config) -> *Output`
 - [ ] Run function returns Output with `metadata={}` dict of key parameters
 - [ ] No try/except wrapping the tool logic — `@tool` decorator handles errors

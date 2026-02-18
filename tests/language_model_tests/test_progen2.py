@@ -28,7 +28,7 @@ _persistent_tool = make_persistent_fixture("progen2")
 # Sampling Tests
 # ============================================================================
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.uses_gpu
 def test_progen2_sample_basic():
     """Test basic ProGen2 sampling via run_progen2_sample."""

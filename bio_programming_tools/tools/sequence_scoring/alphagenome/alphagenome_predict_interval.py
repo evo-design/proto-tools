@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 from .shared_data_models import (
     AlphaGenomeInput,
@@ -35,6 +35,7 @@ AlphaGenomePredictIntervalConfig = AlphaGenomePredictConfig
 @tool(
     key="alphagenome-predict-interval",
     label="AlphaGenome Predict Interval",
+    category="sequence_scoring",
     input=AlphaGenomePredictIntervalInput,
     config=AlphaGenomePredictIntervalConfig,
     output=AlphaGenomePredictIntervalOutput,

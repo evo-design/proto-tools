@@ -148,7 +148,7 @@ class TestStructureMetricsExport:
 class TestStructureMetricsIntegration:
     """Integration tests that require biotite and real PDB files."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.skip_ci
     def test_run_structure_metrics_on_pdb(self, tmp_path):
         """Run structure metrics on a minimal PDB file."""

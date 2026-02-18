@@ -164,6 +164,7 @@ class CrisprTracrConfig(BaseConfig):
 @tool(
     key="crispr-tracr",
     label="CRISPRtracrRNA Prediction",
+    category="gene_annotation",
     input=CrisprTracrInput,
     config=CrisprTracrConfig,
     output=CrisprTracrOutput,

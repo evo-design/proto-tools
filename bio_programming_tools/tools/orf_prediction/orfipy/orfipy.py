@@ -13,15 +13,11 @@ from typing import List, Literal, Optional
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import (
-    BaseConfig,
-    ConfigField,
-    resolve_sequence_ids,
-)
+from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 # ============================================================================
@@ -304,6 +300,7 @@ class OrfipyOutput(BaseToolOutput):
 @tool(
     key="orfipy-prediction",
     label="Orfipy ORF Prediction",
+    category="orf_prediction",
     input=OrfipyInput,
     config=OrfipyConfig,
     output=OrfipyOutput,

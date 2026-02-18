@@ -108,7 +108,7 @@ markers = [
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
     "only_chimera: Test only runs on Chimera cluster (arc-slurm)",
-    "run_all_venvs: One smoke test per standalone venv tool (use --run-all-venvs to run)",
+    "include_in_env_report: Include test in --env-report (one smoke test per tool)",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

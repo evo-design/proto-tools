@@ -6,8 +6,8 @@ from typing import Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 from .alphagenome_score_variant import AlphaGenomeScoreVariantConfig
 from .shared_data_models import AlphaGenomeInput, AlphaGenomeScoreOutput
@@ -104,6 +104,7 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantConfig
 @tool(
     key="alphagenome-score-ism-variants",
     label="AlphaGenome Score ISM Variants",
+    category="sequence_scoring",
     input=AlphaGenomeScoreISMInput,
     config=AlphaGenomeScoreISMConfig,
     output=AlphaGenomeScoreISMOutput,

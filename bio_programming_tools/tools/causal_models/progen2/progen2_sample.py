@@ -7,10 +7,10 @@ from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +281,7 @@ class ProGen2SampleConfig(BaseConfig):
 @tool(
     key="progen2-sample",
     label="ProGen2 Sampling",
+    category="causal_models",
     input=ProGen2SampleInput,
     config=ProGen2SampleConfig,
     output=ProGen2SampleOutput,

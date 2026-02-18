@@ -32,7 +32,7 @@ class TestAlphaGenome:
 
     # --- Interval Prediction ---
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_interval_prediction(self):
         """Test interval prediction with multiple output types."""
         from bio_programming_tools.tools.sequence_scoring.alphagenome import (

@@ -71,7 +71,7 @@ class TestEnformerInputValidation:
 class TestEnformerPrediction:
     """Tests for Enformer prediction functionality."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.uses_gpu
     def test_enformer_prediction_human(self):
         """Test Enformer prediction for human genome."""

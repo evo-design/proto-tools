@@ -34,7 +34,7 @@ def cif_structure():
 class TestLigandMPNNSample:
     """Tests for LigandMPNN sampling."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.uses_gpu
     def test_ligandmpnn_sample_simple(self, cif_structure: Structure):
         """Test basic LigandMPNN sampling with a single structure."""

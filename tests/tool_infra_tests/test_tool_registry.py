@@ -74,6 +74,7 @@ def test_tool_registry_register_decorator(clean_registry):
     @clean_registry.register(
         key="mock-tool",
         label="Mock Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -105,6 +106,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
     @clean_registry.register(
         key="duplicate-tool",
         label="Duplicate Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -124,6 +126,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
         @clean_registry.register(
             key="duplicate-tool",  # Same key
             label="Duplicate Tool 2",
+            category="test",
             input=AnotherMockToolInput,
             config=AnotherMockToolConfig,
             output=AnotherMockToolOutput,
@@ -149,6 +152,7 @@ def test_tool_registry_list_all(clean_registry):
     @clean_registry.register(
         key="tool-1",
         label="Tool 1",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -165,6 +169,7 @@ def test_tool_registry_list_all(clean_registry):
     @clean_registry.register(
         key="tool-2",
         label="Tool 2",
+        category="test",
         input=AnotherMockToolInput,
         config=AnotherMockToolConfig,
         output=AnotherMockToolOutput,
@@ -210,6 +215,7 @@ def test_tool_registry_get_schema(clean_registry):
     @clean_registry.register(
         key="schema-tool",
         label="Schema Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -255,6 +261,7 @@ def test_tool_registry_get_input_schema(clean_registry):
     @clean_registry.register(
         key="input-schema-tool",
         label="Input Schema Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -285,6 +292,7 @@ def test_tool_registry_get_schemas(clean_registry):
     @clean_registry.register(
         key="both-schemas-tool",
         label="Both Schemas Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -323,6 +331,7 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
     @clean_registry.register(
         key="metadata-tool",
         label="Metadata Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -359,6 +368,7 @@ def test_tool_registry_decorator_handles_exceptions(clean_registry):
     @clean_registry.register(
         key="failing-tool",
         label="Failing Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -390,6 +400,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
     @clean_registry.register(
         key="warning-tool",
         label="Warning Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -419,6 +430,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
     @clean_registry.register(
         key="error-access-tool",
         label="Error Access Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -462,6 +474,7 @@ def test_tool_output_successful_access_works(clean_registry):
     @clean_registry.register(
         key="success-access-tool",
         label="Success Access Tool",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -494,6 +507,7 @@ def test_tool_registry_list_gpu_tools(clean_registry):
     @clean_registry.register(
         key="gpu-1",
         label="GPU 1",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -506,6 +520,7 @@ def test_tool_registry_list_gpu_tools(clean_registry):
     @clean_registry.register(
         key="cpu-1",
         label="CPU 1",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,
@@ -517,6 +532,7 @@ def test_tool_registry_list_gpu_tools(clean_registry):
     @clean_registry.register(
         key="gpu-2",
         label="GPU 2",
+        category="test",
         input=MockToolInput,
         config=MockToolConfig,
         output=MockToolOutput,

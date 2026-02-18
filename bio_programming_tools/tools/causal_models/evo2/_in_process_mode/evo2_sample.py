@@ -8,8 +8,8 @@ from typing import Dict, List, Literal, Optional
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 from .evo2_cache import get_cached_evo2_model
 
@@ -354,6 +354,7 @@ class Evo2SampleConfig(BaseConfig):
 @tool(
     key="evo2-sample-in-process",
     label="Evo2 Sampling (In-Process)",
+    category="causal_models",
     input=Evo2SampleInput,
     config=Evo2SampleConfig,
     output=Evo2SampleOutput,

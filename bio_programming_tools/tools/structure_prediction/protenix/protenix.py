@@ -22,7 +22,6 @@ from typing import List, Literal, Optional
 from pydantic import model_validator
 
 from bio_programming_tools.entities.structures import BFactorType, Structure
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -35,6 +34,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 logger = getLogger(__name__)
 
@@ -307,6 +307,7 @@ class ProtenixConfig(StructurePredictionConfig):
 @tool(
     key="protenix-prediction",
     label="Protenix Structure Prediction",
+    category="structure_prediction",
     input=ProtenixInput,
     config=ProtenixConfig,
     output=ProtenixOutput,

@@ -229,7 +229,7 @@ class TestHelperFunctions:
 class TestPyHmmsearchExecution:
     """Tests for pyhmmer_hmmsearch function."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_pyhmmer_hmmsearch_success(self):
         """Test successful pyhmmer_hmmsearch execution with real PyHMMER."""
         inputs = PyHmmsearchInput(

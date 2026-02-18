@@ -7,8 +7,6 @@ from typing import Any, Dict, List
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -17,6 +15,8 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import use_cloud_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class LigandMPNNSequences(DesignedSequences):
 @tool(
     key="ligandmpnn-sample",
     label="LigandMPNN Sampling",
+    category="inverse_folding",
     input=LigandMPNNSampleInput,
     config=LigandMPNNSampleConfig,
     output=LigandMPNNSampleOutput,

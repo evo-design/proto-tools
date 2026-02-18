@@ -216,7 +216,7 @@ class TestMincedIntegration:
         + "ATCGATCGATCGATCGATCGATCGATCG"  # Trailer
     )
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.skip_ci
     def test_run_minced_with_crispr_sequence(self):
         """Run MinCED on a sequence with known CRISPR arrays."""

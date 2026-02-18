@@ -120,7 +120,7 @@ class TestEvo1SampleConfig:
 # ============================================================================
 
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.uses_gpu
 def test_evo1_sample_tool():
     """Test the evo1 sampling tool end-to-end: inference, output structure, and export."""

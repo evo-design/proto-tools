@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from bio_programming_tools import setup_logging
+from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
@@ -113,6 +114,7 @@ class EnvReportCollector:
         *,
         has_gpu_marker: bool = False,
         error_message: str | None = None,
+        tool_name: str | None = None,
     ) -> None:
         """Record a test result."""
         import time
@@ -121,18 +123,22 @@ class EnvReportCollector:
         start_time = self._test_start_times.pop(nodeid, time.time())
         duration = time.time() - start_time
 
-        # Parse tool info from nodeid
-        # Example: tests/language_model_tests/test_esm2.py::test_esm2_score_inference
-        tool_name, category = self._parse_tool_from_nodeid(nodeid)
-        if not tool_name:
+        # Use explicit tool_name if provided, otherwise parse from nodeid
+        if tool_name:
+            parsed_tool = tool_name
+            category = self._get_category_for_tool(tool_name)
+        else:
+            parsed_tool, category = self._parse_tool_from_nodeid(nodeid)
+
+        if not parsed_tool:
             return  # Not a recognizable tool test
 
         # Determine venv path and status
-        venv_path, venv_status = self._get_venv_info(tool_name)
+        venv_path, venv_status = self._get_venv_info(parsed_tool)
 
         self.results.append(
             ToolTestResult(
-                tool_name=tool_name,
+                tool_name=parsed_tool,
                 category=category,
                 test_name=nodeid,
                 status=outcome,
@@ -144,6 +150,11 @@ class EnvReportCollector:
             )
         )
 
+    def _get_category_for_tool(self, tool_name: str) -> str:
+        """Get category for a tool name from the ToolRegistry."""
+        tool_categories = ToolRegistry.get_tool_categories()
+        return tool_categories.get(tool_name, "unknown")
+
     def _parse_tool_from_nodeid(self, nodeid: str) -> tuple[str | None, str | None]:
         """Extract tool name and category from test nodeid."""
         # Pattern: tests/{category}_tests/test_{tool}.py::...
@@ -154,43 +165,19 @@ class EnvReportCollector:
 
         test_file = match.group(1)
 
-        # Map test file names to tool names and categories
-        # This handles cases where test file name differs from tool directory name
-        tool_mappings = {
-            "esm2": ("esm2", "masked_models"),
-            "esm3": ("esm3", "masked_models"),
-            "evo1": ("evo1", "causal_models"),
-            "evo2": ("evo2", "causal_models"),
-            "progen2": ("progen2", "causal_models"),
-            "blast": ("blast", "gene_annotation"),
-            "mmseqs": ("mmseqs", "gene_annotation"),
-            "pyhmmer": ("pyhmmer", "gene_annotation"),
-            "minced": ("minced", "gene_annotation"),
-            "crispr_tracr": ("crispr_tracr", "gene_annotation"),
-            "mafft": ("mafft", "sequence_alignment"),
-            "local_colabfold_search": ("colabfold_search", "sequence_alignment"),
-            "enformer": ("enformer", "sequence_scoring"),
-            "borzoi": ("borzoi", "sequence_scoring"),
-            "alphagenome": ("alphagenome", "sequence_scoring"),
-            "orfipy": ("orfipy", "orf_prediction"),
-            "prodigal": ("prodigal", "orf_prediction"),
-            "rna_splicing": ("splice_transformer", "rna_splicing"),
-            "proteinmpnn": ("proteinmpnn", "inverse_folding"),
-            "ligandmpnn": ("ligandmpnn", "inverse_folding"),
-            "esmfold": ("esmfold", "structure_prediction"),
-            "structure_prediction": ("structure_prediction", "structure_prediction"),
-            "structure_metrics": ("structure_metrics", "structure_prediction"),
-            "viennarna_secondary_structure_prediction": (
-                "viennarna",
-                "structure_prediction",
-            ),
-            "protenix": ("protenix", "structure_prediction"),
-            "rfdiffusion3": ("rfdiffusion3", "structure_design"),
-            "bioemu": ("bioemu", "structure_dynamics"),
+        # Map test file names to tool names (when they differ)
+        file_to_tool = {
+            "local_colabfold_search": "colabfold_search",
+            "rna_splicing": "splice_transformer",
+            "viennarna_secondary_structure_prediction": "viennarna",
         }
 
-        if test_file in tool_mappings:
-            return tool_mappings[test_file]
+        tool_name = file_to_tool.get(test_file, test_file)
+        tool_categories = ToolRegistry.get_tool_categories()
+        category = tool_categories.get(tool_name)
+
+        if category:
+            return tool_name, category
 
         # Fallback: use test file name as tool name
         return test_file, "unknown"
@@ -347,8 +334,8 @@ class EnvReportCollector:
             # Category header with mini badge
             lines.append(f"### {category.replace('_', ' ').title()} ({cat_passed}/{cat_total})")
             lines.append("")
-            lines.append("| Tool | Status | Requires GPU | Venv build succeeded | Duration |")
-            lines.append("|------|--------|--------------|----------------------|----------|")
+            lines.append("| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |")
+            lines.append("|------|--------------|----------------------|----------|--------|")
 
             for r in sorted(results, key=lambda x: x.tool_name):
                 # Status emoji
@@ -373,7 +360,7 @@ class EnvReportCollector:
                 else:
                     venv = "—"
 
-                lines.append(f"| `{r.tool_name}` | {status} | {gpu_req} | {venv} | {duration} |")
+                lines.append(f"| `{r.tool_name}` | {gpu_req} | {venv} | {duration} | {status} |")
 
             lines.append("")
 
@@ -487,7 +474,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
     config.addinivalue_line(
-        "markers", "run_all_venvs: mark test as a venv smoke test for --env-report"
+        "markers", "include_in_env_report: Include test in --env-report (one smoke test per tool)"
     )
 
     # Set environment variable to indicate we're in pytest
@@ -563,9 +550,15 @@ def pytest_runtest_makereport(item, call):
 
     # Only record final outcome (call phase for pass/fail, setup/teardown for errors)
     if _env_report_collector is not None:
-        # Only record tests marked with run_all_venvs
-        if "run_all_venvs" not in item.keywords:
+        # Only record tests marked with include_in_env_report
+        if "include_in_env_report" not in item.keywords:
             return
+
+        # Extract tool name from marker if provided
+        tool_name = None
+        marker = item.get_closest_marker("include_in_env_report")
+        if marker and marker.kwargs.get("tool"):
+            tool_name = marker.kwargs["tool"]
 
         # Determine outcome
         if report.when == "call":
@@ -589,6 +582,7 @@ def pytest_runtest_makereport(item, call):
                 status,
                 has_gpu_marker=has_gpu,
                 error_message=error_msg,
+                tool_name=tool_name,
             )
         elif report.when == "setup" and report.failed:
             # Setup failure
@@ -597,6 +591,7 @@ def pytest_runtest_makereport(item, call):
                 "failed",
                 has_gpu_marker="uses_gpu" in item.keywords,
                 error_message=f"Setup failed: {report.longrepr}",
+                tool_name=tool_name,
             )
 
 
@@ -668,7 +663,7 @@ def pytest_collection_modifyitems(config, items):
         gpu_available = _gpu_available()
 
         for item in items:
-            if "run_all_venvs" not in item.keywords:
+            if "include_in_env_report" not in item.keywords:
                 item.add_marker(skip_not_venv)
             elif "uses_gpu" in item.keywords and not gpu_available:
                 # Skip GPU tests on platforms without GPU, but still include in report

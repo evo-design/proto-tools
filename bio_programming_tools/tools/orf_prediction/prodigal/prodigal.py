@@ -16,8 +16,6 @@ from typing import List
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
@@ -25,6 +23,8 @@ from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_dna_chars,
 )
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 # ============================================================================
@@ -296,6 +296,7 @@ class ProdigalOutput(BaseToolOutput):
 @tool(
     key="prodigal-prediction",
     label="Prodigal ORF Prediction",
+    category="orf_prediction",
     input=ProdigalInput,
     config=ProdigalConfig,
     output=ProdigalOutput,

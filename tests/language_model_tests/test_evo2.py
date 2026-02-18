@@ -81,7 +81,7 @@ def test_evo2_sample_inference():
     assert len(result["kv_caches"]) == 2
 
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.uses_gpu
 def test_evo2_sample_tool():
     """Test the evo2 sampling tool with run_evo2_sample."""

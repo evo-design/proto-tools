@@ -11,15 +11,11 @@ from typing import List, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import (
-    BaseConfig,
-    ConfigField,
-    resolve_sequence_ids,
-)
+from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 # ============================================================================
@@ -139,6 +135,7 @@ class MafftConfig(BaseConfig):
 @tool(
     key="mafft-align",
     label="MAFFT Alignment",
+    category="sequence_alignment",
     input=MafftInput,
     config=MafftConfig,
     output=MafftOutput,

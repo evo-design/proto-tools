@@ -16,7 +16,7 @@ allowed-tools:
 
 ## Workflow
 
-1. **Find the tool**: Browse `bio_programming_tools/tools/` to find the right category and tool directory, or use `ToolRegistry.list_all()` from `bio_programming_tools.tools` to discover available tools
+1. **Find the tool**: Browse `bio_programming_tools/tools/` to find the right category and tool directory, or use `ToolRegistry.list_all()` from `bio_programming_tools.tools` to discover available tools (includes category info via `spec.category`)
 2. **Read README**: `bio_programming_tools/tools/{category}/{tool}/README.md` — has parameters, thresholds, biological context, and examples
 3. **Read notebook**: `bio_programming_tools/tools/{category}/{tool}/examples/example.ipynb` — has working code with exact imports and real output
 4. **Read API**: Read the tool's `Input`/`Config`/`Output` classes for the exact Pydantic schema
@@ -87,6 +87,9 @@ bibtex = ToolRegistry.get_citation("alphafold3-prediction")
 
 # Get all citations
 all_citations = ToolRegistry.list_citations()  # {tool_key: bibtex_string}
+
+# Get tool categories
+tool_categories = ToolRegistry.get_tool_categories()  # {tool_name: category}
 ```
 
 ## GPU Tools

@@ -5,8 +5,8 @@ from typing import List
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_cache import tool_cache
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -63,6 +63,7 @@ PyNhmmerConfig = PyHmmerConfig
 @tool(
     key="pyhmmer-nhmmer",
     label="PyHMMER NHMMER Search",
+    category="gene_annotation",
     input=PyNhmmerInput,
     config=PyNhmmerConfig,
     output=PyNhmmerOutput,

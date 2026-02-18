@@ -14,7 +14,12 @@ from typing import List
 from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, tool_cache_iterable
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    tool_cache_iterable,
+)
 
 
 # ============================================================================
@@ -108,6 +113,7 @@ class StructureMetricsConfig(BaseConfig):
 @tool(
     key="structure-metrics",
     label="Structure Quality Metrics",
+    category="structure_prediction",
     input=StructureMetricsInput,
     config=StructureMetricsConfig,
     output=StructureMetricsOutput,

@@ -12,8 +12,6 @@ from bio_programming_tools.entities.structures import (
     Structure,
     StructureEnsemble,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
@@ -25,6 +23,8 @@ from bio_programming_tools.utils import (
     return_invalid_protein_chars,
     use_cloud_gpu,
 )
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +191,7 @@ class BioEmuConfig(StructurePredictionConfig):
 @tool(
     key="bioemu-sample",
     label="BioEmu Conformational Ensemble Sampling",
+    category="structure_dynamics",
     input=BioEmuInput,
     config=BioEmuConfig,
     output=BioEmuOutput,

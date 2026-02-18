@@ -156,6 +156,7 @@ class CreateBlastDbConfig(BaseConfig):
 @tool(
     key="blast-create-db",
     label="Create BLAST Database",
+    category="gene_annotation",
     input=CreateBlastDbInput,
     config=CreateBlastDbConfig,
     output=CreateBlastDbOutput,

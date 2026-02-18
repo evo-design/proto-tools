@@ -7,8 +7,6 @@ from typing import List, Literal, Union
 
 from pydantic import ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
     BaseConfig,
@@ -16,6 +14,8 @@ from bio_programming_tools.utils import (
     return_invalid_nucleotide_chars,
     use_cloud_gpu,
 )
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class EnformerConfig(BaseConfig):
 @tool(
     key="enformer-prediction",
     label="Enformer Prediction",
+    category="sequence_scoring",
     input=EnformerInput,
     config=EnformerConfig,
     output=EnformerOutput,

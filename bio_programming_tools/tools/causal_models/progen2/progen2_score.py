@@ -10,10 +10,10 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_cloud_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,7 @@ class ProGen2ScoringConfig(BaseConfig):
 @tool(
     key="progen2-score",
     label="ProGen2 Scoring",
+    category="causal_models",
     input=ProGen2ScoringInput,
     config=ProGen2ScoringConfig,
     output=ProGen2ScoringOutput,
