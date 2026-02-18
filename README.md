@@ -135,6 +135,6 @@ pre-commit install
 pytest                          # Fast tests (skips slow)
 pytest --cpu                    # CPU tests only
 pytest --all                    # Include slow tests
-pytest --run-all-venvs          # One smoke test per standalone venv tool
-pytest --run-all-venvs --cpu    # CPU venv smoke tests only
+pytest --env-report             # Generate environment compatibility report
+pytest --env-report --cpu       # CPU tools only
 ```

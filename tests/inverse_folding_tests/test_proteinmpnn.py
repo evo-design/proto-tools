@@ -43,7 +43,7 @@ def pdb_structure():
 
 class TestProteinMPNNSample:
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.uses_gpu
     def test_proteinmpnn_sample_simple(self, pdb_structure: Structure):
         input = InverseFoldingInput(

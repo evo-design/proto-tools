@@ -8,7 +8,6 @@ import numpy as np
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
@@ -17,6 +16,7 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ class ProteinMPNNSequences(DesignedSequences):
 @tool(
     key="proteinmpnn-sample",
     label="ProteinMPNN Sampling",
+    category="inverse_folding",
     input=ProteinMPNNSampleInput,
     config=ProteinMPNNSampleConfig,
     output=ProteinMPNNSampleOutput,

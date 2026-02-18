@@ -21,10 +21,10 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.utils.tool_cache import tool_cache
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +492,7 @@ class RFdiffusion3Output(BaseToolOutput):
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
+    category="structure_design",
     input=RFdiffusion3Input,
     config=RFdiffusion3Config,
     output=RFdiffusion3Output,

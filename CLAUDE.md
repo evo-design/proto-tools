@@ -81,12 +81,17 @@ ToolRegistry.get_citation("tool-key")  # Returns BibTeX string
 ToolRegistry.list_citations()          # Returns {tool_key: bibtex} for all tools
 ```
 
+**To get tool categories:**
+```python
+ToolRegistry.get_tool_categories()  # Returns {tool_name: category} mapping
+```
+
 ### The Universal Tool Pattern
 
 Every tool follows this exact pattern — no exceptions:
 
 ```python
-@tool(key="tool-key", label="Tool Label", input=ToolInput, config=ToolConfig, output=ToolOutput, description="...")
+@tool(key="tool-key", label="Tool Label", category="category_name", input=ToolInput, config=ToolConfig, output=ToolOutput, description="...")
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 ```
 

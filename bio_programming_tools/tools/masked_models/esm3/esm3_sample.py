@@ -7,13 +7,13 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +183,7 @@ class ESM3SampleConfig(BaseConfig):
 @tool(
     key="esm3-sample",
     label="ESM3 Sampling",
+    category="masked_models",
     input=ESM3SampleInput,
     config=ESM3SampleConfig,
     output=ESM3SampleOutput,

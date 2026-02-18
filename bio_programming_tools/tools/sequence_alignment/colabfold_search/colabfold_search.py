@@ -17,11 +17,11 @@ from typing import Iterator, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +420,7 @@ class ColabfoldSearchConfig(BaseConfig):
 @tool(
     key="colabfold-search",
     label="ColabFold MSA Search",
+    category="sequence_alignment",
     input=ColabfoldSearchInput,
     config=ColabfoldSearchConfig,
     output=ColabfoldSearchOutput,

@@ -640,6 +640,7 @@ class BlastSearchConfig(BaseConfig):
 @tool(
     key="blast-search",
     label="BLAST Search",
+    category="gene_annotation",
     input=BlastSearchInput,
     config=BlastSearchConfig,
     output=BlastSearchOutput,

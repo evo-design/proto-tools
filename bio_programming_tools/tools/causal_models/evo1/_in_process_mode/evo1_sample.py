@@ -16,7 +16,12 @@ from typing import List, Literal, Optional
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+)
 
 from .evo1_cache import get_cached_evo1_model
 
@@ -174,6 +179,7 @@ class Evo1SampleConfig(BaseConfig):
 @tool(
     key="evo1-sample-in-process",
     label="Evo1 Sampling (In-Process)",
+    category="causal_models",
     input=Evo1SampleInput,
     config=Evo1SampleConfig,
     output=Evo1SampleOutput,

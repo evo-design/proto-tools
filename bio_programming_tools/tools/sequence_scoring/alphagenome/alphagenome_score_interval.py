@@ -4,9 +4,9 @@ from __future__ import annotations
 import logging
 from typing import List, Literal, Optional
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 from .shared_data_models import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
@@ -72,6 +72,7 @@ class AlphaGenomeScoreIntervalConfig(BaseConfig):
 @tool(
     key="alphagenome-score-interval",
     label="AlphaGenome Score Interval",
+    category="sequence_scoring",
     input=AlphaGenomeScoreIntervalInput,
     config=AlphaGenomeScoreIntervalConfig,
     output=AlphaGenomeScoreIntervalOutput,

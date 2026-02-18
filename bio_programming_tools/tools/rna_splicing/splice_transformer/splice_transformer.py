@@ -241,6 +241,7 @@ class SpliceTransformerOutput(BaseToolOutput):
 @tool(
     key="splice-transformer-prediction",
     label="SpliceTransformer Splicing Prediction",
+    category="rna_splicing",
     input=SpliceTransformerInput,
     config=SpliceTransformerConfig,
     output=SpliceTransformerOutput,

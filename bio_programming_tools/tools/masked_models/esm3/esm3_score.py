@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
     MaskedModelScoringOutput,
@@ -12,6 +11,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,7 @@ class ESM3ScoringConfig(BaseConfig):
 @tool(
     key="esm3-score",
     label="ESM3 Scoring",
+    category="masked_models",
     input=ESM3ScoringInput,
     config=ESM3ScoringConfig,
     output=ESM3ScoringOutput,

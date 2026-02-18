@@ -7,14 +7,14 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import Field
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolOutput
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
 @tool(
     key="esm3-structure-prediction",
     label="ESM3 Structure Prediction",
+    category="masked_models",
     input=ESM3StructurePredictionInput,
     config=ESM3StructurePredictionConfig,
     output=ESM3StructurePredictionOutput,

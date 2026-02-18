@@ -17,9 +17,9 @@ from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 # ============================================================================
@@ -177,6 +177,7 @@ class ViennaRNAConfig(BaseConfig):
 @tool(
     key="viennarna-prediction",
     label="ViennaRNA Secondary Structure Prediction",
+    category="structure_prediction",
     input=ViennaRNAInput,
     config=ViennaRNAConfig,
     output=ViennaRNAOutput,

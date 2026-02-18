@@ -396,7 +396,7 @@ def test_blast_config_schema():
 class TestLocalBlastn:
     """End-to-end local blastn tests against a temporary nucleotide database."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_exact_match(self, nucl_blast_db):
         """Exact subsequence from the database → 100% identity hit."""
         query = (

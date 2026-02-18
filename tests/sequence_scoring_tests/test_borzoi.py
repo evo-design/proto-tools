@@ -100,7 +100,7 @@ class TestBorzoiInputValidation:
 class TestBorzoiPrediction:
     """Tests for Borzoi single-replicate prediction functionality."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     @pytest.mark.uses_gpu
     def test_borzoi_prediction_human(self):
         """Test Borzoi prediction for human genome."""

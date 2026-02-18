@@ -5,9 +5,9 @@ import logging
 
 from pydantic import Field, field_validator
 
+from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
-from bio_programming_tools.tools.tool_registry import tool
 
 from .shared_data_models import AlphaGenomePredictConfig, AlphaGenomePredictOutput
 
@@ -65,6 +65,7 @@ AlphaGenomePredictSequenceConfig = AlphaGenomePredictConfig
 @tool(
     key="alphagenome-predict-sequence",
     label="AlphaGenome Predict Sequence",
+    category="sequence_scoring",
     input=AlphaGenomePredictSequenceInput,
     config=AlphaGenomePredictSequenceConfig,
     output=AlphaGenomePredictSequenceOutput,

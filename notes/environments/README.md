@@ -17,7 +17,7 @@ pytest --env-report --collect-only
 
 The `--env-report` flag:
 1. Cleans the `.venvs/` directory to force fresh venv rebuilds
-2. Runs ALL tests marked `@pytest.mark.run_all_venvs` (overrides `--cpu`, `--gpu`, `--slow`, `skip_ci`)
+2. Runs ALL tests marked `@pytest.mark.include_in_env_report` (overrides `--cpu`, `--gpu`, `--slow`, `skip_ci`)
 3. Skips GPU tests if no GPU is available
 4. Captures parent process and subprocess environment variables
 5. Generates a Markdown report in this directory

@@ -199,6 +199,7 @@ class MincedConfig(BaseConfig):
 @tool(
     key="minced-crispr",
     label="MinCED CRISPR Array Detection",
+    category="gene_annotation",
     input=MincedInput,
     config=MincedConfig,
     output=MincedOutput,

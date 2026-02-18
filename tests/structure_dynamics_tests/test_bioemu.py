@@ -210,7 +210,7 @@ class TestHelpers:
 class TestRunBioEmu:
     """Integration-style tests for run_bioemu."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_local_execution_uses_tool_instance(
         self,
         single_chain_complex: StructurePredictionComplex,

@@ -5,9 +5,9 @@ from typing import List
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils.tool_cache import tool_cache
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -82,6 +82,7 @@ PyJackhmmerOutput = PyHmmerOutput
 @tool(
     key="pyhmmer-jackhmmer",
     label="PyHMMER JackHMMER Search",
+    category="gene_annotation",
     input=PyJackhmmerInput,
     config=PyJackhmmerConfig,
     output=PyJackhmmerOutput,

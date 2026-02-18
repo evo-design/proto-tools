@@ -84,7 +84,7 @@ class TestProdigalInput:
 class TestProdigalPrediction:
     """Test Prodigal gene prediction functionality."""
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_simple_gene_prediction(self):
         """Test prediction on a simple sequence."""
         sequence = "ATGCGTAAATAA"

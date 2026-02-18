@@ -107,6 +107,7 @@ class Evo1ScoringConfig(BaseConfig):
 @tool(
     key="evo1-score",
     label="Evo1 Scoring",
+    category="causal_models",
     input=Evo1ScoringInput,
     config=Evo1ScoringConfig,
     output=Evo1ScoringOutput,

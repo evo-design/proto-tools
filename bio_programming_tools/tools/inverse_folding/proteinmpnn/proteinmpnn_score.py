@@ -7,9 +7,6 @@ from typing import Dict, List, Optional
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceScores,
@@ -17,6 +14,9 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
 @tool(
     key="proteinmpnn-score",
     label="ProteinMPNN Scoring",
+    category="inverse_folding",
     input=ProteinMPNNScoringInput,
     config=ProteinMPNNScoringConfig,
     output=ProteinMPNNScoringOutput,

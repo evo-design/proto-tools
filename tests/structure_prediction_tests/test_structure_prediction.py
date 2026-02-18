@@ -225,12 +225,9 @@ def _generate_test_params():
                 marks.append(pytest.mark.slow)
             if predictor_name in CHIMERA_ONLY_PREDICTORS:
                 marks.append(pytest.mark.only_chimera)
-            # One smoke test per venv tool for --run-all-venvs
-            if (
-                test_name == "two_complex"
-                and predictor_name in ("esmfold", "boltz2", "chai1")
-            ):
-                marks.append(pytest.mark.run_all_venvs)
+            # One smoke test per venv tool for --env-report
+            if test_name == "gfp":
+                marks.append(pytest.mark.include_in_env_report(tool=predictor_name))
 
             # Add without_msa variant (all predictors support this)
             params.append(

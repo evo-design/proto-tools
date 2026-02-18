@@ -6,7 +6,6 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
@@ -14,6 +13,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +152,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
 @tool(
     key="esm2-embedding",
     label="ESM2 Embeddings",
+    category="masked_models",
     input=ESM2EmbeddingsInput,
     config=ESM2EmbeddingsConfig,
     output=ESM2EmbeddingsOutput,

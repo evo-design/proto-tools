@@ -5,8 +5,8 @@ from pathlib import Path
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_cache import tool_cache
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -64,6 +64,7 @@ PyHmmscanConfig = PyHmmerConfig
 @tool(
     key="pyhmmer-hmmscan",
     label="PyHMMER Scan",
+    category="gene_annotation",
     input=PyHmmscanInput,
     config=PyHmmscanConfig,
     output=PyHmmscanOutput,

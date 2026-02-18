@@ -17,7 +17,7 @@ DEFAULT_CHECKPOINT_DIR = Path.home() / ".foundry" / "checkpoints"
 _persistent_tool = make_persistent_fixture("rfdiffusion3")
 
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_unconditional_design():

@@ -7,10 +7,10 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import Field, field_validator
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +344,7 @@ class Evo2SampleConfig(BaseConfig):
 @tool(
     key="evo2-sample",
     label="Evo2 Sampling",
+    category="causal_models",
     input=Evo2SampleInput,
     config=Evo2SampleConfig,
     output=Evo2SampleOutput,

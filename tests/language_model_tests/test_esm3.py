@@ -76,7 +76,7 @@ def test_esm3_predict_structure():
 # Scoring Tests
 # ============================================================================
 
-@pytest.mark.run_all_venvs
+@pytest.mark.include_in_env_report
 @pytest.mark.uses_gpu
 def test_esm3_score_inference():
     """Test run_esm3_score() with comprehensive value validation."""

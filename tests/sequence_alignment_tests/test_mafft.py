@@ -197,7 +197,7 @@ class TestMafftIntegration:
     All expected alignments have been manually verified with MAFFT.
     """
 
-    @pytest.mark.run_all_venvs
+    @pytest.mark.include_in_env_report
     def test_protein_alignment_with_internal_gap(self):
         """Test alignment producing internal gaps (PAD deletion)."""
         inputs = MafftInput(sequences=[PROTEIN_WITH_GAP_LONG, PROTEIN_WITH_GAP_SHORT])

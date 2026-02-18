@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
 
 from pydantic import Field, field_validator
 
@@ -10,10 +10,10 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,7 @@ class Evo2ScoringConfig(BaseConfig):
 @tool(
     key="evo2-score",
     label="Evo2 Scoring",
+    category="causal_models",
     input=Evo2ScoringInput,
     config=Evo2ScoringConfig,
     output=Evo2ScoringOutput,
