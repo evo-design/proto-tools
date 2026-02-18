@@ -27,6 +27,7 @@ class ColabFoldSearchWrapper:
         """Initialize ColabFold search wrapper."""
         self._loaded = False
         self.colabfold_search_executable = None
+        self.mmseqs_executable = None
 
     def _detect_database_name(
         self, msa_db_dir: Path, verbose: bool = False
@@ -129,6 +130,8 @@ class ColabFoldSearchWrapper:
         # Build the command
         cmd = [
             self.colabfold_search_executable,
+            "--mmseqs",
+            self.mmseqs_executable,
             "--threads",
             str(num_threads),
         ]
@@ -249,8 +252,11 @@ class ColabFoldSearchWrapper:
         """Load ColabFold search executable."""
         logger.debug("Initializing ColabFold search")
 
+        # Get the venv's bin directory
+        venv_bin_dir = Path(sys.executable).parent
+
         # First try to find colabfold_search in the current venv's bin directory
-        venv_executable = Path(sys.executable).parent / "colabfold_search"
+        venv_executable = venv_bin_dir / "colabfold_search"
 
         if venv_executable.exists():
             self.colabfold_search_executable = str(venv_executable)
@@ -262,11 +268,24 @@ class ColabFoldSearchWrapper:
                 "Please make sure ColabFold is installed in the current environment."
             )
 
+        # Find mmseqs binary (required by colabfold_search)
+        venv_mmseqs = venv_bin_dir / "mmseqs"
+        if venv_mmseqs.exists():
+            self.mmseqs_executable = str(venv_mmseqs)
+        elif shutil.which("mmseqs") is not None:
+            self.mmseqs_executable = shutil.which("mmseqs")
+        else:
+            raise ImportError(
+                "Could not find the 'mmseqs' executable. "
+                "Please make sure MMseqs2 is installed in the current environment."
+            )
+
         self._loaded = True
 
         logger.debug(
             f"ColabFold search initialized. Using executable: {self.colabfold_search_executable}"
         )
+        logger.debug(f"MMseqs2 executable: {self.mmseqs_executable}")
 
 
 def dispatch(input_dict: dict) -> dict:
