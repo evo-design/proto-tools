@@ -87,19 +87,28 @@ def run_ligandmpnn_sample(
             unit="structure",
             total=len(inputs.inputs),
         ):
-            result = service.sample.remote(
-                pdb_structure=inp.structure_pdb,
-                chain_ids=inp.chain_ids,
-                batch_size=config.batch_size,
-                temperature=config.temperature,
-                fixed_positions=inp.fixed_positions,
-                excluded_amino_acids=config.excluded_amino_acids,
-                seed=config.seed,
-            )
+            all_seqs, all_metrics = [], []
+            remaining = config.num_sequences_per_structure
+            chunk_idx = 0
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)
+                result = service.sample.remote(
+                    pdb_structure=inp.structure_pdb,
+                    chain_ids=inp.chain_ids,
+                    batch_size=chunk,
+                    temperature=config.temperature,
+                    fixed_positions=inp.fixed_positions,
+                    excluded_amino_acids=config.excluded_amino_acids,
+                    seed=config.seed + chunk_idx,
+                )
+                all_seqs.extend(result["sequences"])
+                all_metrics.extend(result["metrics"])
+                chunk_idx += 1
+                remaining -= chunk
             designed_sequences.append(
                 LigandMPNNSequences(
-                    sequences=result["sequences"],
-                    ligandmpnn_metrics=result["metrics"],
+                    sequences=all_seqs,
+                    ligandmpnn_metrics=all_metrics,
                 )
             )
     else:
@@ -110,26 +119,35 @@ def run_ligandmpnn_sample(
             unit="structure",
             total=len(inputs.inputs),
         ):
-            input_dict = {
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
-                "batch_size": config.batch_size,
-                "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions,
-                "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": config.seed,
-                "device": config.device,
-            }
-            result = ToolInstance.dispatch(
-                "ligandmpnn",
-                input_dict,
-                instance=instance,
-                verbose=config.verbose,
-            )
+            all_seqs, all_metrics = [], []
+            remaining = config.num_sequences_per_structure
+            chunk_idx = 0
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)
+                input_dict = {
+                    "pdb_contents": inp.structure_pdb,
+                    "chain_ids": inp.chain_ids,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "fixed_positions": inp.fixed_positions,
+                    "excluded_amino_acids": config.excluded_amino_acids,
+                    "seed": config.seed + chunk_idx,
+                    "device": config.device,
+                }
+                result = ToolInstance.dispatch(
+                    "ligandmpnn",
+                    input_dict,
+                    instance=instance,
+                    verbose=config.verbose,
+                )
+                all_seqs.extend(result["sequences"])
+                all_metrics.extend(result["metrics"])
+                chunk_idx += 1
+                remaining -= chunk
             designed_sequences.append(
                 LigandMPNNSequences(
-                    sequences=result["sequences"],
-                    ligandmpnn_metrics=result["metrics"],
+                    sequences=all_seqs,
+                    ligandmpnn_metrics=all_metrics,
                 )
             )
 

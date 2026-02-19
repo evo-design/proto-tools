@@ -84,7 +84,8 @@ Each `InverseFoldingStructureInput` contains:
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `batch_size` | `int` | `1` | >= 1 | Number of sequences to generate per input structure |
+| `num_sequences_per_structure` | `int` | `1` | >= 1 | Total number of sequences to generate per input structure |
+| `batch_size` | `Optional[int]` | `None` | >= 1 | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
 | `temperature` | `float` | `0.1` | 0.0-1.0 | Sampling temperature controlling sequence diversity |
 | `excluded_amino_acids` | `Optional[List[str]]` | `None` | Any standard AAs | Amino acids forbidden in designed positions. Common: `["C"]` to avoid disulfides. |
 | `seed` | `int` | `42` | any int | Random seed for reproducibility |
@@ -105,7 +106,7 @@ Each `InverseFoldingStructureInput` contains:
 
 **Batch size vs. temperature trade-offs:**
 
-| Strategy | batch_size | temperature | Purpose |
+| Strategy | num_sequences_per_structure | temperature | Purpose |
 |----------|-----------|-------------|---------|
 | Single best | 1 | 0.1 | Quick check of designability |
 | Small library | 10-50 | 0.2 | Focused sequence exploration |
@@ -117,7 +118,7 @@ When used in optimization loops:
 1. **Temperature** has the largest effect on sequence diversity and recovery rate
 2. **Fixed positions** control which regions are designed vs. preserved
 3. **Excluded amino acids** apply hard constraints (e.g., no cysteines)
-4. **Batch size** controls throughput per optimization step
+4. **`num_sequences_per_structure`** controls throughput per optimization step
 
 ## Output Specification
 
@@ -131,7 +132,7 @@ Each `LigandMPNNSequences` contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sequences` | `List[str]` | Designed amino acid sequences (length = `batch_size`) |
+| `sequences` | `List[str]` | Designed amino acid sequences (length = `num_sequences_per_structure`) |
 | `ligandmpnn_metrics` | `List[Dict[str, Any]]` | Per-sequence metrics from LigandMPNN |
 
 Export formats: `fasta`, `json`
@@ -157,7 +158,7 @@ inputs = InverseFoldingInput(
         InverseFoldingStructureInput(structure="/path/to/enzyme_with_ligand.pdb")
     ]
 )
-config = InverseFoldingConfig(batch_size=10, temperature=0.2)
+config = InverseFoldingConfig(num_sequences_per_structure=10, temperature=0.2)
 result = run_ligandmpnn_sample(inputs, config)
 
 for seq in result.designed_sequences[0].sequences:
@@ -176,7 +177,7 @@ inputs = InverseFoldingInput(
     ]
 )
 config = InverseFoldingConfig(
-    batch_size=50,
+    num_sequences_per_structure=50,
     temperature=0.3,
     excluded_amino_acids=["C"],
 )
@@ -195,7 +196,7 @@ inputs = InverseFoldingInput(
         InverseFoldingStructureInput(structure="/path/to/structure3.pdb"),
     ]
 )
-config = InverseFoldingConfig(batch_size=5, temperature=0.1)
+config = InverseFoldingConfig(num_sequences_per_structure=5, temperature=0.1)
 result = run_ligandmpnn_sample(inputs, config)
 
 for i, designs in enumerate(result.designed_sequences):
