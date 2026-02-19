@@ -85,7 +85,8 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `batch_size` | `int` | `1` | Number of sequences to generate per structure |
+| `num_sequences_per_structure` | `int` | `1` | Total number of sequences to generate per structure |
+| `batch_size` | `Optional[int]` | `None` | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
 | `temperature` | `float` | `0.1` | Sampling temperature (0.0-1.0). Lower = more conservative, higher = more diverse |
 | `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues to keep fixed (not redesigned). Maps chain IDs to position lists |
 | `excluded_amino_acids` | `Optional[List[str]]` | `None` | Amino acids to exclude from design (e.g., `["C"]` to avoid cysteines) |
@@ -113,7 +114,7 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 ### Sweep Priorities
 
 1. **`temperature`**: Most impactful for sequence diversity. Start at 0.1 for conservative designs, increase to 0.3-0.5 for exploration.
-2. **`batch_size`**: Generate 10-100 sequences and filter by perplexity. More sequences = more chances of finding good designs.
+2. **`num_sequences_per_structure`**: Generate 10-100 sequences and filter by perplexity. More sequences = more chances of finding good designs.
 3. **`fixed_positions`**: Use to preserve catalytic residues, binding sites, or experimentally validated positions.
 
 ## Output Specification
@@ -179,7 +180,7 @@ inputs = InverseFoldingInput(
 
 # Configure sampling
 config = InverseFoldingConfig(
-    batch_size=10,
+    num_sequences_per_structure=10,
     temperature=0.1
 )
 
@@ -207,7 +208,7 @@ inputs = InverseFoldingInput(
 
 # Fix catalytic triad positions
 config = InverseFoldingConfig(
-    batch_size=20,
+    num_sequences_per_structure=20,
     temperature=0.2,
     fixed_positions={"A": [57, 102, 195]},  # Catalytic residues
     excluded_amino_acids=["C"]  # No cysteines
@@ -269,7 +270,7 @@ inputs = InverseFoldingInput(
 )
 
 config = InverseFoldingConfig(
-    batch_size=10,
+    num_sequences_per_structure=10,
     temperature=0.1
 )
 
@@ -320,7 +321,7 @@ for pos in range(len(probs)):
    - Increase to `0.3-0.5` if you need more diversity.
    - Use `0.0` only when you want a single deterministic answer.
 
-2. `batch_size`:
+2. `num_sequences_per_structure`:
    - Generate 10-100 sequences and filter by perplexity.
    - More sequences = more chances of finding good designs.
 

@@ -172,7 +172,13 @@ class InverseFoldingConfig(BaseConfig):
     constraints (chain_ids, fixed_positions) are specified in InverseFoldingInput.
 
     Attributes:
-        batch_size (int): Number of sequences to generate for each input structure. Defaults to 1.
+        num_sequences_per_structure (int): Total number of sequences to generate
+            for each input structure. Sequences are generated in batches of
+            ``batch_size``. Defaults to 1.
+
+        batch_size (Optional[int]): Maximum number of sequences per GPU forward
+            pass. Defaults to ``num_sequences_per_structure`` (all in one pass).
+            Set explicitly to a lower value if encountering out-of-memory errors.
 
         temperature (float): Controls randomness in sampling from logits. Defaults to 0.1.
 
@@ -184,13 +190,26 @@ class InverseFoldingConfig(BaseConfig):
         device (str): Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution), or specific GPU devices like 'cuda:0'. Defaults to 'cuda'.
     """
 
-    batch_size: int = ConfigField(
-        title="Number of Sequences to Generate",
+    num_sequences_per_structure: int = ConfigField(
+        title="Sequences Per Structure",
         default=1,
         ge=1,
-        description="Number of sequences to generate for each input structure.",
-        examples=[1, 10],
+        description="Total number of sequences to generate per input structure.",
     )
+    batch_size: Optional[int] = ConfigField(
+        title="Batch Size",
+        default=None,
+        ge=1,
+        description="Max sequences per GPU forward pass. Defaults to num_sequences_per_structure.",
+        advanced=True
+    )
+
+    @model_validator(mode="after")
+    def resolve_batch_size(self):
+        """Default batch_size to num_sequences_per_structure if not set."""
+        if self.batch_size is None:
+            self.batch_size = self.num_sequences_per_structure
+        return self
 
     temperature: float = ConfigField(
         title="Sampling Temperature",
@@ -234,7 +253,7 @@ class DesignedSequences(BaseModel, ABC):
     amino acid sequence along with per-position and sequence-level quality metrics.
 
     NOTE: Because inverse folding models can generate multiple sequences for each
-    input structure, fields in this class should be lists of length batch_size.
+    input structure, fields in this class should be lists of length `num_sequences_per_structure`.
 
     Attributes:
         sequences (List[str]): Designed amino acid sequences in single-letter code.

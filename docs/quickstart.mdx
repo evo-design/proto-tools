@@ -43,7 +43,7 @@ from bio_programming_tools.tools.inverse_folding import (
 
 # Design sequences for a structure
 inputs = InverseFoldingInput(structures=["protein.pdb"])
-config = InverseFoldingConfig(batch_size=10, temperature=0.1)
+config = InverseFoldingConfig(num_sequences_per_structure=10, temperature=0.1)
 result = run_proteinmpnn_sample(inputs, config)
 
 # Get designed sequences

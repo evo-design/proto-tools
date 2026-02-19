@@ -89,20 +89,30 @@ def run_proteinmpnn_sample(
         service = ProteinMPNNService()
 
         for inp in tqdm(inputs.inputs, desc="ProteinMPNN sampling", unit="structure"):
-            result = service.sample.remote(
-                pdb_structure=inp.structure_pdb,
-                chain_ids=inp.chain_ids,
-                batch_size=config.batch_size,
-                temperature=config.temperature,
-                fixed_positions=inp.fixed_positions,
-                excluded_amino_acids=config.excluded_amino_acids,
-                seed=config.seed,
-            )
+            all_seqs, all_perp, all_seqid = [], [], []
+            remaining = config.num_sequences_per_structure
+            chunk_idx = 0
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)
+                result = service.sample.remote(
+                    pdb_structure=inp.structure_pdb,
+                    chain_ids=inp.chain_ids,
+                    batch_size=chunk,
+                    temperature=config.temperature,
+                    fixed_positions=inp.fixed_positions,
+                    excluded_amino_acids=config.excluded_amino_acids,
+                    seed=config.seed + chunk_idx,
+                )
+                all_seqs.extend(result["seq"])
+                all_perp.extend(np.exp(result["score"]).tolist())
+                all_seqid.extend(result["seqid"])
+                chunk_idx += 1
+                remaining -= chunk
             designed_sequences.append(
                 ProteinMPNNSequences(
-                    sequences=result["seq"],
-                    perplexity=np.exp(result["score"]).tolist(),
-                    sequence_identity=result["seqid"],
+                    sequences=all_seqs,
+                    perplexity=all_perp,
+                    sequence_identity=all_seqid,
                 )
             )
     else:
@@ -115,28 +125,38 @@ def run_proteinmpnn_sample(
             unit="structure",
             disable=not config.verbose,
         ):
-            input_dict = {
-                "operation": "sample",
-                "pdb_contents": inp.structure_pdb,
-                "chain_ids": inp.chain_ids,
-                "batch_size": config.batch_size,
-                "temperature": config.temperature,
-                "fixed_positions": inp.fixed_positions,
-                "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": config.seed,
-                "device": config.device,
-            }
-            result = ToolInstance.dispatch(
-                "proteinmpnn",
-                input_dict,
-                instance=instance,
-                verbose=config.verbose,
-            )
+            all_seqs, all_perp, all_seqid = [], [], []
+            remaining = config.num_sequences_per_structure
+            chunk_idx = 0
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_contents": inp.structure_pdb,
+                    "chain_ids": inp.chain_ids,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "fixed_positions": inp.fixed_positions,
+                    "excluded_amino_acids": config.excluded_amino_acids,
+                    "seed": config.seed + chunk_idx,
+                    "device": config.device,
+                }
+                result = ToolInstance.dispatch(
+                    "proteinmpnn",
+                    input_dict,
+                    instance=instance,
+                    verbose=config.verbose,
+                )
+                all_seqs.extend(result["seq"])
+                all_perp.extend(np.exp(result["score"]).tolist())
+                all_seqid.extend(result["seqid"])
+                chunk_idx += 1
+                remaining -= chunk
             designed_sequences.append(
                 ProteinMPNNSequences(
-                    sequences=result["seq"],
-                    perplexity=np.exp(result["score"]).tolist(),
-                    sequence_identity=result["seqid"],
+                    sequences=all_seqs,
+                    perplexity=all_perp,
+                    sequence_identity=all_seqid,
                 )
             )
     return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)

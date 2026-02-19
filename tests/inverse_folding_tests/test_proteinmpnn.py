@@ -54,7 +54,7 @@ class TestProteinMPNNSample:
             ]
         )
         config = InverseFoldingConfig(
-            batch_size=10, temperature=1.0, seed=42,
+            num_sequences_per_structure=10, temperature=1.0, seed=42,
         )
         output = run_proteinmpnn_sample(input, config)
         assert (
@@ -78,6 +78,30 @@ class TestProteinMPNNSample:
                 isinstance(identity, float)
                 for identity in designed_sequences.sequence_identity
             )
+
+    @pytest.mark.uses_gpu
+    def test_proteinmpnn_sample_chunked_batching(self, pdb_structure: Structure):
+        """Test that chunked batching produces the correct number of sequences."""
+        input = InverseFoldingInput(
+            inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
+        )
+        config = InverseFoldingConfig(
+            num_sequences_per_structure=6,
+            batch_size=2,
+            temperature=0.1,
+            seed=42,
+        )
+        output = run_proteinmpnn_sample(input, config)
+        assert output.success, f"Chunked batching failed: {output}"
+
+        designed = output.designed_sequences[0]
+        assert len(designed.sequences) == 6
+        assert all(isinstance(seq, str) for seq in designed.sequences)
+        assert all(len(seq) > 0 for seq in designed.sequences)
+        assert len(designed.perplexity) == 6
+        assert all(isinstance(p, float) for p in designed.perplexity)
+        assert len(designed.sequence_identity) == 6
+        assert all(isinstance(s, float) for s in designed.sequence_identity)
 
     @pytest.mark.uses_gpu
     def test_proteinmpnn_sample_advanced_args(self, pdb_structure: Structure):
@@ -108,7 +132,7 @@ class TestProteinMPNNSample:
             ]
         )
         config = InverseFoldingConfig(
-            batch_size=10,
+            num_sequences_per_structure=10,
             temperature=1.0,
             seed=42,
             excluded_amino_acids=["C"],
