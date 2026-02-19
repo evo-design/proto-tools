@@ -145,6 +145,15 @@ class {ToolName}Config(BaseConfig):
         advanced=True,
     )
 
+    # --- Batch processing (GPU tools) ---
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=1,
+        ge=1,
+        description="Number of items to process per GPU forward pass",
+        advanced=True,
+    )
+
     # --- Hidden parameters (not shown in UI) ---
     device: str = ConfigField(
         title="Device",
@@ -379,6 +388,17 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 
     return ToolOutput(results=result["results"])
 ```
+
+### Batching Convention
+
+GPU tools should include `batch_size: int = ConfigField(default=1, ...)` in their config.
+
+**Rules:**
+- Default is always `1` — safe by default, prevents OOM errors
+- The standalone `inference.py` implements the batching loop (chunking inputs, iterating)
+- Generators and constraints pass `batch_size` through to tool configs — they never batch themselves
+- Higher `batch_size` = more GPU memory, higher throughput
+
 ---
 
 ## Step 4: Caching

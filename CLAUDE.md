@@ -173,6 +173,7 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 - Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them
 - Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
+- `batch_size` fields default to `1` (safe by default, prevents OOM). The tool layer owns the batching loop — callers (generators, constraints) pass all inputs plus `batch_size` to the tool in one call
 - Use `from __future__ import annotations` at the top of every file
 - Use `logging.getLogger(__name__)` — never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
