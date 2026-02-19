@@ -25,18 +25,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 
-def _get_in_process_tools():
-    """Lazy import of in-process tools (requires torch)."""
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode import (
-        run_evo1_sample as run_evo1_sample_ip,
-        run_evo1_score as run_evo1_score_ip,
-    )
-    from bio_programming_tools.tools.causal_models.evo1._in_process_mode import (
-        Evo1ScoringConfig as Evo1ScoringConfigIP,
-    )
-
-    return run_evo1_sample_ip, run_evo1_score_ip, Evo1ScoringConfigIP
-
 
 _persistent_tool = make_persistent_fixture("evo1")
 
