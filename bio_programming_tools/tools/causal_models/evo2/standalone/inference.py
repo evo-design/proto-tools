@@ -95,7 +95,7 @@ class Evo2Model:
         verbose: bool = False,
         stop_at_eos: bool = True,
         old_kv_cache: Optional[Dict] = None,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -119,7 +119,8 @@ class Evo2Model:
             verbose: Whether to print verbose output
             stop_at_eos: Whether to stop at end-of-sequence token
             old_kv_cache: Dictionary of inference parameters to use for replaying cached sampling (KV cache)
-            batch_size: Number of prompts to process per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             return_logits: Whether to include logits in the output
         Returns:
             Dictionary with keys: "sequences" (List[str]), optionally "logits" (List[torch.Tensor]), "kv_caches" (Optional[List[Dict]])
@@ -145,14 +146,13 @@ class Evo2Model:
         )
 
         # Batch processing logic
-        effective_batch_size = batch_size if batch_size is not None else len(prompts)
-        num_batches = (len(prompts) + effective_batch_size - 1) // effective_batch_size
+        num_batches = (len(prompts) + batch_size - 1) // batch_size
 
         all_sequences, all_logits, all_inference_params_dicts = [], [], []
 
         for batch_idx in tqdm(range(num_batches), desc="Evo2 Sequence Generation", unit="batch", total=num_batches):
-            batch_start = batch_idx * effective_batch_size
-            batch_end = min(batch_start + effective_batch_size, len(prompts))
+            batch_start = batch_idx * batch_size
+            batch_end = min(batch_start + batch_size, len(prompts))
             batch_prompts = prompts[batch_start:batch_end]
 
             if verbose:
@@ -243,7 +243,7 @@ class Evo2Model:
         sequences: List[str],
         device: str = "cuda",
         verbose: bool = False,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -256,7 +256,8 @@ class Evo2Model:
             sequences: DNA sequences to score
             device: Device to run on
             verbose: Whether to print status messages
-            batch_size: Number of sequences to process per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             return_logits: Whether to include logits in the output
 
         Returns a dict with optional logits (per-sequence tensors), metrics, and vocab tokens."""
@@ -272,10 +273,9 @@ class Evo2Model:
         # Batch processing logic
         all_logits = []
         all_metrics = []
-        effective_batch_size = batch_size or len(sequences)
         batches = [
-            sequences[i:i + effective_batch_size]
-            for i in range(0, len(sequences), effective_batch_size)
+            sequences[i:i + batch_size]
+            for i in range(0, len(sequences), batch_size)
         ]
 
         with torch.inference_mode():

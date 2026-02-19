@@ -121,9 +121,9 @@ class ESM2SampleConfig(BaseConfig):
             iteration. Higher values produce more divergent sequences but may reduce
             biological plausibility. Default: 1.
 
-        batch_size (Optional[int]): Number of sequences to process per batch during inference.
-            If None, processes all sequences at once. Larger batches are faster but use more GPU memory.
-            Reduce if encountering out-of-memory errors. Default: ``None``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
 
         device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
             Default: ``"cuda"``.
@@ -160,10 +160,11 @@ class ESM2SampleConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=None,
-        description="Number of sequences to process per batch. If None, processes all at once.",
+        default=1,
+        ge=1,
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     device: str = ConfigField(

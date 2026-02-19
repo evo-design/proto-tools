@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from pydantic import Field, field_validator
 
@@ -63,8 +63,9 @@ class Evo1ScoringConfig(BaseConfig):
 
     Attributes:
         model_name (str): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
-        batch_size (Optional[int]): Number of sequences to process per batch.
-            If None, processes all sequences at once. Default: ``None``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
         device (str): Device to run the model on. Default: ``"cuda"``.
         return_logits (bool): Whether to include per-position logits in the
             output. Default: ``False``.
@@ -80,11 +81,11 @@ class Evo1ScoringConfig(BaseConfig):
         description="Evo1 model checkpoint to use",
         reload_on_change=True,
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=None,
+        default=1,
         ge=1,
-        description="Max number of sequences on the GPU at once",
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     device: str = ConfigField(
