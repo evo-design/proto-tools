@@ -108,7 +108,7 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | 128 | Sequences per batch (reduce if OOM) |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
@@ -121,7 +121,7 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | `temperature` | `float` | 1.0 | Sampling temperature (lower = conservative) |
 | `decoding_method` | `str` | `"entropy"` | Position selection: `"entropy"`, `"max_logit"`, `"random"` |
 | `num_mutations` | `int` | 1 | Positions to mutate per iteration |
-| `batch_size` | `int?` | `None` | Sequences per batch (None = all at once) |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device for inference |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |
 
@@ -130,7 +130,7 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | 32 | Masked variants per forward pass |
+| `batch_size` | `int` | `1` | Masked variants per forward pass |
 | `device` | `str` | `"cuda"` | Device for inference |
 | `verbose` | `bool` | `False` | Print progress messages |
 | `return_logits` | `bool` | `False` | Include per-position logits in output |

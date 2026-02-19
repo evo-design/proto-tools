@@ -103,7 +103,7 @@ This learned distribution enables two key applications: **generation** (sampling
 | `truncate_at_stop` | `bool` | `True` | Truncate at stop tokens (`1` or `2`) |
 | `strip_special_tokens` | `bool` | `True` | Remove special tokens from output |
 | `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `batch_size` | `Optional[int]` | `None` | Prompts per GPU batch (all if None) |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `return_logits` | `bool` | `False` | Include per-token logits in output |
 
 ### Scoring (`ProGen2ScoringConfig`)
@@ -112,7 +112,7 @@ This learned distribution enables two key applications: **generation** (sampling
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `progen2-large` | Model checkpoint to use |
 | `local_path` | `Optional[str]` | `None` | Local weights path |
-| `batch_size` | `Optional[int]` | `None` | Sequences per GPU batch |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device to run on |
 | `return_logits` | `bool` | `False` | Include per-position logits |
 

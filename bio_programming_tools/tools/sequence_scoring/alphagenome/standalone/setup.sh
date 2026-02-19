@@ -2,72 +2,96 @@
 # Setup script for AlphaGenome standalone environment
 set -euo pipefail
 
-ARCH=$(uname -m)
-if [ "$ARCH" = "aarch64" ]; then
-    echo "ERROR: AlphaGenome is not supported on aarch64."
-    echo "AlphaGenome requires JAX with CUDA support,"
-    echo "which does not provide aarch64 wheels."
-    exit 1
-fi
-
 echo "Setting up AlphaGenome standalone environment..."
 
 echo "Installing uv package manager..."
 pip install uv
 
-# Install CUDA toolkit and cuDNN locally via micromamba (required for JAX GPU support)
-MAMBA_ROOT="$VENV_PATH/micromamba"
-mkdir -p "$MAMBA_ROOT"
-if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
-    echo "Installing micromamba..."
-    curl -Ls "https://micro.mamba.pm/api/micromamba/linux-64/latest" | tar -xvj -C "$MAMBA_ROOT" bin/micromamba
-fi
-export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
-eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"
-
-CUDA_TOOLKIT_VERSION="12.1"
+DRIVER_MAJOR=""
+CUDA_MAJOR=""
 if command -v nvidia-smi &> /dev/null; then
-    DETECTED_CUDA_MAJOR=$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9]+' || true)
-    if [ -n "$DETECTED_CUDA_MAJOR" ] && [ "$DETECTED_CUDA_MAJOR" -ge 13 ]; then
-        CUDA_TOOLKIT_VERSION="12.8"
-    fi
-    echo "Detected CUDA ${DETECTED_CUDA_MAJOR:-unknown} — using toolkit ${CUDA_TOOLKIT_VERSION}"
+    DRIVER_MAJOR=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 | cut -d. -f1 || true)
+    CUDA_MAJOR=$(nvidia-smi | sed -n 's/.*CUDA Version: \([0-9][0-9]*\)\..*/\1/p' | head -n1 || true)
 fi
 
-echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} and cuDNN via micromamba..."
-micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-    "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
-    "cudnn"
+JAX_VARIANT="${ALPHAGENOME_JAX_VARIANT:-}"
+if [ -z "$JAX_VARIANT" ] && [ -n "$CUDA_MAJOR" ]; then
+    if [ "$CUDA_MAJOR" -ge 13 ]; then
+        JAX_VARIANT="cuda13"
+    else
+        JAX_VARIANT="cuda12"
+    fi
+fi
+if [ -n "$JAX_VARIANT" ] && [ "$JAX_VARIANT" != "cuda12" ] && [ "$JAX_VARIANT" != "cuda13" ]; then
+    echo "ERROR: ALPHAGENOME_JAX_VARIANT must be one of: cuda12, cuda13"
+    exit 1
+fi
 
-export CUDA_HOME="$VENV_PATH/cuda_env"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$CUDA_HOME/lib"
+JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-}"
+if [ -z "$JAX_SPEC" ]; then
+    if [ -n "$JAX_VARIANT" ]; then
+        if [ -n "$DRIVER_MAJOR" ]; then
+            if [ "$DRIVER_MAJOR" -ge 570 ]; then
+                JAX_SPEC="jax[${JAX_VARIANT}]>=0.9,<1"
+            elif [ "$DRIVER_MAJOR" -ge 550 ]; then
+                JAX_SPEC="jax[${JAX_VARIANT}]>=0.6,<0.9"
+            elif [ "$DRIVER_MAJOR" -ge 535 ]; then
+                JAX_SPEC="jax[${JAX_VARIANT}]>=0.5,<0.6"
+            else
+                JAX_SPEC="jax[${JAX_VARIANT}]>=0.4.25,<0.5"
+            fi
+        else
+            JAX_SPEC="jax[${JAX_VARIANT}]>=0.5,<1"
+        fi
+    else
+        JAX_SPEC="jax>=0.5,<1"
+    fi
+fi
+
+USE_LOCAL_CUDA_ENV=$(echo "${ALPHAGENOME_USE_LOCAL_CUDA_ENV:-false}" | tr '[:upper:]' '[:lower:]')
+if [ "$USE_LOCAL_CUDA_ENV" = "true" ]; then
+    if [ -z "${VENV_PATH:-}" ]; then
+        echo "ERROR: VENV_PATH is required when ALPHAGENOME_USE_LOCAL_CUDA_ENV=true"
+        exit 1
+    fi
+    MAMBA_ROOT="$VENV_PATH/micromamba"
+    mkdir -p "$MAMBA_ROOT"
+    if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
+        echo "Installing micromamba..."
+        curl -Ls "https://micro.mamba.pm/api/micromamba/linux-64/latest" | tar -xvj -C "$MAMBA_ROOT" bin/micromamba
+    fi
+    export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
+    eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"
+
+    CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-}"
+    if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ] && [ -n "${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}" ]; then
+        # Backward compatibility with prior exact-version override.
+        CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_VERSION}"
+    fi
+    if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
+        if [ -n "$CUDA_MAJOR" ]; then
+            CUDA_TOOLKIT_CONSTRAINT="${CUDA_MAJOR}.*"
+        else
+            CUDA_TOOLKIT_CONSTRAINT="12.*"
+        fi
+    fi
+    echo "Installing local CUDA env (toolkit=${CUDA_TOOLKIT_CONSTRAINT}) via micromamba..."
+    micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+        "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
+        "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
+        "cudnn"
+
+    export CUDA_HOME="$VENV_PATH/cuda_env"
+    export LD_LIBRARY_PATH="${CUDA_HOME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+
+echo "Detected driver=${DRIVER_MAJOR:-unknown} cuda=${CUDA_MAJOR:-unknown}"
+echo "Installing JAX using spec: ${JAX_SPEC}"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
-# Auto-detect CUDA version and install the correct JAX variant with bundled CUDA libraries
-# Modern JAX (>=0.4.20) bundles CUDA libraries by default, making venvs self-contained
-echo "Detecting CUDA version for JAX installation..."
-if command -v nvidia-smi &> /dev/null; then
-    # Extract CUDA version from nvidia-smi output
-    CUDA_MAJOR=$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9]+' | head -n1)
-    if [ -n "$CUDA_MAJOR" ]; then
-        if [ "$CUDA_MAJOR" -ge 13 ]; then
-            echo "Detected CUDA ${CUDA_MAJOR} — installing jax[cuda13] (with bundled CUDA libraries)..."
-            uv pip install "jax[cuda13]"
-        else
-            echo "Detected CUDA ${CUDA_MAJOR} — installing jax[cuda12] (with bundled CUDA libraries)..."
-            uv pip install "jax[cuda12]"
-        fi
-    else
-        echo "WARNING: Could not determine CUDA version. Installing jax[cuda12] as default..."
-        uv pip install "jax[cuda12]"
-    fi
-else
-    echo "WARNING: nvidia-smi not found. Installing JAX without CUDA support..."
-    uv pip install jax
-fi
+uv pip install "${JAX_SPEC}"
 
 REPO_DIR="${VENV_PATH}/src/alphagenome_research"
 if [ -d "$REPO_DIR" ]; then
@@ -80,19 +104,13 @@ fi
 echo "Installing alphagenome_research from local clone..."
 uv pip install "$REPO_DIR"
 
-# Preload CUDA/cuDNN at Python startup so JAX can find them.
-# os.environ alone doesn't affect the current process's dlopen on Linux,
-# so we must load the shared libraries explicitly via ctypes.
+# alphagenome_research leaves JAX unconstrained and may upgrade jax/jaxlib to
+# versions incompatible with the selected CUDA plugin. Re-apply the selected
+# JAX range to keep GPU wheels aligned with host driver/CUDA.
+echo "Re-applying JAX compatibility spec after alphagenome_research install..."
+uv pip install --upgrade "${JAX_SPEC}"
+
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-cat > "$SITE_PACKAGES/sitecustomize.py" <<SITECUSTOMIZE
-import ctypes, os
-cuda_lib = "$CUDA_HOME/lib"
-os.environ["LD_LIBRARY_PATH"] = cuda_lib + ":" + os.environ.get("LD_LIBRARY_PATH", "")
-for lib in ["libcudart.so.12", "libcudnn.so.9"]:
-    try:
-        ctypes.CDLL(os.path.join(cuda_lib, lib), mode=ctypes.RTLD_GLOBAL)
-    except OSError:
-        pass
-SITECUSTOMIZE
+rm -f "$SITE_PACKAGES/sitecustomize.py"
 
 echo "AlphaGenome setup complete!"

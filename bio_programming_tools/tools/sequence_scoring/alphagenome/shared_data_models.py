@@ -16,6 +16,7 @@ from bio_programming_tools.utils import BaseConfig, ConfigField
 # ============================================================================
 
 DEFAULT_ALPHAGENOME_MODEL_VERSION = "all_folds"
+SUPPORTED_CONTEXT_LENGTHS = (1_048_576, 524_288, 131_072, 16_384)
 
 OutputTypeName = Literal[
     "ATAC", "CAGE", "DNASE", "RNA_SEQ",
@@ -49,7 +50,6 @@ class AlphaGenomeInput(BaseToolInput):
     * **524,288 bp** (500 KB)
     * **131,072 bp** (100 KB)
     * **16,384 bp** (16 KB)
-    * **2,048 bp** (2 KB)
 
     If the supplied interval does not match a supported length it is
     automatically resized at inference time (see ``standalone/inference.py``).

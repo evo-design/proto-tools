@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from bio_programming_tools.utils.persistent_worker import PersistentWorker
+from bio_programming_tools.utils.persistent_worker import (
+    PersistentWorker,
+    _clean_env,
+)
 
 
 # ============================================================================
@@ -273,3 +276,61 @@ class TestSerialize:
             }
         finally:
             worker.stop()
+
+
+class TestCleanEnv:
+    """Tests for subprocess environment construction."""
+
+    def test_clean_env_preserves_parent_ld_library_path(self, monkeypatch):
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/base/a:/base/b")
+
+        env = _clean_env(device="cpu")
+
+        assert env["LD_LIBRARY_PATH"] == "/base/a:/base/b"
+
+    def test_clean_env_omits_ld_library_path_when_unset(self, monkeypatch):
+        monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+
+        env = _clean_env(device="cpu")
+
+        assert "LD_LIBRARY_PATH" not in env
+
+    def test_clean_env_merges_tool_venv_library_paths(self, monkeypatch, tmp_path: Path):
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/base/a:/base/b")
+
+        cuda_runtime_lib = tmp_path / "lib" / "python3.12" / "site-packages" / "nvidia" / "cuda_runtime" / "lib"
+        cuda_runtime_lib.mkdir(parents=True)
+        cuda_env_lib = tmp_path / "cuda_env" / "lib"
+        cuda_env_lib.mkdir(parents=True)
+
+        env = _clean_env(device="cuda", tool_venv_path=tmp_path)
+
+        merged_parts = env["LD_LIBRARY_PATH"].split(":")
+        assert merged_parts[0] == str(cuda_env_lib)
+        assert str(cuda_runtime_lib) in merged_parts
+        assert "/base/a" in merged_parts
+        assert "/base/b" in merged_parts
+
+    def test_clean_env_dedupes_merged_library_paths(self, monkeypatch, tmp_path: Path):
+        cuda_runtime_lib = tmp_path / "lib" / "python3.12" / "site-packages" / "nvidia" / "cuda_runtime" / "lib"
+        cuda_runtime_lib.mkdir(parents=True)
+        monkeypatch.setenv("LD_LIBRARY_PATH", f"{cuda_runtime_lib}:/base/a:{cuda_runtime_lib}")
+
+        env = _clean_env(device="cuda", tool_venv_path=tmp_path)
+
+        merged_parts = env["LD_LIBRARY_PATH"].split(":")
+        assert merged_parts.count(str(cuda_runtime_lib)) == 1
+
+    def test_clean_env_sets_jax_platforms_for_cpu(self, monkeypatch):
+        monkeypatch.delenv("JAX_PLATFORMS", raising=False)
+
+        env = _clean_env(device="cpu")
+
+        assert env["JAX_PLATFORMS"] == "cpu"
+
+    def test_clean_env_unsets_jax_platforms_for_cuda(self, monkeypatch):
+        monkeypatch.setenv("JAX_PLATFORMS", "cpu")
+
+        env = _clean_env(device="cuda")
+
+        assert "JAX_PLATFORMS" not in env

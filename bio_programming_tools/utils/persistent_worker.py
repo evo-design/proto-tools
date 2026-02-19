@@ -57,12 +57,68 @@ _CONDA_BLOCKLIST = {
 _BLOCKED_ENV_VARS = _JUPYTER_BLOCKLIST | _CUDA_BLOCKLIST | _CONDA_BLOCKLIST
 
 
-def _clean_env(device: str = "cpu") -> dict[str, str]:
+def _merge_colon_paths(*values: str) -> str:
+    """Merge colon-separated path strings while preserving order and deduplicating."""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if not value:
+            continue
+        for part in value.split(":"):
+            part = part.strip()
+            if not part or part in seen:
+                continue
+            merged.append(part)
+            seen.add(part)
+    return ":".join(merged)
+
+
+def _discover_tool_ld_library_paths(tool_venv_path: Path | str | None) -> list[str]:
+    """Discover CUDA-related library directories from a tool venv."""
+    if not tool_venv_path:
+        return []
+
+    venv_path = Path(tool_venv_path)
+    candidates: list[Path] = [
+        venv_path / "cuda_env" / "lib",
+        venv_path / "cuda_env" / "lib64",
+    ]
+    candidates.extend(venv_path.glob("lib/python*/site-packages/nvidia/*/lib"))
+
+    found: list[str] = []
+    seen: set[str] = set()
+    for path in candidates:
+        if path.is_dir():
+            as_str = str(path)
+            if as_str not in seen:
+                seen.add(as_str)
+                found.append(as_str)
+    return found
+
+
+def _clean_env(
+    device: str = "cpu",
+    tool_venv_path: Path | str | None = None,
+) -> dict[str, str]:
     """Build a clean env dict for subprocess execution."""
     from .system_info import capture_subprocess_env
 
     env = {k: v for k, v in os.environ.items() if k not in _BLOCKED_ENV_VARS}
+    parent_ld_library_path = os.environ.get("LD_LIBRARY_PATH", "").strip()
+    tool_ld_library_path = ":".join(_discover_tool_ld_library_paths(tool_venv_path))
+    merged_ld_library_path = _merge_colon_paths(
+        tool_ld_library_path,
+        parent_ld_library_path,
+    )
+    if merged_ld_library_path:
+        env["LD_LIBRARY_PATH"] = merged_ld_library_path
+
     env["CUDA_VISIBLE_DEVICES"] = determine_visible_devices(device=device)
+    if device == "cpu":
+        # Prevent JAX from probing CUDA plugins in CPU-only subprocesses.
+        env["JAX_PLATFORMS"] = "cpu"
+    else:
+        env.pop("JAX_PLATFORMS", None)
 
     # Capture for environment reporting
     capture_subprocess_env(env)
@@ -128,7 +184,7 @@ class PersistentWorker:
 
         python_exe = str(self.venv_path / "bin" / "python")
         bootstrap = str(Path(__file__).parent / "_worker_bootstrap.py")
-        env = _clean_env(self.device)
+        env = _clean_env(self.device, tool_venv_path=self.venv_path)
         env["TOOL_VENV_PATH"] = str(self.venv_path)
 
         logger.debug(
@@ -260,4 +316,3 @@ class PersistentWorker:
             finally:
                 self._process = None
                 logger.debug("Stopped persistent worker for %s", self.tool_name)
-

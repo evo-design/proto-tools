@@ -108,7 +108,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | `max_seqlen` | `Optional[int]` | `None` | Max sequence length for KV cache |
 | `stop_at_eos` | `bool` | `True` | Stop at end-of-sequence token |
 | `old_kv_cache` | `Optional[Dict]` | `None` | Continue from previous KV cache  |
-| `batch_size` | `Optional[int]` | `None` | Prompts per GPU batch (all if None) |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Inference device |
 | `return_logits` | `bool` | `False` | Include per-token logits in output |
 
@@ -118,7 +118,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
 | `local_path` | `Optional[str]` | `None` | Local weights path |
-| `batch_size` | `Optional[int]` | `None` | Sequences per GPU batch |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Inference device |
 | `return_logits` | `bool` | `False` | Include per-position logits |
 

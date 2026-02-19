@@ -2,13 +2,34 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
+from pathlib import Path
 from typing import List
 
 import numpy as np
 import torch
 
 logger = logging.getLogger(__name__)
+
+_STANDALONE_DIR = Path(__file__).resolve().parent
+if str(_STANDALONE_DIR) not in sys.path:
+    # Needed for persistent-worker imports where script dir is not auto-added.
+    sys.path.insert(0, str(_STANDALONE_DIR))
+
+
+def _resolve_local_checkpoint_path() -> Path | None:
+    """Resolve a local SpliceTransformer checkpoint path if available."""
+    explicit_path = os.environ.get("SPLICE_TRANSFORMER_CHECKPOINT", "").strip()
+    if explicit_path:
+        checkpoint_path = Path(explicit_path).expanduser().resolve()
+        if checkpoint_path.exists():
+            return checkpoint_path
+        raise FileNotFoundError(
+            f"SPLICE_TRANSFORMER_CHECKPOINT is set but file does not exist: {checkpoint_path}"
+        )
+
+    return None
 
 
 class SpliceTransformerModel:
@@ -159,14 +180,18 @@ class SpliceTransformerModel:
             training=False,
         ).to(device).eval()
 
-        # Download checkpoint using HuggingFace Hub (respects HF_HOME env var)
-        logger.debug("Downloading SpliceTransformer checkpoint from HuggingFace Hub...")
-
-        from huggingface_hub import hf_hub_download
-        model_path = hf_hub_download(
-            repo_id="brianhie/SpTransformer",
-            filename="SpTransformer_pytorch.ckpt",
-        )
+        # Prefer a local checkpoint if available, then fallback to HuggingFace Hub.
+        local_model_path = _resolve_local_checkpoint_path()
+        if local_model_path is not None:
+            model_path = str(local_model_path)
+            logger.debug(f"Using local SpliceTransformer checkpoint: {model_path}")
+        else:
+            logger.debug("Downloading SpliceTransformer checkpoint from HuggingFace Hub...")
+            from huggingface_hub import hf_hub_download
+            model_path = hf_hub_download(
+                repo_id="brianhie/SpTransformer",
+                filename="SpTransformer_pytorch.ckpt",
+            )
 
         # Load and fix state dict
         save_dict = torch.load(model_path, map_location=device)

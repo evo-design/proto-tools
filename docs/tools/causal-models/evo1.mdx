@@ -84,7 +84,7 @@ Evo1 performs autoregressive generation: given a prompt DNA sequence, it predict
 | `top_k` | `int` | `4` | `1 - 20` | Top-k sampling; limits to k most likely tokens |
 | `top_p` | `float` | `1.0` | `0.8 - 1.0` | Nucleus sampling threshold |
 | `prepend_prompt` | `bool` | `False` | N/A | Whether to prepend prompt to generated sequence |
-| `batch_size` | `Optional[int]` | `128` | N/A | Max prompts per GPU batch |
+| `batch_size` | `int` | `1` | N/A | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | N/A | Device to run on |
 
 **Parameters to prioritize for sweeps:**

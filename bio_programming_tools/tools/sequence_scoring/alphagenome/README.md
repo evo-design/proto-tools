@@ -50,7 +50,7 @@ AlphaGenome jointly predicts all of these signals from DNA sequence alone, lever
 
 ## How It Works
 
-1. **Input preparation**: The tool accepts either genomic coordinates (chromosome + interval) or a raw DNA sequence. If the interval length does not match one of AlphaGenome's supported context lengths (2 KB, 16 KB, 100 KB, 500 KB, 1 MB), it is automatically resized by the inference layer.
+1. **Input preparation**: The tool accepts either genomic coordinates (chromosome + interval) or a raw DNA sequence. If the interval length does not match one of AlphaGenome's supported context lengths (16 KB, 100 KB, 500 KB, 1 MB), it is automatically resized by the inference layer. Raw sequence inputs must already match one of these lengths.
 2. **Model inference**: The DNA sequence is passed through AlphaGenome's multi-task transformer architecture, which produces predictions for all requested output types in a single forward pass. Inference runs in an isolated venv on GPU.
 3. **Output formatting**: Prediction tools return the raw output matrices keyed by output type. Scoring tools apply recommended scorer functions that summarize the predictions into interpretable per-variant or per-interval scores.
 4. **Variant scoring**: For variant-effect tools, the model runs inference on both the reference and alternate sequences, and scorers compute the difference (e.g., log-fold-change in predicted signal).
@@ -224,7 +224,7 @@ from bio_programming_tools.tools.sequence_scoring.alphagenome import (
     run_alphagenome_predict_sequence,
 )
 
-inputs = AlphaGenomePredictSequenceInput(sequence="ACGT" * 512)  # 2048 bp
+inputs = AlphaGenomePredictSequenceInput(sequence="ACGT" * 4096)  # 16384 bp
 config = AlphaGenomePredictSequenceConfig(
     requested_outputs=["DNASE", "CHIP_TF"],
 )
@@ -255,7 +255,7 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ## Best Practices & Gotchas
 
-- **Context length matters**: AlphaGenome supports 5 context lengths (2 KB to 1 MB). The 1 MB window captures the most distal regulatory effects. Shorter windows are faster but miss long-range interactions. Non-matching interval lengths are automatically resized.
+- **Context length matters**: AlphaGenome supports 4 context lengths (16 KB to 1 MB). The 1 MB window captures the most distal regulatory effects. Shorter windows are faster but miss long-range interactions. Non-matching interval lengths are automatically resized.
 - **First run is slow**: Model weights are downloaded from Hugging Face on first use. Subsequent runs load from the local cache.
 - **GPU required**: AlphaGenome requires a CUDA GPU.
 - **Variant position validation**: The variant position must fall within `[interval_start, interval_end)`. The ISM sub-interval must be fully contained within the main interval.

@@ -9,7 +9,11 @@ from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 
-from .shared_data_models import AlphaGenomePredictConfig, AlphaGenomePredictOutput
+from .shared_data_models import (
+    AlphaGenomePredictConfig,
+    AlphaGenomePredictOutput,
+    SUPPORTED_CONTEXT_LENGTHS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +33,8 @@ class AlphaGenomePredictSequenceInput(BaseToolInput):
     * **524,288 bp** (500 KB)
     * **131,072 bp** (100 KB)
     * **16,384 bp** (16 KB)
-    * **2,048 bp** (2 KB)
 
-    If the supplied sequence does not match a supported length it is
-    automatically resized at inference time (see ``standalone/inference.py``).
+    Raw sequence inputs must already match one of these supported lengths.
 
     Attributes:
         sequence (str): Raw DNA sequence string (A/C/G/T/N characters).
@@ -49,6 +51,12 @@ class AlphaGenomePredictSequenceInput(BaseToolInput):
             raise ValueError("sequence cannot be empty")
         if not set(sequence) <= set("ACGTN"):
             raise ValueError("sequence must only contain DNA bases A/C/G/T/N")
+        if len(sequence) not in SUPPORTED_CONTEXT_LENGTHS:
+            supported = ", ".join(str(length) for length in sorted(SUPPORTED_CONTEXT_LENGTHS))
+            raise ValueError(
+                "sequence length must match a supported AlphaGenome context length "
+                f"({supported} bp)"
+            )
         return sequence
 
 
@@ -88,8 +96,10 @@ def run_alphagenome_predict_sequence(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
+            "timeout": config.timeout,
         },
         instance=instance,
+        verbose=config.verbose,
         reload_on=type(config).reload_fields(),
     )
 

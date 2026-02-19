@@ -644,7 +644,7 @@ class ToolInstance:
                 json.dump(input_dict, f)
 
             # Sets CUDA_VISIBLE_DEVICES based on device string
-            env = _clean_env(device)
+            env = _clean_env(device, tool_venv_path=self.venv_path)
             env["TOOL_VENV_PATH"] = str(self.venv_path)
             python_exe = str(self.venv_path / "bin" / "python")
 
@@ -825,7 +825,7 @@ class ToolInstance:
 
         # Run setup.sh
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
-        env = _clean_env(self.device)
+        env = _clean_env(self.device, tool_venv_path=self.venv_path)
         env["VENV_PATH"] = str(self.venv_path.absolute())
         env["PYTHON_EXE"] = str(self.venv_path.absolute() / "bin" / "python")
         env["PIP_EXE"] = str(self.venv_path.absolute() / "bin" / "pip")

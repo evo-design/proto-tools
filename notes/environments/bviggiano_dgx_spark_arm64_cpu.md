@@ -1,6 +1,6 @@
 # DGX Spark Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-65%25-yellow) ![Passed](https://img.shields.io/badge/passed-19-brightgreen) ![Failed](https://img.shields.io/badge/failed-10-red) ![Skipped](https://img.shields.io/badge/skipped-0-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-68%25-yellow) ![Passed](https://img.shields.io/badge/passed-20-brightgreen) ![Failed](https://img.shields.io/badge/failed-9-red) ![Skipped](https://img.shields.io/badge/skipped-0-lightgrey)
 
 ## Platform
 
@@ -16,15 +16,17 @@
 
 ## Git
 
-- **Commit**: `36e6e2cd234d`
-- **Branch**: `env-report-improvements`
-- **Dirty**: No
+- **Commit**: `1a67a88329fa`
+- **Branch**: `brianhie/alphagenome-gpu-flex-20260219-085113`
+- **Dirty**: Yes
 
 ## Environment Variables
 
 ### Parent Process Environment
 
 ```
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
 CONDA_DEFAULT_ENV=bio_tools
 CONDA_EXE=/home/bviggiano/miniconda3/bin/conda
 CONDA_PREFIX=/home/bviggiano/miniconda3/envs/bio_tools
@@ -32,8 +34,10 @@ CONDA_PREFIX_1=/home/bviggiano/miniconda3
 CONDA_PROMPT_MODIFIER=(bio_tools) 
 CONDA_PYTHON_EXE=/home/bviggiano/miniconda3/bin/python
 CONDA_SHLVL=2
+COREPACK_ENABLE_AUTO_PIN=0
 DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
 DISABLE_PANDERA_IMPORT_WARNING=True
+GIT_EDITOR=true
 HOME=/home/bviggiano
 LANG=en_US.utf8
 LD_LIBRARY_PATH=/usr/local/cuda/lib64:
@@ -41,14 +45,16 @@ LESSCLOSE=/usr/bin/lesspipe %s %s
 LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=bviggiano
 LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=...
+NoDefaultCurrentDirectoryInExePath=1
 OLDPWD=/home/bviggiano/codebases/bio-programming
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 PATH=/home/bviggiano/.local/bin:/home/bviggiano/.local/bin:/usr/local/cuda/bin:/home/bviggiano/miniconda3/envs/bio_tools/bin:/home/bviggiano/miniconda3/condabin:/usr/local/cuda/bin:/opt/bin:/usr/local/sbin...
 PWD=/home/bviggiano/codebases/bio-programming/bio-programming-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 RDBASE=/home/bviggiano/miniconda3/envs/bio_tools/lib/python3.12/site-packages/rdkit
 SHELL=/bin/bash
-SHLVL=1
+SHLVL=2
 TERM=xterm-256color
 USER=bviggiano
 XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -65,17 +71,24 @@ _CONDA_ROOT=/home/bviggiano/miniconda3
 ### Subprocess Environment (passed to tools)
 
 ```
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
 CONDA_PREFIX_1=/home/bviggiano/miniconda3
+COREPACK_ENABLE_AUTO_PIN=0
 CUDA_VISIBLE_DEVICES=0
 DEBUGINFOD_URLS=https://debuginfod.ubuntu.com 
 DISABLE_PANDERA_IMPORT_WARNING=True
+GIT_EDITOR=true
 HOME=/home/bviggiano
 LANG=en_US.utf8
+LD_LIBRARY_PATH=/home/bviggiano/codebases/bio-programming/bio-programming-tools/.venvs/splice_transformer_env/lib/python3.12/site-packages/nvidia/cusparselt/lib:/home/bviggiano/codebases/bio-programming/bio-programmi...
 LESSCLOSE=/usr/bin/lesspipe %s %s
 LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=bviggiano
 LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=00:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=...
+NoDefaultCurrentDirectoryInExePath=1
 OLDPWD=/home/bviggiano/codebases/bio-programming
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 PATH=/home/bviggiano/.local/bin:/home/bviggiano/.local/bin:/usr/local/cuda/bin:/home/bviggiano/miniconda3/envs/bio_tools/bin:/home/bviggiano/miniconda3/condabin:/usr/local/cuda/bin:/opt/bin:/usr/local/sbin...
 PWD=/home/bviggiano/codebases/bio-programming/bio-programming-tools
 PYTEST_CURRENT_TEST=tests/test_rna_splicing.py::test_splice_transformer_gpu (call)
@@ -83,7 +96,7 @@ PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 RDBASE=/home/bviggiano/miniconda3/envs/bio_tools/lib/python3.12/site-packages/rdkit
 SHELL=/bin/bash
-SHLVL=1
+SHLVL=2
 TERM=xterm-256color
 USER=bviggiano
 XDG_DATA_DIRS=/usr/share/gnome:/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -100,67 +113,64 @@ _CE_M=
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `evo1` | yes | ✅ | 13.9s | ❌ Fail |
-| `evo2` | yes | ✅ | 1.4s | ❌ Fail |
-| `progen2` | yes | ✅ | 1.4s | ❌ Fail |
+| `evo1` | yes | ✅ | 16.8s | ❌ Fail |
+| `evo2` | yes | ✅ | 1.8s | ❌ Fail |
+| `progen2` | yes | ✅ | 1.7s | ❌ Fail |
 
-### Gene Annotation (4/5)
+### Gene Annotation (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 58.9s | ✅ Pass |
-| `crispr_tracr` | no | ✅ | 29.8s | ❌ Fail |
-| `minced` | no | ✅ | 2.6s | ✅ Pass |
-| `mmseqs` | no | ✅ | 4.4s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 2.3s | ✅ Pass |
+| `blast` | no | ✅ | 49.4s | ✅ Pass |
+| `minced` | no | ✅ | 3.0s | ✅ Pass |
+| `mmseqs` | no | ✅ | 5.0s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 2.6s | ✅ Pass |
 
 ### Inverse Folding (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `ligandmpnn` | yes | ✅ | 21.2s | ✅ Pass |
-| `proteinmpnn` | yes | ✅ | 15.0s | ✅ Pass |
+| `ligandmpnn` | yes | ✅ | 25.6s | ✅ Pass |
+| `proteinmpnn` | yes | ✅ | 16.3s | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `esm2` | yes | ✅ | 34.9s | ✅ Pass |
-| `esm3` | yes | ✅ | 16.5s | ✅ Pass |
+| `esm2` | yes | ✅ | 34.2s | ✅ Pass |
+| `esm3` | yes | ✅ | 18.0s | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 2.6s | ✅ Pass |
-| `prodigal` | no | ✅ | 2.4s | ✅ Pass |
+| `orfipy` | no | ✅ | 3.1s | ✅ Pass |
+| `prodigal` | no | ✅ | 2.6s | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `splice_transformer` | yes | ✅ | 9.8s | ✅ Pass |
+| `splice_transformer` | yes | ✅ | 11.9s | ✅ Pass |
 
-### Sequence Alignment (2/2)
-
-| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
-|------|--------------|----------------------|----------|--------|
-| `colabfold_search` | no | ✅ | 35.2s | ✅ Pass |
-| `mafft` | no | ✅ | 14.0s | ✅ Pass |
-
-### Sequence Scoring (2/3)
+### Sequence Alignment (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphagenome` | yes | ✅ | 1.4s | ❌ Fail |
-| `borzoi` | yes | ✅ | 23.0s | ✅ Pass |
-| `enformer` | yes | ✅ | 18.6s | ✅ Pass |
+| `mafft` | no | ✅ | 15.7s | ✅ Pass |
+
+### Sequence Scoring (2/2)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
+|------|--------------|----------------------|----------|--------|
+| `borzoi` | yes | ✅ | 21.6s | ✅ Pass |
+| `enformer` | yes | ✅ | 15.4s | ✅ Pass |
 
 ### Structure Design (0/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `rfdiffusion3` | yes | ✅ | 6.9s | ❌ Fail |
+| `rfdiffusion3` | yes | ✅ | 9.1s | ❌ Fail |
 
 ### Structure Dynamics (1/1)
 
@@ -168,17 +178,25 @@ _CE_M=
 |------|--------------|----------------------|----------|--------|
 | `bioemu` | no | — | 0.0s | ✅ Pass |
 
-### Structure Prediction (3/7)
+### Structure Prediction (2/6)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphafold3` | yes | — | 0.7s | ❌ Fail |
-| `boltz2` | yes | ✅ | 607.7s | ❌ Fail |
-| `chai1` | yes | ✅ | 3.4s | ❌ Fail |
-| `esmfold` | yes | ✅ | 111.7s | ✅ Pass |
-| `protenix` | yes | ✅ | 88.5s | ❌ Fail |
-| `structure_metrics` | no | ✅ | 2.7s | ✅ Pass |
-| `viennarna` | no | ✅ | 2.3s | ✅ Pass |
+| `alphafold3` | yes | — | 1.6s | ❌ Fail |
+| `boltz2` | yes | ✅ | 608.3s | ❌ Fail |
+| `chai1` | yes | ✅ | 4.2s | ❌ Fail |
+| `esmfold` | yes | ✅ | 130.5s | ✅ Pass |
+| `protenix` | yes | ✅ | 99.6s | ❌ Fail |
+| `viennarna` | no | ✅ | 2.6s | ✅ Pass |
+
+### Unknown (3/4)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
+|------|--------------|----------------------|----------|--------|
+| `alphagenome` | yes | ✅ | 146.7s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 54.6s | ❌ Fail |
+| `local_colabfold_search` | no | — | 43.2s | ✅ Pass |
+| `structure_metrics` | no | ✅ | 3.0s | ✅ Pass |
 
 ## Failure Details
 
@@ -199,13 +217,13 @@ E    +    where [] = CrisprTracrOutput(tool_id, execution_time, timestamp, succe
 **Test**: `tests/language_model_tests/test_evo1.py::test_evo1_sample_tool`
 
 ```
-tests/language_model_tests/test_evo1.py:138: in test_evo1_sample_tool
+tests/language_model_tests/test_evo1.py:100: in test_evo1_sample_tool
     validate_output(result)
 tests/tool_infra_tests/test_export_functionality.py:102: in validate_output
     assert output.success is True, f"Tool execution failed: {output}"
 E   AssertionError: Tool execution failed: 
 E     ================================================================================
-E     evo1-sample: TOOL FAILURE after 13.8944s
+E     evo1-sample: TOOL FAILURE after 16.7930s
 E     ================================================================================
 E     
 E     Error 1:
@@ -217,7 +235,7 @@ E                  ^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 276, in dispatch
 E         return _model.sample(
 E                ^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 81, in sample
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 82, in sample
 E         self.load(self.device, verbose=verbose)
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 227, in load
 E         evo_obj = Evo(self.model_name)
@@ -253,10 +271,10 @@ E
 E     
 E     Error 2:
 E     Traceback (most recent call last):
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E         result = func(inputs, config, instance)
 E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/evo1_sample.py", line 201, in run_evo1_sample
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/evo1_sample.py", line 209, in run_evo1_sample
 E         result = ToolInstance.dispatch(
 E                  ^^^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -268,7 +286,7 @@ E                ^^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 616, in _run_persistent
 E         return self._worker.send(input_dict, timeout=timeout)
 E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/persistent_worker.py", line 242, in send
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/persistent_worker.py", line 298, in send
 E         raise RuntimeError(
 E     RuntimeError: Worker for evo1 returned an error:
 E     Traceback (most recent call last):
@@ -278,7 +296,7 @@ E                  ^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 276, in dispatch
 E         return _model.sample(
 E                ^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 81, in sample
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 82, in sample
 E         self.load(self.device, verbose=verbose)
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo1/standalone/inference.py", line 227, in load
 E         evo_obj = Evo(self.model_name)
@@ -328,7 +346,7 @@ tests/tool_infra_tests/test_export_functionality.py:102: in validate_output
     assert output.success is True, f"Tool execution failed: {output}"
 E   AssertionError: Tool execution failed: 
 E     ================================================================================
-E     evo2-sample: TOOL FAILURE after 1.3957s
+E     evo2-sample: TOOL FAILURE after 1.7942s
 E     ================================================================================
 E     
 E     Error 1:
@@ -336,10 +354,10 @@ E     'evo2' may not be compatible with your system. setup.sh failed (exit 1).
 E     
 E     Error 2:
 E     Traceback (most recent call last):
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E         result = func(inputs, config, instance)
 E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo2/evo2_sample.py", line 453, in run_evo2_sample
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/evo2/evo2_sample.py", line 455, in run_evo2_sample
 E         result = ToolInstance.dispatch(
 E                  ^^^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -372,7 +390,7 @@ tests/tool_infra_tests/test_export_functionality.py:102: in validate_output
     assert output.success is True, f"Tool execution failed: {output}"
 E   AssertionError: Tool execution failed: 
 E     ================================================================================
-E     progen2-sample: TOOL FAILURE after 1.4029s
+E     progen2-sample: TOOL FAILURE after 1.6874s
 E     ================================================================================
 E     
 E     Error 1:
@@ -380,10 +398,10 @@ E     'progen2' may not be compatible with your system. setup.sh failed (exit 1)
 E     
 E     Error 2:
 E     Traceback (most recent call last):
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E         result = func(inputs, config, instance)
 E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/progen2/progen2_sample.py", line 372, in run_progen2_sample
+E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/causal_models/progen2/progen2_sample.py", line 374, in run_progen2_sample
 E         result = ToolInstance.dispatch(
 E                  ^^^^^^^^^^^^^^^^^^^^^^
 E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -403,50 +421,6 @@ E
 E     ================================================================================
 E   assert False is True
 E    +  where False = ProGen2SampleOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata, logits).success
-```
-
-### ❌ `alphagenome`
-
-**Test**: `tests/sequence_scoring_tests/test_alphagenome.py::TestAlphaGenome::test_interval_prediction`
-
-```
-tests/sequence_scoring_tests/test_alphagenome.py:56: in test_interval_prediction
-    validate_output(result)
-tests/tool_infra_tests/test_export_functionality.py:102: in validate_output
-    assert output.success is True, f"Tool execution failed: {output}"
-E   AssertionError: Tool execution failed: 
-E     ================================================================================
-E     alphagenome-predict-interval: TOOL FAILURE after 1.4175s
-E     ================================================================================
-E     
-E     Error 1:
-E     'alphagenome' may not be compatible with your system. setup.sh failed (exit 1).
-E     
-E     Error 2:
-E     Traceback (most recent call last):
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
-E         result = func(inputs, config, instance)
-E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_interval.py", line 50, in run_alphagenome_predict_interval
-E         result = ToolInstance.dispatch(
-E                  ^^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
-E         return cached.run(
-E                ^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 515, in run
-E         return self._run_persistent(
-E                ^^^^^^^^^^^^^^^^^^^^^
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 577, in _run_persistent
-E         self._ensure_venv()
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 474, in _ensure_venv
-E         self._create_venv()
-E       File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 864, in _create_venv
-E         raise RuntimeError(
-E     RuntimeError: 'alphagenome' may not be compatible with your system. setup.sh failed (exit 1).
-E     
-E     ================================================================================
-E   assert False is True
-E    +  where False = AlphaGenomePredictOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata, variant).success
 ```
 
 ### ❌ `rfdiffusion3`
@@ -499,16 +473,16 @@ E
 E   Error Messages:
 E   'chai1' may not be compatible with your system. setup.sh failed (exit 1).
 E   Traceback (most recent call last):
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E       result = func(inputs, config, instance)
 E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_cache.py", line 460, in wrapper
 E       return func(*args, **kwargs)
 E              ^^^^^^^^^^^^^^^^^^^^^
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/chai1/chai1.py", line 305, in run_chai1
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/chai1/chai1.py", line 306, in run_chai1
 E       results.append(run_chai1_on_complex(comp=comp, config=config, instance=instance))
 E                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/chai1/chai1.py", line 584, in run_chai1_on_complex
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/chai1/chai1.py", line 585, in run_chai1_on_complex
 E       result = ToolInstance.dispatch(
 E                ^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -546,15 +520,15 @@ E
 E   Error Messages:
 E   Worker for boltz2 timed out after 600s
 E   Traceback (most recent call last):
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E       result = func(inputs, config, instance)
 E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_cache.py", line 460, in wrapper
 E       return func(*args, **kwargs)
 E              ^^^^^^^^^^^^^^^^^^^^^
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/boltz2/boltz2.py", line 334, in run_boltz2
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/boltz2/boltz2.py", line 335, in run_boltz2
 E       run_boltz2_on_complex(
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/boltz2/boltz2.py", line 619, in run_boltz2_on_complex
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/boltz2/boltz2.py", line 620, in run_boltz2_on_complex
 E       output_data = ToolInstance.dispatch(
 E                     ^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -566,7 +540,7 @@ E              ^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 616, in _run_persistent
 E       return self._worker.send(input_dict, timeout=timeout)
 E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/persistent_worker.py", line 216, in send
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/persistent_worker.py", line 272, in send
 E       raise TimeoutError(
 E   TimeoutError: Worker for boltz2 timed out after 600s
 ```
@@ -601,13 +575,13 @@ E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/.ven
 E       raise RuntimeError(message) from e
 E   RuntimeError: Error building extension 'fast_layer_norm_cuda_v2'
 E   Traceback (most recent call last):
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 159, in wrapper
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 162, in wrapper
 E       result = func(inputs, config, instance)
 E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_cache.py", line 460, in wrapper
 E       return func(*args, **kwargs)
 E              ^^^^^^^^^^^^^^^^^^^^^
-E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/protenix/protenix.py", line 422, in run_protenix
+E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/tools/structure_prediction/protenix/protenix.py", line 423, in run_protenix
 E       output_data = ToolInstance.dispatch(
 E                     ^^^^^^^^^^^^^^^^^^^^^^
 E     File "/home/bviggiano/codebases/bio-programming/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 232, in dispatch
@@ -636,4 +610,4 @@ E   RuntimeError: Error building extension 'fast_layer_norm_cuda_v2'
 ```
 
 ---
-*Generated at 2026-02-17 21:57:30 by `pytest --env-report`*
+*Generated at 2026-02-19 11:40:27 by `pytest --env-report`*

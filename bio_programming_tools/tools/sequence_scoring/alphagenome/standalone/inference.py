@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
+from pathlib import Path
 from typing import Any, List, Optional
 
 import jax
+import huggingface_hub
 from alphagenome.data import genome
 from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
@@ -17,7 +20,26 @@ from alphagenome_research.model import dna_model
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_CONTEXT_LENGTHS = [1_048_576, 524_288, 131_072, 16_384, 2_048]
+_SUPPORTED_CONTEXT_LENGTHS = [1_048_576, 524_288, 131_072, 16_384]
+
+
+def _ensure_jax_memory_compat() -> None:
+    """Patch a minimal jax.memory shim for alphagenome_research on older JAX."""
+    if hasattr(jax, "memory"):
+        return
+
+    class _MemorySpace:
+        # jax.device_put(x, device=None) is valid and keeps behavior compatible.
+        Host = None
+
+    class _MemoryCompat:
+        Space = _MemorySpace
+
+    setattr(jax, "memory", _MemoryCompat())
+    logger.info("Applied JAX memory compatibility shim (jax.memory missing).")
+
+
+_ensure_jax_memory_compat()
 
 # Minimum center-mask widths required by the recommended scorers.
 # Interval scorers: RNA_SEQ GeneMaskScorer has width=200,001.
@@ -34,6 +56,46 @@ _ORGANISM_ENUMS = {
     "human": dna_model.Organism.HOMO_SAPIENS,
     "mouse": dna_model.Organism.MUS_MUSCULUS,
 }
+
+
+def _resolve_jax_device(device: str) -> tuple[jax.Device, str]:
+    """Resolve a JAX device and fail fast when the requested backend is unavailable."""
+    if device == "cuda":
+        try:
+            return jax.devices("gpu")[0], "cuda"
+        except Exception as exc:
+            raise RuntimeError(
+                "Requested AlphaGenome device 'cuda' but GPU backend is unavailable."
+            ) from exc
+
+    try:
+        return jax.devices(device)[0], device
+    except Exception as exc:
+        raise RuntimeError(
+            f"Requested AlphaGenome device '{device}' is unavailable."
+        ) from exc
+
+
+def _resolve_checkpoint_path(model_version: str) -> Optional[Path]:
+    """Resolve AlphaGenome checkpoint path for offline-friendly loading."""
+    env_checkpoint = os.environ.get("ALPHAGENOME_CHECKPOINT_PATH", "").strip()
+    if env_checkpoint:
+        checkpoint_path = Path(env_checkpoint).expanduser()
+        if checkpoint_path.exists():
+            return checkpoint_path
+        raise FileNotFoundError(
+            f"ALPHAGENOME_CHECKPOINT_PATH does not exist: {checkpoint_path}"
+        )
+
+    repo_id = f"google/alphagenome-{model_version.replace('_', '-').lower()}"
+    try:
+        checkpoint = huggingface_hub.snapshot_download(
+            repo_id=repo_id,
+            local_files_only=True,
+        )
+    except Exception:
+        return None
+    return Path(checkpoint)
 
 
 class AlphaGenomeModel:
@@ -127,6 +189,10 @@ class AlphaGenomeModel:
         device: str = "cuda",
     ) -> dict[str, Any]:
         """Run predictions from a raw DNA sequence string."""
+        _validate_sequence_length(
+            sequence_length=len(sequence),
+            operation="predict_sequence",
+        )
         if not self._loaded:
             self.load(device)
         elif self.device != device:
@@ -280,9 +346,20 @@ class AlphaGenomeModel:
         if verbose:
             logger.info(f"Loading AlphaGenome model: {self.model_version} on {device}")
 
-        jax_device = jax.devices("gpu" if device == "cuda" else device)[0]
-        self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
-        self.device = device
+        jax_device, resolved_device = _resolve_jax_device(device)
+        checkpoint_path = _resolve_checkpoint_path(self.model_version)
+        if checkpoint_path is not None:
+            if verbose:
+                logger.info("Loading AlphaGenome checkpoint from %s", checkpoint_path)
+            self.model = dna_model.create(checkpoint_path, device=jax_device)
+        else:
+            if verbose:
+                logger.info(
+                    "No local checkpoint found for model '%s'; falling back to Hugging Face download.",
+                    self.model_version,
+                )
+            self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
+        self.device = resolved_device
         self._loaded = True
 
         if verbose:
@@ -393,6 +470,18 @@ def _validate_min_scorer_width(
         )
 
 
+def _validate_sequence_length(sequence_length: int, operation: str) -> None:
+    """Validate that raw sequence inputs match a supported context length."""
+    if sequence_length in _SUPPORTED_CONTEXT_LENGTHS:
+        return
+
+    supported = ", ".join(f"{length:,}" for length in sorted(_SUPPORTED_CONTEXT_LENGTHS))
+    raise ValueError(
+        f"{operation}: sequence length ({sequence_length:,} bp) is unsupported. "
+        f"Supported lengths: {supported} bp."
+    )
+
+
 def _resize_interval(
     chromosome: str, interval_start: int, interval_end: int,
 ) -> genome.Interval:
@@ -435,6 +524,8 @@ def dispatch(input_dict: dict) -> dict:
     kwargs = dict(input_dict)
     operation = kwargs.pop("operation")
     model_version = kwargs.pop("model_version", "all_folds")
+    # Tool orchestration metadata (not part of model call signature).
+    kwargs.pop("timeout", None)
 
     if _model is None:
         _model = AlphaGenomeModel(model_version=model_version)
