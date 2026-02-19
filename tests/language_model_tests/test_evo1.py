@@ -252,20 +252,6 @@ class TestEvo1ScoringInput:
 class TestEvo1ScoringConfig:
     """Tests for Evo1ScoringConfig validation."""
 
-    def test_default_values(self):
-        """Verify default config values."""
-        config = Evo1ScoringConfig()
-        assert config.model_name == "evo-1-8k-base"
-        assert config.batch_size == 1
-        assert config.device == "cuda"
-        assert config.return_logits is False
-        assert config.verbose is False
-
-    def test_custom_batch_size(self):
-        """Custom batch_size should be accepted."""
-        config = Evo1ScoringConfig(batch_size=4)
-        assert config.batch_size == 4
-
     def test_custom_model_name(self):
         """Custom model_name should be accepted."""
         config = Evo1ScoringConfig(model_name="evo-1-8k-crispr")

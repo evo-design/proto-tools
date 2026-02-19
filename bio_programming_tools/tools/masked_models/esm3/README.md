@@ -80,7 +80,7 @@ All tools take a tool-specific input with one or more protein sequences:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `128` | Sequences per batch |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | `cuda`, `cpu`, or `mps` |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
@@ -93,7 +93,7 @@ All tools take a tool-specific input with one or more protein sequences:
 | `temperature` | `float` | `1.0` | Sampling temperature |
 | `decoding_method` | `str` | `entropy` | Position selection method |
 | `num_mutations` | `int` | `1` | Mutations per iteration |
-| `batch_size` | `Optional[int]` | `None` | Sequences per batch |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
@@ -103,7 +103,7 @@ All tools take a tool-specific input with one or more protein sequences:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `128` | Sequences per batch (use smaller for structures) |
+| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `cuda` | Device |
 | `verbose` | `bool` | `False` | Print progress |
 
@@ -112,7 +112,7 @@ All tools take a tool-specific input with one or more protein sequences:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `32` | Masked variants per forward pass |
+| `batch_size` | `int` | `1` | Masked variants per forward pass |
 | `device` | `str` | `cuda` | Device |
 | `verbose` | `bool` | `False` | Print progress |
 | `return_logits` | `bool` | `False` | Include per-position logits |
