@@ -173,7 +173,7 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 - Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them
 - Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
-- `batch_size` fields default to `1` (safe by default, prevents OOM). The tool layer owns the batching loop — callers (generators, constraints) pass all inputs plus `batch_size` to the tool in one call
+- `batch_size` fields default to `1` (safe by default, prevents OOM). The tool layer owns the batching loop — callers (generators, constraints) pass all inputs plus `batch_size` to the tool in one call. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
 - Use `from __future__ import annotations` at the top of every file
 - Use `logging.getLogger(__name__)` — never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
@@ -191,6 +191,7 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`
 - Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
+- **Before running GPU tests**, check if a GPU is available. If no GPU is detected, run CPU tests by default (`pytest --cpu`)
 
 ## Using bio_tools with Claude Code
 

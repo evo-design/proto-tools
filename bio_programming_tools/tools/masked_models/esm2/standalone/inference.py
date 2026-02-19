@@ -7,7 +7,7 @@ import json
 import logging
 import math
 import sys
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 import torch
 from tqdm import tqdm
@@ -58,7 +58,8 @@ class ESM2Model:
 
         Args:
             sequences: Protein sequences
-            batch_size: Batch size for processing
+            batch_size: Sequences per GPU forward pass. Larger batches are
+                faster but use more memory.
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to return logits
@@ -194,7 +195,7 @@ class ESM2Model:
         temperature: float,
         decoding_method: str,
         num_mutations: int,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
@@ -207,7 +208,8 @@ class ESM2Model:
             temperature: Sampling temperature for amino acid selection
             decoding_method: Method for selecting positions ("entropy", "max_logit", "random")
             num_mutations: Number of positions to mutate per sequence
-            batch_size: Number of sequences to process per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to return logits used for sampling
@@ -253,10 +255,9 @@ class ESM2Model:
             return result
 
         # Run inference on sequences
-        effective_batch_size = batch_size if batch_size is not None else len(sequences)
         outputs = self(
             sequences=sequences,
-            batch_size=effective_batch_size,
+            batch_size=batch_size,
             device=device,
             verbose=verbose,
             return_logits=True,  # Always need logits for sampling
@@ -294,7 +295,8 @@ class ESM2Model:
 
         Args:
             sequences: List of protein sequences to score
-            batch_size: Number of masked variants to process per forward pass
+            batch_size: Masked variants per forward pass. Larger batches are
+                faster but use more memory.
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to include logits in the output

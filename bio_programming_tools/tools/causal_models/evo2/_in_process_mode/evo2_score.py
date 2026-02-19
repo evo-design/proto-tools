@@ -73,9 +73,9 @@ class Evo2ScoringConfig(BaseConfig):
             ``"cpu"``, or specific GPU devices like ``"cuda:0"``.
             Default: ``"cuda"``.
 
-        batch_size (Optional[int]): Number of sequences to process per batch.
-            If None, processes all sequences at once. Lower values reduce memory
-            usage but may be slower. Default: ``None``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
 
         keep_on_gpu (bool): Whether to keep the model loaded on device after
             inference completes. Set to ``True`` for multiple scoring runs.
@@ -108,11 +108,11 @@ class Evo2ScoringConfig(BaseConfig):
         description="Device to run the model on",
         hidden=True,
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=None,
+        default=1,
         ge=1,
-        description="Max number of samples on the GPU at once",
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     keep_on_gpu: bool = ConfigField(

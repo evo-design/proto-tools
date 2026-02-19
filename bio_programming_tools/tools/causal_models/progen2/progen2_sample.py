@@ -188,8 +188,9 @@ class ProGen2SampleConfig(BaseConfig):
             sequence. If ``False``, only newly generated tokens are returned.
             Default: ``True``.
 
-        batch_size (Optional[int]): Number of prompts to sample at once on the GPU.
-            If not provided, puts all prompts on the GPU. Default: ``None``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
 
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
@@ -260,11 +261,11 @@ class ProGen2SampleConfig(BaseConfig):
         description="Whether to prepend prompt to generation.",
         hidden=True,
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=None,
+        default=1,
         ge=1,
-        description="Max number of samples on the GPU at once",
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     return_logits: bool = ConfigField(

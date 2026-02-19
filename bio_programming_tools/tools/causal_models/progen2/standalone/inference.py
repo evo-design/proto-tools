@@ -164,7 +164,7 @@ class ProGen2Model:
         prepend_prompt: bool = True,
         device: str = "cuda",
         verbose: bool = False,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -182,7 +182,8 @@ class ProGen2Model:
             prepend_prompt: Whether to include prompt in output
             device: Device to run on
             verbose: Verbose logging
-            batch_size: Number of prompts to process per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             return_logits: Whether to return per-position logits for generated tokens.
 
         Returns:
@@ -202,10 +203,9 @@ class ProGen2Model:
         # Batch processing logic
         all_sequences = []
         all_logits = []
-        effective_batch_size = batch_size or len(prompts)
         batches = [
-            prompts[i:i + effective_batch_size]
-            for i in range(0, len(prompts), effective_batch_size)
+            prompts[i:i + batch_size]
+            for i in range(0, len(prompts), batch_size)
         ]
 
         with torch.no_grad():
@@ -271,7 +271,7 @@ class ProGen2Model:
         sequences: List[str],
         device: str = "cuda",
         verbose: bool = False,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -285,7 +285,8 @@ class ProGen2Model:
             sequences: List of protein sequences to score
             device: Device to run on
             verbose: Whether to print status messages
-            batch_size: Number of sequences to process per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             return_logits: Whether to include logits in the output
 
         Returns:
@@ -309,10 +310,9 @@ class ProGen2Model:
         # Batch processing logic
         all_logits = []
         all_metrics = []
-        effective_batch_size = batch_size or len(normalized_seqs)
         batches = [
-            normalized_seqs[i:i + effective_batch_size]
-            for i in range(0, len(normalized_seqs), effective_batch_size)
+            normalized_seqs[i:i + batch_size]
+            for i in range(0, len(normalized_seqs), batch_size)
         ]
 
         # Run inference

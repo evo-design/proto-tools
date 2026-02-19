@@ -77,9 +77,9 @@ class MaskedModelConfig(BaseConfig):
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=128,
+        default=1,
         ge=1,
-        description="Number of sequences to process in each batch",
+        description="Number of sequences to process simultaneously on GPU",
     )
     device: str = ConfigField(
         title="Device",
@@ -178,16 +178,18 @@ class MaskedModelScoringConfig(BaseConfig):
     """Base configuration for masked model sequence scoring.
 
     Attributes:
-        batch_size: Number of sequences to process in each batch.
+        batch_size: Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors.
         device: Device to run the model on.
         verbose: Whether to print status messages.
     """
 
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=128,
+        default=1,
         ge=1,
-        description="Number of sequences to process in each batch",
+        description="Number of sequences to process simultaneously on GPU",
     )
     device: str = ConfigField(
         title="Device",

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal
 
 import torch
 from tqdm import tqdm
@@ -56,7 +56,7 @@ class Evo1Model:
         top_k: int = 4,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         verbose: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -71,7 +71,8 @@ class Evo1Model:
             top_k: Top-k sampling parameter.
             temperature: Sampling temperature.
             top_p: Top-p (nucleus) sampling parameter.
-            batch_size: Number of prompts per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             verbose: Whether to print progress.
 
         Returns:
@@ -85,12 +86,11 @@ class Evo1Model:
 
         from evo.generation import generate as evo_generate
 
-        effective_batch_size = batch_size if batch_size is not None else len(prompts)
         all_sequences: List[str] = []
         all_scores: List[float] = []
 
-        for i in range(0, len(prompts), effective_batch_size):
-            batch = prompts[i : i + effective_batch_size]
+        for i in range(0, len(prompts), batch_size):
+            batch = prompts[i : i + batch_size]
             sequences, scores = evo_generate(
                 prompt_seqs=batch,
                 model=self.model,
@@ -118,7 +118,7 @@ class Evo1Model:
     def score(
         self,
         sequences: List[str],
-        batch_size: Optional[int] = None,
+        batch_size: int = 1,
         return_logits: bool = False,
         verbose: bool = False,
     ) -> Dict[str, Any]:
@@ -130,7 +130,8 @@ class Evo1Model:
 
         Args:
             sequences: DNA sequences to score.
-            batch_size: Number of sequences per batch. If None, processes all at once.
+            batch_size: Number of sequences per GPU forward pass. Larger batches
+                are faster but use more memory.
             return_logits: Whether to include per-position logits in the output.
             verbose: Whether to print progress.
 
@@ -154,10 +155,9 @@ class Evo1Model:
         vocab_size = 512
         vocab = [chr(j) for j in range(vocab_size)]
 
-        effective_batch_size = batch_size or len(sequences)
         batches = [
-            sequences[i : i + effective_batch_size]
-            for i in range(0, len(sequences), effective_batch_size)
+            sequences[i : i + batch_size]
+            for i in range(0, len(sequences), batch_size)
         ]
 
         all_logits = []

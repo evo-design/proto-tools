@@ -219,8 +219,9 @@ class Evo2SampleConfig(BaseConfig):
             a pre-computed KV cache from a previous generation run. Used for
             continuing generation from a cached state. Default: ``None``.
 
-        batch_size (Optional[int]): Number of prompts to sample at once on the GPU.
-            If not provided, puts all prompts on the GPU. Default: ``None``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
 
         device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
             Default: ``"cuda"``.
@@ -319,11 +320,11 @@ class Evo2SampleConfig(BaseConfig):
         description="Dictionary of inference parameters to use for cached sampling (KV cache)",
         hidden=True,
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=None,
+        default=1,
         ge=1,
-        description="Max number of samples on the GPU at once",
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
 

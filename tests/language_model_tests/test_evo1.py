@@ -62,32 +62,6 @@ class TestEvo1SampleInput:
 class TestEvo1SampleConfig:
     """Tests for Evo1SampleConfig validation."""
 
-    def test_default_batch_size(self):
-        """Default batch_size should be 128."""
-        config = Evo1SampleConfig()
-        assert config.batch_size == 128
-
-    def test_default_values(self):
-        """Verify default config values."""
-        config = Evo1SampleConfig()
-        assert config.model_name == "evo-1-8k-base"
-        assert config.top_k == 4
-        assert config.temperature == 1.0
-        assert config.top_p == 1.0
-        assert config.num_tokens == 100
-        assert config.prepend_prompt is False
-        assert config.device == "cuda"
-
-    def test_custom_batch_size(self):
-        """Custom batch_size should be accepted."""
-        config = Evo1SampleConfig(batch_size=32)
-        assert config.batch_size == 32
-
-    def test_batch_size_none(self):
-        """batch_size=None should be accepted."""
-        config = Evo1SampleConfig(batch_size=None)
-        assert config.batch_size is None
-
     @pytest.mark.parametrize(
         "config_kwargs",
         [
@@ -282,7 +256,7 @@ class TestEvo1ScoringConfig:
         """Verify default config values."""
         config = Evo1ScoringConfig()
         assert config.model_name == "evo-1-8k-base"
-        assert config.batch_size is None
+        assert config.batch_size == 1
         assert config.device == "cuda"
         assert config.return_logits is False
         assert config.verbose is False

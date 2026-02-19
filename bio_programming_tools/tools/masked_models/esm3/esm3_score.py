@@ -42,8 +42,9 @@ class ESM3ScoringConfig(BaseConfig):
         batch_size (int): Number of masked sequence variants to process per forward
             pass. For a sequence of length L, scoring requires L forward passes
             (one per position). This parameter controls how many of those masked
-            variants are batched together. Higher values improve throughput but
-            require more GPU memory. Default: 32.
+            variants are batched together. Larger batches improve throughput but
+            use more GPU memory; reduce if encountering out-of-memory errors.
+            Default: ``1``.
 
         device (str): Device to run the model on. Options include ``"cuda"``,
             ``"cpu"``, ``"mps"``, or specific GPU devices like ``"cuda:0"``.
@@ -70,9 +71,9 @@ class ESM3ScoringConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=32,
+        default=1,
         ge=1,
-        description="Number of masked sequences to process per forward pass",
+        description="Number of sequences to process simultaneously on GPU",
     )
     device: str = ConfigField(
         title="Device",

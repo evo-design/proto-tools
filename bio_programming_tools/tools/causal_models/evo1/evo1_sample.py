@@ -110,7 +110,9 @@ class Evo1SampleConfig(BaseConfig):
         top_p: Top-p (nucleus) sampling parameter.
         num_tokens: Number of tokens to generate.
         prepend_prompt: Whether to prepend prompt to output.
-        batch_size: Number of prompts per GPU batch.
+        batch_size: Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors.
         device: Device to run on.
     """
 
@@ -151,11 +153,11 @@ class Evo1SampleConfig(BaseConfig):
         default=False,
         description="Whether to prepend prompt to generated sequence",
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int = ConfigField(
         title="Batch Size",
-        default=128,
+        default=1,
         ge=1,
-        description="Max number of prompts per GPU batch",
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     device: str = ConfigField(
