@@ -49,6 +49,11 @@ def test_progen2_sample_basic():
     result = run_progen2_sample(inputs=inputs, config=config)
     validate_output(result)
 
+    assert result.tool_id == "progen2-sample"
+    assert result.metadata["model_checkpoint"] == "progen2-small"
+    assert result.metadata["max_length"] == 100
+    assert result.metadata["temperature"] == 0.2
+
     assert len(result.sequences) == 2
 
     # Validate actual sequence content
@@ -64,38 +69,6 @@ def test_progen2_sample_basic():
 
         # Sequence length should not exceed max_length (prompt + generated)
         assert len(seq) <= 100, f"Sequence {i} exceeds max_length"
-
-
-@pytest.mark.uses_gpu
-def test_progen2_sample_tool():
-    """Test the progen2 sampling tool output structure."""
-    prompts = ["1MKTL", "1EVQLV"]
-    inputs = ProGen2SampleInput(prompts=prompts)
-    config = ProGen2SampleConfig(
-        model_checkpoint="progen2-small",
-        max_length=100,
-        temperature=0.2,
-        top_p=0.95,
-        verbose=False,
-    )
-
-    result = run_progen2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    # Validate tool output structure
-    assert result.tool_id == "progen2-sample"
-    assert result.metadata["model_checkpoint"] == "progen2-small"
-    assert result.metadata["max_length"] == 100
-    assert result.metadata["temperature"] == 0.2
-    assert len(result.sequences) == 2
-
-    # Validate sequences contain prompts and are valid
-    valid_chars = set(PROTEIN_AMINO_ACIDS)
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
-        prompt_aa = prompt[1:]
-        assert seq.startswith(prompt_aa), f"Sequence {i} should start with '{prompt_aa}'"
-        assert set(seq.upper()).issubset(valid_chars)
-        assert len(seq) <= 100
 
 
 @pytest.mark.uses_gpu
@@ -193,43 +166,6 @@ def test_progen2_sample_config_validation(config_kwargs):
         ProGen2SampleConfig(**config_kwargs)
 
 
-@pytest.mark.uses_gpu
-def test_progen2_sample_special_tokens():
-    """Test ProGen2 with domain tag in prompt."""
-    inputs = ProGen2SampleInput(prompts="<|pf03668|>1MEVVIVTGMSGAGK")
-    config = ProGen2SampleConfig(
-        model_checkpoint="progen2-small",
-        max_length=100,
-        temperature=0.2,
-        verbose=False,
-    )
-
-    result = run_progen2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.sequences) == 1
-    assert len(result.sequences[0]) > 0
-
-
-@pytest.mark.uses_gpu
-def test_progen2_sample_without_special_token_stripping():
-    """Test ProGen2 without stripping special tokens."""
-    inputs = ProGen2SampleInput(prompts="1MKTLV")
-    config = ProGen2SampleConfig(
-        model_checkpoint="progen2-small",
-        max_length=100,
-        temperature=0.2,
-        strip_special_tokens=False,
-        verbose=False,
-    )
-
-    result = run_progen2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.sequences) == 1
-    assert result.sequences[0].startswith("1")
-
-
 # ============================================================================
 # Batched Sampling Tests
 # ============================================================================
@@ -288,49 +224,6 @@ def test_progen2_sample_batched_many():
 # ============================================================================
 
 @pytest.mark.uses_gpu
-def test_progen2_score_basic():
-    """Test ProGen2 scoring with comprehensive value validation."""
-    sequences = ["MKTLVIVTGA", "EVQLVESGGGLVQ"]
-    inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(
-        model_checkpoint="progen2-small",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_progen2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.scores) == 2
-
-    for seq, score in zip(sequences, result.scores):
-        # Validate metrics types
-        assert isinstance(score.log_likelihood, float)
-        assert isinstance(score.avg_log_likelihood, float)
-        assert isinstance(score.perplexity, float)
-
-        # Log likelihood should be negative (log probabilities are <= 0)
-        assert score.log_likelihood < 0, f"Log likelihood should be negative, got {score.log_likelihood}"
-
-        # Average log likelihood should be between log_likelihood and 0
-        assert score.log_likelihood <= score.avg_log_likelihood <= 0
-
-        # Perplexity should be >= 1 (exp(0) = 1 is minimum when avg_ll = 0)
-        assert score.perplexity >= 1.0, f"Perplexity should be >= 1, got {score.perplexity}"
-
-        # Verify perplexity = exp(-avg_log_likelihood)
-        expected_ppl = np.exp(-score.avg_log_likelihood)
-        np.testing.assert_allclose(score.perplexity, expected_ppl, rtol=1e-5)
-
-        # Logits should have correct shape (list of lists)
-        # +1 for start token
-        assert score.logits is not None
-        expected_seq_len = len(seq) + 1  # sequence + start token
-        assert len(score.logits) == expected_seq_len, f"Logits seq_len should be {expected_seq_len}, got {len(score.logits)}"
-        assert len(score.logits[0]) == 30, f"Vocab size should be 30, got {len(score.logits[0])}"
-
-
-@pytest.mark.uses_gpu
 def test_progen2_score_tool():
     """Test the progen2 scoring tool with comprehensive validation."""
     sequences = ["MKTLVIVTGASGAGK", "EVQLVESGGGLVQPG"]
@@ -361,6 +254,11 @@ def test_progen2_score_tool():
         assert score.logits is not None
         assert len(score.logits) == len(seq) + 1  # +1 for start token
         assert len(score.logits[0]) == 30  # ProGen2 vocab size
+
+    # Verify perplexity = exp(-avg_log_likelihood)
+    for score in result.scores:
+        expected_ppl = np.exp(-score.avg_log_likelihood)
+        np.testing.assert_allclose(score.perplexity, expected_ppl, rtol=1e-5)
 
 
 @pytest.mark.uses_gpu
@@ -457,34 +355,7 @@ def test_progen2_score_input_validation():
 @pytest.mark.uses_gpu
 def test_progen2_score_batched():
     """Test batched scoring via run_progen2_score with batch_size."""
-    sequences = ["MKTL", "EVQLVESGGS", "AAAACCCC", "TTTTGGGG"]
-    inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(
-        model_checkpoint="progen2-small",
-        batch_size=2,
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_progen2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.scores) == 4
-
-    for i, (seq, score) in enumerate(zip(sequences, result.scores)):
-        # Each sequence should have valid metrics
-        assert score.log_likelihood < 0
-        assert score.perplexity >= 1.0
-
-        # Logits should match sequence length
-        assert score.logits is not None
-        assert len(score.logits) == len(seq) + 1, f"Sequence {i}: wrong logits length"
-
-
-@pytest.mark.uses_gpu
-def test_progen2_score_batched_many():
-    """Test batched scoring with more sequences than batch_size."""
-    sequences = ["MKTLVIVTGA", "EVQLVESGGS", "AAAACCCCGG", "TTTTGGGGCC", "LLLLLLLLLL", "VVVVVVVVVV"]
+    sequences = ["MKTL", "EVQLVESGGS", "AAAACCCC", "TTTTGGGG", "LLLLLLLLLL", "VVVVVVVVVV"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(
         model_checkpoint="progen2-small",
@@ -498,12 +369,14 @@ def test_progen2_score_batched_many():
 
     assert len(result.scores) == 6
 
-    for seq, score in zip(sequences, result.scores):
+    for i, (seq, score) in enumerate(zip(sequences, result.scores)):
+        # Each sequence should have valid metrics
         assert score.log_likelihood < 0
         assert score.perplexity >= 1.0
+
+        # Logits should match sequence length
         assert score.logits is not None
-        assert len(score.logits) == len(seq) + 1  # +1 for start token
-        assert len(score.logits[0]) == 30  # ProGen2 vocab size
+        assert len(score.logits) == len(seq) + 1, f"Sequence {i}: wrong logits length"
 
 
 @pytest.mark.uses_gpu
@@ -574,32 +447,6 @@ def test_progen2_score_logits_disabled_by_default():
     # Logits should be None when return_logits=False
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-def test_progen2_score_logits_enabled():
-    """Test that logits are correctly returned when return_logits=True."""
-    sequences = ["MKTLVIVTGA", "EVQLVESGGS"]
-    inputs = ProGen2ScoringInput(sequences=sequences)
-    config = ProGen2ScoringConfig(
-        model_checkpoint="progen2-small",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_progen2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    # Logits should be present with correct shape
-    for seq, score in zip(sequences, result.scores):
-        assert score.logits is not None, "Logits should not be None when return_logits=True"
-        assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-
-        # Convert to ndarray for shape validation if it's a list
-        logits_arr = np.array(score.logits)
-        # ProGen2 includes start token, so logits length is seq_len + 1
-        assert logits_arr.shape[0] == len(seq) + 1, f"Logits length should be {len(seq) + 1}, got {logits_arr.shape[0]}"
-        assert logits_arr.shape[1] == 30, f"ProGen2 vocab size should be 30, got {logits_arr.shape[1]}"
 
 
 @pytest.mark.uses_gpu

@@ -366,3 +366,28 @@ def test_evo1_score_tool():
     assert score.vocab[67] == "C"
     assert score.vocab[71] == "G"
     assert score.vocab[84] == "T"
+
+
+@pytest.mark.uses_gpu
+def test_evo1_score_batched():
+    """Test batched scoring with batch_size=2 on 6 sequences."""
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA", "AAAACCCCGGGG",
+                  "TTTTGGGGCCCC", "CCCCAAAATTTT", "GGGGTTTTAAAA"]
+    inputs = Evo1ScoringInput(sequences=sequences)
+    config = Evo1ScoringConfig(
+        model_name="evo-1-8k-base",
+        batch_size=2,
+        return_logits=True,
+        verbose=False,
+    )
+
+    result = run_evo1_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    assert len(result.scores) == 6
+
+    for score in result.scores:
+        assert isinstance(score.log_likelihood, float)
+        assert score.log_likelihood < 0
+        assert score.perplexity >= 1.0
+        assert score.logits is not None
