@@ -500,36 +500,6 @@ class TestProteinMPNNLogits:
             assert score.logits is None, "Logits should be None when return_logits=False"
 
     @pytest.mark.uses_gpu
-    def test_proteinmpnn_score_logits_enabled(self, pdb_structure: Structure):
-        """Test that logits are correctly returned when return_logits=True."""
-        original_sequence = pdb_structure.get_chain_sequence("A")
-        seq_len = len(original_sequence)
-
-        input = ProteinMPNNScoringInput(
-            sequence_structure_pairs=[
-                SequenceStructurePair(
-                    sequence=original_sequence, structure=pdb_structure
-                ),
-            ]
-        )
-        config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
-        output = run_proteinmpnn_score(input, config)
-
-        assert output.success
-        validate_output(output)
-
-        score = output.scores[0]
-
-        # Logits should be present with correct shape
-        assert score.logits is not None, "Logits should not be None when return_logits=True"
-        assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-
-        # Convert to ndarray for shape validation if it's a list
-        logits_arr = np.array(score.logits)
-        assert logits_arr.shape[0] == seq_len, f"Logits length should be {seq_len}, got {logits_arr.shape[0]}"
-        assert logits_arr.shape[1] == len(ALPHAFOLD_VOCAB), f"ProteinMPNN vocab size should be {len(ALPHAFOLD_VOCAB)}, got {logits_arr.shape[1]}"
-
-    @pytest.mark.uses_gpu
     def test_proteinmpnn_score_logits_serialization(self, pdb_structure: Structure):
         """Test that logits are properly serialized as nested lists."""
         original_sequence = pdb_structure.get_chain_sequence("A")

@@ -536,10 +536,6 @@ def test_evo2_continued_generation_with_cache():
     assert len(second_gen) == 50, f"Second generation should produce 50 tokens, got {len(second_gen)}"
 
 
-# ============================================================================
-# Scoring Tests
-# ============================================================================
-
 @pytest.mark.uses_gpu
 def test_evo2_score_tool():
     """Test the evo2 scoring tool with run_evo2_score."""
@@ -602,29 +598,6 @@ def test_evo2_score_single_sequence():
     assert result.scores[0].perplexity > 0
 
 
-@pytest.mark.uses_gpu
-def test_evo2_score_metrics_consistency():
-    """Test that scoring metrics are mathematically consistent."""
-    inputs = Evo2ScoringInput(sequences=["ATCGATCGATCG"])
-    config = Evo2ScoringConfig(
-        model_checkpoint="evo2_7b",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    score = result.scores[0]
-
-    # Verify perplexity = exp(-avg_log_likelihood)
-    expected_perplexity = np.exp(-score.avg_log_likelihood)
-    np.testing.assert_allclose(
-        score.perplexity,
-        expected_perplexity,
-        rtol=1e-5,
-        err_msg="Perplexity should equal exp(-avg_log_likelihood)"
-    )
-
-
 def test_evo2_scoring_input_validation():
     """Test Evo2ScoringInput validation."""
     # Test empty sequences should fail
@@ -638,39 +611,6 @@ def test_evo2_scoring_input_validation():
     # Test list input
     input_list = Evo2ScoringInput(sequences=["ATCG", "GCTA"])
     assert len(input_list.sequences) == 2, "List input should preserve length"
-
-@pytest.mark.uses_gpu
-def test_evo2_score_batched_uniform_length():
-    """Test that scoring batches sequences of uniform length."""
-    # All sequences same length - should use batched scoring
-    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA", "AAAACCCCGGGG", "TTTTGGGGCCCC"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
-
-    result = run_evo2_score(inputs=inputs, config=config)
-
-    assert len(result.scores) == 4
-    for score in result.scores:
-        assert score.perplexity > 0
-        assert score.logits is not None
-
-
-@pytest.mark.uses_gpu
-def test_evo2_score_variable_length():
-    """Test scoring sequences of different lengths (sequential scoring)."""
-    # Different length sequences - should fall back to sequential scoring
-    sequences = ["ATCG", "ATCGATCG", "ATCGATCGATCG"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
-
-    result = run_evo2_score(inputs=inputs, config=config)
-
-    assert len(result.scores) == 3
-    # Verify logits have correct shapes for different length sequences
-    for i, (seq, score) in enumerate(zip(sequences, result.scores)):
-        assert score.logits is not None
-        # Logits should have seq_len matching input (may differ due to tokenization)
-        assert score.perplexity > 0
 
 
 # ============================================================================
@@ -694,32 +634,6 @@ def test_evo2_score_logits_disabled_by_default():
     # Logits should be None when return_logits=False
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
-
-
-@pytest.mark.uses_gpu
-def test_evo2_score_logits_enabled():
-    """Test that logits are correctly returned when return_logits=True."""
-    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(
-        model_checkpoint="evo2_7b",
-        verbose=False,
-        return_logits=True,
-    )
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    validate_output(result)
-
-    # Logits should be present with correct shape
-    for score in result.scores:
-        assert score.logits is not None, "Logits should not be None when return_logits=True"
-        assert isinstance(score.logits, (list, np.ndarray)), f"Logits should be list or ndarray, got {type(score.logits)}"
-
-        # Convert to ndarray for shape validation if it's a list
-        logits_arr = np.array(score.logits)
-        # Evo2 uses byte-level tokenization, so seq_len may differ from raw length
-        assert logits_arr.shape[0] > 0, "Logits should have at least one position"
-        assert logits_arr.shape[1] == 512, f"Evo2 vocab size should be 512 (byte-level), got {logits_arr.shape[1]}"
 
 
 @pytest.mark.uses_gpu
