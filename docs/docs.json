@@ -98,6 +98,12 @@
 						]
 					},
 					{
+						"group": "Sequence Retrieval",
+						"pages": [
+							"tools/sequence-retrieval/sequence-fetch"
+						]
+					},
+					{
 						"group": "Sequence Scoring",
 						"pages": [
 							"tools/sequence-scoring/alphagenome",
