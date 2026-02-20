@@ -238,6 +238,7 @@ class {ToolName}Output(BaseToolOutput):
     config={ToolName}Config,
     output={ToolName}Output,
     description="One-line description of what this tool does",
+    uses_gpu=False,  # Set True for GPU/AI model tools
 )
 def run_{tool_name}(
     inputs: {ToolName}Input, config: {ToolName}Config
@@ -577,7 +578,7 @@ Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/exampl
 
 ## Step 8: Write Tests
 
-Create `tests/tool_tests/test_{tool_name}.py`:
+Create `tests/{category}_tests/test_{tool_name}.py`:
 
 
 
@@ -633,12 +634,12 @@ class Test{ToolName}GPU:
 
 After implementing, do BOTH of the following:
 
-### 8A: Run the tests
+### 9A: Run the tests
 ```bash
-pytest tests/tool_tests/test_{tool_name}.py -v
+pytest tests/{category}_tests/test_{tool_name}.py -v
 ```
 
-### 8B: Run the tool directly
+### 9B: Run the tool directly
 Write and execute a short verification script:
 
 ```python
@@ -692,7 +693,7 @@ Before submitting, verify:
 - [ ] Config extends `BaseConfig`, uses `ConfigField()` (not bare Field)
 - [ ] Output extends `BaseToolOutput`, does NOT redeclare inherited metadata fields
 - [ ] Output implements `output_format_options`, `output_format_default`, `_export_output()`
-- [ ] `@tool()` decorator has all 7 kwargs: key, label, category, input, config, output, description
+- [ ] `@tool()` decorator has all 7 kwargs: key, label, category, input, config, output, description, uses_gpu
 - [ ] Run function signature: `def run_*(inputs: *Input, config: *Config) -> *Output`
 - [ ] Run function returns Output with `metadata={}` dict of key parameters
 - [ ] No try/except wrapping the tool logic — `@tool` decorator handles errors
@@ -701,8 +702,8 @@ Before submitting, verify:
 - [ ] README.md in tool directory
 - [ ] cite.bib with BibTeX citation in tool directory
 - [ ] `examples/example.ipynb` with working code, API reference tables, and example output
-- [ ] Tests written in `tests/tool_tests/` and passing
-- [ ] Tool runs successfully end-to-end (verified via Step 8B)
+- [ ] Tests written in `tests/{category}_tests/` and passing
+- [ ] Tool runs successfully end-to-end (verified via Step 9B)
 - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)
 
 ---
