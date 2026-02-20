@@ -192,6 +192,18 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
     run_segmasker,
 )
 
+# Sequence retrieval tools
+from .sequence_retrieval import (
+    FetchedSequence,
+    FetchedStructure,
+    SequenceFetchConfig,
+    SequenceFetchInput,
+    SequenceFetchOutput,
+    SequenceFetchRequest,
+    SequenceFetchResult,
+    run_sequence_fetch,
+)
+
 # Masked model tools
 from .masked_models import (  # ESM2; ESM3
     ESM2SampleConfig,
@@ -491,6 +503,15 @@ __all__ = [
     "AlphaGenomeScoreISMConfig",
     "AlphaGenomeScoreISMOutput",
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",
+    # Sequence retrieval
+    "run_sequence_fetch",
+    "SequenceFetchRequest",
+    "SequenceFetchInput",
+    "SequenceFetchConfig",
+    "SequenceFetchResult",
+    "FetchedSequence",
+    "FetchedStructure",
+    "SequenceFetchOutput",
     # Sequence alignment - MAFFT
     "run_mafft_align",
     "MafftInput",
