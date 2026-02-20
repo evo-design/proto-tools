@@ -445,19 +445,24 @@ class ToolInstance:
                 f"system. Check logs for details.{hint}"
             )
         if not self.venv_path.exists() or not self._is_venv_ok():
-            # Check for a stale failure from a previous session
+            # Check for a stale status from a previous session
             status_file = self.venv_path / "STATUS.txt"
             if status_file.exists():
                 status = status_file.read_text()
-                if status.startswith("FAILED"):
+                if status.startswith("SUCCESS"):
+                    logger.info(
+                        "Setup files changed for %s, rebuilding venv",
+                        self.tool_name,
+                    )
+                elif status.startswith("FAILED"):
                     current_hash = self._setup_hash()
                     if f"Setup hash: {current_hash}" in status:
                         summary = self._failure_summary()
                         hint = f": {summary}" if summary else ""
                         logger.warning(
                             "'%s' previously failed to build with the "
-                            "same setup.sh (hash=%s)%s. Retrying — if "
-                            "this keeps failing, the tool may not be "
+                            "same setup files (hash=%s)%s. Retrying — "
+                            "if this keeps failing, the tool may not be "
                             "compatible with your system, or you may "
                             "need to accept a license agreement (e.g. "
                             "Hugging Face). Check logs for details.",
@@ -467,7 +472,7 @@ class ToolInstance:
                         )
                     else:
                         logger.info(
-                            "setup.sh changed for %s — retrying venv build",
+                            "Setup files changed for %s — retrying venv build",
                             self.tool_name,
                         )
             try:
@@ -754,8 +759,13 @@ class ToolInstance:
         raise ValueError(f"No standalone script found for tool {tool_name!r}")
 
     def _setup_hash(self) -> str:
-        """Return a short SHA-256 hash of setup.sh for change detection."""
-        return hashlib.sha256(self.setup_script.read_bytes()).hexdigest()[:16]
+        """Short SHA-256 of setup.sh + requirements.txt for change detection."""
+        h = hashlib.sha256()
+        h.update(self.setup_script.read_bytes())
+        req = self.setup_script.parent / "requirements.txt"
+        if req.exists():
+            h.update(req.read_bytes())
+        return h.hexdigest()[:16]
 
     @staticmethod
     def _stderr_tail(stderr: str | None, max_lines: int = 10) -> str:
@@ -781,12 +791,12 @@ class ToolInstance:
         return ""
 
     def _is_venv_ok(self) -> bool:
-        """Check STATUS.txt and verify the Python executable works."""
+        """Check STATUS.txt, verify the Python executable, and compare setup hash."""
         status_file = self.venv_path / "STATUS.txt"
         if not status_file.exists():
             return False
         try:
-            status = status_file.read_text().strip()
+            status = status_file.read_text()
             if not status.startswith("SUCCESS"):
                 return False
             python_exe = self.venv_path / "bin" / "python"
@@ -798,7 +808,13 @@ class ToolInstance:
                 timeout=30,
                 check=False,
             )
-            return result.returncode == 0
+            if result.returncode != 0:
+                return False
+            # Compare stored hash to current setup files
+            current_hash = self._setup_hash()
+            if f"Setup hash: {current_hash}" not in status:
+                return False
+            return True
         except Exception:
             return False
 
@@ -842,7 +858,9 @@ class ToolInstance:
         _, stderr_output = proc.communicate()
 
         if proc.returncode == 0:
-            status_file.write_text("SUCCESS")
+            status_file.write_text(
+                f"SUCCESS\nSetup hash: {self._setup_hash()}\n"
+            )
             logger.debug("Venv setup completed for %s", self.tool_name)
         else:
             logger.error(

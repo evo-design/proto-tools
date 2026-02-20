@@ -1243,7 +1243,29 @@ class TestCreateVenv:
             inst._ensure_venv()
 
         mock_create.assert_called_once()
-        assert "setup.sh changed" in caplog.text
+        assert "Setup files changed" in caplog.text
+
+    def test_success_status_with_stale_hash_rebuilds(self, tmp_path: Path, caplog):
+        """A SUCCESS STATUS.txt with a stale hash triggers a rebuild."""
+        inst = _make_fake_instance()
+        inst._venv_ready = False
+        inst.venv_path = tmp_path / "fake_env"
+        inst.venv_path.mkdir()
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho updated\n")
+
+        status_file = inst.venv_path / "STATUS.txt"
+        status_file.write_text(
+            "SUCCESS\nSetup hash: 0000000000000000\n"
+        )
+
+        with patch.object(
+            ToolInstance, "_create_venv"
+        ) as mock_create, caplog.at_level(logging.INFO):
+            inst._ensure_venv()
+
+        mock_create.assert_called_once()
+        assert "Setup files changed" in caplog.text
 
     def test_build_failures_cleared_between_tests(self):
         """The autouse fixture clears _build_failures so tests are isolated."""
@@ -1251,6 +1273,104 @@ class TestCreateVenv:
         assert len(ToolInstance._build_failures) == 0
         ToolInstance._build_failures["some_tool"] = "test error"
         # Next test will see it cleared by the fixture
+
+
+class TestSetupHash:
+    """Test _setup_hash() change detection."""
+
+    def test_hash_includes_requirements_txt(self, tmp_path: Path):
+        """_setup_hash() should incorporate requirements.txt when present."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        hash_without_req = inst._setup_hash()
+
+        # Add a requirements.txt — hash should change
+        req = tmp_path / "requirements.txt"
+        req.write_text("numpy==1.26\n")
+
+        hash_with_req = inst._setup_hash()
+        assert hash_without_req != hash_with_req
+
+    def test_hash_changes_when_requirements_change(self, tmp_path: Path):
+        """Changing requirements.txt should change the hash."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        req = tmp_path / "requirements.txt"
+        req.write_text("numpy==1.26\n")
+        hash_v1 = inst._setup_hash()
+
+        req.write_text("numpy==2.0\n")
+        hash_v2 = inst._setup_hash()
+
+        assert hash_v1 != hash_v2
+
+    def test_hash_changes_when_setup_changes(self, tmp_path: Path):
+        """Changing setup.sh should change the hash."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho v1\n")
+        hash_v1 = inst._setup_hash()
+
+        inst.setup_script.write_text("#!/bin/bash\necho v2\n")
+        hash_v2 = inst._setup_hash()
+
+        assert hash_v1 != hash_v2
+
+
+class TestIsVenvOk:
+    """Test _is_venv_ok() setup hash validation."""
+
+    def test_returns_false_when_hash_mismatches(self, tmp_path: Path):
+        """_is_venv_ok() should return False when setup files changed."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.venv_path = tmp_path / "fake_env"
+        inst.venv_path.mkdir()
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho updated\n")
+
+        status_file = inst.venv_path / "STATUS.txt"
+        status_file.write_text("SUCCESS\nSetup hash: 0000000000000000\n")
+
+        # Create a fake python executable that succeeds
+        bin_dir = inst.venv_path / "bin"
+        bin_dir.mkdir()
+        python_exe = bin_dir / "python"
+        python_exe.write_text("#!/bin/bash\necho 'Python 3.12'\n")
+        python_exe.chmod(0o755)
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ):
+            assert inst._is_venv_ok() is False
+
+    def test_returns_true_when_hash_matches(self, tmp_path: Path):
+        """_is_venv_ok() should return True when hash matches and python works."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.venv_path = tmp_path / "fake_env"
+        inst.venv_path.mkdir()
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        current_hash = inst._setup_hash()
+        status_file = inst.venv_path / "STATUS.txt"
+        status_file.write_text(f"SUCCESS\nSetup hash: {current_hash}\n")
+
+        bin_dir = inst.venv_path / "bin"
+        bin_dir.mkdir()
+        python_exe = bin_dir / "python"
+        python_exe.write_text("#!/bin/bash\necho 'Python 3.12'\n")
+        python_exe.chmod(0o755)
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ):
+            assert inst._is_venv_ok() is True
 
 
 class TestRunOneshotOutput:
