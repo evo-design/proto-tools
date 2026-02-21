@@ -13,7 +13,7 @@ import numpy as np
 from pydantic import Field, field_serializer, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -296,51 +296,33 @@ def run_splice_transformer(
         - GPU is strongly recommended (CPU inference is very slow)
         - Context length of 4000bp is recommended for best accuracy
         - Target length is typically 1000bp but can vary
-        - Modal GPU execution is automatically used when configured via environment
-        - For local execution, each subprocess is fresh (no in-process caching)
+        - Each subprocess is fresh (no in-process caching)
     """
-    if config.device == "cuda" and use_modal_gpu():
-        # Modal
-        logger.debug(
-            f"Using Modal for SpliceTransformer inference (context_length={config.context_length})"
-        )
-        import modal
+    # Local GPU/CPU via standalone venv
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-        SpliceTransformerService = modal.Cls.from_name(
-            "bio-programming", "SpliceTransformerService"
-        )
-        prediction = SpliceTransformerService().run.remote(
-            target_seqs=inputs.target_seqs,
-            left_contexts=inputs.left_contexts,
-            right_contexts=inputs.right_contexts,
-            verbose=config.verbose,
-        )
-    else:
-        # Local GPU/CPU via standalone venv
-        from bio_programming_tools.utils.tool_instance import ToolInstance
+    logger.debug(
+        f"Using local device for SpliceTransformer inference (context_length={config.context_length})"
+    )
 
-        logger.debug(
-            f"Using local device for SpliceTransformer inference (context_length={config.context_length})"
-        )
+    input_data = {
+        "target_seqs": inputs.target_seqs,
+        "left_contexts": inputs.left_contexts,
+        "right_contexts": inputs.right_contexts,
+        "context_length": config.context_length,
+        "device": config.device,
+        "verbose": config.verbose,
+    }
 
-        input_data = {
-            "target_seqs": inputs.target_seqs,
-            "left_contexts": inputs.left_contexts,
-            "right_contexts": inputs.right_contexts,
-            "context_length": config.context_length,
-            "device": config.device,
-            "verbose": config.verbose,
-        }
+    output_data = ToolInstance.dispatch(
+        "splice_transformer",
+        input_data,
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
-        output_data = ToolInstance.dispatch(
-            "splice_transformer",
-            input_data,
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
-
-        prediction = np.array(output_data["prediction"])
+    prediction = np.array(output_data["prediction"])
 
     return SpliceTransformerOutput(
         metadata={"context_length": config.context_length},

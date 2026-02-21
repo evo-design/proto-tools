@@ -35,7 +35,7 @@ class Boltz2Model:
     def __init__(self):
         """Initialize Boltz2 model wrapper."""
         self._loaded = False
-        # Use HF_HOME if set (Modal), otherwise use home directory
+        # Use HF_HOME if set, otherwise use home directory
         hf_home = os.environ.get("HF_HOME")
         self.cache_dir = (
             Path(hf_home) / "boltz"

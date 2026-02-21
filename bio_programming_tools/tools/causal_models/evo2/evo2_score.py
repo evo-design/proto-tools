@@ -11,7 +11,7 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 
@@ -177,40 +177,26 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    if use_modal_gpu():
-        logger.debug(f"Using Modal for Evo2 scoring: {config.model_checkpoint}")
-        import modal
+    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
 
-        Evo2Service = modal.Cls.from_name("bio-programming", "Evo2Service")
-        result = Evo2Service().score.remote(
-            model_checkpoint=config.model_checkpoint,
-            sequences=inputs.sequences,
-            verbose=config.verbose,
-            batch_size=config.batch_size,
-            return_logits=config.return_logits,
-        )
-    else:
-        logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
-
-        result = ToolInstance.dispatch(
-            "evo2",
-            {
-                "operation": "score",
-                "sequences": inputs.sequences,
-                "model_checkpoint": config.model_checkpoint,
-                "local_path": config.local_path,
-                "device": config.device,
-                "verbose": config.verbose,
-                "batch_size": config.batch_size,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    result = ToolInstance.dispatch(
+        "evo2",
+        {
+            "operation": "score",
+            "sequences": inputs.sequences,
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "device": config.device,
+            "verbose": config.verbose,
+            "batch_size": config.batch_size,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     # Serialize tensors to nested lists at tool boundary if needed
-    # Both Modal and ToolInstance return pre-serialized lists; this handles edge cases
     logits = result["logits"]
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]

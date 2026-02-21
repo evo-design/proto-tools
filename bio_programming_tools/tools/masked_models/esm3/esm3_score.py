@@ -10,7 +10,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -155,34 +155,22 @@ def run_esm3_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    if use_modal_gpu():
-        logger.debug(f"Using Modal for ESM3 scoring: {config.model_checkpoint}")
-        import modal
-
-        ESM3Service = modal.Cls.from_name("bio-programming", "ESM3Service")
-        result = ESM3Service().score.remote(
-            sequences=inputs.sequences,
-            batch_size=config.batch_size,
-            verbose=config.verbose,
-            return_logits=config.return_logits,
-        )
-    else:
-        logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")
-        result = ToolInstance.dispatch(
-            "esm3",
-            {
-                "operation": "score",
-                "sequences": inputs.sequences,
-                "batch_size": config.batch_size,
-                "model_checkpoint": config.model_checkpoint,
-                "device": config.device,
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")
+    result = ToolInstance.dispatch(
+        "esm3",
+        {
+            "operation": "score",
+            "sequences": inputs.sequences,
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     sequence_scores = [
         SequenceScores(

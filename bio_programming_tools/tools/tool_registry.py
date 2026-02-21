@@ -15,7 +15,7 @@ import warnings
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -108,6 +108,18 @@ class ToolRegistry:
     """
 
     _registry: Dict[str, ToolSpec] = {}
+    _execution_backend: Optional[Callable] = None
+
+    @classmethod
+    def set_execution_backend(cls, backend: Callable) -> None:
+        """Register external execution backend.
+        Called with (tool_key, inputs, config) -> Optional[BaseToolOutput].
+        Return output to handle the call, or None to fall through to local."""
+        cls._execution_backend = backend
+
+    @classmethod
+    def clear_execution_backend(cls) -> None:
+        cls._execution_backend = None
 
     @classmethod
     def register(
@@ -149,6 +161,16 @@ class ToolRegistry:
             @wraps(func)
             def wrapper(inputs: BaseToolInput, config: BaseConfig, instance: ToolInstance | None = None) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
+                # Check external backend first (e.g., remote dispatch)
+                if cls._execution_backend is not None:
+                    backend_result = cls._execution_backend(key, inputs, config)
+                    if backend_result is not None:
+                        backend_result.tool_id = key
+                        if backend_result.timestamp is None:
+                            backend_result.timestamp = datetime.now()
+                        return backend_result
+
+                # Fall through to local execution
                 start_time = time.time()
                 logger.debug(f"Tool {key}: starting execution")
 

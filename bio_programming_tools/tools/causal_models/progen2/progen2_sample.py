@@ -8,7 +8,7 @@ from typing import List, Literal, Optional
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -296,8 +296,8 @@ def run_progen2_sample(
     """Generate protein sequences using ProGen2 autoregressive language model.
 
     Uses the ProGen2 protein language model to autoregressively generate protein
-    sequences from prompt sequences. Supports both local GPU execution and
-    distributed Modal GPU execution with various sampling strategies.
+    sequences from prompt sequences. Supports local GPU execution with various
+    sampling strategies.
 
     Args:
         inputs (ProGen2SampleInput): Validated input containing one or more protein
@@ -349,58 +349,36 @@ def run_progen2_sample(
         - ProGen2-finetuning GitHub: https://github.com/hugohrban/ProGen2-finetuning
         - Original ProGen2 GitHub: https://github.com/enijkamp/progen2
     """
-    if use_modal_gpu():
-        logger.debug(f"Using Modal for ProGen2 sampling: {config.model_checkpoint}")
-
-        import modal
-        ProGen2Service = modal.Cls.from_name("bio-programming", "ProGen2Service")
-
-        result = ProGen2Service().sample.remote(
-            prompts=inputs.prompts,
-            model_checkpoint=config.model_checkpoint,
-            temperature=config.temperature,
-            top_p=config.top_p,
-            top_k=config.top_k,
-            max_length=config.max_length,
-            truncate_at_stop=config.truncate_at_stop,
-            strip_special_tokens=config.strip_special_tokens,
-            prepend_prompt=config.prepend_prompt,
-            verbose=config.verbose,
-            batch_size=config.batch_size,
-            return_logits=config.return_logits,
-        )
-    else:
-        logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
-        result = ToolInstance.dispatch(
-            "progen2",
-            {
-                "operation": "sample",
-                "prompts": inputs.prompts,
-                "model_checkpoint": config.model_checkpoint,
-                "local_path": config.local_path,
-                "temperature": config.temperature,
-                "top_p": config.top_p,
-                "top_k": config.top_k,
-                "max_length": config.max_length,
-                "truncate_at_stop": config.truncate_at_stop,
-                "strip_special_tokens": config.strip_special_tokens,
-                "prepend_prompt": config.prepend_prompt,
-                "batch_size": config.batch_size,
-                "device": "cuda",
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
+    result = ToolInstance.dispatch(
+        "progen2",
+        {
+            "operation": "sample",
+            "prompts": inputs.prompts,
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "top_k": config.top_k,
+            "max_length": config.max_length,
+            "truncate_at_stop": config.truncate_at_stop,
+            "strip_special_tokens": config.strip_special_tokens,
+            "prepend_prompt": config.prepend_prompt,
+            "batch_size": config.batch_size,
+            "device": "cuda",
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return ProGen2SampleOutput(
         metadata={
             "model_checkpoint": config.model_checkpoint,
             "temperature": config.temperature,
             "max_length": config.max_length,
-            "used_modal": use_modal_gpu(),
         },
         sequences=result["sequences"],
         logits=result.get("logits"),

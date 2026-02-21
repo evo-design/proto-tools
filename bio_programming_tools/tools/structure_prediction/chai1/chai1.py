@@ -30,7 +30,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
@@ -201,18 +201,6 @@ class Chai1Config(StructurePredictionConfig):
         self.colabfold_search_config.verbose = self.verbose
         return self
 
-    @model_validator(mode="after")
-    def validate_modal_msa_config(self):
-        """Validate that Modal execution uses remote MSA mode."""
-        if self.use_msa:
-            if use_modal_gpu():
-                if self.colabfold_search_config.search_mode != "remote":
-                    raise ValueError(
-                        "Chai1 MSA generation on Modal requires search_mode='remote'. "
-                        "Set colabfold_search_config.search_mode='remote' or use_msa=False."
-                    )
-        return self
-
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -235,8 +223,8 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance=None) -> Chai1Ou
     """Predict 3D structures using Chai1 multi-modal model.
 
     Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,
-    ligands, glycans, and their complexes. Supports both Modal cloud execution
-    and local GPU execution via isolated Python environments.
+    ligands, glycans, and their complexes. Runs via local GPU execution in
+    isolated Python environments.
 
     Args:
         inputs (Chai1Input): Validated input containing one or more complexes to
@@ -498,99 +486,64 @@ def run_chai1_on_complex(
     Run Chai1 structure prediction on a single complex. This function is wrapped
     by ``run_chai1`` to sequentially predict all complexes in the input.
     """
-    # Choose execution mode
-    logger.debug("Running Chai1 structure prediction...")
+    # Local GPU execution via venv subprocess
+    logger.debug("Using local GPU for Chai1 structure prediction...")
 
-    if use_modal_gpu():
-        # Use Modal for cloud GPU execution
-        logger.debug("Using Modal for Chai1 structure prediction...")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-        import modal
-
-        Chai1Service = modal.Cls.from_name("bio-programming", "Chai1Service")
-
+    # Create temporary directory for inputs and outputs
+    with tempfile.TemporaryDirectory() as temp_dir:
         # Generate FASTA content
         fasta_content = _generate_fasta_content(comp)
 
-        # Generate MSAs using ColabFold search tool if requested
-        msa_pqt_files = None
-        if config.use_msa:
-            # Generate MSAs and convert to .pqt format, then serialize for Modal
-            with tempfile.TemporaryDirectory() as temp_dir:
-                pqt_dir = _generate_msa_pqt_files(comp, config, temp_dir)
-                if pqt_dir is not None:
-                    msa_pqt_files = _serialize_pqt_files(pqt_dir)
+        # Write input file
+        input_file = os.path.join(temp_dir, "input.fasta")
+        with open(input_file, "w") as f:
+            f.write(fasta_content)
 
-        cif_output, metrics = Chai1Service().predict.remote(
-            fasta_content=fasta_content,
-            use_esm_embeddings=config.use_esm_embeddings,
-            msa_pqt_files=msa_pqt_files,  # Serialized .pqt files (or None)
-            num_trunk_recycles=config.num_trunk_recycles,
-            num_diffn_timesteps=config.num_diffn_timesteps,
-            num_diffn_samples=config.num_diffn_samples,
-            num_trunk_samples=config.num_trunk_samples,
-            seed=config.seed,
+        output_dir = os.path.join(temp_dir, "output")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Handle ColabFold MSA generation if needed
+        msa_directory = None
+        if config.use_msa:
+            # Configure output directory for MSAs (local mode requires this)
+            msa_config = config.colabfold_search_config.model_copy(deep=True)
+            msa_config.output_dir = temp_dir
+
+            # Temporarily swap config to use the modified one for local execution
+            original_config = config.colabfold_search_config
+            config.colabfold_search_config = msa_config
+            try:
+                msa_directory = _generate_msa_pqt_files(comp, config, temp_dir)
+            finally:
+                # Restore original config
+                config.colabfold_search_config = original_config
+
+        # Prepare input data for inference script
+        input_data = {
+            "fasta_file": input_file,
+            "output_dir": output_dir,
+            "use_esm_embeddings": config.use_esm_embeddings,
+            "msa_directory": msa_directory,
+            "num_trunk_recycles": config.num_trunk_recycles,
+            "num_diffn_timesteps": config.num_diffn_timesteps,
+            "num_diffn_samples": config.num_diffn_samples,
+            "num_trunk_samples": config.num_trunk_samples,
+            "seed": config.seed,
+        }
+
+        # Call the inference script with the venv activated
+        input_data["device"] = config.device
+        result = ToolInstance.dispatch(
+            "chai1",
+            input_data,
+            instance=instance,
             verbose=config.verbose,
         )
-    else:
-        # Use local GPU execution via venv subprocess (required for dependency isolation)
-        logger.debug("Using local GPU for Chai1 structure prediction...")
 
-        from bio_programming_tools.utils.tool_instance import ToolInstance
-
-        # Create temporary directory for inputs and outputs
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate FASTA content
-            fasta_content = _generate_fasta_content(comp)
-
-            # Write input file
-            input_file = os.path.join(temp_dir, "input.fasta")
-            with open(input_file, "w") as f:
-                f.write(fasta_content)
-
-            output_dir = os.path.join(temp_dir, "output")
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Handle ColabFold MSA generation if needed
-            msa_directory = None
-            if config.use_msa:
-                # Configure output directory for MSAs (local mode requires this)
-                msa_config = config.colabfold_search_config.model_copy(deep=True)
-                msa_config.output_dir = temp_dir
-
-                # Temporarily swap config to use the modified one for local execution
-                original_config = config.colabfold_search_config
-                config.colabfold_search_config = msa_config
-                try:
-                    msa_directory = _generate_msa_pqt_files(comp, config, temp_dir)
-                finally:
-                    # Restore original config
-                    config.colabfold_search_config = original_config
-
-            # Prepare input data for inference script
-            input_data = {
-                "fasta_file": input_file,
-                "output_dir": output_dir,
-                "use_esm_embeddings": config.use_esm_embeddings,
-                "msa_directory": msa_directory,
-                "num_trunk_recycles": config.num_trunk_recycles,
-                "num_diffn_timesteps": config.num_diffn_timesteps,
-                "num_diffn_samples": config.num_diffn_samples,
-                "num_trunk_samples": config.num_trunk_samples,
-                "seed": config.seed,
-            }
-
-            # Call the inference script with the venv activated
-            input_data["device"] = config.device
-            result = ToolInstance.dispatch(
-                "chai1",
-                input_data,
-                instance=instance,
-                verbose=config.verbose,
-            )
-
-            cif_output = result["cif_output"]
-            metrics = result["metrics"]
+        cif_output = result["cif_output"]
+        metrics = result["metrics"]
 
     return Structure(
         structure_filepath_or_content=cif_output,

@@ -9,7 +9,7 @@ from pydantic import ConfigDict, Field, model_validator
 from tqdm import tqdm
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 from .borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
@@ -160,48 +160,32 @@ def run_borzoi_ensemble(
         BorzoiEnsembleOutput: Stacked predictions from Borzoi replicates 0-3.
     """
 
-    if config.use_flash_attn and not config.device.startswith("cuda") and not use_modal_gpu():
+    if config.use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 
-    if use_modal_gpu():
-        logger.debug("Using Modal for Borzoi ensemble prediction")
+    logger.debug("Using local execution for Borzoi ensemble prediction")
 
-        import modal
+    predictions: List[List[List[float]]] = []
+    iterator = tqdm(
+        range(4),
+        desc="Borzoi replicates",
+        unit="replicate",
+        total=4,
+        disable=not config.verbose,
+    )
 
-        BorzoiService = modal.Cls.from_name("bio-programming", "BorzoiService")
-        result = BorzoiService().predict_ensemble.remote(
-            sequence=inputs.sequence,
+    for replicate in iterator:
+        replicate_config = BorzoiConfig(
             output_tracks=config.output_tracks,
             species=config.species,
-            use_flash_attn=config.use_flash_attn,
+            replicate=str(replicate),
             avg_output_tracks=config.avg_output_tracks,
+            use_flash_attn=config.use_flash_attn,
+            device=config.device,
             verbose=config.verbose,
         )
-        predictions = result["predictions"]
-    else:
-        logger.debug("Using local execution for Borzoi ensemble prediction")
-
-        predictions: List[List[List[float]]] = []
-        iterator = tqdm(
-            range(4),
-            desc="Borzoi replicates",
-            unit="replicate",
-            total=4,
-            disable=not config.verbose,
-        )
-
-        for replicate in iterator:
-            replicate_config = BorzoiConfig(
-                output_tracks=config.output_tracks,
-                species=config.species,
-                replicate=str(replicate),
-                avg_output_tracks=config.avg_output_tracks,
-                use_flash_attn=config.use_flash_attn,
-                device=config.device,
-                verbose=config.verbose,
-            )
-            replicate_output = run_borzoi(inputs, replicate_config)
-            predictions.append(replicate_output.prediction)
+        replicate_output = run_borzoi(inputs, replicate_config)
+        predictions.append(replicate_output.prediction)
 
     return BorzoiEnsembleOutput(
         sequence=inputs.sequence,

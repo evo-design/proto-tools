@@ -31,7 +31,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 from .inference import AlphaFold3JSON, alphafold3_inference
@@ -205,12 +205,6 @@ def run_alphafold3(
     instance=None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
-
-    # NOTE: Modal deployment will not be supported for AlphaFold3.
-    if use_modal_gpu():
-        raise ValueError(
-            "AlphaFold3 is not supported for Modal deployment. Please run on a local GPU."
-        )
 
     output_structures: List[Structure] = []
 

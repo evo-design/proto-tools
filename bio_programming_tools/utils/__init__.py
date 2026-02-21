@@ -4,7 +4,7 @@ Shared utilities for bio_programming_tools.
 Config, helpers, sequence validation, I/O, caching, env management, device, logging.
 """
 from .base_config import BaseConfig, ConfigField
-from .device import determine_visible_devices, number_of_available_gpus, use_modal_gpu
+from .device import determine_visible_devices, number_of_available_gpus
 from .system_info import (
     capture_parent_env,
     capture_subprocess_env,
@@ -84,7 +84,6 @@ __all__ = [
     # Tool instance management
     "ToolInstance",
     # Device
-    "use_modal_gpu",
     "determine_visible_devices",
     "number_of_available_gpus",
     # Logging

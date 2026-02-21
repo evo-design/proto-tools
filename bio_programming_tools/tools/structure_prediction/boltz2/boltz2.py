@@ -35,7 +35,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 logger = getLogger(__name__)
@@ -197,18 +197,6 @@ class Boltz2Config(StructurePredictionConfig):
         self.colabfold_search_config.verbose = self.verbose
         return self
 
-    @model_validator(mode="after")
-    def validate_modal_msa_config(self):
-        """Validate that Modal execution uses remote MSA mode."""
-        if self.use_msa:
-            if use_modal_gpu():
-                if self.colabfold_search_config.search_mode != "remote":
-                    raise ValueError(
-                        "Boltz2 MSA generation on Modal requires search_mode='remote'. "
-                        "Set colabfold_search_config.search_mode='remote' or use_msa=False."
-                    )
-        return self
-
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -231,8 +219,8 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance=None) -> Bolt
     """Predict 3D structures using Boltz2 multi-modal model.
 
     Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures
-    of proteins, DNA, RNA, ligands, and their complexes. Supports both Modal cloud
-    execution and local GPU execution via isolated Python environments.
+    of proteins, DNA, RNA, ligands, and their complexes. Runs via local GPU
+    execution in isolated Python environments.
 
     Args:
         inputs (Boltz2Input): Validated input containing one or more complexes to
@@ -322,8 +310,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance=None) -> Bolt
             - ``use_msa=False``: Single-sequence mode without MSAs
             - ``use_msa=True`` (default): Use ColabFold search tool for MSA generation
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
-        - Modal execution requires ``colabfold_search_config.search_mode='remote'`` when ``use_msa=True``
-        - Local execution supports both local and remote ColabFold search modes
+        - Supports both local and remote ColabFold search modes when ``use_msa=True``
     """
     results = []
 
@@ -505,127 +492,90 @@ def run_boltz2_on_complex(
         config: Boltz2 configuration
         sp_complex: StructurePredictionComplex instance containing chain information
     """
-    # Choose execution mode
-    if use_modal_gpu():
-        if config.verbose:
-            logger.info("Using Modal for Boltz2 structure prediction...")
+    if config.verbose:
+        logger.info("Using local GPU for Boltz2 structure prediction...")
 
-        # Generate MSAs using ColabFold remote search
-        msa_csv_files = None
+    from bio_programming_tools.utils.tool_instance import ToolInstance
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_dir = os.path.join(temp_dir, "boltz2_output")
+        os.makedirs(output_dir)
+
+        # Handle ColabFold MSA generation if needed
+        msa_paths = None
         if config.use_msa:
             # Extract protein sequences and generate MSAs
             protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(sp_complex)
 
             if protein_seqs:
-                # Generate MSAs and convert to CSV format, then serialize for Modal
-                with tempfile.TemporaryDirectory() as temp_dir:
+                # Configure output directory for MSAs (local mode requires this)
+                msa_config = config.colabfold_search_config.model_copy(deep=True)
+                msa_config.output_dir = temp_dir
+
+                # Temporarily swap config to use the modified one for local execution
+                original_config = config.colabfold_search_config
+                config.colabfold_search_config = msa_config
+                try:
                     msa_paths = _generate_msa_csv_files(
                         protein_seqs, protein_chain_ids, config, temp_dir
                     )
-                    if msa_paths is not None:
-                        msa_csv_files = _serialize_csv_files(msa_paths)
+                finally:
+                    # Restore original config
+                    config.colabfold_search_config = original_config
 
-        import modal
+                # Update YAML content to include MSA paths or set empty for chains without MSAs
+                yaml_dict = yaml.safe_load(yaml_content)
+                for seq_entry in yaml_dict["sequences"]:
+                    for entity_type in seq_entry:
+                        chain_id = seq_entry[entity_type]["id"]
+                        # Handle both string and list formats for chain ID
+                        if isinstance(chain_id, list):
+                            chain_id = chain_id[0] if chain_id else None
 
-        Boltz2Service = modal.Cls.from_name("bio-programming", "Boltz2Service")
+                        # Only set MSA for protein chains
+                        if entity_type == "protein" and chain_id:
+                            if msa_paths and chain_id in msa_paths:
+                                # Use the generated MSA
+                                seq_entry[entity_type]["msa"] = msa_paths[chain_id]
+                            else:
+                                # No MSA found for this chain, set to empty
+                                seq_entry[entity_type]["msa"] = "empty"
+                                print(f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ")
+                                warnings.warn(
+                                    f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ",
+                                    UserWarning,
+                                    stacklevel=2
+                                )
 
-        cif_output, metrics = Boltz2Service().predict.remote(
-            input_yaml_content=yaml_content,
-            msa_csv_files=msa_csv_files,
-            recycling_steps=config.recycling_steps,
-            sampling_steps=config.sampling_steps,
-            diffusion_samples=config.diffusion_samples,
-            num_workers=config.num_workers,
+                yaml_content = yaml.dump(
+                    yaml_dict, sort_keys=False, default_flow_style=False
+                )
+
+        input_yaml_path = os.path.join(temp_dir, "boltz2_input.yaml")
+        with open(input_yaml_path, "w") as f:
+            f.write(yaml_content)
+
+        # Prepare input data for inference script
+        input_data = {
+            "input_yaml_path": str(input_yaml_path),
+            "output_dir": str(output_dir),
+            "recycling_steps": config.recycling_steps,
+            "sampling_steps": config.sampling_steps,
+            "diffusion_samples": config.diffusion_samples,
+            "num_workers": config.num_workers,
+            "device": config.device,
+        }
+
+        # Call the inference script
+        output_data = ToolInstance.dispatch(
+            "boltz2",
+            input_data,
+            instance=instance,
             verbose=config.verbose,
         )
 
-        formatted_metrics = {key: _format_output(value) for key, value in metrics.items()}
-
-    else:
-        if config.verbose:
-            logger.info("Using local GPU for Boltz2 structure prediction...")
-
-        from bio_programming_tools.utils.tool_instance import ToolInstance
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output_dir = os.path.join(temp_dir, "boltz2_output")
-            os.makedirs(output_dir)
-
-            # Handle ColabFold MSA generation if needed
-            msa_paths = None
-            if config.use_msa:
-                # Extract protein sequences and generate MSAs
-                protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(sp_complex)
-
-                if protein_seqs:
-                    # Configure output directory for MSAs (local mode requires this)
-                    msa_config = config.colabfold_search_config.model_copy(deep=True)
-                    msa_config.output_dir = temp_dir
-
-                    # Temporarily swap config to use the modified one for local execution
-                    original_config = config.colabfold_search_config
-                    config.colabfold_search_config = msa_config
-                    try:
-                        msa_paths = _generate_msa_csv_files(
-                            protein_seqs, protein_chain_ids, config, temp_dir
-                        )
-                    finally:
-                        # Restore original config
-                        config.colabfold_search_config = original_config
-
-                    # Update YAML content to include MSA paths or set empty for chains without MSAs
-                    yaml_dict = yaml.safe_load(yaml_content)
-                    for seq_entry in yaml_dict["sequences"]:
-                        for entity_type in seq_entry:
-                            chain_id = seq_entry[entity_type]["id"]
-                            # Handle both string and list formats for chain ID
-                            if isinstance(chain_id, list):
-                                chain_id = chain_id[0] if chain_id else None
-
-                            # Only set MSA for protein chains
-                            if entity_type == "protein" and chain_id:
-                                if msa_paths and chain_id in msa_paths:
-                                    # Use the generated MSA
-                                    seq_entry[entity_type]["msa"] = msa_paths[chain_id]
-                                else:
-                                    # No MSA found for this chain, set to empty
-                                    seq_entry[entity_type]["msa"] = "empty"
-                                    print(f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ")
-                                    warnings.warn(
-                                        f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ",
-                                        UserWarning,
-                                        stacklevel=2
-                                    )
-
-                    yaml_content = yaml.dump(
-                        yaml_dict, sort_keys=False, default_flow_style=False
-                    )
-
-            input_yaml_path = os.path.join(temp_dir, "boltz2_input.yaml")
-            with open(input_yaml_path, "w") as f:
-                f.write(yaml_content)
-
-            # Prepare input data for inference script
-            input_data = {
-                "input_yaml_path": str(input_yaml_path),
-                "output_dir": str(output_dir),
-                "recycling_steps": config.recycling_steps,
-                "sampling_steps": config.sampling_steps,
-                "diffusion_samples": config.diffusion_samples,
-                "num_workers": config.num_workers,
-                "device": config.device,
-            }
-
-            # Call the inference script
-            output_data = ToolInstance.dispatch(
-                "boltz2",
-                input_data,
-                instance=instance,
-                verbose=config.verbose,
-            )
-
-            cif_output = output_data["structure_cif_output"]
-            formatted_metrics = output_data["metrics"]
+        cif_output = output_data["structure_cif_output"]
+        formatted_metrics = output_data["metrics"]
 
     # Extract metrics
     metrics = {

@@ -12,7 +12,6 @@ from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     return_invalid_nucleotide_chars,
-    use_modal_gpu,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
@@ -165,34 +164,21 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance=None) -
         EnformerOutput: Prediction object with sequence, tracks, and metadata.
     """
 
-    if use_modal_gpu():
-        logger.debug("Using Modal for Enformer prediction")
+    logger.debug("Using local venv for Enformer prediction")
 
-        import modal
-
-        EnformerService = modal.Cls.from_name("bio-programming", "EnformerService")
-        result = EnformerService().predict.remote(
-            sequence=inputs.sequence,
-            output_tracks=config.output_tracks,
-            species=config.species,
-            verbose=config.verbose,
-        )
-    else:
-        logger.debug("Using local venv for Enformer prediction")
-
-        result = ToolInstance.dispatch(
-            "enformer",
-            {
-                "sequence": inputs.sequence,
-                "output_tracks": config.output_tracks,
-                "species": config.species,
-                "device": config.device,
-                "verbose": config.verbose,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    result = ToolInstance.dispatch(
+        "enformer",
+        {
+            "sequence": inputs.sequence,
+            "output_tracks": config.output_tracks,
+            "species": config.species,
+            "device": config.device,
+            "verbose": config.verbose,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return EnformerOutput(
         sequence=inputs.sequence,

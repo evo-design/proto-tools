@@ -31,7 +31,6 @@ from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_protein_chars,
-    use_modal_gpu,
 )
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
@@ -211,8 +210,7 @@ def run_esmfold(
 
     Uses ESMFold, a fast transformer-based protein structure prediction model from
     Meta AI, to predict 3D structures without requiring multiple sequence alignments.
-    Supports both Modal cloud execution and local GPU execution with automatic
-    batching for memory efficiency.
+    Supports local GPU execution with automatic batching for memory efficiency.
 
     Args:
         inputs (ESMFoldInput): Validated input containing one or more protein complexes
@@ -278,76 +276,45 @@ def run_esmfold(
     # Run inference on all prepared complexes
     all_results = []
 
-    if use_modal_gpu():
-        # Modal cloud execution
-        logger.debug("Using Modal for ESMFold structure prediction...")
+    # Local GPU execution via venv subprocess
+    logger.debug("Using local GPU for ESMFold structure prediction...")
 
-        import modal
-        ESMFoldService = modal.Cls.from_name("bio-programming", "ESMFoldService")
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-        # Use tqdm to show progress over individual structures, not batches
-        pbar = tqdm(
-            total=len(prepared_complexes),
-            desc="Folding structures (ESMFold)",
-            unit="structure",
+    # Process each sub-batch through standalone script
+    # Use tqdm to show progress over individual structures, not batches
+    pbar = tqdm(
+        total=len(prepared_complexes),
+        desc="Folding structures (ESMFold)",
+        unit="structure",
+    )
+
+    for batch_idx, sub_batch in enumerate(sub_batches):
+        if len(sub_batches) > 1:
+            logger.debug(f"  Sub-batch {batch_idx + 1}/{len(sub_batches)}: {len(sub_batch)} complexes")
+
+        # Prepare input data for inference script
+        input_data = {
+            "batch_data": sub_batch,
+            "residue_idx_offset": config.residue_idx_offset,
+            "chain_linker": config.chain_linker,
+        }
+
+        # Call the inference script
+        input_data["device"] = config.device
+        output_data = ToolInstance.dispatch(
+            "esmfold",
+            input_data,
+            instance=instance,
+            verbose=config.verbose,
         )
 
-        for batch_idx, sub_batch in enumerate(sub_batches):
-            if len(sub_batches) > 1:
-                logger.debug(f"  Sub-batch {batch_idx + 1}/{len(sub_batches)}: {len(sub_batch)} complexes")
+        all_results.extend(output_data["results"])
 
-            batch_results = ESMFoldService().predict.remote(
-                batch_data=sub_batch,
-                residue_idx_offset=config.residue_idx_offset,
-                chain_linker=config.chain_linker,
-                verbose=config.verbose,
-            )
-            all_results.extend(batch_results)
+        # Update progress bar by the number of structures in this batch
+        pbar.update(len(sub_batch))
 
-            # Update progress bar by the number of structures in this batch
-            pbar.update(len(sub_batch))
-
-        pbar.close()
-    else:
-        # Use local GPU execution via venv subprocess
-        logger.debug("Using local GPU for ESMFold structure prediction...")
-
-        from bio_programming_tools.utils.tool_instance import ToolInstance
-
-        # Process each sub-batch through standalone script
-        # Use tqdm to show progress over individual structures, not batches
-        pbar = tqdm(
-            total=len(prepared_complexes),
-            desc="Folding structures (ESMFold)",
-            unit="structure",
-        )
-
-        for batch_idx, sub_batch in enumerate(sub_batches):
-            if len(sub_batches) > 1:
-                logger.debug(f"  Sub-batch {batch_idx + 1}/{len(sub_batches)}: {len(sub_batch)} complexes")
-
-            # Prepare input data for inference script
-            input_data = {
-                "batch_data": sub_batch,
-                "residue_idx_offset": config.residue_idx_offset,
-                "chain_linker": config.chain_linker,
-            }
-
-            # Call the inference script
-            input_data["device"] = config.device
-            output_data = ToolInstance.dispatch(
-                "esmfold",
-                input_data,
-                instance=instance,
-                verbose=config.verbose,
-            )
-
-            all_results.extend(output_data["results"])
-
-            # Update progress bar by the number of structures in this batch
-            pbar.update(len(sub_batch))
-
-        pbar.close()
+    pbar.close()
 
     # Post-process: relabel chains and convert to CIF
     structure_outputs = []

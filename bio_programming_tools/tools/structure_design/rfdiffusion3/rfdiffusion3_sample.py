@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bio_programming_tools.entities.structures import Structure
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -513,8 +513,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     - Enzyme design (scaffold around catalytic sites)
     - Symmetric protein design (design homo-oligomers)
 
-    Supports both Modal cloud execution and local GPU execution via isolated
-    Python environments.
+    Runs via local GPU execution in isolated Python environments.
 
     Args:
         inputs (RFdiffusion3Input): Validated input containing one or more design
@@ -551,52 +550,39 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     Note:
         - RFdiffusion3 generates both structure AND sequence
         - Memory usage scales with batch size and protein length
-        - Modal execution handles dependency isolation automatically
-        - Local execution uses venv subprocess for dependency management
+        - Dependency isolation is handled automatically via venv subprocess
     """
     json_spec = inputs.to_json_spec()
 
-    if use_modal_gpu():
-        logger.debug("Using Modal for RFdiffusion3 structure design...")
+    logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
-        import modal
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
-        RFdiffusion3Service = modal.Cls.from_name("bio-programming", "RFdiffusion3Service")
-        output_data = RFdiffusion3Service().generate.remote(
-            input_json_content=json_spec,
-            verbose=config.verbose,
-            **config.get_cli_kwargs(),
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = Path(temp_dir)
+        input_dir = Path(config.input_dir) if config.input_dir else temp_dir
+        output_dir = (
+            Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"
         )
-    else:
-        logger.debug("Using local GPU for RFdiffusion3 structure design...")
+        input_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        input_json_path = input_dir / "rfdiffusion3_input.json"
 
-        from bio_programming_tools.utils.tool_instance import ToolInstance
+        with open(input_json_path, "w") as f:
+            f.write(json_spec)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_dir = Path(temp_dir)
-            input_dir = Path(config.input_dir) if config.input_dir else temp_dir
-            output_dir = (
-                Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"
-            )
-            input_dir.mkdir(parents=True, exist_ok=True)
-            output_dir.mkdir(parents=True, exist_ok=True)
-            input_json_path = input_dir / "rfdiffusion3_input.json"
-
-            with open(input_json_path, "w") as f:
-                f.write(json_spec)
-
-            input_data = {
-                "input_json_path": str(input_json_path),
-                "output_dir": str(output_dir),
-                **config.get_cli_kwargs(),
-            }
-            input_data["device"] = config.device
-            output_data = ToolInstance.dispatch(
-                "rfdiffusion3",
-                input_data,
-                instance=instance,
-                verbose=config.verbose,
-            )
+        input_data = {
+            "input_json_path": str(input_json_path),
+            "output_dir": str(output_dir),
+            **config.get_cli_kwargs(),
+        }
+        input_data["device"] = config.device
+        output_data = ToolInstance.dispatch(
+            "rfdiffusion3",
+            input_data,
+            instance=instance,
+            verbose=config.verbose,
+        )
 
     output_structures = []
     for design_data in output_data.get("designs", []):

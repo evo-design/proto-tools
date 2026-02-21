@@ -12,7 +12,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -164,8 +164,7 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
 
     Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
     logits for protein sequences. The model is automatically loaded on-demand.
-    Supports both local GPU
-    execution and distributed Modal GPU execution.
+    Supports local GPU execution via isolated Python environments.
 
     Args:
         inputs (MaskedModelInput): Validated input containing one or more protein
@@ -215,38 +214,24 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
 
     Note:
         - Larger models require more GPU memory but provide better representations
-        - Modal GPU execution is automatically used when configured via environment
     """
 
-    if use_modal_gpu():
-        logger.debug(f"Using Modal for ESM2 inference: {config.model_checkpoint}")
-        import modal
-
-        ESM2Service = modal.Cls.from_name("bio-programming", "ESM2Service")
-        outputs = ESM2Service().inference.remote(
-            sequences=inputs.sequences,
-            batch_size=config.batch_size,
-            model_checkpoint=config.model_checkpoint,
-            verbose=config.verbose,
-            return_logits=config.return_logits,
-        )
-    else:
-        logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
-        outputs = ToolInstance.dispatch(
-            "esm2",
-            {
-                "operation": "embeddings",
-                "sequences": inputs.sequences,
-                "batch_size": config.batch_size,
-                "model_checkpoint": config.model_checkpoint,
-                "device": config.device,
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
+    outputs = ToolInstance.dispatch(
+        "esm2",
+        {
+            "operation": "embeddings",
+            "sequences": inputs.sequences,
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return ESM2EmbeddingsOutput(
         metadata={
@@ -254,7 +239,6 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
             "num_sequences": len(inputs.sequences),
             "batch_size": config.batch_size,
             "device": config.device,
-            "used_modal": use_modal_gpu(),
         },
         mean_embeddings=outputs["mean_embeddings"],
         logits=outputs["logits"],

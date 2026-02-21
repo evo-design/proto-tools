@@ -12,7 +12,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 
@@ -206,39 +206,25 @@ def run_esm3_structure_prediction(
     Note:
         - Structure prediction is computationally expensive (minutes per sequence)
         - Use smaller batch sizes (1-4) for structure prediction vs embeddings
-        - Modal GPU execution is automatically used when configured via environment
         - Very long sequences (>1000 residues) may fail or produce low-quality structures
     """
 
-    # Choose execution mode
-    if use_modal_gpu():
-        # Modal
-        logger.debug(f"Using Modal for ESM3 structure prediction: {config.model_checkpoint}")
-        import modal
-
-        ESM3Service = modal.Cls.from_name("bio-programming", "ESM3Service")
-        structures = ESM3Service().predict_structure.remote(
-            sequences=inputs.sequences,
-            batch_size=config.batch_size,
-            verbose=config.verbose,
-        )
-    else:
-        # Local execution
-        logger.debug(f"Using local for ESM3 structure prediction: {config.model_checkpoint}")
-        structures = ToolInstance.dispatch(
-            "esm3",
-            {
-                "operation": "predict_structure",
-                "sequences": inputs.sequences,
-                "batch_size": config.batch_size,
-                "model_checkpoint": config.model_checkpoint,
-                "device": config.device,
-                "verbose": config.verbose,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    # Local execution
+    logger.debug(f"Using local for ESM3 structure prediction: {config.model_checkpoint}")
+    structures = ToolInstance.dispatch(
+        "esm3",
+        {
+            "operation": "predict_structure",
+            "sequences": inputs.sequences,
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return ESM3StructurePredictionOutput(
         metadata={
@@ -246,7 +232,6 @@ def run_esm3_structure_prediction(
             "num_sequences": len(inputs.sequences),
             "batch_size": config.batch_size,
             "device": config.device,
-            "used_modal": use_modal_gpu(),
         },
         structures=structures,
         num_sequences=len(inputs.sequences),

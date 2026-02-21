@@ -12,7 +12,6 @@ from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     return_invalid_nucleotide_chars,
-    use_modal_gpu,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
@@ -199,43 +198,27 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance=None) -> Borz
         BorzoiOutput: Prediction object for one Borzoi replicate.
     """
 
-    if config.use_flash_attn and not config.device.startswith("cuda") and not use_modal_gpu():
+    if config.use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 
-    if use_modal_gpu():
-        logger.debug("Using Modal for Borzoi prediction")
+    logger.debug("Using local venv for Borzoi prediction")
 
-        import modal
-
-        BorzoiService = modal.Cls.from_name("bio-programming", "BorzoiService")
-        result = BorzoiService().predict.remote(
-            sequence=inputs.sequence,
-            output_tracks=config.output_tracks,
-            species=config.species,
-            replicate=config.replicate,
-            use_flash_attn=config.use_flash_attn,
-            avg_output_tracks=config.avg_output_tracks,
-            verbose=config.verbose,
-        )
-    else:
-        logger.debug("Using local venv for Borzoi prediction")
-
-        result = ToolInstance.dispatch(
-            "borzoi",
-            {
-                "sequence": inputs.sequence,
-                "output_tracks": config.output_tracks,
-                "species": config.species,
-                "replicate": config.replicate,
-                "use_flash_attn": config.use_flash_attn,
-                "avg_output_tracks": config.avg_output_tracks,
-                "device": config.device,
-                "verbose": config.verbose,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    result = ToolInstance.dispatch(
+        "borzoi",
+        {
+            "sequence": inputs.sequence,
+            "output_tracks": config.output_tracks,
+            "species": config.species,
+            "replicate": config.replicate,
+            "use_flash_attn": config.use_flash_attn,
+            "avg_output_tracks": config.avg_output_tracks,
+            "device": config.device,
+            "verbose": config.verbose,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return BorzoiOutput(
         sequence=inputs.sequence,

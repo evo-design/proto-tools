@@ -11,7 +11,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 
@@ -251,46 +251,28 @@ def run_esm3_sample(
 
     Note:
         - For protein design workflows, start with low temperatures and few mutations
-        - Modal GPU execution is automatically used when configured via environment
     """
 
-    # Choose execution mode
-    if use_modal_gpu():
-        # Modal
-        logger.debug(f"Using Modal for ESM3 sampling: {config.model_checkpoint}")
-        import modal
-
-        ESM3Service = modal.Cls.from_name("bio-programming", "ESM3Service")
-        result = ESM3Service().sample.remote(
-            sequences=inputs.sequences,
-            temperature=config.temperature,
-            decoding_method=config.decoding_method,
-            num_mutations=config.num_mutations,
-            batch_size=config.batch_size,
-            verbose=config.verbose,
-            return_logits=config.return_logits,
-        )
-    else:
-        # Local execution
-        logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
-        result = ToolInstance.dispatch(
-            "esm3",
-            {
-                "operation": "sample",
-                "sequences": inputs.sequences,
-                "temperature": config.temperature,
-                "decoding_method": config.decoding_method,
-                "num_mutations": config.num_mutations,
-                "batch_size": config.batch_size,
-                "model_checkpoint": config.model_checkpoint,
-                "device": config.device,
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    # Local execution
+    logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
+    result = ToolInstance.dispatch(
+        "esm3",
+        {
+            "operation": "sample",
+            "sequences": inputs.sequences,
+            "temperature": config.temperature,
+            "decoding_method": config.decoding_method,
+            "num_mutations": config.num_mutations,
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     return ESM3SampleOutput(
         metadata={
@@ -299,7 +281,6 @@ def run_esm3_sample(
             "temperature": config.temperature,
             "decoding_method": config.decoding_method,
             "num_mutations": config.num_mutations,
-            "used_modal": use_modal_gpu(),
         },
         sequences=result["sequences"],
         logits=result["logits"],

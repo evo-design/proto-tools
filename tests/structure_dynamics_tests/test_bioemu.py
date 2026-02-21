@@ -221,24 +221,20 @@ class TestRunBioEmu:
         bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
         with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
-            return_value=False,
-        ):
-            with patch(
-                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
-            ) as mock_cls:
-                mock_cls.dispatch.return_value = {
-                    "results": [
-                        {
-                            "pdb_frames": [sample_pdb_content] * 10,
-                            "num_frames": 10,
-                            "num_residues": len(
-                                single_chain_complex.chains[0].sequence
-                            ),
-                        }
-                    ]
-                }
-                result = run_bioemu(bioemu_input, bioemu_config)
+            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+        ) as mock_cls:
+            mock_cls.dispatch.return_value = {
+                "results": [
+                    {
+                        "pdb_frames": [sample_pdb_content] * 10,
+                        "num_frames": 10,
+                        "num_residues": len(
+                            single_chain_complex.chains[0].sequence
+                        ),
+                    }
+                ]
+            }
+            result = run_bioemu(bioemu_input, bioemu_config)
 
         assert isinstance(result, BioEmuOutput)
         assert len(result.ensembles) == 1
@@ -261,31 +257,27 @@ class TestRunBioEmu:
         bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
         with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.use_modal_gpu",
-            return_value=False,
-        ):
-            with patch(
-                "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
-            ) as mock_cls:
-                mock_cls.dispatch.return_value = {
-                    "results": [
-                        {
-                            "pdb_frames": [sample_pdb_content] * 3,
-                            "num_frames": 3,
-                            "num_residues": len(
-                                single_chain_complex.chains[0].sequence
-                            ),
-                        },
-                        {
-                            "pdb_frames": [sample_pdb_content] * 7,
-                            "num_frames": 7,
-                            "num_residues": len(
-                                single_chain_complex.chains[0].sequence
-                            ),
-                        },
-                    ]
-                }
-                result = run_bioemu(bioemu_input, bioemu_config)
+            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+        ) as mock_cls:
+            mock_cls.dispatch.return_value = {
+                "results": [
+                    {
+                        "pdb_frames": [sample_pdb_content] * 3,
+                        "num_frames": 3,
+                        "num_residues": len(
+                            single_chain_complex.chains[0].sequence
+                        ),
+                    },
+                    {
+                        "pdb_frames": [sample_pdb_content] * 7,
+                        "num_frames": 7,
+                        "num_residues": len(
+                            single_chain_complex.chains[0].sequence
+                        ),
+                    },
+                ]
+            }
+            result = run_bioemu(bioemu_input, bioemu_config)
 
         assert len(result.ensembles) == 2
         assert len(result.ensembles[0].structures) == 3

@@ -28,13 +28,11 @@ def mock_af3_inference(tmp_path):
     dummy_pdb_path = str(dummy_pdb_file)
     mock_metrics = {"avg_plddt": 0.95, "ptm": 0.8}
 
-    # Mock use_modal_gpu to return False so tests run as if on local GPU
-    with patch.object(alphafold3_module, "use_modal_gpu", return_value=False):
-        # Patch where it's used (alphafold3.py), not where it's defined (inference.py)
-        with patch.object(
-            alphafold3_module, "alphafold3_inference", return_value=(dummy_pdb_path, mock_metrics)
-        ) as mock:
-            yield mock
+    # Patch where it's used (alphafold3.py), not where it's defined (inference.py)
+    with patch.object(
+        alphafold3_module, "alphafold3_inference", return_value=(dummy_pdb_path, mock_metrics)
+    ) as mock:
+        yield mock
 
 
 def test_af3_ligand_and_nucleic_acids(mock_af3_inference):

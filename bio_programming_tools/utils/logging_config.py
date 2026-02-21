@@ -191,7 +191,6 @@ def setup_logging(
         "torch",
         "urllib3",
         "httpx",
-        "modal",
         "matplotlib",
         "PIL",
         "h5py",

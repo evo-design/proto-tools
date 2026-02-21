@@ -11,7 +11,7 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_io import BaseToolInput
 
 from .evo2_cache import get_cached_evo2_model
@@ -186,39 +186,25 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    if use_modal_gpu():
-        logger.debug(f"Using Modal for Evo2 scoring: {config.model_checkpoint}")
-        import modal
+    logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
 
-        Evo2Service = modal.Cls.from_name("bio-programming", "Evo2Service")
-        result = Evo2Service().score.remote(
-            model_checkpoint=config.model_checkpoint,
-            sequences=inputs.sequences,
-            verbose=config.verbose,
-            batch_size=config.batch_size,
-            return_logits=config.return_logits,
-        )
-    else:
-        logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
+    model = get_cached_evo2_model(
+        model_checkpoint=config.model_checkpoint,
+        local_path=config.local_path,
+    )
 
-        model = get_cached_evo2_model(
-            model_checkpoint=config.model_checkpoint,
-            local_path=config.local_path,
-        )
+    result = model.score(
+        sequences=inputs.sequences,
+        device=config.device,
+        verbose=config.verbose,
+        batch_size=config.batch_size,
+        return_logits=config.return_logits,
+    )
 
-        result = model.score(
-            sequences=inputs.sequences,
-            device=config.device,
-            verbose=config.verbose,
-            batch_size=config.batch_size,
-            return_logits=config.return_logits,
-        )
-
-        if not config.keep_on_gpu:
-            model.unload()
+    if not config.keep_on_gpu:
+        model.unload()
 
     # Serialize tensors to nested lists at tool boundary
-    # Local GPU returns torch tensors; Modal returns pre-serialized lists
     logits = result["logits"]
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]

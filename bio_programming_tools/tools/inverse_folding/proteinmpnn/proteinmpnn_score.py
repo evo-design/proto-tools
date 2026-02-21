@@ -13,7 +13,7 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     SequenceStructurePair,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
@@ -164,67 +164,37 @@ def run_proteinmpnn_score(
     """
     scores = []
 
-    if use_modal_gpu():
-        # Modal
-        logger.debug("Using Modal for ProteinMPNN scoring")
-        import modal
+    # Local venv execution
+    logger.debug("Using local venv for ProteinMPNN scoring")
 
-        ProteinMPNNService = modal.Cls.from_name("bio-programming", "ProteinMPNNService")
-        service = ProteinMPNNService()
-
-        for sequence_structure_pair in tqdm(
-            inputs.sequence_structure_pairs,
-            desc="ProteinMPNN scoring",
-            unit="pair",
-        ):
-            result = service.score.remote(
-                pdb_structure=sequence_structure_pair.structure.structure_pdb,
-                chain_ids=sequence_structure_pair.structure.get_chain_ids(),
-                sequence=sequence_structure_pair.sequence,
-                fixed_positions=config.fixed_positions,
-                seed=config.seed,
-                return_logits=config.return_logits,
+    for sequence_structure_pair in tqdm(
+        inputs.sequence_structure_pairs,
+        desc="ProteinMPNN scoring",
+        unit="pair",
+        disable=not config.verbose,
+    ):
+        input_dict = {
+            "operation": "score",
+            "pdb_contents": sequence_structure_pair.structure.structure_pdb,
+            "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
+            "sequence": sequence_structure_pair.sequence,
+            "seed": config.seed,
+            "fixed_positions": config.fixed_positions,
+            "device": config.device,
+            "return_logits": config.return_logits,
+        }
+        result = ToolInstance.dispatch(
+            "proteinmpnn",
+            input_dict,
+            instance=instance,
+            verbose=config.verbose,
+        )
+        scores.append(
+            SequenceScores(
+                metrics=result["metrics"],
+                logits=result["logits"],
+                vocab=result["vocab"],
             )
-            scores.append(
-                SequenceScores(
-                    metrics=result["metrics"],
-                    logits=result["logits"],
-                    vocab=result["vocab"],
-                )
-            )
-
-    else:
-        # Local venv execution
-        logger.debug("Using local venv for ProteinMPNN scoring")
-
-        for sequence_structure_pair in tqdm(
-            inputs.sequence_structure_pairs,
-            desc="ProteinMPNN scoring",
-            unit="pair",
-            disable=not config.verbose,
-        ):
-            input_dict = {
-                "operation": "score",
-                "pdb_contents": sequence_structure_pair.structure.structure_pdb,
-                "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
-                "sequence": sequence_structure_pair.sequence,
-                "seed": config.seed,
-                "fixed_positions": config.fixed_positions,
-                "device": config.device,
-                "return_logits": config.return_logits,
-            }
-            result = ToolInstance.dispatch(
-                "proteinmpnn",
-                input_dict,
-                instance=instance,
-                verbose=config.verbose,
-            )
-            scores.append(
-                SequenceScores(
-                    metrics=result["metrics"],
-                    logits=result["logits"],
-                    vocab=result["vocab"],
-                )
-            )
+        )
 
     return ProteinMPNNScoringOutput(scores=scores)

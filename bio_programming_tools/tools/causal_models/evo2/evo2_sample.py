@@ -8,7 +8,7 @@ from typing import Dict, List, Literal, Optional
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, use_modal_gpu
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -359,9 +359,8 @@ def run_evo2_sample(
     """Sample DNA sequences using Evo2 language model.
 
     Uses the Evo2 7B parameter language model to autoregressively generate
-    genomic DNA sequences from prompt sequences. Supports both local GPU
-    execution and distributed Modal GPU execution with advanced sampling
-    strategies including nucleus sampling and KV caching.
+    genomic DNA sequences from prompt sequences. Supports local GPU execution
+    with advanced sampling strategies including nucleus sampling and KV caching.
 
     Args:
         inputs (Evo2SampleInput): Validated input containing one or more DNA
@@ -391,95 +390,49 @@ def run_evo2_sample(
     Note:
         - For long sequences, use ``cached_generation=True`` for efficiency
         - Batched generation requires all prompts to have the same length
-        - Modal GPU execution is automatically used when configured via environment
 
     See Also:
         - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2
         - Evo2 Website: https://arcinstitute.org/tools/evo
     """
 
-    if use_modal_gpu():
-        # Modal - Note: Modal deployment does not support KV caching
-        logger.debug(f"Using Modal for Evo2 sampling: {config.model_checkpoint}")
+    # Local GPU - use standalone venv
+    logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
 
-        # Warn if KV caching is requested since Modal doesn't support it
-        if config.old_kv_cache is not None:
-            logger.warning(
-                "old_kv_cache provided but Modal deployment does not support KV caching. "
-                "The cache will be ignored. Use local GPU execution for KV caching support."
-            )
-        if config.cached_generation:
-            logger.warning(
-                "cached_generation=True but Modal deployment does not return KV caches. "
-                "Use local GPU execution for KV caching support."
-            )
-
-        import modal
-
-        Evo2Service = modal.Cls.from_name("bio-programming", "Evo2Service")
-
-        batch_result = Evo2Service().sample.remote(
-            model_checkpoint=config.model_checkpoint,
-            prompts=inputs.prompts,
-            top_k=config.top_k,
-            top_p=config.top_p,
-            temperature=config.temperature,
-            num_tokens=config.num_tokens,
-            cached_generation=config.cached_generation,
-            force_prompt_threshold=config.force_prompt_threshold,
-            max_seqlen=config.max_seqlen,
-            print_generation=config.print_generation,
-            verbose=config.verbose,
-            stop_at_eos=config.stop_at_eos,
-            batch_size=config.batch_size,
-            return_logits=config.return_logits,
+    # Warn about KV cache limitation in venv mode
+    if config.old_kv_cache is not None:
+        logger.warning(
+            "old_kv_cache provided but standalone venv execution does not support "
+            "KV caching. The cache will be ignored."
         )
 
-        result = {
-            "sequences": batch_result["sequences"],
-            "kv_caches": None,  # Modal does not support KV caching
-            "logits": batch_result.get("logits"),
-        }
-
-    else:
-        # Local GPU - use standalone venv
-        logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
-
-        # Warn about KV cache limitation in venv mode (same as Modal)
-        if config.old_kv_cache is not None:
-            logger.warning(
-                "old_kv_cache provided but standalone venv execution does not support "
-                "KV caching. The cache will be ignored."
-            )
-
-        result = ToolInstance.dispatch(
-            "evo2",
-            {
-                "operation": "sample",
-                "prompts": inputs.prompts,
-                "model_checkpoint": config.model_checkpoint,
-                "local_path": config.local_path,
-                "top_k": config.top_k,
-                "top_p": config.top_p,
-                "temperature": config.temperature,
-                "num_tokens": config.num_tokens,
-                "cached_generation": config.cached_generation,
-                "force_prompt_threshold": config.force_prompt_threshold,
-                "max_seqlen": config.max_seqlen,
-                "print_generation": config.print_generation,
-                "stop_at_eos": config.stop_at_eos,
-                "batch_size": config.batch_size,
-                "device": config.device,
-                "verbose": config.verbose,
-                "return_logits": config.return_logits,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
+    result = ToolInstance.dispatch(
+        "evo2",
+        {
+            "operation": "sample",
+            "prompts": inputs.prompts,
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "top_k": config.top_k,
+            "top_p": config.top_p,
+            "temperature": config.temperature,
+            "num_tokens": config.num_tokens,
+            "cached_generation": config.cached_generation,
+            "force_prompt_threshold": config.force_prompt_threshold,
+            "max_seqlen": config.max_seqlen,
+            "print_generation": config.print_generation,
+            "stop_at_eos": config.stop_at_eos,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
 
     # Serialize tensors to nested lists at tool boundary if needed
-    # Both Modal and ToolInstance return pre-serialized lists; this handles edge cases
     logits = result.get("logits")
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]
@@ -503,7 +456,6 @@ def run_evo2_sample(
             "num_tokens": config.num_tokens,
             "cached_generation": config.cached_generation,
             "prepend_prompt": config.prepend_prompt,
-            "used_modal": use_modal_gpu(),
         },
         sequences=result["sequences"],
         kv_caches=result.get("kv_caches"),

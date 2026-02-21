@@ -15,7 +15,6 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import use_modal_gpu
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -79,84 +78,47 @@ def run_proteinmpnn_sample(
     """
     designed_sequences = []
 
-    if use_modal_gpu():
-        # Modal
-        logger.debug("Using Modal for ProteinMPNN sampling")
+    # Local venv execution
+    logger.debug("Using local venv for ProteinMPNN sampling")
 
-        import modal
-
-        ProteinMPNNService = modal.Cls.from_name("bio-programming", "ProteinMPNNService")
-        service = ProteinMPNNService()
-
-        for inp in tqdm(inputs.inputs, desc="ProteinMPNN sampling", unit="structure"):
-            all_seqs, all_perp, all_seqid = [], [], []
-            remaining = config.num_sequences_per_structure
-            chunk_idx = 0
-            while remaining > 0:
-                chunk = min(config.batch_size, remaining)
-                result = service.sample.remote(
-                    pdb_structure=inp.structure_pdb,
-                    chain_ids=inp.chain_ids,
-                    batch_size=chunk,
-                    temperature=config.temperature,
-                    fixed_positions=inp.fixed_positions,
-                    excluded_amino_acids=config.excluded_amino_acids,
-                    seed=config.seed + chunk_idx,
-                )
-                all_seqs.extend(result["seq"])
-                all_perp.extend(np.exp(result["score"]).tolist())
-                all_seqid.extend(result["seqid"])
-                chunk_idx += 1
-                remaining -= chunk
-            designed_sequences.append(
-                ProteinMPNNSequences(
-                    sequences=all_seqs,
-                    perplexity=all_perp,
-                    sequence_identity=all_seqid,
-                )
+    for inp in tqdm(
+        inputs.inputs,
+        desc="ProteinMPNN sampling",
+        unit="structure",
+        disable=not config.verbose,
+    ):
+        all_seqs, all_perp, all_seqid = [], [], []
+        remaining = config.num_sequences_per_structure
+        chunk_idx = 0
+        while remaining > 0:
+            chunk = min(config.batch_size, remaining)
+            input_dict = {
+                "operation": "sample",
+                "pdb_contents": inp.structure_pdb,
+                "chain_ids": inp.chain_ids,
+                "batch_size": chunk,
+                "temperature": config.temperature,
+                "fixed_positions": inp.fixed_positions,
+                "excluded_amino_acids": config.excluded_amino_acids,
+                "seed": config.seed + chunk_idx,
+                "device": config.device,
+            }
+            result = ToolInstance.dispatch(
+                "proteinmpnn",
+                input_dict,
+                instance=instance,
+                verbose=config.verbose,
             )
-    else:
-        # Local venv execution
-        logger.debug("Using local venv for ProteinMPNN sampling")
-
-        for inp in tqdm(
-            inputs.inputs,
-            desc="ProteinMPNN sampling",
-            unit="structure",
-            disable=not config.verbose,
-        ):
-            all_seqs, all_perp, all_seqid = [], [], []
-            remaining = config.num_sequences_per_structure
-            chunk_idx = 0
-            while remaining > 0:
-                chunk = min(config.batch_size, remaining)
-                input_dict = {
-                    "operation": "sample",
-                    "pdb_contents": inp.structure_pdb,
-                    "chain_ids": inp.chain_ids,
-                    "batch_size": chunk,
-                    "temperature": config.temperature,
-                    "fixed_positions": inp.fixed_positions,
-                    "excluded_amino_acids": config.excluded_amino_acids,
-                    "seed": config.seed + chunk_idx,
-                    "device": config.device,
-                }
-                result = ToolInstance.dispatch(
-                    "proteinmpnn",
-                    input_dict,
-                    instance=instance,
-                    verbose=config.verbose,
-                )
-                all_seqs.extend(result["seq"])
-                all_perp.extend(np.exp(result["score"]).tolist())
-                all_seqid.extend(result["seqid"])
-                chunk_idx += 1
-                remaining -= chunk
-            designed_sequences.append(
-                ProteinMPNNSequences(
-                    sequences=all_seqs,
-                    perplexity=all_perp,
-                    sequence_identity=all_seqid,
-                )
+            all_seqs.extend(result["seq"])
+            all_perp.extend(np.exp(result["score"]).tolist())
+            all_seqid.extend(result["seqid"])
+            chunk_idx += 1
+            remaining -= chunk
+        designed_sequences.append(
+            ProteinMPNNSequences(
+                sequences=all_seqs,
+                perplexity=all_perp,
+                sequence_identity=all_seqid,
             )
+        )
     return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)

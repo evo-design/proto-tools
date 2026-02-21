@@ -21,7 +21,6 @@ from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_protein_chars,
-    use_modal_gpu,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
@@ -200,44 +199,25 @@ class BioEmuConfig(StructurePredictionConfig):
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance=None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
-    if use_modal_gpu():
-        import modal
+    logger.debug("Using local venv for BioEmu conformational sampling")
 
-        logger.debug("Using Modal for BioEmu conformational sampling")
-        service = modal.Cls.from_name("bio-programming", "BioEmuService")
-
-        raw_results: List[dict] = []
-        for comp in inputs.complexes:
-            sequence = comp.chains[0].sequence
-            result = service().sample.remote(
-                sequence=sequence,
-                num_samples=config.num_samples,
-                model_name=config.model_name,
-                filter_samples=config.filter_samples,
-                batch_size=config.batch_size,
-                verbose=config.verbose,
-            )
-            raw_results.append(result)
-    else:
-        logger.debug("Using local venv for BioEmu conformational sampling")
-
-        output = ToolInstance.dispatch(
-            "bioemu",
-            {
-                "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
-                "num_samples": config.num_samples,
-                "model_name": config.model_name,
-                "filter_samples": config.filter_samples,
-                "batch_size": config.batch_size,
-                "device": config.device,
-                "output_dir": config.output_dir,
-                "verbose": config.verbose,
-            },
-            instance=instance,
-            verbose=config.verbose,
-            reload_on=type(config).reload_fields(),
-        )
-        raw_results = output["results"]
+    output = ToolInstance.dispatch(
+        "bioemu",
+        {
+            "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
+            "num_samples": config.num_samples,
+            "model_name": config.model_name,
+            "filter_samples": config.filter_samples,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "output_dir": config.output_dir,
+            "verbose": config.verbose,
+        },
+        instance=instance,
+        verbose=config.verbose,
+        reload_on=type(config).reload_fields(),
+    )
+    raw_results = output["results"]
 
     ensembles: List[StructureEnsemble] = []
     total_structures = 0
@@ -258,7 +238,6 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance=None) -> BioE
             "num_complexes": len(inputs.complexes),
             "total_structures": total_structures,
             "model_name": config.model_name,
-            "used_modal": use_modal_gpu(),
         },
     )
 

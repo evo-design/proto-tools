@@ -33,7 +33,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, use_modal_gpu
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 logger = getLogger(__name__)
@@ -286,18 +286,6 @@ class ProtenixConfig(StructurePredictionConfig):
         if self.colabfold_search_config is None:
             self.colabfold_search_config = ColabfoldSearchConfig()
         self.colabfold_search_config.verbose = self.verbose
-        return self
-
-    @model_validator(mode="after")
-    def validate_modal_msa_config(self):
-        """Validate that Modal execution uses remote MSA mode."""
-        if self.use_msa:
-            if use_modal_gpu():
-                if self.colabfold_search_config.search_mode != "remote":
-                    raise ValueError(
-                        "Protenix MSA generation on Modal requires search_mode='remote'. "
-                        "Set colabfold_search_config.search_mode='remote' or use_msa=False."
-                    )
         return self
 
 

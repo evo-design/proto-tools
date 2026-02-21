@@ -14,7 +14,6 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import use_modal_gpu
 from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
@@ -75,80 +74,43 @@ def run_ligandmpnn_sample(
     """
     designed_sequences = []
 
-    if use_modal_gpu():
-        import modal
-
-        LigandMPNNService = modal.Cls.from_name("bio-programming", "LigandMPNNService")
-        service = LigandMPNNService()
-
-        for inp in tqdm(
-            inputs.inputs,
-            desc="LigandMPNN sampling",
-            unit="structure",
-            total=len(inputs.inputs),
-        ):
-            all_seqs, all_metrics = [], []
-            remaining = config.num_sequences_per_structure
-            chunk_idx = 0
-            while remaining > 0:
-                chunk = min(config.batch_size, remaining)
-                result = service.sample.remote(
-                    pdb_structure=inp.structure_pdb,
-                    chain_ids=inp.chain_ids,
-                    batch_size=chunk,
-                    temperature=config.temperature,
-                    fixed_positions=inp.fixed_positions,
-                    excluded_amino_acids=config.excluded_amino_acids,
-                    seed=config.seed + chunk_idx,
-                )
-                all_seqs.extend(result["sequences"])
-                all_metrics.extend(result["metrics"])
-                chunk_idx += 1
-                remaining -= chunk
-            designed_sequences.append(
-                LigandMPNNSequences(
-                    sequences=all_seqs,
-                    ligandmpnn_metrics=all_metrics,
-                )
+    # Local venv execution
+    for inp in tqdm(
+        inputs.inputs,
+        desc="LigandMPNN sampling",
+        unit="structure",
+        total=len(inputs.inputs),
+    ):
+        all_seqs, all_metrics = [], []
+        remaining = config.num_sequences_per_structure
+        chunk_idx = 0
+        while remaining > 0:
+            chunk = min(config.batch_size, remaining)
+            input_dict = {
+                "pdb_contents": inp.structure_pdb,
+                "chain_ids": inp.chain_ids,
+                "batch_size": chunk,
+                "temperature": config.temperature,
+                "fixed_positions": inp.fixed_positions,
+                "excluded_amino_acids": config.excluded_amino_acids,
+                "seed": config.seed + chunk_idx,
+                "device": config.device,
+            }
+            result = ToolInstance.dispatch(
+                "ligandmpnn",
+                input_dict,
+                instance=instance,
+                verbose=config.verbose,
             )
-    else:
-        # Local venv execution
-        for inp in tqdm(
-            inputs.inputs,
-            desc="LigandMPNN sampling",
-            unit="structure",
-            total=len(inputs.inputs),
-        ):
-            all_seqs, all_metrics = [], []
-            remaining = config.num_sequences_per_structure
-            chunk_idx = 0
-            while remaining > 0:
-                chunk = min(config.batch_size, remaining)
-                input_dict = {
-                    "pdb_contents": inp.structure_pdb,
-                    "chain_ids": inp.chain_ids,
-                    "batch_size": chunk,
-                    "temperature": config.temperature,
-                    "fixed_positions": inp.fixed_positions,
-                    "excluded_amino_acids": config.excluded_amino_acids,
-                    "seed": config.seed + chunk_idx,
-                    "device": config.device,
-                }
-                result = ToolInstance.dispatch(
-                    "ligandmpnn",
-                    input_dict,
-                    instance=instance,
-                    verbose=config.verbose,
-                )
-                all_seqs.extend(result["sequences"])
-                all_metrics.extend(result["metrics"])
-                chunk_idx += 1
-                remaining -= chunk
-            designed_sequences.append(
-                LigandMPNNSequences(
-                    sequences=all_seqs,
-                    ligandmpnn_metrics=all_metrics,
-                )
+            all_seqs.extend(result["sequences"])
+            all_metrics.extend(result["metrics"])
+            chunk_idx += 1
+            remaining -= chunk
+        designed_sequences.append(
+            LigandMPNNSequences(
+                sequences=all_seqs,
+                ligandmpnn_metrics=all_metrics,
             )
+        )
 
     return LigandMPNNSampleOutput(designed_sequences=designed_sequences)
