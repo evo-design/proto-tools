@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import re
-import time
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
-from bio_programming_tools.tools.sequence_retrieval import (
+from bio_programming_tools.tools.database_retrieval import (
     SequenceFetchConfig,
     SequenceFetchInput,
-    SequenceFetchResult,
     run_sequence_fetch,
 )
 from bio_programming_tools.tools.tool_registry import ToolRegistry
-import bio_programming_tools.tools.sequence_retrieval.sequence_fetch.sequence_fetch as sf_module
+import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
+from bio_programming_tools.tools.database_retrieval.ncbi_fetch.ncbi_fetch import (
+    _parse_fasta_records,
+)
+from bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
+    _ncbi_gene_term,
+    _ncbi_term,
+    _select_best_record,
+)
 
 
 def test_sequence_fetch_input_normalizes_single_request():
@@ -38,7 +43,6 @@ def test_sequence_fetch_is_registered():
 
     schema = ToolRegistry.get_config_schema("sequence-fetch")
     assert "properties" in schema
-    assert "chunk_size" in schema["properties"]
     assert "request_timeout_seconds" in schema["properties"]
 
 
@@ -46,11 +50,6 @@ def test_sequence_fetch_has_citation():
     citation = ToolRegistry.get_citation("sequence-fetch")
     assert citation is not None
     assert "@article{" in citation
-
-
-def test_sequence_fetch_config_validates_chunk_bounds():
-    with pytest.raises(ValidationError, match="min_chunk_size must be <= max_chunk_size"):
-        SequenceFetchConfig(min_chunk_size=10, max_chunk_size=5)
 
 
 def test_sequence_fetch_rejects_ncrna_as_protein_request():
@@ -72,75 +71,19 @@ def test_sequence_fetch_rejects_ncrna_as_protein_request():
     assert any("TYPE_MISMATCH" in error for error in output.results[0].errors)
 
 
-def test_sequence_fetch_adaptive_chunk_split(monkeypatch):
-    def slow_process(request, request_index, config, session):
-        del config, session
-        time.sleep(0.55)
-        return SequenceFetchResult(
-            request_id=request.request_id or f"request_{request_index}",
-            target_name=request.target_name,
-            organism=request.organism,
-            requested_types=list(request.sequence_types),
-            status="success",
-        )
-
-    monkeypatch.setattr(sf_module, "_process_single_request", slow_process)
-
-    inputs = SequenceFetchInput(
-        requests=[
-            {
-                "request_id": "r1",
-                "target_name": "x",
-                "organism": "org",
-                "sequence_types": ["protein"],
-            },
-            {
-                "request_id": "r2",
-                "target_name": "y",
-                "organism": "org",
-                "sequence_types": ["protein"],
-            },
-            {
-                "request_id": "r3",
-                "target_name": "z",
-                "organism": "org",
-                "sequence_types": ["protein"],
-            },
-        ]
-    )
-
-    config = SequenceFetchConfig(
-        chunk_size=3,
-        max_chunk_size=3,
-        min_chunk_size=1,
-        chunk_timeout_seconds=1,
-        max_chunk_retries=0,
-        backoff_seconds=0.0,
-    )
-
-    output = run_sequence_fetch(inputs, config)
-
-    assert output.split_events >= 1
-    assert output.num_requests == 3
-    assert output.num_success == 3
-
 def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
     """PDB FASTA with DNA chain first must still return protein chain."""
 
-    # Simulate PDB FASTA where DNA chain appears before protein chain
-    fake_fasta = (
-        ">1LBG_1|Chain A|Lac operator DNA|Escherichia coli\n"
-        "GAATTGTGAGCGCTCACAATT\n"
-        ">1LBG_2|Chain B|Lac repressor|Escherichia coli\n"
-        "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNR\n"
-    )
+    fake_records = [
+        ("1LBG_1|Chain A|Lac operator DNA|Escherichia coli", "GAATTGTGAGCGCTCACAATT"),
+        ("1LBG_2|Chain B|Lac repressor|Escherichia coli", "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNR"),
+    ]
 
-    def fake_request_text(session, method, url, config, source_label, params=None):
-        return fake_fasta
+    def fake_fetch_pdb_fasta(pdb_id, config, session):
+        return fake_records
 
-    monkeypatch.setattr(sf_module, "_request_text", fake_request_text)
+    monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", fake_fetch_pdb_fasta)
 
-    # Bypass the UniProt/NCBI paths — go straight to PDB path
     inputs = SequenceFetchInput(
         requests=[
             {
@@ -161,25 +104,22 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
 
     seq = item.fetched_sequences[0]
     assert seq.sequence_type == "protein"
-    # Must be the protein chain, not the DNA chain
     assert seq.sequence.startswith("MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNR")
     assert "GAATTGTGAGCGCTCACAATT" not in seq.sequence
 
 
 def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
-    """PDB FASTA with only DNA/RNA chains must raise NotFoundError."""
+    """PDB FASTA with only DNA/RNA chains must report NOT_FOUND."""
 
-    fake_fasta = (
-        ">1ABC_1|Chain A|DNA|organism\n"
-        "GAATTGTGAGCGCTCACAATT\n"
-        ">1ABC_2|Chain B|RNA|organism\n"
-        "GAUUCGAUUCGAUUCG\n"
-    )
+    fake_records = [
+        ("1ABC_1|Chain A|DNA|organism", "GAATTGTGAGCGCTCACAATT"),
+        ("1ABC_2|Chain B|RNA|organism", "GAUUCGAUUCGAUUCG"),
+    ]
 
-    def fake_request_text(session, method, url, config, source_label, params=None):
-        return fake_fasta
+    def fake_fetch_pdb_fasta(pdb_id, config, session):
+        return fake_records
 
-    monkeypatch.setattr(sf_module, "_request_text", fake_request_text)
+    monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", fake_fetch_pdb_fasta)
 
     inputs = SequenceFetchInput(
         requests=[
@@ -197,7 +137,43 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
     item = output.results[0]
 
     assert item.status == "failed"
-    assert any("no protein chains" in e for e in item.errors)
+    assert any("NOT_FOUND" in e for e in item.errors)
+
+
+def test_select_best_record_prefers_name_match():
+    records = _parse_fasta_records(
+        ">rec1 unrelated protein\nAAAA\n"
+        ">rec2 lacI repressor\nMMMM\n"
+    )
+    selected = _select_best_record(records, "lacI")
+    assert selected is not None
+    assert selected.sequence == "MMMM"
+
+
+def test_select_best_record_fallback():
+    records = _parse_fasta_records(
+        ">rec1 some protein\nAAAA\n"
+        ">rec2 another protein\nMMMM\n"
+    )
+    selected = _select_best_record(records, "noMatch")
+    assert selected is not None
+    assert selected.sequence == "AAAA"
+
+
+def test_select_best_record_empty():
+    assert _select_best_record([], "test") is None
+
+
+def test_ncbi_term_format():
+    term = _ncbi_term("lacI", "Escherichia coli")
+    assert '"lacI"[Gene]' in term
+    assert '"Escherichia coli"[Organism]' in term
+
+
+def test_ncbi_gene_term_format():
+    term = _ncbi_gene_term("TP53", "Homo sapiens")
+    assert '"TP53"[Gene Name]' in term
+    assert '"Homo sapiens"[Organism]' in term
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +286,7 @@ def test_sequence_fetch_dna_genomic_by_name():
         ]
     )
 
-    output = run_sequence_fetch(inputs, SequenceFetchConfig(chunk_timeout_seconds=45))
+    output = run_sequence_fetch(inputs, SequenceFetchConfig())
     item = output.results[0]
 
     assert item.status in {"success", "warning"}
@@ -362,7 +338,7 @@ def test_sequence_fetch_premrna_minus_strand_no_double_rc():
         ]
     )
 
-    config = SequenceFetchConfig(chunk_timeout_seconds=45)
+    config = SequenceFetchConfig()
 
     genomic_output = run_sequence_fetch(genomic_inputs, config)
     premrna_output = run_sequence_fetch(premrna_inputs, config)

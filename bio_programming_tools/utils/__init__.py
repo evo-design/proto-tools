@@ -5,6 +5,7 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 """
 from .base_config import BaseConfig, ConfigField
 from .device import determine_visible_devices, number_of_available_gpus
+from .http_session import build_http_session
 from .system_info import (
     capture_parent_env,
     capture_subprocess_env,
@@ -86,6 +87,8 @@ __all__ = [
     # Device
     "determine_visible_devices",
     "number_of_available_gpus",
+    # HTTP
+    "build_http_session",
     # Logging
     "get_logger",
     "setup_logging",

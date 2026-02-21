@@ -54,6 +54,15 @@
 						]
 					},
 					{
+						"group": "Database Retrieval",
+						"pages": [
+							"tools/database-retrieval/ncbi-fetch",
+							"tools/database-retrieval/pdb-fetch",
+							"tools/database-retrieval/sequence-fetch",
+							"tools/database-retrieval/uniprot-fetch"
+						]
+					},
+					{
 						"group": "Gene Annotation",
 						"pages": [
 							"tools/gene-annotation/blast",
@@ -95,12 +104,6 @@
 						"pages": [
 							"tools/sequence-alignment/colabfold-search",
 							"tools/sequence-alignment/mafft"
-						]
-					},
-					{
-						"group": "Sequence Retrieval",
-						"pages": [
-							"tools/sequence-retrieval/sequence-fetch"
 						]
 					},
 					{
