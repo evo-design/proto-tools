@@ -192,16 +192,30 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
     run_segmasker,
 )
 
-# Sequence retrieval tools
-from .sequence_retrieval import (
+# Database retrieval tools
+from .database_retrieval import (
     FetchedSequence,
     FetchedStructure,
+    NCBIFastaRecord,
+    NCBIFetchConfig,
+    NCBIFetchInput,
+    NCBIFetchOutput,
+    PdbChain,
+    PdbFetchConfig,
+    PdbFetchInput,
+    PdbFetchOutput,
     SequenceFetchConfig,
     SequenceFetchInput,
     SequenceFetchOutput,
     SequenceFetchRequest,
     SequenceFetchResult,
+    UniProtFetchConfig,
+    UniProtFetchInput,
+    UniProtFetchOutput,
+    run_ncbi_fetch,
+    run_pdb_fetch,
     run_sequence_fetch,
+    run_uniprot_fetch,
 )
 
 # Masked model tools
@@ -503,7 +517,24 @@ __all__ = [
     "AlphaGenomeScoreISMConfig",
     "AlphaGenomeScoreISMOutput",
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",
-    # Sequence retrieval
+    # Database retrieval - NCBI Fetch
+    "run_ncbi_fetch",
+    "NCBIFetchInput",
+    "NCBIFetchConfig",
+    "NCBIFastaRecord",
+    "NCBIFetchOutput",
+    # Database retrieval - UniProt Fetch
+    "run_uniprot_fetch",
+    "UniProtFetchInput",
+    "UniProtFetchConfig",
+    "UniProtFetchOutput",
+    # Database retrieval - PDB Fetch
+    "run_pdb_fetch",
+    "PdbFetchInput",
+    "PdbFetchConfig",
+    "PdbChain",
+    "PdbFetchOutput",
+    # Database retrieval - Sequence Fetch (orchestrator)
     "run_sequence_fetch",
     "SequenceFetchRequest",
     "SequenceFetchInput",
