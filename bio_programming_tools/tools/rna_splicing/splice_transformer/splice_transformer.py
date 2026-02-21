@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 CONTEXT_LENGTH = 4000
 TARGET_LENGTH = 1000
-TISSUE_INDEX_OFFSET = 3  # Offset of tissue predictions in SpliceTransformer output.
 
 
 class SpliceTransformerType(Enum):
@@ -33,29 +32,45 @@ class SpliceTransformerType(Enum):
     DONOR = 2
 
 
-class SpliceTransformerTissue(Enum):
-    AVERAGE = -1
-    ADIPOSE_TISSUE = 0
-    BLOOD = 1
-    BLOOD_VESSEL = 2
-    BRAIN = 3
-    COLON = 4
-    HEART = 5
-    KIDNEY = 6
-    LIVER = 7
-    LUNG = 8
-    MUSCLE = 9
-    NERVE = 10
-    SMALL_INTESTINE = 11
-    SKIN = 12
-    SPLEEN = 13
-    STOMACH = 14
+SpliceTransformerTissue = Literal[
+    "AVERAGE",
+    "ADIPOSE_TISSUE",
+    "BLOOD",
+    "BLOOD_VESSEL",
+    "BRAIN",
+    "COLON",
+    "HEART",
+    "KIDNEY",
+    "LIVER",
+    "LUNG",
+    "MUSCLE",
+    "NERVE",
+    "SMALL_INTESTINE",
+    "SKIN",
+    "SPLEEN",
+    "STOMACH",
+]
 
-    @classmethod
-    def as_literal(cls) -> Literal[str]:
-        """Generate Literal type from enum member names."""
-        names = tuple(member.name for member in cls)
-        return Literal[names]
+# Prediction channels:
+# [0: neither, 1: acceptor, 2: donor, 3+: tissue-specific channels].
+SPLICE_TISSUE_CHANNEL_INDEX: dict[SpliceTransformerTissue, int | None] = {
+    "AVERAGE": None,
+    "ADIPOSE_TISSUE": 3,
+    "BLOOD": 4,
+    "BLOOD_VESSEL": 5,
+    "BRAIN": 6,
+    "COLON": 7,
+    "HEART": 8,
+    "KIDNEY": 9,
+    "LIVER": 10,
+    "LUNG": 11,
+    "MUSCLE": 12,
+    "NERVE": 13,
+    "SMALL_INTESTINE": 14,
+    "SKIN": 15,
+    "SPLEEN": 16,
+    "STOMACH": 17,
+}
 
 
 # ============================================================================

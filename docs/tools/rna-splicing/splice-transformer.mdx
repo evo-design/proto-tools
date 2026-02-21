@@ -207,7 +207,7 @@ print(f"Donor sites: {donor_sites}")
 ```python python icon="python"
 from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer, SpliceTransformerInput, SpliceTransformerConfig,
-    SpliceTransformerTissue, TISSUE_INDEX_OFFSET
+    SPLICE_TISSUE_CHANNEL_INDEX
 )
 import numpy as np
 
@@ -222,11 +222,11 @@ result = run_splice_transformer(inputs, config)
 pred = result.prediction[0]
 
 # Get brain-specific splicing
-brain_idx = SpliceTransformerTissue.BRAIN.value + TISSUE_INDEX_OFFSET
+brain_idx = SPLICE_TISSUE_CHANNEL_INDEX["BRAIN"]
 brain_splicing = pred[:, brain_idx]
 
 # Get liver-specific splicing
-liver_idx = SpliceTransformerTissue.LIVER.value + TISSUE_INDEX_OFFSET
+liver_idx = SPLICE_TISSUE_CHANNEL_INDEX["LIVER"]
 liver_splicing = pred[:, liver_idx]
 
 # Find positions with tissue-specific difference

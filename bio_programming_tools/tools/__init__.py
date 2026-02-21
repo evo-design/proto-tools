@@ -233,8 +233,8 @@ from .masked_models import (  # ESM2; ESM3
 # RNA splicing tools
 from .rna_splicing import (
     CONTEXT_LENGTH,
+    SPLICE_TISSUE_CHANNEL_INDEX,
     TARGET_LENGTH,
-    TISSUE_INDEX_OFFSET,
     SpliceTransformerConfig,
     SpliceTransformerInput,
     SpliceTransformerOutput,
@@ -586,6 +586,6 @@ __all__ = [
     "SpliceTransformerType",
     "SpliceTransformerTissue",
     "CONTEXT_LENGTH",
+    "SPLICE_TISSUE_CHANNEL_INDEX",
     "TARGET_LENGTH",
-    "TISSUE_INDEX_OFFSET",
 ]

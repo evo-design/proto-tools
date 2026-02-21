@@ -1,7 +1,7 @@
 from .splice_transformer import (
     CONTEXT_LENGTH,
+    SPLICE_TISSUE_CHANNEL_INDEX,
     TARGET_LENGTH,
-    TISSUE_INDEX_OFFSET,
     SpliceTransformerConfig,
     SpliceTransformerInput,
     SpliceTransformerOutput,
@@ -12,8 +12,8 @@ from .splice_transformer import (
 
 __all__ = [
     "CONTEXT_LENGTH",
+    "SPLICE_TISSUE_CHANNEL_INDEX",
     "TARGET_LENGTH",
-    "TISSUE_INDEX_OFFSET",
     "SpliceTransformerType",
     "SpliceTransformerTissue",
     "SpliceTransformerInput",
