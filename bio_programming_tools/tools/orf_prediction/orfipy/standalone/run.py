@@ -110,9 +110,12 @@ def run_orfipy(input_data: dict) -> dict:
         nt_path = temp_dir / "orfipy_nt.fna"
 
         orfipy_bin = str(Path(sys.prefix) / "bin" / "orfipy")
+        outdir = temp_dir / "orfipy_out"
         cmd = [
             orfipy_bin,
             str(input_fasta),
+            "--outdir",
+            str(outdir),
             "--procs",
             str(config.get("threads", 4)),
             "--start",

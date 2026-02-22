@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import torch
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Suppress vortex library INFO logs
 logging.getLogger('vortex').setLevel(logging.ERROR)
 logging.getLogger('StripedHyena').setLevel(logging.ERROR)
+
 
 # Evo2 uses 1 as padding token: https://github.com/Zymrael/vortex/blob/3e2511427794d02f46e464bc34a8895c9b911e76/vortex/model/tokenizer.py#L140
 EVO2_PAD_TOKEN_ID = 1
@@ -324,6 +326,7 @@ class Evo2Model:
             logger.info(f"Loading Evo2: {self.model_checkpoint} on {device}")
 
         from evo2 import Evo2
+        _cleanup_vortex_debug_log()
         self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
         self.tokenizer = self.model.tokenizer
         self.model.model = self.model.model.to(device).eval()
@@ -511,6 +514,23 @@ def dispatch(input_dict: dict) -> dict:
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+def _cleanup_vortex_debug_log():
+    """Remove activations_debug.log created by vortex.logging at import time.
+
+    The vortex library unconditionally creates a FileHandler for
+    'activations_debug.log' in the CWD when vortex.logging is imported.
+    Remove the handler and delete the empty file.
+    """
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        if isinstance(handler, logging.FileHandler) and handler.baseFilename.endswith("activations_debug.log"):
+            root.removeHandler(handler)
+            handler.close()
+    debug_log = Path("activations_debug.log")
+    if debug_log.exists():
+        debug_log.unlink()
 
 
 if __name__ == "__main__":
