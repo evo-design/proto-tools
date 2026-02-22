@@ -7,45 +7,16 @@ echo "Setting up AlphaGenome standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-DRIVER_MAJOR=""
-CUDA_MAJOR=""
-if command -v nvidia-smi &> /dev/null; then
-    DRIVER_MAJOR=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 | cut -d. -f1 || true)
-    CUDA_MAJOR=$(nvidia-smi | sed -n 's/.*CUDA Version: \([0-9][0-9]*\)\..*/\1/p' | head -n1 || true)
-fi
+# Use hardware-aware JAX spec from centralized detection
+# (injected by bio_programming_tools.utils.compute_deps)
+# Override with ALPHAGENOME_JAX_VARIANT/JAX_SPEC env vars if needed
+JAX_VARIANT="${ALPHAGENOME_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
+JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
 
-JAX_VARIANT="${ALPHAGENOME_JAX_VARIANT:-}"
-if [ -z "$JAX_VARIANT" ] && [ -n "$CUDA_MAJOR" ]; then
-    if [ "$CUDA_MAJOR" -ge 13 ]; then
-        JAX_VARIANT="cuda13"
-    else
-        JAX_VARIANT="cuda12"
-    fi
-fi
-if [ -n "$JAX_VARIANT" ] && [ "$JAX_VARIANT" != "cuda12" ] && [ "$JAX_VARIANT" != "cuda13" ]; then
+# Validate JAX variant if user override is provided
+if [ "${ALPHAGENOME_JAX_VARIANT:-}" != "" ] && [ "$JAX_VARIANT" != "cuda12" ] && [ "$JAX_VARIANT" != "cuda13" ]; then
     echo "ERROR: ALPHAGENOME_JAX_VARIANT must be one of: cuda12, cuda13"
     exit 1
-fi
-
-JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-}"
-if [ -z "$JAX_SPEC" ]; then
-    if [ -n "$JAX_VARIANT" ]; then
-        if [ -n "$DRIVER_MAJOR" ]; then
-            if [ "$DRIVER_MAJOR" -ge 570 ]; then
-                JAX_SPEC="jax[${JAX_VARIANT}]>=0.9,<1"
-            elif [ "$DRIVER_MAJOR" -ge 550 ]; then
-                JAX_SPEC="jax[${JAX_VARIANT}]>=0.6,<0.9"
-            elif [ "$DRIVER_MAJOR" -ge 535 ]; then
-                JAX_SPEC="jax[${JAX_VARIANT}]>=0.5,<0.6"
-            else
-                JAX_SPEC="jax[${JAX_VARIANT}]>=0.4.25,<0.5"
-            fi
-        else
-            JAX_SPEC="jax[${JAX_VARIANT}]>=0.5,<1"
-        fi
-    else
-        JAX_SPEC="jax>=0.5,<1"
-    fi
 fi
 
 USE_LOCAL_CUDA_ENV=$(echo "${ALPHAGENOME_USE_LOCAL_CUDA_ENV:-false}" | tr '[:upper:]' '[:lower:]')
@@ -69,8 +40,9 @@ if [ "$USE_LOCAL_CUDA_ENV" = "true" ]; then
         CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_VERSION}"
     fi
     if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
-        if [ -n "$CUDA_MAJOR" ]; then
-            CUDA_TOOLKIT_CONSTRAINT="${CUDA_MAJOR}.*"
+        # Use centrally detected CUDA version
+        if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
+            CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
         else
             CUDA_TOOLKIT_CONSTRAINT="12.*"
         fi
@@ -85,8 +57,9 @@ if [ "$USE_LOCAL_CUDA_ENV" = "true" ]; then
     export LD_LIBRARY_PATH="${CUDA_HOME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 fi
 
-echo "Detected driver=${DRIVER_MAJOR:-unknown} cuda=${CUDA_MAJOR:-unknown}"
-echo "Installing JAX using spec: ${JAX_SPEC}"
+echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
+echo "Detected driver: ${DETECTED_DRIVER_VERSION:-unknown}, CUDA: ${DETECTED_CUDA_VERSION:-unknown}"
+echo "Installing JAX: ${JAX_SPEC}"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt

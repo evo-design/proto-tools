@@ -3,82 +3,24 @@ set -euo pipefail
 
 echo "Setting up Protenix standalone environment..."
 
-# Detect architecture for platform-specific paths
-ARCH=$(uname -m)
-if [ "$ARCH" = "aarch64" ]; then
-    MAMBA_PLATFORM="linux-aarch64"
-    CUDA_TARGET="aarch64-linux"
-elif [ "$ARCH" = "x86_64" ]; then
-    MAMBA_PLATFORM="linux-64"
-    CUDA_TARGET="x86_64-linux"
-else
-    echo "ERROR: Unsupported architecture: $ARCH"
-    exit 1
-fi
-
 echo "Installing uv package manager..."
 pip install uv
 
-# Install micromamba for managing CUDA toolkit
-echo "Installing micromamba for ${ARCH}..."
-MAMBA_ROOT="$VENV_PATH/micromamba"
-mkdir -p "$MAMBA_ROOT"
-
-# Download and install micromamba
-if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
-    echo "Downloading micromamba..."
-    if ! curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" | tar -xvj -C "$MAMBA_ROOT" bin/micromamba; then
-        echo "ERROR: Failed to download or extract micromamba from https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest"
-        echo "Please check your internet connection and try again."
-        exit 1
-    fi
-fi
-
-# Verify micromamba binary exists and is executable
-if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
-    echo "ERROR: micromamba binary not found at $MAMBA_ROOT/bin/micromamba after installation attempt"
-    exit 1
-fi
-
-if [ ! -x "$MAMBA_ROOT/bin/micromamba" ]; then
-    echo "WARNING: micromamba binary is not executable, attempting to fix permissions..."
-    chmod +x "$MAMBA_ROOT/bin/micromamba" || {
-        echo "ERROR: Failed to make micromamba executable"
-        exit 1
-    }
-fi
-
-# Initialize micromamba for this session
-export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
-if ! eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"; then
-    echo "ERROR: Failed to initialize micromamba shell hook"
-    exit 1
-fi
-
-# Verify micromamba command is now available
-if ! command -v micromamba &> /dev/null; then
-    echo "ERROR: micromamba command not found in PATH after initialization"
-    echo "This may indicate an issue with the shell hook evaluation"
-    exit 1
-fi
-
-echo "✓ micromamba successfully installed and initialized"
-
-# Auto-detect CUDA version for toolkit installation
-CUDA_TOOLKIT_VERSION="12.1"
-if command -v nvidia-smi &> /dev/null; then
-    DETECTED_CUDA_MAJOR=$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9]+' || true)
-    if [ -n "$DETECTED_CUDA_MAJOR" ] && [ "$DETECTED_CUDA_MAJOR" -ge 13 ]; then
-        CUDA_TOOLKIT_VERSION="12.8"
-        echo "Detected CUDA ${DETECTED_CUDA_MAJOR} — using CUDA toolkit ${CUDA_TOOLKIT_VERSION} for compatibility"
-    else
-        echo "Detected CUDA ${DETECTED_CUDA_MAJOR:-unknown} — using CUDA toolkit ${CUDA_TOOLKIT_VERSION}"
-    fi
+# Determine CUDA toolkit version to install for JIT compilation.
+# DETECTED_CUDA_VERSION is injected by compute_deps.py (e.g., "12" or "13").
+# Cap at 12.8 for CUDA 13+ since toolkit 13 is too new for PyTorch JIT.
+DETECTED_CUDA_MAJOR="${DETECTED_CUDA_VERSION:-12}"
+if [ "$DETECTED_CUDA_MAJOR" -ge 13 ] 2>/dev/null; then
+    CUDA_TOOLKIT_VERSION="12.8"
+    echo "Detected CUDA ${DETECTED_CUDA_MAJOR} — using CUDA toolkit ${CUDA_TOOLKIT_VERSION} for compatibility"
+else
+    CUDA_TOOLKIT_VERSION="${DETECTED_CUDA_MAJOR}.1"
+    echo "Detected CUDA ${DETECTED_CUDA_MAJOR} — using CUDA toolkit ${CUDA_TOOLKIT_VERSION}"
 fi
 
 # Install CUDA toolkit locally in the venv via micromamba
 echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
-if ! micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}"; then
@@ -94,15 +36,26 @@ fi
 export CUDA_HOME="$VENV_PATH/cuda_env"
 echo "Using local CUDA installation at: $CUDA_HOME"
 
-# Create symlinks for cuda/std headers (from targets/ to include/)
-# This is needed because PyTorch's cpp_extension only looks in CUDA_HOME/include
+# Auto-detect CUDA target directory (e.g., x86_64-linux, aarch64-linux, sbsa-linux)
+# The conda CUDA toolkit uses different target names depending on version and arch.
+CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
+if [ -z "$CUDA_TARGET" ]; then
+    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    exit 1
+fi
+echo "Detected CUDA target: $CUDA_TARGET"
+
+# Symlink all CUDA headers from targets/ into include/
+# PyTorch's cpp_extension only looks in CUDA_HOME/include for JIT compilation
 CUDA_TARGETS_DIR="$CUDA_HOME/targets/${CUDA_TARGET}/include"
 if [ -d "$CUDA_TARGETS_DIR" ]; then
-    for header_dir in cuda thrust cub; do
-        if [ -d "$CUDA_TARGETS_DIR/$header_dir" ] && [ ! -e "$CUDA_HOME/include/$header_dir" ]; then
-            ln -s "$CUDA_TARGETS_DIR/$header_dir" "$CUDA_HOME/include/$header_dir"
+    for item in "$CUDA_TARGETS_DIR"/*; do
+        name=$(basename "$item")
+        if [ ! -e "$CUDA_HOME/include/$name" ]; then
+            ln -s "$item" "$CUDA_HOME/include/$name"
         fi
     done
+    echo "Symlinked CUDA headers from $CUDA_TARGETS_DIR"
 fi
 
 # Fix broken libcudart.so symlink (micromamba may install different version than requested)
@@ -134,12 +87,48 @@ echo "Added CUDA headers from: $CUDA_INCLUDE_PATH"
 echo "Added CUDA libraries from: $CUDA_LIB_PATH"
 echo "NVCC location: $(which nvcc)"
 
-echo "Installing protenix with --no-build-isolation flag..."
-uv pip install --no-build-isolation protenix --torch-backend=auto
+# Install protenix + torch in a single resolve (like main).
+# --torch-backend=auto selects the right CUDA torch.
+echo "Installing protenix..."
+uv pip install "protenix" --torch-backend=auto
+
+# Locate site-packages for patching and sitecustomize.py
+SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+
+# Patch protenix's torch_ext_compile.py to use the current GPU's architecture
+# instead of hardcoded sm_70/sm_80. Protenix upstream overrides TORCH_CUDA_ARCH_LIST
+# and hardcodes -gencode flags, so our env var alone is insufficient.
+# TORCH_CUDA_ARCH_LIST is injected by compute_deps.py (e.g., "12.0").
+COMPILE_PY="$SITE_PACKAGES/protenix/model/layer_norm/torch_ext_compile.py"
+GPU_ARCH="${TORCH_CUDA_ARCH_LIST:-}"
+if [ -f "$COMPILE_PY" ] && [ -n "$GPU_ARCH" ]; then
+    GPU_SM="sm_${GPU_ARCH//./}"  # e.g., "12.0" -> "sm_120"
+    GPU_COMPUTE="compute_${GPU_ARCH//./}"
+    echo "Patching $COMPILE_PY for $GPU_SM (arch $GPU_ARCH)"
+    # Replace the hardcoded TORCH_CUDA_ARCH_LIST
+    sed -i "s|os.environ\[\"TORCH_CUDA_ARCH_LIST\"\] = .*|os.environ[\"TORCH_CUDA_ARCH_LIST\"] = \"$GPU_ARCH\"|" "$COMPILE_PY"
+    # Replace hardcoded -gencode flags with the detected arch
+    python -c "
+import re
+
+with open('$COMPILE_PY', 'r') as f:
+    content = f.read()
+
+# Replace all -gencode flag pairs with a single one for the detected arch
+content = re.sub(
+    r'(\"-gencode\",\s*\n\s*\"arch=compute_\d+,code=sm_\d+\",\s*\n\s*)+',
+    '\"-gencode\",\n            \"arch=$GPU_COMPUTE,code=$GPU_SM\",\n            ',
+    content,
+)
+
+with open('$COMPILE_PY', 'w') as f:
+    f.write(content)
+"
+    echo "Patched torch_ext_compile.py for $GPU_SM"
+fi
 
 # Create a sitecustomize.py to set CUDA environment variables automatically when Python starts
 # This ensures the environment is configured before any imports happen
-SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
 cat > "$SITE_PACKAGES/sitecustomize.py" <<SITECUSTOMIZE
 # Auto-generated CUDA environment setup for Protenix venv
 import os

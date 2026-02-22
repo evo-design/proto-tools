@@ -364,6 +364,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance=No
         },
         instance=instance,
         verbose=False,
+        timeout=config.timeout,
     )
 
     # Reconstruct ORF objects from returned dicts

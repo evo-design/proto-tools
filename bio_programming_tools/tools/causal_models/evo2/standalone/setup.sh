@@ -10,7 +10,6 @@ if [ "$ARCH" = "aarch64" ]; then
 fi
 
 MAMBA_PLATFORM="linux-64"
-CUDA_TARGET="x86_64-linux"
 
 echo "Setting up Evo2 standalone environment..."
 
@@ -21,31 +20,17 @@ echo ""
 echo "Installing uv package manager..."
 pip install uv
 
+echo "Clearing package caches for ABI-sensitive dependencies..."
+uv cache clean torch 2>/dev/null || true
+uv cache clean flash-attn 2>/dev/null || true
+uv cache clean transformer-engine 2>/dev/null || true
+
 # ============================================================================
-# Install micromamba for managing CUDA toolkit + cuDNN
+# Install CUDA toolkit + cuDNN via micromamba
+# Micromamba is provided via $MAMBA_BIN environment variable
 # ============================================================================
-echo "Installing micromamba..."
-MAMBA_ROOT="$VENV_PATH/micromamba"
-mkdir -p "$MAMBA_ROOT"
-
-if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
-    echo "Downloading micromamba..."
-    if ! curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" \
-        | tar -xvj -C "$MAMBA_ROOT" bin/micromamba; then
-        echo "ERROR: Failed to download or extract micromamba"
-        exit 1
-    fi
-fi
-
-if [ ! -x "$MAMBA_ROOT/bin/micromamba" ]; then
-    chmod +x "$MAMBA_ROOT/bin/micromamba"
-fi
-
-export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
-eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"
-
 echo "Installing CUDA toolkit and cuDNN via micromamba..."
-micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+"$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     cuda-toolkit \
     cuda-nvcc \
     cuda-cudart-dev \
@@ -55,16 +40,26 @@ micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
 export CUDA_HOME="$VENV_PATH/cuda_env"
 echo "Using local CUDA installation at: $CUDA_HOME"
 
+# Auto-detect CUDA target directory (e.g., x86_64-linux, aarch64-linux, sbsa-linux)
+CUDA_TARGET=$(ls "$CUDA_HOME/targets/" 2>/dev/null | head -1)
+if [ -z "$CUDA_TARGET" ]; then
+    echo "ERROR: No CUDA target directory found in $CUDA_HOME/targets/"
+    exit 1
+fi
+echo "Detected CUDA target: $CUDA_TARGET"
+
 # ============================================================================
 # Create header symlinks for PyTorch's cpp_extension and transformer-engine
 # ============================================================================
 CUDA_TARGETS_DIR="$CUDA_HOME/targets/${CUDA_TARGET}/include"
 if [ -d "$CUDA_TARGETS_DIR" ]; then
-    for header_dir in cuda thrust cub; do
-        if [ -d "$CUDA_TARGETS_DIR/$header_dir" ] && [ ! -e "$CUDA_HOME/include/$header_dir" ]; then
-            ln -s "$CUDA_TARGETS_DIR/$header_dir" "$CUDA_HOME/include/$header_dir"
+    for item in "$CUDA_TARGETS_DIR"/*; do
+        name=$(basename "$item")
+        if [ ! -e "$CUDA_HOME/include/$name" ]; then
+            ln -s "$item" "$CUDA_HOME/include/$name"
         fi
     done
+    echo "Symlinked CUDA headers from $CUDA_TARGETS_DIR"
 fi
 
 # nvtx3 headers may be installed under nsight-compute; symlink to standard include path
@@ -101,14 +96,22 @@ echo "NVCC: $(which nvcc) ($(nvcc --version | tail -1))"
 # Install Python packages
 # ============================================================================
 echo "Installing torch..."
-uv pip install torch==2.6.0 --torch-backend=auto
+uv pip install torch==2.6.0 --torch-backend=auto --refresh
 
 echo "Installing build dependencies..."
 uv pip install psutil ninja packaging setuptools wheel numpy
 
 echo "Installing flash-attn..."
 # flash-attn's build step imports torch, so disable build isolation.
-uv pip install --no-build-isolation flash-attn==2.8.3
+uv pip install --no-build-isolation flash-attn==2.8.3 --refresh
+
+# Validate flash-attn ABI compatibility — check CUDA kernels actually load.
+# Test the C++ extension import that vortex uses, not just the Python wrapper.
+if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then
+    echo "flash-attn wheel has ABI mismatch (flash_attn_2_cuda import failed), rebuilding from source..."
+    echo "WARNING: Source builds can take 30+ minutes depending on hardware."
+    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==2.8.3
+fi
 
 echo "Installing transformer-engine..."
 # transformer-engine's build step imports torch, so disable build isolation.
@@ -119,13 +122,14 @@ echo "Installing transformer-engine..."
 # the cached sdist source. A subsequent build for a different Python version
 # would reuse the dirty cache and fail with "No module named 'build_tools'".
 uv cache clean transformer-engine-torch
-uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0"
+uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0" --refresh
 
 echo "Installing vortex..."
 uv pip install vtx
 
 echo "Installing dependencies from requirements.txt..."
-uv pip install -r requirements.txt --torch-backend=auto
+# Constrain torch to the pinned version to prevent evo2 package from upgrading it
+uv pip install -r requirements.txt --constraint <(echo "torch==2.6.0")
 
 echo "Upgrading triton..."
 # torch 2.6.0 pins triton==3.2.0, which has a PY_SSIZE_T_CLEAN bug causing

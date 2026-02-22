@@ -7,9 +7,11 @@ echo "Setting up ESMFold standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-# Use --torch-backend=auto to automatically detect GPU and install
-# the correct PyTorch build (CUDA-enabled or CPU-only).
+# Install hardware-aware PyTorch version (from centralized detection)
+echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+
 echo "Installing remaining dependencies..."
-uv pip install torch transformers biopython --torch-backend=auto
+uv pip install transformers biopython
 
 echo "ESMFold setup complete!"

@@ -11,7 +11,8 @@ __pycache__/
 **/__pycache__/
 .ipynb_checkpoints/
 data/
-*.venvs
+tool_envs
+.micromamba
 *.hmm
 *mini_mmseqs_db
 

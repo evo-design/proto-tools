@@ -217,6 +217,7 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance=None) -> Borz
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

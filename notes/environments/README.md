@@ -22,6 +22,26 @@ The `--env-report` flag:
 4. Captures parent process and subprocess environment variables
 5. Generates a Markdown report in this directory
 
+## Marking Tests for Reports
+
+Mark one smoke test per tool with `@pytest.mark.include_in_env_report`:
+
+```python
+@pytest.mark.include_in_env_report
+def test_my_tool_basic():
+    ...
+```
+
+For tools where the test file name doesn't match the tool name, or where auto-detection fails, you can explicitly specify the tool name and category:
+
+```python
+@pytest.mark.include_in_env_report(tool="my_tool", category="my_category")
+def test_my_tool_basic():
+    ...
+```
+
+Categories should match the directory structure in `bio_programming_tools/tools/` (e.g., `sequence_scoring`, `gene_annotation`, `structure_prediction`, etc.).
+
 ## Report Naming
 
 Reports are named: `{platform_id}.md`

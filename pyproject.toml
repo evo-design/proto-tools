@@ -22,6 +22,7 @@ dependencies = [
     # Scientific computing
     "numpy>=1.24.0",
     "pandas>=2.0.0",
+    "pyarrow",  # Required for pandas parquet support (chai1 MSA conversion)
     "scipy>=1.10.0",
 
     # Bioinformatics
@@ -108,7 +109,7 @@ markers = [
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
     "only_chimera: Test only runs on Chimera cluster (arc-slurm)",
-    "include_in_env_report: Include test in --env-report (one smoke test per tool)",
+    "include_in_env_report: Include test in --env-report (one smoke test per tool). Accepts optional kwargs: tool='tool_name', category='category_name'",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -129,7 +130,7 @@ extend-exclude = '''
   | \.mypy_cache
   | \.tox
   | \.venv
-  | \.venvs
+  | tool_envs
   | build
   | dist
 )/
@@ -144,8 +145,8 @@ known_first_party = ["bio_programming_tools"]
 [tool.flake8]
 select = ["F401", "F841"]
 exclude = [
-    ".venvs",
-    "*/.venvs",
+    "tool_envs",
+    "*/tool_envs",
     "__pycache__",
     ".git",
     "build",

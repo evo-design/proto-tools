@@ -17,11 +17,25 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 
+def _cuequivariance_available() -> bool:
+    """Check if cuequivariance kernels are installed."""
+    try:
+        import cuequivariance_ops_torch_cu12  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def validate_checkpoint(checkpoint_path: Path) -> bool:
     """Validate that a PyTorch checkpoint file is not corrupted.
 
-    PyTorch checkpoint files are ZIP archives. This performs a lightweight
-    validation by checking the ZIP file structure without loading the full model.
+    PyTorch checkpoint files are ZIP archives. This uses PyTorch's own
+    checkpoint loading to detect corruption that generic ZIP validation might miss
+    (e.g., "failed finding central directory" errors from PytorchStreamReader).
+
+    Note: This loads the checkpoint into memory which may take 10-30 seconds for
+    large models, but ensures thorough validation.
 
     Args:
         checkpoint_path: Path to the checkpoint file to validate
@@ -30,20 +44,28 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
         True if the checkpoint is valid, False if corrupted
     """
     try:
-        with zipfile.ZipFile(checkpoint_path, 'r') as z:
-            # Test the ZIP file integrity - returns name of first bad file or None
-            bad_file = z.testzip()
-            if bad_file:
-                logger.warning(f"Corrupted file in checkpoint: {bad_file}")
-                return False
+        import torch
+        # Try to load the checkpoint with PyTorch's ZIP reader (PytorchStreamReader)
+        # This catches "failed finding central directory" and other ZIP corruption
+        # that zipfile.testzip() misses
+        logger.info(f"Validating checkpoint integrity (may take 10-30s): {checkpoint_path.name}")
+        torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+        logger.info(f"Checkpoint validation passed: {checkpoint_path.name}")
         return True
-    except (zipfile.BadZipFile, OSError) as e:
+    except (RuntimeError, zipfile.BadZipFile, OSError, EOFError) as e:
+        # RuntimeError: catches "PytorchStreamReader failed reading zip archive"
+        # zipfile.BadZipFile: catches basic ZIP corruption
+        # OSError: catches file system issues
+        # EOFError: catches truncated files
         logger.warning(f"Checkpoint validation failed for {checkpoint_path}: {e}")
         return False
 
 
 def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:
     """Check and remove corrupted checkpoint files for a specific model.
+
+    Uses a `.validated` marker file to cache validation results and avoid
+    re-validating unchanged checkpoints on every inference call.
 
     Args:
         checkpoint_dir: Directory containing checkpoint files
@@ -53,13 +75,41 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
         return
 
     checkpoint_path = checkpoint_dir / f"{model_name}.pt"
+    marker_path = checkpoint_dir / f"{model_name}.pt.validated"
 
-    if checkpoint_path.exists():
-        logger.info(f"Validating checkpoint: {checkpoint_path}")
+    if not checkpoint_path.exists():
+        return
+
+    # Check if validation marker exists and checkpoint hasn't changed
+    needs_validation = True
+    if marker_path.exists():
+        try:
+            # Read marker file (contains size and mtime from last validation)
+            marker_data = marker_path.read_text().strip().split(',')
+            if len(marker_data) == 2:
+                cached_size = int(marker_data[0])
+                cached_mtime = float(marker_data[1])
+
+                # Compare with current checkpoint
+                current_stat = checkpoint_path.stat()
+                if current_stat.st_size == cached_size and current_stat.st_mtime == cached_mtime:
+                    logger.debug(f"Checkpoint validation cached (skipping): {checkpoint_path.name}")
+                    needs_validation = False
+        except (ValueError, OSError) as e:
+            logger.debug(f"Invalid validation marker, will re-validate: {e}")
+
+    if needs_validation:
+        logger.info(f"Validating checkpoint: {checkpoint_path.name}")
         if not validate_checkpoint(checkpoint_path):
             logger.warning(f"Removing corrupted checkpoint: {checkpoint_path}")
             checkpoint_path.unlink()
+            marker_path.unlink(missing_ok=True)
             logger.info(f"Corrupted checkpoint removed. It will be re-downloaded on next use.")
+        else:
+            # Validation passed - create/update marker file
+            stat = checkpoint_path.stat()
+            marker_path.write_text(f"{stat.st_size},{stat.st_mtime}")
+            logger.debug(f"Validation marker created: {marker_path.name}")
 
 
 class ProtenixModel:
@@ -125,6 +175,9 @@ class ProtenixModel:
             "-d", "bf16",                       # --dtype
         ]
 
+        kernel = "cuequivariance" if _cuequivariance_available() else "torch"
+        cmd.extend(["--trimul_kernel", kernel, "--triatt_kernel", kernel])
+
         if not use_msa:
             cmd.append("--use_msa=false")
 
@@ -146,6 +199,18 @@ class ProtenixModel:
         )
 
         logger.debug("Protenix prediction completed")
+
+        # Check for protenix error directory (protenix exits 0 even on failure)
+        err_dir = Path(output_dir) / "ERR"
+        if err_dir.is_dir():
+            err_files = list(err_dir.iterdir())
+            if err_files:
+                messages = []
+                for ef in err_files:
+                    messages.append(f"{ef.name}: {ef.read_text()[:500]}")
+                raise RuntimeError(
+                    "Protenix reported errors:\n" + "\n".join(messages)
+                )
 
         # Read job names from input JSON to preserve ordering
         with open(input_json_path, "r") as f:
@@ -259,10 +324,10 @@ def dispatch(input_dict: dict) -> dict:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    # Store checkpoints in the venv directory so they're cleaned up with the venv
-    venv_path = os.environ.get("TOOL_VENV_PATH")
-    if venv_path:
-        os.environ["PROTENIX_ROOT_DIR"] = venv_path
+    # Store checkpoints in the tool env directory so they're cleaned up with the env
+    env_path = os.environ.get("TOOL_VENV_PATH")
+    if env_path:
+        os.environ["PROTENIX_ROOT_DIR"] = env_path
 
     if _model is None:
         _model = ProtenixModel()

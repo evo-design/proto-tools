@@ -829,6 +829,7 @@ def _local_search(
             "blast",
             input_data,
             instance=instance,
+            timeout=config.timeout,
         )
     finally:
         # Clean up temp file if we created one

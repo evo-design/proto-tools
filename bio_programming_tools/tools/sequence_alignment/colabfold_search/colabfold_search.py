@@ -670,6 +670,7 @@ def _local_search(
             instance=instance,
             script_path=standalone_script,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
 
         if not output_data.get("success", False):
@@ -745,6 +746,7 @@ def _remote_search(
         instance=instance,
         script_path=standalone_script,
         verbose=config.verbose,
+        timeout=config.timeout,
     )
 
     if not output_data.get("success", False):

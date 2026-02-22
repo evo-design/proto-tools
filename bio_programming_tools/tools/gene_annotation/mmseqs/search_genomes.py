@@ -251,6 +251,7 @@ def run_mmseqs_search_genomes(
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     # Parse results

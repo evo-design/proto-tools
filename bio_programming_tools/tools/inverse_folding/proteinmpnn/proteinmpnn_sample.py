@@ -102,12 +102,14 @@ def run_proteinmpnn_sample(
                 "excluded_amino_acids": config.excluded_amino_acids,
                 "seed": config.seed + chunk_idx,
                 "device": config.device,
+                "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(
                 "proteinmpnn",
                 input_dict,
                 instance=instance,
                 verbose=config.verbose,
+                timeout=config.timeout,
             )
             all_seqs.extend(result["seq"])
             all_perp.extend(np.exp(result["score"]).tolist())

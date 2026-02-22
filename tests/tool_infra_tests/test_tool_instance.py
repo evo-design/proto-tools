@@ -29,18 +29,35 @@ from bio_programming_tools.utils.tool_instance import (
 def _make_fake_instance(
     tool_name: str = "esm2",
     device: str = "cpu",
+    first_run: bool = False,
 ) -> ToolInstance:
-    """Create a ToolInstance with fake paths, bypassing __init__."""
+    """Create a ToolInstance with fake paths, bypassing __init__.
+
+    Parameters
+    ----------
+    tool_name : str
+        Name of the tool
+    device : str
+        Device to use
+    first_run : bool
+        If False (default), mark the instance as having completed first run,
+        which disables warmup timeout. Set to True to test first-run behavior.
+    """
     inst = ToolInstance.__new__(ToolInstance)
     inst.tool_name = tool_name
     inst.device = device
-    inst.venv_path = Path("/fake/venv")
+    inst.env_path = Path("/fake/venv")
     inst.script_path = Path("/fake/inference.py")
-    inst._venv_ready = True
+    inst._tool_env_vars = {"passthrough": [], "set": []}
+    inst._env_ready = True
     inst._cache_keys = set()
     inst._instance_lock = threading.Lock()
     inst._worker = None
     inst._reload_params = {}
+
+    # Mock first run state - create a mock method that returns the specified value
+    inst._is_first_run = lambda: first_run
+
     return inst
 
 
@@ -311,7 +328,7 @@ class TestOneshot:
         assert result == {"result": "ephemeral"}
         mock_run.assert_called_once()
 
-    def test_oneshot_injects_tool_venv_path(self):
+    def test_oneshot_injects_tool_env_path(self):
         """_run_oneshot() should set TOOL_VENV_PATH in the subprocess env."""
         inst = _make_fake_instance()
 
@@ -775,9 +792,10 @@ class TestDeviceRestart:
         assert inst.device == "cuda"
         MockPW.assert_called_once_with(
             tool_name="esm2",
-            venv_path=Path("/fake/venv"),
+            env_path=Path("/fake/venv"),
             script_path=Path("/fake/inference.py"),
             device="cuda",
+            tool_env_vars={"passthrough": [], "set": []},
         )
         assert result == {"result": "ok"}
 
@@ -1120,82 +1138,83 @@ class TestThreadSafety:
 
 
 class TestCreateVenv:
-    """Test _create_venv() edge cases."""
+    """Test _create_env() edge cases."""
 
     def test_failure_writes_status_and_raises(self, tmp_path: Path):
-        """_create_venv() should write FAILED status and raise on setup.sh failure."""
+        """_create_env() should write FAILED status and raise on setup.sh failure."""
         inst = ToolInstance.__new__(ToolInstance)
         inst.tool_name = "fake_tool"
         inst.device = "cpu"
-        inst.venv_path = tmp_path / "fake_env"
+        inst.env_path = tmp_path / "fake_env"
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
+        inst._tool_env_vars = {"passthrough": [], "set": []}
 
         mock_proc = MagicMock()
         mock_proc.returncode = 42
         mock_proc.communicate.return_value = ("", "setup failed!")
 
-        def _create_venv_dir(*args, **kwargs):
+        def _create_env_dir(*args, **kwargs):
             """Simulate 'python -m venv' creating the directory."""
-            inst.venv_path.mkdir(parents=True, exist_ok=True)
+            inst.env_path.mkdir(parents=True, exist_ok=True)
 
         with patch(
             "bio_programming_tools.utils.tool_instance.subprocess.run",
-            side_effect=_create_venv_dir,
+            side_effect=_create_env_dir,
         ), patch(
             "bio_programming_tools.utils.tool_instance.subprocess.Popen",
             return_value=mock_proc,
         ):
             with pytest.raises(RuntimeError, match="may not be compatible"):
-                inst._create_venv()
+                inst._create_env()
 
-        status = (inst.venv_path / "STATUS.txt").read_text()
+        status = (inst.env_path / "STATUS.txt").read_text()
         assert status.startswith("FAILED")
         assert "42" in status
         assert "Setup hash:" in status
 
     def test_build_failure_prevents_retry_in_process(self, tmp_path: Path):
-        """After _create_venv fails, _ensure_venv raises immediately on retry."""
+        """After _create_env fails, _ensure_env raises immediately on retry."""
         inst = _make_fake_instance()
-        inst._venv_ready = False
-        inst.venv_path = tmp_path / "fake_env"
+        inst._env_ready = False
+        inst.env_path = tmp_path / "fake_env"
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
 
         with patch.object(
-            ToolInstance, "_is_venv_ok", return_value=False
+            ToolInstance, "_is_env_ok", return_value=False
         ), patch.object(
             ToolInstance,
-            "_create_venv",
+            "_create_env",
             side_effect=RuntimeError(
                 "'fake_tool' may not be compatible with your system. "
                 "setup.sh failed (exit 1)."
             ),
         ) as mock_create:
             with pytest.raises(RuntimeError, match="setup.sh failed"):
-                inst._ensure_venv()
+                inst._ensure_env()
 
             mock_create.assert_called_once()
 
-            # Second call should fail fast without calling _create_venv again
+            # Second call should fail fast without calling _create_env again
             with pytest.raises(RuntimeError, match="may not be compatible"):
-                inst._ensure_venv()
+                inst._ensure_env()
 
             assert mock_create.call_count == 1
 
     def test_stale_failure_warns_and_retries(self, tmp_path: Path, caplog):
         """A FAILED STATUS.txt with matching hash logs a warning and retries."""
         inst = _make_fake_instance()
-        inst._venv_ready = False
-        inst.venv_path = tmp_path / "fake_env"
-        inst.venv_path.mkdir()
+        inst._env_ready = False
+        inst.env_path = tmp_path / "fake_env"
+        inst.env_path.mkdir()
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\necho hi\n")
 
         setup_hash = hashlib.sha256(
             inst.setup_script.read_bytes()
         ).hexdigest()[:16]
-        status_file = inst.venv_path / "STATUS.txt"
+        status_file = inst.env_path / "STATUS.txt"
         status_file.write_text(
             f"FAILED\n\n"
             f"Return code: 1\n"
@@ -1206,11 +1225,11 @@ class TestCreateVenv:
         )
 
         with patch.object(
-            ToolInstance, "_is_venv_ok", return_value=False
+            ToolInstance, "_is_env_ok", return_value=False
         ), patch.object(
-            ToolInstance, "_create_venv"
+            ToolInstance, "_create_env"
         ) as mock_create, caplog.at_level(logging.WARNING):
-            inst._ensure_venv()
+            inst._ensure_env()
 
         mock_create.assert_called_once()
         assert "previously failed to build" in caplog.text
@@ -1219,13 +1238,13 @@ class TestCreateVenv:
     def test_changed_setup_hash_logs_info_and_retries(self, tmp_path: Path, caplog):
         """A FAILED STATUS.txt with a different hash logs info and retries."""
         inst = _make_fake_instance()
-        inst._venv_ready = False
-        inst.venv_path = tmp_path / "fake_env"
-        inst.venv_path.mkdir()
+        inst._env_ready = False
+        inst.env_path = tmp_path / "fake_env"
+        inst.env_path.mkdir()
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\necho fixed\n")
 
-        status_file = inst.venv_path / "STATUS.txt"
+        status_file = inst.env_path / "STATUS.txt"
         status_file.write_text(
             "FAILED\n\n"
             "Return code: 1\n"
@@ -1236,11 +1255,11 @@ class TestCreateVenv:
         )
 
         with patch.object(
-            ToolInstance, "_is_venv_ok", return_value=False
+            ToolInstance, "_is_env_ok", return_value=False
         ), patch.object(
-            ToolInstance, "_create_venv"
+            ToolInstance, "_create_env"
         ) as mock_create, caplog.at_level(logging.INFO):
-            inst._ensure_venv()
+            inst._ensure_env()
 
         mock_create.assert_called_once()
         assert "Setup files changed" in caplog.text
@@ -1248,21 +1267,21 @@ class TestCreateVenv:
     def test_success_status_with_stale_hash_rebuilds(self, tmp_path: Path, caplog):
         """A SUCCESS STATUS.txt with a stale hash triggers a rebuild."""
         inst = _make_fake_instance()
-        inst._venv_ready = False
-        inst.venv_path = tmp_path / "fake_env"
-        inst.venv_path.mkdir()
+        inst._env_ready = False
+        inst.env_path = tmp_path / "fake_env"
+        inst.env_path.mkdir()
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\necho updated\n")
 
-        status_file = inst.venv_path / "STATUS.txt"
+        status_file = inst.env_path / "STATUS.txt"
         status_file.write_text(
             "SUCCESS\nSetup hash: 0000000000000000\n"
         )
 
         with patch.object(
-            ToolInstance, "_create_venv"
+            ToolInstance, "_create_env"
         ) as mock_create, caplog.at_level(logging.INFO):
-            inst._ensure_venv()
+            inst._ensure_env()
 
         mock_create.assert_called_once()
         assert "Setup files changed" in caplog.text
@@ -1320,23 +1339,52 @@ class TestSetupHash:
 
         assert hash_v1 != hash_v2
 
+    def test_hash_includes_env_vars_txt(self, tmp_path: Path):
+        """_setup_hash() should incorporate env_vars.txt when present."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        hash_without = inst._setup_hash()
+
+        env_vars = tmp_path / "env_vars.txt"
+        env_vars.write_text("[passthrough]\nHF_TOKEN\n")
+
+        hash_with = inst._setup_hash()
+        assert hash_without != hash_with
+
+    def test_hash_changes_when_env_vars_change(self, tmp_path: Path):
+        """Changing env_vars.txt should change the hash."""
+        inst = ToolInstance.__new__(ToolInstance)
+        inst.setup_script = tmp_path / "setup.sh"
+        inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+
+        env_vars = tmp_path / "env_vars.txt"
+        env_vars.write_text("[passthrough]\nHF_TOKEN\n")
+        hash_v1 = inst._setup_hash()
+
+        env_vars.write_text("[passthrough]\nHF_TOKEN\nHF_HOME\n")
+        hash_v2 = inst._setup_hash()
+
+        assert hash_v1 != hash_v2
+
 
 class TestIsVenvOk:
-    """Test _is_venv_ok() setup hash validation."""
+    """Test _is_env_ok() setup hash validation."""
 
     def test_returns_false_when_hash_mismatches(self, tmp_path: Path):
-        """_is_venv_ok() should return False when setup files changed."""
+        """_is_env_ok() should return False when setup files changed."""
         inst = ToolInstance.__new__(ToolInstance)
-        inst.venv_path = tmp_path / "fake_env"
-        inst.venv_path.mkdir()
+        inst.env_path = tmp_path / "fake_env"
+        inst.env_path.mkdir()
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\necho updated\n")
 
-        status_file = inst.venv_path / "STATUS.txt"
+        status_file = inst.env_path / "STATUS.txt"
         status_file.write_text("SUCCESS\nSetup hash: 0000000000000000\n")
 
         # Create a fake python executable that succeeds
-        bin_dir = inst.venv_path / "bin"
+        bin_dir = inst.env_path / "bin"
         bin_dir.mkdir()
         python_exe = bin_dir / "python"
         python_exe.write_text("#!/bin/bash\necho 'Python 3.12'\n")
@@ -1346,21 +1394,21 @@ class TestIsVenvOk:
             "bio_programming_tools.utils.tool_instance.subprocess.run",
             return_value=MagicMock(returncode=0),
         ):
-            assert inst._is_venv_ok() is False
+            assert inst._is_env_ok() is False
 
     def test_returns_true_when_hash_matches(self, tmp_path: Path):
-        """_is_venv_ok() should return True when hash matches and python works."""
+        """_is_env_ok() should return True when hash matches and python works."""
         inst = ToolInstance.__new__(ToolInstance)
-        inst.venv_path = tmp_path / "fake_env"
-        inst.venv_path.mkdir()
+        inst.env_path = tmp_path / "fake_env"
+        inst.env_path.mkdir()
         inst.setup_script = tmp_path / "setup.sh"
         inst.setup_script.write_text("#!/bin/bash\necho hi\n")
 
         current_hash = inst._setup_hash()
-        status_file = inst.venv_path / "STATUS.txt"
+        status_file = inst.env_path / "STATUS.txt"
         status_file.write_text(f"SUCCESS\nSetup hash: {current_hash}\n")
 
-        bin_dir = inst.venv_path / "bin"
+        bin_dir = inst.env_path / "bin"
         bin_dir.mkdir()
         python_exe = bin_dir / "python"
         python_exe.write_text("#!/bin/bash\necho 'Python 3.12'\n")
@@ -1370,7 +1418,7 @@ class TestIsVenvOk:
             "bio_programming_tools.utils.tool_instance.subprocess.run",
             return_value=MagicMock(returncode=0),
         ):
-            assert inst._is_venv_ok() is True
+            assert inst._is_env_ok() is True
 
 
 class TestRunOneshotOutput:
@@ -1394,12 +1442,29 @@ class TestRunOneshotOutput:
         inst.device = "cpu"
         # Use current Python as the "venv" python
         python_dir = Path(sys.executable).parent
-        inst.venv_path = python_dir.parent
+        inst.env_path = python_dir.parent
         inst.script_path = script
-        inst._venv_ready = True
+        inst._tool_env_vars = {"passthrough": [], "set": []}
+        inst._env_ready = True
 
         result = inst._run_oneshot(
             {"hello": "world"},
             script_path=script,
         )
         assert result == {"echo": {"hello": "world"}}
+
+
+class TestToolEnvVarsLoading:
+    """Test that ToolInstance loads env_vars.txt on init."""
+
+    def test_init_loads_env_vars(self):
+        """ToolInstance should parse env_vars.txt from the standalone dir."""
+        inst = ToolInstance("esm3")
+        # esm3 has an env_vars.txt with [passthrough] HF_TOKEN, HUGGING_FACE_HUB_TOKEN
+        assert "HF_TOKEN" in inst._tool_env_vars["passthrough"]
+        assert "HUGGING_FACE_HUB_TOKEN" in inst._tool_env_vars["passthrough"]
+
+    def test_init_empty_env_vars_for_tool_without_file(self):
+        """Tools without env_vars.txt should get empty lists."""
+        inst = ToolInstance("esm2")
+        assert inst._tool_env_vars == {"passthrough": [], "set": []}

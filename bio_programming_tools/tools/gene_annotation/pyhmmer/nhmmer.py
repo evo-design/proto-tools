@@ -97,6 +97,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance=N
             "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     sequence_hits_df, domain_hits_df = _build_dataframes(

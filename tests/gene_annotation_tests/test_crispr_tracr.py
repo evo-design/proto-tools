@@ -303,7 +303,7 @@ class TestStandaloneRunnerConfig:
 class TestCrisprTracrIntegration:
     """Integration tests that require the CRISPRtracrRNA tool."""
 
-    @pytest.mark.include_in_env_report
+    @pytest.mark.include_in_env_report(category="gene_annotation")
     @pytest.mark.skip_ci
     def test_run_crispr_tracr(self):
         """Run CRISPRtracrRNA on a test sequence."""

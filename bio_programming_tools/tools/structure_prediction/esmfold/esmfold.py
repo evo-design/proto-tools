@@ -302,11 +302,13 @@ def run_esmfold(
 
         # Call the inference script
         input_data["device"] = config.device
+        input_data["verbose"] = config.verbose
         output_data = ToolInstance.dispatch(
             "esmfold",
             input_data,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
 
         all_results.extend(output_data["results"])

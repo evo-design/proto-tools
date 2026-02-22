@@ -215,6 +215,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance=None) -> BioE
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
     raw_results = output["results"]

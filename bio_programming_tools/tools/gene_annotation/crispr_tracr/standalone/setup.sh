@@ -5,7 +5,7 @@ set -euo pipefail
 echo "Setting up CRISPRtracrRNA standalone environment..."
 
 echo "Cloning CRISPRtracrRNA repository..."
-INSTALL_DIR="${PREFIX:-$VIRTUAL_ENV}/CRISPRtracrRNA"
+INSTALL_DIR="${PREFIX:-$VENV_PATH}/CRISPRtracrRNA"
 if [ ! -d "$INSTALL_DIR" ]; then
     git clone https://github.com/BackofenLab/CRISPRtracrRNA.git "$INSTALL_DIR"
 fi
@@ -24,7 +24,7 @@ fi
 
 echo "Creating isolated conda environment (Python 3.8 + scikit-learn 0.22)..."
 echo "CRISPRidentify's pickled models require sklearn 0.22 (incompatible with 3.12)."
-echo "Using $VIRTUAL_ENV/conda_deps to avoid polluting base env..."
+echo "Using $VENV_PATH/conda_deps to avoid polluting base env..."
 
 # Detect platform for micromamba download and package installation.
 # scikit-learn 0.22, vmatch, and several bioconda tools only have x86_64
@@ -62,7 +62,7 @@ if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
 fi
 
 # Install micromamba if not already available
-MAMBA_ROOT="$VIRTUAL_ENV/micromamba"
+MAMBA_ROOT="$VENV_PATH/micromamba"
 MAMBA_BIN="$MAMBA_ROOT/bin/micromamba"
 if [ ! -x "$MAMBA_BIN" ]; then
     echo "Installing micromamba ($MAMBA_PLATFORM)..."
@@ -75,7 +75,7 @@ export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
 eval "$("$MAMBA_BIN" shell hook -s posix)"
 
 echo "Creating conda environment with micromamba..."
-"$MAMBA_BIN" create -p "$VIRTUAL_ENV/conda_deps" -y -c conda-forge -c bioconda \
+"$MAMBA_BIN" create -p "$VENV_PATH/conda_deps" -y -c conda-forge -c bioconda \
     "${MAMBA_EXTRA_ARGS[@]}" \
     python=3.8 \
     scikit-learn=0.22.1 \

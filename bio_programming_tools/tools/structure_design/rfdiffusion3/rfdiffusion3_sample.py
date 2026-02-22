@@ -574,14 +574,17 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         input_data = {
             "input_json_path": str(input_json_path),
             "output_dir": str(output_dir),
+            "verbose": config.verbose,
             **config.get_cli_kwargs(),
         }
-        input_data["device"] = config.device
+        # Device is controlled via CUDA_VISIBLE_DEVICES env var set by ToolInstance
+        # RFdiffusion3 doesn't accept device as a CLI parameter
         output_data = ToolInstance.dispatch(
             "rfdiffusion3",
             input_data,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
 
     output_structures = []

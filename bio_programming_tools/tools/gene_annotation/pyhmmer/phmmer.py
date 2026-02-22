@@ -130,6 +130,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance=N
             "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     # Convert results to DataFrames

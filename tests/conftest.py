@@ -88,8 +88,8 @@ class ToolTestResult:
     status: str  # "passed", "failed", "skipped"
     duration_seconds: float
     requires_gpu: bool
-    venv_path: str | None
-    venv_status: str  # "success", "build_failed", "not_found"
+    env_path: str | None
+    env_status: str  # "success", "build_failed", "not_found"
     error_message: str | None
 
 
@@ -115,6 +115,7 @@ class EnvReportCollector:
         has_gpu_marker: bool = False,
         error_message: str | None = None,
         tool_name: str | None = None,
+        category: str | None = None,
     ) -> None:
         """Record a test result."""
         import time
@@ -123,10 +124,12 @@ class EnvReportCollector:
         start_time = self._test_start_times.pop(nodeid, time.time())
         duration = time.time() - start_time
 
-        # Use explicit tool_name if provided, otherwise parse from nodeid
+        # Use explicit tool_name/category if provided, otherwise parse from nodeid
         if tool_name:
             parsed_tool = tool_name
-            category = self._get_category_for_tool(tool_name)
+            # Use explicit category if provided, otherwise lookup
+            if not category:
+                category = self._get_category_for_tool(tool_name)
         else:
             parsed_tool, category = self._parse_tool_from_nodeid(nodeid)
 
@@ -134,7 +137,7 @@ class EnvReportCollector:
             return  # Not a recognizable tool test
 
         # Determine venv path and status
-        venv_path, venv_status = self._get_venv_info(parsed_tool)
+        env_path, env_status = self._get_venv_info(parsed_tool)
 
         self.results.append(
             ToolTestResult(
@@ -144,8 +147,8 @@ class EnvReportCollector:
                 status=outcome,
                 duration_seconds=round(duration, 2),
                 requires_gpu=has_gpu_marker,
-                venv_path=venv_path,
-                venv_status=venv_status,
+                env_path=env_path,
+                env_status=env_status,
                 error_message=error_message,
             )
         )
@@ -185,7 +188,7 @@ class EnvReportCollector:
     def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
         """Get venv path and status for a tool."""
         project_root = Path(__file__).parent.parent
-        venvs_dir = project_root / ".venvs"
+        venvs_dir = project_root / "tool_envs"
 
         # Look for venv with tool name
         for venv_dir in venvs_dir.glob(f"*{tool_name}*"):
@@ -353,9 +356,9 @@ class EnvReportCollector:
                 gpu_req = "yes" if r.requires_gpu else "no"
 
                 # Venv status
-                if r.venv_status == "success":
+                if r.env_status == "success":
                     venv = "✅"
-                elif r.venv_status == "build_failed":
+                elif r.env_status == "build_failed":
                     venv = "❌"
                 else:
                     venv = "—"
@@ -461,7 +464,7 @@ def pytest_addoption(parser):
         default=False,
         help=(
             "Run venv smoke tests and generate platform compatibility report. "
-            "Cleans .venvs/ first, overrides --cpu/--gpu/--slow/skip_ci filters. "
+            "Cleans tool_envs/ first, overrides --cpu/--gpu/--slow/skip_ci filters. "
             "Optionally specify output path: --env-report=path/to/report.md"
         ),
     )
@@ -474,7 +477,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
     config.addinivalue_line(
-        "markers", "include_in_env_report: Include test in --env-report (one smoke test per tool)"
+        "markers", "include_in_env_report: Include test in --env-report (one smoke test per tool). "
+        "Accepts optional kwargs: tool='tool_name', category='category_name'"
     )
 
     # Set environment variable to indicate we're in pytest
@@ -499,13 +503,13 @@ def pytest_configure(config):
         # Capture parent process environment before any tools run
         capture_parent_env()
 
-        # Clean .venvs/ directory to force fresh rebuilds
+        # Clean tool_envs/ directory to force fresh rebuilds
         project_root = Path(__file__).parent.parent
-        venvs_dir = project_root / ".venvs"
+        venvs_dir = project_root / "tool_envs"
         if venvs_dir.exists():
             logger = logging.getLogger("bio_programming_tools.tests")
             logger.warning(
-                f"Cleaning {venvs_dir} for fresh venv rebuilds "
+                f"Cleaning {venvs_dir} for fresh environment rebuilds "
                 "(this may take a while on network filesystems)..."
             )
             # Use subprocess instead of shutil.rmtree to avoid NFS hang issues
@@ -554,11 +558,13 @@ def pytest_runtest_makereport(item, call):
         if "include_in_env_report" not in item.keywords:
             return
 
-        # Extract tool name from marker if provided
+        # Extract tool name and category from marker if provided
         tool_name = None
+        category = None
         marker = item.get_closest_marker("include_in_env_report")
-        if marker and marker.kwargs.get("tool"):
-            tool_name = marker.kwargs["tool"]
+        if marker:
+            tool_name = marker.kwargs.get("tool")
+            category = marker.kwargs.get("category")
 
         # Determine outcome
         if report.when == "call":
@@ -583,6 +589,7 @@ def pytest_runtest_makereport(item, call):
                 has_gpu_marker=has_gpu,
                 error_message=error_msg,
                 tool_name=tool_name,
+                category=category,
             )
         elif report.when == "setup" and report.failed:
             # Setup failure
@@ -592,6 +599,7 @@ def pytest_runtest_makereport(item, call):
                 has_gpu_marker="uses_gpu" in item.keywords,
                 error_message=f"Setup failed: {report.longrepr}",
                 tool_name=tool_name,
+                category=category,
             )
 
 
@@ -660,11 +668,17 @@ def pytest_collection_modifyitems(config, items):
     if config.getoption("--env-report"):
         skip_not_venv = pytest.mark.skip(reason="--env-report: not a venv smoke test")
         skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
+        skip_not_chimera = pytest.mark.skip(
+            reason="--env-report: requires Chimera cluster"
+        )
         gpu_available = _gpu_available()
+        on_chimera = is_on_chimera()
 
         for item in items:
             if "include_in_env_report" not in item.keywords:
                 item.add_marker(skip_not_venv)
+            elif "only_chimera" in item.keywords and not on_chimera:
+                item.add_marker(skip_not_chimera)
             elif "uses_gpu" in item.keywords and not gpu_available:
                 # Skip GPU tests on platforms without GPU, but still include in report
                 item.add_marker(skip_no_gpu)

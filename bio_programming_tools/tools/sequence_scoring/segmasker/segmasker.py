@@ -244,6 +244,8 @@ def run_segmasker(
         "segmasker",
         input_data,
         instance=instance,
+        verbose=config.verbose,
+        timeout=config.timeout,
     )
 
     results_df = pd.DataFrame(output_data["results_data"])

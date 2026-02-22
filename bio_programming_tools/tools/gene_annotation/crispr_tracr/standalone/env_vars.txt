@@ -1,0 +1,14 @@
+# Environment variables for CRISPR-TracrRNA prediction tool
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Optional: path to CRISPRidentify or CRISPRCasIdentifier installation directory
+# If not set, the tool will use the version installed in the venv
+CRISPR_TRACR_PATH
+
+# Optional: number of CPU cores to use (for SLURM environments)
+# If not set, defaults to all available cores
+SLURM_CPUS_PER_TASK

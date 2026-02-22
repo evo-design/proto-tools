@@ -177,6 +177,7 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance=None) -
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

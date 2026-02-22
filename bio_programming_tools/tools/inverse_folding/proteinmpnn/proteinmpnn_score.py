@@ -182,12 +182,14 @@ def run_proteinmpnn_score(
             "fixed_positions": config.fixed_positions,
             "device": config.device,
             "return_logits": config.return_logits,
+            "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
             "proteinmpnn",
             input_dict,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
         scores.append(
             SequenceScores(

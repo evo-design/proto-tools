@@ -221,6 +221,7 @@ def run_mmseqs_clustering(
             "min_seq_id": config.min_seq_id,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     # Parse cluster assignments

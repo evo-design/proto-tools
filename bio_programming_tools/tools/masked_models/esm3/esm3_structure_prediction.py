@@ -223,6 +223,7 @@ def run_esm3_structure_prediction(
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

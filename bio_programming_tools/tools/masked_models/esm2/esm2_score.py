@@ -174,6 +174,7 @@ def run_esm2_score(
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 
