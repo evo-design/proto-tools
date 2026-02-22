@@ -1,0 +1,126 @@
+# PDB Fetch Tools
+
+## Overview
+
+Two tools for retrieving data from the RCSB Protein Data Bank:
+
+- **`pdb-fetch-entry`** — fetch structure metadata (title, method, resolution)
+- **`pdb-fetch-fasta`** — fetch chain sequences with protein/nucleotide classification
+
+## When to Use These Tools
+
+**Primary use cases:**
+- Fetching PDB entry metadata (experimental method, resolution, title)
+- Retrieving chain sequences from PDB FASTA with protein/DNA/RNA classification
+- Getting structure information for a known PDB accession
+
+**When NOT to use these tools:**
+- Multi-source orchestrated fetches across NCBI, UniProt, and PDB: use `sequence-fetch`
+- Structure prediction: use `esmfold`, `boltz2`, or `alphafold3-prediction`
+- Finding PDB IDs from gene names: use `sequence-fetch` which resolves via UniProt cross-refs
+
+## How It Works
+
+The tools wrap the RCSB PDB REST API. Entry metadata comes from the core entry endpoint. FASTA chains are fetched from the RCSB FASTA endpoint and classified as protein or nucleic acid based on sequence composition.
+
+## Quick Start
+
+### Fetch Entry Metadata
+
+```python
+from bio_programming_tools.tools.database_retrieval import (
+    PdbFetchConfig,
+    PdbFetchEntryInput,
+    run_pdb_fetch_entry,
+)
+
+inputs = PdbFetchEntryInput(pdb_id="1LBG")
+output = run_pdb_fetch_entry(inputs, PdbFetchConfig())
+print(output.title, output.method, output.resolution)
+```
+
+### Fetch FASTA Chains
+
+```python
+from bio_programming_tools.tools.database_retrieval import (
+    PdbFetchConfig,
+    PdbFetchFastaInput,
+    run_pdb_fetch_fasta,
+)
+
+inputs = PdbFetchFastaInput(pdb_id="1LBG")
+output = run_pdb_fetch_fasta(inputs, PdbFetchConfig())
+for chain in output.chains:
+    chain_type = "protein" if chain.is_protein else "nucleotide"
+    print(chain.chain_id, chain_type, len(chain.sequence))
+```
+
+## Input Parameters
+
+### `PdbFetchEntryInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pdb_id` | `str` | *(required)* | PDB accession (e.g. `1LBG`) |
+
+### `PdbFetchFastaInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pdb_id` | `str` | *(required)* | PDB accession (e.g. `1LBG`) |
+
+## Configuration (shared)
+
+Both tools share `PdbFetchConfig`:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `request_timeout_seconds` | `int` | `15` | HTTP timeout per request |
+| `http_retries` | `int` | `3` | Max HTTP retries |
+| `backoff_seconds` | `float` | `1.0` | Seconds to wait between retries (doubles after each attempt) |
+| `user_agent` | `str` | `"bio-programming-tools/pdb-fetch-v1"` | Identifier string sent with each request |
+
+## Output Specifications
+
+### `PdbFetchEntryOutput`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `Optional[str]` | Structure title |
+| `method` | `Optional[str]` | Experimental method |
+| `resolution` | `Optional[float]` | Resolution in angstroms |
+| `source_url` | `Optional[str]` | Request URL |
+
+### `PdbFetchFastaOutput`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chains` | `List[PdbChain]` | Parsed chain sequences |
+| `source_url` | `Optional[str]` | Request URL |
+
+### `PdbChain`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chain_id` | `Optional[str]` | Chain identifier from header |
+| `header` | `str` | Full FASTA header |
+| `sequence` | `str` | Chain sequence |
+| `is_protein` | `bool` | True if chain is protein, False if nucleic acid |
+
+## Best Practices & Gotchas
+
+1. PDB IDs are case-insensitive and automatically uppercased by both tools.
+2. `pdb-fetch-entry` returns metadata only (title, method, resolution) — no sequences.
+3. `pdb-fetch-fasta` returns chain sequences with automatic protein/nucleic acid classification based on amino acid composition.
+4. Chains containing protein-specific residues (e.g. F, W, Y, H) are classified as protein; purely A/T/G/C/U sequences as nucleic acid.
+5. A PDB entry may contain multiple chains — iterate over `output.chains` to access them all.
+
+## Related Tools
+
+- `sequence-fetch`: multi-source orchestrator across NCBI, UniProt, and PDB
+- `ncbi-esearch` / `ncbi-esummary` / `ncbi-efetch`: NCBI Entrez tools
+- `uniprot-fetch`: protein entry lookup with PDB cross-references
+
+## References
+
+- Burley SK, et al. RCSB Protein Data Bank: Celebrating 50 years of the PDB. Protein Science. 2022;31(1):187-208. doi:10.1002/pro.4213

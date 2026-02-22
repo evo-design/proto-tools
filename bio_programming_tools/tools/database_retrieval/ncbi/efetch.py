@@ -1,0 +1,168 @@
+"""NCBI Entrez efetch tool — retrieve records by ID.
+
+Wraps the NCBI E-utilities efetch endpoint for fetching sequences and
+records from protein, nuccore, and gene databases.
+"""
+
+from __future__ import annotations
+
+from typing import List, Literal, Optional
+
+from pydantic import Field
+
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.http_session import build_http_session
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+
+from .shared_data_models import (
+    NCBIFastaRecord,
+    NCBIFetchConfig,
+    _ncbi_efetch,
+    _parse_fasta_records,
+)
+
+# ============================================================================
+# Data Models
+# ============================================================================
+
+
+class NCBIEfetchInput(BaseToolInput):
+    """Input for NCBI efetch.
+
+    Attributes:
+        db: NCBI database to query: 'protein', 'nuccore' (nucleotide core),
+            or 'gene'.
+        identifier: Accession or NCBI ID to fetch (e.g. 'NP_000537.3').
+        return_format: NCBI rettype: 'fasta' for sequences or
+            'fasta_cds_na' for coding DNA sequences.
+        seq_start: Start position for subsequence extraction (1-indexed,
+            inclusive).
+        seq_stop: Stop position for subsequence extraction (1-indexed,
+            inclusive).
+        strand: Strand for nucleotide retrieval (+ or -).
+    """
+
+    db: Literal["protein", "nuccore", "gene"] = Field(
+        description="NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'"
+    )
+    identifier: str = Field(
+        description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')",
+    )
+    return_format: Literal["fasta", "fasta_cds_na"] = Field(
+        default="fasta",
+        description="NCBI rettype: 'fasta' for sequences, 'fasta_cds_na' for CDS",
+    )
+    seq_start: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Start position for subsequence extraction (1-indexed, inclusive)",
+    )
+    seq_stop: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Stop position for subsequence extraction (1-indexed, inclusive)",
+    )
+    strand: Optional[Literal["+", "-"]] = Field(
+        default=None,
+        description="Strand for nucleotide retrieval",
+    )
+
+
+class NCBIEfetchOutput(BaseToolOutput):
+    """Output from NCBI efetch.
+
+    Attributes:
+        fasta_records: Parsed FASTA records from efetch.
+        source_url: Sanitized URL used for the request.
+    """
+
+    fasta_records: List[NCBIFastaRecord] = Field(
+        default_factory=list, description="Parsed FASTA records"
+    )
+    source_url: str = Field(description="Sanitized request URL")
+
+    @property
+    def output_format_options(self) -> List[str]:
+        return ["json"]
+
+    @property
+    def output_format_default(self) -> str:
+        return "json"
+
+    def _export_output(self, export_path, file_format: str):
+        import json
+        from pathlib import Path
+
+        if file_format == "json":
+            path = Path(export_path).with_suffix(".json")
+            with path.open("w", encoding="utf-8") as f:
+                json.dump(self.model_dump(mode="json"), f, indent=2)
+            return
+        raise ValueError(f"Unsupported format: {file_format}")
+
+
+NCBIEfetchConfig = NCBIFetchConfig
+
+
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+
+
+@tool(
+    key="ncbi-efetch",
+    label="NCBI Entrez EFetch",
+    category="database_retrieval",
+    input=NCBIEfetchInput,
+    config=NCBIFetchConfig,
+    output=NCBIEfetchOutput,
+    description="Fetch sequences and records from NCBI Entrez by accession or ID",
+    uses_gpu=False,
+)
+def run_ncbi_efetch(
+    inputs: NCBIEfetchInput,
+    config: NCBIFetchConfig,
+    instance=None,
+) -> NCBIEfetchOutput:
+    """Fetch sequences from NCBI Entrez databases.
+
+    Retrieves FASTA records by accession or ID with optional subsequence
+    extraction.
+
+    Args:
+        inputs: Database, identifier, format, and optional coordinate
+            parameters.
+        config: HTTP timeout, retry, and authentication settings.
+
+    Returns:
+        NCBIEfetchOutput containing parsed FASTA records.
+    """
+    del instance
+
+    session = build_http_session(
+        http_retries=config.http_retries,
+        backoff_seconds=config.backoff_seconds,
+        user_agent=config.user_agent,
+        allowed_methods=["GET", "POST"],
+    )
+
+    try:
+        result = _ncbi_efetch(
+            db=inputs.db,
+            identifier=inputs.identifier,
+            rettype=inputs.return_format,
+            config=config,
+            session=session,
+            seq_start=inputs.seq_start,
+            seq_stop=inputs.seq_stop,
+            strand=inputs.strand,
+        )
+        if result is None:
+            raise ValueError(
+                f"No record found for {inputs.db}:{inputs.identifier}"
+            )
+        text, url = result
+        records = _parse_fasta_records(text)
+        return NCBIEfetchOutput(fasta_records=records, source_url=url)
+    finally:
+        session.close()

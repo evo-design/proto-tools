@@ -1,0 +1,54 @@
+{
+  "tool_id": "sequence-fetch",
+  "execution_time": 1.149472951889038,
+  "timestamp": "2026-02-21T17:09:00.038323",
+  "success": true,
+  "warnings": [],
+  "errors": [],
+  "metadata": {},
+  "results": [
+    {
+      "request_id": "request_0",
+      "target_name": "TP53",
+      "organism": "Homo sapiens",
+      "requested_types": [
+        "protein",
+        "structure"
+      ],
+      "status": "success",
+      "fetched_sequences": [
+        {
+          "sequence_type": "protein",
+          "source_database": "uniprot",
+          "accession": "P04637",
+          "sequence": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD",
+          "length": 393,
+          "checksum_sha256": "e3ca60f18e3b6e98986ad6749215ee3b7a3abc09c191675213d1f243c035c9a3",
+          "source_url": "https://rest.uniprot.org/uniprotkb/P04637",
+          "inferred": false
+        }
+      ],
+      "fetched_structures": [
+        {
+          "pdb_id": "1TSR",
+          "source_database": "pdb",
+          "title": "P53 CORE DOMAIN IN COMPLEX WITH DNA",
+          "method": "X-RAY DIFFRACTION",
+          "resolution": 2.2,
+          "source_url": "https://www.rcsb.org/structure/1TSR"
+        }
+      ],
+      "resolved_ids": {
+        "uniprot_id": "P04637",
+        "pdb_id": "1TSR"
+      },
+      "warnings": [],
+      "errors": []
+    }
+  ],
+  "num_requests": 1,
+  "num_success": 1,
+  "num_warning": 0,
+  "num_completed": 1,
+  "num_failed": 0
+}

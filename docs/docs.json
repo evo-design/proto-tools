@@ -56,10 +56,10 @@
 					{
 						"group": "Database Retrieval",
 						"pages": [
-							"tools/database-retrieval/ncbi-fetch",
-							"tools/database-retrieval/pdb-fetch",
+							"tools/database-retrieval/ncbi",
+							"tools/database-retrieval/pdb",
 							"tools/database-retrieval/sequence-fetch",
-							"tools/database-retrieval/uniprot-fetch"
+							"tools/database-retrieval/uniprot"
 						]
 					},
 					{

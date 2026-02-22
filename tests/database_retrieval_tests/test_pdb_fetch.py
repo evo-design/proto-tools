@@ -1,4 +1,4 @@
-"""Tests for the PDB fetch tool."""
+"""Tests for the PDB fetch tools (fetch-entry, fetch-fasta)."""
 
 from __future__ import annotations
 
@@ -6,26 +6,39 @@ import pytest
 
 from bio_programming_tools.tools.database_retrieval import (
     PdbFetchConfig,
-    PdbFetchInput,
-    run_pdb_fetch,
+    PdbFetchEntryInput,
+    PdbFetchFastaInput,
+    run_pdb_fetch_entry,
+    run_pdb_fetch_fasta,
 )
-from bio_programming_tools.tools.database_retrieval.pdb_fetch.pdb_fetch import (
+from bio_programming_tools.tools.database_retrieval.pdb.shared_data_models import (
     _is_protein_sequence,
 )
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 
 
-def test_pdb_fetch_is_registered():
+def test_pdb_fetch_entry_is_registered():
     tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "pdb-fetch" in tool_keys
+    assert "pdb-fetch-entry" in tool_keys
 
-    schema = ToolRegistry.get_config_schema("pdb-fetch")
+    schema = ToolRegistry.get_config_schema("pdb-fetch-entry")
     assert "properties" in schema
     assert "request_timeout_seconds" in schema["properties"]
 
 
-def test_pdb_fetch_has_citation():
-    citation = ToolRegistry.get_citation("pdb-fetch")
+def test_pdb_fetch_fasta_is_registered():
+    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
+    assert "pdb-fetch-fasta" in tool_keys
+
+
+def test_pdb_fetch_entry_has_citation():
+    citation = ToolRegistry.get_citation("pdb-fetch-entry")
+    assert citation is not None
+    assert "@article{" in citation
+
+
+def test_pdb_fetch_fasta_has_citation():
+    citation = ToolRegistry.get_citation("pdb-fetch-fasta")
     assert citation is not None
     assert "@article{" in citation
 
@@ -52,11 +65,10 @@ def test_is_protein_sequence_empty():
 
 
 @pytest.mark.integration
-def test_pdb_fetch_metadata():
+def test_pdb_fetch_entry_metadata():
     """Fetch PDB entry metadata for a known structure."""
-    inputs = PdbFetchInput(pdb_id="1LBG", operation="entry")
-    output = run_pdb_fetch(inputs, PdbFetchConfig())
-    assert output.pdb_id == "1LBG"
+    inputs = PdbFetchEntryInput(pdb_id="1LBG")
+    output = run_pdb_fetch_entry(inputs, PdbFetchConfig())
     assert output.title is not None
     assert output.method is not None
     assert output.source_url == "https://data.rcsb.org/rest/v1/core/entry/1LBG"
@@ -65,8 +77,8 @@ def test_pdb_fetch_metadata():
 @pytest.mark.integration
 def test_pdb_fetch_fasta():
     """Fetch PDB FASTA chains for a known structure."""
-    inputs = PdbFetchInput(pdb_id="1LBG", operation="fasta")
-    output = run_pdb_fetch(inputs, PdbFetchConfig())
+    inputs = PdbFetchFastaInput(pdb_id="1LBG")
+    output = run_pdb_fetch_fasta(inputs, PdbFetchConfig())
     assert len(output.chains) > 0
     protein_chains = [c for c in output.chains if c.is_protein]
     assert len(protein_chains) > 0

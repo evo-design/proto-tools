@@ -1,4 +1,4 @@
-"""Tests for the NCBI Entrez fetch tool."""
+"""Tests for the NCBI Entrez tools (esearch, esummary, efetch)."""
 
 from __future__ import annotations
 
@@ -6,40 +6,71 @@ import pytest
 from pydantic import ValidationError
 
 from bio_programming_tools.tools.database_retrieval import (
+    NCBIEfetchInput,
+    NCBIEsearchInput,
+    NCBIEsummaryInput,
     NCBIFetchConfig,
-    NCBIFetchInput,
-    run_ncbi_fetch,
+    run_ncbi_efetch,
+    run_ncbi_esearch,
+    run_ncbi_esummary,
 )
-from bio_programming_tools.tools.database_retrieval.ncbi_fetch.ncbi_fetch import (
+from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _accession_from_header,
     _parse_fasta_records,
 )
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 
 
-def test_ncbi_fetch_is_registered():
+def test_ncbi_esearch_is_registered():
     tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "ncbi-fetch" in tool_keys
+    assert "ncbi-esearch" in tool_keys
 
-    schema = ToolRegistry.get_config_schema("ncbi-fetch")
+    schema = ToolRegistry.get_config_schema("ncbi-esearch")
     assert "properties" in schema
     assert "request_timeout_seconds" in schema["properties"]
 
 
-def test_ncbi_fetch_has_citation():
-    citation = ToolRegistry.get_citation("ncbi-fetch")
+def test_ncbi_esummary_is_registered():
+    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
+    assert "ncbi-esummary" in tool_keys
+
+
+def test_ncbi_efetch_is_registered():
+    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
+    assert "ncbi-efetch" in tool_keys
+
+
+def test_ncbi_esearch_has_citation():
+    citation = ToolRegistry.get_citation("ncbi-esearch")
     assert citation is not None
     assert "@article{" in citation
 
 
-def test_ncbi_fetch_input_esearch_requires_term():
-    with pytest.raises(ValidationError, match="esearch requires search_term"):
-        NCBIFetchInput(db="protein", operation="esearch")
+def test_ncbi_esummary_has_citation():
+    citation = ToolRegistry.get_citation("ncbi-esummary")
+    assert citation is not None
+    assert "@article{" in citation
 
 
-def test_ncbi_fetch_input_efetch_requires_identifier():
-    with pytest.raises(ValidationError, match="efetch requires identifier"):
-        NCBIFetchInput(db="protein", operation="efetch")
+def test_ncbi_efetch_has_citation():
+    citation = ToolRegistry.get_citation("ncbi-efetch")
+    assert citation is not None
+    assert "@article{" in citation
+
+
+def test_ncbi_esearch_requires_search_term():
+    with pytest.raises(ValidationError):
+        NCBIEsearchInput(db="protein")
+
+
+def test_ncbi_esummary_requires_identifier():
+    with pytest.raises(ValidationError):
+        NCBIEsummaryInput(db="protein")
+
+
+def test_ncbi_efetch_requires_identifier():
+    with pytest.raises(ValidationError):
+        NCBIEfetchInput(db="protein")
 
 
 def test_parse_fasta_records():
@@ -75,29 +106,37 @@ def test_accession_from_header_empty():
 
 
 @pytest.mark.integration
-def test_ncbi_fetch_esearch_protein():
+def test_ncbi_esearch_protein():
     """Search NCBI protein database for lacI."""
-    inputs = NCBIFetchInput(
+    inputs = NCBIEsearchInput(
         db="protein",
-        operation="esearch",
         search_term='"lacI"[Gene] AND "Escherichia coli"[Organism]',
         max_results=3,
     )
-    output = run_ncbi_fetch(inputs, NCBIFetchConfig())
-    assert output.operation == "esearch"
+    output = run_ncbi_esearch(inputs, NCBIFetchConfig())
     assert len(output.ids) > 0
 
 
 @pytest.mark.integration
-def test_ncbi_fetch_efetch_fasta():
+def test_ncbi_efetch_fasta():
     """Fetch protein FASTA from NCBI by accession."""
-    inputs = NCBIFetchInput(
+    inputs = NCBIEfetchInput(
         db="protein",
-        operation="efetch",
         identifier="NP_000537.3",
-        rettype="fasta",
+        return_format="fasta",
     )
-    output = run_ncbi_fetch(inputs, NCBIFetchConfig())
-    assert output.operation == "efetch"
+    output = run_ncbi_efetch(inputs, NCBIFetchConfig())
     assert len(output.fasta_records) > 0
     assert output.fasta_records[0].sequence.startswith("M")
+
+
+@pytest.mark.integration
+def test_ncbi_esummary_gene():
+    """Retrieve gene summary from NCBI by gene ID."""
+    inputs = NCBIEsummaryInput(
+        db="gene",
+        identifier="7157",
+    )
+    output = run_ncbi_esummary(inputs, NCBIFetchConfig())
+    assert output.summary
+    assert output.source_url is not None

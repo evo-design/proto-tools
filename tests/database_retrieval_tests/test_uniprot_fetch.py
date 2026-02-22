@@ -10,7 +10,7 @@ from bio_programming_tools.tools.database_retrieval import (
     UniProtFetchInput,
     run_uniprot_fetch,
 )
-from bio_programming_tools.tools.database_retrieval.uniprot_fetch.uniprot_fetch import (
+from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     _extract_gene_names,
     _extract_pdb_crossrefs,
 )

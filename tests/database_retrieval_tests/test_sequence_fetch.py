@@ -14,7 +14,7 @@ from bio_programming_tools.tools.database_retrieval import (
 )
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
-from bio_programming_tools.tools.database_retrieval.ncbi_fetch.ncbi_fetch import (
+from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )
 from bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (

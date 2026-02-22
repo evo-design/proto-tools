@@ -1,14 +1,13 @@
 """Sequence retrieval orchestrator across NCBI Entrez, UniProt, and PDB.
 
-Thin orchestrator that chains database-specific tools (ncbi_fetch, uniprot_fetch,
-pdb_fetch) with molecule-type routing and cross-fetcher ID resolution.
+Thin orchestrator that chains database-specific tools (ncbi, uniprot,
+pdb) with molecule-type routing and cross-fetcher ID resolution.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -22,7 +21,7 @@ from bio_programming_tools.utils import BaseConfig, ConfigField, tool_cache_iter
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 # Database tool imports — orchestrator calls these directly
-from bio_programming_tools.tools.database_retrieval.ncbi_fetch.ncbi_fetch import (
+from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     NCBIFastaRecord,
     NCBIFetchConfig,
     _accession_from_header,
@@ -32,21 +31,19 @@ from bio_programming_tools.tools.database_retrieval.ncbi_fetch.ncbi_fetch import
     _parse_fasta_records,
 )
 from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.tools.database_retrieval.pdb_fetch.pdb_fetch import (
+from bio_programming_tools.tools.database_retrieval.pdb.shared_data_models import (
     PdbFetchConfig,
     _fetch_pdb_entry,
     _fetch_pdb_fasta,
     _is_protein_sequence,
 )
-from bio_programming_tools.tools.database_retrieval.uniprot_fetch.uniprot_fetch import (
+from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     UniProtFetchConfig,
     _UNIPROT_BASE,
     _extract_pdb_crossrefs,
     _fetch_entry as _fetch_uniprot_entry,
     _search_entry as _search_uniprot_entry,
 )
-
-logger = logging.getLogger(__name__)
 
 _NON_CODING_PATTERNS = (
     r"\bncrna\b",
@@ -83,7 +80,6 @@ class SequenceFetchRequest(BaseModel):
         protein_id (Optional[str]): NCBI protein accession override.
         transcript_id (Optional[str]): Transcript accession override.
         genomic_coordinates (Optional[str]): Genomic interval like NC_000913.3:1-100:+.
-        assembly (Optional[str]): Genome assembly name for coordinate context.
         additional_ids (Dict[str, str]): Extra IDs used for custom routing.
     """
 
@@ -111,7 +107,6 @@ class SequenceFetchRequest(BaseModel):
         default=None,
         description="Genomic coordinates as accession:start-end:strand",
     )
-    assembly: Optional[str] = Field(default=None, description="Genome assembly for coordinate mapping")
     additional_ids: Dict[str, str] = Field(
         default_factory=dict,
         description="Additional IDs for custom routing",
@@ -336,14 +331,19 @@ class SequenceFetchConfig(BaseConfig):
     Attributes:
         request_timeout_seconds (int): Timeout per HTTP request.
         http_retries (int): Retries per upstream HTTP call.
-        backoff_seconds (float): Base exponential backoff in seconds.
-        max_candidates_per_source (int): Max source candidates for name lookups.
-        strict_type_checks (bool): Enforce ncRNA/protein mismatch checks.
-        fail_on_type_mismatch (bool): Convert type mismatches to hard failures.
+        backoff_seconds (float): Seconds to wait between retries (doubles
+            after each attempt).
+        max_candidates_per_source (int): Maximum database candidates to
+            evaluate per name-based search.
+        strict_type_checks (bool): Reject requests where molecule type
+            conflicts with target (e.g. protein for an ncRNA gene).
+        fail_on_type_mismatch (bool): Treat molecule type mismatches as errors
+            instead of warnings.
         include_sequence_checksums (bool): Include SHA256 checksums in outputs.
         ncbi_api_key (Optional[str]): Optional API key for NCBI Entrez.
         ncbi_email (Optional[str]): Optional contact email for NCBI requests.
-        user_agent (str): HTTP user-agent sent to upstream APIs.
+        user_agent (str): Identifier string sent to database APIs with each
+            request.
     """
 
     request_timeout_seconds: int = ConfigField(
@@ -364,7 +364,7 @@ class SequenceFetchConfig(BaseConfig):
         title="Backoff Seconds",
         default=1.0,
         ge=0.0,
-        description="Base exponential backoff time",
+        description="Seconds to wait between retries (doubles after each attempt)",
         advanced=True,
     )
     max_candidates_per_source: int = ConfigField(
@@ -372,18 +372,18 @@ class SequenceFetchConfig(BaseConfig):
         default=5,
         ge=1,
         le=25,
-        description="Max candidates per source lookup",
+        description="Maximum database candidates to evaluate per name-based search",
         advanced=True,
     )
     strict_type_checks: bool = ConfigField(
         title="Strict Type Checks",
         default=True,
-        description="Enforce ncRNA versus protein checks",
+        description="Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene)",
     )
     fail_on_type_mismatch: bool = ConfigField(
         title="Fail On Mismatch",
         default=True,
-        description="Treat type mismatch as failure",
+        description="Treat molecule type mismatches as errors instead of warnings",
     )
     include_sequence_checksums: bool = ConfigField(
         title="Include Checksums",
@@ -406,7 +406,7 @@ class SequenceFetchConfig(BaseConfig):
     user_agent: str = ConfigField(
         title="User Agent",
         default="bio-programming-tools/sequence-fetch-v1",
-        description="HTTP user-agent string",
+        description="Identifier string sent to database APIs with each request",
         advanced=True,
     )
 

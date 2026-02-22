@@ -1,0 +1,17 @@
+{
+  "tool_id": "ncbi-efetch",
+  "execution_time": 0.537086009979248,
+  "timestamp": "2026-02-21T17:08:23.694375",
+  "success": true,
+  "warnings": [],
+  "errors": [],
+  "metadata": {},
+  "fasta_records": [
+    {
+      "header": "NC_000913.3:c366628-366428 Escherichia coli str. K-12 substr. MG1655, complete genome",
+      "sequence": "CTGCTGGGGCAAACCAGCGTGGACCGCTTGCTGCAACTCTCTCAGGGCCAGGCGGTGAAGGGCAATCAGCTGTTGCCCGTCTCACTGGTGAAAAGAAAAACCACCCTGGCGCCCAATACGCAAACCGCCTCTCCCCGCGCGTTGGCCGATTCATTAATGCAGCTGGCACGACAGGTTTCCCGACTGGAAAGCGGGCAGTGA",
+      "accession": "NC_000913.3:c366628-366428"
+    }
+  ],
+  "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_000913.3&rettype=fasta&retmode=text&seq_start=366428&seq_stop=366628&strand=2&tool=bio_programming_tools_ncbi_fetch"
+}

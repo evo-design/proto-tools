@@ -1,0 +1,171 @@
+---
+title: "NCBI Entrez Tools"
+description: "Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (prot..."
+---
+
+# NCBI Entrez Tools
+
+## Overview
+
+Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (protein, nucleotide, gene):
+
+- **`ncbi-esearch`** — search for IDs by query term
+- **`ncbi-esummary`** — retrieve record metadata by ID
+- **`ncbi-efetch`** — fetch sequences/records by ID in FASTA or other formats
+
+## When to Use These Tools
+
+**Primary use cases:**
+- Searching NCBI databases by term (gene name + organism)
+- Fetching sequences by accession/ID in FASTA format
+- Retrieving gene summaries via esummary
+- Subsequence extraction with coordinates and strand
+
+**When NOT to use these tools:**
+- Multi-source orchestrated fetches across NCBI, UniProt, and PDB: use `sequence-fetch`
+- Sequence similarity search: use `blast-search`
+- Large-scale homology search: use `mmseqs-search-proteins`
+
+## How It Works
+
+Each tool wraps one NCBI Entrez E-utility endpoint with automatic retry/backoff and session management. Requests specify a database (`protein`, `nuccore`, `gene`) and either an identifier or search term.
+
+## Quick Start
+
+### ESearch — find IDs by query
+
+```python python icon="python"
+from bio_programming_tools.tools.database_retrieval import (
+    NCBIFetchConfig,
+    NCBIEsearchInput,
+    run_ncbi_esearch,
+)
+
+inputs = NCBIEsearchInput(
+    db="protein",
+    search_term="lacI[Gene Name] AND Escherichia coli[Organism]",
+    max_results=5,
+)
+output = run_ncbi_esearch(inputs, NCBIFetchConfig())
+print(output.ids)
+```
+
+### ESummary — get record metadata
+
+```python python icon="python"
+from bio_programming_tools.tools.database_retrieval import (
+    NCBIFetchConfig,
+    NCBIEsummaryInput,
+    run_ncbi_esummary,
+)
+
+inputs = NCBIEsummaryInput(db="gene", identifier="7157")
+output = run_ncbi_esummary(inputs, NCBIFetchConfig())
+print(output.summary)
+```
+
+### EFetch — retrieve sequences
+
+```python python icon="python"
+from bio_programming_tools.tools.database_retrieval import (
+    NCBIFetchConfig,
+    NCBIEfetchInput,
+    run_ncbi_efetch,
+)
+
+inputs = NCBIEfetchInput(
+    db="protein",
+    identifier="NP_000537.3",
+    return_format="fasta",
+)
+output = run_ncbi_efetch(inputs, NCBIFetchConfig())
+print(output.fasta_records[0].accession, len(output.fasta_records[0].sequence))
+```
+
+## Input Parameters
+
+### `NCBIEsearchInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
+| `search_term` | `str` | *(required)* | NCBI search query (e.g. `lacI[Gene] AND Escherichia coli[Organism]`) |
+| `max_results` | `int` | `5` | Maximum number of IDs to return (1-100) |
+
+### `NCBIEsummaryInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
+| `identifier` | `str` | *(required)* | Accession or NCBI ID (e.g. `NP_000537.3`, `7157`) |
+
+### `NCBIEfetchInput`
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
+| `identifier` | `str` | *(required)* | Accession or NCBI ID |
+| `return_format` | `Literal["fasta", "fasta_cds_na"]` | `"fasta"` | NCBI rettype: `fasta` for sequences, `fasta_cds_na` for CDS |
+| `seq_start` | `Optional[int]` | `None` | Start position for subsequence (1-indexed, inclusive) |
+| `seq_stop` | `Optional[int]` | `None` | Stop position for subsequence (1-indexed, inclusive) |
+| `strand` | `Optional[Literal["+", "-"]]` | `None` | Strand for nucleotide retrieval |
+
+## Configuration (shared)
+
+All three tools share `NCBIFetchConfig`:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds |
+| `http_retries` | `int` | `2` | Retries for HTTP requests |
+| `backoff_seconds` | `float` | `1.0` | Seconds to wait between retries (doubles after each attempt) |
+| `ncbi_api_key` | `Optional[str]` | `None` | Optional NCBI API key |
+| `ncbi_email` | `Optional[str]` | `None` | Optional NCBI contact email |
+| `user_agent` | `str` | `"bio-programming-tools/ncbi-fetch-v1"` | Identifier string sent with each request |
+
+## Output Specifications
+
+### `NCBIEsearchOutput`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ids` | `List[str]` | List of NCBI IDs found by the search |
+
+### `NCBIEsummaryOutput`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `summary` | `Dict[str, Any]` | Record summary data |
+| `source_url` | `str` | Sanitized request URL |
+
+### `NCBIEfetchOutput`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fasta_records` | `List[NCBIFastaRecord]` | Parsed FASTA records |
+| `source_url` | `str` | Sanitized request URL |
+
+### `NCBIFastaRecord`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `header` | `str` | FASTA header line |
+| `sequence` | `str` | Sequence string |
+| `accession` | `Optional[str]` | Accession extracted from header |
+
+## Best Practices & Gotchas
+
+1. Use `ncbi-esearch` to find IDs first, then `ncbi-efetch` to retrieve records.
+2. Provide an NCBI API key via `ncbi_api_key` for higher rate limits (10 req/sec vs 3 req/sec without a key).
+3. For subsequence extraction, `seq_start` and `seq_stop` are 1-indexed and inclusive on both ends.
+
+## Related Tools
+
+- `sequence-fetch`: multi-source orchestrator across NCBI, UniProt, and PDB
+- `uniprot-fetch`: protein-centric entry lookup and search
+- `pdb-fetch-entry` / `pdb-fetch-fasta`: PDB structure metadata and chain sequences
+- `blast-search`: sequence similarity search
+
+## References
+
+- Sayers EW, et al. GenBank. Nucleic Acids Research. 2022;50(D1):D161-D164. doi:10.1093/nar/gkab1135

@@ -35,9 +35,10 @@ class UniProtFetchInput(BaseToolInput):
         uniprot_id: UniProt accession for direct entry lookup.
         target_name: Gene or protein name for search-based lookup.
         organism: Organism name for disambiguation during search.
-        prefer_pdb_crossref: Prefer entries with PDB cross-references
-            during search ranking.
-        max_candidates: Maximum search results to consider.
+        prefer_pdb_crossref: When searching, prefer entries that have linked
+            PDB structures.
+        max_candidates: Maximum number of search results to evaluate when
+            ranking.
     """
 
     uniprot_id: Optional[str] = Field(
@@ -54,13 +55,13 @@ class UniProtFetchInput(BaseToolInput):
     )
     prefer_pdb_crossref: bool = Field(
         default=False,
-        description="Prefer entries with PDB cross-references",
+        description="When searching, prefer entries that have linked PDB structures",
     )
     max_candidates: int = Field(
         default=5,
         ge=1,
         le=25,
-        description="Max candidates for search ranking",
+        description="Maximum number of search results to evaluate when ranking",
     )
 
     @model_validator(mode="after")
@@ -80,28 +81,30 @@ class UniProtFetchOutput(BaseToolOutput):
         accession: Primary UniProt accession.
         sequence: Protein sequence string.
         length: Sequence length.
-        entry_type: UniProt entry type (e.g. UniProtKB reviewed).
+        entry_type: Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for
+            curated entries).
         gene_names: Extracted gene name symbols.
-        pdb_crossrefs: PDB cross-reference IDs from UniProt entry.
+        pdb_crossrefs: PDB structure IDs linked to this protein entry.
         source_url: UniProt entry URL.
-        raw_entry: Full UniProt entry JSON for advanced use.
+        raw_entry: Complete UniProt JSON record for advanced programmatic
+            access.
     """
 
     accession: str = Field(description="Primary UniProt accession")
     sequence: Optional[str] = Field(default=None, description="Protein sequence")
     length: Optional[int] = Field(default=None, description="Sequence length")
     entry_type: Optional[str] = Field(
-        default=None, description="UniProt entry type"
+        default=None, description="Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)"
     )
     gene_names: List[str] = Field(
         default_factory=list, description="Gene name symbols"
     )
     pdb_crossrefs: List[str] = Field(
-        default_factory=list, description="PDB cross-reference IDs"
+        default_factory=list, description="PDB structure IDs linked to this protein entry"
     )
     source_url: str = Field(description="UniProt entry URL")
     raw_entry: Dict[str, Any] = Field(
-        default_factory=dict, description="Full UniProt entry JSON"
+        default_factory=dict, description="Complete UniProt JSON record for advanced programmatic access"
     )
 
     @property
@@ -130,8 +133,9 @@ class UniProtFetchConfig(BaseConfig):
     Attributes:
         request_timeout_seconds: HTTP timeout per request.
         http_retries: Number of retries for failed requests.
-        backoff_seconds: Base backoff time between retries.
-        user_agent: HTTP user-agent string.
+        backoff_seconds: Seconds to wait between retries (doubles after each
+            attempt).
+        user_agent: Identifier string sent to database APIs with each request.
     """
 
     request_timeout_seconds: int = ConfigField(
@@ -152,13 +156,13 @@ class UniProtFetchConfig(BaseConfig):
         title="Backoff Seconds",
         default=1.0,
         ge=0.0,
-        description="Base exponential backoff time",
+        description="Seconds to wait between retries (doubles after each attempt)",
         advanced=True,
     )
     user_agent: str = ConfigField(
         title="User Agent",
         default="bio-programming-tools/uniprot-fetch-v1",
-        description="HTTP user-agent string",
+        description="Identifier string sent to database APIs with each request",
         advanced=True,
     )
 
