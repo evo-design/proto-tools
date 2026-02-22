@@ -1,6 +1,6 @@
 ---
 title: "Evo2"
-description: "Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained..."
+description: "Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local GPU/CPU execution with KV caching for efficient long generations."
 ---
 
 # Evo2
@@ -75,88 +75,6 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 2. At each position t, the model computes log P(x_t | x_\{&lt;t\}) -- the log probability of the actual nucleotide given the left context.
 3. These per-position log probabilities are summed to produce total `log_likelihood` and averaged for `avg_log_likelihood`.
 4. Perplexity is computed as exp(-avg_log_likelihood).
-
-## Input Parameters
-
-### Sampling (`Evo2SampleInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prompts` | `str` or `List[str]` | Prompt DNA sequence(s) for generation |
-
-### Scoring (`Evo2ScoringInput`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `str` or `List[str]` | DNA sequences to score |
-
-## Configuration
-
-### Sampling (`Evo2SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path (bypasses HF download) |
-| `num_tokens` | `int` | `32` | Number of new tokens to generate |
-| `temperature` | `float` | `1.0` | Sampling temperature |
-| `top_k` | `int` | `4` | Top-k sampling limit |
-| `top_p` | `float` | `1.0` | Nucleus sampling threshold |
-| `prepend_prompt` | `bool` | `True` | Include prompt in output sequence |
-| `cached_generation` | `bool` | `True` | Use KV caching  |
-| `force_prompt_threshold` | `Optional[int]` | `None` | Prefill tokens before prompt forcing |
-| `max_seqlen` | `Optional[int]` | `None` | Max sequence length for KV cache |
-| `stop_at_eos` | `bool` | `True` | Stop at end-of-sequence token |
-| `old_kv_cache` | `Optional[Dict]` | `None` | Continue from previous KV cache  |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Inference device |
-| `return_logits` | `bool` | `False` | Include per-token logits in output |
-
-### Scoring (`Evo2ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
-| `local_path` | `Optional[str]` | `None` | Local weights path |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Inference device |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Parameter Guides
-
-**Temperature for DNA generation:**
-
-| Temperature | Behavior | When to Use |
-|-------------|----------|-------------|
-| 0.5 - 0.8 | Conservative, low diversity | Generating close homologs, constrained design |
-| 0.8 - 1.0 | Balanced diversity and quality | General DNA generation (recommended) |
-| 1.0 - 1.2 | Higher diversity, more exploration | Library design, diverse sampling |
-| 1.2+ | Very high diversity | Maximum exploration (lower average quality) |
-
-## Output Specification
-
-### `Evo2SampleOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Generated DNA sequences |
-| `logits` | `Optional[List]` | Per-token logits (if requested) |
-| `kv_caches` | `Optional[List[Dict]]` | KV caches for continued generation  |
-
-Export formats: `fasta`, `txt`, `json`
-
-### `Evo2ScoringOutput`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[SequenceScores]` | Per-sequence metrics and optional logits |
-
-Each `SequenceScores` entry contains:
-- `metrics`: dict with `log_likelihood`, `avg_log_likelihood`, `perplexity`
-- `logits`: per-position logits (seq_len x vocab_size=512) if `return_logits=True`
-- `vocab`: byte-level vocabulary list (512 tokens) if `return_logits=True`
-
-Export formats: `json`, `csv`
 
 ## Interpreting Results
 
@@ -300,3 +218,221 @@ print(f"Logits shape: {len(result.scores[0].logits)} positions")
 **Alternatives:**
 - `progen2` — autoregressive generation for protein (not DNA) sequences
 - `esm3` — generative protein language model with structure conditioning
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="Evo2 Sampling">
+  **Key:** `evo2-sample`
+
+  Sample DNA sequences using Evo2 language model
+
+### Input
+
+<ParamField path="prompts" type="List[string]" required>
+  Prompt sequences for generation
+</ParamField>
+
+### Configuration
+
+<ParamField path="prepend_prompt" type="boolean" default="True">
+  Whether to prepend the prompt to the generated sequence in the output
+</ParamField>
+
+<ParamField path="model_checkpoint" type="enum" default="evo2_7b">
+  Evo2 model checkpoint to use
+
+  Options: `evo2_7b`, `evo2_40b`, `evo2_7b_base`, `evo2_40b_base`, `evo2_1b_base`, `evo2_7b_262k`, `evo2_7b_microviridae`
+</ParamField>
+
+<ParamField path="top_k" type="integer" default="4">
+  Limits sampling to the top-k most probable tokens at each generation step.
+</ParamField>
+
+<ParamField path="top_p" type="number" default="1">
+  Chooses the smallest set of tokens whose cumulative probability mass ≥ top-p.
+</ParamField>
+
+<ParamField path="temperature" type="number" default="1.0">
+  Scales the randomness of sampling by adjusting probability distribution sharpness.
+</ParamField>
+
+<ParamField path="num_tokens" type="integer" default="32">
+  Number of tokens to generate (Does not include prompt)
+</ParamField>
+
+<ParamField path="cached_generation" type="boolean" default="True">
+  Whether to use vortex KV caching for generation
+</ParamField>
+
+<ParamField path="max_seqlen" type="integer">
+  Optional maximum sequence length to generate.
+</ParamField>
+
+<ParamField path="stop_at_eos" type="boolean" default="True">
+  Whether to stop at end-of-sequence token
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="sequences" type="List[string]" required>
+  Generated DNA sequences
+</ResponseField>
+
+<ResponseField name="logits" type="array">
+  Per-token logits for each sequence
+</ResponseField>
+
+<ResponseField name="kv_caches" type="array">
+  List of KV caches for each sequence
+</ResponseField>
+  </Tab>
+  <Tab title="Evo2 Sampling (In-Process)">
+  **Key:** `evo2-sample-in-process`
+
+  Sample DNA sequences using Evo2 language model (in-process mode)
+
+### Input
+
+<ParamField path="prompts" type="List[string]" required>
+  Prompt sequences for generation
+</ParamField>
+
+### Configuration
+
+<ParamField path="prepend_prompt" type="boolean" default="True">
+  Whether to prepend the prompt to the generated sequence in the output
+</ParamField>
+
+<ParamField path="model_checkpoint" type="enum" default="evo2_7b">
+  Evo2 model checkpoint to use
+
+  Options: `evo2_7b`, `evo2_40b`, `evo2_7b_base`, `evo2_40b_base`, `evo2_1b_base`, `evo2_7b_262k`, `evo2_7b_microviridae`
+</ParamField>
+
+<ParamField path="top_k" type="integer" default="4">
+  Limits sampling to the top-k most probable tokens at each generation step.
+</ParamField>
+
+<ParamField path="top_p" type="number" default="1">
+  Chooses the smallest set of tokens whose cumulative probability mass ≥ top-p.
+</ParamField>
+
+<ParamField path="temperature" type="number" default="1.0">
+  Scales the randomness of sampling by adjusting probability distribution sharpness.
+</ParamField>
+
+<ParamField path="num_tokens" type="integer" default="32">
+  Number of tokens to generate (Does not include prompt)
+</ParamField>
+
+<ParamField path="cached_generation" type="boolean" default="True">
+  Whether to use vortex KV caching for generation
+</ParamField>
+
+<ParamField path="max_seqlen" type="integer">
+  Optional maximum sequence length to generate.
+</ParamField>
+
+<ParamField path="stop_at_eos" type="boolean" default="True">
+  Whether to stop at end-of-sequence token
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="sequences" type="List[string]" required>
+  Generated DNA sequences
+</ResponseField>
+
+<ResponseField name="logits" type="array">
+  Per-token logits for each sequence
+</ResponseField>
+
+<ResponseField name="kv_caches" type="array">
+  List of KV caches for each sequence
+</ResponseField>
+  </Tab>
+  <Tab title="Evo2 Scoring">
+  **Key:** `evo2-score`
+
+  Score DNA sequences using Evo2 language model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  DNA sequences to score
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="enum" default="evo2_7b">
+  Evo2 model checkpoint to use
+
+  Options: `evo2_7b`, `evo2_40b`, `evo2_7b_base`, `evo2_40b_base`, `evo2_1b_base`, `evo2_7b_262k`, `evo2_7b_microviridae`
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[SequenceScores]" required>
+  List of scoring outputs, one per input sequence
+</ResponseField>
+  </Tab>
+  <Tab title="Evo2 Scoring (In-Process)">
+  **Key:** `evo2-score-in-process`
+
+  Score DNA sequences using Evo2 language model (in-process mode)
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  DNA sequences to score
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="enum" default="evo2_7b">
+  Evo2 model checkpoint to use
+
+  Options: `evo2_7b`, `evo2_40b`, `evo2_7b_base`, `evo2_40b_base`, `evo2_1b_base`, `evo2_7b_262k`, `evo2_7b_microviridae`
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[SequenceScores]" required>
+  List of scoring outputs, one per input sequence
+</ResponseField>
+  </Tab>
+</Tabs>

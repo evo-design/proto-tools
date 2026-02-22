@@ -1,6 +1,6 @@
 ---
 title: "Structure Metrics"
-description: "Structure Metrics computes structural quality metrics from PDB files, specifically the longest alpha..."
+description: "Structure Metrics computes structural quality metrics from PDB files, specifically the longest alpha helix length and radius of gyration. These metrics are used to flag structural artifacts such as unrealistically long helices or disordered/extended conformations in predicted protein structures."
 ---
 
 # Structure Metrics
@@ -62,55 +62,6 @@ The tool reads each PDB file using Biotite, assigns secondary structure elements
 - **Hardware:** CPU only; no GPU required
 - **Runtime:** ~1-2 seconds per PDB file
 - **Scalability:** Linear in number of PDB files; I/O bound for large batches
-
-## Important Parameters
-
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_paths` | `List[str]` | *Required* | List of PDB file paths to compute structure metrics for |
-
-**Configuration parameters:**
-
-No configuration parameters. Both metrics are computed deterministically from the input structure.
-
----
-
-**Output specification:**
-
-```python python icon="python"
-# Return type: StructureMetricsOutput
-{
-    "metrics": [
-        {
-            "pdb_path": str,              # Path to the PDB file analyzed
-            "longest_alpha_helix": int,   # Length in residues
-            "gyration_radius": float,     # Radius of gyration in Angstroms
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Units | Interpretation |
-|-------|------|-------|----------------|
-| `pdb_path` | `str` | — | Path to the analyzed PDB file |
-| `longest_alpha_helix` | `int` | residues | Length of the longest contiguous alpha helix |
-| `gyration_radius` | `float` | Angstroms | Radius of gyration; lower = more compact |
-
-**Supported export formats:** `csv`, `json`
-
-**Thresholds & decision boundaries (calibrated for Cas9-sized proteins, ~1000-1400 residues):**
-- **Longest alpha helix:**
-  - **Normal (&lt; 50 residues)**: Typical for globular proteins
-  - **Artifact (>= 50 residues)**: Likely a structure prediction artifact; real alpha helices rarely exceed 40-50 residues in globular proteins. Used as threshold in the Cas9 pipeline (`LONGEST_ALPHA_THRESHOLD = 50`).
-- **Radius of gyration:**
-  - **Compact (&lt; 30 A)**: Well-folded, compact structure
-  - **Normal (30-45 A)**: Typical for large multi-domain proteins like Cas9
-  - **Disordered (>= 45 A)**: Extended or disordered conformation; likely a failed prediction. Used as threshold in the Cas9 pipeline (`GYRATION_RADIUS_THRESHOLD = 45.0`).
 
 ## Best Practices & Gotchas
 
@@ -196,3 +147,23 @@ for m in result.metrics:
 
 ---
 **Maintenance notes:**
+- Last updated: 2025-06-01
+
+
+## API Reference
+
+### Input
+
+<ParamField path="pdb_paths" type="List[string]" required>
+  List of PDB file paths to compute structure metrics for
+</ParamField>
+
+### Configuration
+
+_No parameters_
+
+### Output
+
+<ResponseField name="metrics" type="List[StructureMetrics]">
+  Per-structure quality metrics
+</ResponseField>

@@ -1,6 +1,6 @@
 ---
 title: "RFdiffusion3"
-description: "RFdiffusion3 is a diffusion-based generative model for de novo protein structure design. Unlike stru..."
+description: "RFdiffusion3 is a diffusion-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints."
 ---
 
 # RFdiffusion3
@@ -69,52 +69,6 @@ The model is trained on protein structures from the PDB, learning the distributi
 - No explicit energy function: Relies on learned patterns, not physics-based scoring
 - Designability not guaranteed: Generated structures may need validation with structure prediction
 - Limited to proteins: Cannot design small molecules, nucleic acids, or carbohydrates
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `design_specs` | `List[RFdiffusion3DesignSpec]` | *required* | Design specifications with constraints |
-
-Each `RFdiffusion3DesignSpec` contains:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `length` | `str` | Target protein length (int or "min-max" range) |
-| `contig` | `str` | Contig string specifying design topology |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `n_batches` | `int` | `1` | Number of batches per spec |
-| `diffusion_batch_size` | `int` | `8` | Designs per batch (memory scales with this) |
-| `num_timesteps` | `int` | `200` | Diffusion steps (higher = better quality, slower) |
-| `step_scale` | `float` | `1.5` | Step scale (higher = less diverse, more designable) |
-
-### Sweep Priorities
-
-1. **`num_timesteps`**: Most impactful for structure quality. Use 50-100 for rapid prototyping, 200-500 for production.
-2. **`step_scale`**: Controls diversity vs designability tradeoff. Lower (1.0-1.3) for diverse exploration, higher (1.5-2.0) for safer designs.
-3. **`diffusion_batch_size`**: Generate multiple designs per run; rank by downstream metrics.
-
-## Output Specification
-
-```python python icon="python"
-RFdiffusion3Output(
-    output_structures: List[RFdiffusion3Structure],
-)
-```
-
-Each `RFdiffusion3Structure` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structure` | `Structure` | Full atomic coordinates of designed protein |
-| `sequence` | `str` | Amino acid sequence (multi-chain: chains separated by `/`) |
-| `spec_key` | `str` | Identifier linking to input specification |
-| `design_index` | `int` | Index within batch |
-| `metadata` | `dict` | Sampled contig, chain info, and logged metrics |
 
 ## Interpreting Results
 
@@ -226,3 +180,44 @@ result = run_rfdiffusion3(inputs, config)
 - RFdiffusion (original): Backbone-only diffusion; faster but less detailed
 - Chroma: Alternative diffusion-based protein design method
 - ESM3: Sequence-focused generative model (no explicit structure generation)
+
+
+## API Reference
+
+### Input
+
+<ParamField path="design_specs" type="List[RFdiffusion3DesignSpec]">
+  List of design specifications
+</ParamField>
+
+<ParamField path="raw_json" type="string">
+  Raw JSON string for advanced RFdiffusion3 configuration
+</ParamField>
+
+### Configuration
+
+<ParamField path="n_batches" type="integer" default="1">
+  number of batches to generate per input key (default: 1).
+</ParamField>
+
+<ParamField path="diffusion_batch_size" type="integer" default="8">
+  number of diffusion samples (designs) per batch (default: 8).
+</ParamField>
+
+<ParamField path="num_timesteps" type="integer" default="200">
+  diffusion timesteps for sampling (default: 200).
+</ParamField>
+
+<ParamField path="step_scale" type="number" default="1.5">
+  scales diffusion step size; higher -> less diverse, more designable (default: 1.5).
+</ParamField>
+
+<ParamField path="low_memory_mode" type="boolean" default="False">
+  memory-efficient tokenization mode; set True if GPU RAM is tight (default: False).
+</ParamField>
+
+### Output
+
+<ResponseField name="output_structures" type="List[RFdiffusion3Structure]">
+  List of designed structures
+</ResponseField>

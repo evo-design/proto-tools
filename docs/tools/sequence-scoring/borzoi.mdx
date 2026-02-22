@@ -1,6 +1,6 @@
 ---
 title: "Borzoi Prediction"
-description: "Borzoi is a deep learning model that predicts gene expression and regulatory activity from a 524,288..."
+description: "Borzoi is a deep learning model that predicts gene expression and regulatory activity from a 524,288 bp DNA sequence. As the successor to Enformer, Borzoi uses dilated residual convolutional blocks combined with attention to achieve a 2.7x longer context window (524 kb vs. 196 kb), higher output resolution (6,144 bins), and improved accuracy, particularly for RNA-seq coverage prediction."
 ---
 
 # Borzoi Prediction
@@ -69,79 +69,6 @@ For ensemble mode, all 4 replicates run sequentially.
 4. **Attention layers**: Transformer-style attention captures dependencies across the full context window
 5. **Species-specific output heads**: Separate prediction heads for human and mouse tracks
 6. **Output**: A prediction matrix of shape `[num_tracks, 6144]` for single replicate, or `[4, num_tracks, 6144]` for ensemble
-
-## Input Parameters
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `sequence` | `str` | Yes | DNA sequence, must be exactly 524,288 bp. Only characters A, T, C, G, N allowed. |
-
-## Configuration
-
-### Single Replicate (`BorzoiConfig`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | **required** | Track indices to extract from model output |
-| `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
-| `replicate` | `"0"`, `"1"`, `"2"`, or `"3"` | `"0"` | Which replicate model to run |
-| `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
-| `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log status messages |
-
-### Ensemble (`BorzoiEnsembleConfig`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `output_tracks` | `List[int]` | **required** | Track indices to extract from model output |
-| `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
-| `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
-| `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log status messages |
-
-### Parameter Guides
-
-**`avg_output_tracks`**: When `True` (default), all requested tracks are averaged into a single output track per bin. This is useful for combining related tracks (e.g., multiple CAGE tracks) into a composite signal. Set to `False` to get individual predictions per track.
-
-**`use_flash_attn`**: FlashAttention provides significant speedup for attention computation. It is enabled by default for human models. Mouse models do NOT support FlashAttention -- setting `use_flash_attn=True` with `species="mouse"` raises a validation error.
-
-**`replicate`**: Borzoi has 4 independently trained replicates (0-3). Each produces slightly different predictions. Replicate "0" is the default. For production analysis, use the ensemble tool to get all 4.
-
-### Sweep Priorities
-
-When using Borzoi in optimization loops:
-
-1. **`output_tracks`**: Most critical. Select tracks matching your biological objective.
-2. **`species`**: Must match the organism of your target sequence.
-3. **`avg_output_tracks`**: Set to `True` for a single optimization signal, `False` for multi-objective optimization across tracks.
-
-## Output Specification
-
-### `BorzoiOutput` (single replicate)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequence` | `str` | The input DNA sequence |
-| `sequence_length` | `int` | Always 524,288 |
-| `prediction` | `List[List[float]]` | Shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`) |
-| `output_tracks` | `List[int]` | Track indices used |
-| `species` | `str` | Species head used |
-| `replicate` | `str` | Replicate ID used |
-| `avg_output_tracks` | `bool` | Whether averaging was applied |
-
-### `BorzoiEnsembleOutput` (ensemble)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequence` | `str` | The input DNA sequence |
-| `sequence_length` | `int` | Always 524,288 |
-| `predictions` | `List[List[List[float]]]` | Shape `[4, num_tracks, 6144]` |
-| `output_tracks` | `List[int]` | Track indices used |
-| `species` | `str` | Species head used |
-| `avg_output_tracks` | `bool` | Whether averaging was applied |
-| `num_replicates` | `int` | Always 4 |
 
 ## Interpreting Results
 
@@ -260,3 +187,129 @@ result.export("borzoi_output", file_format="json")
 - `enformer-prediction` — Shorter context (196 kb), faster inference. Use when long-range context is not needed.
 - `alphagenome` — Google DeepMind's next-generation genomics model
 - `splice-transformer` — Specialized for splice site prediction rather than general regulatory activity
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="Borzoi Ensemble">
+  **Key:** `borzoi-ensemble`
+
+  Regulatory activity prediction using all 4 Borzoi replicates
+
+### Input
+
+<ParamField path="sequence" type="string" required>
+  DNA sequence to score
+</ParamField>
+
+### Configuration
+
+<ParamField path="output_tracks" type="List[integer]" required>
+  Track indices to extract from model output
+</ParamField>
+
+<ParamField path="species" type="enum" default="human">
+  Species model to use
+
+  Options: `human`, `mouse`
+</ParamField>
+
+<ParamField path="avg_output_tracks" type="boolean" default="True">
+  Whether to average selected tracks into one output
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence" type="string" required>
+  Input DNA/RNA sequence
+</ResponseField>
+
+<ResponseField name="sequence_length" type="integer" required>
+  Length of input sequence
+</ResponseField>
+
+<ResponseField name="predictions" type="List[array]" required>
+  Stacked predictions with shape [4, num_tracks, 6144]
+</ResponseField>
+
+<ResponseField name="output_tracks" type="List[integer]" required>
+  Track indices used for prediction
+</ResponseField>
+
+<ResponseField name="species" type="string" required>
+  Species used for prediction ('human' or 'mouse')
+</ResponseField>
+
+<ResponseField name="avg_output_tracks" type="boolean" required>
+  Whether track outputs were averaged
+</ResponseField>
+
+<ResponseField name="num_replicates" type="integer">
+  Number of Borzoi replicates returned
+</ResponseField>
+  </Tab>
+  <Tab title="Borzoi Prediction">
+  **Key:** `borzoi-prediction`
+
+  Regulatory activity prediction using a single Borzoi replicate
+
+### Input
+
+<ParamField path="sequence" type="string" required>
+  DNA sequence to score
+</ParamField>
+
+### Configuration
+
+<ParamField path="output_tracks" type="List[integer]" required>
+  Track indices to extract from model output
+</ParamField>
+
+<ParamField path="species" type="enum" default="human">
+  Species model to use
+
+  Options: `human`, `mouse`
+</ParamField>
+
+<ParamField path="replicate" type="enum" default="0">
+  Replicate ID to run
+
+  Options: `0`, `1`, `2`, `3`
+</ParamField>
+
+<ParamField path="avg_output_tracks" type="boolean" default="True">
+  Whether to average selected tracks into one output
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence" type="string" required>
+  Input DNA/RNA sequence
+</ResponseField>
+
+<ResponseField name="sequence_length" type="integer" required>
+  Length of input sequence
+</ResponseField>
+
+<ResponseField name="prediction" type="List[array]" required>
+  Prediction matrix with shape [num_tracks, 6144]
+</ResponseField>
+
+<ResponseField name="output_tracks" type="List[integer]" required>
+  Track indices used for prediction
+</ResponseField>
+
+<ResponseField name="species" type="string" required>
+  Species used for prediction ('human' or 'mouse')
+</ResponseField>
+
+<ResponseField name="replicate" type="string" required>
+  Replicate used for prediction ('0' to '3')
+</ResponseField>
+
+<ResponseField name="avg_output_tracks" type="boolean" required>
+  Whether track outputs were averaged
+</ResponseField>
+  </Tab>
+</Tabs>

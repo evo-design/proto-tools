@@ -1,6 +1,6 @@
 ---
 title: "Prodigal"
-description: "Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction..."
+description: "Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for prokaryotic genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types."
 ---
 
 # Prodigal
@@ -55,82 +55,6 @@ Prokaryotic genes are simpler than eukaryotic genes:
 
 **Parallel processing:**
 When multiple sequences are provided, Prodigal processes them in parallel using multiple CPU threads.
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `input_sequences` | `str` or `List[str]` | DNA sequence(s) to analyze |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `meta_mode` | `bool` | `True` | Use meta mode (True) or single-genome mode (False) |
-| `translation_table` | `int` | `11` | NCBI genetic code (11 = standard bacterial) |
-| `closed_ends` | `bool` | `False` | Prevent partial genes at sequence ends |
-| `num_threads` | `int` | auto | CPU threads for parallel processing |
-
-### Parameter Guides
-
-**Mode selection:**
-| Mode | When to Use |
-|------|-------------|
-| Meta mode (`True`) | Contigs, draft assemblies, metagenomic data, mixed samples |
-| Single-genome mode (`False`) | Complete/near-complete genomes (>100kb) |
-
-**Translation table options:**
-| Code | Description |
-|------|-------------|
-| `11` | Bacterial, archaeal, plant plastid (default) |
-| `4` | Mycoplasma/Spiroplasma |
-| `25` | Candidate division SR1, Gracilibacteria |
-
-**Closed ends:**
-| Setting | When to Use |
-|---------|-------------|
-| `False` (default) | Linear contigs, draft assemblies (allows partial genes at edges) |
-| `True` | Complete circular genomes (chromosomes, plasmids) |
-
-### Sweep Priorities
-
-1. `meta_mode` — Most impactful; determines whether model trains on input or uses pre-trained parameters
-2. `translation_table` — Must match organism; incorrect code produces wrong translations
-3. `closed_ends` — Only relevant for complete circular genomes
-
-## Output Specification
-
-**ProdigalOutput**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `predicted_orfs` | `List[List[ORF]]` | List of ORF results per input sequence |
-| `num_orfs` | `int` | Total genes predicted across all sequences (computed) |
-| `num_orfs_per_sequence` | `List[int]` | Gene count per sequence (computed) |
-| `results_df` | `DataFrame` | All ORFs as a pandas DataFrame (computed) |
-
-**ORF / DataFrame columns**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `parent_id` | `str` | Parent sequence ID (seq_0, seq_1, etc.) |
-| `orf_id` | `str` | ORF identifier within parent (gene_1, gene_2, etc.) |
-| `amino_acid_sequence` | `str` | Translated protein sequence |
-| `nucleotide_sequence` | `str` | DNA sequence of the gene |
-| `amino_acid_length` | `int` | Protein length in amino acids |
-| `nucleotide_length` | `int` | Gene length in nucleotides |
-| `nucleotide_start` | `int` | Start position (1-indexed) |
-| `nucleotide_end` | `int` | End position (1-indexed) |
-| `strand` | `str` | '+' or '-' |
-| `frame` | `int` | Reading frame (1, 2, or 3) |
-| `partial` | `str` | Partial status (00_00 = complete, computed) |
-| `partial_begin` | `int` | 0 = complete, 1 = truncated at 5' |
-| `partial_end` | `int` | 0 = complete, 1 = truncated at 3' |
-| `gc_content` | `float` | GC content (0.0-1.0) |
-| `start_type` | `str` | Start codon (ATG, GTG, TTG) |
-| `rbs_motif` | `str` | RBS motif detected |
-| `rbs_spacer` | `str` | Spacing between RBS and start |
-| `description` | `str` | Full Prodigal annotation string |
 
 ## Interpreting Results
 
@@ -294,3 +218,32 @@ print(df[['parent_id', 'orf_id', 'amino_acid_length', 'strand']])
 
 **Alternative tools:**
 - `orfipy`: General ORF prediction — more flexible for custom start/stop codons but less accurate for prokaryotic gene calling.
+
+
+## API Reference
+
+### Input
+
+<ParamField path="input_sequences" type="List[string]" required>
+  DNA sequence(s) to analyze for open reading frames
+</ParamField>
+
+### Configuration
+
+<ParamField path="meta_mode" type="boolean" default="True">
+  Use meta mode for short sequences/fragments (True) or single-genome mode (False)
+</ParamField>
+
+<ParamField path="translation_table" type="integer" default="11">
+  NCBI translation table (default: 11 for bacteria)
+</ParamField>
+
+<ParamField path="closed_ends" type="boolean" default="False">
+  Prevent genes from running off sequence edges (use True for complete circular genomes)
+</ParamField>
+
+### Output
+
+<ResponseField name="predicted_orfs" type="List[array]">
+  List of ORF results per input sequence
+</ResponseField>

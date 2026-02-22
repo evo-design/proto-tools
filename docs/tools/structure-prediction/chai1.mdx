@@ -1,6 +1,6 @@
 ---
 title: "Chai1"
-description: "Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of..."
+description: "Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a diffusion-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy."
 ---
 
 # Chai1
@@ -83,65 +83,6 @@ Chai1 employs a multi-stage architecture:
 - **Single conformation:** Predicts one structure, not conformational ensembles
 - **No explicit water:** Does not model structural water molecules
 - **Glycan complexity:** Limited to standard glycan building blocks
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | List of complexes; each can have protein chains, ligands, and/or glycans |
-| `use_esm_embeddings` | `bool` | `True` | Use ESM-2 embeddings for improved protein representations |
-| `use_msa` | `bool` | `True` | Whether to generate and use MSAs for protein chains using ColabFold search |
-| `colabfold_search_config.search_mode` | `str` | `"remote"` | MSA search mode; `"remote"` uses ColabFold API, `"local"` uses local databases |
-| `colabfold_search_config.use_metagenomic` | `bool` | `False` | Include metagenomic sequences in MSA search for improved coverage |
-| `num_trunk_recycles` | `int` | `3` | Iterative refinement passes; more = better quality but slower |
-| `num_diffn_timesteps` | `int` | `200` | Denoising steps; more = finer structures but slower |
-| `num_diffn_samples` | `int` | `1` | Independent structure samples; best is returned |
-| `num_trunk_samples` | `int` | `1` | Trunk forward passes per diffusion sample |
-| `seed` | `int` | `42` | Random seed for reproducibility |
-
-## Configuration
-
-### Parameter Guides
-
-| Parameter | Sweep Range | Notes |
-|-----------|-------------|-------|
-| `use_esm_embeddings` | `True, False` | Always use `True` unless debugging |
-| `num_trunk_recycles` | `1 - 10` | Higher = more refined but slower |
-| `num_diffn_timesteps` | `100 - 500` | Higher = finer structures; 200 is good default |
-| `num_diffn_samples` | `1 - 5` | More samples explore binding pose diversity |
-| `num_trunk_samples` | `1 - 3` | Multiple trunk passes per diffusion sample |
-
-### Sweep Priorities
-
-1. **`use_esm_embeddings`**: Most impactful for protein structure quality. Always use `True` unless debugging.
-2. **`num_trunk_recycles`**: Affects structure refinement quality. Try 3, 5, 10 to balance speed vs accuracy.
-3. **`num_diffn_timesteps`**: For high-stakes predictions, increase to 400-500. Use 100-200 for rapid screening.
-
-## Output Specification
-
-```python python icon="python"
-# Return type: Chai1Output
-Chai1Output(
-    structures: List[Structure],  # One per input complex
-)
-
-# Each Structure contains metrics:
-metrics = {
-    "avg_plddt": float,        # Average pLDDT across all residues (0-100)
-    "ptm": float,              # Predicted TM-score (0-1), may be None
-    "iptm": float,             # Interface pTM (0-1), may be None
-    "confidence_score": float, # Aggregate confidence, may be None
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `avg_plddt` | `float` | `0 - 100` | Mean per-residue confidence; >90 = excellent, 70-90 = good, &lt;70 = uncertain |
-| `ptm` | `float` | `0.0 - 1.0` | Global fold confidence; >0.8 = reliable topology |
-| `iptm` | `float` | `0.0 - 1.0` | Interface confidence; >0.8 = reliable interactions between chains |
-| `confidence_score` | `float` | `0.0 - 1.0` | Aggregate ranking score combining multiple metrics |
 
 ## Interpreting Results
 
@@ -244,3 +185,44 @@ for structure in result.structures:
 - **`boltz2-prediction`**: Supports DNA/RNA complexes that Chai1 cannot handle; use for nucleic acid interactions
 - **`esmfold`**: Much faster for protein-only structures; use when no ligands/glycans needed
 - **`alphafold2`**: Higher accuracy for protein-only; use for final validation of protein folds
+
+
+## API Reference
+
+### Input
+
+<ParamField path="complexes" type="List[StructurePredictionComplex]" required>
+  List of complexes to predict structure for containing chains and entity types.
+</ParamField>
+
+### Configuration
+
+<ParamField path="use_esm_embeddings" type="boolean" default="True">
+  Whether to use ESM embeddings for improved predictions
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
+</ParamField>
+
+<ParamField path="num_trunk_recycles" type="integer" default="3">
+  Number of iterative refinement passes through the trunk network
+</ParamField>
+
+<ParamField path="num_diffn_timesteps" type="integer" default="200">
+  Number of denoising steps in the diffusion process (higher=more refined structures but slower)
+</ParamField>
+
+<ParamField path="num_diffn_samples" type="integer" default="1">
+  Number of independent structure samples to generate (Only best is returned for each complex)
+</ParamField>
+
+<ParamField path="num_trunk_samples" type="integer" default="1">
+  Number of independent trunk forward passes per diffusion sample
+</ParamField>
+
+### Output
+
+<ResponseField name="structures" type="List[object]" required>
+  List of predicted structures
+</ResponseField>

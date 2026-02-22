@@ -60,20 +60,6 @@ for chain in output.chains:
     print(chain.chain_id, chain_type, len(chain.sequence))
 ```
 
-## Input Parameters
-
-### `PdbFetchEntryInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_id` | `str` | *(required)* | PDB accession (e.g. `1LBG`) |
-
-### `PdbFetchFastaInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `pdb_id` | `str` | *(required)* | PDB accession (e.g. `1LBG`) |
-
 ## Configuration (shared)
 
 Both tools share `PdbFetchConfig`:
@@ -129,3 +115,95 @@ Both tools share `PdbFetchConfig`:
 ## References
 
 - Burley SK, et al. RCSB Protein Data Bank: Celebrating 50 years of the PDB. Protein Science. 2022;31(1):187-208. doi:10.1002/pro.4213
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="PDB Fetch Entry">
+  **Key:** `pdb-fetch-entry`
+
+  Fetch structure metadata (title, method, resolution) from RCSB PDB
+
+### Input
+
+<ParamField path="pdb_id" type="string" required>
+  PDB accession (e.g. '1LBG')
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout per request
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="3">
+  Max HTTP retries
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/pdb-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="title" type="string">
+  Structure title
+</ResponseField>
+
+<ResponseField name="method" type="string">
+  Experimental method
+</ResponseField>
+
+<ResponseField name="resolution" type="number">
+  Resolution in angstroms
+</ResponseField>
+
+<ResponseField name="source_url" type="string">
+  Request URL
+</ResponseField>
+  </Tab>
+  <Tab title="PDB Fetch FASTA">
+  **Key:** `pdb-fetch-fasta`
+
+  Fetch chain sequences from RCSB PDB with protein/nucleotide classification
+
+### Input
+
+<ParamField path="pdb_id" type="string" required>
+  PDB accession (e.g. '1LBG')
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout per request
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="3">
+  Max HTTP retries
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/pdb-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="chains" type="List[PdbChain]">
+  Parsed chain sequences
+</ResponseField>
+
+<ResponseField name="source_url" type="string">
+  Request URL
+</ResponseField>
+  </Tab>
+</Tabs>

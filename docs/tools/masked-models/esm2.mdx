@@ -1,6 +1,6 @@
 ---
 title: "ESM2"
-description: "ESM2 (Evolutionary Scale Modeling 2) is Meta AI's protein language model trained on millions of prot..."
+description: "ESM2 (Evolutionary Scale Modeling 2) is Meta AI's protein language model trained on millions of protein sequences from UniRef. It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost."
 ---
 
 # ESM2
@@ -80,100 +80,6 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 - **Embeddings**: Forward pass through the model produces per-position hidden states. Mean-pooling across positions yields a fixed-length sequence descriptor.
 - **Sampling**: Positions are selected by a decoding method (entropy, max_logit, or random), masked, and resampled from the model's predicted distribution at a given temperature.
 - **Scoring**: Each position is masked one at a time, and the model's log-probability of the true amino acid is recorded. Aggregated scores give pseudo-perplexity (lower = more "natural" sequence).
-
-## Input Parameters
-
-### Embeddings Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences (amino acid strings) |
-
-### Sampling Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences to mutate |
-
-### Scoring Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences to score |
-
-## Configuration
-
-### Embeddings Tool (`ESM2EmbeddingsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
-| `verbose` | `bool` | `False` | Print progress messages |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Sampling Tool (`ESM2SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `temperature` | `float` | 1.0 | Sampling temperature (lower = conservative) |
-| `decoding_method` | `str` | `"entropy"` | Position selection: `"entropy"`, `"max_logit"`, `"random"` |
-| `num_mutations` | `int` | 1 | Positions to mutate per iteration |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `"cuda"` | Device for inference |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Scoring Tool (`ESM2ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `"esm2_t33_650M_UR50D"` | Model variant to use |
-| `batch_size` | `int` | `1` | Masked variants per forward pass |
-| `device` | `str` | `"cuda"` | Device for inference |
-| `verbose` | `bool` | `False` | Print progress messages |
-| `return_logits` | `bool` | `False` | Include per-position logits in output |
-
-### Parameter Guides
-
-**Temperature guide for sampling:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| 0.5-0.7 | Conservative | Safer mutations |
-| 1.0 | Standard | Model distribution |
-| 1.5-2.0 | Creative | More diverse mutations |
-
-## Output Specification
-
-### ESM2EmbeddingsOutput (Embeddings)
-
-| Field | Type | Shape | Description |
-|-------|------|-------|-------------|
-| `mean_embeddings` | `List[List[float]]` | `[num_seq, embed_dim]` | Mean-pooled sequence embeddings |
-| `logits` | `List[List[List[float]]]` | `[num_seq, seq_len, 20]` | Per-position amino acid logits (AA-only) |
-| `attention_masks` | `List[List[int]]` | `[num_seq, seq_len]` | Valid position masks (1=valid, 0=padding) |
-| `num_sequences` | `int` | - | Number of sequences processed |
-
-### ESM2SampleOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Mutated protein sequences |
-| `logits` | `List[List[List[float]]]?` | Optional per-position logits (AA-only) |
-
-### MaskedModelScoringOutput (Scoring)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[SequenceScores]` | One score object per input sequence |
-
-**SequenceScores fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| `metrics` | `Dict[str, float]` | Includes `log_likelihood`, `avg_log_likelihood`, `perplexity` |
-| `logits` | `List[List[float]]?` | Optional per-position logits (shape `[seq_len, 20]`) |
-| `vocab` | `List[str]?` | Amino acid order (AA-only) |
 
 ## Interpreting Results
 
@@ -325,3 +231,138 @@ print(f"Processed {result.num_sequences} sequences")
 **Alternative tools:**
 - `progen2`: Autoregressive protein generation
 - `esm3`: Can also do embeddings, but ESM2 is faster for embedding-only tasks
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="ESM2 Embeddings">
+  **Key:** `esm2-embedding`
+
+  Extract protein sequence embeddings and logits using ESM2
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="enum" default="esm2_t33_650M_UR50D">
+  Name of the ESM2 model variant to use
+
+  Options: `esm2_t6_8M_UR50D`, `esm2_t12_35M_UR50D`, `esm2_t30_150M_UR50D`, `esm2_t33_650M_UR50D`, `esm2_t36_3B_UR50D`, `esm2_t48_15B_UR50D`
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+### Output
+
+<ResponseField name="logits" type="array">
+  Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].
+</ResponseField>
+
+<ResponseField name="attention_masks" type="List[array]" required>
+  Attention masks for each sequence (shape: [num_sequences, seq_len])
+</ResponseField>
+
+<ResponseField name="mean_embeddings" type="array">
+  Mean embeddings for each sequence (averaged over sequence length)
+</ResponseField>
+
+<ResponseField name="num_sequences" type="integer" required>
+  Number of sequences processed
+</ResponseField>
+  </Tab>
+  <Tab title="ESM2 Sampling">
+  **Key:** `esm2-sample`
+
+  Sample protein sequences using ESM2 language model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="enum" default="esm2_t33_650M_UR50D">
+  Name of the ESM2 model variant to use
+
+  Options: `esm2_t6_8M_UR50D`, `esm2_t12_35M_UR50D`, `esm2_t30_150M_UR50D`, `esm2_t33_650M_UR50D`, `esm2_t36_3B_UR50D`, `esm2_t48_15B_UR50D`
+</ParamField>
+
+<ParamField path="temperature" type="number" default="1.0">
+  Sampling temperature for amino acid selection
+</ParamField>
+
+<ParamField path="decoding_method" type="enum" default="entropy">
+  Method for selecting positions to mutate
+
+  Options: `entropy`, `max_logit`, `random`
+</ParamField>
+
+<ParamField path="num_mutations" type="integer" default="1">
+  Number of positions to mutate per sequence
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="sequences" type="List[string]" required>
+  Sampled/mutated protein sequences
+</ResponseField>
+
+<ResponseField name="logits" type="array">
+  Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].
+</ResponseField>
+  </Tab>
+  <Tab title="ESM2 Scoring">
+  **Key:** `esm2-score`
+
+  Score protein sequences using ESM2 language model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="enum" default="esm2_t33_650M_UR50D">
+  ESM2 model checkpoint to use
+
+  Options: `esm2_t6_8M_UR50D`, `esm2_t12_35M_UR50D`, `esm2_t30_150M_UR50D`, `esm2_t33_650M_UR50D`, `esm2_t36_3B_UR50D`, `esm2_t48_15B_UR50D`
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[SequenceScores]" required>
+  List of scoring outputs, one per input sequence
+</ResponseField>
+  </Tab>
+</Tabs>

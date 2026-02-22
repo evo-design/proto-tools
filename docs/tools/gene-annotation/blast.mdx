@@ -1,6 +1,6 @@
 ---
 title: "BLAST"
-description: "BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. ..."
+description: "BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides a unified interface for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases."
 ---
 
 # BLAST
@@ -79,112 +79,6 @@ Online: Minimal local resources, but high latency (seconds to minutes per query)
 Local: CPU-intensive. RAM usage depends on database size.
 
 Storage: Local databases can be large (NCBI 'nt' is >100GB compressed; custom DBs are small).
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | `str` | Your sequence as a string (e.g., `"ATGCGTAAA..."`) OR a path to a FASTA file. Automatically detected. |
-
-The input has strict type validation: if the value is an existing file path, it's treated as a FASTA file; otherwise it's validated as a raw sequence string containing only valid sequence characters.
-
-## Configuration
-
-**Core Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `search_mode` | `str` | `"online"` | `"online"` for NCBI servers, `"local"` for BLAST+ CLI |
-| `program` | `str` | `"blastn"` | BLAST algorithm (see Program Matrix above) |
-
-**Online-Only Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `database` | `str` | `"nt"` | NCBI database to search against |
-| `hitlist_size` | `int` | `None` | Number of hits to return (NCBI default: 50) |
-| `entrez_query` | `str` | `None` | Restrict search with an Entrez query |
-| `megablast` | `bool` | `None` | Use MegaBLAST algorithm (blastn only) |
-
-**Local-Only Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `local_db` | `str` | *Required* | Path to local BLAST database (created by `blast-create-db`) |
-| `num_threads` | `int` | `4` | Number of CPU threads |
-
-**Scoring Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `evalue` | `float` | `None` | E-value threshold (BLAST default: 10.0) |
-| `word_size` | `int` | `None` | Word size for initial matches |
-| `gapopen` | `int` | `None` | Cost to open a gap |
-| `gapextend` | `int` | `None` | Cost to extend a gap |
-| `matrix` | `str` | `None` | Scoring matrix (BLOSUM62, PAM30, etc.) |
-| `reward` | `int` | `None` | Nucleotide match reward (blastn only) |
-| `penalty` | `int` | `None` | Nucleotide mismatch penalty (blastn only) |
-
-**Filtering Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `max_target_seqs` | `int` | `None` | Max aligned sequences to keep |
-| `max_hsps` | `int` | `None` | Max HSPs per query-subject pair |
-| `perc_identity` | `float` | `None` | Min percent identity (0-100) |
-| `qcov_hsp_perc` | `float` | `None` | Min query coverage per HSP (0-100) |
-
-**Search Parameters**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `task` | `str` | `None` | Task preset (megablast, blastn-short, blastp-fast, etc.) |
-| `ungapped` | `bool` | `None` | Perform ungapped alignment only |
-| `strand` | `str` | `None` | Query strand: both, plus, minus |
-
-See `BlastSearchConfig` class for the full list of supported parameters.
-
-### Parameter Guides
-
-**Program selection:**
-| Query Type | Database Type | Use Program |
-|------------|---------------|-------------|
-| Nucleotide | Nucleotide | `blastn` |
-| Protein | Protein | `blastp` |
-| Nucleotide | Protein | `blastx` |
-| Protein | Nucleotide | `tblastn` |
-| Nucleotide (translated) | Nucleotide (translated) | `tblastx` |
-
-**E-value interpretation:**
-| E-value | Meaning |
-|---------|---------|
-| `< 1e-50` | Near-certain homolog |
-| `< 1e-5` | Strong evidence of homology |
-| `< 0.01` | Possible homolog (inspect manually) |
-| `> 0.01` | Likely noise/chance |
-
-### Sweep Priorities
-
-1. `evalue` — Most impactful; controls sensitivity vs noise tradeoff
-2. `program` — Must match query/database types; incorrect choice yields no results
-3. `word_size` — Decrease to find shorter/more divergent matches (slower), increase for speed
-
-## Output Specification
-
-`blast-search` returns a `BlastSearchOutput` object with two attributes:
-- `results_df`: A Pandas DataFrame with all hits (or empty if no matches)
-- `num_hits`: Total number of hits found
-
-**DataFrame Columns (standard "Outfmt 6"):**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `qseqid` | Query ID | The ID of your input sequence. |
-| `sseqid` | Subject ID | The ID of the match in the database. |
-| `pident` | Percent Identity | % of exact matches. >95% usually implies same species/gene. |
-| `length` | Alignment Length | How long the matching region is. |
-| `mismatch` | Mismatches | Number of non-matching positions. |
-| `gapopen` | Gap Openings | Number of gaps introduced in the alignment. |
-| `qstart` | Query Start | Position in your sequence where the match begins. |
-| `qend` | Query End | Position in your sequence where the match ends. |
-| `sstart` | Subject Start | Position in the database sequence where the match begins. |
-| `send` | Subject End | Position in the database sequence where the match ends. |
-| `evalue` | Expect Value | **Crucial statistic.** The number of hits expected by chance. Lower is better. |
-| `bitscore` | Bit Score | Alignment score normalized for database size. Higher is better. |
 
 ## Interpreting Results
 
@@ -287,3 +181,237 @@ print(good_hits)
 **Alternative tools:**
 - `mmseqs-search-proteins` / `mmseqs-search-genomes`: Faster alternative for very large-scale searches (100-1000x faster).
 - `pyhmmer-hmmsearch` / `pyhmmer-phmmer`: More sensitive for detecting remote homologs using profile HMMs.
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="Create BLAST Database">
+  **Key:** `blast-create-db`
+
+  Create a local BLAST database from a FASTA file
+
+### Input
+
+<ParamField path="fasta" type="string" required>
+  Path to the input FASTA file containing sequences to create a BLAST database from
+</ParamField>
+
+### Configuration
+
+<ParamField path="dbtype" type="enum" default="nucl">
+  Specifies the type of database to create: Nucleotide or Protein
+
+  Options: `nucl`, `prot`
+</ParamField>
+
+<ParamField path="out_prefix" type="string">
+  File-path prefix for database files (default: FASTA stem)
+</ParamField>
+
+<ParamField path="title" type="string">
+  Optional name for the database
+</ParamField>
+
+<ParamField path="additional_params" type="Dict[string, string | integer | number | boolean]">
+  Extra flags for makeblastdb (e.g., parse_seqids, hash_index)
+</ParamField>
+
+### Output
+
+<ResponseField name="db_path" type="string" required>
+  Path to the generated BLAST database
+</ResponseField>
+  </Tab>
+  <Tab title="BLAST Search">
+  **Key:** `blast-search`
+
+  Search sequences against BLAST databases (online or local)
+
+### Input
+
+<ParamField path="query" type="string" required>
+  Query sequence string or path to a FASTA file containing query sequence(s)
+</ParamField>
+
+<ParamField path="query_type" type="enum" default="sequence">
+  Auto-inferred query type: 'sequence' for raw string, 'fasta_path' for a file path.
+
+  Options: `sequence`, `fasta_path`
+</ParamField>
+
+### Configuration
+
+<ParamField path="search_mode" type="enum" default="online">
+  Search mode: "online" queries NCBI servers, "local" runs BLAST+ against a local database
+
+  Options: `online`, `local`
+</ParamField>
+
+<ParamField path="program" type="enum" default="blastn">
+  BLAST algorithm to use for the search
+
+  Options: `blastn`, `blastp`, `blastx`, `tblastn`, `tblastx`
+</ParamField>
+
+<ParamField path="database" type="enum" default="nt">
+  NCBI database to search against (online mode only). Ignored when search_mode is 'local'.
+
+  Options: `nt`, `nr`, `refseq_rna`, `refseq_protein`, `swissprot`, `pdb`, `pataa`, `patnt`
+</ParamField>
+
+<ParamField path="entrez_query" type="string">
+  Restrict online search with an Entrez query (e.g. 'Homo sapiens[Organism]'). Online only.
+</ParamField>
+
+<ParamField path="hitlist_size" type="integer">
+  Number of database sequences to return. Defaults to 50 on NCBI. Online mode only.
+</ParamField>
+
+<ParamField path="megablast" type="boolean">
+  Use MegaBLAST algorithm for blastn searches (online mode only). Ignored when search_mode is 'local'.
+</ParamField>
+
+<ParamField path="local_db" type="string">
+  Path to a local BLAST database (no file extensions). Required for local mode.
+</ParamField>
+
+<ParamField path="num_threads" type="integer" default="4">
+  Number of CPU threads for local BLAST search
+</ParamField>
+
+<ParamField path="evalue" type="number">
+  Expectation value threshold for reporting hits. Default is 10.0 in both online and local BLAST.
+</ParamField>
+
+<ParamField path="word_size" type="integer">
+  Length of initial exact match. Defaults: 28 (megablast), 11 (blastn), 3 (protein).
+</ParamField>
+
+<ParamField path="gapopen" type="integer">
+  Cost to open a gap. Defaults: 5 (blastn), 11 (protein programs).
+</ParamField>
+
+<ParamField path="gapextend" type="integer">
+  Cost to extend a gap. Not supported for tblastx. Defaults: 2 (blastn), 1 (blastp/blastx/tblastn).
+</ParamField>
+
+<ParamField path="matrix" type="string">
+  Substitution matrix for protein alignments. Not applicable to blastn. Default: BLOSUM62.
+</ParamField>
+
+<ParamField path="reward" type="integer">
+  Reward for a nucleotide match (blastn only). Default: 1 (megablast), 2 (blastn/dc-megablast).
+</ParamField>
+
+<ParamField path="penalty" type="integer">
+  Penalty for nucleotide mismatch (blastn only). Must be negative. Default: -2 or -3.
+</ParamField>
+
+<ParamField path="threshold" type="integer">
+  Minimum word score for BLAST lookup table (protein only). Default: 11-13 depending on program.
+</ParamField>
+
+<ParamField path="comp_based_stats" type="integer">
+  Composition-based score adjustment (protein). 0=off, 1=stats, 2=adjust (default), 3=unconditional.
+</ParamField>
+
+<ParamField path="max_target_seqs" type="integer">
+  Maximum number of aligned sequences to keep. Default: 500 (local mode).
+</ParamField>
+
+<ParamField path="max_hsps" type="integer">
+  Maximum number of HSPs (high-scoring segment pairs) per query-subject pair. Default: no limit.
+</ParamField>
+
+<ParamField path="perc_identity" type="number">
+  Minimum percent identity for reported alignments (0-100). Most useful for blastn.
+</ParamField>
+
+<ParamField path="qcov_hsp_perc" type="number">
+  Minimum query coverage percentage per HSP (0-100).
+</ParamField>
+
+<ParamField path="culling_limit" type="integer">
+  Delete hits enveloped by at least this many higher-scoring hits.
+</ParamField>
+
+<ParamField path="best_hit_overhang" type="number">
+  Best Hit algorithm overhang value (>0 and &lt;0.5). Incompatible with culling_limit.
+</ParamField>
+
+<ParamField path="best_hit_score_edge" type="number">
+  Best Hit algorithm score edge value (>0 and &lt;0.5). Incompatible with culling_limit.
+</ParamField>
+
+<ParamField path="subject_besthit" type="boolean">
+  Only report the best hit per subject sequence.
+</ParamField>
+
+<ParamField path="soft_masking" type="boolean">
+  Apply filtering as soft masks (for seeding only). Default: true (blastn), false (protein programs).
+</ParamField>
+
+<ParamField path="lcase_masking" type="boolean">
+  Treat lowercase letters in FASTA input as masked.
+</ParamField>
+
+<ParamField path="dust" type="string">
+  Low-complexity filter for nucleotide queries. Values: 'yes', 'no', or 'level window linker'.
+</ParamField>
+
+<ParamField path="seg" type="string">
+  Low-complexity filter for protein queries. Values: 'yes', 'no', or 'window locut hicut'.
+</ParamField>
+
+<ParamField path="task" type="string">
+  Task preset that sets optimized default parameters (e.g. megablast, blastp-fast, blastx-fast).
+</ParamField>
+
+<ParamField path="ungapped" type="boolean">
+  Perform ungapped alignment only.
+</ParamField>
+
+<ParamField path="strand" type="string">
+  Query strand(s) to search: 'both', 'plus', or 'minus'. Only for blastn, blastx, tblastx.
+</ParamField>
+
+<ParamField path="query_gencode" type="integer">
+  Genetic code for translating the query sequence. Only for blastx and tblastx. Default: 1 (Standard).
+</ParamField>
+
+<ParamField path="db_gencode" type="integer">
+  Genetic code for translating database sequences. Only for tblastn/tblastx. Default: 1.
+</ParamField>
+
+<ParamField path="window_size" type="integer">
+  Multiple-hits window size for combining initial word hits.
+</ParamField>
+
+<ParamField path="xdrop_ungap" type="number">
+  X-dropoff value (in bits) for ungapped extensions.
+</ParamField>
+
+<ParamField path="xdrop_gap" type="number">
+  X-dropoff value (in bits) for preliminary gapped extensions.
+</ParamField>
+
+<ParamField path="xdrop_gap_final" type="number">
+  X-dropoff value (in bits) for final gapped alignment.
+</ParamField>
+
+<ParamField path="use_sw_tback" type="boolean">
+  Compute locally optimal Smith-Waterman alignments. Only for blastp, blastx, tblastn.
+</ParamField>
+
+### Output
+
+<ResponseField name="results_df" type="DataFrame">
+  DataFrame with BLAST results
+</ResponseField>
+
+<ResponseField name="num_hits" type="integer">
+  Number of BLAST hits found
+</ResponseField>
+  </Tab>
+</Tabs>

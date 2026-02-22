@@ -1,6 +1,6 @@
 ---
 title: "ColabFold MSA Search"
-description: "ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein sequences by searchin..."
+description: "ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein sequences by searching large sequence databases for homologs. MSAs are a foundational input for structure prediction (AlphaFold, ESMFold), co-evolutionary analysis, and conservation scoring. This tool wraps MMSeqs2 for fast local search and the ColabFold API for remote search."
 ---
 
 # ColabFold MSA Search
@@ -50,89 +50,6 @@ ColabFold uses MMSeqs2 (Many-against-Many sequence searching) for fast homology 
 **Search modes:**
 - **Remote** (default): Queries the ColabFold API server. No local database required, but subject to rate limits. Best for small batches.
 - **Local**: Searches a locally installed MMSeqs2 database. Requires downloading the UniRef30 database (~70 GB). Best for large-scale or repeated searches.
-
-## Input Parameters
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `queries` | `List[ColabfoldSearchQuery]` | Protein sequences to search. Accepts multiple formats (see below). |
-
-**Flexible input formats:**
-
-```python python icon="python"
-# Simple: list of sequence strings
-inputs = ColabfoldSearchInput(queries=["MVLSPADKTN", "MKTAYIAKQR"])
-
-# With explicit IDs
-inputs = ColabfoldSearchInput(queries=[
-    ColabfoldSearchQuery(sequence="MVLSPADKTN", sequence_id="hemoglobin_alpha"),
-    ColabfoldSearchQuery(sequence="MKTAYIAKQR", sequence_id="my_design"),
-])
-
-# Tuple format: (sequence, id)
-inputs = ColabfoldSearchInput(queries=[
-    ("MVLSPADKTN", "hemoglobin_alpha"),
-    ("MKTAYIAKQR", "my_design"),
-])
-```
-
-Sequence IDs are auto-generated from a hash of the sequence if not provided.
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `search_mode` | `"local"` \| `"remote"` | `"remote"` | Search mode. Remote uses ColabFold API; local uses MMSeqs2 database. |
-| `use_metagenomic_db` | `bool` | `False` | Include metagenomic sequences in search. Increases MSA depth but slows search. |
-| `sensitivity` | `Optional[float]` | `None` | MMSeqs2 sensitivity (1.0-9.0). Local mode only. Higher = more remote homologs found but slower. |
-| `database_name` | `str` | `"uniref30_2302_db"` | Database name for local search. |
-| `num_threads` | `Optional[int]` | `None` (auto) | CPU threads for local search. Auto-detects available cores. |
-| `output_dir` | `Optional[str]` | `None` | Output directory for MSA files. Defaults to `~/.cache/bio-programming/colabfold_search`. |
-| `msa_db_dir` | `str` | (system default) | Path to local MMSeqs2 database directory. Local mode only. |
-| `verbose` | `bool` | `False` | Print progress messages during execution. |
-
-### Parameter Guides
-
-**Sensitivity (local mode):**
-
-| Value | Speed | Sensitivity | Use Case |
-|-------|-------|-------------|----------|
-| 1.0-4.0 | Fast | Low | Quick screening, close homologs only |
-| 5.0-7.0 | Moderate | Moderate | General-purpose search |
-| 7.5-8.0 | Slow | High | Default ColabFold behavior; good for structure prediction |
-| 8.5-9.0 | Very slow | Maximum | Exhaustive search for remote homologs |
-
-**Metagenomic database:**
-
-| Setting | MSA Depth | Speed | When to Use |
-|---------|-----------|-------|-------------|
-| `False` | Lower | Faster | Most use cases; sufficient for well-studied protein families |
-| `True` | Higher | Slower | Orphan proteins, de novo designs, or when MSA depth is critical for structure prediction |
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[ColabfoldSearchResult]` | One result per input query, in input order |
-
-Each `ColabfoldSearchResult` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `msa` | `Optional[MSA]` | The MSA object, or `None` if no homologs were found |
-| `sequence_id` | `str` | Identifier for the searched sequence |
-| `num_homologs_found` | `int` (property) | Number of homologs (excludes the query sequence itself) |
-
-**MSA object properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `num_sequences` | `int` | Total sequences including query |
-| `alignment_length` | `int` | Number of columns in the alignment |
-| `sequence_ids` | `List[str]` | Identifiers for all sequences |
-| `average_gap_fraction` | `float` | Mean fraction of gaps across sequences |
-
-Export formats: `a3m`, `fasta`
 
 ## Interpreting Results
 
@@ -251,3 +168,36 @@ if msa is not None:
 - **BLAST** (`blast-search`) -- Traditional sequence search with E-value statistics; better for targeted homolog identification
 - **Foldseek** (`foldseek-search`) -- Structure-based search; finds remote homologs that sequence search misses
 - **HHblits** -- Iterative profile-based search; higher sensitivity for remote homologs but slower
+
+
+## API Reference
+
+### Input
+
+<ParamField path="queries" type="List[ColabfoldSearchQuery]" required>
+  List of protein sequences to search for homologs
+</ParamField>
+
+### Configuration
+
+<ParamField path="use_metagenomic_db" type="boolean" default="False">
+  Whether to include metagenomic database in search
+</ParamField>
+
+<ParamField path="msa_db_dir" type="string" default="/large_storage/hielab/brk/databases/colabfold">
+  Path to local ColabFold/MMSeqs2 database directory (default: ./databases in tool directory)
+</ParamField>
+
+<ParamField path="database_name" type="string" default="uniref30_2302_db">
+  Name of the database to use.
+</ParamField>
+
+<ParamField path="sensitivity" type="number">
+  MMseqs2 parameter. Higher means more hits but slower search. Default matches ColabFold server.
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[ColabfoldSearchResult]" required>
+  List of MSA search results
+</ResponseField>

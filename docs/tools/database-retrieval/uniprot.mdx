@@ -1,6 +1,6 @@
 ---
 title: "UniProt Fetch"
-description: "uniprot-fetch retrieves protein entries from UniProt by accession ID or by searching with target nam..."
+description: "`uniprot-fetch` retrieves protein entries from UniProt by accession ID or by searching with target name and organism. It returns the protein sequence, gene names, and PDB cross-references."
 ---
 
 # UniProt Fetch
@@ -41,40 +41,6 @@ output = run_uniprot_fetch(inputs, UniProtFetchConfig())
 print(output.accession, output.sequence[:20], output.length)
 ```
 
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `uniprot_id` | `Optional[str]` | `None` | UniProt accession for direct entry lookup |
-| `target_name` | `Optional[str]` | `None` | Gene or protein name for search |
-| `organism` | `Optional[str]` | `None` | Organism for search disambiguation |
-| `prefer_pdb_crossref` | `bool` | `False` | When searching, prefer entries that have linked PDB structures |
-| `max_candidates` | `int` | `5` | Maximum number of search results to evaluate when ranking |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds |
-| `http_retries` | `int` | `2` | Retries for HTTP requests |
-| `backoff_seconds` | `float` | `1.0` | Seconds to wait between retries (doubles after each attempt) |
-| `user_agent` | `str` | `"bio-programming-tools/uniprot-fetch-v1"` | Identifier string sent to database APIs with each request |
-
-## Output Specification
-
-`run_uniprot_fetch` returns `UniProtFetchOutput`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `accession` | `str` | Primary UniProt accession |
-| `sequence` | `Optional[str]` | Protein sequence |
-| `length` | `Optional[int]` | Sequence length |
-| `entry_type` | `Optional[str]` | Review status (e.g. `UniProtKB reviewed (Swiss-Prot)` for curated entries) |
-| `gene_names` | `List[str]` | Gene name symbols |
-| `pdb_crossrefs` | `List[str]` | PDB structure IDs linked to this protein entry |
-| `source_url` | `str` | UniProt entry URL |
-| `raw_entry` | `Dict[str, Any]` | Complete UniProt JSON record for advanced programmatic access |
-
 ## Best Practices & Gotchas
 
 1. Provide either `uniprot_id` or both `target_name` and `organism` — the validator enforces this.
@@ -92,3 +58,80 @@ print(output.accession, output.sequence[:20], output.length)
 ## References
 
 - The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. Nucleic Acids Research. 2025;53(D1):D609-D617. doi:10.1093/nar/gkae1010
+
+
+## API Reference
+
+### Input
+
+<ParamField path="uniprot_id" type="string">
+  UniProt accession for direct entry lookup
+</ParamField>
+
+<ParamField path="target_name" type="string">
+  Gene or protein name for search
+</ParamField>
+
+<ParamField path="organism" type="string">
+  Organism for search disambiguation
+</ParamField>
+
+<ParamField path="prefer_pdb_crossref" type="boolean" default="False">
+  When searching, prefer entries that have linked PDB structures
+</ParamField>
+
+<ParamField path="max_candidates" type="integer" default="5">
+  Maximum number of search results to evaluate when ranking
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout in seconds
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="2">
+  Retries for HTTP requests
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/uniprot-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="accession" type="string" required>
+  Primary UniProt accession
+</ResponseField>
+
+<ResponseField name="sequence" type="string">
+  Protein sequence
+</ResponseField>
+
+<ResponseField name="length" type="integer">
+  Sequence length
+</ResponseField>
+
+<ResponseField name="entry_type" type="string">
+  Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)
+</ResponseField>
+
+<ResponseField name="gene_names" type="List[string]">
+  Gene name symbols
+</ResponseField>
+
+<ResponseField name="pdb_crossrefs" type="List[string]">
+  PDB structure IDs linked to this protein entry
+</ResponseField>
+
+<ResponseField name="source_url" type="string" required>
+  UniProt entry URL
+</ResponseField>
+
+<ResponseField name="raw_entry" type="Dict[string, any]">
+  Complete UniProt JSON record for advanced programmatic access
+</ResponseField>

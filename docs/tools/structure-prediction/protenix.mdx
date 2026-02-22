@@ -1,6 +1,6 @@
 ---
 title: "Protenix Structure Prediction"
-description: "Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of bi..."
+description: "Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of biomolecular complexes using a diffusion-based architecture. It supports proteins, DNA, RNA, ligands, and their multi-chain complexes with optional post-translational modifications. Protenix is the first fully open-source model to match or exceed AlphaFold3 accuracy across diverse benchmarks."
 ---
 
 # Protenix Structure Prediction
@@ -69,88 +69,6 @@ The model architecture consists of a Pairformer module (iterative refinement of 
 5. **Diffusion sampling**: Random 3D coordinates are denoised over multiple steps (default: 200 steps) to produce structure samples
 6. **Ranking**: Multiple samples are generated per seed, and the best is selected by a confidence ranking score
 7. **Output**: mmCIF structure files with per-residue and global confidence metrics
-
-## Input Parameters
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | Yes | Complexes to predict. Each complex contains one or more chains. |
-
-Each `StructurePredictionComplex` contains chains that can be specified as:
-- Plain strings (entity type auto-inferred): `["MVLSPADKTN", "ATCGATCG"]`
-- `Chain` objects with explicit types: `Chain(sequence="MVLSPADKTN", entity_type="protein")`
-- `Chain` objects with modifications: `Chain(sequence="MVLSPADKTN", modifications=[(5, "SEP")])`
-
-Supported entity types: `protein`, `dna`, `rna`, `ligand`
-
-## Configuration
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model_name` | `ProtenixModelName` | `"protenix_base_default_v1.0.0"` | Model checkpoint to use (see Model Variants) |
-| `seeds` | `List[int]` | `[0]` | Random seeds for sampling. Each seed generates `num_diffusion_samples` structures. |
-| `use_msa` | `bool` | `True` | Generate and use MSAs for protein chains via ColabFold |
-| `colabfold_search_config` | `ColabfoldSearchConfig` | `None` (uses defaults) | Configuration for ColabFold MSA search |
-| `num_diffusion_samples` | `int` | `5` | Structure samples per seed (best is returned by ranking score) |
-| `num_diffusion_steps` | `int` | `200` | Denoising steps in the diffusion process |
-| `num_pairformer_cycles` | `int` | `10` | Pairformer recycling iterations |
-| `device` | `str` | `"cuda"` | Inference device |
-| `verbose` | `bool` | `False` | Log progress during MSA generation, model loading, and prediction |
-
-### Parameter Guides
-
-**`num_diffusion_samples`** controls conformational exploration:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 1-3 | Rapid screening, initial exploration | Fastest |
-| 5 | Default, good balance of speed and quality | Moderate |
-| 7-10 | High-confidence predictions, flexible complexes | Slowest |
-
-**`num_diffusion_steps`** controls structure refinement quality:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 100-150 | Fast screening, acceptable quality | ~50% of default |
-| 200 | Default, recommended for production | Baseline |
-| 300-500 | Maximum quality, critical predictions | 1.5-2.5x default |
-
-**`num_pairformer_cycles`** controls iterative refinement:
-
-| Value | Use Case | Runtime Impact |
-|-------|----------|---------------|
-| 3-5 | Fast screening | ~50% of default |
-| 10 | Default, good accuracy | Baseline |
-| 15-20 | Maximum refinement, publication quality | 1.5-2x default |
-
-### Sweep Priorities
-
-When using Protenix in optimization loops, prioritize sweeping:
-
-1. **`num_diffusion_samples`**: Most impactful for finding optimal conformations and binding poses
-2. **`num_pairformer_cycles`**: Affects refinement quality of the pair representations
-3. **`num_diffusion_steps`**: For critical predictions, increase for finer structure quality
-4. **`use_msa`**: Critical for accuracy but adds runtime. Try `False` for designed/orphan proteins
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structures` | `List[Structure]` | One predicted structure per input complex |
-
-Each `Structure` contains 3D coordinates (mmCIF format) and a `metrics` dictionary:
-
-| Metric | Type | Range | Description |
-|--------|------|-------|-------------|
-| `confidence_score` | `float` | 0.0-1.0 | Primary ranking score (weighted combination) |
-| `ptm` | `float` | 0.0-1.0 | Predicted TM-score (global fold quality) |
-| `iptm` | `float` | 0.0-1.0 | Interface pTM (inter-chain interface quality) |
-| `avg_plddt` | `float` | 0.0-1.0 | Average per-residue confidence (normalized from 0-100) |
-| `gpde` | `float` | >0 (Angstroms) | Global Predicted Distance Error |
-| `chain_ptm` | `List[float]` | 0.0-1.0 each | Per-chain PTM scores |
-| `chain_plddt` | `List[float]` | 0.0-1.0 each | Per-chain average pLDDT |
-| `chain_pair_iptm` | `List[List[float]]` | 0.0-1.0 each | Pairwise interface PTM between all chain pairs |
-| `has_clash` | `bool` | — | Whether the structure has steric clashes |
 
 ## Interpreting Results
 
@@ -283,3 +201,46 @@ result.export("protenix_output/", file_format="pdb")
 - `alphafold3-prediction` — Original AlphaFold3 (requires API access)
 - `esmfold-prediction` — Fast single-chain protein folding without MSA (no DNA/RNA/ligand support)
 - `chai-prediction` — Another open-source multi-modal structure prediction model
+
+
+## API Reference
+
+### Input
+
+<ParamField path="complexes" type="List[StructurePredictionComplex]" required>
+  List of complexes to predict structure for containing chains and entity types.
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_name" type="enum" default="protenix_base_default_v1.0.0">
+  Protenix model variant to use for structure prediction
+
+  Options: `protenix_base_default_v1.0.0`, `protenix_base_20250630_v1.0.0`, `protenix_base_default_v0.5.0`, `protenix_base_constraint_v0.5.0`, `protenix_mini_esm_v0.5.0`, `protenix_mini_ism_v0.5.0`, `protenix_mini_default_v0.5.0`, `protenix_tiny_default_v0.5.0`
+</ParamField>
+
+<ParamField path="seeds" type="List[integer]" default="[0]">
+  Random seeds for structure sampling. Each seed produces num_diffusion_samples independent samples.
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
+</ParamField>
+
+<ParamField path="num_diffusion_samples" type="integer" default="5">
+  Number of independent structure samples per seed (only the best is returned)
+</ParamField>
+
+<ParamField path="num_diffusion_steps" type="integer" default="200">
+  Number of denoising steps in the diffusion process (higher=more refined but slower)
+</ParamField>
+
+<ParamField path="num_pairformer_cycles" type="integer" default="10">
+  Number of Pairformer recycling iterations (higher=more refined but slower)
+</ParamField>
+
+### Output
+
+<ResponseField name="structures" type="List[object]" required>
+  List of predicted structures
+</ResponseField>

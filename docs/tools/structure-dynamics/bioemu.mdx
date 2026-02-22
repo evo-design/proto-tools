@@ -1,6 +1,6 @@
 ---
 title: "BioEmu Conformational Ensemble Sampling"
-description: "BioEmu generates protein conformational ensembles using a diffusion generative model trained on mole..."
+description: "BioEmu generates protein conformational ensembles using a diffusion generative model trained on molecular dynamics (MD) simulation data. Given a protein sequence, it produces an ensemble of 3D backbone structures representing the equilibrium distribution of conformations the protein adopts -- capturing folded states, alternative conformations, and conformational heterogeneity without running explicit MD simulations."
 ---
 
 # BioEmu Conformational Ensemble Sampling
@@ -65,85 +65,6 @@ Both models accept the same inputs and produce the same output format. v1.1 gene
 3. **Ensemble generation**: The process is repeated `num_samples` times (default 500), each producing an independent backbone conformation drawn from the learned equilibrium distribution
 4. **Quality filtering**: If `filter_samples=True` (default), BioEmu applies internal quality checks to remove poorly generated samples (e.g., structures with steric clashes or broken chain geometry)
 5. **Structure packaging**: Filtered conformations are returned as `Structure` objects within a `StructureEnsemble`
-
-## Input Parameters
-
-`BioEmuInput` extends `StructurePredictionInput`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | Protein complexes to sample. Each must be a single-chain monomer with standard amino acids only. |
-
-**Constraints:**
-- Each complex must contain exactly one protein chain (monomers only)
-- Only standard amino acid characters are allowed
-- Sequences > 500 residues will produce a warning (quality may degrade)
-- Chain modifications are not supported
-
-## Configuration
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `num_samples` | `int` | `500` | >= 1 | Number of conformations to sample per sequence |
-| `model_name` | `"bioemu-v1.0"` \| `"bioemu-v1.1"` | `"bioemu-v1.1"` | -- | BioEmu model variant |
-| `filter_samples` | `bool` | `True` | -- | Apply quality filtering to remove poorly generated structures |
-| `batch_size` | `int` | `10` | >= 1 | Internal batch size for sampling (affects GPU memory, not output count) |
-| `output_dir` | `Optional[str]` | `None` | -- | Optional directory for raw BioEmu output files |
-| `device` | `str` | `"cuda"` | `"cuda"`, `"cpu"` | Inference device (inherited from StructurePredictionConfig) |
-| `verbose` | `bool` | `False` | -- | Verbose logging (inherited from StructurePredictionConfig) |
-
-### Parameter Guides
-
-**Number of samples:**
-
-| num_samples | Use Case | Compute Time |
-|-------------|----------|--------------|
-| 10-50 | Quick check of conformational diversity | Seconds |
-| 100-200 | Moderate ensemble for visualization | Minutes |
-| 500 (default) | Publication-quality ensemble | Minutes |
-| 1000-5000 | Detailed free-energy landscape analysis | Tens of minutes |
-
-**Batch size:**
-
-The `batch_size` parameter controls how many samples are generated in parallel on the GPU. Larger values use more GPU memory but are faster. If you encounter out-of-memory errors, reduce `batch_size`.
-
-| batch_size | GPU Memory | Speed |
-|------------|------------|-------|
-| 1 | Minimal | Slow |
-| 10 (default) | Moderate | Good balance |
-| 50 | High | Fast (if memory allows) |
-
-## Output Specification
-
-`BioEmuOutput` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `ensembles` | `List[StructureEnsemble]` | One ensemble per input complex |
-
-Each `StructureEnsemble` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structures` | `List[Structure]` | Individual backbone conformations |
-| `sequence` | `str` | The input protein sequence |
-
-Each `Structure` in the ensemble has metadata:
-
-| Key | Description |
-|-----|-------------|
-| `ensemble_idx` | Index of the input complex |
-| `frame_idx` | Index of this conformation within the ensemble |
-
-Output metadata:
-
-| Key | Description |
-|-----|-------------|
-| `num_complexes` | Number of input complexes processed |
-| `total_structures` | Total number of conformations generated across all complexes |
-| `model_name` | BioEmu model variant used |
-
-Export formats: `pdb`, `json`
 
 ## Interpreting Results
 
@@ -247,3 +168,38 @@ result = run_bioemu(inputs, config)
 **Alternatives for dynamics:**
 - **Molecular dynamics** (GROMACS, OpenMM) -- Explicit time-resolved dynamics; more accurate but orders of magnitude slower
 - **Normal mode analysis** -- Fast harmonic approximation of dynamics around a single structure; less accurate than BioEmu for large conformational changes
+
+
+## API Reference
+
+### Input
+
+<ParamField path="complexes" type="List[StructurePredictionComplex]" required>
+  List of complexes to predict structure for containing chains and entity types.
+</ParamField>
+
+### Configuration
+
+<ParamField path="num_samples" type="integer" default="500">
+  Number of conformations to sample per sequence
+</ParamField>
+
+<ParamField path="model_name" type="enum" default="bioemu-v1.1">
+  BioEmu model variant to use
+
+  Options: `bioemu-v1.0`, `bioemu-v1.1`
+</ParamField>
+
+<ParamField path="filter_samples" type="boolean" default="True">
+  Whether to filter generated samples using BioEmu quality checks
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="10">
+  Batch size control for BioEmu internal sampling
+</ParamField>
+
+### Output
+
+<ResponseField name="ensembles" type="List[StructureEnsemble]" required>
+  Generated protein conformational ensembles
+</ResponseField>

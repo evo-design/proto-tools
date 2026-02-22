@@ -9,21 +9,6 @@
 #   pre-commit run --all-files
 
 repos:
-  # Auto-generate documentation from tool READMEs
-  - repo: local
-    hooks:
-      - id: generate-docs
-        name: Generate documentation
-        entry: bash -c 'cd "$GIT_PREFIX" && python docs/generate_docs.py'
-        language: system
-        pass_filenames: false
-        files: |
-          (?x)^(
-              bio_programming_tools/tools/.*/README\.md|
-              docs/generate_docs\.py
-          )$
-        stages: [pre-commit]
-
   # Import sorting
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
