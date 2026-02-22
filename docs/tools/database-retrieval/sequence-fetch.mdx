@@ -1,6 +1,6 @@
 ---
 title: "Multi-source Sequence Fetch"
-description: "sequence-fetch retrieves DNA, RNA, protein, and structure data for named targets across NCBI Entrez,..."
+description: "`sequence-fetch` retrieves DNA, RNA, protein, and structure data for named targets across NCBI Entrez, UniProt, and PDB. It supports ID-first resolution, name+organism fallback, and strict molecular type checks."
 ---
 
 # Multi-source Sequence Fetch
@@ -70,62 +70,6 @@ fetches the genomic interval directly from the chromosome accession.
 - `dna_genomic` is not directly translatable in eukaryotes.
 - Protein retrieval from genomic coordinates is inferred through annotation, not direct translation.
 - Alternative splicing can map one locus to multiple proteins.
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `requests` | `List[SequenceFetchRequest]` | One or more retrieval requests; single dict is accepted and auto-wrapped. |
-
-### `SequenceFetchRequest`
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `target_name` | `str` | Gene/protein/RNA target name. |
-| `organism` | `str` | Organism label for disambiguation. |
-| `sequence_types` | `List[str]` | Any of: `protein`, `dna_genomic`, `dna_cds`, `rna_transcript`, `rna_premrna`, `structure`. |
-| `uniprot_id` | `Optional[str]` | Optional UniProt accession override. |
-| `genbank_accession` | `Optional[str]` | Optional GenBank accession override. |
-| `refseq_accession` | `Optional[str]` | Optional RefSeq accession override. |
-| `pdb_id` | `Optional[str]` | Optional PDB ID override. |
-| `gene_id` | `Optional[str]` | Optional NCBI Gene ID override. |
-| `protein_id` | `Optional[str]` | Optional NCBI protein accession override. |
-| `transcript_id` | `Optional[str]` | Optional transcript accession override. |
-| `genomic_coordinates` | `Optional[str]` | Optional coordinates like `NC_000913.3:1-100:+`. |
-| `additional_ids` | `Dict[str, str]` | Optional extra IDs for custom routing. |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds. |
-| `http_retries` | `int` | `2` | Retries for upstream HTTP requests. |
-| `backoff_seconds` | `float` | `1.0` | Seconds to wait between retries (doubles after each attempt). |
-| `max_candidates_per_source` | `int` | `5` | Maximum database candidates to evaluate per name-based search. |
-| `strict_type_checks` | `bool` | `True` | Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene). |
-| `fail_on_type_mismatch` | `bool` | `True` | Treat molecule type mismatches as errors instead of warnings. |
-| `include_sequence_checksums` | `bool` | `True` | Include SHA256 checksums per sequence. |
-| `ncbi_api_key` | `Optional[str]` | `None` | Optional NCBI API key. |
-| `ncbi_email` | `Optional[str]` | `None` | Optional NCBI contact email. |
-| `user_agent` | `str` | `"bio-programming-tools/sequence-fetch-v1"` | Identifier string sent to database APIs with each request. |
-
-## Output Specification
-
-`run_sequence_fetch` returns `SequenceFetchOutput`:
-
-- `results`: per-request outcomes (`success`, `warning`, or `failed`)
-- `num_success`: pure success count (no warnings)
-- `num_warning`: warning count (completed with caveats)
-- `num_completed`: `success + warning` count
-- `num_failed`: failure count
-
-Each `SequenceFetchResult` includes:
-- `fetched_sequences`: sequence records with type/source/accession/checksum
-- `fetched_structures`: PDB structure metadata records
-- `resolved_ids`: IDs used or resolved during retrieval
-- `warnings` and `errors`: explicit diagnostics
-
-**Supported export formats:** `json`, `fasta`
 
 ## Interpreting Results
 
@@ -201,3 +145,60 @@ result.export(name="sequence_fetch_run", export_path="./outputs", file_format="f
 - `blast-search`: sequence similarity search after retrieval
 - `mmseqs-search-proteins`: scalable protein homology search
 - `prodigal` / `orfipy`: coding region discovery from raw DNA
+
+
+## API Reference
+
+### Input
+
+<ParamField path="requests" type="List[SequenceFetchRequest]" required>
+  One or more retrieval requests
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout in seconds
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="2">
+  Retries for upstream HTTP requests
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="max_candidates_per_source" type="integer" default="5">
+  Maximum database candidates to evaluate per name-based search
+</ParamField>
+
+<ParamField path="strict_type_checks" type="boolean" default="True">
+  Reject requests where molecule type conflicts with target (e.g. protein for an ncRNA gene)
+</ParamField>
+
+<ParamField path="fail_on_type_mismatch" type="boolean" default="True">
+  Treat molecule type mismatches as errors instead of warnings
+</ParamField>
+
+<ParamField path="include_sequence_checksums" type="boolean" default="True">
+  Include SHA256 checksums per sequence
+</ParamField>
+
+<ParamField path="ncbi_api_key" type="string">
+  Optional NCBI API key
+</ParamField>
+
+<ParamField path="ncbi_email" type="string">
+  Optional NCBI contact email
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/sequence-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[SequenceFetchResult]">
+  Per-request retrieval outcomes
+</ResponseField>

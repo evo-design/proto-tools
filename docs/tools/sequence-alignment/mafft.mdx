@@ -1,6 +1,6 @@
 ---
 title: "MAFFT"
-description: "MAFFT (Multiple Alignment using Fast Fourier Transform) is a widely used tool for multiple sequence ..."
+description: "MAFFT (Multiple Alignment using Fast Fourier Transform) is a widely used tool for multiple sequence alignment (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT."
 ---
 
 # MAFFT
@@ -67,70 +67,6 @@ MAFFT builds alignments in several stages:
 - **Hardware:** CPU only, scales with threads
 - **Runtime:** ~1 second for 10 sequences, minutes for thousands
 - **Scalability:** Excellent parallelization with `--thread`
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | List of sequence strings to align (minimum 2 required) |
-| `sequence_ids` | `Optional[List[str]]` | Optional sequence identifiers. If not provided, defaults to `seq_0`, `seq_1`, etc. These IDs are preserved in the output MSA |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `align_method` | `str` | `"auto"` | Alignment method: `auto`, `localpair`, `globalpair`, or `genafpair` |
-| `max_iterations` | `int` | `0` | Maximum iterative refinement cycles (0 = method default) |
-| `threads` | `int` | `1` | Number of CPU threads for parallel processing |
-
-### Parameter Guides
-
-**Alignment method selection:**
-
-| `align_method` | Method | Best For | Max Sequences |
-|----------|--------|----------|---------------|
-| `auto` | Auto-select | General use | Any |
-| `localpair` | L-INS-i | One alignable domain with flanking regions | ~200 |
-| `globalpair` | G-INS-i | Similar-length sequences, global homology | ~200 |
-| `genafpair` | E-INS-i | Multiple domains, large unalignable regions | ~200 |
-
-## Output Specification
-
-**Return type:** `MafftOutput`
-
-```python python icon="python"
-MafftOutput(
-    msa=MSA(
-        aligned_sequences=["MVLSPADKTN", "MVLSAADKTN"],
-        sequence_ids=["seq_0", "seq_1"],
-        original_sequences=["MVLSPADKTN", "MVLSAADKTN"]
-    )
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `msa` | `MSA` | Multiple sequence alignment object with aligned sequences |
-
-**MSA fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `aligned_sequences` | `List[str]` | Aligned sequences with gap characters ('-') |
-| `sequence_ids` | `List[str]` | Sequence identifiers (e.g., "seq_0", "seq_1") |
-| `original_sequences` | `List[str]` | Original input sequences without gaps |
-
-**MSA properties:**
-- `num_sequences`: Number of sequences in alignment
-- `alignment_length`: Length of alignment (all sequences have this length)
-- `total_gaps`: Total gap characters across all sequences
-- `average_gap_fraction`: Average fraction of gaps
-- `get_column(pos)`: Get all residues at a position
-- `get_conservation(pos)`: Calculate conservation score at a position
-- `get_position_frequencies(pos)`: Get character frequencies at a position
-- `to_fasta()`: Convert alignment to FASTA format
 
 ## Interpreting Results
 
@@ -293,3 +229,34 @@ for seq_id, aligned_seq in zip(msa.sequence_ids, msa.aligned_sequences):
 - Clustal Omega: Alternative MSA tool, available in Biopython
 - MUSCLE: Fast MSA, good for large datasets
 - T-Coffee: Higher accuracy for small sets, significantly slower
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  List of sequences to align (minimum 2 required)
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="align_method" type="enum" default="auto">
+  Alignment method: auto, localpair (L-INS-i), globalpair (G-INS-i), or genafpair (E-INS-i)
+
+  Options: `auto`, `localpair`, `globalpair`, `genafpair`
+</ParamField>
+
+<ParamField path="max_iterations" type="integer" default="0">
+  Maximum iterative refinement cycles (0 is default, higher values are more accurate)
+</ParamField>
+
+### Output
+
+<ResponseField name="msa" type="MSA" required>
+  The multiple sequence alignment
+</ResponseField>

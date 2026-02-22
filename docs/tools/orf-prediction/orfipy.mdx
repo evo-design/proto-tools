@@ -1,6 +1,6 @@
 ---
 title: "ORFipy"
-description: "ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identifies potential coding..."
+description: "ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identifies potential coding regions in DNA sequences based on start and stop codons. Unlike gene prediction tools like Prodigal, ORFipy performs simple ORF finding without machine learning - it reports all ORFs matching your criteria, making it ideal for exploratory analysis and custom filtering."
 ---
 
 # ORFipy
@@ -47,74 +47,6 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 **Six-frame translation:**
 - Forward strand: Frames +1, +2, +3
 - Reverse strand: Frames -1, -2, -3
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `str` or `List[str]` | DNA sequence(s) to scan |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `start_codons` | `str` | `ATG,GTG,TTG` | Comma-separated start codons |
-| `stop_codons` | `str` | `TAA,TAG,TGA` | Comma-separated stop codons |
-| `strand` | `str` | `b` | Strand to scan: `f` (forward), `r` (reverse), `b` (both) |
-| `min_len` | `int` | `0` | Minimum ORF length in nucleotides |
-| `max_len` | `int` | `10000` | Maximum ORF length in nucleotides |
-| `include_stop` | `bool` | `True` | Include stop codon in reported sequence |
-| `translation_table` | `int` | `None` | NCBI genetic code (1-33), None = standard |
-| `threads` | `int` | `4` | CPU threads per sequence |
-
-### Parameter Guides
-
-**Start codon selection:**
-| Setting | Codons | Use Case |
-|---------|--------|----------|
-| Standard | `ATG` | Eukaryotic sequences, strict filtering |
-| Prokaryotic (default) | `ATG,GTG,TTG` | Bacterial/archaeal sequences |
-| Custom | Any valid codons | Specialized genetic codes |
-
-**Length filtering guidelines:**
-| min_len | Approximate proteins | Use case |
-|---------|---------------------|----------|
-| `0` | All ORFs | Comprehensive analysis |
-| `150` | >50 aa | Filter very short ORFs |
-| `300` | >100 aa | Typical small proteins |
-| `600` | >200 aa | Substantial proteins only |
-| `900` | >300 aa | Large proteins only |
-
-### Sweep Priorities
-
-1. `min_len` — Most impactful for controlling output volume and filtering noise
-2. `start_codons` — Controls whether alternative start codons are included
-3. `strand` — Reduce to `f` or `r` when coding strand is known
-
-## Output Specification
-
-**ORFipyOutput**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `predicted_orfs` | `List[List[Orf]]` | ORFs per input sequence |
-| `num_orfs` | `int` | Total ORFs across all sequences (computed) |
-| `results_df` | `DataFrame` | All ORFs as DataFrame (computed) |
-
-**Orf object / DataFrame columns**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `parent_id` | `str` | Parent sequence ID (seq_0, seq_1, etc.) |
-| `orf_id` | `str` | ORF identifier within parent |
-| `strand` | `str` | '+' or '-' |
-| `frame` | `int` | Reading frame (1, 2, or 3) |
-| `amino_acid_sequence` | `str` | Translated protein |
-| `nucleotide_sequence` | `str` | DNA sequence |
-| `amino_acid_length` | `int` | Protein length |
-| `nucleotide_length` | `int` | ORF length in bp |
-| `nucleotide_start` | `int` | Start position (1-indexed) |
-| `nucleotide_end` | `int` | End position (1-indexed) |
 
 ## Interpreting Results
 
@@ -271,3 +203,54 @@ for i, orfs in enumerate(result.predicted_orfs):
 
 **Alternative tools:**
 - `prodigal`: ML-based prokaryotic gene prediction — more accurate for bacteria/archaea but less flexible for custom ORF criteria.
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  DNA sequence(s) to analyze for open reading frames
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="start_codons" type="string" default="ATG,GTG,TTG">
+  Comma-separated list of start codons
+</ParamField>
+
+<ParamField path="stop_codons" type="string" default="TAA,TAG,TGA">
+  Comma-separated list of stop codons
+</ParamField>
+
+<ParamField path="strand" type="enum" default="b">
+  Which strand(s) to scan: 'f' (forward), 'r' (reverse), or 'b' (both)
+
+  Options: `f`, `r`, `b`
+</ParamField>
+
+<ParamField path="min_len" type="integer" default="0">
+  Minimum ORF length in nucleotides
+</ParamField>
+
+<ParamField path="max_len" type="integer" default="10000">
+  Maximum ORF length in nucleotides
+</ParamField>
+
+<ParamField path="include_stop" type="boolean" default="True">
+  Whether to include the stop codon in the reported ORF
+</ParamField>
+
+<ParamField path="translation_table" type="integer">
+  Optional NCBI translation table (1-33)
+</ParamField>
+
+### Output
+
+<ResponseField name="predicted_orfs" type="List[array]">
+  List of ORF results per input sequence
+</ResponseField>

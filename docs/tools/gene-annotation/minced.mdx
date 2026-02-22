@@ -1,6 +1,6 @@
 ---
 title: "MinCED"
-description: "MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting CRISPR arrays in nucleotid..."
+description: "MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting CRISPR arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic k-mer search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions."
 ---
 
 # MinCED
@@ -63,81 +63,6 @@ MinCED uses a heuristic k-mer search to find candidate CRISPR arrays. It scans t
 - **Hardware:** CPU only; no GPU required
 - **Runtime:** Seconds for typical bacterial genomes (~5 Mb)
 - **Scalability:** Processes sequences independently; scales linearly with input size
-
-## Important Parameters
-
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `sequences` | `List[str]` | *Required* | Nucleotide sequence(s) to search for CRISPR arrays |
-| `sequence_ids` | `Optional[List[str]]` | `None` | Optional sequence identifiers (defaults to seq_0, seq_1, ...) |
-
-**Configuration parameters:**
-
-| Parameter | Type | Default | Sweep Range | Description |
-|-----------|------|---------|-------------|-------------|
-| `min_num_repeats` | `int` | `3` | `2 - 5` | Minimum number of repeats required for a CRISPR array |
-| `min_repeat_length` | `int` | `27` | `20 - 35` | Minimum length of a repeat sequence in nucleotides |
-
-**Parameters to prioritize for sweeps:**
-1. **`min_num_repeats`**: Lowering to 2 increases sensitivity but also false positives. Default of 3 balances sensitivity and specificity for most applications.
-2. **`min_repeat_length`**: Lowering below 23 may detect non-CRISPR tandem repeats. Increasing above 30 may miss arrays with shorter repeats.
-
----
-
-**Output specification:**
-
-```python python icon="python"
-# Return type: MincedOutput
-{
-    "results": [
-        {
-            "sequence_id": str,
-            "crispr_arrays": [
-                {
-                    "repeats_and_spacers": [
-                        {
-                            "position": int,       # Genomic position
-                            "repeat": str,         # Repeat sequence
-                            "spacer": str | None,  # Spacer (None for last repeat)
-                            "repeat_length": int,
-                            "spacer_length": int | None,
-                        },
-                        ...
-                    ]
-                },
-                ...
-            ]
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `List[MincedSequenceResult]` | Per-sequence CRISPR array detection results |
-| `sequence_id` | `str` | Identifier for the input sequence |
-| `crispr_arrays` | `List[CrisprArray]` | CRISPR arrays detected in this sequence |
-| `repeats_and_spacers` | `List[CrisprRepeatSpacer]` | Ordered repeat-spacer units in each array |
-| `position` | `int` | Genomic position of each repeat |
-| `repeat` / `spacer` | `str` | The actual repeat and spacer sequences |
-
-**Properties:**
-- `MincedSequenceResult.has_crispr`: Whether any CRISPR arrays were found
-- `MincedSequenceResult.num_arrays`: Number of arrays detected
-- `CrisprArray.num_repeats`: Number of repeats in the array
-- `CrisprArray.spacers`: List of spacer sequences
-
-**Supported export formats:** `csv`, `json`
-
-**Thresholds & decision boundaries:**
-- **Typical CRISPR array**: 3+ repeats of 23-47 nt, spacers of 26-50 nt
-- **High-confidence array**: >=4 repeats with consistent repeat lengths (+/-2 nt)
-- **Questionable array**: 2 repeats only, or highly variable repeat lengths
 
 ## Best Practices & Gotchas
 
@@ -230,3 +155,33 @@ print(f"{result.num_sequences_with_crispr} of {len(result.results)} sequences ha
 
 ---
 **Maintenance notes:**
+- Last updated: 2025-06-01
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Nucleotide sequence(s) to search for CRISPR arrays
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="min_num_repeats" type="integer" default="3">
+  Minimum number of repeats required for a CRISPR array
+</ParamField>
+
+<ParamField path="min_repeat_length" type="integer" default="27">
+  Minimum length of a repeat sequence in nucleotides
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[MincedSequenceResult]">
+  Per-sequence CRISPR array detection results
+</ResponseField>

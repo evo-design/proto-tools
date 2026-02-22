@@ -1,6 +1,6 @@
 ---
 title: "ESM3"
-description: "ESM3 is EvolutionaryScale's next-generation protein language model that combines sequence understand..."
+description: "ESM3 is EvolutionaryScale's next-generation protein language model that combines sequence understanding with structure prediction and generation capabilities. Unlike ESM2, ESM3 is a generative model that can perform both embedding extraction and de novo protein structure prediction. The open model (`esm3_sm_open_v1`) provides embeddings, logits, sampling, and structure prediction in a unified framework."
 ---
 
 # ESM3
@@ -69,115 +69,6 @@ ESM3 uses a transformer architecture that jointly models protein sequence and st
 **Scoring**: Each position is masked one at a time to compute log-probability of the true amino acid, yielding pseudo-perplexity.
 
 **Structure prediction**: The model predicts structure tokens from sequence, which are decoded into 3D coordinates with confidence scores (pLDDT, pTM).
-
-## Input Parameters
-
-All tools take a tool-specific input with one or more protein sequences:
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `List[str]` | Protein sequences (amino acid strings) |
-
-## Configuration
-
-### Embeddings Tool (`ESM3EmbeddingsConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | `cuda`, `cpu`, or `mps` |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Sampling Tool (`ESM3SampleConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `temperature` | `float` | `1.0` | Sampling temperature |
-| `decoding_method` | `str` | `entropy` | Position selection method |
-| `num_mutations` | `int` | `1` | Mutations per iteration |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Structure Prediction Tool (`ESM3StructurePredictionConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Device |
-| `verbose` | `bool` | `False` | Print progress |
-
-### Scoring Tool (`ESM3ScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_checkpoint` | `str` | `esm3_sm_open_v1` | Model variant |
-| `batch_size` | `int` | `1` | Masked variants per forward pass |
-| `device` | `str` | `cuda` | Device |
-| `verbose` | `bool` | `False` | Print progress |
-| `return_logits` | `bool` | `False` | Include per-position logits |
-
-### Parameter Guides
-
-**Temperature guide for sampling:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| 0.5-0.7 | Conservative | Safer mutations |
-| 1.0 | Standard | Model distribution |
-| 1.5-2.0 | Creative | More diverse mutations |
-
-## Output Specification
-
-### ESM3EmbeddingsOutput (Embeddings)
-
-| Field | Type | Shape | Description |
-|-------|------|-------|-------------|
-| `mean_embeddings` | `List[List[float]]` | `[num_seq, embed_dim]` | Mean-pooled sequence embeddings |
-| `logits` | `List[List[List[float]]]` | `[num_seq, seq_len, vocab_size]` | Per-position logits |
-| `attention_masks` | `List[List[int]]` | `[num_seq, seq_len]` | Valid position masks |
-| `num_sequences` | `int` | - | Sequences processed |
-
-### ESM3SampleOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Mutated protein sequences |
-| `logits` | `Optional[List[List[List[float]]]]` | Per-position logits (if requested) |
-
-Supported export formats: `fasta`, `txt`, `json`
-
-### ESM3StructurePredictionOutput
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `structures` | `List[Dict]` | Structures with `pdb_string`, `avg_plddt`, `ptm` |
-| `num_sequences` | `int` | Sequences processed |
-
-**Structure dict fields:**
-| Key | Type | Description |
-|-----|------|-------------|
-| `sequence` | `str` | Input sequence |
-| `pdb_string` | `str` | PDB format structure |
-| `avg_plddt` | `float` | Average pLDDT (0-100) |
-| `ptm` | `float` | Predicted TM-score (0-1) |
-
-Supported export formats: `pdb`, `json`
-
-### MaskedModelScoringOutput (Scoring)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[SequenceScores]` | Per-sequence metrics and optional logits |
-
-Each `SequenceScores` entry includes:
-- `metrics`: `log_likelihood`, `avg_log_likelihood`, `perplexity`
-- `logits`: per-position logits if `return_logits=True`
-- `vocab`: list of 20 standard amino acids if `return_logits=True`
 
 ## Interpreting Results
 
@@ -329,3 +220,163 @@ print(f"Processed {result.num_sequences} sequences")
 **Alternative tools:**
 - `esmfold`: Dedicated structure prediction (based on ESM2)
 - `progen2`: Autoregressive protein generation
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="ESM3 Embeddings">
+  **Key:** `esm3-embedding`
+
+  Extract protein sequence embeddings and logits using ESM3
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="string" default="esm3_sm_open_v1">
+  ESM3 model checkpoint to use
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+### Output
+
+<ResponseField name="logits" type="array">
+  Per-position amino acid logits. Shape: [num_sequences, seq_len, vocab_size].
+</ResponseField>
+
+<ResponseField name="attention_masks" type="List[array]" required>
+  Attention masks for each sequence (shape: [num_sequences, seq_len])
+</ResponseField>
+
+<ResponseField name="mean_embeddings" type="array">
+  Mean embeddings for each sequence (averaged over sequence length)
+</ResponseField>
+
+<ResponseField name="num_sequences" type="integer" required>
+  Number of sequences processed
+</ResponseField>
+  </Tab>
+  <Tab title="ESM3 Sampling">
+  **Key:** `esm3-sample`
+
+  Sample protein sequences using ESM3 language model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="string" default="esm3_sm_open_v1">
+  ESM3 model checkpoint to use
+</ParamField>
+
+<ParamField path="temperature" type="number" default="1.0">
+  Sampling temperature for amino acid selection
+</ParamField>
+
+<ParamField path="decoding_method" type="enum" default="entropy">
+  Specifies the method used to determine which positions to mutate
+
+  Options: `entropy`, `max_logit`, `random`
+</ParamField>
+
+<ParamField path="num_mutations" type="integer" default="1">
+  Number of positions to mutate per sequence
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="sequences" type="List[string]" required>
+  Sampled/mutated protein sequences
+</ResponseField>
+
+<ResponseField name="logits" type="array">
+  Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].
+</ResponseField>
+  </Tab>
+  <Tab title="ESM3 Scoring">
+  **Key:** `esm3-score`
+
+  Score protein sequences using ESM3 language model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="string" default="esm3_sm_open_v1">
+  ESM3 model checkpoint to use
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[SequenceScores]" required>
+  List of scoring outputs, one per input sequence
+</ResponseField>
+  </Tab>
+  <Tab title="ESM3 Structure Prediction">
+  **Key:** `esm3-structure-prediction`
+
+  Predict protein 3D structures using ESM3 generative model
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_checkpoint" type="string" default="esm3_sm_open_v1">
+  ESM3 model checkpoint to use
+</ParamField>
+
+<ParamField path="batch_size" type="integer" default="1">
+  Number of sequences to process simultaneously on GPU
+</ParamField>
+
+### Output
+
+<ResponseField name="structures" type="List[object]" required>
+  Predicted structures for each sequence with confidence metrics
+</ResponseField>
+
+<ResponseField name="num_sequences" type="integer" required>
+  Number of sequences processed
+</ResponseField>
+  </Tab>
+</Tabs>

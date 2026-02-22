@@ -1,6 +1,6 @@
 ---
 title: "ESMFold"
-description: "ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures direct..."
+description: "ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a language model approach, without requiring multiple sequence alignments."
 ---
 
 # ESMFold
@@ -74,56 +74,6 @@ Unlike AlphaFold2, ESMFold does not require multiple sequence alignments (MSAs),
 - **No ligands/cofactors:** Cannot include small molecules, metal ions, or post-translational modifications
 - **Single conformation:** Predicts one structure, not conformational ensembles or dynamic regions
 - **MSA-free tradeoff:** Slightly lower accuracy than AlphaFold2 for well-characterized protein families
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | List of protein complexes to predict; each complex can have multiple chains for homomers |
-| `n_replications` | `int` | `1` | Number of times to replicate each chain (2=dimer, 3=trimer, etc.); total residues must be &lt;=2,400 |
-| `residue_idx_offset` | `int` | `512` | Offset for residue indexing; controls chain break tokens in model; rarely needs adjustment |
-| `chain_linker` | `int` | `25` | Number of residues between chains; affects inter-chain geometry |
-
-## Configuration
-
-### Parameter Guides
-
-| Parameter | Sweep Range | Notes |
-|-----------|-------------|-------|
-| `n_replications` | `1 - 6` | Determines assembly state; GPU memory increases linearly |
-| `chain_linker` | `10 - 100` | Affects packing geometry for multi-chain predictions |
-
-### Sweep Priorities
-
-1. **`n_replications`**: Most impactful for oligomer design; determines assembly state. Sweep 1-4 to find optimal oligomeric state.
-2. **`chain_linker`**: Affects packing geometry for multi-chain predictions; try 15, 25, 50 if default gives poor inter-chain contacts.
-
-## Output Specification
-
-```python python icon="python"
-# Return type: ESMFoldOutput
-ESMFoldOutput(
-    structures: List[PredictedStructure],  # One per input complex
-    success: bool,
-    errors: List[str]
-)
-
-PredictedStructure(
-    avg_plddt: float,              # Average pLDDT across all residues (0-1)
-    ptm: float,                    # Predicted TM-score (0-1)
-    structure_pdb_output: str,     # PDB format structure
-    structure_cif_output: str,     # mmCIF format structure
-    per_residue_plddt: List[float] # pLDDT for each residue (0-1)
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `avg_plddt` | `float` | `0.0 - 1.0` | Mean per-residue confidence; >0.9 = well-folded, &lt;0.7 = disordered/uncertain |
-| `ptm` | `float` | `0.0 - 1.0` | Global fold confidence; >0.8 = reliable topology, &lt;0.5 = fold likely incorrect |
-| `per_residue_plddt` | `List[float]` | `0.0 - 1.0` each | Identifies flexible/disordered regions vs well-folded domains |
 
 ## Interpreting Results
 
@@ -218,3 +168,24 @@ result_dimer = run_esmfold_prediction(inputs, config_dimer)
 **Alternative tools:**
 - **`alphafold2`**: Slower but more accurate; use for final validation after ESMFold screening
 - **`boltz2`**: Handles heteromeric complexes and small molecules; use when you need protein-protein or protein-ligand interactions
+
+
+## API Reference
+
+### Input
+
+<ParamField path="complexes" type="List[StructurePredictionComplex]" required>
+  List of complexes to predict structure for containing chains and entity types.
+</ParamField>
+
+### Configuration
+
+<ParamField path="chain_linker" type="string" default="GGGGGGGGGGGGGGGGGGGGGGGGG">
+  Sequence to link chains (default: 25 glycines)
+</ParamField>
+
+### Output
+
+<ResponseField name="structures" type="List[object]" required>
+  List of predicted structures
+</ResponseField>

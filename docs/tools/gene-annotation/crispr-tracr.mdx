@@ -1,6 +1,6 @@
 ---
 title: "CRISPRtracrRNA"
-description: "CRISPRtracrRNA predicts tracrRNA (trans-activating CRISPR RNA) sequences from nucleotide CRISPR loci..."
+description: "CRISPRtracrRNA predicts tracrRNA (trans-activating CRISPR RNA) sequences from nucleotide CRISPR loci using covariance models and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via IntaRNA."
 ---
 
 # CRISPRtracrRNA
@@ -63,67 +63,6 @@ The tool operates in two stages:
 - **Hardware:** CPU only; no GPU required
 - **Runtime:** ~10-60 seconds per sequence depending on length and model type
 - **Scalability:** Processes sequences independently; scales linearly
-
-## Important Parameters
-
-**Input parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `sequences` | `List[str]` | *Required* | Nucleotide sequence(s) to predict tracrRNA from |
-| `sequence_ids` | `Optional[List[str]]` | `None` | Optional sequence identifiers (defaults to seq_0, seq_1, ...) |
-
-**Configuration parameters:**
-
-| Parameter | Type | Default | Sweep Range | Description |
-|-----------|------|---------|-------------|-------------|
-| `model_type` | `Literal["II", "all"]` | `"II"` | N/A | CRISPR model type: `"II"` for Type II only (faster), `"all"` for comprehensive search |
-
-**Parameters to prioritize for sweeps:**
-1. **`model_type`**: Use `"II"` for most Cas9-related work (faster and more specific). Use `"all"` when the CRISPR system type is unknown or when searching for non-Type II tracrRNA-like elements.
-
----
-
-**Output specification:**
-
-```python python icon="python"
-# Return type: CrisprTracrOutput
-{
-    "predictions": [
-        {
-            "sequence_id": str,
-            "tracr_start": int | None,          # Start position
-            "tracr_end": int | None,            # End position
-            "tracr_hit": str | None,            # Hit description
-            "interaction_energy": float | None, # IntaRNA energy (kcal/mol, complete_run)
-            "anti_repeat_similarity_coverage_multiplication": float | None,
-            "intarna_anti_repeat_interaction": str | None,
-        },
-        ...
-    ]
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `tracr_start` / `tracr_end` | `int` | Sequence coordinates | Genomic position of predicted tracrRNA |
-| `interaction_energy` | `float` | &lt; 0 kcal/mol | IntaRNA interaction energy; more negative = stronger (complete_run mode) |
-| `anti_repeat_similarity_coverage_multiplication` | `float` | 0.0 - 1.0 | Combined similarity x coverage of anti-repeat interaction |
-| `intarna_anti_repeat_interaction` | `str` | — | Predicted RNA-RNA interaction structure |
-
-**Properties:**
-- `TracrPrediction.has_tracr`: `True` if a tracrRNA was detected
-- `CrisprTracrOutput.num_with_tracr`: Count of sequences with detected tracrRNA
-
-**Supported export formats:** `csv`, `json`
-
-**Thresholds & decision boundaries (complete_run mode):**
-- **Strong interaction:** `interaction_energy < -5.0` kcal/mol — strong anti-repeat/tracrRNA duplex
-- **Moderate interaction:** `-5.0 <= interaction_energy < -2.0` — plausible tracrRNA
-- **Weak interaction:** `interaction_energy >= -2.0` — unlikely to form stable duplex
-- **No detection:** `tracr_start is None` — no tracrRNA found; the locus may not contain a Type II system
 
 ## Best Practices & Gotchas
 
@@ -225,3 +164,41 @@ for pred in result.predictions:
 
 ---
 **Maintenance notes:**
+- Last updated: 2025-06-01
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Nucleotide sequence(s) to predict tracrRNA from
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_type" type="enum" default="II">
+  CRISPR model type: "II" for type II only (faster), "all" for comprehensive
+
+  Options: `II`, `all`
+</ParamField>
+
+<ParamField path="run_type" type="enum" default="complete_run">
+  Pipeline mode: "complete_run" for full analysis, "model_only" for fast scan
+
+  Options: `complete_run`, `model_only`
+</ParamField>
+
+<ParamField path="num_workers" type="integer">
+  Number of parallel workers (defaults to SLURM CPUs or 1)
+</ParamField>
+
+### Output
+
+<ResponseField name="predictions" type="List[TracrPrediction]">
+  Per-sequence tracrRNA predictions
+</ResponseField>

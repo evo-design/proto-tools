@@ -1,6 +1,6 @@
 ---
 title: "ViennaRNA"
-description: "ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to co..."
+description: "ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to compute the minimum free energy (MFE) structure from nucleotide sequences."
 ---
 
 # ViennaRNA
@@ -78,52 +78,6 @@ ViennaRNA implements the Zuker algorithm with McCaskill's partition function:
 - **Space complexity:** O(n^2)
 - **Runtime:** ~1 second for 1000 nt on modern CPU
 - **No GPU required:** Runs efficiently on CPU
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `sequences` | `List[str]` | *required* | List of RNA/DNA sequences to fold |
-| `temperature` | `float` | `37.0` | Temperature in Celsius; affects thermodynamic stability |
-| `use_dna_params` | `bool` | `False` | Use DNA parameters instead of RNA |
-| `no_lonely_pairs` | `bool` | `False` | Disallow isolated base pairs |
-
-## Configuration
-
-### Parameter Guides
-
-| Parameter | Sweep Range | Notes |
-|-----------|-------------|-------|
-| `temperature` | `25 - 42` | Lower temperatures stabilize structures; higher destabilize |
-| `no_lonely_pairs` | `True, False` | Can reduce artifacts from isolated base pairs |
-
-### Sweep Priorities
-
-1. **`temperature`**: Most impactful for thermosensor designs or temperature-sensitive applications. Sweep 25C, 30C, 37C, 42C.
-2. **`no_lonely_pairs`**: Can reduce artifacts; try both True and False for final designs.
-
-## Output Specification
-
-```python python icon="python"
-# Return type: ViennaRNAOutput
-ViennaRNAOutput(
-    results: List[RNAFoldResult],
-    metadata: dict
-)
-
-RNAFoldResult(
-    sequence: str,           # Input sequence (normalized to RNA)
-    structure: str,          # Dot-bracket notation
-    mfe: float,              # Minimum free energy (kcal/mol)
-)
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `structure` | `str` | N/A | '.' = unpaired, '(' = 5' pair, ')' = 3' pair |
-| `mfe` | `float` | typically -50 to 0 | More negative = more stable; depends on length |
 
 ## Interpreting Results
 
@@ -214,3 +168,32 @@ for fold in result.results:
 **Alternative tools:**
 - **`boltz2-prediction`**: For 3D RNA structure prediction when 2D folding is insufficient
 - **`alphafold3-prediction`**: For RNA-protein complex 3D structure prediction
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  List of input RNA sequences
+</ParamField>
+
+### Configuration
+
+<ParamField path="temperature" type="number" default="37.0">
+  Temperature in Celsius for energy calculations
+</ParamField>
+
+<ParamField path="use_dna_params" type="boolean" default="False">
+  Use DNA energy parameters instead of RNA parameters
+</ParamField>
+
+<ParamField path="no_lonely_pairs" type="boolean" default="False">
+  Disallow lonely base pairs (helices of length 1)
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[ViennaRNAResult]" required>
+  List of ViennaRNA results
+</ResponseField>

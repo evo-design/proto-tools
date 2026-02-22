@@ -1,6 +1,6 @@
 ---
 title: "AlphaGenome"
-description: "AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulator..."
+description: "AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM)."
 ---
 
 # AlphaGenome
@@ -61,105 +61,6 @@ AlphaGenome jointly predicts all of these signals from DNA sequence alone, lever
 4. **Variant scoring**: For variant-effect tools, the model runs inference on both the reference and alternate sequences, and scorers compute the difference (e.g., log-fold-change in predicted signal).
 
 Coordinates use **0-based indexing with exclusive end** (BED-style).
-
-## Input Parameters
-
-### Interval Tools (`alphagenome-predict-interval`, `alphagenome-score-interval`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier (e.g. `"chr1"`) |
-| `interval_start` | `int` | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-
-### Variant Tools (`alphagenome-predict-variant`, `alphagenome-score-variant`)
-
-Extends interval input with:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `variant_position` | `int` | Variant position (0-based) |
-| `reference_bases` | `str` | Reference allele (A/C/G/T/N string) |
-| `alternate_bases` | `str` | Alternate allele (A/C/G/T/N string) |
-
-### Sequence Tool (`alphagenome-predict-sequence`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequence` | `str` | Raw DNA sequence string (A/C/G/T/N characters) |
-
-### ISM Tool (`alphagenome-score-ism-variants`)
-
-Extends interval input with:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `ism_interval_start` | `int` | ISM sub-interval start (0-based, inclusive) |
-| `ism_interval_end` | `int` | ISM sub-interval end (0-based, exclusive) |
-| `variant_position` | `Optional[int]` | Optional existing variant position (0-based) |
-| `reference_bases` | `Optional[str]` | Optional existing variant ref allele |
-| `alternate_bases` | `Optional[str]` | Optional existing variant alt allele |
-
-## Configuration
-
-### Prediction Configs (`AlphaGenomePredictIntervalConfig` / `PredictVariantConfig` / `PredictSequenceConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `requested_outputs` | `List[str]` | required | Output types to predict (see table below) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `ontology_terms` | `Optional[List[str]]` | `None` | Optional ontology term filters |
-| `device` | `str` | `"cuda"` | Inference device |
-
-**Available output types:** `ATAC`, `CAGE`, `DNASE`, `RNA_SEQ`, `CHIP_HISTONE`, `CHIP_TF`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `CONTACT_MAPS`, `PROCAP`
-
-### Variant Scoring Config (`AlphaGenomeScoreVariantConfig` / `ScoreISMConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `variant_scorers` | `Optional[List[str]]` | `None` | Scorer names (`None` = all recommended) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `device` | `str` | `"cuda"` | Inference device |
-
-**Available variant scorers:** `ATAC`, `CONTACT_MAPS`, `DNASE`, `CHIP_TF`, `CHIP_HISTONE`, `CAGE`, `PROCAP`, `RNA_SEQ`, `RNA_SEQ_ACTIVE`, `SPLICE_SITES`, `SPLICE_SITE_USAGE`, `SPLICE_JUNCTIONS`, `POLYADENYLATION`, `ATAC_ACTIVE`, `DNASE_ACTIVE`, `CHIP_TF_ACTIVE`, `CHIP_HISTONE_ACTIVE`, `CAGE_ACTIVE`, `PROCAP_ACTIVE`
-
-### Interval Scoring Config (`AlphaGenomeScoreIntervalConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model_version` | `str` | `"all_folds"` | HF model version |
-| `interval_scorers` | `Optional[List[str]]` | `None` | Scorer names (`None` = all recommended) |
-| `organism` | `"human" \| "mouse"` | `"human"` | Organism setting |
-| `device` | `str` | `"cuda"` | Inference device |
-
-**Available interval scorers:** `RNA_SEQ`
-
-## Output Specification
-
-### Prediction Outputs (`AlphaGenomePredictOutput`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier |
-| `interval_start` | `int` | Interval start (0-based) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-| `requested_outputs` | `List[str]` | Output types that were requested |
-| `result` | `Dict[str, Any]` | Serialized prediction payload (spatial tracks) |
-| `variant` | `Optional[Dict]` | Variant metadata (variant prediction only) |
-
-Export formats: `json`, `npy`
-
-### Scoring Outputs (`AlphaGenomeScoreOutput`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[Dict[str, Any]]` | Tidy score records (one per scorer-track-gene combination) |
-
-Each score record contains keys such as `variant_id`, `scored_interval`, `gene_id`, `gene_name`, `output_type`, `variant_scorer` or `interval_scorer`, `track_name`, `raw_score`.
-
-Export formats: `json`, `csv`
 
 ## Interpreting Results
 
@@ -290,3 +191,363 @@ print(f"ISM scores: {len(result.scores)} records")
 - `enformer` — lighter-weight expression prediction (200 KB context, Basenji-style architecture)
 - `borzoi` — mammalian expression prediction at 32 bp resolution with RNA-seq coverage tracks
 - `splice_transformer` — dedicated splice site prediction
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="AlphaGenome Predict Interval">
+  **Key:** `alphagenome-predict-interval`
+
+  Predict genomic signals for a region using AlphaGenome open weights
+
+### Input
+
+<ParamField path="chromosome" type="string" required>
+  Chromosome identifier, e.g. 'chr1'
+</ParamField>
+
+<ParamField path="interval_start" type="integer" required>
+  Interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="requested_outputs" type="List[string]" required>
+  Output type names to request from AlphaGenome
+</ParamField>
+
+<ParamField path="ontology_terms" type="array">
+  Optional ontology term filters
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="chromosome" type="string" required>
+  Chromosome identifier
+</ResponseField>
+
+<ResponseField name="interval_start" type="integer" required>
+  Interval start (0-based)
+</ResponseField>
+
+<ResponseField name="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ResponseField>
+
+<ResponseField name="requested_outputs" type="List[string]" required>
+  Output types requested for this prediction
+</ResponseField>
+
+<ResponseField name="result" type="Dict[string, any]" required>
+  Serialized AlphaGenome prediction payload
+</ResponseField>
+
+<ResponseField name="variant" type="Dict[string, any]">
+  Variant metadata for variant-effect predictions
+</ResponseField>
+  </Tab>
+  <Tab title="AlphaGenome Predict Sequence">
+  **Key:** `alphagenome-predict-sequence`
+
+  Predict genomic signals from a raw DNA sequence using AlphaGenome open weights
+
+### Input
+
+<ParamField path="sequence" type="string" required>
+  Raw DNA sequence for prediction
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="requested_outputs" type="List[string]" required>
+  Output type names to request from AlphaGenome
+</ParamField>
+
+<ParamField path="ontology_terms" type="array">
+  Optional ontology term filters
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="chromosome" type="string" required>
+  Chromosome identifier
+</ResponseField>
+
+<ResponseField name="interval_start" type="integer" required>
+  Interval start (0-based)
+</ResponseField>
+
+<ResponseField name="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ResponseField>
+
+<ResponseField name="requested_outputs" type="List[string]" required>
+  Output types requested for this prediction
+</ResponseField>
+
+<ResponseField name="result" type="Dict[string, any]" required>
+  Serialized AlphaGenome prediction payload
+</ResponseField>
+
+<ResponseField name="variant" type="Dict[string, any]">
+  Variant metadata for variant-effect predictions
+</ResponseField>
+  </Tab>
+  <Tab title="AlphaGenome Predict Variant">
+  **Key:** `alphagenome-predict-variant`
+
+  Predict variant effects with AlphaGenome open weights
+
+### Input
+
+<ParamField path="variant_position" type="integer" required>
+  Variant genomic position (0-based)
+</ParamField>
+
+<ParamField path="reference_bases" type="string" required>
+  Reference allele, e.g. 'A' or 'AC'
+</ParamField>
+
+<ParamField path="alternate_bases" type="string" required>
+  Alternate allele, e.g. 'G' or 'GTT'
+</ParamField>
+
+<ParamField path="chromosome" type="string" required>
+  Chromosome identifier, e.g. 'chr1'
+</ParamField>
+
+<ParamField path="interval_start" type="integer" required>
+  Interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="requested_outputs" type="List[string]" required>
+  Output type names to request from AlphaGenome
+</ParamField>
+
+<ParamField path="ontology_terms" type="array">
+  Optional ontology term filters
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="chromosome" type="string" required>
+  Chromosome identifier
+</ResponseField>
+
+<ResponseField name="interval_start" type="integer" required>
+  Interval start (0-based)
+</ResponseField>
+
+<ResponseField name="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ResponseField>
+
+<ResponseField name="requested_outputs" type="List[string]" required>
+  Output types requested for this prediction
+</ResponseField>
+
+<ResponseField name="result" type="Dict[string, any]" required>
+  Serialized AlphaGenome prediction payload
+</ResponseField>
+
+<ResponseField name="variant" type="Dict[string, any]">
+  Variant metadata for variant-effect predictions
+</ResponseField>
+  </Tab>
+  <Tab title="AlphaGenome Score Interval">
+  **Key:** `alphagenome-score-interval`
+
+  Score genomic intervals with AlphaGenome using recommended interval scorers
+
+### Input
+
+<ParamField path="chromosome" type="string" required>
+  Chromosome identifier, e.g. 'chr1'
+</ParamField>
+
+<ParamField path="interval_start" type="integer" required>
+  Interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="interval_scorers" type="array">
+  Scorer names to use. None uses all recommended scorers.
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[object]" required>
+  Tidy score records (one per scorer-track-gene combination)
+</ResponseField>
+  </Tab>
+  <Tab title="AlphaGenome Score ISM Variants">
+  **Key:** `alphagenome-score-ism-variants`
+
+  Run in-silico mutagenesis with AlphaGenome variant scorers
+
+### Input
+
+<ParamField path="ism_interval_start" type="integer" required>
+  ISM sub-interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="ism_interval_end" type="integer" required>
+  ISM sub-interval end (0-based, exclusive)
+</ParamField>
+
+<ParamField path="variant_position" type="integer">
+  Optional existing variant position for ISM context (0-based)
+</ParamField>
+
+<ParamField path="reference_bases" type="string">
+  Optional existing variant reference allele
+</ParamField>
+
+<ParamField path="alternate_bases" type="string">
+  Optional existing variant alternate allele
+</ParamField>
+
+<ParamField path="chromosome" type="string" required>
+  Chromosome identifier, e.g. 'chr1'
+</ParamField>
+
+<ParamField path="interval_start" type="integer" required>
+  Interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="variant_scorers" type="array">
+  Scorer names to use. None uses all recommended scorers.
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[object]" required>
+  Tidy score records (one per scorer-track-gene combination)
+</ResponseField>
+  </Tab>
+  <Tab title="AlphaGenome Score Variant">
+  **Key:** `alphagenome-score-variant`
+
+  Score variant effects with AlphaGenome using recommended variant scorers
+
+### Input
+
+<ParamField path="variant_position" type="integer" required>
+  Variant genomic position (0-based)
+</ParamField>
+
+<ParamField path="reference_bases" type="string" required>
+  Reference allele, e.g. 'A' or 'AC'
+</ParamField>
+
+<ParamField path="alternate_bases" type="string" required>
+  Alternate allele, e.g. 'G' or 'GTT'
+</ParamField>
+
+<ParamField path="chromosome" type="string" required>
+  Chromosome identifier, e.g. 'chr1'
+</ParamField>
+
+<ParamField path="interval_start" type="integer" required>
+  Interval start (0-based, inclusive)
+</ParamField>
+
+<ParamField path="interval_end" type="integer" required>
+  Interval end (0-based, exclusive)
+</ParamField>
+
+### Configuration
+
+<ParamField path="model_version" type="string" default="all_folds">
+  AlphaGenome Hugging Face model version
+</ParamField>
+
+<ParamField path="variant_scorers" type="array">
+  Scorer names to use. None uses all recommended scorers.
+</ParamField>
+
+<ParamField path="organism" type="enum" default="human">
+  Organism for AlphaGenome predictions
+
+  Options: `human`, `mouse`
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[object]" required>
+  Tidy score records (one per scorer-track-gene combination)
+</ResponseField>
+  </Tab>
+</Tabs>

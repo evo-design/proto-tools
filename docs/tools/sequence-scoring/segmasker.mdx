@@ -1,6 +1,6 @@
 ---
 title: "Segmasker Low-Complexity Detection"
-description: "Segmasker detects low-complexity regions in protein sequences using NCBI's SEG algorithm. Low-comple..."
+description: "Segmasker detects low-complexity regions in protein sequences using NCBI's SEG algorithm. Low-complexity regions are stretches of amino acids with biased composition (e.g., polyalanine runs, proline-rich regions, or glutamine repeats) that can cause spurious hits in homology searches and may indicate disordered or non-globular regions."
 ---
 
 # Segmasker Low-Complexity Detection
@@ -47,56 +47,6 @@ In protein design, high low-complexity content often signals poor sequence quali
 3. **Threshold classification**: Windows with entropy below `locut` are flagged as low-complexity; the `hicut` threshold defines the boundary for extending masked regions
 4. **Region merging**: Adjacent low-complexity windows are merged into contiguous regions
 5. **Fraction calculation**: The total number of low-complexity positions divided by sequence length gives the low-complexity fraction
-
-## Input Parameters
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Protein sequence(s) to analyze. Accepts a single string (auto-wrapped) or a list of strings. Each sequence should use standard amino acid characters. |
-
-## Configuration
-
-| Parameter | Type | Default | Range | Description |
-|-----------|------|---------|-------|-------------|
-| `window` | `int` | `15` | >= 1 | Sliding window size for complexity calculation. Larger windows are less sensitive to short LCRs. |
-| `locut` | `float` | `1.8` | Typical: 1.4-2.2 | Low-complexity threshold. Regions below this are classified as low-complexity. |
-| `hicut` | `float` | `3.4` | Typical: 2.5-3.8 | High-complexity threshold. Must be greater than `locut`. Controls region boundary extension. |
-
-### Parameter Guides
-
-**Window size:**
-
-| Window | Effect | Use Case |
-|--------|--------|----------|
-| 10-12 | More sensitive, detects short LCRs | Fine-grained analysis of short peptides |
-| 15 | Balanced (default) | General-purpose screening |
-| 18-20 | Less sensitive, ignores short LCRs | Focus on extended low-complexity stretches |
-
-**Threshold tuning:**
-
-| locut / hicut | Stringency | Effect |
-|---------------|------------|--------|
-| 1.4 / 2.5 | High | Flags only the most extreme compositional bias |
-| 1.8 / 3.4 | Default | Standard NCBI settings, balanced sensitivity |
-| 2.2 / 3.8 | Low | Flags moderate compositional bias as low-complexity |
-
-### Sweep Priorities
-
-When used as a constraint in optimization, low-complexity fraction is a filtering metric rather than a continuous objective. Typical usage:
-
-1. **Hard filter**: Reject sequences with `low_complexity_fraction > 0.15`
-2. **Soft penalty**: Penalize proportionally above a threshold (e.g., 0.05)
-
-## Output Specification
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `low_complexity_fractions` | `List[float]` | Fraction of each sequence classified as low-complexity (0.0-1.0) |
-| `low_complexity_counts` | `List[int]` | Number of residue positions classified as low-complexity per sequence |
-| `sequence_lengths` | `List[int]` | Length of each input sequence in amino acids |
-| `results_df` | `Optional[DataFrame]` | Detailed results with columns: `sequence_id`, `length`, `lowercase_count`, `low_complexity_fraction` |
-
-Export formats: `csv`, `json`
 
 ## Interpreting Results
 
@@ -187,3 +137,44 @@ result.export("/path/to/output", file_format="csv")
 - **IUPred** -- Predicts intrinsic disorder from sequence (different algorithm, different biological question)
 - **PONDR** -- Disorder prediction using neural networks
 - **DUST** -- Low-complexity filtering for nucleotide sequences (DNA/RNA equivalent of SEG)
+
+
+## API Reference
+
+### Input
+
+<ParamField path="sequences" type="List[string]" required>
+  Protein sequence(s) to analyze for low-complexity regions
+</ParamField>
+
+### Configuration
+
+<ParamField path="window" type="integer" default="15">
+  Window size for low-complexity detection
+</ParamField>
+
+<ParamField path="locut" type="number" default="1.8">
+  Threshold below which a region is considered low-complexity
+</ParamField>
+
+<ParamField path="hicut" type="number" default="3.4">
+  Threshold above which a region is considered high-complexity
+</ParamField>
+
+### Output
+
+<ResponseField name="low_complexity_fractions" type="List[number]" required>
+  Fraction of low-complexity regions for each sequence (0.0-1.0)
+</ResponseField>
+
+<ResponseField name="low_complexity_counts" type="List[integer]" required>
+  Number of low-complexity positions for each sequence
+</ResponseField>
+
+<ResponseField name="sequence_lengths" type="List[integer]" required>
+  Length of each input sequence
+</ResponseField>
+
+<ResponseField name="results_df" type="DataFrame">
+  DataFrame with detailed results
+</ResponseField>

@@ -1,6 +1,6 @@
 ---
 title: "SpliceTransformer"
-description: "SpliceTransformer is a deep learning model for predicting splice sites with tissue-specific resoluti..."
+description: "SpliceTransformer is a deep learning model for predicting splice sites with tissue-specific resolution. It identifies splice donors (5' splice sites) and acceptors (3' splice sites) across 15 human tissues, enabling analysis of alternative splicing patterns and tissue-specific isoform usage. The model uses transformer architecture with long-range sequence context for accurate splice site prediction."
 ---
 
 # SpliceTransformer
@@ -81,52 +81,6 @@ SpliceTransformer runs on GPU (recommended) or CPU:
 **Resolution:**
 - Single nucleotide resolution over target sequence
 - Context provides information for accurate prediction
-
-## Input Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `target_seqs` | `List[str]` | Target sequences for prediction (typically 1000bp) |
-| `left_contexts` | `List[str]` | Left flanking sequences (must match `context_length`) |
-| `right_contexts` | `List[str]` | Right flanking sequences (must match `context_length`) |
-
-## Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `context_length` | `int` | `4000` | Length of left/right context sequences |
-| `device` | `str` | `cuda` | Device: `cuda`, `cpu` |
-| `verbose` | `bool` | `False` | Print progress messages |
-
-## Output Specification
-
-### SpliceTransformerOutput
-
-| Field | Type | Shape | Description |
-|-------|------|-------|-------------|
-| `prediction` | `np.ndarray` | `(batch, target_len, 18)` | Per-position predictions |
-
-**Prediction channels:**
-| Index | Content |
-|-------|---------|
-| 0 | P(neither) |
-| 1 | P(acceptor) |
-| 2 | P(donor) |
-| 3 | Adipose tissue |
-| 4 | Blood |
-| 5 | Blood vessel |
-| 6 | Brain |
-| 7 | Colon |
-| 8 | Heart |
-| 9 | Kidney |
-| 10 | Liver |
-| 11 | Lung |
-| 12 | Muscle |
-| 13 | Nerve |
-| 14 | Small intestine |
-| 15 | Skin |
-| 16 | Spleen |
-| 17 | Stomach |
 
 ## Interpreting Results
 
@@ -306,3 +260,32 @@ print(f"Processed {result.prediction.shape[0]} sequences")
 **Alternative tools:**
 - `alphagenome`: Multi-output genomic predictions including splicing
 - SpliceAI: Alternative splice site prediction model (not wrapped in this toolkit)
+
+
+## API Reference
+
+### Input
+
+<ParamField path="target_seqs" type="List[string]" required>
+  Sequence(s) on which to make splicing predictions
+</ParamField>
+
+<ParamField path="left_contexts" type="List[string]" required>
+  Sequence(s) of the left context. Must be the same length as target_seqs
+</ParamField>
+
+<ParamField path="right_contexts" type="List[string]" required>
+  Sequence(s) of the right context. Must be the same length as target_seqs
+</ParamField>
+
+### Configuration
+
+<ParamField path="context_length" type="integer" default="4000">
+  Context length on both left and right of target sequence.
+</ParamField>
+
+### Output
+
+<ResponseField name="prediction" type="ndarray" required>
+  Matrix of (batch, target_length, 18)
+</ResponseField>

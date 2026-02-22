@@ -2,21 +2,28 @@
 """
 Documentation generator for Bio Programming Tools.
 
-This script auto-generates Mintlify MDX documentation from tool README.md files.
+This script auto-generates Mintlify MDX documentation from tool README.md files,
+with schema-rich API references sourced from ToolRegistry/Pydantic models.
 
 Run from repository root:
     python docs/generate_docs.py
-
-Dependencies:
-    No external dependencies required (uses only stdlib)
 """
 from __future__ import annotations
 
+import enum
+import importlib
+import inspect
 import json
+import logging
+import pkgutil
 import re
 import sys
+import types
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Type, Union, get_args, get_origin
+
+from pydantic import BaseModel
+from pydantic.fields import PydanticUndefined
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -28,48 +35,93 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 DOCS_DIR = PROJECT_ROOT / "docs"
 TOOLS_DIR = DOCS_DIR / "tools"
+TOOLS_SOURCE_DIR = PROJECT_ROOT / "bio_programming_tools" / "tools"
 
 # Directories to exclude when discovering tool categories
 EXCLUDED_TOOL_DIRS = {"__pycache__", "infra", "utils"}
 
+# BaseToolOutput metadata fields to exclude from generated output docs
+BASE_OUTPUT_METADATA_FIELDS = {
+    "tool_id",
+    "execution_time",
+    "timestamp",
+    "success",
+    "warnings",
+    "errors",
+    "metadata",
+}
 
-def discover_tool_categories() -> Dict[str, str]:
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Auto-Import Helper
+# =============================================================================
+
+
+def auto_import_package_modules(package_name: str) -> None:
+    """Recursively import all modules in a package to trigger registrations."""
+    try:
+        package = importlib.import_module(package_name)
+    except ImportError as e:
+        print(f"  Warning: Could not import {package_name}: {e}")
+        return
+
+    if not hasattr(package, "__path__"):
+        return
+
+    for _, module_name, _ in pkgutil.walk_packages(
+        package.__path__, prefix=f"{package_name}."
+    ):
+        try:
+            importlib.import_module(module_name)
+        except ImportError as e:
+            print(f"  Warning: Could not import {module_name}: {e}")
+
+
+# =============================================================================
+# Shared Helpers
+# =============================================================================
+
+
+def discover_tool_categories() -> List[str]:
     """Auto-discover tool categories from bio_programming_tools/tools directory."""
-    tools_base = PROJECT_ROOT / "bio_programming_tools" / "tools"
-    categories = {}
+    if not TOOLS_SOURCE_DIR.is_dir():
+        print("  Warning: tools source directory not found")
+        return []
 
-    for item in sorted(tools_base.iterdir()):
-        if not item.is_dir():
-            continue
-        if item.name.startswith("_") or item.name in EXCLUDED_TOOL_DIRS:
-            print(f"  Skipped (excluded): {item.name}")
-            continue
-        # Check if directory contains tool subdirectories with READMEs
-        subdirs_checked = []
-        for subdir in item.iterdir():
-            if subdir.is_dir() and not subdir.name.startswith("_"):
-                subdirs_checked.append(subdir.name)
-
-        has_tool_readmes = any(
-            (item / subdir / "README.md").exists()
-            for subdir in subdirs_checked
-        )
-        if has_tool_readmes:
-            slug = item.name.replace("_", "-")
-            categories[slug] = f"bio_programming_tools/tools/{item.name}"
-        else:
-            print(f"  Skipped (no READMEs): {item.name}/ (checked: {', '.join(subdirs_checked) or 'no subdirs'})")
-
+    categories = sorted(
+        d.name
+        for d in TOOLS_SOURCE_DIR.iterdir()
+        if d.is_dir() and not d.name.startswith("_") and d.name not in EXCLUDED_TOOL_DIRS
+    )
     return categories
 
-
-# =============================================================================
-# Helpers
-# =============================================================================
 
 def slugify(text: str) -> str:
     """Convert text to URL-friendly slug."""
     return text.lower().replace("_", "-").replace(" ", "-")
+
+
+def slug_to_label(slug: str) -> str:
+    """Convert a slug to a human-readable label."""
+    acronyms = {"orf": "ORF", "rna": "RNA", "dna": "DNA", "api": "API"}
+    words = slug.split("-")
+    result = []
+    for word in words:
+        if word.lower() in acronyms:
+            result.append(acronyms[word.lower()])
+        else:
+            result.append(word.capitalize())
+    return " ".join(result)
+
+
+def extract_first_paragraph(text: str) -> str:
+    """Extract first paragraph from text."""
+    if not text:
+        return ""
+    paragraphs = text.strip().split("\n\n")
+    return paragraphs[0].replace("\n", " ").strip()
 
 
 # Compiled patterns for escape_mdx
@@ -165,12 +217,7 @@ CODE_BLOCK_ICONS = {
 
 
 def add_code_block_icons(text: str) -> str:
-    """Add Mintlify icon syntax to code blocks.
-
-    Converts ```python to ```python python icon="python"
-    Converts ```bash to ```bash bash icon="terminal"
-    etc.
-    """
+    """Add Mintlify icon syntax to fenced code blocks."""
     if not text:
         return text
 
@@ -181,154 +228,765 @@ def add_code_block_icons(text: str) -> str:
             return f'```{lang} {lang} icon="{icon}"'
         return match.group(0)
 
-    # Match ```language that isn't already followed by icon syntax
-    # Captures the language name and checks it's not already decorated
-    pattern = r'```(' + '|'.join(re.escape(lang) for lang in CODE_BLOCK_ICONS.keys()) + r')(?!\s+\w+\s+icon=)'
+    pattern = (
+        r"```("
+        + "|".join(re.escape(lang) for lang in CODE_BLOCK_ICONS)
+        + r')(?!\s+\w+\s+icon=)'
+    )
     return re.sub(pattern, replace_code_block, text)
-
-
-# =============================================================================
-# Tool README Documentation Generator
-# =============================================================================
-
-def find_tool_readmes(category_dir: Path) -> List[Dict[str, Any]]:
-    """Find all README.md files in a tool category directory."""
-    tools = []
-
-    if not category_dir.exists():
-        return tools
-
-    for item in category_dir.iterdir():
-        if item.is_dir():
-            readme_path = item / "README.md"
-            if readme_path.exists():
-                tools.append({
-                    "name": item.name,
-                    "readme_path": readme_path,
-                })
-
-    return tools
-
-
-def extract_readme_title(content: str) -> str:
-    """Extract title from README content (first H1)."""
-    match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
-    return match.group(1) if match else "Untitled"
 
 
 def extract_readme_description(content: str) -> str:
     """Extract description from README (overview section or first clean paragraph)."""
-    # First try to get Overview section
-    overview_match = re.search(r'## Overview\s*\n+(.+?)(?=\n##|\Z)', content, re.DOTALL)
+    overview_match = re.search(r"##\s+Overview\s*\n(.*?)(?=\n##|\Z)", content, re.DOTALL)
     if overview_match:
-        overview_text = overview_match.group(1).strip()
-        # Get first sentence or line
-        first_line = overview_text.split('\n')[0].strip()
-        # Clean markdown
-        clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', first_line)
-        clean = re.sub(r'\*([^*]+)\*', r'\1', clean)
-        clean = re.sub(r'`([^`]+)`', r'\1', clean)
-        clean = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', clean)
-        if clean:
-            return clean[:200]
+        return extract_first_paragraph(overview_match.group(1))
 
-    # Fallback: first paragraph after title
-    content_no_title = re.sub(r'^#\s+.+\n', '', content, count=1)
+    content_no_title = re.sub(r"^#\s+.+\n", "", content, count=1)
     paragraphs = content_no_title.strip().split("\n\n")
     for p in paragraphs:
         p = p.strip()
-        if p and not p.startswith("#") and not p.startswith("```") and not p.startswith("**") and not p.startswith("-"):
-            clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', p)
-            clean = re.sub(r'\*([^*]+)\*', r'\1', clean)
-            clean = re.sub(r'`([^`]+)`', r'\1', clean)
-            clean = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', clean)
-            clean = clean.replace("\n", " ")
+        if p and not p.startswith("#") and not p.startswith("```"):
+            clean = p.replace("\n", " ")
             return clean[:200]
 
     return ""
 
 
-def convert_readme_to_mdx(readme_path: Path, output_path: Path) -> None:
-    """Convert a README.md to Mintlify MDX format."""
-    content = readme_path.read_text()
+# =============================================================================
+# Pydantic Schema Extraction
+# =============================================================================
 
-    # Extract metadata
-    title = extract_readme_title(content)
-    description = extract_readme_description(content)
 
-    # Clean description for frontmatter (remove quotes, truncate)
-    clean_desc = description.replace('"', "'").replace('\n', ' ')[:100]
-    if len(description) > 100:
-        clean_desc += "..."
+def _own_field_names(model_class: Type[BaseModel]) -> set[str]:
+    """Return field names defined directly on model_class (not inherited)."""
+    inherited: set[str] = set()
+    for parent in model_class.__mro__[1:]:
+        if hasattr(parent, "model_fields"):
+            inherited |= parent.model_fields.keys()
+    return model_class.model_fields.keys() - inherited
 
-    # Remove existing "Last updated" line
-    content = re.sub(r'\n*-\s*Last updated:.*$', '', content, flags=re.MULTILINE)
 
-    # Escape MDX special characters in content
-    content = escape_mdx(content)
+def _safe_field_default(model_field: Any) -> Any:
+    """Return field default when defined, else None."""
+    default = getattr(model_field, "default", PydanticUndefined)
+    if default is PydanticUndefined:
+        return None
+    return default
 
-    # Add code block icons
-    content = add_code_block_icons(content)
 
-    # Add frontmatter (no timestamp to ensure deterministic output)
-    mdx_content = f"""---
-title: "{title}"
-description: "{clean_desc}"
----
+def _is_required(model_field: Any) -> bool:
+    """Return whether model_field is required."""
+    checker = getattr(model_field, "is_required", None)
+    if callable(checker):
+        return checker()
+    return bool(checker)
 
-{content.rstrip()}
-"""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(mdx_content)
+def _json_schema_extra(model_field: Any) -> dict[str, Any]:
+    """Extract JSON schema extra metadata if available."""
+    extra = getattr(model_field, "json_schema_extra", None)
+    if isinstance(extra, dict):
+        return extra
+    return {}
+
+
+def _normalize_primitive_type(type_name: str) -> str:
+    """Normalize primitive type names for docs display."""
+    mapping = {
+        "str": "string",
+        "string": "string",
+        "int": "integer",
+        "integer": "integer",
+        "float": "number",
+        "number": "number",
+        "bool": "boolean",
+        "boolean": "boolean",
+        "none": "null",
+        "null": "null",
+        "any": "any",
+        "object": "object",
+    }
+    return mapping.get(type_name.lower(), type_name)
+
+
+def _extract_ndarray_dtype(annotation: Any) -> Optional[str]:
+    """Extract a readable ndarray dtype from annotation repr when possible."""
+    text = str(annotation)
+
+    for pattern in [r"dtype\[(.*?)\]", r"numpy\.dtype\[(.*?)\]"]:
+        match = re.search(pattern, text)
+        if match:
+            dtype = match.group(1).split(".")[-1]
+            return dtype.replace("]", "").strip()
+    return None
+
+
+def _annotation_looks_like_dataframe(annotation: Any) -> bool:
+    """Return True when annotation appears to be pandas.DataFrame."""
+    if annotation is None:
+        return False
+    if isinstance(annotation, str):
+        text = annotation
+    else:
+        module = getattr(annotation, "__module__", "")
+        qualname = getattr(annotation, "__qualname__", getattr(annotation, "__name__", ""))
+        text = f"{module}.{qualname}"
+        if not qualname:
+            text = str(annotation)
+    return "DataFrame" in text and "pandas" in text
+
+
+def _annotation_looks_like_ndarray(annotation: Any) -> bool:
+    """Return True when annotation appears to be numpy ndarray/NDArray."""
+    if annotation is None:
+        return False
+    if isinstance(annotation, str):
+        text = annotation
+    else:
+        module = getattr(annotation, "__module__", "")
+        qualname = getattr(annotation, "__qualname__", getattr(annotation, "__name__", ""))
+        text = f"{module}.{qualname}"
+        if not qualname:
+            text = str(annotation)
+    return "ndarray" in text.lower() or "NDArray" in text
+
+
+def _format_ndarray_type(annotation: Any) -> str:
+    """Return ndarray type string, optionally including dtype."""
+    dtype = _extract_ndarray_dtype(annotation)
+    if dtype:
+        return f"ndarray[{dtype}]"
+    return "ndarray"
+
+
+def _annotation_to_type_and_enum(annotation: Any) -> tuple[str, Optional[List[Any]]]:
+    """Map a Python annotation to a doc type string and optional enum values."""
+    if annotation in (None, Any):
+        return "any", None
+
+    if _annotation_looks_like_dataframe(annotation):
+        return "DataFrame", None
+    if _annotation_looks_like_ndarray(annotation):
+        return _format_ndarray_type(annotation), None
+
+    if isinstance(annotation, str):
+        lowered = annotation.lower()
+        if "dataframe" in lowered:
+            return "DataFrame", None
+        if "ndarray" in lowered:
+            return "ndarray", None
+        return _normalize_primitive_type(annotation), None
+
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin is Annotated:
+        if args:
+            return _annotation_to_type_and_enum(args[0])
+        return "any", None
+
+    if origin in (Union, types.UnionType):
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        if not non_none_args:
+            return "null", None
+        if len(non_none_args) == 1:
+            return _annotation_to_type_and_enum(non_none_args[0])
+        mapped = [_annotation_to_type_and_enum(arg)[0] for arg in non_none_args]
+        return " | ".join(mapped), None
+
+    if origin is Literal:
+        values = list(args)
+        return "enum", values
+
+    if origin in (list, List):
+        item_type = _annotation_to_type_and_enum(args[0])[0] if args else "any"
+        return f"List[{item_type}]", None
+
+    if origin in (dict, Dict):
+        key_type = _annotation_to_type_and_enum(args[0])[0] if len(args) >= 1 else "any"
+        value_type = _annotation_to_type_and_enum(args[1])[0] if len(args) >= 2 else "any"
+        return f"Dict[{key_type}, {value_type}]", None
+
+    if origin in (tuple, Tuple):
+        if not args:
+            return "Tuple", None
+        if len(args) == 2 and args[1] is Ellipsis:
+            item_type = _annotation_to_type_and_enum(args[0])[0]
+            return f"Tuple[{item_type}, ...]", None
+        part_types = [_annotation_to_type_and_enum(arg)[0] for arg in args]
+        return f"Tuple[{', '.join(part_types)}]", None
+
+    if inspect.isclass(annotation):
+        if issubclass(annotation, enum.Enum):
+            enum_values = [member.value for member in annotation]
+            return "enum", enum_values
+
+        primitive_name = _normalize_primitive_type(annotation.__name__)
+        if primitive_name != annotation.__name__:
+            return primitive_name, None
+
+        if annotation.__module__ == "builtins":
+            return annotation.__name__, None
+        return annotation.__name__, None
+
+    return "object", None
+
+
+def _parse_schema_property(
+    name: str,
+    prop: Dict[str, Any],
+    required_set: set[str],
+) -> Dict[str, Any]:
+    """Extract a field definition from JSON schema property data."""
+    field: Dict[str, Any] = {
+        "name": name,
+        "type": _normalize_primitive_type(prop.get("type", "any")),
+        "required": name in required_set,
+        "default": prop.get("default"),
+        "description": prop.get("description", ""),
+        "title": prop.get("title", name),
+        "advanced": prop.get("advanced", False),
+        "hidden": prop.get("hidden", False),
+    }
+
+    if "anyOf" in prop:
+        mapped_types: List[str] = []
+        for option in prop["anyOf"]:
+            option_type = option.get("type")
+            if option_type:
+                mapped_types.append(_normalize_primitive_type(option_type))
+            elif "enum" in option:
+                mapped_types.append("enum")
+        mapped_types = [t for t in mapped_types if t != "null"]
+        if mapped_types:
+            field["type"] = " | ".join(mapped_types)
+
+    if "enum" in prop:
+        field["type"] = "enum"
+        field["enum_values"] = prop["enum"]
+
+    if field["type"] == "array" and "items" in prop:
+        item_type = _normalize_primitive_type(prop["items"].get("type", "any"))
+        field["type"] = f"List[{item_type}]"
+
+    return field
+
+
+def _build_field_from_model_field(name: str, model_field: Any) -> Dict[str, Any]:
+    """Build a docs field definition by introspecting Pydantic model_field."""
+    type_name, enum_values = _annotation_to_type_and_enum(model_field.annotation)
+    extra = _json_schema_extra(model_field)
+
+    field: Dict[str, Any] = {
+        "name": name,
+        "type": type_name,
+        "required": _is_required(model_field),
+        "default": _safe_field_default(model_field),
+        "description": getattr(model_field, "description", "") or "",
+        "title": getattr(model_field, "title", None) or name,
+        "advanced": bool(extra.get("advanced", False)),
+        "hidden": bool(extra.get("hidden", False)),
+    }
+    if enum_values:
+        field["enum_values"] = enum_values
+    return field
+
+
+def _should_prefer_introspection(schema_field: Dict[str, Any], inferred_field: Dict[str, Any]) -> bool:
+    """Return True when introspected field should override schema-derived field."""
+    inferred_type = str(inferred_field.get("type", "any"))
+    schema_type = str(schema_field.get("type", "any"))
+
+    if inferred_type in {"DataFrame", "ndarray"} or inferred_type.startswith("ndarray["):
+        return True
+
+    if schema_type in {"any", "object"} and not schema_field.get("enum_values"):
+        return True
+
+    if "any" in schema_type and inferred_type != schema_type and inferred_type not in {"any", "object"}:
+        return True
+
+    if not schema_field.get("description") and inferred_field.get("description"):
+        return True
+
+    return False
+
+
+def parse_pydantic_fields(
+    model_class: Type[BaseModel],
+    exclude: Optional[set[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Extract model fields for docs, preferring schema with resilient fallbacks.
+
+    Uses model_json_schema() when available, then falls back to model_fields
+    introspection for opaque/missing/non-JSON-schema-native types.
+
+    Returns list of dicts with keys:
+        name, type, required, default, description, title, advanced, hidden, enum_values
+    """
+    exclude = exclude or set()
+
+    schema_fields: Dict[str, Dict[str, Any]] = {}
+    try:
+        schema = model_class.model_json_schema()
+        properties = schema.get("properties", {})
+        required_set = set(schema.get("required", []))
+        for name, prop in properties.items():
+            if name in exclude:
+                continue
+            schema_fields[name] = _parse_schema_property(name, prop, required_set)
+    except Exception as exc:
+        logger.warning(
+            "Could not generate JSON schema for %s; using model field introspection: %s",
+            model_class.__name__,
+            exc,
+        )
+
+    parsed_fields: List[Dict[str, Any]] = []
+    seen_names: set[str] = set()
+
+    for name, model_field in model_class.model_fields.items():
+        if name in exclude:
+            continue
+        seen_names.add(name)
+
+        schema_field = schema_fields.get(name)
+        try:
+            inferred_field = _build_field_from_model_field(name, model_field)
+        except Exception as exc:
+            logger.warning(
+                "Could not introspect %s.%s; falling back to schema/default field: %s",
+                model_class.__name__,
+                name,
+                exc,
+            )
+            if schema_field:
+                parsed_fields.append(schema_field)
+            else:
+                parsed_fields.append(
+                    {
+                        "name": name,
+                        "type": "object",
+                        "required": _is_required(model_field),
+                        "default": _safe_field_default(model_field),
+                        "description": "",
+                        "title": name,
+                        "advanced": False,
+                        "hidden": False,
+                    }
+                )
+            continue
+
+        if schema_field and not _should_prefer_introspection(schema_field, inferred_field):
+            if not schema_field.get("description") and inferred_field.get("description"):
+                schema_field["description"] = inferred_field["description"]
+            parsed_fields.append(schema_field)
+        else:
+            parsed_fields.append(inferred_field)
+
+    for name, schema_field in schema_fields.items():
+        if name not in seen_names:
+            parsed_fields.append(schema_field)
+
+    # Reorder: own fields first, inherited base fields last.
+    own_names = _own_field_names(model_class)
+    own = [f for f in parsed_fields if f["name"] in own_names]
+    inherited = [f for f in parsed_fields if f["name"] not in own_names]
+    return own + inherited
+
+
+# =============================================================================
+# Mintlify Component Formatters
+# =============================================================================
+
+
+def format_param_field(param: Dict[str, Any]) -> str:
+    """Format a single parameter as a Mintlify <ParamField> component."""
+    attrs = [f'path="{param["name"]}"', f'type="{param["type"]}"']
+    if param["required"]:
+        attrs.append("required")
+    if param.get("default") is not None:
+        attrs.append(f'default="{param["default"]}"')
+
+    desc = escape_mdx(param.get("description", ""))
+    lines = [f'<ParamField {" ".join(attrs)}>']
+    lines.append(f"  {desc}")
+
+    if param.get("enum_values"):
+        enum_str = "`, `".join(str(v) for v in param["enum_values"])
+        lines.append("")
+        lines.append(f"  Options: `{enum_str}`")
+
+    lines.append("</ParamField>")
+    return "\n".join(lines)
+
+
+def format_param_fields(params: List[Dict[str, Any]]) -> str:
+    """Format a list of parameters as Mintlify <ParamField> components."""
+    visible = [p for p in params if not p.get("hidden")]
+    if not visible:
+        return "_No parameters_"
+    return "\n\n".join(format_param_field(p) for p in visible)
+
+
+def format_response_field(field: Dict[str, Any]) -> str:
+    """Format a single field as a Mintlify <ResponseField> component."""
+    attrs = [f'name="{field["name"]}"', f'type="{field["type"]}"']
+    if field["required"]:
+        attrs.append("required")
+
+    desc = escape_mdx(field.get("description", ""))
+    lines = [f'<ResponseField {" ".join(attrs)}>']
+    lines.append(f"  {desc}")
+    lines.append("</ResponseField>")
+    return "\n".join(lines)
+
+
+def format_response_fields(fields: List[Dict[str, Any]]) -> str:
+    """Format a list of fields as Mintlify <ResponseField> components."""
+    if not fields:
+        return "_No fields_"
+    return "\n\n".join(format_response_field(f) for f in fields)
+
+
+# =============================================================================
+# Tool Documentation Generator
+# =============================================================================
+
+
+def try_import_tool_registry():
+    """Graceful import of ToolRegistry; returns None if deps missing."""
+    try:
+        auto_import_package_modules("bio_programming_tools.tools")
+        from bio_programming_tools import ToolRegistry
+
+        return ToolRegistry
+    except Exception as e:
+        print(f"  Warning: Could not import ToolRegistry: {e}")
+        print("  Falling back to README-only tool docs")
+        return None
+
+
+def _tool_source_dir(spec) -> Optional[Path]:
+    """Get the source directory for a tool function using inspect.getfile().
+
+    Walks up from the source file to find the nearest directory containing a
+    README.md, which is the canonical tool directory.
+    """
+    try:
+        unwrapped = inspect.unwrap(spec.function)
+        source_file = Path(inspect.getfile(unwrapped))
+    except (TypeError, OSError):
+        return None
+
+    current = source_file.parent
+    while current != current.parent:
+        if (current / "README.md").exists():
+            return current
+        if current.name == "tools":
+            break
+        current = current.parent
+    return source_file.parent
+
+
+def _strip_hand_written_schemas(
+    readme_text: str,
+    *,
+    strip_input: bool = True,
+    strip_config: bool = True,
+    strip_output: bool = True,
+    strip_important: bool = True,
+) -> str:
+    """Strip selected hand-written schema sections from README.
+
+    This lets us keep manual fallback documentation (for example Output
+    sections) if schema extraction fails for a model.
+    """
+    sections: List[str] = []
+    if strip_input:
+        sections.extend([r"Inputs?", r"Input Parameters?"])
+    if strip_config:
+        sections.append(r"Configurations?")
+    if strip_output:
+        sections.extend([r"Outputs?", r"Output Specification?"])
+    if strip_important:
+        sections.append(r"Important Parameters?")
+
+    if not sections:
+        return readme_text
+
+    pattern = re.compile(
+        rf"^##\s+(?:{'|'.join(sections)})\s*\n"
+        r"(?:(?!^##\s).*\n?)*",
+        re.MULTILINE,
+    )
+    return pattern.sub("", readme_text)
+
+
+def _build_tool_api_section(spec) -> tuple[str, set[str]]:
+    """Build API Reference MDX for a ToolSpec.
+
+    Returns:
+        (section_markdown, generated_sections)
+        generated_sections contains any of: {"input", "config", "output"}.
+    """
+    sections: List[str] = []
+    generated_sections: set[str] = set()
+
+    try:
+        input_fields = parse_pydantic_fields(spec.input_model)
+        if input_fields:
+            sections.append("### Input\n")
+            sections.append(format_param_fields(input_fields))
+            generated_sections.add("input")
+    except Exception as exc:
+        logger.warning("Could not parse input model for %s: %s", spec.key, exc)
+
+    try:
+        config_params = parse_pydantic_fields(spec.config_model)
+        if config_params:
+            sections.append("\n### Configuration\n")
+            sections.append(format_param_fields(config_params))
+            generated_sections.add("config")
+    except Exception as exc:
+        logger.warning("Could not parse config model for %s: %s", spec.key, exc)
+
+    try:
+        output_fields = parse_pydantic_fields(
+            spec.output_model,
+            exclude=BASE_OUTPUT_METADATA_FIELDS,
+        )
+        if output_fields:
+            sections.append("\n### Output\n")
+            sections.append(format_response_fields(output_fields))
+            generated_sections.add("output")
+    except Exception as exc:
+        logger.warning("Could not parse output model for %s: %s", spec.key, exc)
+
+    return "\n".join(sections), generated_sections
 
 
 def generate_tool_docs() -> Dict[str, List[str]]:
-    """Generate MDX documentation from tool READMEs."""
-    tool_categories = discover_tool_categories()
-    generated_pages = {}
+    """Generate MDX documentation for all tools.
 
-    for category_slug, source_dir in tool_categories.items():
-        category_path = PROJECT_ROOT / source_dir
-        output_dir = TOOLS_DIR / category_slug
+    Merges README content with ToolRegistry-backed API reference sections.
+    """
+    categories = discover_tool_categories()
+    if not categories:
+        return {}
 
-        tools = find_tool_readmes(category_path)
-        if not tools:
+    tool_registry = try_import_tool_registry()
+
+    dir_to_specs: Dict[Path, list] = {}
+    if tool_registry is not None:
+        for spec in tool_registry.list_all():
+            src_dir = _tool_source_dir(spec)
+            if src_dir is not None:
+                dir_to_specs.setdefault(src_dir.resolve(), []).append(spec)
+
+    category_pages: Dict[str, List[str]] = {}
+
+    for category in categories:
+        category_dir = TOOLS_SOURCE_DIR / category
+
+        readme_paths = sorted(category_dir.rglob("README.md"))
+        skip_tool_dirs = {"standalone", "__pycache__"}
+        readme_paths = [
+            p
+            for p in readme_paths
+            if p.parent != category_dir and p.parent.name not in skip_tool_dirs
+        ]
+
+        if not readme_paths:
             continue
 
+        category_slug = slugify(category)
+        output_dir = TOOLS_DIR / category_slug
         output_dir.mkdir(parents=True, exist_ok=True)
-        category_pages = []
 
-        for tool in tools:
-            tool_slug = slugify(tool["name"])
+        for readme_path in readme_paths:
+            tool_dir = readme_path.parent
+            tool_slug = slugify(tool_dir.name)
+            readme_text = readme_path.read_text()
+
+            specs = dir_to_specs.get(tool_dir.resolve(), [])
+
+            title_match = re.match(r"^#\s+(.+)", readme_text)
+            title = title_match.group(1).strip() if title_match else slug_to_label(tool_slug)
+
+            desc = extract_readme_description(readme_text)
+            if not desc and specs:
+                desc = specs[0].description
+
+            mdx_parts: List[str] = []
+            safe_title = title.replace('"', '\\"')
+            safe_desc = desc.replace('"', '\\"')
+            mdx_parts.append(
+                f'---\ntitle: "{safe_title}"\ndescription: "{safe_desc}"\n---\n'
+            )
+
+            generated_sections_per_spec: List[set[str]] = []
+            api_reference_parts: List[str] = []
+
+            if specs:
+                if len(specs) == 1:
+                    api_section, generated_sections = _build_tool_api_section(specs[0])
+                    generated_sections_per_spec.append(generated_sections)
+                    api_reference_parts.append("\n## API Reference\n")
+                    api_reference_parts.append(api_section)
+                else:
+                    api_reference_parts.append("\n## API Reference\n")
+                    api_reference_parts.append("<Tabs>")
+                    for spec in sorted(specs, key=lambda s: s.key):
+                        api_section, generated_sections = _build_tool_api_section(spec)
+                        generated_sections_per_spec.append(generated_sections)
+                        api_reference_parts.append(f'  <Tab title="{spec.label}">')
+                        api_reference_parts.append(f"  **Key:** `{spec.key}`\n")
+                        api_reference_parts.append(f"  {spec.description}\n")
+                        api_reference_parts.append(api_section)
+                        api_reference_parts.append("  </Tab>")
+                    api_reference_parts.append("</Tabs>")
+
+            body = readme_text
+            if generated_sections_per_spec:
+                strip_input = all("input" in s for s in generated_sections_per_spec)
+                strip_config = all("config" in s for s in generated_sections_per_spec)
+                strip_output = all("output" in s for s in generated_sections_per_spec)
+                body = _strip_hand_written_schemas(
+                    body,
+                    strip_input=strip_input,
+                    strip_config=strip_config,
+                    strip_output=strip_output,
+                    strip_important=(strip_input or strip_config),
+                )
+
+            body = add_code_block_icons(body)
+            body = escape_mdx(body)
+            mdx_parts.append(body)
+
+            mdx_parts.extend(api_reference_parts)
+
+            mdx = "\n".join(mdx_parts) + "\n"
+
             output_path = output_dir / f"{tool_slug}.mdx"
-
-            convert_readme_to_mdx(tool["readme_path"], output_path)
+            output_path.write_text(mdx)
 
             page_path = f"tools/{category_slug}/{tool_slug}"
-            category_pages.append(page_path)
+            category_pages.setdefault(category_slug, []).append(page_path)
             print(f"  Generated: {output_path.relative_to(PROJECT_ROOT)}")
 
-        generated_pages[category_slug] = category_pages
+    generated_pages = {
+        page_path for pages in category_pages.values() for page_path in pages
+    }
+    stale_pages = prune_stale_tool_pages(generated_pages)
+    for page_path in stale_pages:
+        print(f"  Removed stale: docs/{page_path}.mdx")
 
-    return generated_pages
+    return category_pages
+
+
+# =============================================================================
+# Validation
+# =============================================================================
+
+
+def prune_stale_tool_pages(generated_pages: set[str]) -> List[str]:
+    """Remove stale generated tool pages not present in the current run."""
+    stale_pages: List[str] = []
+
+    if not TOOLS_DIR.exists():
+        return stale_pages
+
+    for path in sorted(TOOLS_DIR.rglob("*.mdx")):
+        page_path = str(path.relative_to(DOCS_DIR).with_suffix("")).replace("\\", "/")
+        if page_path not in generated_pages:
+            path.unlink()
+            stale_pages.append(page_path)
+
+    # Remove empty category directories left behind after stale page cleanup.
+    for directory in sorted(TOOLS_DIR.rglob("*"), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+
+    return stale_pages
+
+
+def _expected_tool_pages_from_readmes() -> set[str]:
+    """Compute expected tool page paths from source README files."""
+    expected: set[str] = set()
+    skip_tool_dirs = {"standalone", "__pycache__"}
+
+    for category in discover_tool_categories():
+        category_dir = TOOLS_SOURCE_DIR / category
+        for readme_path in sorted(category_dir.rglob("README.md")):
+            if (
+                readme_path.parent == category_dir
+                or readme_path.parent.name in skip_tool_dirs
+            ):
+                continue
+            category_slug = slugify(category)
+            tool_slug = slugify(readme_path.parent.name)
+            expected.add(f"tools/{category_slug}/{tool_slug}")
+
+    return expected
+
+
+def validate_generated_docs(tool_pages: Dict[str, List[str]]) -> None:
+    """Validate generated docs coverage and navigation consistency."""
+    expected_from_readmes = _expected_tool_pages_from_readmes()
+    generated_from_mapping = {
+        page_path for pages in tool_pages.values() for page_path in pages
+    }
+    if generated_from_mapping != expected_from_readmes:
+        missing = sorted(expected_from_readmes - generated_from_mapping)
+        extra = sorted(generated_from_mapping - expected_from_readmes)
+        raise ValueError(
+            "README coverage mismatch in generated tool pages.\n"
+            f"  Missing pages: {missing}\n"
+            f"  Extra pages: {extra}"
+        )
+
+    generated_on_disk = {
+        str(path.relative_to(DOCS_DIR).with_suffix("")).replace("\\", "/")
+        for path in TOOLS_DIR.rglob("*.mdx")
+    }
+    if generated_on_disk != generated_from_mapping:
+        missing = sorted(generated_from_mapping - generated_on_disk)
+        extra = sorted(generated_on_disk - generated_from_mapping)
+        raise ValueError(
+            "Disk output mismatch for generated tool docs.\n"
+            f"  Missing files: {missing}\n"
+            f"  Extra files: {extra}"
+        )
+
+    docs_json_path = DOCS_DIR / "docs.json"
+    docs = json.loads(docs_json_path.read_text())
+    tools_tab = next(
+        (tab for tab in docs.get("navigation", {}).get("tabs", []) if tab.get("tab") == "Tools"),
+        None,
+    )
+    if tools_tab is None:
+        raise ValueError("docs.json missing 'Tools' tab")
+
+    nav_pages = {
+        page
+        for group in tools_tab.get("groups", [])
+        for page in group.get("pages", [])
+    }
+    if nav_pages != generated_from_mapping:
+        missing = sorted(generated_from_mapping - nav_pages)
+        extra = sorted(nav_pages - generated_from_mapping)
+        raise ValueError(
+            "Navigation mismatch for tool docs.\n"
+            f"  Missing in navigation: {missing}\n"
+            f"  Unknown in navigation: {extra}"
+        )
 
 
 # =============================================================================
 # Navigation Updater
 # =============================================================================
-
-def slug_to_label(slug: str) -> str:
-    """Convert a slug to a human-readable label."""
-    acronyms = {"orf": "ORF", "rna": "RNA", "dna": "DNA", "api": "API"}
-    words = slug.split("-")
-    result = []
-    for word in words:
-        if word.lower() in acronyms:
-            result.append(acronyms[word.lower()])
-        else:
-            result.append(word.capitalize())
-    return " ".join(result)
 
 
 def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
@@ -341,7 +999,6 @@ def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
 
     docs = json.loads(docs_json_path.read_text())
 
-    # Validate expected structure
     if "navigation" not in docs:
         print("  Error: docs.json missing 'navigation' key")
         return
@@ -350,7 +1007,6 @@ def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
         print("  Error: docs.json missing 'navigation.tabs' key")
         return
 
-    # Find the Tools tab
     tools_tab = None
     for tab in docs["navigation"]["tabs"]:
         if tab.get("tab") == "Tools":
@@ -361,21 +1017,14 @@ def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
         print("  Warning: No 'Tools' tab found in docs.json")
         return
 
-    # Build groups for each category
     new_groups = []
     for category_slug in sorted(tool_pages.keys()):
         group_label = slug_to_label(category_slug)
         pages = sorted(tool_pages[category_slug])
 
-        new_groups.append({
-            "group": group_label,
-            "pages": pages
-        })
+        new_groups.append({"group": group_label, "pages": pages})
 
-    # Update the Tools tab's groups
     tools_tab["groups"] = new_groups
-
-    # Write back to docs.json with pretty formatting
     docs_json_path.write_text(json.dumps(docs, indent="\t") + "\n")
 
 
@@ -383,23 +1032,27 @@ def update_docs_json(tool_pages: Dict[str, List[str]]) -> None:
 # Main
 # =============================================================================
 
+
 def main():
     """Main entry point for documentation generation."""
     print("=" * 60)
     print("Bio Programming Tools Documentation Generator")
     print("=" * 60)
 
-    # Ensure docs directories exist
     TOOLS_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\n[1/2] Generating tool documentation...")
+    print("\n[1/3] Generating tool documentation...")
     tool_pages = generate_tool_docs()
     total_tools = sum(len(pages) for pages in tool_pages.values())
     print(f"  Total: {total_tools} tools across {len(tool_pages)} categories")
 
-    print("\n[2/2] Updating docs.json navigation...")
+    print("\n[2/3] Updating docs.json navigation...")
     update_docs_json(tool_pages)
     print("  Updated: docs/docs.json")
+
+    print("\n[3/3] Validating generated docs integrity...")
+    validate_generated_docs(tool_pages)
+    print("  Validation passed")
 
     print("\n" + "=" * 60)
     print("Documentation generation complete!")

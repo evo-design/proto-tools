@@ -1,6 +1,6 @@
 ---
 title: "NCBI Entrez Tools"
-description: "Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (prot..."
+description: "Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (protein, nucleotide, gene):"
 ---
 
 # NCBI Entrez Tools
@@ -82,34 +82,6 @@ output = run_ncbi_efetch(inputs, NCBIFetchConfig())
 print(output.fasta_records[0].accession, len(output.fasta_records[0].sequence))
 ```
 
-## Input Parameters
-
-### `NCBIEsearchInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
-| `search_term` | `str` | *(required)* | NCBI search query (e.g. `lacI[Gene] AND Escherichia coli[Organism]`) |
-| `max_results` | `int` | `5` | Maximum number of IDs to return (1-100) |
-
-### `NCBIEsummaryInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
-| `identifier` | `str` | *(required)* | Accession or NCBI ID (e.g. `NP_000537.3`, `7157`) |
-
-### `NCBIEfetchInput`
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `db` | `Literal["protein", "nuccore", "gene"]` | *(required)* | NCBI database to query |
-| `identifier` | `str` | *(required)* | Accession or NCBI ID |
-| `return_format` | `Literal["fasta", "fasta_cds_na"]` | `"fasta"` | NCBI rettype: `fasta` for sequences, `fasta_cds_na` for CDS |
-| `seq_start` | `Optional[int]` | `None` | Start position for subsequence (1-indexed, inclusive) |
-| `seq_stop` | `Optional[int]` | `None` | Stop position for subsequence (1-indexed, inclusive) |
-| `strand` | `Optional[Literal["+", "-"]]` | `None` | Strand for nucleotide retrieval |
-
 ## Configuration (shared)
 
 All three tools share `NCBIFetchConfig`:
@@ -169,3 +141,186 @@ All three tools share `NCBIFetchConfig`:
 ## References
 
 - Sayers EW, et al. GenBank. Nucleic Acids Research. 2022;50(D1):D161-D164. doi:10.1093/nar/gkab1135
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="NCBI Entrez EFetch">
+  **Key:** `ncbi-efetch`
+
+  Fetch sequences and records from NCBI Entrez by accession or ID
+
+### Input
+
+<ParamField path="db" type="enum" required>
+  NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'
+
+  Options: `protein`, `nuccore`, `gene`
+</ParamField>
+
+<ParamField path="identifier" type="string" required>
+  Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')
+</ParamField>
+
+<ParamField path="return_format" type="enum" default="fasta">
+  NCBI rettype: 'fasta' for sequences, 'fasta_cds_na' for CDS
+
+  Options: `fasta`, `fasta_cds_na`
+</ParamField>
+
+<ParamField path="seq_start" type="integer">
+  Start position for subsequence extraction (1-indexed, inclusive)
+</ParamField>
+
+<ParamField path="seq_stop" type="integer">
+  Stop position for subsequence extraction (1-indexed, inclusive)
+</ParamField>
+
+<ParamField path="strand" type="string">
+  Strand for nucleotide retrieval
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout in seconds
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="2">
+  Retries for HTTP requests
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="ncbi_api_key" type="string">
+  Optional NCBI API key
+</ParamField>
+
+<ParamField path="ncbi_email" type="string">
+  Optional NCBI contact email
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/ncbi-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="fasta_records" type="List[NCBIFastaRecord]">
+  Parsed FASTA records
+</ResponseField>
+
+<ResponseField name="source_url" type="string" required>
+  Sanitized request URL
+</ResponseField>
+  </Tab>
+  <Tab title="NCBI Entrez ESearch">
+  **Key:** `ncbi-esearch`
+
+  Search NCBI Entrez databases by query term to find matching IDs
+
+### Input
+
+<ParamField path="db" type="enum" required>
+  NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'
+
+  Options: `protein`, `nuccore`, `gene`
+</ParamField>
+
+<ParamField path="search_term" type="string" required>
+  NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')
+</ParamField>
+
+<ParamField path="max_results" type="integer" default="5">
+  Maximum number of IDs to return from a search
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout in seconds
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="2">
+  Retries for HTTP requests
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="ncbi_api_key" type="string">
+  Optional NCBI API key
+</ParamField>
+
+<ParamField path="ncbi_email" type="string">
+  Optional NCBI contact email
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/ncbi-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="ids" type="List[string]">
+  List of NCBI IDs found by the search
+</ResponseField>
+  </Tab>
+  <Tab title="NCBI Entrez ESummary">
+  **Key:** `ncbi-esummary`
+
+  Retrieve record summary metadata from NCBI Entrez by ID
+
+### Input
+
+<ParamField path="db" type="enum" required>
+  NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'
+
+  Options: `protein`, `nuccore`, `gene`
+</ParamField>
+
+<ParamField path="identifier" type="string" required>
+  Accession or NCBI ID for esummary (e.g. 'NP_000537.3', '7157')
+</ParamField>
+
+### Configuration
+
+<ParamField path="request_timeout_seconds" type="integer" default="15">
+  HTTP timeout in seconds
+</ParamField>
+
+<ParamField path="http_retries" type="integer" default="2">
+  Retries for HTTP requests
+</ParamField>
+
+<ParamField path="backoff_seconds" type="number" default="1.0">
+  Seconds to wait between retries (doubles after each attempt)
+</ParamField>
+
+<ParamField path="ncbi_api_key" type="string">
+  Optional NCBI API key
+</ParamField>
+
+<ParamField path="ncbi_email" type="string">
+  Optional NCBI contact email
+</ParamField>
+
+<ParamField path="user_agent" type="string" default="bio-programming-tools/ncbi-fetch-v1">
+  Identifier string sent to database APIs with each request
+</ParamField>
+
+### Output
+
+<ResponseField name="summary" type="Dict[string, any]">
+  Record summary data returned by esummary
+</ResponseField>
+
+<ResponseField name="source_url" type="string" required>
+  Sanitized request URL
+</ResponseField>
+  </Tab>
+</Tabs>

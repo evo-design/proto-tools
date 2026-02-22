@@ -1,6 +1,6 @@
 ---
 title: "ProteinMPNN"
-description: "ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ..."
+description: "ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure (\"inverse folding\"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone) and *Sequence Scoring* (evaluating how well a sequence fits a structure)."
 ---
 
 # ProteinMPNN
@@ -63,87 +63,6 @@ ProteinMPNN runs on GPU (recommended) or CPU:
 **Sampling (`proteinmpnn-sample`):** Generates new protein sequences for a given backbone structure. Outputs multiple sequence candidates with diversity controlled by temperature. Returns perplexity scores and sequence identity to the original structure's sequence.
 
 **Scoring (`proteinmpnn-score`):** Evaluates how well a given sequence fits a structure. Returns perplexity (lower is better) and per-position logits for detailed analysis.
-
-## Input Parameters
-
-### Sampling (`proteinmpnn-sample`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `structures` | `List[Structure]` or `List[str]` | Backbone structures as Structure objects or PDB file paths/content |
-| `all_chain_ids` | `Optional[List[List[str]]]` | Which chains to design for each structure. If `None`, designs all chains |
-
-### Scoring (`proteinmpnn-score`)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequence_structure_pairs` | `List[SequenceStructurePair]` | List of (sequence, structure) pairs to score |
-
-## Configuration
-
-### Sampling Configuration (`InverseFoldingConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `num_sequences_per_structure` | `int` | `1` | Total number of sequences to generate per structure |
-| `batch_size` | `Optional[int]` | `None` | Max sequences per GPU forward pass (defaults to `num_sequences_per_structure`) |
-| `temperature` | `float` | `0.1` | Sampling temperature (0.0-1.0). Lower = more conservative, higher = more diverse |
-| `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Residues to keep fixed (not redesigned). Maps chain IDs to position lists |
-| `excluded_amino_acids` | `Optional[List[str]]` | `None` | Amino acids to exclude from design (e.g., `["C"]` to avoid cysteines) |
-| `seed` | `int` | `42` | Random seed for reproducibility |
-| `device` | `str` | `"cuda"` | Device for inference (`"cuda"` or `"cpu"`) |
-
-### Scoring Configuration (`ProteinMPNNScoringConfig`)
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `fixed_positions` | `Optional[Dict[str, List[int]]]` | `None` | Positions to exclude from perplexity calculation |
-| `seed` | `int` | `42` | Random seed |
-| `device` | `str` | `"cuda"` | Device for inference |
-
-### Parameter Guides
-
-**Temperature guide:**
-| Temperature | Behavior | Use Case |
-|-------------|----------|----------|
-| `0.0` | Deterministic (argmax) | Most likely sequence, no diversity |
-| `0.1` | Low diversity (default) | Conservative designs, high confidence |
-| `0.3-0.5` | Moderate diversity | Balanced exploration |
-| `0.7-1.0` | High diversity | Maximum sequence variation |
-
-### Sweep Priorities
-
-1. **`temperature`**: Most impactful for sequence diversity. Start at 0.1 for conservative designs, increase to 0.3-0.5 for exploration.
-2. **`num_sequences_per_structure`**: Generate 10-100 sequences and filter by perplexity. More sequences = more chances of finding good designs.
-3. **`fixed_positions`**: Use to preserve catalytic residues, binding sites, or experimentally validated positions.
-
-## Output Specification
-
-### Sampling Output (`InverseFoldingOutput`)
-
-Contains a list of `ProteinMPNNSequences` objects, one per input structure:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `sequences` | `List[str]` | Designed amino acid sequences. Multi-chain sequences are "/"-delimited (e.g., `"MASCQT/EVQLVE"`) |
-| `perplexity` | `List[float]` | Perplexity for each sequence. **Lower is better.** Typical range: 1.5-8.0 |
-| `sequence_identity` | `List[float]` | Identity to the original PDB sequence (0.0-1.0) |
-
-### Scoring Output (`ProteinMPNNScoringOutput`)
-
-Contains a list of `SequenceScores` objects, one per input pair. Metrics can be accessed via attribute-style (`score.perplexity`) or dict-style (`score.metrics["perplexity"]`):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `scores` | `List[SequenceScores]` | List of scores, one per input sequence-structure pair |
-| `vocab` | `Optional[List[str]]` | Token ordering for logits: `logits[:, j]` corresponds to `vocab[j]` |
-
-Each `SequenceScores` contains:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `metrics` | `Dict[str, float]` | Dictionary containing `log_likelihood`, `avg_log_likelihood`, and `perplexity` |
-| `logits` | `Optional[List[List[float]]]` | Per-position logits array of shape `(seq_length, vocab_size)` |
 
 ## Interpreting Results
 
@@ -368,3 +287,71 @@ for pos in range(len(probs)):
 **Alternative tools:**
 - `esm-if1`: Alternative inverse folding model with different architecture
 - `esm2-sample` / `esm3-sample`: Sequence-only design (no structure conditioning)
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="ProteinMPNN Sampling">
+  **Key:** `proteinmpnn-sample`
+
+  Sample protein sequences using ProteinMPNN
+
+### Input
+
+<ParamField path="inputs" type="List[InverseFoldingStructureInput]" required>
+  List of inverse folding inputs, each containing a structure and constraints.
+</ParamField>
+
+### Configuration
+
+<ParamField path="num_sequences_per_structure" type="integer" default="1">
+  Total number of sequences to generate per input structure.
+</ParamField>
+
+<ParamField path="batch_size" type="integer">
+  Number of sequences to process simultaneously on GPU. Defaults to num_sequences_per_structure.
+</ParamField>
+
+<ParamField path="temperature" type="number" default="0.1">
+  Controls randomness in sampling from logits
+</ParamField>
+
+<ParamField path="excluded_amino_acids" type="array">
+  List of amino acids that are not allowed in the sequence. If None, no amino acids will be disallowed
+</ParamField>
+
+### Output
+
+<ResponseField name="designed_sequences" type="List[DesignedSequences]" required>
+  List of sequences predicted for the input structures
+</ResponseField>
+  </Tab>
+  <Tab title="ProteinMPNN Scoring">
+  **Key:** `proteinmpnn-score`
+
+  Score protein sequences using ProteinMPNN
+
+### Input
+
+<ParamField path="sequence_structure_pairs" type="List[SequenceStructurePair]" required>
+  List of sequence-structure pairs to score
+</ParamField>
+
+### Configuration
+
+<ParamField path="fixed_positions" type="Dict[string, List[integer]]">
+  Dictionary mapping chain IDs to fixed positions in the sequence. If None, no positions will be fixed
+</ParamField>
+
+<ParamField path="return_logits" type="boolean" default="False">
+  Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+### Output
+
+<ResponseField name="scores" type="List[SequenceScores]" required>
+  List of scoring outputs, one per input sequence-structure pair
+</ResponseField>
+  </Tab>
+</Tabs>

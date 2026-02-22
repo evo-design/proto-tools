@@ -1,6 +1,6 @@
 ---
 title: "Boltz2"
-description: "Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of p..."
+description: "Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of proteins, DNA, RNA, and ligands using a diffusion-based architecture with MSA integration. It provides the broadest molecular type support among current structure prediction tools."
 ---
 
 # Boltz2
@@ -86,77 +86,6 @@ Boltz2 uses a sophisticated pipeline:
 - **Runtime:** Thorough sampling (25 samples x 200 steps) takes 2-10 minutes per complex
 - **Network dependency:** Requires internet access when using remote MSA search mode
 - **Memory intensive:** Large complexes require significant GPU memory
-
-## Input Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `complexes` | `List[StructurePredictionComplex]` | *required* | List of complexes; each can have protein, DNA, RNA, and/or ligand chains |
-| `use_msa` | `bool` | `True` | Whether to generate and use MSAs for protein chains using ColabFold search |
-| `colabfold_search_config.search_mode` | `str` | `"remote"` | MSA search mode; `"remote"` uses ColabFold API, `"local"` uses local databases |
-| `colabfold_search_config.use_metagenomic` | `bool` | `False` | Include metagenomic sequences in MSA search for improved coverage |
-| `recycling_steps` | `int` | `10` | Iterative refinement passes; more = better quality but slower |
-| `sampling_steps` | `int` | `200` | Denoising steps; more = finer structures but slower |
-| `diffusion_samples` | `int` | `25` | Independent structure samples; best is returned by confidence |
-| `num_workers` | `int` | `min(cpu_count, 4)` | CPU workers for parallel processing |
-| `devices` | `str` | `"0"` | GPU device IDs (e.g., "0" or "0,1" for multi-GPU) |
-
-## Configuration
-
-### Parameter Guides
-
-| Parameter | Sweep Range | Notes |
-|-----------|-------------|-------|
-| `recycling_steps` | `3 - 20` | Higher = more refined but slower |
-| `sampling_steps` | `100 - 500` | Higher = finer structures; 200 is good default |
-| `diffusion_samples` | `5 - 50` | More samples explore conformational diversity |
-| `use_msa` | `True, False` | Disabling reduces accuracy significantly |
-
-### Sweep Priorities
-
-1. **`diffusion_samples`**: Most impactful for conformational diversity and finding optimal binding poses. Use 5-10 for screening, 25-50 for high-confidence predictions.
-2. **`recycling_steps`**: Affects structure refinement quality. Try 5, 10, 15 to balance speed vs accuracy.
-3. **`sampling_steps`**: For critical predictions, increase to 300-500. Use 100-150 for rapid screening.
-
-## Output Specification
-
-```python python icon="python"
-# Return type: Boltz2Output
-Boltz2Output(
-    structures: List[Structure],  # One per input complex
-)
-
-# Each Structure contains comprehensive metrics:
-metrics = {
-    # Primary metrics (always present)
-    "confidence_score": float,   # Primary ranking score (iptm for complexes, ptm for single chains)
-    "ptm": float,                # Predicted TM-score (0-1)
-    "iptm": float,               # Interface pTM (0-1)
-
-    # Per-chain metrics
-    "chains_ptm": List[float],   # pTM for each chain individually
-    "pair_chains_iptm": List[List[float]],  # Pairwise ipTM matrix between chains
-
-    # Optional metrics (may be None)
-    "ligand_iptm": float,        # Protein-ligand interface score
-    "protein_iptm": float,       # Protein-protein interface score
-    "complex_plddt": float,      # Average pLDDT across all residues (0-100)
-    "complex_iplddt": float,     # Interface pLDDT (0-100)
-    "complex_pde": float,        # Predicted aligned error (Angstrom), lower is better
-    "complex_ipde": float,       # Interface PAE (Angstrom), lower is better
-}
-```
-
-**Key output fields:**
-
-| Field | Type | Range | Interpretation |
-|-------|------|-------|----------------|
-| `confidence_score` | `float` | `0.0 - 1.0` | Primary ranking score; >0.7 = good, >0.85 = excellent |
-| `ptm` | `float` | `0.0 - 1.0` | Global fold quality; >0.7 = high quality, &lt;0.5 = unreliable |
-| `iptm` | `float` | `0.0 - 1.0` | Interface quality; >0.85 = high confidence, 0.7-0.85 = moderate, &lt;0.7 = low |
-| `ligand_iptm` | `float` | `0.0 - 1.0` | Protein-ligand binding confidence; >0.7 = reliable binding pose |
-| `complex_plddt` | `float` | `0 - 100` | Per-residue average; >90 = very high, 70-90 = high, &lt;70 = uncertain |
-| `complex_pde` | `float` | `>0 Angstrom` | Spatial error estimate; &lt;10A = good relative positions, >20A = uncertain |
 
 ## Interpreting Results
 
@@ -261,3 +190,36 @@ for structure in result.structures:
 - **`chai1-prediction`**: Better for glycan-containing complexes; Chai1 doesn't require MSA server
 - **`esmfold`**: Much faster for protein-only structures when nucleic acids/ligands not needed
 - **`alphafold2`**: Higher accuracy for pure protein structures; use for final validation
+
+
+## API Reference
+
+### Input
+
+<ParamField path="complexes" type="List[StructurePredictionComplex]" required>
+  List of complexes to predict structure for containing chains and entity types.
+</ParamField>
+
+### Configuration
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
+</ParamField>
+
+<ParamField path="recycling_steps" type="integer" default="10">
+  Number of iterative refinement passes (higher=more refined structures but slower)
+</ParamField>
+
+<ParamField path="sampling_steps" type="integer" default="200">
+  Number of denoising steps in the diffusion process (higher=more refined but slower)
+</ParamField>
+
+<ParamField path="diffusion_samples" type="integer" default="25">
+  Number of independent structure samples to generate (Only best is returned for each complex)
+</ParamField>
+
+### Output
+
+<ResponseField name="structures" type="List[object]" required>
+  List of predicted structures
+</ResponseField>

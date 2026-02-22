@@ -1,6 +1,6 @@
 ---
 title: "MMseqs2"
-description: "MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering hu..."
+description: "MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches 100x faster while maintaining similar sensitivity, making it ideal for large-scale sequence analysis. This module provides interfaces for *Protein Search*, *Genome Search*, and *Sequence Clustering* operations using MMseqs2."
 ---
 
 # MMseqs2
@@ -85,93 +85,6 @@ CPU: Scales well with multiple threads (default: 96 threads).
 RAM: Depends on database size; uses memory-mapped files for efficiency.
 
 Storage: Databases are typically 2-3x the size of the input FASTA.
-
-## Input Parameters
-
-| Tool | Parameter | Type | Description |
-|------|-----------|------|-------------|
-| `mmseqs-search-proteins` | `query_sequences` | `str` or `List[str]` | Path to FASTA file OR list of protein sequence strings. |
-| `mmseqs-search-proteins` | `mmseqs_db` | `str` | Path to target database (FASTA or pre-built MMseqs2 DB). |
-| `mmseqs-search-genomes` | `query_genomes` | `str` or `List[str]` | Path to FASTA file OR list of nucleotide sequences. |
-| `mmseqs-search-genomes` | `target_genomes` | `str` or `List[str]` | Path to FASTA file OR list of nucleotide sequences. |
-| `mmseqs-clustering` | `input_sequences` | `str` or `List[str]` | Path to FASTA file OR list of sequences to cluster. |
-
-## Configuration
-
-**Protein Search (`mmseqs-search-proteins`)**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `results_dir` | `str` | *Required* | Directory for storing intermediate and final results. |
-| `sensitivity` | `float` | `4.0` | Search sensitivity (1.0=fastest, 7.5=most sensitive). |
-| `threads` | `int` | `96` | Number of CPU threads for parallel processing. |
-| `split` | `int` | `0` | Memory mode (0=auto, higher values use less memory). |
-| `only_top_hits` | `bool` | `True` | If True, keep only the best hit per query. |
-
-**Genome Search (`mmseqs-search-genomes`)**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `out_dir` | `str` | *Required* | Output directory for databases and results. |
-| `sensitivity` | `float` | `7.5` | Search sensitivity (higher for genome searches). |
-| `search_type` | `int` | `3` | Search type (3=nucleotide vs nucleotide). |
-| `threads` | `int` | `96` | Number of CPU threads. |
-| `results_filename` | `str` | `mmseqs_results.m8` | Name for the output .m8 file. |
-
-**Clustering (`mmseqs-clustering`)**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `output_dir` | `str` | *Required* | Directory for clustering results. |
-| `min_seq_id` | `float` | `0.60` | Minimum sequence identity threshold (0.0-1.0). |
-| `extract_representatives` | `bool` | `True` | If True, extract representative sequences to FASTA. |
-
-### Parameter Guides
-
-**Sensitivity tuning:**
-| Sensitivity | Speed | Use Case |
-|-------------|-------|----------|
-| `1.0` | Fastest | Near-identical matches only |
-| `4.0` | Default | Good balance for most protein searches |
-| `7.5` | Slowest | Maximum sensitivity, genome searches, distant homologs |
-
-**Clustering identity thresholds:**
-| min_seq_id | Description | Use Case |
-|------------|-------------|----------|
-| `0.95` | Near-identical | Removing duplicates, sequencing errors, isoforms |
-| `0.60` | Same family | Grouping proteins into functional families (default) |
-| `0.30` | Remote homologs | Very loose clustering for distant relationships |
-
-### Sweep Priorities
-
-1. `sensitivity` — Most impactful for search quality; higher values find more distant hits at the cost of speed
-2. `min_seq_id` (clustering) — Directly controls cluster granularity
-3. `only_top_hits` — Set to `False` when multiple hits per query are needed for downstream analysis
-
-## Output Specification
-
-All tools return an `MmseqsOutput` object with two attributes:
-- `results_df`: A Pandas DataFrame with search/clustering results
-- `num_hits`: Total number of hits or clusters found
-
-**Search DataFrame Columns (Protein & Genome Search):**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `query` | Query sequence ID | The ID of your input sequence. |
-| `target` | Target sequence ID | The ID of the match in the database. |
-| `pident` | Percent Identity | % of exact matches in the alignment. |
-| `evalue` | Expect Value | Number of hits expected by chance. Lower is better. |
-
-**Clustering DataFrame Columns:**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `representative` | Cluster representative ID | The sequence chosen to represent this cluster. |
-| `member` | Cluster member ID | A sequence belonging to this cluster. |
-
-When `extract_representatives=True`, the DataFrame instead contains:
-| Column | Description |
-|--------|-------------|
-| `id_prompt` | Representative sequence ID |
-| `sequence` | Amino acid/nucleotide sequence |
 
 ## Interpreting Results
 
@@ -327,3 +240,114 @@ print(f"Average cluster size: {cluster_sizes.mean():.1f}")
 **Alternative tools:**
 - `blast-search`: Use for smaller-scale searches or when you need NCBI database access.
 - `pyhmmer-hmmsearch`: Use for profile-based searches when detecting remote homologs (&lt;30% identity).
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="MMseqs Clustering">
+  **Key:** `mmseqs-clustering`
+
+  Perform sequence clustering using MMseqs2 to reduce redundancy
+
+### Input
+
+<ParamField path="input_sequences" type="List[string]" required>
+  List of sequences to cluster
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="min_seq_id" type="number" default="0.6">
+  Minimum sequence identity threshold for clustering (0.0-1.0)
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[MmseqsClusterResult]" required>
+  List of clustering results, one per input sequence
+</ResponseField>
+  </Tab>
+  <Tab title="MMseqs Genome Search">
+  **Key:** `mmseqs-search-genomes`
+
+  Execute nucleotide genome-to-genome search workflow
+
+### Input
+
+<ParamField path="query_genomes" type="List[string]" required>
+  List of query genome sequences (nucleotide)
+</ParamField>
+
+<ParamField path="query_ids" type="array">
+  Optional query identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+<ParamField path="target_genomes" type="List[string]" required>
+  List of target genome sequences to search against
+</ParamField>
+
+<ParamField path="target_ids" type="array">
+  Optional target identifiers (defaults to target_0, target_1, ...)
+</ParamField>
+
+### Configuration
+
+<ParamField path="search_type" type="integer" default="3">
+  MMseqs2 search type (3=nucleotide vs nucleotide)
+</ParamField>
+
+<ParamField path="sensitivity" type="number" default="7.5">
+  Search sensitivity (7.5=very sensitive, default for genomes)
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[MmseqsSequenceSearchResult]" required>
+  List of search results, one per input query genome
+</ResponseField>
+  </Tab>
+  <Tab title="MMseqs2 Protein Search">
+  **Key:** `mmseqs-search-proteins`
+
+  Search protein sequences using MMseqs2 with per-sequence results
+
+### Input
+
+<ParamField path="query_sequences" type="List[string]" required>
+  List of protein sequences to search
+</ParamField>
+
+<ParamField path="sequence_ids" type="array">
+  Optional sequence identifiers (defaults to seq_0, seq_1, ...)
+</ParamField>
+
+<ParamField path="mmseqs_db" type="string" required>
+  Path to target database (FASTA file or MMseqs2 database)
+</ParamField>
+
+### Configuration
+
+<ParamField path="split" type="integer" default="0">
+  Memory management mode (0=auto, higher uses less memory)
+</ParamField>
+
+<ParamField path="sensitivity" type="number" default="4.0">
+  Search sensitivity (1.0=fast, 7.5=very sensitive)
+</ParamField>
+
+<ParamField path="only_top_hits" type="boolean" default="True">
+  If True, keep only the best hit per query sequence
+</ParamField>
+
+### Output
+
+<ResponseField name="results" type="List[MmseqsSequenceSearchResult]" required>
+  List of search results, one per input sequence
+</ResponseField>
+  </Tab>
+</Tabs>

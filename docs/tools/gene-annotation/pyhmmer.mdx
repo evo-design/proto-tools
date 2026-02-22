@@ -1,6 +1,6 @@
 ---
 title: "PyHMMER"
-description: "PyHMMER is a Python library binding to HMMER3 for biological sequence analysis using profile hidden ..."
+description: "PyHMMER is a Python library binding to HMMER3 for biological sequence analysis using profile hidden Markov models (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search)."
 ---
 
 # PyHMMER
@@ -80,85 +80,6 @@ CPU: Scales well with multiple threads (use `num_threads=0` for auto-detection).
 RAM: Depends on HMM database size; Pfam-A (~20,000 HMMs) requires ~2GB RAM.
 
 Storage: HMM files are compact; Pfam-A is ~300MB.
-
-## Input Parameters
-
-| Tool | Parameter | Type | Description |
-|------|-----------|------|-------------|
-| `pyhmmer-hmmsearch` | `sequences` | `str` or `List[str]` | Target protein sequences to search (amino acid strings). |
-| `pyhmmer-hmmsearch` | `hmm` | `str` | Path to HMM file containing one or more profiles. |
-| `pyhmmer-hmmscan` | `sequences` | `str` or `List[str]` | Query protein sequences to annotate. |
-| `pyhmmer-hmmscan` | `hmm_db` | `str` | Path to HMM database file (e.g., Pfam-A.hmm). |
-| `pyhmmer-phmmer` | `sequences` | `str` or `List[str]` | Query protein sequences. |
-| `pyhmmer-phmmer` | `target_sequences` | `str` or `List[str]` | Target protein sequences to search against. |
-| `pyhmmer-nhmmer` | `sequences` | `str` or `List[str]` | Query nucleotide sequences. |
-| `pyhmmer-nhmmer` | `target_sequences` | `str` or `List[str]` | Target nucleotide sequences to search against. |
-| `pyhmmer-jackhmmer` | `sequences` | `str` or `List[str]` | Query protein sequences. |
-| `pyhmmer-jackhmmer` | `target_sequences` | `str` or `List[str]` | Target protein sequences to search against. |
-
-## Configuration
-
-**Shared Parameters (All Tools)**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `num_threads` | `int` | `0` | Number of CPU threads (0 = auto-detect all available cores). |
-| `evalue_threshold` | `float` | `10.0` | E-value reporting threshold for sequence-level hits. |
-| `score_threshold` | `float` | `None` | Bit score threshold (overrides E-value if set). |
-| `domain_evalue_threshold` | `float` | `10.0` | E-value reporting threshold for domain-level hits. |
-| `domain_score_threshold` | `float` | `None` | Domain bit score threshold (overrides domain E-value if set). |
-| `max_iterations` (`pyhmmer-jackhmmer` only) | `int` | `5` | Maximum number of jackhmmer iterations. |
-
-### Parameter Guides
-
-**E-value thresholds:**
-| Threshold | Use Case |
-|-----------|----------|
-| `10.0` | Permissive exploration (default) |
-| `0.001` | High-confidence domain annotation |
-| `1e-10` | Stringent homology detection |
-
-**Score vs E-value:**
-- E-values are database-size dependent; scores are not.
-- For reproducible thresholds across different databases, use `score_threshold`.
-
-### Sweep Priorities
-
-1. `evalue_threshold` — Most impactful; controls overall sensitivity vs specificity tradeoff
-2. `domain_evalue_threshold` — Controls domain-level filtering independently from sequence-level
-3. `score_threshold` — Use when database-size-independent thresholds are needed
-
-## Output Specification
-
-All tools return a `PyHmmerOutput` object with two DataFrames:
-- `sequence_hits_df`: Sequence-level hits (one row per query-target pair)
-- `domain_hits_df`: Domain-level hits (one row per domain alignment)
-
-**Sequence-Level DataFrame Columns:**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `query_name` | Name of the query HMM or sequence | Identifier for what you searched with. |
-| `query_accession` | Accession of the query | Database accession (e.g., PF00001) or "-". |
-| `target_name` | Name of the target sequence | Identifier of the matching sequence. |
-| `evalue` | Expect Value | **Key statistic.** Number of hits expected by chance. Lower is better. |
-| `score` | Bit Score | Log-odds score of the full sequence match. Higher is better. |
-| `bias` | Composition Bias | Correction for biased amino acid composition. |
-| `num_domains` | Domain Count | Number of domains found in this sequence. |
-| `included` | Inclusion Status | Whether hit passes inclusion thresholds. |
-| `reported` | Reporting Status | Whether hit passes reporting thresholds. |
-
-**Domain-Level DataFrame Columns:**
-
-| Column | Description | Interpretation |
-|--------|-------------|----------------|
-| `query_name` | Name of the query HMM | Which HMM profile matched. |
-| `target_name` | Name of the target sequence | Which sequence contains this domain. |
-| `hmm_from` / `hmm_to` | HMM coordinates (1-indexed) | Which positions of the HMM are aligned. |
-| `target_from` / `target_to` | Sequence coordinates (1-indexed) | Where the domain is located in the protein. |
-| `c_evalue` | Conditional E-value | E-value conditioned on finding *this* sequence. |
-| `i_evalue` | Independent E-value | E-value for this domain alone. |
-| `domain_score` | Domain Bit Score | Score for this specific domain alignment. |
-| `env_from` / `env_to` | Envelope coordinates | Broader region containing the domain. |
 
 ## Interpreting Results
 
@@ -383,3 +304,228 @@ if result.domain_hits_df is not None:
 **Alternative tools:**
 - `blast-search`: Use for quick pairwise searches, broad database compatibility, or when HMM workflows are unnecessary.
 - `mmseqs-search-proteins`: Use for fast large-scale protein searches (less sensitive but much faster).
+
+
+## API Reference
+
+<Tabs>
+  <Tab title="PyHMMER Scan">
+  **Key:** `pyhmmer-hmmscan`
+
+  Search sequences against HMM database using PyHMMER
+
+### Input
+
+<ParamField path="hmm_db" type="string | string" required>
+  Path to HMM database file
+</ParamField>
+
+<ParamField path="sequences" type="List[string]" required>
+  Input sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+### Configuration
+
+<ParamField path="evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for sequence level hits
+</ParamField>
+
+<ParamField path="score_threshold" type="number">
+  Score reporting threshold. (Overrides the E-value threshold)
+</ParamField>
+
+<ParamField path="domain_evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for domain level hits
+</ParamField>
+
+<ParamField path="domain_score_threshold" type="number">
+  Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence_hits_df" type="DataFrame">
+  DataFrame with per-sequence hits
+</ResponseField>
+
+<ResponseField name="domain_hits_df" type="DataFrame">
+  DataFrame with per-domain hits
+</ResponseField>
+  </Tab>
+  <Tab title="PyHMMER Profile Search">
+  **Key:** `pyhmmer-hmmsearch`
+
+  Search HMM profile(s) against sequences using PyHMMER
+
+### Input
+
+<ParamField path="hmm" type="string | string" required>
+  Path to HMM file
+</ParamField>
+
+<ParamField path="sequences" type="List[string]" required>
+  Input sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+### Configuration
+
+<ParamField path="evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for sequence level hits
+</ParamField>
+
+<ParamField path="score_threshold" type="number">
+  Score reporting threshold. (Overrides the E-value threshold)
+</ParamField>
+
+<ParamField path="domain_evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for domain level hits
+</ParamField>
+
+<ParamField path="domain_score_threshold" type="number">
+  Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence_hits_df" type="DataFrame">
+  DataFrame with per-sequence hits
+</ResponseField>
+
+<ResponseField name="domain_hits_df" type="DataFrame">
+  DataFrame with per-domain hits
+</ResponseField>
+  </Tab>
+  <Tab title="PyHMMER JackHMMER Search">
+  **Key:** `pyhmmer-jackhmmer`
+
+  Iteratively search protein sequences against protein database using PyHMMER
+
+### Input
+
+<ParamField path="target_sequences" type="List[string]" required>
+  Target sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+<ParamField path="sequences" type="List[string]" required>
+  Input sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+### Configuration
+
+<ParamField path="max_iterations" type="integer" default="5">
+  Maximum number of jackhmmer search iterations.
+</ParamField>
+
+<ParamField path="evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for sequence level hits
+</ParamField>
+
+<ParamField path="score_threshold" type="number">
+  Score reporting threshold. (Overrides the E-value threshold)
+</ParamField>
+
+<ParamField path="domain_evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for domain level hits
+</ParamField>
+
+<ParamField path="domain_score_threshold" type="number">
+  Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence_hits_df" type="DataFrame">
+  DataFrame with per-sequence hits
+</ResponseField>
+
+<ResponseField name="domain_hits_df" type="DataFrame">
+  DataFrame with per-domain hits
+</ResponseField>
+  </Tab>
+  <Tab title="PyHMMER NHMMER Search">
+  **Key:** `pyhmmer-nhmmer`
+
+  Search nucleotide sequences against nucleotide database using PyHMMER
+
+### Input
+
+<ParamField path="target_sequences" type="List[string]" required>
+  Target nucleotide sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+<ParamField path="sequences" type="List[string]" required>
+  Input sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+### Configuration
+
+<ParamField path="evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for sequence level hits
+</ParamField>
+
+<ParamField path="score_threshold" type="number">
+  Score reporting threshold. (Overrides the E-value threshold)
+</ParamField>
+
+<ParamField path="domain_evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for domain level hits
+</ParamField>
+
+<ParamField path="domain_score_threshold" type="number">
+  Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence_hits_df" type="DataFrame">
+  DataFrame with per-sequence hits
+</ResponseField>
+
+<ResponseField name="domain_hits_df" type="DataFrame">
+  DataFrame with per-domain hits
+</ResponseField>
+  </Tab>
+  <Tab title="PyHMMER PHMMER Search">
+  **Key:** `pyhmmer-phmmer`
+
+  Search protein sequences against protein database using PyHMMER
+
+### Input
+
+<ParamField path="target_sequences" type="List[string]" required>
+  Target sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+<ParamField path="sequences" type="List[string]" required>
+  Input sequences as: single sequence string or list of sequence strings
+</ParamField>
+
+### Configuration
+
+<ParamField path="evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for sequence level hits
+</ParamField>
+
+<ParamField path="score_threshold" type="number">
+  Score reporting threshold. (Overrides the E-value threshold)
+</ParamField>
+
+<ParamField path="domain_evalue_threshold" type="number" default="10.0">
+  E-value reporting threshold for domain level hits
+</ParamField>
+
+<ParamField path="domain_score_threshold" type="number">
+  Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)
+</ParamField>
+
+### Output
+
+<ResponseField name="sequence_hits_df" type="DataFrame">
+  DataFrame with per-sequence hits
+</ResponseField>
+
+<ResponseField name="domain_hits_df" type="DataFrame">
+  DataFrame with per-domain hits
+</ResponseField>
+  </Tab>
+</Tabs>
