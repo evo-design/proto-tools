@@ -535,11 +535,13 @@ def run_chai1_on_complex(
 
         # Call the inference script with the venv activated
         input_data["device"] = config.device
+        input_data["verbose"] = config.verbose
         result = ToolInstance.dispatch(
             "chai1",
             input_data,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
 
         cif_output = result["cif_output"]

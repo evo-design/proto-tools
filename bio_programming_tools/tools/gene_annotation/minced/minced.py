@@ -241,7 +241,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance=None) -> Minc
     }
 
     output_data = ToolInstance.dispatch(
-        "minced", input_data, instance=instance,
+        "minced", input_data, instance=instance, timeout=config.timeout,
     )
 
     results = []

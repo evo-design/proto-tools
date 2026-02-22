@@ -43,7 +43,7 @@ bio_programming_tools/
 │   │   │   ├── cite.bib            # BibTeX citation for the tool
 │   │   │   ├── examples/           # Example notebook
 │   │   │   │   └── example.ipynb   # Working example with imports and output
-│   │   │   └── standalone/         # [optional] Isolated venv
+│   │   │   └── standalone/         # [optional] Isolated tool environment
 │   │   ├── shared_data_models.py   # [optional] Shared schemas
 │   │   └── __init__.py             # Re-exports from all tools in category
 │   ├── tool_registry.py            # @tool decorator and ToolRegistry
@@ -101,7 +101,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 
 ### Tool Execution & Persistence (ToolInstance)
 
-Tools run in **isolated virtual environments** via `ToolInstance` (`utils/tool_instance.py`). This keeps heavy dependencies (PyTorch, ESM, etc.) out of the main environment.
+Tools run in **isolated micromamba-based environments** via `ToolInstance` (`utils/tool_instance.py`). This keeps heavy dependencies (PyTorch, ESM, etc.) out of the main environment and allows per-tool Python version control.
 
 **One-shot (default):** Each `run_*` call spins up an ephemeral subprocess — safe, no leaked processes or GPU memory. Every call pays the full model load cost. Device is read from `config.device` (a `BaseConfig` field, default `"cpu"`; GPU tool configs override to `"cuda"`).
 
@@ -135,13 +135,177 @@ Persistent workers auto-restart when any `reload_on_change` config field changes
 
 See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthrough with timing data.
 
+### Compute Dependency Management
+
+Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`utils/compute_deps.py`) to automatically select compatible package versions based on the host's NVIDIA driver and CUDA versions. This eliminates fragile bash version detection scattered across tool setup scripts.
+
+**How it works:**
+
+1. `persistent_worker.py` calls `detect_compute_environment()` when building the subprocess environment
+2. Detection inspects `nvidia-smi` output to extract driver and CUDA versions
+3. Compatibility matrices map driver major versions to package version constraints
+4. Environment variables are injected into the subprocess before `setup.sh` runs
+5. Tool setup scripts consume these variables to install the right package versions
+
+**Environment variables injected:**
+
+| Variable | Example Value | Description |
+|---|---|---|
+| `DETECTED_COMPUTE_PLATFORM` | `"nvidia-gpu"` or `"cpu"` | Hardware platform detected |
+| `DETECTED_DRIVER_VERSION` | `"570.122.3"` | NVIDIA driver version |
+| `DETECTED_CUDA_VERSION` | `"12.6"` | CUDA version |
+| `RECOMMENDED_TORCH_SPEC` | `"torch>=2.10,<3"` | PyTorch version constraint for detected driver |
+| `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.5,<1"` | JAX version constraint with CUDA plugin |
+| `RECOMMENDED_JAX_VARIANT` | `"cuda12"` | JAX CUDA variant (cuda12, cuda13) |
+
+**Standard PyTorch setup pattern** (see `esm2`, `esmfold`, `boltz2`):
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+echo "Installing uv package manager..."
+pip install uv
+
+# Install hardware-aware PyTorch version (from centralized detection)
+echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+
+echo "Installing remaining dependencies..."
+uv pip install -r requirements.txt
+```
+
+**Standard JAX setup pattern** (see `alphagenome`):
+
+```bash
+JAX_VARIANT="${TOOL_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
+JAX_SPEC="${TOOL_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
+
+echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
+echo "Installing JAX: ${JAX_SPEC}"
+uv pip install "${JAX_SPEC}"
+```
+
+**Tool-specific overrides:**
+
+Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`). This allows per-tool customization while maintaining the centralized detection infrastructure.
+
+**Pinned-version tools:**
+
+Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
+- `evo1`: `torch==2.7.1` (flash-attn ABI compatibility)
+- `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
+- `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
+
+**Compatibility matrices:**
+
+Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
+
+PyTorch (driver → torch version):
+- Driver 570+: torch 2.8+ (CUDA 12.8 native support)
+- Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
+- Driver 535-549: torch 2.4+ (CUDA 12.2 native support)
+- Driver 525-534: torch 2.4+ (CUDA 12.0-12.1 native support)
+- Driver <525: torch 2.1-2.3 (CUDA 11.x era)
+
+JAX (driver + CUDA → jax version + variant):
+- Driver 525+: jax[cuda12] 0.4.20+ (all CUDA 12.x)
+- Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x, not yet used)
+- Driver <525: jax[cuda11] 0.4.20+ (CUDA 11.x)
+
+See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage of all hardware configurations.
+
+### Cache Management for ABI-Sensitive Packages
+
+Tools that install C++ extensions with ABI dependencies (torch, flash-attn, transformer-engine) must clear package manager caches to prevent compatibility issues. Cached wheels may be built against different PyTorch/CUDA/compiler versions, causing runtime failures with symbols like `undefined symbol: _ZN3c105ErrorC2ENS_14SourceLocationESs`.
+
+**Why this is needed:**
+
+Package managers (uv, pip) cache downloaded wheels globally per user. When multiple users share the same machine, or when a user rebuilds after system updates, cached wheels may be incompatible:
+- flash-attn wheel built for torch 2.5.0 won't work with torch 2.6.0
+- torch wheel for CUDA 12.4 won't work with CUDA 12.8 drivers
+- Cached wheels persist across tool environment rebuilds
+
+**Standard pattern for ABI-sensitive tools:**
+
+All tools with pinned torch versions and C++ extensions (evo1, evo2, borzoi) must follow this pattern in `setup.sh`:
+
+```bash
+echo "Installing uv package manager..."
+pip install uv
+
+# Clear caches BEFORE installing any ABI-sensitive packages
+echo "Clearing package caches for ABI-sensitive dependencies..."
+uv cache clean torch 2>/dev/null || true
+uv cache clean flash-attn 2>/dev/null || true
+uv cache clean transformer-engine 2>/dev/null || true  # if used
+
+# Install with --refresh flag as defense-in-depth
+echo "Installing torch..."
+uv pip install torch==X.Y.Z --torch-backend=auto --refresh
+
+echo "Installing flash-attn..."
+uv pip install --no-build-isolation flash-attn==A.B.C --refresh
+
+# Validate the deepest import used by runtime code
+if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then
+    echo "flash-attn wheel has ABI mismatch, rebuilding from source..."
+    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==A.B.C
+fi
+```
+
+**Key requirements:**
+
+1. **Clear caches early**: Call `uv cache clean <package>` after installing uv, before installing packages
+2. **Add --refresh flag**: Use `--refresh` on all ABI-sensitive installs (torch, flash-attn, transformer-engine)
+3. **Validate deep imports**: Test the actual C++ extension import (e.g., `flash_attn_2_cuda`), not just the Python wrapper
+4. **Graceful failure**: Use `2>/dev/null || true` to handle missing cache entries
+
+**For direct URL installs** (e.g., GitHub release wheels):
+
+Use pip's `--force-reinstall` instead of `--refresh`:
+
+```bash
+pip install --force-reinstall https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.7cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
+```
+
+**Reference implementations:**
+
+- `bio_programming_tools/tools/causal_models/evo1/standalone/setup.sh`
+- `bio_programming_tools/tools/causal_models/evo2/standalone/setup.sh`
+- `bio_programming_tools/tools/sequence_scoring/borzoi/standalone/setup.sh`
+
+### Python Version Specification
+
+Tools can optionally specify their required Python version via `standalone/python_version.txt`. This enables per-tool Python version control for compatibility with dependencies that don't provide wheels for newer Python versions.
+
+**Format:** Single line containing version in `major.minor` or `major.minor.patch` format (e.g., `3.11` or `3.11.5`)
+
+**Example `python_version.txt`:**
+```
+3.11
+```
+
+**Validation:**
+- File must contain exactly one non-empty line
+- Version must be `>=3.8`
+- Format must be `major.minor` or `major.minor.patch` with numeric components only
+- No comments, prefixes, or extra whitespace
+- If file is missing, defaults to current Python version (3.12)
+
+**Rebuilds:** The python_version.txt content is included in the environment setup hash. Changing the version triggers an automatic rebuild of the tool environment.
+
+**Example use case:** Protenix requires `scikit-learn-extra==0.3.0`, which has no Python 3.12 wheels. Adding `python_version.txt` with `3.11` creates the environment with Python 3.11, allowing it to use conda-forge's binary wheels.
+
+See `tests/tool_infra_tests/test_python_version_files.py` for validation tests.
+
 ### Binary Installation (`install_binary.py`)
 
 Tools that need external binaries (not available via pip) must use the shared `utils/install_binary.py` utility — never raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
-   - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into the venv's `bin/`
+   - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into the tool environment's `bin/`
 2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <tool_name>` (see blast or mmseqs for the standard pattern)
 
 For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys and generate any wrapper scripts in `extract()`.
@@ -153,8 +317,9 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 | `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
-| `utils/tool_instance.py` | `ToolInstance` — isolated venv execution with opt-in persistence |
-| `utils/install_binary.py` | Shared binary downloader for standalone venvs |
+| `utils/tool_instance.py` | `ToolInstance` — isolated environment execution with opt-in persistence |
+| `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
+| `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
 | `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
 | `tools/__init__.py` | Master export — all tools re-exported here |
 
@@ -227,6 +392,10 @@ with ToolInstance.persist():
 - **bio-tools** — workflow for running, analyzing, and writing scripts for any bioinformatics tool (discovery, script generation, GPU handling, output conventions)
 
 ### For developers (extending the tool library)
+
+Skills:
+
+- **fix-env** — Debug and fix tool environment setup failures on new systems (hardware detection, setup.sh patterns, env-report, cross-platform compatibility)
 
 Commands (invoked with `/command-name [args]`):
 

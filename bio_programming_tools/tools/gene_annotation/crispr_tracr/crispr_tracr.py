@@ -213,7 +213,7 @@ def run_crispr_tracr(
     }
 
     output_data = ToolInstance.dispatch(
-        "crispr_tracr", input_data, instance=instance,
+        "crispr_tracr", input_data, instance=instance, timeout=config.timeout,
     )
 
     predictions = [TracrPrediction(**p) for p in output_data["predictions"]]

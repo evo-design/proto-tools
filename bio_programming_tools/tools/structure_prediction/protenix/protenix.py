@@ -280,6 +280,14 @@ class ProtenixConfig(StructurePredictionConfig):
         advanced=True,
     )
 
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1200,
+        ge=1,
+        description="Maximum execution time in seconds (base models need ~10-15 min on slower GPUs)",
+        hidden=True,
+    )
+
     @model_validator(mode="after")
     def sync_nested_config(self):
         """Sync verbose flag with nested colabfold_search_config."""
@@ -408,11 +416,13 @@ def run_protenix(
         logger.info(f"Running Protenix prediction for {len(inputs.complexes)} complex(es)...")
 
         input_data["device"] = config.device
+        input_data["verbose"] = config.verbose
         output_data = ToolInstance.dispatch(
             "protenix",
             input_data,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
             reload_on=type(config).reload_fields(),
         )
 

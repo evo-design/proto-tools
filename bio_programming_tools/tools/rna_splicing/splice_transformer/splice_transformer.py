@@ -334,6 +334,7 @@ def run_splice_transformer(
         input_data,
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

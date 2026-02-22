@@ -420,14 +420,14 @@ def test_evo2_score_batch_size_consistency():
             inputs=inputs,
             config=Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=bs, verbose=False),
         )
-        for bs in [1, 2, None]
+        for bs in [1, 2, 4]
     }
 
     # All batch sizes should produce consistent perplexities
     # Relaxed tolerance for Hyena architecture batch-dependent numerical variance
     for i in range(4):
-        perplexities = [results[bs].scores[i].perplexity for bs in [1, 2, None]]
-        log_likelihoods = [results[bs].scores[i].log_likelihood for bs in [1, 2, None]]
+        perplexities = [results[bs].scores[i].perplexity for bs in [1, 2, 4]]
+        log_likelihoods = [results[bs].scores[i].log_likelihood for bs in [1, 2, 4]]
 
         np.testing.assert_allclose(perplexities[0], perplexities[1], rtol=1e-2)
         np.testing.assert_allclose(perplexities[0], perplexities[2], rtol=1e-2)

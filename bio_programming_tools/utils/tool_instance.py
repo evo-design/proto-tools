@@ -64,7 +64,11 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from .base_config import DEFAULT_TIMEOUT
-from .persistent_worker import PersistentWorker, _clean_env
+from .persistent_worker import (
+    PersistentWorker,
+    _build_subprocess_env,
+    _parse_env_vars_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +179,7 @@ class ToolInstance:
         instance: str | ToolInstance | None = None,
         script_path: Path | str | None = None,
         verbose: bool = False,
+        timeout: int | None = None,
         reload_on: set[str] | None = None,
     ) -> dict[str, Any]:
         """Run a tool, reusing a cached persistent instance if one exists.
@@ -183,11 +188,6 @@ class ToolInstance:
         persistent instance is cached, runs an ephemeral one-shot
         subprocess (no leak).  When a persistent instance exists (via
         :meth:`persistent` or :meth:`get`), reuses it.
-
-        Timeout is read from ``input_dict["timeout"]`` (falling back to
-        ``DEFAULT_TIMEOUT``).  The constant is defined once in
-        ``base_config.py`` and shared by both ``BaseConfig.timeout`` and
-        this fallback.
 
         Parameters
         ----------
@@ -205,12 +205,17 @@ class ToolInstance:
             Override the default standalone script.
         verbose : bool
             Whether to log progress.
+        timeout : int | None
+            Maximum execution time in seconds. If None, reads from
+            input_dict["timeout"] or falls back to DEFAULT_TIMEOUT.
         reload_on : set[str] | None
             Config field names whose value changes should trigger a
             persistent worker restart.  Defaults to ``{"device"}`` for
             backward compatibility.
         """
-        timeout: int | None = input_dict.get("timeout", DEFAULT_TIMEOUT)
+        # Prefer kwarg, fall back to input_dict, then DEFAULT_TIMEOUT
+        if timeout is None:
+            timeout = input_dict.get("timeout", DEFAULT_TIMEOUT)
         # Path 1: caller passed a ToolInstance object directly
         if isinstance(instance, ToolInstance):
             logger.debug("dispatch(%s): using provided ToolInstance", tool_name)
@@ -410,32 +415,35 @@ class ToolInstance:
         self.tool_name = self._validate_tool_name(tool_name)
         self.device = "cpu"
 
-        venv_root = self._get_venvs_root()
-        venv_root.mkdir(parents=True, exist_ok=True)
+        env_root = self._get_tool_envs_root()
+        env_root.mkdir(parents=True, exist_ok=True)
 
-        self.venv_path = venv_root / f"{tool_name}_env"
+        self.env_path = env_root / f"{tool_name}_env"
         self.setup_script = self._find_setup_script(tool_name)
         self.script_path = self._find_script(tool_name)
+        self._tool_env_vars = _parse_env_vars_file(
+            self.setup_script.parent / "env_vars.txt"
+        )
 
-        self._venv_ready = False
+        self._env_ready = False
         self._cache_keys: set[str] = set()
         self._instance_lock = threading.Lock()  # protects _worker lifecycle
         self._worker: PersistentWorker | None = None
         # Tracks previous reload-field values for restart detection
         self._reload_params: dict[str, Any] = {}
 
-    def _ensure_venv(self) -> None:
-        """Build the tool's venv if it doesn't exist or is broken.
+    def _ensure_env(self) -> None:
+        """Build the tool's environment if it doesn't exist or is broken.
 
         Called lazily on first actual execution (not during ``__init__``),
         so that the double-check-locking loser in ``get()`` discards only
-        a lightweight object — not one that already built a venv.
+        a lightweight object — not one that already built an environment.
 
         Fails fast if this tool already failed to build in this process.
         On a cross-session failure (FAILED STATUS.txt from a previous run),
         logs a warning and retries the build.
         """
-        if getattr(self, "_venv_ready", False):
+        if getattr(self, "_env_ready", False):
             return
         if self.tool_name in self._build_failures:
             tail = self._build_failures[self.tool_name]
@@ -444,14 +452,14 @@ class ToolInstance:
                 f"'{self.tool_name}' may not be compatible with your "
                 f"system. Check logs for details.{hint}"
             )
-        if not self.venv_path.exists() or not self._is_venv_ok():
+        if not self.env_path.exists() or not self._is_env_ok():
             # Check for a stale status from a previous session
-            status_file = self.venv_path / "STATUS.txt"
+            status_file = self.env_path / "STATUS.txt"
             if status_file.exists():
                 status = status_file.read_text()
                 if status.startswith("SUCCESS"):
                     logger.info(
-                        "Setup files changed for %s, rebuilding venv",
+                        "Setup files changed for %s, rebuilding environment",
                         self.tool_name,
                     )
                 elif status.startswith("FAILED"):
@@ -476,15 +484,15 @@ class ToolInstance:
                             self.tool_name,
                         )
             try:
-                self._create_venv()
+                self._create_env()
             except Exception as exc:
-                # _create_venv populates _build_failures with the stderr
+                # _create_env populates _build_failures with the stderr
                 # tail on setup.sh failure; for other exceptions, store
                 # the message as fallback.
                 if self.tool_name not in self._build_failures:
                     self._build_failures[self.tool_name] = str(exc)
                 raise
-        self._venv_ready = True
+        self._env_ready = True
 
     # ------------------------------------------------------------------
     # Public API
@@ -533,7 +541,7 @@ class ToolInstance:
         See ``tests/dummy_data/create_mini_mmseqs_db.py`` for an example
         (used to access the mmseqs binary directly for database setup).
         """
-        self._ensure_venv()
+        self._ensure_env()
 
     def shutdown(self) -> None:
         """Stop the persistent worker (if any) and remove from cache."""
@@ -555,6 +563,61 @@ class ToolInstance:
             cache = _active_cache()
             for k in getattr(self, "_cache_keys", set()):
                 cache.pop(k, None)
+
+    # ------------------------------------------------------------------
+    # First-run detection (for warm-up timeout)
+    # ------------------------------------------------------------------
+    def _is_first_run(self) -> bool:
+        """Check if this is the first successful run of the tool.
+
+        Returns True if the tool has never completed a successful run,
+        which indicates checkpoints may need to be downloaded.
+        """
+        marker_file = self.env_path / ".first_run_complete"
+        return not marker_file.exists()
+
+    def _mark_first_run_complete(self) -> None:
+        """Mark that the first successful run is complete.
+
+        Creates a marker file to indicate that initial setup (including
+        any checkpoint downloads) has been completed successfully.
+        """
+        marker_file = self.env_path / ".first_run_complete"
+        marker_file.touch()
+
+    def _apply_warmup_timeout(self, timeout: int | None) -> int | None:
+        """Apply warm-up timeout for first run.
+
+        On the first run, tools may need to download large checkpoint files.
+        Use an extended timeout (40 minutes or the configured timeout,
+        whichever is larger) to allow time for downloads.
+
+        Parameters
+        ----------
+        timeout : int | None
+            The configured timeout in seconds, or None for no timeout.
+
+        Returns
+        -------
+        int | None
+            The effective timeout to use (extended on first run).
+        """
+        WARMUP_TIMEOUT = 2400  # 40 minutes
+        if self._is_first_run():
+            if timeout is None:
+                effective_timeout = WARMUP_TIMEOUT
+            else:
+                effective_timeout = max(WARMUP_TIMEOUT, timeout)
+            if timeout is None or effective_timeout > timeout:
+                logger.info(
+                    "First run of %s detected, using extended warm-up timeout: "
+                    "%ds (configured: %s)",
+                    self.tool_name,
+                    effective_timeout,
+                    f"{timeout}s" if timeout is not None else "None",
+                )
+            return effective_timeout
+        return timeout
 
     # ------------------------------------------------------------------
     # Persistent execution
@@ -579,7 +642,7 @@ class ToolInstance:
         the ToolInstance layer handles restarts via ``reload_on_change``
         fields in the tool's Config class.
         """
-        self._ensure_venv()
+        self._ensure_env()
         sp = script_path or self.script_path
         # Default to {"device"} for backward compat with tools that don't
         # pass reload_on explicitly.
@@ -614,11 +677,24 @@ class ToolInstance:
         if self._worker is None:
             self._worker = PersistentWorker(
                 tool_name=self.tool_name,
-                venv_path=self.venv_path,
+                env_path=self.env_path,
                 script_path=sp,
                 device=self.device,
+                tool_env_vars=self._tool_env_vars,
             )
-        return self._worker.send(input_dict, timeout=timeout)
+
+        # Apply warm-up timeout for first run (checkpoint downloads)
+        effective_timeout = self._apply_warmup_timeout(timeout)
+
+        try:
+            result = self._worker.send(input_dict, timeout=effective_timeout)
+            # Mark first run complete on success
+            if self._is_first_run():
+                self._mark_first_run_complete()
+            return result
+        except Exception:
+            # Don't mark first run complete on failure
+            raise
 
     # ------------------------------------------------------------------
     # One-shot execution
@@ -638,7 +714,7 @@ class ToolInstance:
         output JSON, and converts ``subprocess.TimeoutExpired`` to
         ``TimeoutError``.
         """
-        self._ensure_venv()
+        self._ensure_env()
         sp = script_path or self.script_path
         device = input_dict.get("device", self.device)
         with tempfile.TemporaryDirectory() as tmp:
@@ -649,9 +725,13 @@ class ToolInstance:
                 json.dump(input_dict, f)
 
             # Sets CUDA_VISIBLE_DEVICES based on device string
-            env = _clean_env(device, tool_venv_path=self.venv_path)
-            env["TOOL_VENV_PATH"] = str(self.venv_path)
-            python_exe = str(self.venv_path / "bin" / "python")
+            env = _build_subprocess_env(
+                device,
+                tool_env_path=self.env_path,
+                tool_env_vars=self._tool_env_vars,
+            )
+            env["TOOL_VENV_PATH"] = str(self.env_path)
+            python_exe = str(self.env_path / "bin" / "python")
 
             if verbose:
                 logger.info(
@@ -660,48 +740,187 @@ class ToolInstance:
                     device,
                 )
 
+            # Apply warm-up timeout for first run (checkpoint downloads)
+            effective_timeout = self._apply_warmup_timeout(timeout)
+
             try:
                 subprocess.run(
                     [python_exe, str(sp), str(input_path), str(output_path)],
                     env=env,
                     text=True,
                     check=True,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                     stdout=None if verbose else subprocess.PIPE,
                     stderr=None if verbose else subprocess.PIPE,
                 )
             except subprocess.TimeoutExpired:
                 raise TimeoutError(
-                    f"Tool {self.tool_name} timed out after {timeout}s"
+                    f"Tool {self.tool_name} timed out after {effective_timeout}s"
                 ) from None
 
             with open(output_path) as f:
-                return json.load(f)
+                result = json.load(f)
+                # Mark first run complete on success
+                if self._is_first_run():
+                    self._mark_first_run_complete()
+                return result
 
     # ------------------------------------------------------------------
     # Venv management
     # ------------------------------------------------------------------
     @staticmethod
-    def _get_venvs_root() -> Path:
-        """Determine the ``.venvs`` root directory.
+    def _get_tool_envs_root() -> Path:
+        """Determine the ``tool_envs`` root directory.
 
         For editable installs (``pip install -e .``), finds the project root
         by walking up from this file looking for ``pyproject.toml``, then
-        uses ``project_root/.venvs/``.
+        uses ``project_root/tool_envs/``.
 
         For non-editable installs (``pip install .``), the package is copied
         into site-packages and there's no project root.  Falls back to a
         user-level cache directory:
-        ``$XDG_CACHE_HOME/bio_programming_tools/.venvs/`` or
-        ``~/.cache/bio_programming_tools/.venvs/``.
+        ``$XDG_CACHE_HOME/bio_programming_tools/tool_envs/`` or
+        ``~/.cache/bio_programming_tools/tool_envs/``.
         """
         for parent in Path(__file__).resolve().parents:
             if (parent / "pyproject.toml").exists():
-                return parent / ".venvs"
+                return parent / "tool_envs"
         cache_home = Path(
             os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
         )
-        return cache_home / "bio_programming_tools" / ".venvs"
+        return cache_home / "bio_programming_tools" / "tool_envs"
+
+    @staticmethod
+    def _get_micromamba_root() -> Path:
+        """Determine the ``.micromamba`` directory for global micromamba install.
+
+        Uses same logic as tool_envs: editable install → project root, otherwise
+        → user cache directory.
+        """
+        for parent in Path(__file__).resolve().parents:
+            if (parent / "pyproject.toml").exists():
+                return parent / ".micromamba"
+        cache_home = Path(
+            os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
+        )
+        return cache_home / "bio_programming_tools" / ".micromamba"
+
+    @staticmethod
+    def _ensure_micromamba() -> Path:
+        """Ensure micromamba is installed, download if missing.
+
+        Returns path to micromamba binary.
+        """
+        mamba_root = ToolInstance._get_micromamba_root()
+        mamba_bin = mamba_root / "bin" / "micromamba"
+
+        if mamba_bin.exists():
+            return mamba_bin
+
+        # Download micromamba
+        logger.info("Downloading micromamba to %s...", mamba_root)
+        mamba_root.mkdir(parents=True, exist_ok=True)
+
+        import platform
+
+        system = platform.system()
+        arch = platform.machine()
+
+        if system == "Linux":
+            if arch == "x86_64":
+                platform_id = "linux-64"
+            elif arch == "aarch64" or arch == "arm64":
+                platform_id = "linux-aarch64"
+            else:
+                raise RuntimeError(f"Unsupported Linux architecture: {arch}")
+        elif system == "Darwin":  # macOS
+            if arch == "x86_64":
+                platform_id = "osx-64"
+            elif arch == "arm64":
+                platform_id = "osx-arm64"
+            else:
+                raise RuntimeError(f"Unsupported macOS architecture: {arch}")
+        else:
+            raise RuntimeError(
+                f"Unsupported operating system: {system} (arch: {arch})"
+            )
+
+        url = f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest"
+        try:
+            result = subprocess.run(
+                ["curl", "-Ls", url],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
+                input=result.stdout,
+                check=True,
+                capture_output=True,
+            )
+            mamba_bin.chmod(0o755)
+            logger.info("Micromamba installed successfully")
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"Failed to download/extract micromamba from {url}: {e}"
+            )
+
+        return mamba_bin
+
+    def _get_python_version(self) -> str:
+        """Get Python version for this tool from python_version.txt.
+
+        Looks for `standalone/python_version.txt` in the tool's directory.
+        Returns version string (e.g., "3.11") or defaults to current Python version.
+
+        Validates format: must be major.minor or major.minor.patch (e.g., "3.11" or "3.11.5").
+        """
+        version_file = self.setup_script.parent / "python_version.txt"
+
+        if not version_file.exists():
+            # Default to current Python version
+            return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+        try:
+            version_str = version_file.read_text().strip()
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read {version_file} for tool '{self.tool_name}': {e}"
+            )
+
+        # Validate format
+        if not version_str:
+            raise ValueError(
+                f"python_version.txt for tool '{self.tool_name}' is empty. "
+                f"Expected format: '3.11' or '3.11.5'"
+            )
+
+        parts = version_str.split(".")
+        if len(parts) not in (2, 3):
+            raise ValueError(
+                f"Invalid Python version format in {version_file}: '{version_str}'. "
+                f"Expected format: '3.11' or '3.11.5' (major.minor or major.minor.patch)"
+            )
+
+        try:
+            major = int(parts[0])
+            minor = int(parts[1])
+            if len(parts) == 3:
+                _ = int(parts[2])  # Validate patch is numeric
+        except ValueError:
+            raise ValueError(
+                f"Invalid Python version in {version_file}: '{version_str}'. "
+                f"Version components must be integers."
+            )
+
+        # Check reasonable bounds
+        if major != 3 or minor < 8:
+            raise ValueError(
+                f"Unsupported Python version in {version_file}: '{version_str}'. "
+                f"Requires Python 3.8 or higher."
+            )
+
+        return version_str
 
     @classmethod
     def _get_tool_dirs(cls) -> dict[str, Path]:
@@ -759,12 +978,18 @@ class ToolInstance:
         raise ValueError(f"No standalone script found for tool {tool_name!r}")
 
     def _setup_hash(self) -> str:
-        """Short SHA-256 of setup.sh + requirements.txt for change detection."""
+        """Short SHA-256 of setup.sh + requirements.txt + env_vars.txt + python_version.txt for change detection."""
         h = hashlib.sha256()
         h.update(self.setup_script.read_bytes())
         req = self.setup_script.parent / "requirements.txt"
         if req.exists():
             h.update(req.read_bytes())
+        env_vars = self.setup_script.parent / "env_vars.txt"
+        if env_vars.exists():
+            h.update(env_vars.read_bytes())
+        python_version = self.setup_script.parent / "python_version.txt"
+        if python_version.exists():
+            h.update(python_version.read_bytes())
         return h.hexdigest()[:16]
 
     @staticmethod
@@ -777,7 +1002,7 @@ class ToolInstance:
 
     def _failure_summary(self) -> str:
         """Extract a one-line error summary from a FAILED STATUS.txt."""
-        status_file = self.venv_path / "STATUS.txt"
+        status_file = self.env_path / "STATUS.txt"
         if not status_file.exists():
             return ""
         skip = (
@@ -790,16 +1015,16 @@ class ToolInstance:
                 return line[:200]
         return ""
 
-    def _is_venv_ok(self) -> bool:
+    def _is_env_ok(self) -> bool:
         """Check STATUS.txt, verify the Python executable, and compare setup hash."""
-        status_file = self.venv_path / "STATUS.txt"
+        status_file = self.env_path / "STATUS.txt"
         if not status_file.exists():
             return False
         try:
             status = status_file.read_text()
             if not status.startswith("SUCCESS"):
                 return False
-            python_exe = self.venv_path / "bin" / "python"
+            python_exe = self.env_path / "bin" / "python"
             if not python_exe.exists():
                 return False
             result = subprocess.run(
@@ -818,65 +1043,89 @@ class ToolInstance:
         except Exception:
             return False
 
-    def _create_venv(self) -> None:
-        """Create (or rebuild) the tool's isolated venv.
+    def _create_env(self) -> None:
+        """Create (or rebuild) the tool's isolated environment.
 
-        Removes a broken existing venv, creates a fresh one via
-        ``python -m venv``, runs ``standalone/setup.sh`` inside it, and
+        Removes a broken existing env, creates a fresh one via
+        ``micromamba create``, runs ``standalone/setup.sh`` inside it, and
         writes STATUS.txt to record success or failure.
         """
-        status_file = self.venv_path / "STATUS.txt"
+        status_file = self.env_path / "STATUS.txt"
 
-        # Remove broken venv
-        if self.venv_path.exists() and not self._is_venv_ok():
-            logger.info("Removing broken venv at %s", self.venv_path)
-            shutil.rmtree(self.venv_path)
+        # Remove env if setup files changed
+        if self.env_path.exists() and not self._is_env_ok():
+            logger.info("Removing environment at %s", self.env_path)
+            shutil.rmtree(self.env_path)
 
-        # Create fresh venv
-        logger.info("Setting up venv for %s ...", self.tool_name)
+        # Ensure micromamba is available
+        mamba_bin = self._ensure_micromamba()
+
+        # Get Python version for this tool
+        python_version = self._get_python_version()
+
+        # Create fresh micromamba environment
+        logger.info(
+            "Setting up environment for %s (Python %s)...",
+            self.tool_name,
+            python_version
+        )
         subprocess.run(
-            [sys.executable, "-m", "venv", "--copies", str(self.venv_path)],
+            [
+                str(mamba_bin), "create", "-y", "-p", str(self.env_path),
+                f"python={python_version}",
+                "pip", "uv",
+                "-c", "conda-forge"
+            ],
             check=True,
+            capture_output=True,
         )
 
-        # Run setup.sh
+        # Run setup.sh via micromamba run
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
-        env = _clean_env(self.device, tool_venv_path=self.venv_path)
-        env["VENV_PATH"] = str(self.venv_path.absolute())
-        env["PYTHON_EXE"] = str(self.venv_path.absolute() / "bin" / "python")
-        env["PIP_EXE"] = str(self.venv_path.absolute() / "bin" / "pip")
+        env = _build_subprocess_env(
+            self.device,
+            tool_env_path=self.env_path,
+            tool_env_vars=self._tool_env_vars,
+        )
+        env["VENV_PATH"] = str(self.env_path.absolute())
+        env["PYTHON_EXE"] = str(self.env_path.absolute() / "bin" / "python")
+        env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
+        env["MAMBA_BIN"] = str(mamba_bin.absolute())
 
-        activate = self.venv_path.absolute() / "bin" / "activate"
         proc = subprocess.Popen(
-            ["bash", "-c", f"source {activate} && {self.setup_script}"],
+            [
+                str(mamba_bin), "run", "-p", str(self.env_path),
+                "bash", str(self.setup_script)
+            ],
             cwd=self.setup_script.parent,
             env=env,
-            stdout=None,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
         )
-        _, stderr_output = proc.communicate()
+        combined_output, _ = proc.communicate()
 
         if proc.returncode == 0:
             status_file.write_text(
                 f"SUCCESS\nSetup hash: {self._setup_hash()}\n"
             )
-            logger.debug("Venv setup completed for %s", self.tool_name)
+            logger.debug("Environment setup completed for %s", self.tool_name)
         else:
+            tail = self._stderr_tail(combined_output)
             logger.error(
-                "Venv setup failed for %s (exit %d)", self.tool_name, proc.returncode
+                "Environment setup failed for %s (exit %d):\n%s",
+                self.tool_name, proc.returncode, tail,
             )
-            if stderr_output:
-                logger.error("stderr: %s", stderr_output)
+            if combined_output:
+                logger.debug("Full setup output for %s:\n%s", self.tool_name, combined_output)
             status_file.write_text(
                 f"FAILED\n\n"
                 f"Return code: {proc.returncode}\n"
                 f"Command: {self.setup_script}\n"
                 f"Setup hash: {self._setup_hash()}\n"
                 f"Timestamp: {datetime.datetime.now()}\n\n"
-                f"STDERR:\n{stderr_output or ''}\n"
+                f"OUTPUT:\n{combined_output or ''}\n"
             )
-            tail = self._stderr_tail(stderr_output)
             self._build_failures[self.tool_name] = tail
             hint = f"\n{tail}" if tail else ""
             raise RuntimeError(

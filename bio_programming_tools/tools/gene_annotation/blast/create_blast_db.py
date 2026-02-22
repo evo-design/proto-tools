@@ -214,6 +214,7 @@ def run_create_blast_db(
             "additional_params": config.additional_params,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     return CreateBlastDbOutput(

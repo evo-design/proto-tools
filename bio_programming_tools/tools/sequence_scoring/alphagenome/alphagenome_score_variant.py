@@ -101,6 +101,8 @@ def run_alphagenome_score_variant(
             "device": config.device,
         },
         instance=instance,
+        verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

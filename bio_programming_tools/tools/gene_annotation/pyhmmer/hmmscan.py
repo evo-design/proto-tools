@@ -133,6 +133,7 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instanc
             "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     # Convert results to DataFrames

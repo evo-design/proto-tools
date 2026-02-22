@@ -429,6 +429,7 @@ def run_evo2_sample(
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

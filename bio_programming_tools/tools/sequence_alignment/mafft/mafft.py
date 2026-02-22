@@ -189,6 +189,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance=None) -> M
         input_data,
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
     )
 
     # Extract results from output

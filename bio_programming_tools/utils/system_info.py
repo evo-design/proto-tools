@@ -6,6 +6,7 @@ Collects platform, GPU, and environment information without torch dependency.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import platform
@@ -120,8 +121,11 @@ def _get_ram_gb() -> float:
 # ============================================================================
 # GPU Info
 # ============================================================================
+@functools.lru_cache(maxsize=1)
 def get_gpu_info() -> GPUInfo:
     """Collect GPU information using nvidia-smi.
+
+    Cached for the lifetime of the process
 
     Returns
     -------
@@ -182,7 +186,13 @@ def get_gpu_info() -> GPUInfo:
                 index = int(parts[0])
                 name = parts[1]
                 compute_cap = parts[2]
-                vram_mb = float(parts[3])
+                try:
+                    vram_gb = round(float(parts[3]) / 1024, 1)
+                except (ValueError, TypeError):
+                    # Unified memory GPUs (e.g., GB10) report [N/A] for
+                    # dedicated VRAM — fall back to total system RAM since
+                    # it's all GPU-addressable.
+                    vram_gb = round(_get_ram_gb(), 1)
                 driver_version = parts[4]
 
                 devices.append(
@@ -190,7 +200,7 @@ def get_gpu_info() -> GPUInfo:
                         index=index,
                         name=name,
                         compute_capability=compute_cap,
-                        vram_gb=round(vram_mb / 1024, 1),
+                        vram_gb=vram_gb,
                     )
                 )
 
@@ -379,7 +389,7 @@ def capture_parent_env() -> dict[str, str]:
 def capture_subprocess_env(env: dict[str, str]) -> None:
     """Record the environment variables passed to a subprocess.
 
-    Call this from subprocess execution code (e.g., _clean_env or ToolInstance)
+    Call this from subprocess execution code (e.g., _build_subprocess_env or ToolInstance)
     to record what env vars are actually passed to tool subprocesses.
 
     Parameters

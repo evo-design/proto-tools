@@ -356,6 +356,8 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
             },
         },
         instance=instance,
+        verbose=config.verbose,
+        timeout=config.timeout,
     )
 
     # Reconstruct ORF objects from returned dicts

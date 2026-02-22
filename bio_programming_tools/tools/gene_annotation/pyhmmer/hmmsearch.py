@@ -131,6 +131,7 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig, i
             "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
+        timeout=config.timeout,
     )
 
     # Convert results to DataFrames

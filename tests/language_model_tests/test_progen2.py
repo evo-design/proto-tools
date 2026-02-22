@@ -390,13 +390,13 @@ def test_progen2_score_batch_size_consistency():
             inputs=inputs,
             config=ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=bs, verbose=False),
         )
-        for bs in [1, 2, None]
+        for bs in [1, 2, 4]
     }
 
     # All batch sizes should produce identical perplexities
     for i in range(4):
-        perplexities = [results[bs].scores[i].perplexity for bs in [1, 2, None]]
-        log_likelihoods = [results[bs].scores[i].log_likelihood for bs in [1, 2, None]]
+        perplexities = [results[bs].scores[i].perplexity for bs in [1, 2, 4]]
+        log_likelihoods = [results[bs].scores[i].log_likelihood for bs in [1, 2, 4]]
 
         np.testing.assert_allclose(perplexities[0], perplexities[1], rtol=1e-5)
         np.testing.assert_allclose(perplexities[0], perplexities[2], rtol=1e-5)

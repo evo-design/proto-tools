@@ -564,6 +564,7 @@ def run_boltz2_on_complex(
             "diffusion_samples": config.diffusion_samples,
             "num_workers": config.num_workers,
             "device": config.device,
+            "verbose": config.verbose,
         }
 
         # Call the inference script
@@ -572,6 +573,7 @@ def run_boltz2_on_complex(
             input_data,
             instance=instance,
             verbose=config.verbose,
+            timeout=config.timeout,
         )
 
         cif_output = output_data["structure_cif_output"]

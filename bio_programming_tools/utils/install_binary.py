@@ -18,9 +18,13 @@ import importlib.util
 import platform
 import sys
 import tempfile
+import time
 import urllib.request
 import warnings
 from pathlib import Path
+
+_MAX_DOWNLOAD_RETRIES = 3
+_RETRY_DELAY_SECONDS = 5
 
 # Canonical architecture names. Tool binary_config.py files should use these
 # in their URLS dicts. Raw platform.machine() values are normalized to these
@@ -72,12 +76,17 @@ def _load_tool_config(config_path: Path):
 
 
 def _download_with_progress(url: str, dest: Path) -> None:
-    """Download a file with a tqdm progress bar, falling back to simple logging."""
+    """Download a file with a tqdm progress bar, falling back to simple logging.
+
+    Validates that the downloaded file size matches the Content-Length header
+    to detect truncated downloads (e.g., from flaky CI network connections).
+    """
     try:
         from tqdm import tqdm
 
         response = urllib.request.urlopen(url)
         total = int(response.headers.get("Content-Length", 0))
+        downloaded = 0
 
         with (
             tqdm(total=total, unit="B", unit_scale=True, desc="  Downloading", file=sys.stdout) as pbar,
@@ -88,19 +97,29 @@ def _download_with_progress(url: str, dest: Path) -> None:
                 if not chunk:
                     break
                 f.write(chunk)
+                downloaded += len(chunk)
                 pbar.update(len(chunk))
     except ImportError:
         # Fallback: simple percentage-based progress
         def _reporthook(block_num, block_size, total_size):
-            downloaded = block_num * block_size
+            dl = block_num * block_size
             if total_size > 0:
-                pct = min(100, downloaded * 100 / total_size)
-                mb = downloaded / (1024 * 1024)
+                pct = min(100, dl * 100 / total_size)
+                mb = dl / (1024 * 1024)
                 mb_total = total_size / (1024 * 1024)
                 print(f"\r  Downloading: {mb:.1f}/{mb_total:.1f} MB ({pct:.0f}%)", end="", flush=True)
 
         urllib.request.urlretrieve(url, dest, _reporthook)
+        downloaded = dest.stat().st_size
+        total = downloaded  # urlretrieve raises on network errors; trust actual size
         print()  # newline after progress
+
+    # Validate download integrity
+    if total > 0 and downloaded != total:
+        raise IOError(
+            f"Download incomplete: got {downloaded} bytes, "
+            f"expected {total} bytes from {url}"
+        )
 
 
 def install_binary(tool_name: str) -> None:
@@ -144,17 +163,37 @@ def install_binary(tool_name: str) -> None:
 
     print(f"Installing {tool_name} for {key[0]}/{key[1]}...")
 
-    with tempfile.TemporaryDirectory() as tmp:
-        filename = url.split("/")[-1]
-        archive_path = Path(tmp) / filename
+    last_error = None
+    for attempt in range(1, _MAX_DOWNLOAD_RETRIES + 1):
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                filename = url.split("/")[-1]
+                archive_path = Path(tmp) / filename
 
-        _download_with_progress(url, archive_path)
-        print(f"  Download complete ({archive_path.stat().st_size / 1024 / 1024:.1f} MB)")
-        print(f"  Extracting binaries to {bin_dir}...")
+                _download_with_progress(url, archive_path)
+                size_mb = archive_path.stat().st_size / 1024 / 1024
+                print(f"  Download complete ({size_mb:.1f} MB)")
+                print(f"  Extracting binaries to {bin_dir}...")
 
-        config.extract(archive_path, bin_dir)
+                config.extract(archive_path, bin_dir)
 
-    print(f"{tool_name} installation complete!")
+            print(f"{tool_name} installation complete!")
+            return
+        except (IOError, EOFError, urllib.error.URLError) as exc:
+            last_error = exc
+            if attempt < _MAX_DOWNLOAD_RETRIES:
+                print(
+                    f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}\n"
+                    f"  Retrying in {_RETRY_DELAY_SECONDS}s..."
+                )
+                time.sleep(_RETRY_DELAY_SECONDS)
+            else:
+                print(f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}")
+
+    raise RuntimeError(
+        f"Failed to download {tool_name} after {_MAX_DOWNLOAD_RETRIES} attempts. "
+        f"Last error: {last_error}"
+    )
 
 
 if __name__ == "__main__":

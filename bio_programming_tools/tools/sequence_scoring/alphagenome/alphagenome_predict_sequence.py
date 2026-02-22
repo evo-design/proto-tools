@@ -96,10 +96,10 @@ def run_alphagenome_predict_sequence(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
-            "timeout": config.timeout,
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

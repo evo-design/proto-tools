@@ -115,6 +115,14 @@ def main() -> None:
         )
         sys.exit(1)
 
+    # Save the original stdout for JSON protocol writes, then redirect
+    # sys.stdout to sys.stderr.  This ensures any tool code that writes to
+    # sys.stdout (including subprocess calls with stdout=sys.stdout) goes
+    # through the parent's stderr drain thread and gets logged at DEBUG,
+    # instead of polluting the JSON protocol pipe.
+    _json_out = sys.stdout
+    sys.stdout = sys.stderr
+
     script_path = sys.argv[1]
     module = _load_module(script_path)
 
@@ -137,8 +145,10 @@ def main() -> None:
         except json.JSONDecodeError as exc:
             # Can't parse request — write error with no id
             error_response = {"id": None, "error": f"Invalid JSON: {exc}"}
-            sys.stdout.write(json.dumps(error_response, separators=(",", ":")) + "\n")
-            sys.stdout.flush()
+            response_json = json.dumps(error_response, separators=(",", ":"))
+            _json_out.write(f"LENGTH:{len(response_json)}\n")
+            _json_out.write(response_json)
+            _json_out.flush()
             continue
 
         request_id = request.get("id")
@@ -151,8 +161,12 @@ def main() -> None:
         except Exception:
             response = {"id": request_id, "error": traceback.format_exc()}
 
-        sys.stdout.write(json.dumps(response, separators=(",", ":")) + "\n")
-        sys.stdout.flush()
+        # Length-prefixed protocol: send byte count then JSON
+        # This allows libraries to output warnings/logs without breaking JSON parsing
+        response_json = json.dumps(response, separators=(",", ":"))
+        _json_out.write(f"LENGTH:{len(response_json)}\n")
+        _json_out.write(response_json)
+        _json_out.flush()
 
 
 if __name__ == "__main__":

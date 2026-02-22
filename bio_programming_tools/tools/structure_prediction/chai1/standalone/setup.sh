@@ -15,10 +15,12 @@ echo "Setting up Chai1 standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-# Use --torch-backend=auto to automatically detect GPU and install
-# the correct PyTorch build (CUDA-enabled or CPU-only).
-echo "Installing dependencies from requirements.txt..."
-uv pip install -r requirements.txt --torch-backend=auto
+# Install hardware-aware PyTorch version (from centralized detection)
+echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+
+echo "Installing remaining dependencies..."
+uv pip install -r requirements.txt
 
 # Warn if GPU compute capability may be incompatible with chai_lab's pinned torch version.
 if command -v nvidia-smi &> /dev/null; then

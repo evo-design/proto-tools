@@ -150,7 +150,11 @@ def run_structure_metrics(
     }
 
     output_data = ToolInstance.dispatch(
-        "structure_metrics", input_data, instance=instance,
+        "structure_metrics",
+        input_data,
+        instance=instance,
+        verbose=config.verbose,
+        timeout=config.timeout,
     )
 
     metrics = [StructureMetrics(**m) for m in output_data["metrics"]]

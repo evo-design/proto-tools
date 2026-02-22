@@ -230,6 +230,7 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
         },
         instance=instance,
         verbose=config.verbose,
+        timeout=config.timeout,
         reload_on=type(config).reload_fields(),
     )
 

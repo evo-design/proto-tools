@@ -275,12 +275,18 @@ def _release_between_predictors(request):
 
     Not autouse — only parametrized tests have callspec.params. Applied
     via @pytest.mark.usefixtures on test_folding only.
+
+    Note: Skips alphafold3 as it uses Singularity container, not ToolInstance.
     """
     prev = getattr(request.module, "_active_predictor", None)
     predictor_name = request.node.callspec.params["predictor_name"]
-    if prev is not None and prev != predictor_name:
-        ToolInstance.shutdown_instance(prev)
-    ToolInstance.get(predictor_name)
+
+    # Skip alphafold3 - it uses Singularity container, not ToolInstance
+    if predictor_name != "alphafold3":
+        if prev is not None and prev != predictor_name and prev != "alphafold3":
+            ToolInstance.shutdown_instance(prev)
+        ToolInstance.get(predictor_name)
+
     request.module._active_predictor = predictor_name
     yield
 

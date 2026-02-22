@@ -3,7 +3,7 @@
 Setup script for MMseqs2 mini debug database.
 
 This script downloads and sets up a mini MMseqs2 database for testing purposes.
-It uses ToolInstance to access mmseqs from the isolated venv.
+It uses ToolInstance to access mmseqs from the isolated tool environment.
 """
 
 from __future__ import annotations
@@ -80,11 +80,11 @@ def setup_mini_database():
         return
 
     # We need the mmseqs binary directly (not via run_*), so explicitly
-    # build the venv — ToolInstance.get() alone defers venv creation.
+    # build the env — ToolInstance.get() alone defers env creation.
     logger.info("Initializing mmseqs environment...")
     tool = ToolInstance.get("mmseqs")
     tool.ensure_ready()
-    mmseqs_bin = tool.venv_path / "bin" / "mmseqs"
+    mmseqs_bin = tool.env_path / "bin" / "mmseqs"
 
     if not mmseqs_bin.exists():
         raise RuntimeError(
