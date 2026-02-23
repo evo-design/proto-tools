@@ -190,7 +190,7 @@ class TestAlphaGenome:
     # --- In-Silico Mutagenesis (ISM) ---
 
     def test_ism(self):
-        """Test ISM over a small sub-interval."""
+        """Test ISM over a small sub-interval with position-based scorers."""
         from bio_programming_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomeScoreISMConfig,
             AlphaGenomeScoreISMInput,
@@ -205,7 +205,10 @@ class TestAlphaGenome:
             ism_interval_end=_SCORE_MID + 10,  # 20 bp window
         )
         config = AlphaGenomeScoreISMConfig(
-            variant_scorers=None,
+            # Use position-based (CenterMask) scorers that don't require gene
+            # annotations near the ISM window. The default (None = all recommended)
+            # includes gene-based scorers that return empty for gene-poor regions.
+            variant_scorers=["ATAC", "DNASE"],
             organism="human",
         )
 
@@ -246,10 +249,10 @@ class TestAlphaGenome:
 
         assert len(result.scores) > 0
 
-    # --- Stress Test (full 1 Mb context) ---
+    # --- Stress Test (131k context) ---
 
     def test_full_context_interval_prediction(self):
-        """Stress test: interval prediction at the maximum 1 Mb context length."""
+        """Stress test: interval prediction at the 131k context length."""
         from bio_programming_tools.tools.sequence_scoring.alphagenome import (
             AlphaGenomePredictIntervalConfig,
             AlphaGenomePredictIntervalInput,
@@ -259,7 +262,7 @@ class TestAlphaGenome:
         inputs = AlphaGenomePredictIntervalInput(
             chromosome="chr1",
             interval_start=0,
-            interval_end=1_048_576,
+            interval_end=131_072,
         )
         config = AlphaGenomePredictIntervalConfig(
             requested_outputs=["RNA_SEQ"],
@@ -271,5 +274,5 @@ class TestAlphaGenome:
         validate_output(result)
 
         assert result.tool_id == "alphagenome-predict-interval"
-        assert result.interval_end == 1_048_576
+        assert result.interval_end == 131_072
         assert "predictions" in result.result

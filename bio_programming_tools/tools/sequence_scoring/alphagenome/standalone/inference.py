@@ -20,6 +20,21 @@ from alphagenome_research.model import dna_model
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_tidy_scores(scores) -> list:
+    """Wrap variant_scorers_lib.tidy_scores to handle upstream empty-result bug."""
+    try:
+        df = variant_scorers_lib.tidy_scores(scores)
+    except KeyError:
+        logger.warning(
+            "variant_scorers_lib.tidy_scores raised KeyError (likely empty "
+            "gene-based results); returning empty score list."
+        )
+        return []
+    if df is None or df.empty:
+        return []
+    return json.loads(df.to_json(orient="records"))
+
 _SUPPORTED_CONTEXT_LENGTHS = [1_048_576, 524_288, 131_072, 16_384]
 
 
@@ -220,7 +235,7 @@ class AlphaGenomeModel:
         variant_scorers: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Run variant scoring with recommended variant scorers."""
         _validate_min_scorer_width(
             interval_end - interval_start,
@@ -248,8 +263,7 @@ class AlphaGenomeModel:
             organism=_ORGANISM_ENUMS[organism],
         )
 
-        df = variant_scorers_lib.tidy_scores(scores)
-        return json.loads(df.to_json(orient="records"))
+        return _safe_tidy_scores(scores)
 
     def score_interval(
         self,
@@ -259,7 +273,7 @@ class AlphaGenomeModel:
         interval_scorers: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Run interval scoring with recommended interval scorers."""
         _validate_min_scorer_width(
             interval_end - interval_start,
@@ -281,8 +295,7 @@ class AlphaGenomeModel:
             organism=_ORGANISM_ENUMS[organism],
         )
 
-        df = variant_scorers_lib.tidy_scores(scores)
-        return json.loads(df.to_json(orient="records"))
+        return _safe_tidy_scores(scores)
 
     def score_ism_variants(
         self,
@@ -297,7 +310,7 @@ class AlphaGenomeModel:
         reference_bases: Optional[str] = None,
         alternate_bases: Optional[str] = None,
         device: str = "cuda",
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Run in-silico mutagenesis scoring."""
         _validate_min_scorer_width(
             interval_end - interval_start,
@@ -335,8 +348,7 @@ class AlphaGenomeModel:
             interval_variant=interval_variant,
         )
 
-        df = variant_scorers_lib.tidy_scores(scores)
-        return json.loads(df.to_json(orient="records"))
+        return _safe_tidy_scores(scores)
 
     # ============================================================================
     # Device Management
