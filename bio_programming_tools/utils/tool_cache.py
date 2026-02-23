@@ -472,9 +472,11 @@ def tool_cache_iterable(
             input_items = getattr(inputs, input_iterable_field)
 
             # Track which items need computation vs which are already cached
-            cached_results = []  # tuple of (index, cached_result)
-            uncached_indices = []  # Original indices
-            uncached_input_items = []  # Input items that need computation
+            cached_results: dict[int, Any] = {}  # orig_idx -> cached_result
+            unique_uncached_keys: list[str] = []  # ordered unique cache keys
+            unique_uncached_items: list[Any] = []  # 1:1 with unique_uncached_keys
+            key_to_unique_idx: dict[str, int] = {}  # cache_key -> index in unique lists
+            uncached_index_map: list[tuple[int, int]] = []  # (orig_idx, unique_idx)
 
             # For each item in the input iterable
             for idx, item in enumerate(input_items):
@@ -486,17 +488,30 @@ def tool_cache_iterable(
                 # Check cache
                 cached_result = cache.get(actual_tool_name, cache_key)
                 if cached_result is not None:
-                    cached_results.append((idx, cached_result))
+                    cached_results[idx] = cached_result
                 else:
-                    uncached_indices.append(idx)
-                    uncached_input_items.append(item)
+                    # Deduplicate: only add to unique lists on first occurrence
+                    if cache_key not in key_to_unique_idx:
+                        unique_idx = len(unique_uncached_keys)
+                        key_to_unique_idx[cache_key] = unique_idx
+                        unique_uncached_keys.append(cache_key)
+                        unique_uncached_items.append(item)
+                    else:
+                        unique_idx = key_to_unique_idx[cache_key]
+                    uncached_index_map.append((idx, unique_idx))
 
             # Log cache statistics
             num_cache_hits = len(cached_results)
-            num_cache_misses = len(uncached_indices)
+            num_unique_misses = len(unique_uncached_items)
+            num_duplicates = len(uncached_index_map) - num_unique_misses
             total_items = len(input_items)
+            dedup_info = ""
+            if num_duplicates > 0:
+                dedup_info = f", {num_duplicates} duplicate{'s' if num_duplicates != 1 else ''} removed"
             logger.debug(
-                f"[Iterable Cache Stats] {actual_tool_name}: {num_cache_hits} cache hits, {num_cache_misses} cache misses out of {total_items} items"
+                f"[Iterable Cache Stats] {actual_tool_name}: {num_cache_hits} cache hits, "
+                f"{num_unique_misses} unique misses out of {total_items} items"
+                + dedup_info
             )
 
             # Get the input and output pydantic model classes from the ToolRegistry
@@ -507,9 +522,8 @@ def tool_cache_iterable(
             output_model = tool_spec.output_model
 
             # If everything is cached, return the cached results in a new OutputPydantic model
-            if num_cache_misses == 0:
+            if num_unique_misses == 0:
                 logger.debug(f"[Iterable Cache] {actual_tool_name}: full cache hit, skipping computation")
-                # Create new output model instance with cached results
                 output_instance = output_model(
                     tool_id=actual_tool_name,
                     execution_time=0.0,
@@ -518,7 +532,7 @@ def tool_cache_iterable(
                     metadata={},
                     **{
                         output_iterable_field: [
-                            cached_result for _, cached_result in cached_results
+                            cached_results[i] for i in range(total_items)
                         ]
                     },
                 )
@@ -526,37 +540,32 @@ def tool_cache_iterable(
 
             # If there are some items that need computation
             else:
-                logger.debug(f"[Iterable Cache] {actual_tool_name}: computing {num_cache_misses} uncached items")
-                # Create new input model instance with the uncached items
+                logger.debug(
+                    f"[Iterable Cache] {actual_tool_name}: computing "
+                    f"{num_unique_misses} unique uncached items"
+                )
+                # Create new input model instance with only unique uncached items
                 input_data = inputs.model_dump()
-                # Update only the iterable field
-                input_data[input_iterable_field] = uncached_input_items
+                input_data[input_iterable_field] = unique_uncached_items
                 input_model_instance = input_model(**input_data)
 
-                # Run the function on the uncached items
+                # Run the function on unique uncached items only
                 tool_output = func(inputs=input_model_instance, config=config)
 
-                # Cache the results
+                # Cache the results (1:1 with unique_uncached_keys)
                 result_iterable = getattr(tool_output, output_iterable_field, [])
-                for input_item, result_item in zip(
-                    uncached_input_items, result_iterable
+                for cache_key, result_item in zip(
+                    unique_uncached_keys, result_iterable
                 ):
-                    cache.set(
-                        actual_tool_name,
-                        _generate_cache_key(
-                            actual_tool_name, input_item=input_item, config=config
-                        ),
-                        result_item,
-                    )
+                    cache.set(actual_tool_name, cache_key, result_item)
 
                 # Reconstruct the final ordering
                 result_map = dict(cached_results)
-                for orig_idx, result_item in zip(uncached_indices, result_iterable):
-                    result_map[orig_idx] = result_item
+                for orig_idx, unique_idx in uncached_index_map:
+                    result_map[orig_idx] = result_iterable[unique_idx]
 
                 final_output_iterable = [result_map[i] for i in range(total_items)]
 
-                # Create new output model instance with cached and uncached results in original order
                 output_instance = output_model(
                     tool_id=tool_output.tool_id,
                     execution_time=tool_output.execution_time,

@@ -612,7 +612,7 @@ class TestToolCacheIterable:
             with caplog.at_level(logging.DEBUG):
                 _ = verbose_function(inputs, config)
             assert "[Iterable Cache Stats]" in caplog.text
-            assert "0 cache hits, 2 cache misses" in caplog.text
+            assert "0 cache hits, 2 unique misses out of 2 items" in caplog.text
 
             caplog.clear()
 
@@ -620,7 +620,7 @@ class TestToolCacheIterable:
             with caplog.at_level(logging.DEBUG):
                 _ = verbose_function(inputs, config)
             assert "[Iterable Cache Stats]" in caplog.text
-            assert "2 cache hits, 0 cache misses" in caplog.text
+            assert "2 cache hits, 0 unique misses out of 2 items" in caplog.text
 
     def test_iterable_cache_with_different_configs(self):
         """Test that different configs produce different cache entries."""
@@ -851,6 +851,241 @@ class TestToolCacheIterable:
             clear_cache()
             info = get_cache_info()
             assert info["total_entries"] == 0
+
+    def test_iterable_cache_dedup_all_duplicates(self):
+        """Test that all-duplicate inputs dispatch only one item to the function."""
+
+        class Item(BaseModel):
+            value: int
+
+        class TestInput(BaseToolInput):
+            items: list[Item]
+
+        class TestConfig(BaseConfig):
+            multiplier: int = 2
+
+        class TestOutput(MockToolOutputBase):
+            results: list[int]
+
+        mock_spec = self.mock_tool_registry_get("dedup_all", TestInput, TestOutput)
+
+        with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
+            received_items = []
+
+            @tool_cache_iterable(
+                input_iterable_field="items",
+                output_iterable_field="results",
+                tool_name="dedup_all",
+            )
+            def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
+                received_items.extend(inputs.items)
+                return TestOutput(
+                    results=[item.value * config.multiplier for item in inputs.items],
+                    tool_id="dedup_all",
+                    execution_time=0.0,
+                    success=True,
+                )
+
+            inputs = TestInput(items=[Item(value=1), Item(value=1), Item(value=1)])
+            config = TestConfig(multiplier=2)
+
+            result = process_items(inputs, config)
+
+            # Function should only receive 1 unique item
+            assert len(received_items) == 1
+            assert received_items[0].value == 1
+
+            # All 3 output positions should have the same result
+            assert result.results == [2, 2, 2]
+
+    def test_iterable_cache_dedup_mixed(self):
+        """Test dedup with a mix of unique and duplicate uncached items."""
+
+        class Item(BaseModel):
+            value: int
+
+        class TestInput(BaseToolInput):
+            items: list[Item]
+
+        class TestConfig(BaseConfig):
+            multiplier: int = 2
+
+        class TestOutput(MockToolOutputBase):
+            results: list[int]
+
+        mock_spec = self.mock_tool_registry_get("dedup_mixed", TestInput, TestOutput)
+
+        with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
+            received_items = []
+
+            @tool_cache_iterable(
+                input_iterable_field="items",
+                output_iterable_field="results",
+                tool_name="dedup_mixed",
+            )
+            def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
+                received_items.extend(inputs.items)
+                return TestOutput(
+                    results=[item.value * config.multiplier for item in inputs.items],
+                    tool_id="dedup_mixed",
+                    execution_time=0.0,
+                    success=True,
+                )
+
+            # [1, 2, 1, 3, 2] -> function should receive [1, 2, 3]
+            inputs = TestInput(items=[
+                Item(value=1), Item(value=2), Item(value=1),
+                Item(value=3), Item(value=2),
+            ])
+            config = TestConfig(multiplier=2)
+
+            result = process_items(inputs, config)
+
+            # Function should only receive 3 unique items
+            assert len(received_items) == 3
+            assert [item.value for item in received_items] == [1, 2, 3]
+
+            # Output should preserve original ordering
+            assert result.results == [2, 4, 2, 6, 4]
+            # output[0] == output[2] (both value=1)
+            assert result.results[0] == result.results[2]
+            # output[1] == output[4] (both value=2)
+            assert result.results[1] == result.results[4]
+
+    def test_iterable_cache_dedup_with_cached_hits(self):
+        """Test dedup when some items are already cached."""
+
+        class Item(BaseModel):
+            value: int
+
+        class TestInput(BaseToolInput):
+            items: list[Item]
+
+        class TestConfig(BaseConfig):
+            multiplier: int = 2
+
+        class TestOutput(MockToolOutputBase):
+            results: list[int]
+
+        mock_spec = self.mock_tool_registry_get("dedup_cached", TestInput, TestOutput)
+
+        with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
+            call_log = []
+
+            @tool_cache_iterable(
+                input_iterable_field="items",
+                output_iterable_field="results",
+                tool_name="dedup_cached",
+            )
+            def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
+                call_log.append([item.value for item in inputs.items])
+                return TestOutput(
+                    results=[item.value * config.multiplier for item in inputs.items],
+                    tool_id="dedup_cached",
+                    execution_time=0.0,
+                    success=True,
+                )
+
+            config = TestConfig(multiplier=2)
+
+            # First call: cache items 1 and 2
+            inputs1 = TestInput(items=[Item(value=1), Item(value=2)])
+            process_items(inputs1, config)
+            assert call_log == [[1, 2]]
+
+            # Second call: [1, 3, 3, 2] -> function should only receive [3]
+            inputs2 = TestInput(items=[
+                Item(value=1), Item(value=3), Item(value=3), Item(value=2),
+            ])
+            result = process_items(inputs2, config)
+
+            assert call_log == [[1, 2], [3]]
+            assert result.results == [2, 6, 6, 4]
+
+    def test_iterable_cache_dedup_preserves_order(self):
+        """Test that dedup preserves exact output ordering with string items."""
+
+        class Item(BaseModel):
+            id: str
+
+        class TestInput(BaseToolInput):
+            items: list[Item]
+
+        class TestConfig(BaseConfig):
+            prefix: str = "out_"
+
+        class TestOutput(MockToolOutputBase):
+            results: list[str]
+
+        mock_spec = self.mock_tool_registry_get("dedup_order", TestInput, TestOutput)
+
+        with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
+            @tool_cache_iterable(
+                input_iterable_field="items",
+                output_iterable_field="results",
+                tool_name="dedup_order",
+            )
+            def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
+                return TestOutput(
+                    results=[f"{config.prefix}{item.id}" for item in inputs.items],
+                    tool_id="dedup_order",
+                    execution_time=0.0,
+                    success=True,
+                )
+
+            # ["C", "A", "C", "B", "A"]
+            inputs = TestInput(items=[
+                Item(id="C"), Item(id="A"), Item(id="C"),
+                Item(id="B"), Item(id="A"),
+            ])
+            config = TestConfig(prefix="out_")
+
+            result = process_items(inputs, config)
+
+            assert result.results == ["out_C", "out_A", "out_C", "out_B", "out_A"]
+
+    def test_iterable_cache_dedup_logging(self, caplog):
+        """Test that log messages contain 'unique misses' and 'duplicates'."""
+        import logging
+
+        class Item(BaseModel):
+            value: int
+
+        class TestInput(BaseToolInput):
+            items: list[Item]
+
+        class TestConfig(BaseConfig):
+            multiplier: int = 2
+
+        class TestOutput(MockToolOutputBase):
+            results: list[int]
+
+        mock_spec = self.mock_tool_registry_get("dedup_log", TestInput, TestOutput)
+
+        with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
+            @tool_cache_iterable(
+                input_iterable_field="items",
+                output_iterable_field="results",
+                tool_name="dedup_log",
+            )
+            def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
+                return TestOutput(
+                    results=[item.value * config.multiplier for item in inputs.items],
+                    tool_id="dedup_log",
+                    execution_time=0.0,
+                    success=True,
+                )
+
+            # [1, 2, 1] -> 0 hits, 2 unique misses, 1 duplicate
+            inputs = TestInput(items=[Item(value=1), Item(value=2), Item(value=1)])
+            config = TestConfig(multiplier=2)
+
+            with caplog.at_level(logging.DEBUG):
+                process_items(inputs, config)
+
+            assert "unique misses" in caplog.text
+            assert "duplicate" in caplog.text
+            assert "0 cache hits, 2 unique misses out of 3 items, 1 duplicate removed" in caplog.text
 
 
 class MockOptimizer:
