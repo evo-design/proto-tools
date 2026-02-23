@@ -271,7 +271,10 @@ from .structure_design import (
 from .structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
 
 # Structure prediction tools
-from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
+from .structure_prediction import (  # AlphaFold2; AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
+    AlphaFold2Config,
+    AlphaFold2Input,
+    AlphaFold2Output,
     AlphaFold3Config,
     AlphaFold3Input,
     AlphaFold3Output,
@@ -299,6 +302,7 @@ from .structure_prediction import (  # AlphaFold3; Boltz2; Chai1; ESMFold; Prote
     ViennaRNAInput,
     ViennaRNAOutput,
     predict_structures,
+    run_alphafold2,
     run_alphafold3,
     run_boltz2,
     run_chai1,
@@ -441,6 +445,11 @@ __all__ = [
     "InverseFoldingConfig",
     "InverseFoldingInput",
     "SequenceScores",
+    # Structure prediction - AlphaFold2
+    "run_alphafold2",
+    "AlphaFold2Input",
+    "AlphaFold2Config",
+    "AlphaFold2Output",
     # Structure prediction - AlphaFold3
     "run_alphafold3",
     "AlphaFold3Input",

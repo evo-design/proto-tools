@@ -1,3 +1,9 @@
+from .alphafold2 import (
+    AlphaFold2Config,
+    AlphaFold2Input,
+    AlphaFold2Output,
+    run_alphafold2,
+)
 from .alphafold3 import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -27,6 +33,11 @@ from .structure_metrics import (
 from .viennarna import ViennaRNAConfig, ViennaRNAInput, ViennaRNAOutput, run_viennarna
 
 __all__ = [
+    # AlphaFold2
+    "run_alphafold2",
+    "AlphaFold2Input",
+    "AlphaFold2Config",
+    "AlphaFold2Output",
     # AlphaFold3
     "run_alphafold3",
     "AlphaFold3Input",

@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union
 
+from bio_programming_tools.tools.structure_prediction.alphafold2 import (
+    AlphaFold2Config,
+    AlphaFold2Input,
+    run_alphafold2,
+)
 from bio_programming_tools.tools.structure_prediction.alphafold3 import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -40,6 +45,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 
 SP_TOOL_MAP = {
     "esmfold": {"config": ESMFoldConfig, "input": ESMFoldInput, "run_func": run_esmfold},
+    "alphafold2": {"config": AlphaFold2Config, "input": AlphaFold2Input, "run_func": run_alphafold2},
     "alphafold3": {"config": AlphaFold3Config, "input": AlphaFold3Input, "run_func": run_alphafold3},
     "boltz2": {"config": Boltz2Config, "input": Boltz2Input, "run_func": run_boltz2},
     "chai1": {"config": Chai1Config, "input": Chai1Input, "run_func": run_chai1},
@@ -51,7 +57,7 @@ def predict_structures(
     complexes: Union[StructurePredictionComplex, List[StructurePredictionComplex]],
     tool_name: str,
     tool_config: Optional[
-        Union[ESMFoldConfig, AlphaFold3Config, Boltz2Config, Chai1Config, ProtenixConfig, Dict[str, Any]]
+        Union[ESMFoldConfig, AlphaFold2Config, AlphaFold3Config, Boltz2Config, Chai1Config, ProtenixConfig, Dict[str, Any]]
     ] = None,
 ) -> StructurePredictionOutput:
     """Dispatch structure prediction to the specified tool.
@@ -62,7 +68,7 @@ def predict_structures(
     Args:
         complexes: List of StructurePredictionComplex objects to predict.
         tool_name: Name of the structure prediction tool. Supported values:
-            ``"esmfold"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``.
+            ``"esmfold"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``.
         tool_config: Tool-specific configuration dictionary.
 
     Returns:

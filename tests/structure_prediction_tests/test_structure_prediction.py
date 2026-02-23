@@ -14,6 +14,8 @@ from bio_programming_tools.entities.structures import is_valid_structure
 from bio_programming_tools.utils.tool_cache import ToolCache
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.structure_prediction import (
+    AlphaFold2Config,
+    AlphaFold2Input,
     AlphaFold3Config,
     AlphaFold3Input,
     Boltz2Config,
@@ -26,6 +28,7 @@ from bio_programming_tools.tools.structure_prediction import (
     ProtenixInput,
     StructurePredictionComplex,
     StructurePredictionOutput,
+    run_alphafold2,
     run_alphafold3,
     run_boltz2,
     run_chai1,
@@ -36,6 +39,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig),
+    "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config),
     "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
     "chai1": (run_chai1, Chai1Input, Chai1Config),
     "boltz2": (run_boltz2, Boltz2Input, Boltz2Config),
