@@ -459,6 +459,6 @@ def run_evo2_sample(
             "prepend_prompt": config.prepend_prompt,
         },
         sequences=result["sequences"],
-        kv_caches=result.get("kv_caches"),
+        kv_caches=result["kv_caches"],
         logits=logits,
     )
