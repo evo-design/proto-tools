@@ -360,9 +360,12 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 ## Using bio_tools with Claude Code
 
 When a user asks to run a bioinformatics tool:
-1. Browse `bio_programming_tools/tools/` to find the right category and tool directory
-2. Read the tool's `README.md` for biological context, parameters, and examples
-3. Read the tool's `Input`/`Config`/`Output` classes for the exact API
+1. **Find the tool**: Browse `bio_programming_tools/tools/` to find the right category and tool directory, or use `ToolRegistry.list_all()` to discover available tools
+2. **Read README + notebook**: `bio_programming_tools/tools/{category}/{tool}/README.md` for parameters, thresholds, and biological context; `examples/example.ipynb` for working code with exact imports and real output
+3. **Read API**: Read the tool's `Input`/`Config`/`Output` classes for the exact Pydantic schema
+4. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
+
+Start with READMEs and notebooks for API details. Read `.py` source only if you need deeper implementation context.
 
 ```python
 from bio_programming_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
@@ -372,6 +375,48 @@ config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
 result = run_{tool}(inputs, config)
 # result.success, result.execution_time, result.errors, plus tool-specific fields
 ```
+
+### Script vs Direct Execution
+
+Infer from context whether to **write a script** or **execute directly**:
+
+**Write a script** to `./analyses/{descriptive_name}_{YYYY-MM-DD}.py` when:
+- The user says "write", "create", "set up", "notebook", or similar authoring language
+- The task is a multi-step pipeline or expensive GPU job
+- The user will likely iterate on parameters or review before running
+- When unclear — default to writing a script (safer, reproducible)
+
+**Execute directly** (run inline via Bash, include code in the response) when:
+- The user says "what is", "how many", "show me", "quick", "find", or similar query language
+- The task is a simple one-off lookup or quick check
+- The answer is more important than the script
+
+In either case, always show the equivalent Python code so the user can reproduce the result.
+
+### Script Structure
+
+Generated scripts should follow this structure:
+
+```python
+"""
+Brief description of what this analysis does.
+Generated: {date}
+"""
+from bio_programming_tools.tools.{category}.{tool} import ...
+
+# --- Configuration (review these) ---
+# All parameters in one place with comments explaining choices
+
+# --- Run ---
+# Tool execution
+
+# --- Results ---
+# Parse and display output
+```
+
+For multi-step pipelines, use one script with `# === Step N: Description ===` section headers.
+
+### Batch Persistence
 
 For batch workloads or loops calling the same tool repeatedly, use `ToolInstance.persist()` to avoid reloading the model on every call:
 
@@ -383,15 +428,15 @@ with ToolInstance.persist():
         result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
 ```
 
-**Invoke the `bio-tools` skill for full workflow guidance** (script vs direct execution, script structure, GPU handling, output conventions).
+### GPU Tools
+
+Some tools require GPU access. Check a tool's Config class for a `device` field (defaulting to `"cuda"`). When writing scripts for GPU tools, note the GPU requirement in a comment at the top of the script.
+
+### Citations
+
+Every tool has a BibTeX citation accessible via `ToolRegistry.get_citation("tool-key")`. When writing analysis scripts or reports, include citations for the tools used. Use `ToolRegistry.list_citations()` for all citations.
 
 ## Skills (`.claude/skills/`) & Commands (`.claude/commands/`)
-
-### For users (running tools)
-
-- **bio-tools** — workflow for running, analyzing, and writing scripts for any bioinformatics tool (discovery, script generation, GPU handling, output conventions)
-
-### For developers (extending the tool library)
 
 Skills:
 

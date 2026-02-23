@@ -89,15 +89,11 @@ See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthr
 
 ## Using with Claude Code
 
-This repo includes [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for both users running tools and developers extending the library. Launch `claude` from the repo root:
+This repo includes [Claude Code](https://docs.anthropic.com/en/docs/claude-code) integration for both users running tools and developers extending the library. Launch `claude` from the repo root:
 
 ```bash
 claude
 ```
-
-### For users (running tools)
-
-- **bio-tools** — workflow for running, analyzing, and writing scripts for any bioinformatics tool (discovery, script generation, GPU handling, output conventions)
 
 Ask Claude things like:
 
@@ -107,7 +103,7 @@ Ask Claude things like:
 > Fold this sequence, redesign it with inverse folding, and compare the original and designed sequences
 ```
 
-It will write runnable scripts to `analyses/` or execute directly depending on context. See [`analyses/examples/`](analyses/examples/) for reference scripts.
+It will write runnable scripts to `analyses/` or execute directly depending on context. See `CLAUDE.md` for the full workflow guide.
 
 ### For developers (extending the tool library)
 
@@ -116,8 +112,7 @@ Commands (invoked with `/command-name`):
 - **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
 - **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
 
-
-Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. See [`analyses/examples/`](analyses/examples/) for complete runnable scripts.
+Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.
 
 ## Development
 
