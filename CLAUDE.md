@@ -349,7 +349,7 @@ For platform-independent tools (e.g., Java JARs), use the same URL for all platf
 
 ## Configuration
 
-- Python >=3.12, Pydantic >=2.0
+- Python >=3.10, Pydantic >=2.0
 - Do **not** run `black` on this project — formatting is handled manually
 - isort line length: 88
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)

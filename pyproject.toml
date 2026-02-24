@@ -12,7 +12,7 @@ authors = [
     {name = "Bio Programming Team"}
 ]
 
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
 # Core dependencies
 dependencies = [
@@ -20,36 +20,34 @@ dependencies = [
     "pydantic>=2.0.0",
 
     # Scientific computing
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
+    "numpy>=1.20",
+    "pandas>=1.5",
     "pyarrow",  # Required for pandas parquet support (chai1 MSA conversion)
-    "scipy>=1.10.0",
 
     # Bioinformatics
-    "biopython>=1.81",
-    "biotite>=0.38.0",
+    "biopython",
+    "biotite>=0.30.0",
     "gemmi",
 
     # Chemistry & structure
     "rdkit",
-    "py3Dmol>=2.0.0",
+    "py3Dmol",
 
     # File parsing/indexing
     "pyfaidx",
 
     # Biology-specific tools
-    "promotercalculator>=1.0.0",
+    "promotercalculator",
 
     # Visualization & utilities
     "matplotlib",
-    "openpyxl>=3.0.0",
     "ipython",
-    "ipymol>=0.5",
+    "ipymol",
 
     # Utilities
-    "pyyaml>=6.0",
-    "requests>=2.31.0",
-    "tqdm>=4.65.0",
+    "pyyaml",
+    "requests",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
@@ -57,37 +55,28 @@ dependencies = [
 # Development dependencies
 dev = [
     # Testing
-    "pytest>=7.3.0",
-    "pytest-asyncio>=0.21.0",
+    "pytest>=7.3.0",        # --strict-markers requires 7.3+
+    "pytest-asyncio>=0.21", # asyncio_mode="auto" requires 0.21+
     "pytest-cov>=4.1.0",
 
     # Code quality
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
-    "Flake8-pyproject>=1.2.0",
-    "mypy>=1.5.0",
-    "pre-commit>=3.3.0",
+    "black",
+    "isort",
+    "flake8",
+    "Flake8-pyproject>=1.2.0",  # pyproject.toml flake8 config support
+    "mypy",
+    "pre-commit",
 
     # Notebooks & interactive
-    "jupyter>=1.1.1",
-    "ipykernel>=6.25.0",
-    "ipywidgets>=8.0.0",
-
-    # Visualization
-    "matplotlib>=3.7.0",
-    "seaborn>=0.13.0",
+    "jupyter",
+    "ipykernel",
+    "ipywidgets",
 
     # Documentation
     "docstring-parser",
 ]
 
-# Cloud deployment
-cloud = [
-    "cloud>=0.64.0",
-]
-
-# Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[tools,dev])
+# Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[dev])
 
 [tool.pytest.ini_options]
 # Run from bio-programming-tools root directory
@@ -119,7 +108,7 @@ log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
 [tool.black]
 line-length = 88
-target-version = ['py312']
+target-version = ['py310']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -155,7 +144,7 @@ exclude = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
