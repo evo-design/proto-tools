@@ -24,7 +24,11 @@ from bio_programming_tools.tools.structure_prediction.alphafold3 import (
 @pytest.fixture
 def mock_af3_inference(tmp_path):
     dummy_pdb_file = tmp_path / "dummy.pdb"
-    dummy_pdb_file.write_text("HEADER    DUMMY PDB")
+    dummy_pdb_file.write_text(
+        "HEADER    DUMMY PDB\n"
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.95           C\n"
+        "END\n"
+    )
     dummy_pdb_path = str(dummy_pdb_file)
     mock_metrics = {"avg_plddt": 0.95, "ptm": 0.8}
 
@@ -50,7 +54,8 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
-    run_alphafold3(inputs, config)
+    result = run_alphafold3(inputs, config)
+    assert result.success
 
     # Extract arguments.
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
@@ -82,7 +87,8 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
     inputs = AlphaFold3Input(complexes=complexes)
     config = AlphaFold3Config(name="test_entities", use_msa=False)
 
-    run_alphafold3(inputs, config)
+    result = run_alphafold3(inputs, config)
+    assert result.success
 
     # Extract arguments.
     input_json = mock_af3_inference.call_args.kwargs["input_json"]
