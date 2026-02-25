@@ -400,6 +400,44 @@ GPU tools should include `batch_size: int = ConfigField(default=1, ...)` in thei
 - Generators and constraints pass `batch_size` through to tool configs — they never batch themselves
 - Higher `batch_size` = more GPU memory, higher throughput
 
+### 3C: Compile-from-Source Tool
+
+For tools distributed as C/C++ source (no prebuilt binaries or pip packages), compile during setup. No `binary_config.py` or `requirements.txt` needed.
+
+**standalone/setup.sh**:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+echo "Setting up {ToolName}..."
+
+# Check for compiler
+if ! command -v g++ &>/dev/null; then
+    echo "ERROR: g++ not found. Install a C++ compiler (e.g., apt install g++)." >&2
+    exit 1
+fi
+
+pip install uv
+
+# Compile from source
+BUILD_DIR=$(mktemp -d)
+git clone --depth 1 https://github.com/{org}/{repo}.git "$BUILD_DIR/src"
+
+BIN_DIR="$(dirname "$(which python)")"
+g++ -O3 -ffast-math -lm -o "$BIN_DIR/{ToolBinary}" "$BUILD_DIR/src/{source}.cpp"
+
+rm -rf "$BUILD_DIR"
+echo "{ToolName} setup complete!"
+```
+
+**Key differences from 3A/3B:**
+- Check for `g++`/`gcc`/`cmake` before compiling
+- Use `BUILD_DIR` (not `TMPDIR`) to avoid shadowing the environment variable
+- No `requirements.txt` or `binary_config.py`
+- Binary is compiled directly into the venv's `bin/` directory
+
+**Canonical examples:** TMalign (`tools/structure_alignment/tmalign/`) and USalign (`tools/structure_alignment/usalign/`)
+
 ---
 
 ## Step 4: Caching
@@ -715,6 +753,7 @@ When in doubt, read these canonical examples:
 | Pattern | Example | File |
 |---|---|---|
 | Standalone + binary | BLAST | `tools/gene_annotation/blast/` |
+| Compile-from-source | TMalign | `tools/structure_alignment/tmalign/` |
 | CPU standalone (run.py) | BLAST | `tools/gene_annotation/blast/standalone/run.py` |
 | AI model standalone (inference.py) | ESMFold | `tools/structure_prediction/esmfold/standalone/inference.py` |
 | GPU standalone | Evo2 | `tools/causal_models/evo2/evo2_sample.py` |

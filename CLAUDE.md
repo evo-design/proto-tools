@@ -310,6 +310,10 @@ Tools that need external binaries (not available via pip) must use the shared `u
 
 For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys and generate any wrapper scripts in `extract()`.
 
+### Compile-from-Source Tools
+
+Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed — just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
+
 ### Key File Paths
 
 | File | Provides |

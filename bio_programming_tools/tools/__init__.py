@@ -270,6 +270,18 @@ from .structure_design import (
 # Structure dynamics tools
 from .structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
 
+# Structure alignment tools
+from .structure_alignment import (
+    TMalignConfig,
+    TMalignInput,
+    TMalignOutput,
+    USalignConfig,
+    USalignInput,
+    USalignOutput,
+    run_tmalign,
+    run_usalign,
+)
+
 # Structure prediction tools
 from .structure_prediction import (  # AlphaFold2; AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
     AlphaFold2Config,
@@ -492,6 +504,16 @@ __all__ = [
     "BioEmuInput",
     "BioEmuConfig",
     "BioEmuOutput",
+    # Structure alignment - TMalign
+    "run_tmalign",
+    "TMalignInput",
+    "TMalignConfig",
+    "TMalignOutput",
+    # Structure alignment - USalign
+    "run_usalign",
+    "USalignInput",
+    "USalignConfig",
+    "USalignOutput",
     # Sequence scoring - Borzoi
     "run_borzoi",
     "run_borzoi_ensemble",
