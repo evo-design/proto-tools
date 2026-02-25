@@ -116,6 +116,13 @@
 						]
 					},
 					{
+						"group": "Structure Alignment",
+						"pages": [
+							"tools/structure-alignment/tmalign",
+							"tools/structure-alignment/usalign"
+						]
+					},
+					{
 						"group": "Structure Design",
 						"pages": [
 							"tools/structure-design/rfdiffusion3"
