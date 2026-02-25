@@ -6,6 +6,7 @@ by esearch, esummary, and efetch tool modules.
 
 from __future__ import annotations
 
+import json
 import logging
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
@@ -134,7 +135,7 @@ def _ncbi_esearch(
     )
     if not _check_response(response, "ncbi-esearch"):
         return []
-    data = response.json()
+    data = json.loads(response.text, strict=False)
     return data.get("esearchresult", {}).get("idlist", [])
 
 
@@ -160,7 +161,7 @@ def _ncbi_esummary(
     if not _check_response(response, "ncbi-esummary"):
         return None
     url = _sanitize_url(str(response.url))
-    data = response.json()
+    data = json.loads(response.text, strict=False)
     return data.get("result", {}), url
 
 
