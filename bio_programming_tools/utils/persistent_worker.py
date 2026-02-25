@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import select
+import signal
 import subprocess
 import threading
 import uuid
@@ -344,6 +345,7 @@ class PersistentWorker:
             env=env,
             text=True,
             bufsize=1,  # line-buffered
+            start_new_session=True,  # own process group for clean shutdown
         )
 
         self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
@@ -492,17 +494,24 @@ class PersistentWorker:
 
             return response["result"]
 
+    def _killpg(self, sig: int) -> None:
+        """Send *sig* to the worker's process group, ignoring already-dead."""
+        try:
+            os.killpg(self._process.pid, sig)
+        except OSError:
+            pass
+
     def stop(self) -> None:
-        """Terminate the worker subprocess."""
+        """Terminate the worker and all of its child processes."""
         if self._process is not None:
             try:
                 if self._process.stdin and not self._process.stdin.closed:
                     self._process.stdin.close()
-                self._process.terminate()
+                self._killpg(signal.SIGTERM)          # graceful shutdown
                 self._process.wait(timeout=10)
             except Exception:
-                self._process.kill()
-                self._process.wait(timeout=5)
+                self._killpg(signal.SIGKILL)          # force kill
+                self._process.wait(timeout=5)         # reap zombie
             finally:
                 self._process = None
                 logger.debug("Stopped persistent worker for %s", self.tool_name)

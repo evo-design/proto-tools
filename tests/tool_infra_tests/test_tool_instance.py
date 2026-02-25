@@ -1069,6 +1069,7 @@ class TestTimeout:
 
         mock_process = MagicMock()
         mock_process.poll.return_value = None  # alive
+        mock_process.pid = 999999  # safe fake PID (avoid MagicMock defaulting to int 1)
         mock_process.stdin = MagicMock()
         mock_process.stdout = MagicMock()
         mock_process.stdout.fileno.return_value = 99
