@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import signal
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -230,6 +233,82 @@ class TestWorkerLifecycle:
         assert worker.alive
         worker.stop()
         assert not worker.alive
+
+
+class TestProcessGroupCleanup:
+    """Tests for process-group-based cleanup in stop()."""
+
+    def test_stop_signals_process_group(self):
+        """stop() should send SIGTERM to the process group, not just the process."""
+        worker = PersistentWorker.__new__(PersistentWorker)
+        worker.tool_name = "test"
+
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None
+        mock_process.pid = 99999
+        mock_process.stdin = MagicMock()
+        worker._process = mock_process
+
+        with patch("bio_programming_tools.utils.persistent_worker.os.killpg") as mock_killpg:
+            worker.stop()
+
+        # SIGTERM should be sent to the process group, not process.terminate()
+        mock_killpg.assert_any_call(99999, signal.SIGTERM)
+        mock_process.terminate.assert_not_called()
+        assert worker._process is None
+
+    def test_stop_escalates_to_sigkill(self):
+        """stop() should SIGKILL the group if SIGTERM + wait fails."""
+        worker = PersistentWorker.__new__(PersistentWorker)
+        worker.tool_name = "test"
+
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None
+        mock_process.pid = 99999
+        mock_process.stdin = MagicMock()
+        # First wait (after SIGTERM) times out, second wait (after SIGKILL) succeeds
+        mock_process.wait.side_effect = [Exception("timed out"), None]
+        worker._process = mock_process
+
+        with patch("bio_programming_tools.utils.persistent_worker.os.killpg") as mock_killpg:
+            worker.stop()
+
+        calls = [c.args for c in mock_killpg.call_args_list]
+        assert (99999, signal.SIGTERM) in calls
+        assert (99999, signal.SIGKILL) in calls
+        assert worker._process is None
+
+    def test_stop_kills_child_processes(self, tmp_path: Path):
+        """stop() should kill subprocesses spawned by the worker script."""
+        # Script that forks a long-lived child and reports its PID
+        script = tmp_path / "forking_script.py"
+        script.write_text(textwrap.dedent("""\
+            import subprocess, sys
+
+            def dispatch(input_dict):
+                # Spawn a long-lived child process
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(3600)"],
+                )
+                return {"child_pid": child.pid}
+            """))
+
+        worker = _make_worker(script)
+        try:
+            result = worker.send({})
+            child_pid = result["child_pid"]
+
+            # Child should be alive
+            os.kill(child_pid, 0)  # raises ProcessLookupError if dead
+
+            worker.stop()
+
+            # Both the worker and its child should be dead
+            assert not worker.alive
+            with pytest.raises(ProcessLookupError):
+                os.kill(child_pid, 0)
+        finally:
+            worker.stop()
 
 
 class TestSerialize:
