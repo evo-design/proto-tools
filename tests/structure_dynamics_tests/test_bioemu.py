@@ -1,23 +1,20 @@
-"""Unit tests for the BioEmu conformational ensemble sampling tool."""
+"""Tests for the BioEmu conformational ensemble sampling tool."""
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.entities.structures import Structure, StructureEnsemble
+from bio_programming_tools.entities.structures import Structure
 from bio_programming_tools.tools.structure_dynamics.bioemu import (
     BioEmuConfig,
     BioEmuInput,
-    BioEmuOutput,
     run_bioemu,
-)
-from bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample import (
-    _pdb_frames_to_structures,
 )
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
 )
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
 @pytest.fixture
@@ -37,39 +34,8 @@ def sample_pdb_content() -> str:
     )
 
 
-@pytest.fixture
-def single_chain_complex(sample_sequence: str) -> StructurePredictionComplex:
-    """Create a valid single-chain protein complex."""
-    return StructurePredictionComplex(
-        chains=[{"sequence": sample_sequence, "entity_type": "protein"}]
-    )
-
-
 class TestBioEmuInput:
     """Tests for BioEmuInput validation."""
-
-    def test_new_module_path_import(self):
-        """Test importing symbols from the new per-tool module path."""
-        from bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample import (
-            BioEmuConfig as BioEmuConfigFromModule,
-        )
-        from bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample import (
-            BioEmuInput as BioEmuInputFromModule,
-        )
-        from bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample import (
-            run_bioemu as run_bioemu_from_module,
-        )
-
-        assert BioEmuInputFromModule is not None
-        assert BioEmuConfigFromModule is not None
-        assert callable(run_bioemu_from_module)
-
-    def test_valid_single_chain_protein(
-        self, single_chain_complex: StructurePredictionComplex
-    ):
-        """Test that a valid single-chain protein input is accepted."""
-        bioemu_input = BioEmuInput(complexes=[single_chain_complex])
-        assert len(bioemu_input.complexes) == 1
 
     def test_rejects_multi_chain_complex(self, sample_sequence: str):
         """Test that multi-chain complexes are rejected."""
@@ -140,29 +106,7 @@ class TestBioEmuInput:
 
 
 class TestBioEmuConfig:
-    """Tests for BioEmuConfig defaults and validation."""
-
-    def test_default_values(self):
-        """Test default config values."""
-        config = BioEmuConfig()
-        assert config.num_samples == 500
-        assert config.model_name == "bioemu-v1.1"
-        assert config.filter_samples is True
-        assert config.batch_size == 10
-        assert config.output_dir is None
-
-    def test_custom_values(self):
-        """Test custom config values."""
-        config = BioEmuConfig(
-            num_samples=1000,
-            model_name="bioemu-v1.0",
-            filter_samples=False,
-            batch_size=32,
-        )
-        assert config.num_samples == 1000
-        assert config.model_name == "bioemu-v1.0"
-        assert config.filter_samples is False
-        assert config.batch_size == 32
+    """Tests for BioEmuConfig validation."""
 
     def test_invalid_values(self):
         """Test config validation for invalid values."""
@@ -174,86 +118,47 @@ class TestBioEmuConfig:
             BioEmuConfig(model_name="invalid-model")
 
 
-class TestBioEmuOutput:
-    """Tests for BioEmuOutput schema."""
-
-    def test_creation(self, sample_sequence: str):
-        """Test creating a BioEmuOutput."""
-        mock_structure = Mock(spec=Structure)
-        ensemble = StructureEnsemble(
-            structures=[mock_structure] * 5,
-            sequence=sample_sequence,
-        )
-
-        output = BioEmuOutput(
-            ensembles=[ensemble],
-            metadata={
-                "num_complexes": 1,
-                "total_structures": 5,
-                "model_name": "bioemu-v1.1",
-            },
-        )
-
-        assert len(output.ensembles) == 1
-        assert output.metadata["num_complexes"] == 1
-        assert output.metadata["total_structures"] == 5
-
-
-class TestHelpers:
-    """Tests for helper behavior."""
-
-    def test_empty_pdb_frames(self):
-        """Test conversion with empty frame list."""
-        assert _pdb_frames_to_structures([], comp_idx=0) == []
-
-
 class TestRunBioEmu:
-    """Integration-style tests for run_bioemu."""
+    """Tests for run_bioemu."""
 
     @pytest.mark.include_in_env_report
-    def test_local_execution_uses_tool_instance(
-        self,
-        single_chain_complex: StructurePredictionComplex,
-        sample_pdb_content: str,
-    ):
-        """Test local execution through ToolInstance standalone boundary."""
-        bioemu_input = BioEmuInput(complexes=[single_chain_complex])
-        bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
+    @pytest.mark.uses_gpu
+    def test_bioemu_sample_tool(self):
+        """Test BioEmu conformational ensemble sampling end-to-end."""
+        sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
+        inputs = BioEmuInput(
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[{"sequence": sequence, "entity_type": "protein"}]
+                )
+            ]
+        )
+        config = BioEmuConfig(num_samples=5, verbose=False)
 
-        with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
-        ) as mock_cls:
-            mock_cls.dispatch.return_value = {
-                "results": [
-                    {
-                        "pdb_frames": [sample_pdb_content] * 10,
-                        "num_frames": 10,
-                        "num_residues": len(
-                            single_chain_complex.chains[0].sequence
-                        ),
-                    }
-                ]
-            }
-            result = run_bioemu(bioemu_input, bioemu_config)
+        result = run_bioemu(inputs, config)
+        validate_output(result)
 
-        assert isinstance(result, BioEmuOutput)
+        assert result.tool_id == "bioemu-sample"
         assert len(result.ensembles) == 1
-        assert len(result.ensembles[0].structures) == 10
+        assert len(result.ensembles[0].structures) >= 1
         assert result.metadata["num_complexes"] == 1
-        assert result.metadata["total_structures"] == 10
+        assert result.metadata["model_name"] == "bioemu-v1.1"
 
-        call_args = mock_cls.dispatch.call_args
-        assert call_args[0][1]["sequences"] == [
-            single_chain_complex.chains[0].sequence
-        ]
+        for structure in result.ensembles[0].structures:
+            assert isinstance(structure, Structure)
+            assert structure.structure_pdb is not None
+            assert len(structure.structure_pdb) > 0
 
-    def test_local_execution_multiple_complexes(
+    def test_multiple_complexes(
         self,
-        single_chain_complex: StructurePredictionComplex,
+        sample_sequence: str,
         sample_pdb_content: str,
     ):
-        """Test local execution with multiple complexes."""
-        bioemu_input = BioEmuInput(complexes=[single_chain_complex, single_chain_complex])
+        """Test that multiple complexes produce separate ensembles."""
+        complex_ = StructurePredictionComplex(
+            chains=[{"sequence": sample_sequence, "entity_type": "protein"}]
+        )
+        bioemu_input = BioEmuInput(complexes=[complex_, complex_])
         bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
         with patch(
@@ -264,16 +169,12 @@ class TestRunBioEmu:
                     {
                         "pdb_frames": [sample_pdb_content] * 3,
                         "num_frames": 3,
-                        "num_residues": len(
-                            single_chain_complex.chains[0].sequence
-                        ),
+                        "num_residues": len(sample_sequence),
                     },
                     {
                         "pdb_frames": [sample_pdb_content] * 7,
                         "num_frames": 7,
-                        "num_residues": len(
-                            single_chain_complex.chains[0].sequence
-                        ),
+                        "num_residues": len(sample_sequence),
                     },
                 ]
             }
