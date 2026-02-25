@@ -30,6 +30,18 @@ IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_dtype",
 ]
 
+# Retry configuration for transient failures (network, timeout, subprocess crashes)
+MAX_RETRIES = 3
+RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
+
+# Exception types that indicate transient/retryable failures
+_RETRYABLE_EXCEPTIONS = (
+    ConnectionError,    # Network failures (includes requests.ConnectionError)
+    TimeoutError,       # Subprocess/worker timeouts (persistent_worker, tool_instance)
+    OSError,            # Low-level socket/pipe errors
+    BrokenPipeError,    # Subprocess worker crash
+)
+
 from bio_programming_tools.utils import BaseConfig
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
@@ -161,72 +173,85 @@ class ToolRegistry:
             @wraps(func)
             def wrapper(inputs: BaseToolInput, config: BaseConfig, instance: ToolInstance | None = None) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
-                # Check external backend first (e.g., remote dispatch)
-                if cls._execution_backend is not None:
-                    backend_result = cls._execution_backend(key, inputs, config)
-                    if backend_result is not None:
-                        backend_result.tool_id = key
-                        if backend_result.timestamp is None:
-                            backend_result.timestamp = datetime.now()
-                        return backend_result
-
-                # Fall through to local execution
                 start_time = time.time()
-                logger.debug(f"Tool {key}: starting execution")
+                last_exception = None
 
-                # Capture warnings during execution
-                with warnings.catch_warnings(record=True) as warning_list:
-                    # Ensure all warnings are captured
-                    warnings.simplefilter("always")
-
+                for attempt in range(1 + MAX_RETRIES):
                     try:
-                        # Execute the tool function
-                        result = func(inputs, config, instance)
+                        # Check external backend first (e.g., remote dispatch)
+                        if cls._execution_backend is not None:
+                            backend_result = cls._execution_backend(key, inputs, config)
+                            if backend_result is not None:
+                                backend_result.tool_id = key
+                                if backend_result.timestamp is None:
+                                    backend_result.timestamp = datetime.now()
+                                return backend_result
 
-                        # Populate metadata fields
-                        result.tool_id = key
-                        result.execution_time = time.time() - start_time
-                        result.success = True
-                        if result.timestamp is None:
-                            result.timestamp = datetime.now()
+                        # Fall through to local execution
+                        if attempt == 0:
+                            logger.debug(f"Tool {key}: starting execution")
 
-                        # Add captured warnings to the result (filtered)
-                        if warning_list:
-                            # Filter out ignored warnings
+                        # Capture warnings during execution
+                        with warnings.catch_warnings(record=True) as warning_list:
+                            # Ensure all warnings are captured
+                            warnings.simplefilter("always")
+
+                            # Execute the tool function
+                            result = func(inputs, config, instance)
+
+                            # Populate metadata fields
+                            result.tool_id = key
+                            result.execution_time = time.time() - start_time
+                            result.success = True
+                            if result.timestamp is None:
+                                result.timestamp = datetime.now()
+
+                            # Add captured warnings to the result (filtered)
+                            if warning_list:
+                                # Filter out ignored warnings
+                                filtered_warnings = [
+                                    w for w in warning_list
+                                    if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                                ]
+
+                                if filtered_warnings:
+                                    captured_warnings = [str(w.message) for w in filtered_warnings]
+                                    result.warnings = result.warnings + captured_warnings
+                                    for w in captured_warnings:
+                                        logger.warning(f"Tool {key}: {w}")
+
+                                    # Re-emit warnings so they still get logged/printed
+                                    _re_emit_warnings(filtered_warnings)
+
+                            logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
+                            return result
+
+                    except _RETRYABLE_EXCEPTIONS as e:
+                        last_exception = e
+                        if attempt < MAX_RETRIES:
+                            delay = RETRY_DELAY * (2 ** attempt)
+                            logger.warning(
+                                f"Tool {key}: transient {type(e).__name__} on attempt "
+                                f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                            )
+                            time.sleep(delay)
+                        # else: fall through to post-loop error handling
+
+                    except Exception as e:
+                        # Non-retryable error — return immediately
+                        try:
                             filtered_warnings = [
                                 w for w in warning_list
                                 if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
                             ]
+                            captured_warnings = [str(w.message) for w in filtered_warnings]
+                            _re_emit_warnings(filtered_warnings)
+                        except UnboundLocalError:
+                            captured_warnings = []
 
-                            if filtered_warnings:
-                                captured_warnings = [str(w.message) for w in filtered_warnings]
-                                result.warnings = result.warnings + captured_warnings
-                                for w in captured_warnings:
-                                    logger.warning(f"Tool {key}: {w}")
-
-                                # Re-emit warnings so they still get logged/printed
-                                _re_emit_warnings(filtered_warnings)
-
-                        logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
-                        return result
-
-                    except Exception as e:
-                        # Capture warnings even on failure (filtered)
-                        filtered_warnings = [
-                            w for w in warning_list
-                            if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                        ]
-                        captured_warnings = [str(w.message) for w in filtered_warnings]
-
-                        # Re-emit warnings before returning error
-                        _re_emit_warnings(filtered_warnings)
-
-                        # Capture traceback
                         full_traceback = traceback.format_exc()
                         logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
 
-                        # Create error output using model_construct to bypass validation
-                        # (This allows us to create an output with only metadata fields populated)
                         error_output = output.model_construct(
                             tool_id=key,
                             execution_time=time.time() - start_time,
@@ -236,6 +261,23 @@ class ToolRegistry:
                             errors=[str(e)] + [full_traceback],
                         )
                         return error_output
+
+                # All retries exhausted for a retryable exception
+                full_traceback = traceback.format_exc()
+                logger.error(
+                    f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
+                    f"{type(last_exception).__name__}: {last_exception}"
+                )
+
+                error_output = output.model_construct(
+                    tool_id=key,
+                    execution_time=time.time() - start_time,
+                    success=False,
+                    timestamp=datetime.now(),
+                    warnings=[],
+                    errors=[str(last_exception)] + [full_traceback],
+                )
+                return error_output
 
             # Register the tool spec with the original function
             cls._registry[key] = ToolSpec(
