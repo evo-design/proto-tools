@@ -34,13 +34,9 @@ IGNORED_WARNING_SUBSTRINGS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
-# Exception types that indicate transient/retryable failures
-# Note: BrokenPipeError is a subclass of ConnectionError, so listing it is redundant.
-# OSError is intentionally excluded — it catches non-transient subclasses like
-# FileNotFoundError and PermissionError that should not be retried.
 _RETRYABLE_EXCEPTIONS = (
-    ConnectionError,    # Network failures, broken pipes (covers BrokenPipeError)
-    TimeoutError,       # Subprocess/worker timeouts (persistent_worker, tool_instance)
+    ConnectionError,
+    TimeoutError,
 )
 
 from bio_programming_tools.utils import BaseConfig
@@ -239,7 +235,6 @@ class ToolRegistry:
                                 f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
                             )
                             time.sleep(delay)
-                        # else: fall through to post-loop error handling
 
                     except Exception as e:
                         # Non-retryable error — return immediately

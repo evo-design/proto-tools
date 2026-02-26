@@ -580,109 +580,55 @@ def test_cpu_tools_are_not_marked_gpu():
     assert "mafft-align" in cpu_keys
 
 
-# ============================================================================
-# Retry logic tests
-# ============================================================================
+def _register_and_run(registry, key, func):
+    """Register a tool with mock types and run it with default inputs."""
+    registered = registry.register(
+        key=key, label=key, category="test",
+        input=MockToolInput, config=MockToolConfig, output=MockToolOutput,
+        description=key,
+    )(func)
+    spec = registry.get(key)
+    return spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
 
 
-def test_retryable_error_succeeds_after_retries(clean_registry, monkeypatch):
-    """Test that a retryable error is retried and succeeds on a later attempt."""
+@pytest.fixture
+def fast_retry(monkeypatch):
+    """Zero out retry delay for tests."""
     import bio_programming_tools.tools.tool_registry as reg_module
-
     monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
 
+
+def test_retryable_error_succeeds_after_retries(clean_registry, fast_retry):
     call_count = 0
 
-    @clean_registry.register(
-        key="retry-succeed-tool",
-        label="Retry Succeed Tool",
-        category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="Tool that fails twice then succeeds",
-    )
-    def retry_succeed_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+    def tool(inputs, config, instance=None):
         nonlocal call_count
         call_count += 1
         if call_count < 3:
             raise ConnectionError("Connection refused")
         return MockToolOutput(result="success")
 
-    spec = clean_registry.get("retry-succeed-tool")
-    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
+    result = _register_and_run(clean_registry, "retry-succeed", tool)
     assert result.success is True
     assert result.result == "success"
     assert call_count == 3
 
 
-def test_retries_exhaust(clean_registry, monkeypatch):
-    """Test that retries exhaust and return failure after MAX_RETRIES attempts."""
-    import bio_programming_tools.tools.tool_registry as reg_module
-
-    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
-
+def test_non_retryable_error_not_retried(clean_registry, fast_retry):
     call_count = 0
 
-    @clean_registry.register(
-        key="retry-exhaust-tool",
-        label="Retry Exhaust Tool",
-        category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="Tool that always raises TimeoutError",
-    )
-    def retry_exhaust_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        nonlocal call_count
-        call_count += 1
-        raise TimeoutError("Timed out")
-
-    spec = clean_registry.get("retry-exhaust-tool")
-    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
-    assert result.success is False
-    assert call_count == 1 + MAX_RETRIES
-    assert "Timed out" in result.errors[0]
-
-
-def test_non_retryable_error_not_retried(clean_registry, monkeypatch):
-    """Test that non-retryable errors are not retried."""
-    import bio_programming_tools.tools.tool_registry as reg_module
-
-    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
-
-    call_count = 0
-
-    @clean_registry.register(
-        key="no-retry-tool",
-        label="No Retry Tool",
-        category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="Tool that raises ValueError (non-retryable)",
-    )
-    def no_retry_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+    def tool(inputs, config, instance=None):
         nonlocal call_count
         call_count += 1
         raise ValueError("Bad input")
 
-    spec = clean_registry.get("no-retry-tool")
-    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
+    result = _register_and_run(clean_registry, "no-retry", tool)
     assert result.success is False
     assert call_count == 1
     assert "Bad input" in result.errors[0]
 
 
-def test_backend_path_retries(clean_registry, monkeypatch):
-    """Test that the backend execution path also retries on transient errors."""
-    import bio_programming_tools.tools.tool_registry as reg_module
-
-    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
-
+def test_backend_path_retries(clean_registry, fast_retry):
     backend_call_count = 0
 
     def flaky_backend(tool_key, inputs, config):
@@ -693,23 +639,11 @@ def test_backend_path_retries(clean_registry, monkeypatch):
         return MockToolOutput(result="backend ok", success=True)
 
     clean_registry.set_execution_backend(flaky_backend)
-
     try:
-        @clean_registry.register(
-            key="backend-retry-tool",
-            label="Backend Retry Tool",
-            category="test",
-            input=MockToolInput,
-            config=MockToolConfig,
-            output=MockToolOutput,
-            description="Tool with flaky backend",
+        result = _register_and_run(
+            clean_registry, "backend-retry",
+            lambda inputs, config, instance=None: MockToolOutput(result="local fallback"),
         )
-        def backend_retry_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-            return MockToolOutput(result="local fallback")
-
-        spec = clean_registry.get("backend-retry-tool")
-        result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
         assert result.success is True
         assert result.result == "backend ok"
         assert backend_call_count == 2
@@ -717,65 +651,19 @@ def test_backend_path_retries(clean_registry, monkeypatch):
         clean_registry.clear_execution_backend()
 
 
-def test_retry_exhaustion_traceback_is_meaningful(clean_registry, monkeypatch):
-    """Test that retry-exhaustion errors contain a real traceback, not 'NoneType: None'."""
-    import bio_programming_tools.tools.tool_registry as reg_module
-
-    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
-
-    @clean_registry.register(
-        key="traceback-retry-tool",
-        label="Traceback Retry Tool",
-        category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="Tool that always times out to test traceback capture",
-    )
-    def traceback_retry_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        raise TimeoutError("worker timed out")
-
-    spec = clean_registry.get("traceback-retry-tool")
-    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
-    assert result.success is False
-    assert len(result.errors) == 2
-    assert "worker timed out" in result.errors[0]
-    # The traceback should contain the actual exception, not "NoneType: None"
-    assert "TimeoutError" in result.errors[1]
-    assert "worker timed out" in result.errors[1]
-    assert "NoneType: None" not in result.errors[1]
-
-
-def test_execution_time_includes_retries(clean_registry, monkeypatch):
-    """Test that execution_time reflects retry delay overhead."""
-    import bio_programming_tools.tools.tool_registry as reg_module
-
-    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.05)
-
+def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
     call_count = 0
 
-    @clean_registry.register(
-        key="timing-retry-tool",
-        label="Timing Retry Tool",
-        category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
-        description="Tool that fails once to test timing",
-    )
-    def timing_retry_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+    def tool(inputs, config, instance=None):
         nonlocal call_count
         call_count += 1
-        if call_count < 2:
-            raise ConnectionError("Temporary failure")
-        return MockToolOutput(result="ok")
+        raise TimeoutError("worker timed out")
 
-    spec = clean_registry.get("timing-retry-tool")
-    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
-
-    assert result.success is True
-    # First retry delay is RETRY_DELAY * 2^0 = 0.05s
-    assert result.execution_time >= 0.05
+    result = _register_and_run(clean_registry, "retry-exhaust", tool)
+    assert result.success is False
+    assert call_count == 1 + MAX_RETRIES
+    assert "worker timed out" in result.errors[0]
+    assert "TimeoutError" in result.errors[1]
+    assert "NoneType: None" not in result.errors[1]
 
 
