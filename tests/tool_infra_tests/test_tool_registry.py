@@ -657,13 +657,29 @@ def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
     def tool(inputs, config, instance=None):
         nonlocal call_count
         call_count += 1
-        raise TimeoutError("worker timed out")
+        raise ConnectionError("connection refused")
 
     result = _register_and_run(clean_registry, "retry-exhaust", tool)
     assert result.success is False
     assert call_count == 1 + MAX_RETRIES
-    assert "worker timed out" in result.errors[0]
-    assert "TimeoutError" in result.errors[1]
+    assert "connection refused" in result.errors[0]
+    assert "ConnectionError" in result.errors[1]
     assert "NoneType: None" not in result.errors[1]
+
+
+def test_timeout_error_not_retried(clean_registry, fast_retry):
+    """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its
+    configured timeout — retrying with the same limit would just time out again."""
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise TimeoutError("worker timed out after 300s")
+
+    result = _register_and_run(clean_registry, "timeout-no-retry", tool)
+    assert result.success is False
+    assert call_count == 1
+    assert "worker timed out" in result.errors[0]
 
 

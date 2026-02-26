@@ -30,14 +30,14 @@ IGNORED_WARNING_SUBSTRINGS = [
     "get_autocast_dtype",
 ]
 
-# Retry configuration for transient failures (network, timeout, subprocess crashes)
+# Retry configuration for transient failures (network drops, subprocess crashes)
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
-_RETRYABLE_EXCEPTIONS = (
-    ConnectionError,
-    TimeoutError,
-)
+# NOTE: TimeoutError is intentionally excluded — ToolInstance and PersistentWorker
+# raise TimeoutError when a tool exceeds its configured timeout, and retrying with
+# the same limit would just time out again.
+_RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
 from bio_programming_tools.utils import BaseConfig
 from bio_programming_tools.utils.tool_instance import ToolInstance
