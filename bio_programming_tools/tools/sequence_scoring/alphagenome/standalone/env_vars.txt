@@ -13,3 +13,6 @@
 # Optional: path to custom AlphaGenome model checkpoint
 # If not set, downloads the default pretrained model
 ALPHAGENOME_CHECKPOINT_PATH
+
+[set]
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
