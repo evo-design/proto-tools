@@ -35,11 +35,12 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
 # Exception types that indicate transient/retryable failures
+# Note: BrokenPipeError is a subclass of ConnectionError, so listing it is redundant.
+# OSError is intentionally excluded — it catches non-transient subclasses like
+# FileNotFoundError and PermissionError that should not be retried.
 _RETRYABLE_EXCEPTIONS = (
-    ConnectionError,    # Network failures (includes requests.ConnectionError)
+    ConnectionError,    # Network failures, broken pipes (covers BrokenPipeError)
     TimeoutError,       # Subprocess/worker timeouts (persistent_worker, tool_instance)
-    OSError,            # Low-level socket/pipe errors
-    BrokenPipeError,    # Subprocess worker crash
 )
 
 from bio_programming_tools.utils import BaseConfig
@@ -175,6 +176,8 @@ class ToolRegistry:
                 """Wrapper that tracks execution and populates metadata."""
                 start_time = time.time()
                 last_exception = None
+                last_traceback = ""
+                warning_list = []
 
                 for attempt in range(1 + MAX_RETRIES):
                     try:
@@ -228,6 +231,7 @@ class ToolRegistry:
 
                     except _RETRYABLE_EXCEPTIONS as e:
                         last_exception = e
+                        last_traceback = traceback.format_exc()
                         if attempt < MAX_RETRIES:
                             delay = RETRY_DELAY * (2 ** attempt)
                             logger.warning(
@@ -239,15 +243,12 @@ class ToolRegistry:
 
                     except Exception as e:
                         # Non-retryable error — return immediately
-                        try:
-                            filtered_warnings = [
-                                w for w in warning_list
-                                if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                            ]
-                            captured_warnings = [str(w.message) for w in filtered_warnings]
-                            _re_emit_warnings(filtered_warnings)
-                        except UnboundLocalError:
-                            captured_warnings = []
+                        filtered_warnings = [
+                            w for w in warning_list
+                            if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                        ]
+                        captured_warnings = [str(w.message) for w in filtered_warnings]
+                        _re_emit_warnings(filtered_warnings)
 
                         full_traceback = traceback.format_exc()
                         logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
@@ -263,7 +264,7 @@ class ToolRegistry:
                         return error_output
 
                 # All retries exhausted for a retryable exception
-                full_traceback = traceback.format_exc()
+                full_traceback = last_traceback
                 logger.error(
                     f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
                     f"{type(last_exception).__name__}: {last_exception}"
