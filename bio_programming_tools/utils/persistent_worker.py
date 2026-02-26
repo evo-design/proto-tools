@@ -123,29 +123,6 @@ def _parse_env_vars_file(
     return result
 
 
-def _discover_tool_ld_library_paths(tool_env_path: Path | str | None) -> list[str]:
-    """Discover CUDA-related library directories from a tool venv."""
-    if not tool_env_path:
-        return []
-
-    env_path = Path(tool_env_path)
-    candidates: list[Path] = [
-        env_path / "cuda_env" / "lib",
-        env_path / "cuda_env" / "lib64",
-    ]
-    candidates.extend(env_path.glob("lib/python*/site-packages/nvidia/*/lib"))
-
-    found: list[str] = []
-    seen: set[str] = set()
-    for path in candidates:
-        if path.is_dir():
-            as_str = str(path)
-            if as_str not in seen:
-                seen.add(as_str)
-                found.append(as_str)
-    return found
-
-
 def _build_subprocess_env(
     device: str = "cpu",
     tool_env_path: Path | str | None = None,
@@ -163,13 +140,9 @@ def _build_subprocess_env(
     device
         Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
     tool_env_path
-        Path to the tool's isolated venv.  Used to reconstruct PATH
-        and LD_LIBRARY_PATH.
+        Path to the tool's isolated venv.  Used to reconstruct PATH.
     tool_env_vars
         Parsed env_vars.txt contents (from :func:`_parse_env_vars_file`).
-        ``"passthrough"`` entries are copied from the parent env;
-        ``"set"`` entries are literal ``KEY=VALUE`` assignments with
-        optional ``${VENV_PATH}`` interpolation.
     """
     from .system_info import capture_subprocess_env
 
@@ -190,26 +163,21 @@ def _build_subprocess_env(
     path_parts.extend(_SYSTEM_PATH_DIRS)
     env["PATH"] = ":".join(path_parts)
 
-    # 3. Reconstruct LD_LIBRARY_PATH from venv CUDA libs only (no parent)
-    tool_ld_paths = _discover_tool_ld_library_paths(tool_env_path)
-    if tool_ld_paths:
-        env["LD_LIBRARY_PATH"] = ":".join(tool_ld_paths)
-
-    # 4. Device visibility
+    # 3. Device visibility
     env["CUDA_VISIBLE_DEVICES"] = determine_visible_devices(device=device)
     if device == "cpu":
         env["JAX_PLATFORMS"] = "cpu"
 
-    # 5. Per-venv torch cache isolation
+    # 4. Per-venv torch cache isolation
     if tool_env_path:
         env["TORCH_HOME"] = str(Path(tool_env_path) / "cache" / "torch")
 
-    # 6. Inject compute environment detection (hardware-aware PyTorch/JAX specs)
+    # 5. Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from .compute_deps import detect_compute_environment
     compute_env = detect_compute_environment()
     env.update(compute_env)
 
-    # 7. Apply tool-specific env vars from env_vars.txt
+    # 6. Apply tool-specific env vars from env_vars.txt
     if tool_env_vars:
         venv_str = str(Path(tool_env_path)) if tool_env_path else ""
 

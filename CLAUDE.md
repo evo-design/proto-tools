@@ -29,6 +29,24 @@ pre-commit install
 isort bio_programming_tools
 ```
 
+## Keeping Docs in Sync
+
+When a code change alters behavior documented in this file or any `SKILL.md`, update the docs in the same change. Key mappings:
+
+| Code area | Update in |
+|---|---|
+| `utils/persistent_worker.py` | CLAUDE.md (env_vars.txt sections, Tool Execution & Persistence) |
+| `utils/compute_deps.py` | CLAUDE.md (Compute Dependency Management, compatibility matrices) |
+| `utils/tool_instance.py` | CLAUDE.md (Tool Execution & Persistence) |
+| `utils/tool_io.py`, `tools/tool_registry.py` | CLAUDE.md (Universal Tool Pattern, Key File Paths) |
+| `utils/install_binary.py` | CLAUDE.md (Binary Installation) |
+| `standalone/env_vars.txt` (any tool) | CLAUDE.md (env_vars.txt sections — update tool lists if adding/removing `[set]` LD_LIBRARY_PATH) |
+| `standalone/setup.sh` patterns | CLAUDE.md (Standard PyTorch/JAX setup pattern, Cache Management), `fix-env` SKILL.md |
+| `standalone/python_version.txt` | CLAUDE.md (Python Version Specification) |
+| New tool added/removed | CLAUDE.md (Package Hierarchy if structure changes), Key File Paths |
+| New skills or commands added | CLAUDE.md Skills & Commands section |
+| pytest markers, test patterns | CLAUDE.md Configuration |
+
 ## Architecture
 
 ### Package Hierarchy
@@ -189,6 +207,14 @@ uv pip install "${JAX_SPEC}"
 **Tool-specific overrides:**
 
 Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`). This allows per-tool customization while maintaining the centralized detection infrastructure.
+
+**env_vars.txt sections:**
+
+Each tool's `standalone/env_vars.txt` supports two sections:
+- `[passthrough]` — Variable names copied from the parent environment (e.g., `HF_TOKEN`)
+- `[set]` — Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
+
+`LD_LIBRARY_PATH` is **not** auto-set. Tools that need it must declare it via `[set]` (currently: evo1, alphagenome).
 
 **Pinned-version tools:**
 

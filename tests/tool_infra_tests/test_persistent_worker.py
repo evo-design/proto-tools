@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import textwrap
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -305,6 +306,14 @@ class TestProcessGroupCleanup:
 
             # Both the worker and its child should be dead
             assert not worker.alive
+            # Poll briefly — the child may take a moment to be reaped after
+            # the process group receives SIGTERM.
+            for _ in range(50):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.1)
             with pytest.raises(ProcessLookupError):
                 os.kill(child_pid, 0)
         finally:
@@ -426,6 +435,7 @@ class TestParseEnvVarsFile:
         assert result == {"passthrough": [], "set": []}
 
 
+
 # ============================================================================
 # Tests for _build_subprocess_env (whitelist-based)
 # ============================================================================
@@ -527,17 +537,34 @@ class TestCleanEnv:
 
         assert "LD_LIBRARY_PATH" not in env
 
-    def test_ld_library_path_from_venv_cuda_libs(self, monkeypatch, tmp_path: Path):
-        """LD_LIBRARY_PATH should include venv CUDA libs only."""
+    def test_ld_library_path_not_auto_set(self, monkeypatch, tmp_path: Path):
+        """LD_LIBRARY_PATH should NOT be auto-discovered from venv CUDA libs."""
         monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/conda/lib")
 
+        # Even with cuda_env/lib present, no auto-discovery should happen
         cuda_env_lib = tmp_path / "cuda_env" / "lib"
         cuda_env_lib.mkdir(parents=True)
 
         env = _build_subprocess_env(device="cuda", tool_env_path=tmp_path)
 
-        assert env["LD_LIBRARY_PATH"] == str(cuda_env_lib)
-        assert "/opt/conda/lib" not in env["LD_LIBRARY_PATH"]
+        assert "LD_LIBRARY_PATH" not in env
+
+    def test_ld_library_path_via_set_directive(self, tmp_path: Path):
+        """Tools can explicitly set LD_LIBRARY_PATH via [set] in env_vars.txt."""
+        tool_env_vars = {
+            "passthrough": [],
+            "set": [
+                "LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib:${VENV_PATH}/cuda_env/lib64"
+            ],
+        }
+        env = _build_subprocess_env(
+            device="cuda",
+            tool_env_path=tmp_path,
+            tool_env_vars=tool_env_vars,
+        )
+
+        expected = f"{tmp_path}/cuda_env/lib:{tmp_path}/cuda_env/lib64"
+        assert env["LD_LIBRARY_PATH"] == expected
 
     def test_torch_home_set_per_venv(self, tmp_path: Path):
         """TORCH_HOME should be set to {venv}/cache/torch."""

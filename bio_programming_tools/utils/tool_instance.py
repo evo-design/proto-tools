@@ -753,6 +753,13 @@ class ToolInstance:
                     stdout=None if verbose else subprocess.PIPE,
                     stderr=None if verbose else subprocess.PIPE,
                 )
+            except subprocess.CalledProcessError as e:
+                tail = self._stderr_tail(e.stderr or e.stdout or "")
+                logger.error(
+                    "Tool %s failed (exit %d):\n%s",
+                    self.tool_name, e.returncode, tail,
+                )
+                raise
             except subprocess.TimeoutExpired:
                 raise TimeoutError(
                     f"Tool {self.tool_name} timed out after {effective_timeout}s"
@@ -822,7 +829,6 @@ class ToolInstance:
         mamba_root.mkdir(parents=True, exist_ok=True)
 
         import platform
-
         system = platform.system()
         arch = platform.machine()
 
@@ -1101,9 +1107,9 @@ class ToolInstance:
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
         )
-        combined_output, _ = proc.communicate()
+        raw_output, _ = proc.communicate()
+        combined_output = raw_output.decode("utf-8", errors="replace") if raw_output else ""
 
         if proc.returncode == 0:
             status_file.write_text(
