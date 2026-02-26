@@ -12,9 +12,13 @@ import time
 import pytest
 from pydantic import Field
 
-from bio_programming_tools.utils.tool_io import BaseToolInput
-from bio_programming_tools.tools.tool_registry import ToolRegistry, ToolSpec
+from bio_programming_tools.tools.tool_registry import (
+    MAX_RETRIES,
+    ToolRegistry,
+    ToolSpec,
+)
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
@@ -574,5 +578,108 @@ def test_cpu_tools_are_not_marked_gpu():
     # Spot check known CPU tools
     assert "blast-search" in cpu_keys
     assert "mafft-align" in cpu_keys
+
+
+def _register_and_run(registry, key, func):
+    """Register a tool with mock types and run it with default inputs."""
+    registry.register(
+        key=key, label=key, category="test",
+        input=MockToolInput, config=MockToolConfig, output=MockToolOutput,
+        description=key,
+    )(func)
+    spec = registry.get(key)
+    return spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
+
+
+@pytest.fixture
+def fast_retry(monkeypatch):
+    """Zero out retry delay for tests."""
+    import bio_programming_tools.tools.tool_registry as reg_module
+    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
+
+
+def test_retryable_error_succeeds_after_retries(clean_registry, fast_retry):
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            raise ConnectionError("Connection refused")
+        return MockToolOutput(result="success")
+
+    result = _register_and_run(clean_registry, "retry-succeed", tool)
+    assert result.success is True
+    assert result.result == "success"
+    assert call_count == 3
+
+
+def test_non_retryable_error_not_retried(clean_registry, fast_retry):
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise ValueError("Bad input")
+
+    result = _register_and_run(clean_registry, "no-retry", tool)
+    assert result.success is False
+    assert call_count == 1
+    assert "Bad input" in result.errors[0]
+
+
+def test_backend_path_retries(clean_registry, fast_retry):
+    backend_call_count = 0
+
+    def flaky_backend(tool_key, inputs, config):
+        nonlocal backend_call_count
+        backend_call_count += 1
+        if backend_call_count < 2:
+            raise ConnectionError("Backend connection lost")
+        return MockToolOutput(result="backend ok", success=True)
+
+    clean_registry.set_execution_backend(flaky_backend)
+    try:
+        result = _register_and_run(
+            clean_registry, "backend-retry",
+            lambda inputs, config, instance=None: MockToolOutput(result="local fallback"),
+        )
+        assert result.success is True
+        assert result.result == "backend ok"
+        assert backend_call_count == 2
+    finally:
+        clean_registry.clear_execution_backend()
+
+
+def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise ConnectionError("connection refused")
+
+    result = _register_and_run(clean_registry, "retry-exhaust", tool)
+    assert result.success is False
+    assert call_count == 1 + MAX_RETRIES
+    assert "connection refused" in result.errors[0]
+    assert "ConnectionError" in result.errors[1]
+    assert "NoneType: None" not in result.errors[1]
+
+
+def test_timeout_error_not_retried(clean_registry, fast_retry):
+    """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its
+    configured timeout — retrying with the same limit would just time out again."""
+    call_count = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal call_count
+        call_count += 1
+        raise TimeoutError("worker timed out after 300s")
+
+    result = _register_and_run(clean_registry, "timeout-no-retry", tool)
+    assert result.success is False
+    assert call_count == 1
+    assert "worker timed out" in result.errors[0]
 
 
