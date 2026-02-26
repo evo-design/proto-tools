@@ -582,7 +582,7 @@ def test_cpu_tools_are_not_marked_gpu():
 
 def _register_and_run(registry, key, func):
     """Register a tool with mock types and run it with default inputs."""
-    registered = registry.register(
+    registry.register(
         key=key, label=key, category="test",
         input=MockToolInput, config=MockToolConfig, output=MockToolOutput,
         description=key,
