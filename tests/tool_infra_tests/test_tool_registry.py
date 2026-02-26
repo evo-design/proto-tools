@@ -717,6 +717,36 @@ def test_backend_path_retries(clean_registry, monkeypatch):
         clean_registry.clear_execution_backend()
 
 
+def test_retry_exhaustion_traceback_is_meaningful(clean_registry, monkeypatch):
+    """Test that retry-exhaustion errors contain a real traceback, not 'NoneType: None'."""
+    import bio_programming_tools.tools.tool_registry as reg_module
+
+    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
+
+    @clean_registry.register(
+        key="traceback-retry-tool",
+        label="Traceback Retry Tool",
+        category="test",
+        input=MockToolInput,
+        config=MockToolConfig,
+        output=MockToolOutput,
+        description="Tool that always times out to test traceback capture",
+    )
+    def traceback_retry_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        raise TimeoutError("worker timed out")
+
+    spec = clean_registry.get("traceback-retry-tool")
+    result = spec.function(MockToolInput(input_data="test"), MockToolConfig(param1="v"))
+
+    assert result.success is False
+    assert len(result.errors) == 2
+    assert "worker timed out" in result.errors[0]
+    # The traceback should contain the actual exception, not "NoneType: None"
+    assert "TimeoutError" in result.errors[1]
+    assert "worker timed out" in result.errors[1]
+    assert "NoneType: None" not in result.errors[1]
+
+
 def test_execution_time_includes_retries(clean_registry, monkeypatch):
     """Test that execution_time reflects retry delay overhead."""
     import bio_programming_tools.tools.tool_registry as reg_module
