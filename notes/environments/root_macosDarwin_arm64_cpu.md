@@ -16,8 +16,8 @@
 
 ## Git
 
-- **Commit**: `cbc0b961f0df`
-- **Branch**: `dguo/bioemu-py311-fix`
+- **Commit**: `ab8a09d645b0`
+- **Branch**: `main`
 - **Dirty**: No
 
 ## Environment Variables
@@ -25,6 +25,12 @@
 ### Parent Process Environment
 
 ```
+AR=arm64-apple-darwin20.0.0-ar
+AS=arm64-apple-darwin20.0.0-as
+CHECKSYMS=arm64-apple-darwin20.0.0-checksyms
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 COLORTERM=truecolor
 COMMAND_MODE=unix2003
 CONDA_CHANGEPS1=false
@@ -35,28 +41,50 @@ CONDA_PREFIX_1=/opt/miniconda3
 CONDA_PROMPT_MODIFIER=
 CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
 CONDA_SHLVL=2
+COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
 DISPLAY=/private/tmp/com.apple.launchd.4rcYEp7e88/org.xquartz:0
+GIT_EDITOR=true
+GSETTINGS_SCHEMA_DIR=/opt/miniconda3/envs/bio-programming/share/glib-2.0/schemas
+GSETTINGS_SCHEMA_DIR_CONDA_BACKUP=
 HOME=/Users/danielguo
 HOMEBREW_CELLAR=/opt/homebrew/Cellar
 HOMEBREW_PREFIX=/opt/homebrew
 HOMEBREW_REPOSITORY=/opt/homebrew
 INFOPATH=/opt/homebrew/share/info:/opt/homebrew/share/info:
+INSTALL_NAME_TOOL=arm64-apple-darwin20.0.0-install_name_tool
 LANG=en_US.UTF-8
+LD=arm64-apple-darwin20.0.0-ld
+LIBTOOL=arm64-apple-darwin20.0.0-libtool
+LIPO=arm64-apple-darwin20.0.0-lipo
 LOGNAME=danielguo
+NM=arm64-apple-darwin20.0.0-nm
+NMEDIT=arm64-apple-darwin20.0.0-nmedit
 NVM_BIN=/Users/danielguo/.nvm/versions/node/v22.14.0/bin
 NVM_CD_FLAGS=-q
 NVM_DIR=/Users/danielguo/.nvm
 NVM_INC=/Users/danielguo/.nvm/versions/node/v22.14.0/include/node
-OLDPWD=/Users/danielguo/Research/darwin/bio-programming
+NoDefaultCurrentDirectoryInExePath=1
+OLDPWD=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools
 OSLogRateLimit=64
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
+OTOOL=arm64-apple-darwin20.0.0-otool
+PAGESTUFF=arm64-apple-darwin20.0.0-pagestuff
 PATH=/Users/danielguo/.local/bin:/opt/homebrew/opt/gnu-getopt/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/danielguo/.local/bin:/Users/danielguo/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/opt/gnu-get...
 PWD=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
+RANLIB=arm64-apple-darwin20.0.0-ranlib
 RDBASE=/opt/miniconda3/envs/bio-programming/lib/python3.12/site-packages/rdkit
+REDO_PREBINDING=arm64-apple-darwin20.0.0-redo_prebinding
+SEGEDIT=arm64-apple-darwin20.0.0-segedit
+SEG_ADDR_TABLE=arm64-apple-darwin20.0.0-seg_addr_table
+SEG_HACK=arm64-apple-darwin20.0.0-seg_hack
 SHELL=/bin/zsh
-SHLVL=2
+SHLVL=3
+SIZE=arm64-apple-darwin20.0.0-size
+STRINGS=arm64-apple-darwin20.0.0-strings
+STRIP=arm64-apple-darwin20.0.0-strip
 TERM=xterm-256color
 TERM_PROGRAM=WarpTerminal
 TERM_PROGRAM_VERSION=v0.2026.02.18.08.22.stable_02
@@ -65,9 +93,10 @@ USER=danielguo
 WARP_HONOR_PS1=0
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
+XML_CATALOG_FILES=file:///opt/miniconda3/envs/bio-programming/etc/xml/catalog file:///etc/xml/catalog
 XPC_FLAGS=0x0
 XPC_SERVICE_NAME=0
-_=/opt/miniconda3/envs/bio-programming/bin/pytest
+_=/opt/miniconda3/envs/bio-programming/bin/python
 _CE_CONDA=
 _CE_M=
 __CFBundleIdentifier=dev.warp.Warp-Stable
@@ -77,22 +106,22 @@ __CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_DEFAULT_ENV=bio-programming
-CONDA_PREFIX=/opt/miniconda3/envs/bio-programming
-CONDA_SHLVL=2
+CONDA_PREFIX=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env
 CUDA_VISIBLE_DEVICES=
 DETECTED_COMPUTE_PLATFORM=cpu
 HOME=/Users/danielguo
 JAX_PLATFORMS=cpu
 LANG=en_US.UTF-8
+LD_LIBRARY_PATH=/opt/miniconda3/envs/bio-programming/lib
 LOGNAME=danielguo
-PATH=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env/bin:/Users/danielguo/.local/bin:/opt/homebrew/opt/gnu-getopt/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Us...
 RECOMMENDED_JAX_SPEC=jax
 RECOMMENDED_TORCH_SPEC=torch
 SHELL=/bin/zsh
 TMPDIR=/var/folders/rs/6dqw0_k1125fl7f7_9h85hgh0000gn/T/
 TORCH_HOME=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env/cache/torch
 USER=danielguo
+VIRTUAL_ENV=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env
 ```
 
 ## Results by Category
@@ -101,46 +130,46 @@ USER=danielguo
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 56.6s | ✅ Pass |
-| `minced` | no | ✅ | 13.8s | ✅ Pass |
-| `mmseqs` | no | ✅ | 18.2s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 15.0s | ✅ Pass |
+| `blast` | no | ✅ | 79.6s | ✅ Pass |
+| `minced` | no | ✅ | 12.5s | ✅ Pass |
+| `mmseqs` | no | ✅ | 15.8s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 12.1s | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 17.2s | ✅ Pass |
-| `prodigal` | no | ✅ | 14.3s | ✅ Pass |
+| `orfipy` | no | ✅ | 14.0s | ✅ Pass |
+| `prodigal` | no | ✅ | 11.3s | ✅ Pass |
 
 ### Sequence Alignment (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `mafft` | no | ✅ | 19.1s | ✅ Pass |
+| `mafft` | no | ✅ | 22.5s | ✅ Pass |
 
 ### Structure Alignment (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `tmalign` | no | ✅ | 18.7s | ✅ Pass |
+| `tmalign` | no | ✅ | 14.2s | ✅ Pass |
 | `tmalign` | no | ✅ | 0.1s | ✅ Pass |
-| `usalign` | no | ✅ | 21.9s | ✅ Pass |
+| `usalign` | no | ✅ | 17.1s | ✅ Pass |
 | `usalign` | no | ✅ | 0.1s | ✅ Pass |
 
 ### Structure Prediction (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `viennarna` | no | ✅ | 13.8s | ✅ Pass |
+| `viennarna` | no | ✅ | 10.2s | ✅ Pass |
 
 ### Unknown (3/3)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `crispr_tracr` | no | ✅ | 230.3s | ✅ Pass |
-| `local_colabfold_search` | no | — | 38.2s | ✅ Pass |
-| `structure_metrics` | no | ✅ | 19.2s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 244.1s | ✅ Pass |
+| `local_colabfold_search` | no | — | 34.6s | ✅ Pass |
+| `structure_metrics` | no | ✅ | 16.8s | ✅ Pass |
 
 ---
-*Generated at 2026-02-25 01:05:37 by `pytest --env-report`*
+*Generated at 2026-02-26 23:49:41 by `pytest --env-report`*
