@@ -1053,8 +1053,8 @@ class ToolInstance:
         """Create (or rebuild) the tool's isolated environment.
 
         Removes a broken existing env, creates a fresh one via
-        ``micromamba create``, runs ``standalone/setup.sh`` inside it, and
-        writes STATUS.txt to record success or failure.
+        ``micromamba create``, runs ``standalone/setup.sh`` with the tool
+        env on PATH, and writes STATUS.txt to record success or failure.
         """
         status_file = self.env_path / "STATUS.txt"
 
@@ -1086,7 +1086,8 @@ class ToolInstance:
             capture_output=True,
         )
 
-        # Run setup.sh via micromamba run
+        # Run setup.sh directly (not via micromamba run, which overwrites PATH
+        # and strips conda prefix — breaking access to git, curl, gcc, etc.)
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
         env = _build_subprocess_env(
             self.device,
@@ -1099,10 +1100,7 @@ class ToolInstance:
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
 
         proc = subprocess.Popen(
-            [
-                str(mamba_bin), "run", "-p", str(self.env_path),
-                "bash", str(self.setup_script)
-            ],
+            ["bash", str(self.setup_script)],
             cwd=self.setup_script.parent,
             env=env,
             stdout=subprocess.PIPE,

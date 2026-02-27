@@ -237,7 +237,11 @@ Each tool's `standalone/env_vars.txt` supports two sections:
 - `[passthrough]` — Variable names copied from the parent environment (e.g., `HF_TOKEN`)
 - `[set]` — Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
 
-`LD_LIBRARY_PATH` is **not** auto-set. Tools that need it must declare it via `[set]` (currently: evo1, alphagenome).
+**Auto-set environment variables** (always injected by `_build_subprocess_env()`):
+- `CONDA_PREFIX` — set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
+- `VIRTUAL_ENV` — set to the **tool env path** for uv >=0.10 compatibility (uv doesn't recognise micromamba-created envs via CONDA_PREFIX alone)
+- `PATH` — `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs. Parent PATH is carried over to preserve HPC module-loaded tools (git, gcc, curl, etc.) and conda/bin
+- `LD_LIBRARY_PATH` — tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (libgomp, libstdc++). Parent LD is carried over to preserve NVIDIA driver, CUDA, and HPC module-loaded libs
 
 **Pinned-version tools:**
 

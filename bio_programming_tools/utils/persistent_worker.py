@@ -59,10 +59,6 @@ _BASE_PASSTHROUGH = {
     "http_proxy",
     "https_proxy",
     "no_proxy",
-    # Conda/Micromamba environment info — needed for micromamba-created environments
-    "CONDA_PREFIX",
-    "CONDA_DEFAULT_ENV",
-    "CONDA_SHLVL",
 }
 
 # Standard system binary dirs — always present in reconstructed PATH
@@ -154,13 +150,18 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
-    # 2. Reconstruct PATH: venv/bin + (cuda bin for GPU) + system dirs
+    # 2. Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
     path_parts: list[str] = []
     if tool_env_path:
         path_parts.append(str(Path(tool_env_path) / "bin"))
     if device != "cpu":
         path_parts.append(_CUDA_BIN_DIR)
-    path_parts.extend(_SYSTEM_PATH_DIRS)
+    for p in os.environ.get("PATH", "").split(":"):
+        if p and p not in path_parts:
+            path_parts.append(p)
+    for d in _SYSTEM_PATH_DIRS:
+        if d not in path_parts:
+            path_parts.append(d)
     env["PATH"] = ":".join(path_parts)
 
     # 3. Device visibility
@@ -198,6 +199,40 @@ def _build_subprocess_env(
                 continue
             key, val = entry.split("=", 1)
             env[key] = val.replace("${VENV_PATH}", venv_str)
+
+    # 7. Point CONDA_PREFIX and VIRTUAL_ENV at the tool env (not the parent).
+    #    Read parent CONDA_PREFIX first — needed for conda/lib in step 8.
+    #    VIRTUAL_ENV needed because uv >=0.10 ignores CONDA_PREFIX for
+    #    micromamba-created envs.
+    parent_conda_prefix = os.environ.get("CONDA_PREFIX")
+    if tool_env_path:
+        env["CONDA_PREFIX"] = str(Path(tool_env_path))
+        env["VIRTUAL_ENV"] = str(Path(tool_env_path))
+
+    # 8. Build LD_LIBRARY_PATH: tool [set] > parent LD > conda/lib
+    ld_parts: list[str] = []
+
+    # Tool-specific [set] LD_LIBRARY_PATH goes first (already in env from step 6)
+    existing_ld = env.get("LD_LIBRARY_PATH", "")
+    if existing_ld:
+        ld_parts.extend(existing_ld.split(":"))
+
+    # Parent LD_LIBRARY_PATH (NVIDIA driver, CUDA, module-loaded libs, MKL, etc.)
+    parent_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    for p in parent_ld.split(":"):
+        if p and p not in ld_parts:
+            ld_parts.append(p)
+
+    # Conda shared libs (libgomp, libstdc++, etc.) — may not be in parent LD
+    if parent_conda_prefix:
+        conda_lib = str(Path(parent_conda_prefix) / "lib")
+        if conda_lib not in ld_parts:
+            ld_parts.append(conda_lib)
+
+    if ld_parts:
+        env["LD_LIBRARY_PATH"] = ":".join(ld_parts)
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
 
     # Capture for environment reporting
     capture_subprocess_env(env)
