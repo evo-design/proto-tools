@@ -182,19 +182,18 @@ class TestPersistentWorkerBasic:
 class TestLegacyDispatch:
     """Tests for the legacy dispatch pattern (run_{operation} functions)."""
 
-    def test_legacy_greet(self, legacy_script: Path):
+    @pytest.mark.parametrize(
+        "op, name, expected",
+        [
+            ("greet", "Alice", {"greeting": "hello Alice"}),
+            ("farewell", "Bob", {"farewell": "goodbye Bob"}),
+        ],
+    )
+    def test_legacy_dispatch(self, legacy_script: Path, op, name, expected):
         worker = _make_worker(legacy_script)
         try:
-            result = worker.send({"operation": "greet", "name": "Alice"})
-            assert result == {"greeting": "hello Alice"}
-        finally:
-            worker.stop()
-
-    def test_legacy_farewell(self, legacy_script: Path):
-        worker = _make_worker(legacy_script)
-        try:
-            result = worker.send({"operation": "farewell", "name": "Bob"})
-            assert result == {"farewell": "goodbye Bob"}
+            result = worker.send({"operation": op, "name": name})
+            assert result == expected
         finally:
             worker.stop()
 
@@ -443,114 +442,152 @@ class TestCleanEnv:
     """Tests for whitelist-based subprocess environment construction."""
 
     def test_non_whitelisted_vars_are_absent(self, monkeypatch):
-        """Jupyter, mamba root, and arbitrary vars must not leak.
+        """Conda activation vars, jupyter, mamba, and arbitrary vars must not leak."""
+        leaked = {
+            "CONDA_PREFIX": "/opt/conda",
+            "CONDA_DEFAULT_ENV": "base",
+            "CONDA_SHLVL": "4",
+            "MAMBA_ROOT_PREFIX": "/opt/mamba",
+            "JPY_PARENT_PID": "12345",
+            "RDBASE": "/opt/rdkit",
+            "SOME_RANDOM_VAR": "leaked",
+        }
+        for k, v in leaked.items():
+            monkeypatch.setenv(k, v)
 
-        Note: CONDA_PREFIX, CONDA_DEFAULT_ENV, and CONDA_SHLVL are now
-        intentionally passed through to support micromamba-created environments.
-        """
-        monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
-        monkeypatch.setenv("CONDA_DEFAULT_ENV", "base")
-        monkeypatch.setenv("CONDA_SHLVL", "4")
-        monkeypatch.setenv("MAMBA_ROOT_PREFIX", "/opt/mamba")
-        monkeypatch.setenv("JPY_PARENT_PID", "12345")
-        monkeypatch.setenv("RDBASE", "/opt/rdkit")
-        monkeypatch.setenv("SOME_RANDOM_VAR", "leaked")
-
+        # Without tool_env_path, none of these should appear
         env = _build_subprocess_env(device="cpu")
-
-        # CONDA_PREFIX, CONDA_DEFAULT_ENV, CONDA_SHLVL are now whitelisted
-        assert env.get("CONDA_PREFIX") == "/opt/conda"
-        assert env.get("CONDA_DEFAULT_ENV") == "base"
-        assert env.get("CONDA_SHLVL") == "4"
-        # But these should still be filtered out
-        assert "MAMBA_ROOT_PREFIX" not in env
-        assert "JPY_PARENT_PID" not in env
-        assert "RDBASE" not in env
-        assert "SOME_RANDOM_VAR" not in env
+        for var in leaked:
+            assert var not in env, f"{var} leaked into subprocess env"
 
     def test_base_whitelist_vars_present(self, monkeypatch):
         """Whitelisted vars should be passed through when set."""
         monkeypatch.setenv("HOME", "/home/test")
         monkeypatch.setenv("LANG", "en_US.UTF-8")
         monkeypatch.setenv("HTTP_PROXY", "http://proxy:8080")
-        monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
-        monkeypatch.setenv("CONDA_DEFAULT_ENV", "base")
-        monkeypatch.setenv("CONDA_SHLVL", "2")
 
         env = _build_subprocess_env(device="cpu")
 
         assert env["HOME"] == "/home/test"
         assert env["LANG"] == "en_US.UTF-8"
         assert env["HTTP_PROXY"] == "http://proxy:8080"
-        # Conda variables needed for micromamba environments
-        assert env["CONDA_PREFIX"] == "/opt/conda"
-        assert env["CONDA_DEFAULT_ENV"] == "base"
-        assert env["CONDA_SHLVL"] == "2"
 
     def test_missing_whitelist_vars_not_added(self, monkeypatch):
         """Whitelisted vars not in parent env should not appear."""
         monkeypatch.delenv("HTTP_PROXY", raising=False)
         monkeypatch.delenv("HTTPS_PROXY", raising=False)
-        monkeypatch.delenv("CONDA_PREFIX", raising=False)
-        monkeypatch.delenv("CONDA_DEFAULT_ENV", raising=False)
-        monkeypatch.delenv("CONDA_SHLVL", raising=False)
 
         env = _build_subprocess_env(device="cpu")
 
         assert "HTTP_PROXY" not in env
         assert "HTTPS_PROXY" not in env
-        assert "CONDA_PREFIX" not in env
-        assert "CONDA_DEFAULT_ENV" not in env
-        assert "CONDA_SHLVL" not in env
 
-    def test_path_reconstructed_without_conda(self, monkeypatch, tmp_path: Path):
-        """PATH should be reconstructed from venv/bin + system dirs, no conda."""
-        monkeypatch.setenv("PATH", "/opt/conda/bin:/usr/bin:/bin")
+    # -- PATH construction --
+
+    @pytest.mark.parametrize("device, expect_cuda", [("cpu", False), ("cuda", True)])
+    def test_path_ordering(self, monkeypatch, tmp_path: Path, device, expect_cuda):
+        """PATH: venv/bin > (cuda if GPU) > parent PATH > system dirs."""
+        monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
+        monkeypatch.setenv("PATH", "/opt/conda/bin:/opt/module/bin:/usr/bin:/bin")
+
+        env = _build_subprocess_env(device=device, tool_env_path=tmp_path)
+
+        path_parts = env["PATH"].split(":")
+        assert path_parts[0] == str(tmp_path / "bin")
+        # Parent PATH entries carried over (including conda/bin from parent)
+        assert "/opt/conda/bin" in path_parts
+        assert "/opt/module/bin" in path_parts
+        assert ("/usr/local/cuda/bin" in path_parts) == expect_cuda
+        if expect_cuda:
+            cuda_idx = path_parts.index("/usr/local/cuda/bin")
+            conda_idx = path_parts.index("/opt/conda/bin")
+            assert cuda_idx < conda_idx  # cuda/bin before parent PATH
+
+    def test_path_without_conda_prefix(self, monkeypatch, tmp_path: Path):
+        """Without CONDA_PREFIX, no conda bin in PATH; parent PATH still carried over."""
+        monkeypatch.delenv("CONDA_PREFIX", raising=False)
+        monkeypatch.setenv("PATH", "/opt/hpc/bin:/usr/bin:/bin")
 
         env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
 
         path_parts = env["PATH"].split(":")
         assert path_parts[0] == str(tmp_path / "bin")
-        assert "/opt/conda/bin" not in path_parts
-        assert "/usr/bin" in path_parts
-        assert "/bin" in path_parts
+        assert "/opt/hpc/bin" in path_parts  # parent PATH entry carried over
 
-    def test_path_includes_cuda_for_gpu(self, monkeypatch, tmp_path: Path):
-        """GPU device should add /usr/local/cuda/bin to PATH."""
-        env = _build_subprocess_env(device="cuda", tool_env_path=tmp_path)
+    # -- CONDA_PREFIX / VIRTUAL_ENV --
 
-        path_parts = env["PATH"].split(":")
-        assert "/usr/local/cuda/bin" in path_parts
+    @pytest.mark.parametrize(
+        "has_tool_env",
+        [True, False],
+        ids=["with_tool_env", "without_tool_env"],
+    )
+    def test_conda_prefix_and_virtual_env(self, monkeypatch, tmp_path: Path, has_tool_env):
+        """CONDA_PREFIX/VIRTUAL_ENV point to tool env when provided, absent otherwise."""
+        monkeypatch.setenv("CONDA_PREFIX", "/opt/conda")
 
-    def test_path_excludes_cuda_for_cpu(self, monkeypatch, tmp_path: Path):
-        """CPU device should not have /usr/local/cuda/bin in PATH."""
-        env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+        tool_env_path = tmp_path if has_tool_env else None
+        env = _build_subprocess_env(device="cpu", tool_env_path=tool_env_path)
 
-        path_parts = env["PATH"].split(":")
-        assert "/usr/local/cuda/bin" not in path_parts
+        if has_tool_env:
+            assert env["CONDA_PREFIX"] == str(tmp_path)
+            assert env["VIRTUAL_ENV"] == str(tmp_path)
+        else:
+            assert "CONDA_PREFIX" not in env
+            assert "VIRTUAL_ENV" not in env
 
-    def test_parent_ld_library_path_not_inherited(self, monkeypatch):
-        """Parent LD_LIBRARY_PATH must not leak into subprocess."""
-        monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/conda/lib:/some/other/lib")
+    # -- LD_LIBRARY_PATH --
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_parent_ld_library_path_inherited(self, monkeypatch, device):
+        """Parent LD_LIBRARY_PATH entries are carried over for all devices."""
+        monkeypatch.setenv(
+            "LD_LIBRARY_PATH",
+            "/usr/local/cuda-12.4/lib64:/usr/lib64:/opt/nvidia/lib64"
+        )
+        monkeypatch.delenv("CONDA_PREFIX", raising=False)
+
+        env = _build_subprocess_env(device=device)
+
+        ld_parts = env["LD_LIBRARY_PATH"].split(":")
+        assert "/usr/local/cuda-12.4/lib64" in ld_parts
+        assert "/opt/nvidia/lib64" in ld_parts
+        assert "/usr/lib64" in ld_parts
+
+    @pytest.mark.parametrize(
+        "conda_prefix, expect_ld",
+        [("/opt/conda", "/opt/conda/lib"), (None, None)],
+        ids=["with_conda", "without_conda"],
+    )
+    def test_ld_library_path_conda_auto(self, monkeypatch, conda_prefix, expect_ld):
+        """LD_LIBRARY_PATH includes $CONDA_PREFIX/lib when set, absent otherwise (CPU)."""
+        if conda_prefix:
+            monkeypatch.setenv("CONDA_PREFIX", conda_prefix)
+        else:
+            monkeypatch.delenv("CONDA_PREFIX", raising=False)
+        # Clear parent LD so we isolate the conda auto-set behavior
+        monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
 
         env = _build_subprocess_env(device="cpu")
 
-        assert "LD_LIBRARY_PATH" not in env
+        if expect_ld:
+            assert env["LD_LIBRARY_PATH"] == expect_ld
+        else:
+            assert "LD_LIBRARY_PATH" not in env
 
-    def test_ld_library_path_not_auto_set(self, monkeypatch, tmp_path: Path):
-        """LD_LIBRARY_PATH should NOT be auto-discovered from venv CUDA libs."""
-        monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/conda/lib")
-
-        # Even with cuda_env/lib present, no auto-discovery should happen
-        cuda_env_lib = tmp_path / "cuda_env" / "lib"
-        cuda_env_lib.mkdir(parents=True)
-
-        env = _build_subprocess_env(device="cuda", tool_env_path=tmp_path)
-
-        assert "LD_LIBRARY_PATH" not in env
-
-    def test_ld_library_path_via_set_directive(self, tmp_path: Path):
-        """Tools can explicitly set LD_LIBRARY_PATH via [set] in env_vars.txt."""
+    @pytest.mark.parametrize(
+        "conda_prefix, expect_conda_lib",
+        [("/opt/conda", True), (None, False)],
+        ids=["with_conda", "without_conda"],
+    )
+    def test_ld_library_path_via_set_directive(
+        self, monkeypatch, tmp_path: Path, conda_prefix, expect_conda_lib
+    ):
+        """[set] LD_LIBRARY_PATH + parent LD + conda lib (when set)."""
+        if conda_prefix:
+            monkeypatch.setenv("CONDA_PREFIX", conda_prefix)
+        else:
+            monkeypatch.delenv("CONDA_PREFIX", raising=False)
+        monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         tool_env_vars = {
             "passthrough": [],
             "set": [
@@ -563,50 +600,65 @@ class TestCleanEnv:
             tool_env_vars=tool_env_vars,
         )
 
-        expected = f"{tmp_path}/cuda_env/lib:{tmp_path}/cuda_env/lib64"
-        assert env["LD_LIBRARY_PATH"] == expected
+        ld_parts = env["LD_LIBRARY_PATH"].split(":")
+        # Tool-specific paths come first
+        assert ld_parts[0] == f"{tmp_path}/cuda_env/lib"
+        assert ld_parts[1] == f"{tmp_path}/cuda_env/lib64"
+        # Conda lib present only when CONDA_PREFIX set
+        assert ("/opt/conda/lib" in ld_parts) == expect_conda_lib
 
-    def test_torch_home_set_per_venv(self, tmp_path: Path):
-        """TORCH_HOME should be set to {venv}/cache/torch."""
-        env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    # -- Per-venv vars --
 
-        assert env["TORCH_HOME"] == str(tmp_path / "cache" / "torch")
+    @pytest.mark.parametrize(
+        "has_venv, expect_torch_home",
+        [(True, True), (False, False)],
+        ids=["with_venv", "without_venv"],
+    )
+    def test_torch_home(self, tmp_path: Path, has_venv, expect_torch_home):
+        """TORCH_HOME = {venv}/cache/torch when venv provided, absent otherwise."""
+        tool_env_path = tmp_path if has_venv else None
+        env = _build_subprocess_env(device="cpu", tool_env_path=tool_env_path)
 
-    def test_torch_home_not_set_without_venv(self):
-        """Without a venv path, TORCH_HOME should not be set."""
-        env = _build_subprocess_env(device="cpu", tool_env_path=None)
+        if expect_torch_home:
+            assert env["TORCH_HOME"] == str(tmp_path / "cache" / "torch")
+        else:
+            assert "TORCH_HOME" not in env
 
-        assert "TORCH_HOME" not in env
+    @pytest.mark.parametrize(
+        "device, expect_jax",
+        [("cpu", "cpu"), ("cuda", None)],
+        ids=["cpu", "cuda"],
+    )
+    def test_jax_platforms(self, device, expect_jax):
+        """JAX_PLATFORMS=cpu on CPU, absent on GPU."""
+        env = _build_subprocess_env(device=device)
 
-    def test_jax_platforms_cpu(self, monkeypatch):
-        """CPU device should set JAX_PLATFORMS=cpu."""
-        env = _build_subprocess_env(device="cpu")
+        if expect_jax:
+            assert env["JAX_PLATFORMS"] == expect_jax
+        else:
+            assert "JAX_PLATFORMS" not in env
 
-        assert env["JAX_PLATFORMS"] == "cpu"
+    # -- Tool-specific env vars (env_vars.txt) --
 
-    def test_jax_platforms_not_set_for_cuda(self, monkeypatch):
-        """GPU device should not set JAX_PLATFORMS."""
-        env = _build_subprocess_env(device="cuda")
-
-        assert "JAX_PLATFORMS" not in env
-
-    def test_passthrough_vars_present_when_set(self, monkeypatch):
-        """Tool-specific passthrough vars should appear when in parent env."""
-        monkeypatch.setenv("HF_TOKEN", "secret-token")
+    @pytest.mark.parametrize(
+        "parent_has_var",
+        [True, False],
+        ids=["present", "absent"],
+    )
+    def test_passthrough_vars(self, monkeypatch, parent_has_var):
+        """Tool-specific passthrough vars appear only when set in parent env."""
+        if parent_has_var:
+            monkeypatch.setenv("HF_TOKEN", "secret-token")
+        else:
+            monkeypatch.delenv("HF_TOKEN", raising=False)
 
         tool_env_vars = {"passthrough": ["HF_TOKEN"], "set": []}
         env = _build_subprocess_env(device="cpu", tool_env_vars=tool_env_vars)
 
-        assert env["HF_TOKEN"] == "secret-token"
-
-    def test_passthrough_vars_absent_when_not_set(self, monkeypatch):
-        """Tool-specific passthrough vars missing in parent should not appear."""
-        monkeypatch.delenv("HF_TOKEN", raising=False)
-
-        tool_env_vars = {"passthrough": ["HF_TOKEN"], "set": []}
-        env = _build_subprocess_env(device="cpu", tool_env_vars=tool_env_vars)
-
-        assert "HF_TOKEN" not in env
+        if parent_has_var:
+            assert env["HF_TOKEN"] == "secret-token"
+        else:
+            assert "HF_TOKEN" not in env
 
     def test_passthrough_missing_var_warns(self, monkeypatch, caplog):
         """Passthrough var not in parent env should emit a debug message."""
@@ -619,33 +671,25 @@ class TestCleanEnv:
         assert "HF_TOKEN" in caplog.text
         assert "not set in the parent environment" in caplog.text
 
-    def test_set_vars_with_venv_interpolation(self, tmp_path: Path):
-        """[set] entries should interpolate ${VENV_PATH}."""
-        tool_env_vars = {
-            "passthrough": [],
-            "set": ["MY_DATA=${VENV_PATH}/data"],
-        }
+    @pytest.mark.parametrize(
+        "set_line, var, expected_suffix",
+        [
+            ("MY_DATA=${VENV_PATH}/data", "MY_DATA", "/data"),
+            ("FOO=bar", "FOO", None),
+        ],
+        ids=["interpolation", "literal"],
+    )
+    def test_set_vars(self, tmp_path: Path, set_line, var, expected_suffix):
+        """[set] entries: interpolate ${VENV_PATH} or pass through literally."""
+        tool_env_vars = {"passthrough": [], "set": [set_line]}
         env = _build_subprocess_env(
-            device="cpu",
-            tool_env_path=tmp_path,
-            tool_env_vars=tool_env_vars,
+            device="cpu", tool_env_path=tmp_path, tool_env_vars=tool_env_vars,
         )
 
-        assert env["MY_DATA"] == f"{tmp_path}/data"
-
-    def test_set_vars_literal(self, tmp_path: Path):
-        """[set] entries without interpolation should be literal."""
-        tool_env_vars = {
-            "passthrough": [],
-            "set": ["FOO=bar"],
-        }
-        env = _build_subprocess_env(
-            device="cpu",
-            tool_env_path=tmp_path,
-            tool_env_vars=tool_env_vars,
-        )
-
-        assert env["FOO"] == "bar"
+        if expected_suffix:
+            assert env[var] == f"{tmp_path}{expected_suffix}"
+        else:
+            assert env[var] == set_line.split("=", 1)[1]
 
 
 # ============================================================================
