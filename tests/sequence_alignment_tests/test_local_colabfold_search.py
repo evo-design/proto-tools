@@ -213,7 +213,8 @@ TEST_DB_SETUP_SCRIPT = os.path.join(
 @pytest.fixture(scope="class", autouse=True)
 def setup_mini_database():
     """Automatically setup mini database if it doesn't exist."""
-    if not os.path.exists(TEST_DB_DIR):
+    db_sentinel = os.path.join(TEST_DB_DIR, "uniref30_mini_db.dbtype")
+    if not os.path.exists(db_sentinel):
         print(f"\n⚙️  Setting up mini MMseqs database...")
         print(f"   Running: {TEST_DB_SETUP_SCRIPT}")
         try:

@@ -268,6 +268,27 @@ JAX (driver + CUDA → jax version + variant):
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage of all hardware configurations.
 
+### GCC/nvcc Compatibility for CUDA JIT Tools
+
+Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-forge inside their `cuda_env`. The GCC version is chosen per-tool based on the CUDA toolkit version installed, following NVIDIA's official host compiler support matrix.
+
+**CUDA → max GCC mapping:**
+- CUDA 12.1: GCC ≤12
+- CUDA 12.4: GCC ≤13.2
+- CUDA 12.6: GCC ≤14
+- CUDA 12.8: GCC ≤14
+
+**Per-tool versions:**
+- **evo1** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
+- **protenix** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
+- **evo2** (latest CUDA ~12.8): `"gcc=14.*" "gxx=14.*"`
+
+**Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default. Sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects. Pinning to glibc 2.17 avoids this. Not needed for evo2 since CUDA 12.8's nvcc handles newer sysroot headers.
+
+**Pattern:**
+1. Add `gcc`/`gxx` (+ `sysroot_linux-64` if needed) to the micromamba create command — `$CUDA_HOME/bin` is already in PATH, so `gcc` resolves to the conda-forge version automatically
+2. For runtime JIT tools (protenix): also set `CC`/`CXX` in `sitecustomize.py` since `_BASE_PASSTHROUGH` doesn't include compiler vars
+
 ### Cache Management for ABI-Sensitive Packages
 
 Tools that install C++ extensions with ABI dependencies (torch, flash-attn, transformer-engine) must clear package manager caches to prevent compatibility issues. Cached wheels may be built against different PyTorch/CUDA/compiler versions, causing runtime failures with symbols like `undefined symbol: _ZN3c105ErrorC2ENS_14SourceLocationESs`.

@@ -31,7 +31,8 @@ echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}"; then
+    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
+    "gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"; then
     echo "ERROR: Failed to install CUDA toolkit via micromamba"
     echo "This may indicate:"
     echo "  - Network connectivity issues"
@@ -87,6 +88,7 @@ export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$CUDA_HOME/lib"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$CUDA_HOME/lib"
 
 echo "NVCC: $(which nvcc) ($(nvcc --version | tail -1))"
+echo "CC: $(which gcc) ($(gcc --version | head -1))"
 
 # ============================================================================
 # Install Python packages

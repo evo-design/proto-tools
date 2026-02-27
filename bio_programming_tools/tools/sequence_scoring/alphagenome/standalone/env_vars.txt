@@ -13,6 +13,9 @@
 # Optional: path to custom AlphaGenome model checkpoint
 # If not set, downloads the default pretrained model
 ALPHAGENOME_CHECKPOINT_PATH
+# Hugging Face tokens for downloading model weights without interactive login
+HF_TOKEN
+HUGGING_FACE_HUB_TOKEN
 
 [set]
 LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib

@@ -7,6 +7,7 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 ## Directory Structure
 
 - `environments/` — Machine-generated Markdown compatibility reports (see `environments/README.md`)
+- `huggingface_token.md` — HuggingFace token setup for gated models (ESM3, AlphaGenome)
 
 ## Docs Ownership
 

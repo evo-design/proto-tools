@@ -13,10 +13,6 @@ MAMBA_PLATFORM="linux-64"
 
 echo "Setting up Evo2 standalone environment..."
 
-echo "Prerequisites not installed by this script:"
-echo "  - GCC 9+ or Clang 10+ with C++17 support"
-echo ""
-
 echo "Installing uv package manager..."
 pip install uv
 
@@ -35,7 +31,8 @@ echo "Installing CUDA toolkit and cuDNN via micromamba..."
     cuda-nvcc \
     cuda-cudart-dev \
     cudnn \
-    cuda-nvtx
+    cuda-nvtx \
+    "gcc=14.*" "gxx=14.*"
 
 export CUDA_HOME="$VENV_PATH/cuda_env"
 echo "Using local CUDA installation at: $CUDA_HOME"
@@ -91,6 +88,7 @@ export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$CUDA_HOME/lib"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$CUDA_HOME/lib"
 
 echo "NVCC: $(which nvcc) ($(nvcc --version | tail -1))"
+echo "CC: $(which gcc) ($(gcc --version | head -1))"
 
 # ============================================================================
 # Install Python packages

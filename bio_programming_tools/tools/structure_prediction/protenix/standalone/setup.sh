@@ -23,7 +23,8 @@ echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}"; then
+    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
+    "gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"; then
     echo "ERROR: Failed to install CUDA toolkit via micromamba"
     echo "This may indicate:"
     echo "  - Network connectivity issues"
@@ -86,6 +87,7 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$CUDA_LIB_PATH"
 echo "Added CUDA headers from: $CUDA_INCLUDE_PATH"
 echo "Added CUDA libraries from: $CUDA_LIB_PATH"
 echo "NVCC location: $(which nvcc)"
+echo "CC: $(which gcc) ($(gcc --version | head -1))"
 
 # Install protenix + torch in a single resolve (like main).
 # --torch-backend=auto selects the right CUDA torch.
@@ -139,6 +141,9 @@ cuda_targets_include = cuda_home + "/targets/${CUDA_TARGET}/include"
 
 # Set CUDA environment variables
 os.environ["CUDA_HOME"] = cuda_home
+# Use conda-forge GCC 12 from cuda_env for runtime JIT compilation (nvcc compat)
+os.environ["CC"] = cuda_home + "/bin/gcc"
+os.environ["CXX"] = cuda_home + "/bin/g++"
 os.environ["PATH"] = f"{venv_bin}:{cuda_home}/bin:" + os.environ.get("PATH", "")
 os.environ["CPATH"] = cuda_home + "/include:" + cuda_targets_include + ":" + os.environ.get("CPATH", "")
 os.environ["CXXFLAGS"] = os.environ.get("CXXFLAGS", "") + f" -I{cuda_home}/include -I{cuda_targets_include}"

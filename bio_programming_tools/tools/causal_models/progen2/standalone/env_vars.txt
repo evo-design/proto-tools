@@ -1,0 +1,10 @@
+# Environment variables for ProGen2 (protein language model)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Hugging Face tokens for downloading model weights without interactive login
+HF_TOKEN
+HUGGING_FACE_HUB_TOKEN

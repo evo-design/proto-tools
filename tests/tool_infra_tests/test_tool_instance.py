@@ -1467,5 +1467,5 @@ class TestToolEnvVarsLoading:
 
     def test_init_empty_env_vars_for_tool_without_file(self):
         """Tools without env_vars.txt should get empty lists."""
-        inst = ToolInstance("esm2")
+        inst = ToolInstance("tmalign")
         assert inst._tool_env_vars == {"passthrough": [], "set": []}
