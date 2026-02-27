@@ -4,6 +4,11 @@ set -euo pipefail
 
 echo "Setting up BioEmu standalone environment..."
 
+# Clear stale colabfold venv so it rebuilds with the correct Python version.
+# BioEmu creates ~/.bioemu_colabfold on first run; if it exists from a
+# previous env (e.g. wrong Python version), the patches won't be reapplied.
+rm -rf "${HOME}/.bioemu_colabfold"
+
 echo "Installing uv package manager..."
 pip install uv
 
