@@ -85,10 +85,10 @@ Follow the coding conventions:
 Keep the fix minimal and focused. Don't refactor surrounding code unless the issue specifically asks for it.
 
 If the fix touches the tool's public API (Input/Config/Output classes), update the `__init__.py` export chain:
-1. Tool `__init__.py` → exports Input, Config, Output, run_*
-2. Category `__init__.py` → re-exports from all tools
-3. `tools/__init__.py` → master re-export
-4. `bio_programming_tools/__init__.py` → package-level re-export
+1. Tool `__init__.py` -> exports Input, Config, Output, run_*
+2. Category `__init__.py` -> re-exports from all tools
+3. `tools/__init__.py` -> master re-export
+4. `bio_programming_tools/__init__.py` -> package-level re-export
 
 ## Step 5: Verify
 
@@ -126,3 +126,15 @@ After all checks pass, provide a concise summary:
 - When fixing tool data model issues, always verify the JSON schema output: `ToolRegistry.get_schemas("tool-key")`
 - Missing exports are a common source of "tool not found" issues — check the 4-level `__init__.py` export chain
 - If the issue references a tool README being wrong, update the README and run `pre-commit run --all-files` to regenerate docs
+
+## Validation Checklist
+
+- [ ] Issue read and requirements understood (`gh issue view`)
+- [ ] Affected source files identified and read
+- [ ] Failing test reproduces the bug (or test plan for features)
+- [ ] Fix is minimal and focused
+- [ ] `__init__.py` export chain updated (if public API changed)
+- [ ] New test passes: `pytest -xvs -k "test_name"`
+- [ ] Area tests pass: `pytest tests/{category}_tests/ -m "not slow"`
+- [ ] Full fast suite passes: `pytest -m "not slow"`
+- [ ] Lint passes: `flake8 bio_programming_tools tests`

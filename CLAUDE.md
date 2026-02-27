@@ -398,7 +398,7 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 - Every tool directory must include a `cite.bib` file with the BibTeX citation for the underlying paper/tool
 - Every tool directory must include an `examples/example.ipynb` notebook with working code, exact imports, API reference tables, and example output
 
-**Run `/implement-tool` for the complete tool implementation guide with step-by-step templates and examples.**
+**The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 
 ## Configuration
 
@@ -492,10 +492,8 @@ Every tool has a BibTeX citation accessible via `ToolRegistry.get_citation("tool
 ## Skills (`.claude/skills/`) & Commands (`.claude/commands/`)
 
 Skills:
-
-- **fix-env** — Debug and fix tool environment setup failures on new systems (hardware detection, setup.sh patterns, env-report, cross-platform compatibility)
+- **fix-env** — Debug and fix tool environment setup failures (ABI mismatches, network failures, OOM, platform detection, CUDA headers)
+- **implement-tool** — Full lifecycle for implementing a new tool wrapper (directory structure, data models, @tool decorator, ToolInstance, export chain, caching, tests, README, cite.bib, example notebook)
 
 Commands (invoked with `/command-name [args]`):
-
-- **`/fix-issue <number>`** — full GitHub issue fix lifecycle for bio-programming-tools (read issue, explore, reproduce, fix, test, verify)
-- **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+- **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
