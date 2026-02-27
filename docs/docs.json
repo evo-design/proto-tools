@@ -137,6 +137,7 @@
 					{
 						"group": "Structure Prediction",
 						"pages": [
+							"tools/structure-prediction/alphafold2",
 							"tools/structure-prediction/alphafold3",
 							"tools/structure-prediction/boltz2",
 							"tools/structure-prediction/chai1",
