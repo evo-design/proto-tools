@@ -6,11 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 bio_programming_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models. It is a git submodule of [bio-programming](https://github.com/evo-design/bio-programming), mounted at `bio-programming-tools/`. It also works standalone.
 
-## Notes (`notes/`)
+## Knowledge Management
 
-Dynamic development notes. **Read these at the start of relevant tasks. Actively update them** when you discover new gotchas, resolve issues, or learn something future sessions should know — don't ask, just update and mention what you added.
+Three layers for persistent knowledge — put information in the right one:
 
-- `environments/` — Machine-generated platform compatibility reports (Chimera H100, DGX Spark, macOS).
+| Layer | Location | Shared? | Best For |
+|-------|----------|---------|----------|
+| **CLAUDE.md** | Repo root (git) | Team | Conventions, architecture, commands, standards |
+| **notes/** | `notes/` (git) | Team | Platform compatibility reports, tool-specific gotchas, architecture decisions |
+| **Auto-memory** | `~/.claude/.../memory/` | Personal | Debugging patterns, tool/model quirks, non-obvious discoveries |
+
+### notes/
+
+Team-shared development docs. Read at the start of relevant tasks.
+
+- `environments/` — Machine-generated platform compatibility reports (Chimera H100, DGX Spark, macOS)
+
+Update notes/ when you discover something **every developer needs to know** (platform issues, new setup steps, architecture decisions).
+
+### Auto-memory
+
+Claude's personal memory across sessions. Save to auto-memory when you discover something **non-obvious during a session**:
+
+- Debugging that took multiple attempts → save root cause + fix
+- Undocumented tool/model behavior → save the quirk + workaround
+- Non-obvious architectural coupling → save the discovery
+- Platform-specific issues (Modal cold starts, GPU memory limits, etc.)
+
+Do NOT save to auto-memory: anything already in CLAUDE.md or notes/ (avoid duplication), temporary task context, or information other developers need (use notes/ instead).
 
 ## Documentation
 
