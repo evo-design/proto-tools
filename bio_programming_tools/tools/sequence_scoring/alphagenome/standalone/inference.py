@@ -418,6 +418,12 @@ def _serialize_data(value: Any) -> Any:
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
+    if type(value).__name__ in ("DataFrame", "Series"):
+        return _serialize_data(
+            value.to_dict(orient="records")
+            if type(value).__name__ == "DataFrame"
+            else value.to_dict()
+        )
     if isinstance(value, dict):
         return {str(key): _serialize_data(val) for key, val in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -432,6 +438,7 @@ def _serialize_data(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return _serialize_data(vars(value))
     return str(value)
+
 
 
 def _resolve_variant_scorers(
