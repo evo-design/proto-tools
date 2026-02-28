@@ -1,13 +1,17 @@
 # implement-tool: Implementation Patterns
 
-Reference file for the `implement-tool` skill. Contains implementation patterns for different tool types, caching, and the export chain.
+Reference file for the `implement-tool` skill. Patterns are tagged with which subagent or phase consumes them.
 
-## Standalone CPU Tool (ToolInstance)
+---
 
-**Main tool file** -- calls ToolInstance with `run.py`:
+## Standalone CPU Tool (ToolInstance) — [Subagent 1: Standalone + Phase 2: Contract]
+
+**Main tool file** (Phase 2 — Contract) — calls ToolInstance with `run.py`:
 ```python
+from bio_programming_tools.utils.tool_instance import ToolInstance
+
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    logger.debug("Using local venv for tool_name operation")
 
     input_data = {
         "operation": "{operation_name}",
@@ -29,7 +33,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     )
 ```
 
-**standalone/run.py** (or **inference.py** for AI models) -- JSON I/O entry point:
+**standalone/run.py** (Subagent 1) — JSON I/O entry point:
 ```python
 """
 {ToolName} standalone runner for ToolInstance venv execution.
@@ -73,7 +77,7 @@ if __name__ == "__main__":
         json.dump(output_data, f)
 ```
 
-**standalone/setup.sh**:
+**standalone/setup.sh** (Subagent 1):
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -84,7 +88,7 @@ uv pip install -r requirements.txt
 echo "Setup complete!"
 ```
 
-**standalone/requirements.txt**:
+**standalone/requirements.txt** (Subagent 1):
 ```
 some-library>=1.0.0
 numpy>=1.24.0
@@ -92,11 +96,14 @@ numpy>=1.24.0
 
 ---
 
-## AI Model Tool (GPU)
+## AI Model Tool (GPU) — [Subagent 1: Standalone + Phase 2: Contract]
 
+**Main tool file** (Phase 2 — Contract):
 ```python
+from bio_programming_tools.utils.tool_instance import ToolInstance
+
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    logger.debug("Using local venv for tool_name operation")
 
     result = ToolInstance.dispatch(
         "{tool_name}",
@@ -114,23 +121,140 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     return ToolOutput(results=result["results"])
 ```
 
-### Batching Convention
+**standalone/inference.py** (Subagent 1) — GPU model pattern:
+```python
+"""
+{ToolName} standalone inference for ToolInstance venv execution.
+"""
+from __future__ import annotations
+
+import json
+import sys
+import os
+from typing import Any, Dict, List
+
+# Model class with lazy loading
+class {ToolName}Model:
+    def __init__(self):
+        self._loaded = False
+        self.device = None
+        self.model = None
+
+    def load(self, device: str, verbose: bool = False):
+        """Load model weights to device."""
+        import torch  # Heavy imports ONLY inside methods
+        # Load model...
+        self._loaded = True
+        self.device = device
+
+    def predict(self, input_data: dict) -> dict:
+        """Run inference. Returns JSON-serializable dict."""
+        if not self._loaded:
+            self.load(input_data.get("device", "cuda"))
+        # Run inference...
+        return {"results": [...]}
+
+
+def _serialize_output(value: Any) -> Any:
+    """Recursively serialize tensors and arrays to JSON-safe types."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _serialize_output(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_output(v) for v in value]
+    if hasattr(value, "detach"):
+        value = value.detach()
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+_model = None
+
+def dispatch(input_dict: dict) -> dict:
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    if _model is None:
+        _model = {ToolName}Model()
+
+    operation = input_dict.get("operation", "predict")
+    if operation == "predict":
+        return _serialize_output(_model.predict(input_dict))
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise ValueError("Usage: python inference.py <input.json> <output.json>")
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+    result = dispatch(input_data)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)
+```
+
+**standalone/setup.sh for PyTorch tools** (Subagent 1):
+```bash
+#!/bin/bash
+set -euo pipefail
+
+echo "Installing uv package manager..."
+pip install uv
+
+# Install hardware-aware PyTorch (from centralized detection)
+echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+
+echo "Installing remaining dependencies..."
+uv pip install -r requirements.txt
+
+echo "{ToolName} setup complete!"
+```
+
+**standalone/setup.sh for JAX tools** (Subagent 1):
+```bash
+#!/bin/bash
+set -euo pipefail
+
+echo "Installing uv package manager..."
+pip install uv
+
+JAX_VARIANT="${TOOL_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
+JAX_SPEC="${TOOL_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.4.20,<1}}"
+
+echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
+echo "Installing JAX: ${JAX_SPEC}"
+uv pip install "${JAX_SPEC}"
+
+echo "Installing remaining dependencies..."
+uv pip install -r requirements.txt
+
+echo "{ToolName} setup complete!"
+```
+
+### Batching Convention — [Subagent 1: Standalone + Phase 2: Contract]
 
 GPU tools should include `batch_size: int = ConfigField(default=1, ...)` in their config.
 
 **Rules:**
-- Default is always `1` -- safe by default, prevents OOM errors
+- Default is always `1` — safe by default, prevents OOM errors
 - The standalone `inference.py` implements the batching loop (chunking inputs, iterating)
-- Generators and constraints pass `batch_size` through to tool configs -- they never batch themselves
+- Generators and constraints pass `batch_size` through to tool configs — they never batch themselves
 - Higher `batch_size` = more GPU memory, higher throughput
 
 ---
 
-## Compile-from-Source Tool
+## Compile-from-Source Tool — [Subagent 1: Standalone]
 
 For tools distributed as C/C++ source (no prebuilt binaries or pip packages), compile during setup. No `binary_config.py` or `requirements.txt` needed.
 
-**standalone/setup.sh**:
+**standalone/setup.sh** (Subagent 1):
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -166,7 +290,7 @@ echo "{ToolName} setup complete!"
 
 ---
 
-## Caching Patterns
+## Caching Patterns — [Phase 2: Contract]
 
 ### Whole-result caching (for tools with single output)
 ```python
@@ -192,7 +316,7 @@ Import from: `from bio_programming_tools.utils.tool_cache import tool_cache, too
 
 ---
 
-## Export Chain (`__init__.py` at all 4 levels)
+## Export Chain (`__init__.py` at all 4 levels) — [Subagent 5: Export Chain]
 
 **You MUST update ALL 4 levels.** Missing any level breaks imports.
 
@@ -207,15 +331,17 @@ from .{tool_name} import (
 )
 
 __all__ = [
-    "{ToolName}Input",
     "{ToolName}Config",
+    "{ToolName}Input",
     "{ToolName}Output",
     "run_{tool_name}",
 ]
 ```
 
+**Note:** No `from __future__ import annotations` in `__init__.py` files. Sort `__all__` alphabetically.
+
 ### Level 2: Category `__init__.py`
-`tools/{category}/__init__.py` -- add imports:
+`tools/{category}/__init__.py` — add imports:
 ```python
 # {ToolName}
 from .{tool_name} import (
@@ -230,15 +356,15 @@ from .{tool_name} import (
 __all__ = [
     # ... existing exports ...
     # {ToolName}
-    "{ToolName}Input",
     "{ToolName}Config",
+    "{ToolName}Input",
     "{ToolName}Output",
     "run_{tool_name}",
 ]
 ```
 
 ### Level 3: Master `tools/__init__.py`
-`tools/__init__.py` -- add import block and __all__ entries:
+`tools/__init__.py` — add import block and __all__ entries:
 ```python
 # {Category} - {ToolName}
 from .{category} import (
@@ -252,12 +378,12 @@ from .{category} import (
 __all__ = [
     # ... existing ...
     # {ToolName}
-    "run_{tool_name}",
-    "{ToolName}Input",
     "{ToolName}Config",
+    "{ToolName}Input",
     "{ToolName}Output",
+    "run_{tool_name}",
 ]
 ```
 
 ### Level 4: Package `__init__.py`
-`bio_programming_tools/__init__.py` -- this file uses `from bio_programming_tools.tools import *` so no changes needed IF the tool is properly added to `tools/__init__.py`'s `__all__`.
+`bio_programming_tools/__init__.py` — this file uses `from bio_programming_tools.tools import *` so no changes needed IF the tool is properly added to `tools/__init__.py`'s `__all__`.

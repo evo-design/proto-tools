@@ -1,19 +1,17 @@
 # implement-tool: Code Templates
 
-Reference file for the `implement-tool` skill. Contains complete code templates for all artifacts in a tool implementation.
+Reference file for the `implement-tool` skill. Templates are tagged with which phase or subagent consumes them.
 
-## Complete Tool Template
+---
+
+## Complete Tool File Template — [Phase 2: Contract]
 
 ```python
-"""{ToolName} -- brief description of what this tool does.
-
-This module provides a standardized interface for {description of biological function}.
-"""
+"""{ToolName} {operation} tool."""
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal
 
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
@@ -22,6 +20,14 @@ from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
 logger = logging.getLogger(__name__)
+
+# If using shared data models from the category, use labeled type aliases:
+# Input:
+# {ToolName}Input = SharedCategoryInput
+# Config:
+# {ToolName}Config = SharedCategoryConfig
+# Output:
+# {ToolName}Output = SharedCategoryOutput
 
 
 # ============================================================================
@@ -95,19 +101,8 @@ class {ToolName}Config(BaseConfig):
         advanced=True,
     )
 
-    # --- Hidden parameters (not shown in UI) ---
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run on",
-        hidden=True,
-    )
-    verbose: bool = ConfigField(
-        title="Verbose",
-        default=False,
-        description="Whether to print status messages",
-        hidden=True,
-    )
+    # Note: verbose, timeout, and device are inherited from BaseConfig.
+    # Only redeclare them if you need to override the default value.
 
 
 class {ToolName}Output(BaseToolOutput):
@@ -151,7 +146,6 @@ class {ToolName}Output(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "csv":
-            # Write CSV output
             import csv
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -219,7 +213,7 @@ def run_{tool_name}(
 
 ---
 
-## Test Template
+## Test Template — [Subagent 4: Tests]
 
 Create `tests/{category}_tests/test_{tool_name}.py`:
 
@@ -271,7 +265,7 @@ class Test{ToolName}GPU:
 
 ---
 
-## README.md Template
+## README.md Template — [Subagent 2: README + cite.bib]
 
 Create `tools/{category}/{tool_name}/README.md`:
 
@@ -279,33 +273,97 @@ Create `tools/{category}/{tool_name}/README.md`:
 # {Tool Display Name}
 
 ## Overview
-Brief biological context -- what does this tool do and why is it useful?
+Brief biological context — what does this tool do and why is it useful?
 
-## Key Parameters
-- **param1**: What it controls, sensible defaults, when to change it
-- **param2**: What it controls, recommended values
+## When to Use This Tool
 
-## Quick Start
-\```python
-from bio_programming_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+**Primary use cases:**
+- Use case 1
+- Use case 2
 
-inputs = {ToolName}Input(sequences=["ATGCGT..."])
-config = {ToolName}Config(param1=4)
-result = run_{tool_name}(inputs, config)
-print(result.num_results)
-\```
+**When NOT to use this tool:**
+- Anti-pattern 1
+- Anti-pattern 2
+
+## Biological Background
+
+**What does this tool do?**
+Description of the biological problem it solves.
+
+**Why is this important?**
+Real-world applications.
+
+**Scientific foundation:**
+How the algorithm/model works at a high level.
+
+## Tool Catalog
+
+| Tool | Input | Output | Use Case |
+|------|-------|--------|----------|
+| `{tool-key}` | Description | Description | Use case |
+
+## Execution Modes
+
+GPU/CPU requirements, memory estimates, timing.
+
+## How It Works
+
+Brief description of each operation.
+
+## Input Parameters
+
+### Operation Name (`{tool-key}`)
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `field1` | `Type` | Description |
+
+## Configuration
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `param1` | `type` | `default` | Description |
+
+## Output Specification
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `field1` | `type` | Description |
 
 ## Interpreting Results
-How to interpret the output. What values mean biologically.
+
+How to interpret the output values biologically.
+
+## Quick Start Examples
+
+**Example 1: Basic usage**
+\```python
+from bio_programming_tools.tools.{category}.{tool_name} import (
+    run_{tool_name}, {ToolName}Input, {ToolName}Config
+)
+
+inputs = {ToolName}Input(...)
+config = {ToolName}Config(...)
+result = run_{tool_name}(inputs, config)
+\```
+
+## Best Practices & Gotchas
+
+Parameter tuning guidance and common mistakes.
 
 ## References
-- [Tool GitHub](https://github.com/...)
+
 - [Paper](https://doi.org/...)
+- [GitHub](https://github.com/...)
+
+## Related Tools
+
+Tools often used together, alternatives.
 ```
 
 ---
 
-## cite.bib Template
+## cite.bib Template — [Subagent 2: README + cite.bib]
 
 Create `tools/{category}/{tool_name}/cite.bib`:
 
@@ -330,7 +388,7 @@ Create `tools/{category}/{tool_name}/cite.bib`:
 
 ---
 
-## Example Notebook Guidance
+## Example Notebook Guidance — [Subagent 3: Example Notebook]
 
 Create `tools/{category}/{tool_name}/examples/example.ipynb` with:
 
@@ -348,7 +406,7 @@ Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/exampl
 
 ---
 
-## Verification Script Template
+## Verification Script Template — [Phase 4: Verify]
 
 Write and execute a short verification script:
 
