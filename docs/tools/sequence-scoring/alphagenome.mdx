@@ -1,13 +1,13 @@
 ---
 title: "AlphaGenome"
-description: "AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM)."
+description: "AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM)."
 ---
 
 # AlphaGenome
 
 ## Overview
 
-AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
+AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
 
 This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`ToolInstance("alphagenome")`).
 
@@ -44,18 +44,20 @@ AlphaGenome jointly predicts all of these signals from DNA sequence alone, lever
 
 | Tool Key | Description | Input | Output |
 |----------|-------------|-------|--------|
-| `alphagenome-predict-interval` | Predict regulatory signals for a genomic region | Chromosome + coordinates | Prediction matrices (spatial tracks) |
-| `alphagenome-predict-variant` | Predict signals for reference and alternate alleles | Chromosome + coordinates + variant | Prediction matrices + variant metadata |
-| `alphagenome-predict-sequence` | Predict signals from a raw DNA string | Raw DNA sequence | Prediction matrices |
-| `alphagenome-score-variant` | Score a variant's effect using recommended scorers | Chromosome + coordinates + variant | Tidy score records (per scorer/track/gene) |
-| `alphagenome-score-interval` | Score a genomic interval with interval scorers | Chromosome + coordinates | Tidy score records |
-| `alphagenome-score-ism-variants` | In-silico mutagenesis across a sub-interval | Chromosome + coordinates + ISM range | Tidy score records (per position/mutation) |
+| `alphagenome-predict-intervals` | Predict regulatory signals for batched genomic regions | List of intervals (auto-wraps single) | List of prediction matrices |
+| `alphagenome-predict-variants` | Predict signals for batched variant effects | List of variants (auto-wraps single) | List of prediction matrices + variant metadata |
+| `alphagenome-predict-sequences` | Predict signals from raw DNA sequence(s) | List of DNA sequences (auto-wraps single string) | List of prediction matrices |
+| `alphagenome-score-variants` | Score batched variant effects using variant scorers | List of variants (auto-wraps single) | List of tidy score records |
+| `alphagenome-score-intervals` | Score batched genomic intervals with interval scorers | List of intervals (auto-wraps single) | List of tidy score records |
+| `alphagenome-score-ism-variants-batch` | Batched in-silico mutagenesis | List of ISM requests (auto-wraps single) | List of tidy score records |
+
+All tools accept either a single input item (auto-wrapped into a list) or an explicit list for batch processing. All tools use `@tool_cache_iterable` for per-item caching.
 
 **Prediction tools** return raw spatial tracks (matrices) suitable for visualization and custom downstream analysis. **Scoring tools** return tidy tabular records (one row per scorer-track-gene combination) suitable for ranking and filtering.
 
 ## How It Works
 
-1. **Input preparation**: The tool accepts either genomic coordinates (chromosome + interval) or a raw DNA sequence. If the interval length does not match one of AlphaGenome's supported context lengths (16 KB, 100 KB, 500 KB, 1 MB), it is automatically resized by the inference layer. Raw sequence inputs must already match one of these lengths.
+1. **Input preparation**: The tool accepts either genomic coordinates (chromosome + interval) or raw DNA sequence(s). If the interval length does not match one of AlphaGenome's supported context lengths (16 KB, 100 KB, 500 KB, 1 MB), it is automatically resized by the inference layer. Raw sequence inputs must already match one of these lengths.
 2. **Model inference**: The DNA sequence is passed through AlphaGenome's multi-task transformer architecture, which produces predictions for all requested output types in a single forward pass. Inference runs in an isolated venv on GPU.
 3. **Output formatting**: Prediction tools return the raw output matrices keyed by output type. Scoring tools apply recommended scorer functions that summarize the predictions into interpretable per-variant or per-interval scores.
 4. **Variant scoring**: For variant-effect tools, the model runs inference on both the reference and alternate sequences, and scorers compute the difference (e.g., log-fold-change in predicted signal).
@@ -77,86 +79,98 @@ Coordinates use **0-based indexing with exclusive end** (BED-style).
 
 **Example 1: Predict RNA-seq and ATAC for a genomic interval**
 ```python python icon="python"
-from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-    AlphaGenomePredictIntervalConfig,
-    AlphaGenomePredictIntervalInput,
-    run_alphagenome_predict_interval,
+from bio_programming_tools import (
+    AlphaGenomeInterval,
+    AlphaGenomePredictIntervalsConfig,
+    AlphaGenomePredictIntervalsInput,
+    run_alphagenome_predict_intervals,
 )
 
-inputs = AlphaGenomePredictIntervalInput(
-    chromosome="chr19",
-    interval_start=10_587_331,
-    interval_end=11_635_907,
+inputs = AlphaGenomePredictIntervalsInput(
+    intervals=AlphaGenomeInterval(
+        chromosome="chr19",
+        interval_start=10_587_331,
+        interval_end=11_635_907,
+    ),
 )
-config = AlphaGenomePredictIntervalConfig(
+config = AlphaGenomePredictIntervalsConfig(
     requested_outputs=["RNA_SEQ", "ATAC"],
     organism="human",
 )
 
-result = run_alphagenome_predict_interval(inputs, config)
-print(result.requested_outputs)  # ['RNA_SEQ', 'ATAC']
+result = run_alphagenome_predict_intervals(inputs, config)
+print(result[0].requested_outputs)  # ['RNA_SEQ', 'ATAC']
 ```
 
 **Example 2: Score a variant's regulatory impact**
 ```python python icon="python"
-from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-    AlphaGenomeScoreVariantConfig,
-    AlphaGenomeScoreVariantInput,
-    run_alphagenome_score_variant,
+from bio_programming_tools import (
+    AlphaGenomeScoreVariantsConfig,
+    AlphaGenomeScoreVariantsInput,
+    AlphaGenomeVariant,
+    run_alphagenome_score_variants,
 )
 
-inputs = AlphaGenomeScoreVariantInput(
-    chromosome="chr19",
-    interval_start=10_587_331,
-    interval_end=11_635_907,
-    variant_position=11_000_000,
-    reference_bases="A",
-    alternate_bases="G",
+inputs = AlphaGenomeScoreVariantsInput(
+    variants=AlphaGenomeVariant(
+        chromosome="chr19",
+        interval_start=10_587_331,
+        interval_end=11_635_907,
+        variant_position=11_000_000,
+        reference_bases="A",
+        alternate_bases="G",
+    ),
 )
-config = AlphaGenomeScoreVariantConfig(
+config = AlphaGenomeScoreVariantsConfig(
     variant_scorers=["RNA_SEQ", "ATAC", "CAGE"],
 )
 
-result = run_alphagenome_score_variant(inputs, config)
-for score in result.scores[:3]:
+result = run_alphagenome_score_variants(inputs, config)
+for score in result[0].scores[:3]:
     print(f"{score['variant_scorer']} | {score['track_name']}: {score['raw_score']:.4f}")
 ```
 
-**Example 3: Predict from a raw DNA sequence**
+**Example 3: Predict from raw DNA sequence(s)**
 ```python python icon="python"
-from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-    AlphaGenomePredictSequenceConfig,
-    AlphaGenomePredictSequenceInput,
-    run_alphagenome_predict_sequence,
+from bio_programming_tools import (
+    AlphaGenomePredictSequencesConfig,
+    AlphaGenomePredictSequencesInput,
+    run_alphagenome_predict_sequences,
 )
 
-inputs = AlphaGenomePredictSequenceInput(sequence="ACGT" * 4096)  # 16384 bp
-config = AlphaGenomePredictSequenceConfig(
+inputs = AlphaGenomePredictSequencesInput(
+    sequences=["ACGT" * 4096],  # 16,384 bp
+)
+config = AlphaGenomePredictSequencesConfig(
     requested_outputs=["DNASE", "CHIP_TF"],
 )
 
-result = run_alphagenome_predict_sequence(inputs, config)
+result = run_alphagenome_predict_sequences(inputs, config)
+first_output = result[0]
 ```
 
 **Example 4: In-silico mutagenesis over a promoter region**
 ```python python icon="python"
-from bio_programming_tools.tools.sequence_scoring.alphagenome import (
+from bio_programming_tools import (
+    AlphaGenomeISM,
     AlphaGenomeScoreISMConfig,
     AlphaGenomeScoreISMInput,
-    run_alphagenome_score_ism_variants,
+    run_alphagenome_score_ism_variants_batch,
 )
 
 inputs = AlphaGenomeScoreISMInput(
-    chromosome="chr19",
-    interval_start=10_587_331,
-    interval_end=11_635_907,
-    ism_interval_start=11_000_000,
-    ism_interval_end=11_000_050,
+    requests=AlphaGenomeISM(
+        chromosome="chr19",
+        interval_start=10_587_331,
+        interval_end=11_635_907,
+        ism_interval_start=11_000_000,
+        ism_interval_end=11_000_050,
+    ),
 )
 config = AlphaGenomeScoreISMConfig(variant_scorers=["CAGE"])
 
-result = run_alphagenome_score_ism_variants(inputs, config)
-print(f"ISM scores: {len(result.scores)} records")
+result = run_alphagenome_score_ism_variants_batch(inputs, config)
+print(f"ISM scores: {len(result[0].scores)} records")
 ```
 
 ## Best Practices & Gotchas
@@ -164,6 +178,8 @@ print(f"ISM scores: {len(result.scores)} records")
 - **Context length matters**: AlphaGenome supports 4 context lengths (16 KB to 1 MB). The 1 MB window captures the most distal regulatory effects. Shorter windows are faster but miss long-range interactions. Non-matching interval lengths are automatically resized.
 - **First run is slow**: Model weights are downloaded from Hugging Face on first use. Subsequent runs load from the local cache.
 - **GPU required**: AlphaGenome requires a CUDA GPU.
+- **Auto-wrapping**: All batched tools accept a single item (dict, model instance, or string) which is automatically wrapped into a one-element list. This avoids the need for explicit list syntax for single-input use cases.
+- **Per-item caching**: All tools use `@tool_cache_iterable` which caches results per individual input item. Duplicate items in a batch are computed only once.
 - **Variant position validation**: The variant position must fall within `[interval_start, interval_end)`. The ISM sub-interval must be fully contained within the main interval.
 - **Scorer selection**: Passing `None` for `variant_scorers` or `interval_scorers` uses all recommended scorers, which provides comprehensive coverage but is slower. Specify individual scorers when you only need specific assay types.
 - **ISM sub-intervals**: Keep ISM windows small (tens to low hundreds of bp). Each position generates 3 alternate allele predictions, so computation scales linearly with window size.
@@ -193,26 +209,61 @@ print(f"ISM scores: {len(result.scores)} records")
 - `splice_transformer` — dedicated splice site prediction
 
 
+## Inner Model Reference
+
+All batched tools accept lists of these inner model types. A single item is auto-wrapped into a one-element list.
+
+### AlphaGenomeInterval
+
+Base input for interval-based tools.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
+| `interval_start` | `int` | Interval start (0-based, inclusive) |
+| `interval_end` | `int` | Interval end (0-based, exclusive) |
+
+### AlphaGenomeVariant
+
+Extends `AlphaGenomeInterval` with variant alleles.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
+| `interval_start` | `int` | Interval start (0-based, inclusive) |
+| `interval_end` | `int` | Interval end (0-based, exclusive) |
+| `variant_position` | `int` | Variant genomic position (0-based, must be within interval) |
+| `reference_bases` | `str` | Reference allele (A/C/G/T/N string) |
+| `alternate_bases` | `str` | Alternate allele (A/C/G/T/N string) |
+
+### AlphaGenomeISM
+
+Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `chromosome` | `str` | *(required)* | Chromosome identifier |
+| `interval_start` | `int` | *(required)* | Interval start (0-based, inclusive) |
+| `interval_end` | `int` | *(required)* | Interval end (0-based, exclusive) |
+| `ism_interval_start` | `int` | *(required)* | ISM sub-interval start (must be within interval) |
+| `ism_interval_end` | `int` | *(required)* | ISM sub-interval end (must be within interval) |
+| `variant_position` | `Optional[int]` | `None` | Optional existing variant position |
+| `reference_bases` | `Optional[str]` | `None` | Optional existing variant reference allele |
+| `alternate_bases` | `Optional[str]` | `None` | Optional existing variant alternate allele |
+
+
 ## API Reference
 
 <Tabs>
-  <Tab title="AlphaGenome Predict Interval">
-  **Key:** `alphagenome-predict-interval`
+  <Tab title="AlphaGenome Predict Intervals">
+  **Key:** `alphagenome-predict-intervals`
 
-  Predict genomic signals for a region using AlphaGenome open weights
+  Predict genomic signals for batched intervals using AlphaGenome
 
 ### Input
 
-<ParamField path="chromosome" type="string" required>
-  Chromosome identifier, e.g. 'chr1'
-</ParamField>
-
-<ParamField path="interval_start" type="integer" required>
-  Interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
+<ParamField path="intervals" type="List[AlphaGenomeInterval]" required>
+  Genomic intervals for prediction. A single interval is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -237,39 +288,19 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="chromosome" type="string" required>
-  Chromosome identifier
-</ResponseField>
-
-<ResponseField name="interval_start" type="integer" required>
-  Interval start (0-based)
-</ResponseField>
-
-<ResponseField name="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
-</ResponseField>
-
-<ResponseField name="requested_outputs" type="List[string]" required>
-  Output types requested for this prediction
-</ResponseField>
-
-<ResponseField name="result" type="Dict[string, any]" required>
-  Serialized AlphaGenome prediction payload
-</ResponseField>
-
-<ResponseField name="variant" type="Dict[string, any]">
-  Variant metadata for variant-effect predictions
+<ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
+  Per-interval prediction outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
-  <Tab title="AlphaGenome Predict Sequence">
-  **Key:** `alphagenome-predict-sequence`
+  <Tab title="AlphaGenome Predict Sequences">
+  **Key:** `alphagenome-predict-sequences`
 
-  Predict genomic signals from a raw DNA sequence using AlphaGenome open weights
+  Predict genomic signals from batched raw DNA sequences using AlphaGenome
 
 ### Input
 
-<ParamField path="sequence" type="string" required>
-  Raw DNA sequence for prediction
+<ParamField path="sequences" type="List[string]" required>
+  Raw DNA sequences for prediction. A single string is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -294,59 +325,19 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="chromosome" type="string" required>
-  Chromosome identifier
-</ResponseField>
-
-<ResponseField name="interval_start" type="integer" required>
-  Interval start (0-based)
-</ResponseField>
-
-<ResponseField name="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
-</ResponseField>
-
-<ResponseField name="requested_outputs" type="List[string]" required>
-  Output types requested for this prediction
-</ResponseField>
-
-<ResponseField name="result" type="Dict[string, any]" required>
-  Serialized AlphaGenome prediction payload
-</ResponseField>
-
-<ResponseField name="variant" type="Dict[string, any]">
-  Variant metadata for variant-effect predictions
+<ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
+  Per-sequence prediction outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
-  <Tab title="AlphaGenome Predict Variant">
-  **Key:** `alphagenome-predict-variant`
+  <Tab title="AlphaGenome Predict Variants">
+  **Key:** `alphagenome-predict-variants`
 
-  Predict variant effects with AlphaGenome open weights
+  Predict variant effects in batch using AlphaGenome
 
 ### Input
 
-<ParamField path="variant_position" type="integer" required>
-  Variant genomic position (0-based)
-</ParamField>
-
-<ParamField path="reference_bases" type="string" required>
-  Reference allele, e.g. 'A' or 'AC'
-</ParamField>
-
-<ParamField path="alternate_bases" type="string" required>
-  Alternate allele, e.g. 'G' or 'GTT'
-</ParamField>
-
-<ParamField path="chromosome" type="string" required>
-  Chromosome identifier, e.g. 'chr1'
-</ParamField>
-
-<ParamField path="interval_start" type="integer" required>
-  Interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
+<ParamField path="variants" type="List[AlphaGenomeVariant]" required>
+  Variants (with intervals) for prediction. A single variant is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -371,47 +362,19 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="chromosome" type="string" required>
-  Chromosome identifier
-</ResponseField>
-
-<ResponseField name="interval_start" type="integer" required>
-  Interval start (0-based)
-</ResponseField>
-
-<ResponseField name="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
-</ResponseField>
-
-<ResponseField name="requested_outputs" type="List[string]" required>
-  Output types requested for this prediction
-</ResponseField>
-
-<ResponseField name="result" type="Dict[string, any]" required>
-  Serialized AlphaGenome prediction payload
-</ResponseField>
-
-<ResponseField name="variant" type="Dict[string, any]">
-  Variant metadata for variant-effect predictions
+<ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
+  Per-variant prediction outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
-  <Tab title="AlphaGenome Score Interval">
-  **Key:** `alphagenome-score-interval`
+  <Tab title="AlphaGenome Score Intervals">
+  **Key:** `alphagenome-score-intervals`
 
-  Score genomic intervals with AlphaGenome using recommended interval scorers
+  Score genomic intervals in batch with AlphaGenome interval scorers
 
 ### Input
 
-<ParamField path="chromosome" type="string" required>
-  Chromosome identifier, e.g. 'chr1'
-</ParamField>
-
-<ParamField path="interval_start" type="integer" required>
-  Interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
+<ParamField path="intervals" type="List[AlphaGenomeInterval]" required>
+  Genomic intervals for scoring. A single interval is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -432,47 +395,19 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="scores" type="List[object]" required>
-  Tidy score records (one per scorer-track-gene combination)
+<ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
+  Per-interval score outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
-  <Tab title="AlphaGenome Score ISM Variants">
-  **Key:** `alphagenome-score-ism-variants`
+  <Tab title="AlphaGenome Score ISM Variants Batch">
+  **Key:** `alphagenome-score-ism-variants-batch`
 
-  Run in-silico mutagenesis with AlphaGenome variant scorers
+  Run batched in-silico mutagenesis with AlphaGenome variant scorers
 
 ### Input
 
-<ParamField path="ism_interval_start" type="integer" required>
-  ISM sub-interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="ism_interval_end" type="integer" required>
-  ISM sub-interval end (0-based, exclusive)
-</ParamField>
-
-<ParamField path="variant_position" type="integer">
-  Optional existing variant position for ISM context (0-based)
-</ParamField>
-
-<ParamField path="reference_bases" type="string">
-  Optional existing variant reference allele
-</ParamField>
-
-<ParamField path="alternate_bases" type="string">
-  Optional existing variant alternate allele
-</ParamField>
-
-<ParamField path="chromosome" type="string" required>
-  Chromosome identifier, e.g. 'chr1'
-</ParamField>
-
-<ParamField path="interval_start" type="integer" required>
-  Interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
+<ParamField path="requests" type="List[AlphaGenomeISM]" required>
+  ISM requests to process. A single request is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -493,39 +428,19 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="scores" type="List[object]" required>
-  Tidy score records (one per scorer-track-gene combination)
+<ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
+  Per-request ISM score outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
-  <Tab title="AlphaGenome Score Variant">
-  **Key:** `alphagenome-score-variant`
+  <Tab title="AlphaGenome Score Variants">
+  **Key:** `alphagenome-score-variants`
 
-  Score variant effects with AlphaGenome using recommended variant scorers
+  Score variant effects in batch with AlphaGenome variant scorers
 
 ### Input
 
-<ParamField path="variant_position" type="integer" required>
-  Variant genomic position (0-based)
-</ParamField>
-
-<ParamField path="reference_bases" type="string" required>
-  Reference allele, e.g. 'A' or 'AC'
-</ParamField>
-
-<ParamField path="alternate_bases" type="string" required>
-  Alternate allele, e.g. 'G' or 'GTT'
-</ParamField>
-
-<ParamField path="chromosome" type="string" required>
-  Chromosome identifier, e.g. 'chr1'
-</ParamField>
-
-<ParamField path="interval_start" type="integer" required>
-  Interval start (0-based, inclusive)
-</ParamField>
-
-<ParamField path="interval_end" type="integer" required>
-  Interval end (0-based, exclusive)
+<ParamField path="variants" type="List[AlphaGenomeVariant]" required>
+  Variants (with intervals) for scoring. A single variant is auto-wrapped into a list.
 </ParamField>
 
 ### Configuration
@@ -546,8 +461,8 @@ print(f"ISM scores: {len(result.scores)} records")
 
 ### Output
 
-<ResponseField name="scores" type="List[object]" required>
-  Tidy score records (one per scorer-track-gene combination)
+<ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
+  Per-variant score outputs. Supports indexing and iteration.
 </ResponseField>
   </Tab>
 </Tabs>

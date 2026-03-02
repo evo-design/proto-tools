@@ -1,71 +1,86 @@
-from .alphagenome_predict_interval import (
-    AlphaGenomePredictIntervalConfig,
-    AlphaGenomePredictIntervalInput,
-    AlphaGenomePredictIntervalOutput,
-    run_alphagenome_predict_interval,
+from .alphagenome_predict_intervals import (
+    AlphaGenomePredictIntervalsConfig,
+    AlphaGenomePredictIntervalsInput,
+    AlphaGenomePredictIntervalsOutput,
+    run_alphagenome_predict_intervals,
 )
-from .alphagenome_predict_sequence import (
-    AlphaGenomePredictSequenceConfig,
-    AlphaGenomePredictSequenceInput,
-    AlphaGenomePredictSequenceOutput,
-    run_alphagenome_predict_sequence,
+from .alphagenome_predict_sequences import (
+    AlphaGenomePredictSequencesConfig,
+    AlphaGenomePredictSequencesInput,
+    AlphaGenomePredictSequencesOutput,
+    run_alphagenome_predict_sequences,
 )
-from .alphagenome_predict_variant import (
-    AlphaGenomePredictVariantConfig,
-    AlphaGenomePredictVariantInput,
-    AlphaGenomePredictVariantOutput,
-    run_alphagenome_predict_variant,
+from .alphagenome_predict_variants import (
+    AlphaGenomePredictVariantsConfig,
+    AlphaGenomePredictVariantsInput,
+    AlphaGenomePredictVariantsOutput,
+    run_alphagenome_predict_variants,
 )
-from .alphagenome_score_interval import (
-    AlphaGenomeScoreIntervalConfig,
-    AlphaGenomeScoreIntervalInput,
-    AlphaGenomeScoreIntervalOutput,
-    run_alphagenome_score_interval,
+from .alphagenome_score_intervals import (
+    AlphaGenomeScoreIntervalsConfig,
+    AlphaGenomeScoreIntervalsInput,
+    AlphaGenomeScoreIntervalsOutput,
+    run_alphagenome_score_intervals,
 )
-from .alphagenome_score_ism_variants import (
+from .alphagenome_score_ism_variants_batch import (
+    AlphaGenomeISM,
     AlphaGenomeScoreISMConfig,
     AlphaGenomeScoreISMInput,
     AlphaGenomeScoreISMOutput,
-    run_alphagenome_score_ism_variants,
+    run_alphagenome_score_ism_variants_batch,
 )
-from .alphagenome_score_variant import (
-    AlphaGenomeScoreVariantConfig,
-    AlphaGenomeScoreVariantInput,
-    AlphaGenomeScoreVariantOutput,
-    run_alphagenome_score_variant,
+from .alphagenome_score_variants import (
+    AlphaGenomeScoreVariantsConfig,
+    AlphaGenomeScoreVariantsInput,
+    AlphaGenomeScoreVariantsOutput,
+    run_alphagenome_score_variants,
 )
-from .shared_data_models import DEFAULT_ALPHAGENOME_MODEL_VERSION
+from .shared_data_models import (
+    DEFAULT_ALPHAGENOME_MODEL_VERSION,
+    AlphaGenomeInterval,
+    AlphaGenomePredictConfig,
+    AlphaGenomePredictOutput,
+    AlphaGenomeScoreOutput,
+    AlphaGenomeVariant,
+)
 
 __all__ = [
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",
-    # Predict Interval
-    "AlphaGenomePredictIntervalInput",
-    "AlphaGenomePredictIntervalConfig",
-    "AlphaGenomePredictIntervalOutput",
-    "run_alphagenome_predict_interval",
-    # Predict Variant
-    "AlphaGenomePredictVariantInput",
-    "AlphaGenomePredictVariantConfig",
-    "AlphaGenomePredictVariantOutput",
-    "run_alphagenome_predict_variant",
-    # Predict Sequence
-    "AlphaGenomePredictSequenceInput",
-    "AlphaGenomePredictSequenceConfig",
-    "AlphaGenomePredictSequenceOutput",
-    "run_alphagenome_predict_sequence",
-    # Score Variant
-    "AlphaGenomeScoreVariantInput",
-    "AlphaGenomeScoreVariantConfig",
-    "AlphaGenomeScoreVariantOutput",
-    "run_alphagenome_score_variant",
-    # Score Interval
-    "AlphaGenomeScoreIntervalInput",
-    "AlphaGenomeScoreIntervalConfig",
-    "AlphaGenomeScoreIntervalOutput",
-    "run_alphagenome_score_interval",
-    # Score ISM
+    # Shared types
+    "AlphaGenomeInterval",
+    "AlphaGenomeVariant",
+    "AlphaGenomeISM",
+    "AlphaGenomePredictConfig",
+    "AlphaGenomePredictOutput",
+    "AlphaGenomeScoreOutput",
+    # Predict Intervals
+    "AlphaGenomePredictIntervalsInput",
+    "AlphaGenomePredictIntervalsConfig",
+    "AlphaGenomePredictIntervalsOutput",
+    "run_alphagenome_predict_intervals",
+    # Predict Variants
+    "AlphaGenomePredictVariantsInput",
+    "AlphaGenomePredictVariantsConfig",
+    "AlphaGenomePredictVariantsOutput",
+    "run_alphagenome_predict_variants",
+    # Predict Sequences
+    "AlphaGenomePredictSequencesInput",
+    "AlphaGenomePredictSequencesConfig",
+    "AlphaGenomePredictSequencesOutput",
+    "run_alphagenome_predict_sequences",
+    # Score Variants
+    "AlphaGenomeScoreVariantsInput",
+    "AlphaGenomeScoreVariantsConfig",
+    "AlphaGenomeScoreVariantsOutput",
+    "run_alphagenome_score_variants",
+    # Score Intervals
+    "AlphaGenomeScoreIntervalsInput",
+    "AlphaGenomeScoreIntervalsConfig",
+    "AlphaGenomeScoreIntervalsOutput",
+    "run_alphagenome_score_intervals",
+    # Score ISM Batch
     "AlphaGenomeScoreISMInput",
     "AlphaGenomeScoreISMConfig",
     "AlphaGenomeScoreISMOutput",
-    "run_alphagenome_score_ism_variants",
+    "run_alphagenome_score_ism_variants_batch",
 ]

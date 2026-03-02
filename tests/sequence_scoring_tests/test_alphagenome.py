@@ -35,65 +35,73 @@ class TestAlphaGenome:
     @pytest.mark.include_in_env_report(category="sequence_scoring")
     def test_interval_prediction(self):
         """Test interval prediction with multiple output types."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomePredictIntervalConfig,
-            AlphaGenomePredictIntervalInput,
-            run_alphagenome_predict_interval,
+        from bio_programming_tools import (
+            AlphaGenomeInterval,
+            AlphaGenomePredictIntervalsConfig,
+            AlphaGenomePredictIntervalsInput,
+            run_alphagenome_predict_intervals,
         )
 
-        inputs = AlphaGenomePredictIntervalInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SHORT,
+        inputs = AlphaGenomePredictIntervalsInput(
+            intervals=AlphaGenomeInterval(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SHORT,
+            ),
         )
-        config = AlphaGenomePredictIntervalConfig(
+        config = AlphaGenomePredictIntervalsConfig(
             requested_outputs=["RNA_SEQ", "ATAC"],
             organism="human",
         )
 
-        result = run_alphagenome_predict_interval(inputs, config)
+        result = run_alphagenome_predict_intervals(inputs, config)
 
+        assert result.tool_id == "alphagenome-predict-intervals"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-predict-interval"
-        assert result.chromosome == "chr1"
-        assert result.interval_start == 0
-        assert result.interval_end == _SHORT
-        assert result.requested_outputs == ["RNA_SEQ", "ATAC"]
-        assert "predictions" in result.result
-        assert result.variant is None
+        output = result[0]
+        assert output.chromosome == "chr1"
+        assert output.interval_start == 0
+        assert output.interval_end == _SHORT
+        assert output.requested_outputs == ["RNA_SEQ", "ATAC"]
+        assert "predictions" in output.result
+        assert output.variant is None
 
     # --- Variant Prediction ---
 
     def test_variant_prediction(self):
         """Test variant prediction returns correct metadata and predictions."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomePredictVariantConfig,
-            AlphaGenomePredictVariantInput,
-            run_alphagenome_predict_variant,
+        from bio_programming_tools import (
+            AlphaGenomePredictVariantsConfig,
+            AlphaGenomePredictVariantsInput,
+            AlphaGenomeVariant,
+            run_alphagenome_predict_variants,
         )
 
-        inputs = AlphaGenomePredictVariantInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SHORT,
-            variant_position=_SHORT_MID,
-            reference_bases="A",
-            alternate_bases="G",
+        inputs = AlphaGenomePredictVariantsInput(
+            variants=AlphaGenomeVariant(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SHORT,
+                variant_position=_SHORT_MID,
+                reference_bases="A",
+                alternate_bases="G",
+            ),
         )
-        config = AlphaGenomePredictVariantConfig(
+        config = AlphaGenomePredictVariantsConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )
 
-        result = run_alphagenome_predict_variant(inputs, config)
+        result = run_alphagenome_predict_variants(inputs, config)
 
+        assert result.tool_id == "alphagenome-predict-variants"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-predict-variant"
-        assert result.requested_outputs == ["RNA_SEQ"]
-        assert "predictions" in result.result
-        assert result.variant == {
+        output = result[0]
+        assert output.requested_outputs == ["RNA_SEQ"]
+        assert "predictions" in output.result
+        assert output.variant == {
             "position": _SHORT_MID,
             "reference_bases": "A",
             "alternate_bases": "G",
@@ -101,108 +109,119 @@ class TestAlphaGenome:
 
     # --- Sequence Prediction ---
 
-    def test_sequence_prediction(self):
-        """Test prediction from a raw DNA sequence string."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomePredictSequenceConfig,
-            AlphaGenomePredictSequenceInput,
-            run_alphagenome_predict_sequence,
+    def test_single_sequence_prediction_via_batched_api(self):
+        """Single-sequence prediction should run through batched API."""
+        from bio_programming_tools import (
+            AlphaGenomePredictSequencesConfig,
+            AlphaGenomePredictSequencesInput,
+            run_alphagenome_predict_sequences,
         )
 
-        sequence = "ATCG" * (_SHORT // 4)  # 2,048 bp
-        inputs = AlphaGenomePredictSequenceInput(sequence=sequence)
-        config = AlphaGenomePredictSequenceConfig(
+        sequence = "ATCG" * (_SHORT // 4)
+        inputs = AlphaGenomePredictSequencesInput(sequences=[sequence])
+        config = AlphaGenomePredictSequencesConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )
 
-        result = run_alphagenome_predict_sequence(inputs, config)
-
+        result = run_alphagenome_predict_sequences(inputs, config)
+        assert result.tool_id == "alphagenome-predict-sequences"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-predict-sequence"
-        assert result.chromosome == "sequence"
-        assert result.interval_start == 0
-        assert result.interval_end == len(sequence)
-        assert result.requested_outputs == ["RNA_SEQ"]
-        assert "predictions" in result.result
+        output = result[0]
+        assert output.chromosome == "sequence"
+        assert output.interval_start == 0
+        assert output.interval_end == len(sequence)
+        assert output.requested_outputs == ["RNA_SEQ"]
+        assert "predictions" in output.result
 
     # --- Variant Scoring ---
 
     def test_variant_scoring(self):
         """Test variant scoring with default scorers."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeScoreVariantConfig,
-            AlphaGenomeScoreVariantInput,
-            run_alphagenome_score_variant,
+        from bio_programming_tools import (
+            AlphaGenomeScoreVariantsConfig,
+            AlphaGenomeScoreVariantsInput,
+            AlphaGenomeVariant,
+            run_alphagenome_score_variants,
         )
 
-        inputs = AlphaGenomeScoreVariantInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SCORE,
-            variant_position=_SCORE_MID,
-            reference_bases="A",
-            alternate_bases="G",
+        inputs = AlphaGenomeScoreVariantsInput(
+            variants=AlphaGenomeVariant(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SCORE,
+                variant_position=_SCORE_MID,
+                reference_bases="A",
+                alternate_bases="G",
+            ),
         )
-        config = AlphaGenomeScoreVariantConfig(
+        config = AlphaGenomeScoreVariantsConfig(
             variant_scorers=None,
             organism="human",
         )
 
-        result = run_alphagenome_score_variant(inputs, config)
+        result = run_alphagenome_score_variants(inputs, config)
 
+        assert result.tool_id == "alphagenome-score-variants"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-score-variant"
-        assert isinstance(result.scores, list)
-        assert len(result.scores) > 0
-        assert isinstance(result.scores[0], dict)
+        output = result[0]
+        assert isinstance(output.scores, list)
+        assert len(output.scores) > 0
+        assert isinstance(output.scores[0], dict)
 
     # --- Interval Scoring ---
 
     def test_interval_scoring(self):
         """Test interval scoring with default scorers."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomeScoreIntervalConfig,
-            AlphaGenomeScoreIntervalInput,
-            run_alphagenome_score_interval,
+        from bio_programming_tools import (
+            AlphaGenomeInterval,
+            AlphaGenomeScoreIntervalsConfig,
+            AlphaGenomeScoreIntervalsInput,
+            run_alphagenome_score_intervals,
         )
 
-        inputs = AlphaGenomeScoreIntervalInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SCORE,
+        inputs = AlphaGenomeScoreIntervalsInput(
+            intervals=AlphaGenomeInterval(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SCORE,
+            ),
         )
-        config = AlphaGenomeScoreIntervalConfig(
+        config = AlphaGenomeScoreIntervalsConfig(
             interval_scorers=None,
             organism="human",
         )
 
-        result = run_alphagenome_score_interval(inputs, config)
+        result = run_alphagenome_score_intervals(inputs, config)
 
+        assert result.tool_id == "alphagenome-score-intervals"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-score-interval"
-        assert isinstance(result.scores, list)
-        assert len(result.scores) > 0
+        output = result[0]
+        assert isinstance(output.scores, list)
+        assert len(output.scores) > 0
 
     # --- In-Silico Mutagenesis (ISM) ---
 
     def test_ism(self):
         """Test ISM over a small sub-interval with position-based scorers."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
+        from bio_programming_tools import (
+            AlphaGenomeISM,
             AlphaGenomeScoreISMConfig,
             AlphaGenomeScoreISMInput,
-            run_alphagenome_score_ism_variants,
+            run_alphagenome_score_ism_variants_batch,
         )
 
         inputs = AlphaGenomeScoreISMInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,  # 20 bp window
+            requests=AlphaGenomeISM(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SCORE,
+                ism_interval_start=_SCORE_MID - 10,
+                ism_interval_end=_SCORE_MID + 10,  # 20 bp window
+            ),
         )
         config = AlphaGenomeScoreISMConfig(
             # Use position-based (CenterMask) scorers that don't require gene
@@ -212,67 +231,74 @@ class TestAlphaGenome:
             organism="human",
         )
 
-        result = run_alphagenome_score_ism_variants(inputs, config)
+        result = run_alphagenome_score_ism_variants_batch(inputs, config)
 
+        assert result.tool_id == "alphagenome-score-ism-variants-batch"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-score-ism-variants"
-        assert isinstance(result.scores, list)
-        assert len(result.scores) > 0
+        output = result[0]
+        assert isinstance(output.scores, list)
+        assert len(output.scores) > 0
 
     def test_ism_with_variant_context(self):
         """Test ISM with an existing variant applied as background context."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
+        from bio_programming_tools import (
+            AlphaGenomeISM,
             AlphaGenomeScoreISMConfig,
             AlphaGenomeScoreISMInput,
-            run_alphagenome_score_ism_variants,
+            run_alphagenome_score_ism_variants_batch,
         )
 
         inputs = AlphaGenomeScoreISMInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,
-            variant_position=_SCORE_MID,
-            reference_bases="A",
-            alternate_bases="G",
+            requests=AlphaGenomeISM(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=_SCORE,
+                ism_interval_start=_SCORE_MID - 10,
+                ism_interval_end=_SCORE_MID + 10,
+                variant_position=_SCORE_MID,
+                reference_bases="A",
+                alternate_bases="G",
+            ),
         )
         config = AlphaGenomeScoreISMConfig(
             variant_scorers=["RNA_SEQ"],
             organism="human",
         )
 
-        result = run_alphagenome_score_ism_variants(inputs, config)
+        result = run_alphagenome_score_ism_variants_batch(inputs, config)
 
-        validate_output(result)
-
-        assert len(result.scores) > 0
+        assert len(result) == 1
+        assert len(result[0].scores) > 0
 
     # --- Stress Test (131k context) ---
 
     def test_full_context_interval_prediction(self):
         """Stress test: interval prediction at the 131k context length."""
-        from bio_programming_tools.tools.sequence_scoring.alphagenome import (
-            AlphaGenomePredictIntervalConfig,
-            AlphaGenomePredictIntervalInput,
-            run_alphagenome_predict_interval,
+        from bio_programming_tools import (
+            AlphaGenomeInterval,
+            AlphaGenomePredictIntervalsConfig,
+            AlphaGenomePredictIntervalsInput,
+            run_alphagenome_predict_intervals,
         )
 
-        inputs = AlphaGenomePredictIntervalInput(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=131_072,
+        inputs = AlphaGenomePredictIntervalsInput(
+            intervals=AlphaGenomeInterval(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=131_072,
+            ),
         )
-        config = AlphaGenomePredictIntervalConfig(
+        config = AlphaGenomePredictIntervalsConfig(
             requested_outputs=["RNA_SEQ"],
             organism="human",
         )
 
-        result = run_alphagenome_predict_interval(inputs, config)
+        result = run_alphagenome_predict_intervals(inputs, config)
 
+        assert result.tool_id == "alphagenome-predict-intervals"
+        assert len(result) == 1
         validate_output(result)
-
-        assert result.tool_id == "alphagenome-predict-interval"
-        assert result.interval_end == 131_072
-        assert "predictions" in result.result
+        output = result[0]
+        assert output.interval_end == 131_072
+        assert "predictions" in output.result

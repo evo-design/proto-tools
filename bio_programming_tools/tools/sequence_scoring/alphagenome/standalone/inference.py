@@ -130,225 +130,184 @@ class AlphaGenomeModel:
         self.device = None
         self.model = None
 
-    def predict_interval(
-        self,
-        chromosome: str,
-        interval_start: int,
-        interval_end: int,
-        requested_outputs: List[str],
-        ontology_terms: Optional[List[str]] = None,
-        organism: str = "human",
-        device: str = "cuda",
-    ) -> dict[str, Any]:
-        """Run interval predictions."""
+    def _ensure_loaded(self, device: str) -> None:
         if not self._loaded:
             self.load(device)
         elif self.device != device:
             self.to_device(device)
 
-        interval = _resize_interval(chromosome, interval_start, interval_end)
-
-        prediction = self.model.predict_interval(
-            interval=interval,
-            requested_outputs=[
-                dna_model.OutputType[name] for name in requested_outputs
-            ],
-            ontology_terms=ontology_terms,
-            organism=_ORGANISM_ENUMS[organism],
-        )
-
-        return {"predictions": _serialize_data(prediction)}
-
-    def predict_variant(
+    def predict_intervals(
         self,
-        chromosome: str,
-        interval_start: int,
-        interval_end: int,
-        variant_position: int,
-        reference_bases: str,
-        alternate_bases: str,
+        intervals: List[dict[str, Any]],
         requested_outputs: List[str],
         ontology_terms: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
-        """Run variant-effect predictions."""
-        if not self._loaded:
-            self.load(device)
-        elif self.device != device:
-            self.to_device(device)
+        """Run interval predictions through DnaClient.predict_intervals."""
+        parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
+        self._ensure_loaded(device)
 
-        interval = _resize_interval(chromosome, interval_start, interval_end)
-
-        prediction = self.model.predict_variant(
-            interval=interval,
-            variant=genome.Variant(
-                chromosome=chromosome,
-                position=variant_position,
-                reference_bases=reference_bases,
-                alternate_bases=alternate_bases,
-            ),
-            requested_outputs=[dna_model.OutputType[name] for name in requested_outputs],
+        predictions = self.model.predict_intervals(
+            intervals=parsed,
+            requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
             organism=_ORGANISM_ENUMS[organism],
+            progress_bar=False,
         )
+        return {"predictions": [_serialize_data(p) for p in predictions]}
 
-        return {"predictions": _serialize_data(prediction)}
-
-    def predict_sequence(
+    def predict_variants(
         self,
-        sequence: str,
+        intervals: List[dict[str, Any]],
+        variants: List[dict[str, Any]],
         requested_outputs: List[str],
         ontology_terms: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
-        """Run predictions from a raw DNA sequence string."""
-        _validate_sequence_length(
-            sequence_length=len(sequence),
-            operation="predict_sequence",
-        )
-        if not self._loaded:
-            self.load(device)
-        elif self.device != device:
-            self.to_device(device)
+        """Run variant-effect predictions through DnaClient.predict_variants."""
+        parsed_intervals = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
+        parsed_variants = [
+            genome.Variant(
+                chromosome=v["chromosome"],
+                position=v["variant_position"],
+                reference_bases=v["reference_bases"],
+                alternate_bases=v["alternate_bases"],
+            )
+            for v in variants
+        ]
+        self._ensure_loaded(device)
 
-        prediction = self.model.predict_sequence(
-            sequence=sequence,
-            requested_outputs=[
-                dna_model.OutputType[name] for name in requested_outputs
-            ],
+        predictions = self.model.predict_variants(
+            intervals=parsed_intervals,
+            variants=parsed_variants,
+            requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
             organism=_ORGANISM_ENUMS[organism],
+            progress_bar=False,
         )
+        return {"predictions": [_serialize_data(p) for p in predictions]}
 
-        return {"predictions": _serialize_data(prediction)}
-
-    def score_variant(
+    def predict_sequences(
         self,
-        chromosome: str,
-        interval_start: int,
-        interval_end: int,
-        variant_position: int,
-        reference_bases: str,
-        alternate_bases: str,
+        sequences: List[str],
+        requested_outputs: List[str],
+        ontology_terms: Optional[List[str]] = None,
+        organism: str = "human",
+        device: str = "cuda",
+    ) -> dict[str, Any]:
+        """Run predictions from raw DNA sequence strings."""
+        for seq in sequences:
+            _validate_sequence_length(len(seq), operation="predict_sequences")
+        self._ensure_loaded(device)
+
+        predictions = self.model.predict_sequences(
+            sequences=sequences,
+            requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
+            ontology_terms=ontology_terms,
+            organism=_ORGANISM_ENUMS[organism],
+            progress_bar=False,
+        )
+        return {"predictions": [_serialize_data(p) for p in predictions]}
+
+    def score_variants(
+        self,
+        intervals: List[dict[str, Any]],
+        variants: List[dict[str, Any]],
         variant_scorers: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
-    ) -> list[dict[str, Any]]:
-        """Run variant scoring with recommended variant scorers."""
-        _validate_min_scorer_width(
-            interval_end - interval_start,
-            _MIN_VARIANT_SCORER_WIDTH,
-            "score_variant",
-        )
-        if not self._loaded:
-            self.load(device)
-        elif self.device != device:
-            self.to_device(device)
+    ) -> dict[str, Any]:
+        """Run variant scoring through DnaClient.score_variants."""
+        parsed_intervals = []
+        parsed_variants = []
+        for i, v in zip(intervals, variants, strict=True):
+            width = i["interval_end"] - i["interval_start"]
+            _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_variants")
+            parsed_intervals.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
+            parsed_variants.append(genome.Variant(
+                chromosome=v["chromosome"],
+                position=v["variant_position"],
+                reference_bases=v["reference_bases"],
+                alternate_bases=v["alternate_bases"],
+            ))
+        self._ensure_loaded(device)
 
-        scorers = _resolve_variant_scorers(variant_scorers, organism)
-
-        interval = _resize_interval(chromosome, interval_start, interval_end)
-
-        scores = self.model.score_variant(
-            interval=interval,
-            variant=genome.Variant(
-                chromosome=chromosome,
-                position=variant_position,
-                reference_bases=reference_bases,
-                alternate_bases=alternate_bases,
-            ),
-            variant_scorers=scorers,
+        scores_per_variant = self.model.score_variants(
+            intervals=parsed_intervals,
+            variants=parsed_variants,
+            variant_scorers=_resolve_variant_scorers(variant_scorers, organism),
             organism=_ORGANISM_ENUMS[organism],
+            progress_bar=False,
         )
+        return {"scores": [_safe_tidy_scores(s) for s in scores_per_variant]}
 
-        return _safe_tidy_scores(scores)
-
-    def score_interval(
+    def score_intervals(
         self,
-        chromosome: str,
-        interval_start: int,
-        interval_end: int,
+        intervals: List[dict[str, Any]],
         interval_scorers: Optional[List[str]] = None,
         organism: str = "human",
         device: str = "cuda",
-    ) -> list[dict[str, Any]]:
-        """Run interval scoring with recommended interval scorers."""
-        _validate_min_scorer_width(
-            interval_end - interval_start,
-            _MIN_INTERVAL_SCORER_WIDTH,
-            "score_interval",
-        )
-        if not self._loaded:
-            self.load(device)
-        elif self.device != device:
-            self.to_device(device)
+    ) -> dict[str, Any]:
+        """Run interval scoring through DnaClient.score_intervals."""
+        parsed = []
+        for i in intervals:
+            width = i["interval_end"] - i["interval_start"]
+            _validate_min_scorer_width(width, _MIN_INTERVAL_SCORER_WIDTH, "score_intervals")
+            parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
+        self._ensure_loaded(device)
 
-        scorers = _resolve_interval_scorers(interval_scorers)
-
-        interval = _resize_interval(chromosome, interval_start, interval_end)
-
-        scores = self.model.score_interval(
-            interval=interval,
-            interval_scorers=scorers,
+        scores_per_interval = self.model.score_intervals(
+            intervals=parsed,
+            interval_scorers=_resolve_interval_scorers(interval_scorers),
             organism=_ORGANISM_ENUMS[organism],
+            progress_bar=False,
         )
+        return {"scores": [_safe_tidy_scores(s) for s in scores_per_interval]}
 
-        return _safe_tidy_scores(scores)
-
-    def score_ism_variants(
+    def score_ism_variants_batch(
         self,
-        chromosome: str,
-        interval_start: int,
-        interval_end: int,
-        ism_interval_start: int,
-        ism_interval_end: int,
+        requests: List[dict[str, Any]],
         variant_scorers: Optional[List[str]] = None,
         organism: str = "human",
-        variant_position: Optional[int] = None,
-        reference_bases: Optional[str] = None,
-        alternate_bases: Optional[str] = None,
         device: str = "cuda",
-    ) -> list[dict[str, Any]]:
-        """Run in-silico mutagenesis scoring."""
-        _validate_min_scorer_width(
-            interval_end - interval_start,
-            _MIN_VARIANT_SCORER_WIDTH,
-            "score_ism_variants",
-        )
-        if not self._loaded:
-            self.load(device)
-        elif self.device != device:
-            self.to_device(device)
-
+    ) -> dict[str, Any]:
+        """Run batched ISM scoring (sequential — upstream has no batched ISM)."""
+        self._ensure_loaded(device)
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
-        interval = _resize_interval(chromosome, interval_start, interval_end)
-        ism_interval = genome.Interval(
-            chromosome=chromosome,
-            start=ism_interval_start,
-            end=ism_interval_end,
-        )
+        all_scores = []
+        for req in requests:
+            width = req["interval_end"] - req["interval_start"]
+            _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_ism_variants_batch")
 
-        interval_variant = None
-        if variant_position is not None:
-            interval_variant = genome.Variant(
-                chromosome=chromosome,
-                position=variant_position,
-                reference_bases=reference_bases,
-                alternate_bases=alternate_bases,
+            interval = _resize_interval(req["chromosome"], req["interval_start"], req["interval_end"])
+            ism_interval = genome.Interval(
+                chromosome=interval.chromosome,
+                start=req["ism_interval_start"],
+                end=req["ism_interval_end"],
             )
 
-        scores = self.model.score_ism_variants(
-            interval=interval,
-            ism_interval=ism_interval,
-            variant_scorers=scorers,
-            organism=_ORGANISM_ENUMS[organism],
-            interval_variant=interval_variant,
-        )
+            interval_variant = None
+            if req.get("variant_position") is not None:
+                interval_variant = genome.Variant(
+                    chromosome=req["chromosome"],
+                    position=req["variant_position"],
+                    reference_bases=req["reference_bases"],
+                    alternate_bases=req["alternate_bases"],
+                )
 
-        return _safe_tidy_scores(scores)
+            scores = self.model.score_ism_variants(
+                interval=interval,
+                ism_interval=ism_interval,
+                variant_scorers=scorers,
+                organism=_ORGANISM_ENUMS[organism],
+                interval_variant=interval_variant,
+            )
+            all_scores.append(_safe_tidy_scores(scores))
+
+        return {"scores": all_scores}
 
     # ============================================================================
     # Device Management
@@ -439,8 +398,6 @@ def _serialize_data(value: Any) -> Any:
         return _serialize_data(vars(value))
     return str(value)
 
-
-
 def _resolve_variant_scorers(
     scorer_names: list[str] | None,
     organism: str,
@@ -521,16 +478,17 @@ def _resize_interval(
     return interval.resize(target)
 
 
+
 # ============================================================================
 # Dispatch
 # ============================================================================
 _OPERATIONS = {
-    "predict_interval",
-    "predict_variant",
-    "predict_sequence",
-    "score_variant",
-    "score_interval",
-    "score_ism_variants",
+    "predict_intervals",
+    "predict_variants",
+    "predict_sequences",
+    "score_variants",
+    "score_intervals",
+    "score_ism_variants_batch",
 }
 
 _model: AlphaGenomeModel | None = None

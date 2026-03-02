@@ -40,7 +40,7 @@ VariantScorerName = Literal[
 # ============================================================================
 
 # Input:
-class AlphaGenomeInput(BaseToolInput):
+class AlphaGenomeInterval(BaseToolInput):
     """Base input for AlphaGenome tools that operate on genomic intervals.
 
     AlphaGenome's architecture requires input sequences whose length matches
@@ -73,14 +73,14 @@ class AlphaGenomeInput(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def validate_interval(self) -> AlphaGenomeInput:
+    def validate_interval(self) -> AlphaGenomeInterval:
         """Validate interval start < end."""
         if self.interval_end <= self.interval_start:
             raise ValueError("end must be greater than start")
         return self
 
 
-class AlphaGenomeVariantInput(AlphaGenomeInput):
+class AlphaGenomeVariant(AlphaGenomeInterval):
     """Input object for AlphaGenome variant-effect tools.
 
     Extends the base interval input with variant coordinates and alleles.
@@ -113,7 +113,7 @@ class AlphaGenomeVariantInput(AlphaGenomeInput):
         return normalized
 
     @model_validator(mode="after")
-    def validate_variant_position(self) -> AlphaGenomeVariantInput:
+    def validate_variant_position(self) -> AlphaGenomeVariant:
         """Ensure variant position is within the interval."""
         if not (self.interval_start <= self.variant_position < self.interval_end):
             raise ValueError("variant_position must be within [interval_start, interval_end)")
