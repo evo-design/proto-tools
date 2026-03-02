@@ -209,49 +209,6 @@ print(f"ISM scores: {len(result[0].scores)} records")
 - `splice_transformer` — dedicated splice site prediction
 
 
-## Inner Model Reference
-
-All batched tools accept lists of these inner model types. A single item is auto-wrapped into a one-element list.
-
-### AlphaGenomeInterval
-
-Base input for interval-based tools.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
-| `interval_start` | `int` | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-
-### AlphaGenomeVariant
-
-Extends `AlphaGenomeInterval` with variant alleles.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `chromosome` | `str` | Chromosome identifier, e.g. `"chr1"` |
-| `interval_start` | `int` | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | Interval end (0-based, exclusive) |
-| `variant_position` | `int` | Variant genomic position (0-based, must be within interval) |
-| `reference_bases` | `str` | Reference allele (A/C/G/T/N string) |
-| `alternate_bases` | `str` | Alternate allele (A/C/G/T/N string) |
-
-### AlphaGenomeISM
-
-Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `chromosome` | `str` | *(required)* | Chromosome identifier |
-| `interval_start` | `int` | *(required)* | Interval start (0-based, inclusive) |
-| `interval_end` | `int` | *(required)* | Interval end (0-based, exclusive) |
-| `ism_interval_start` | `int` | *(required)* | ISM sub-interval start (must be within interval) |
-| `ism_interval_end` | `int` | *(required)* | ISM sub-interval end (must be within interval) |
-| `variant_position` | `Optional[int]` | `None` | Optional existing variant position |
-| `reference_bases` | `Optional[str]` | `None` | Optional existing variant reference allele |
-| `alternate_bases` | `Optional[str]` | `None` | Optional existing variant alternate allele |
-
-
 ## API Reference
 
 <Tabs>
@@ -263,7 +220,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="intervals" type="List[AlphaGenomeInterval]" required>
-  Genomic intervals for prediction. A single interval is auto-wrapped into a list.
+  Genomic intervals for prediction
 </ParamField>
 
 ### Configuration
@@ -289,7 +246,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
-  Per-interval prediction outputs. Supports indexing and iteration.
+  Per-interval AlphaGenome prediction outputs
 </ResponseField>
   </Tab>
   <Tab title="AlphaGenome Predict Sequences">
@@ -300,7 +257,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="sequences" type="List[string]" required>
-  Raw DNA sequences for prediction. A single string is auto-wrapped into a list.
+  Raw DNA sequences for prediction
 </ParamField>
 
 ### Configuration
@@ -326,7 +283,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
-  Per-sequence prediction outputs. Supports indexing and iteration.
+  Per-sequence AlphaGenome prediction outputs
 </ResponseField>
   </Tab>
   <Tab title="AlphaGenome Predict Variants">
@@ -337,7 +294,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="variants" type="List[AlphaGenomeVariant]" required>
-  Variants (with intervals) for prediction. A single variant is auto-wrapped into a list.
+  Variants (with intervals) for prediction
 </ParamField>
 
 ### Configuration
@@ -363,7 +320,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomePredictOutput]" required>
-  Per-variant prediction outputs. Supports indexing and iteration.
+  Per-variant AlphaGenome prediction outputs
 </ResponseField>
   </Tab>
   <Tab title="AlphaGenome Score Intervals">
@@ -374,7 +331,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="intervals" type="List[AlphaGenomeInterval]" required>
-  Genomic intervals for scoring. A single interval is auto-wrapped into a list.
+  Genomic intervals for scoring
 </ParamField>
 
 ### Configuration
@@ -396,7 +353,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
-  Per-interval score outputs. Supports indexing and iteration.
+  Per-interval AlphaGenome score outputs
 </ResponseField>
   </Tab>
   <Tab title="AlphaGenome Score ISM Variants Batch">
@@ -407,7 +364,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="requests" type="List[AlphaGenomeISM]" required>
-  ISM requests to process. A single request is auto-wrapped into a list.
+  ISM requests to process
 </ParamField>
 
 ### Configuration
@@ -429,7 +386,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
-  Per-request ISM score outputs. Supports indexing and iteration.
+  Per-request AlphaGenome ISM score outputs
 </ResponseField>
   </Tab>
   <Tab title="AlphaGenome Score Variants">
@@ -440,7 +397,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Input
 
 <ParamField path="variants" type="List[AlphaGenomeVariant]" required>
-  Variants (with intervals) for scoring. A single variant is auto-wrapped into a list.
+  Variants (with intervals) for scoring
 </ParamField>
 
 ### Configuration
@@ -462,7 +419,7 @@ Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context
 ### Output
 
 <ResponseField name="results" type="List[AlphaGenomeScoreOutput]" required>
-  Per-variant score outputs. Supports indexing and iteration.
+  Per-variant AlphaGenome score outputs
 </ResponseField>
   </Tab>
 </Tabs>
