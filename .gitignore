@@ -49,3 +49,4 @@ file_store/
 # User-generated analysis scripts (examples are tracked)
 analyses/*
 !analyses/examples/
+.claude/worktrees/

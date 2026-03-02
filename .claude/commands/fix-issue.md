@@ -1,5 +1,20 @@
 # Fix GitHub Issue $ARGUMENTS
 
+## Step 0: Set Up Worktree
+
+Create an isolated worktree so this fix doesn't block or conflict with other in-progress work:
+
+```bash
+git fetch origin main
+USER=$(git config user.name | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+git worktree add .claude/worktrees/issue-$ARGUMENTS -b "$USER/fix-issue-$ARGUMENTS" origin/main
+cd .claude/worktrees/issue-$ARGUMENTS
+```
+
+Work inside this worktree for all subsequent steps. If the branch name doesn't capture the intent (e.g., it's a feature, not a fix), rename it after reading the issue with `git branch -m $USER/better-name`.
+
+If a worktree already exists for this issue, `cd` into it and `git pull origin main` to stay current.
+
 ## Step 1: Read the Issue
 
 ```bash
@@ -58,7 +73,19 @@ tests/
 └── conftest.py
 ```
 
-## Step 3: Write a Failing Test
+## Step 3: Present Findings — STOP and wait for user
+
+**Do not write code yet.** Present your interpretation of the problem and proposed approach:
+
+- **My read on the issue**: one paragraph — what's actually broken/needed and why
+- **Root cause hypothesis**: what you think is wrong, with evidence from the code you read
+- **Proposed approach**: which files you'll touch and what changes you'll make
+- **Scope check**: is this a clean fix, or does it touch the public API / export chain / multiple tools?
+- **Branch name**: confirm or suggest renaming the branch to something more descriptive
+
+Wait for the user to confirm, redirect, or add context before proceeding.
+
+## Step 4: Write a Failing Test
 
 **Always write a test that reproduces the bug before attempting a fix.**
 
@@ -71,7 +98,7 @@ pytest -xvs -k "test_name" tests/path/to/test_file.py
 
 For feature requests (not bugs), skip the failing-test step — but still plan the tests you'll write alongside the implementation.
 
-## Step 4: Implement the Fix
+## Step 5: Implement the Fix
 
 Follow the coding conventions:
 - `from __future__ import annotations` at top of every file
@@ -90,7 +117,7 @@ If the fix touches the tool's public API (Input/Config/Output classes), update t
 3. `tools/__init__.py` -> master re-export
 4. `bio_programming_tools/__init__.py` -> package-level re-export
 
-## Step 5: Verify
+## Step 6: Verify
 
 Run these checks in parallel using sub-agents where possible:
 
@@ -110,14 +137,39 @@ flake8 bio_programming_tools tests
 
 If any test fails, fix it before proceeding. Don't ask — just fix regressions.
 
-## Step 6: Summary
+## Step 7: Push & PR
 
-After all checks pass, provide a concise summary:
+After all checks pass, push the branch and create a PR:
+
+```bash
+git push -u origin HEAD
+gh pr create --title "Fix #$ARGUMENTS: <concise description>" --body "Closes #$ARGUMENTS
+
+## Summary
+<1-3 bullets>
+
+## Test plan
+- [ ] New test reproduces the bug and passes with fix
+- [ ] Area tests pass
+- [ ] Full fast suite passes
+- [ ] Lint clean"
+```
+
+Then offer to clean up the worktree:
+```bash
+REPO_ROOT=$(git worktree list --porcelain | head -1 | sed 's/worktree //')
+cd "$REPO_ROOT"
+git worktree remove .claude/worktrees/issue-$ARGUMENTS
+```
+
+## Step 8: Summary
+
+Provide a concise summary:
 - **Issue**: one-line restatement of the problem
 - **Root cause**: what was wrong
 - **Fix**: what changed (files + brief description)
 - **Tests**: what tests were added/modified
-- **Verification**: confirmation that all tests and lint pass
+- **PR**: link to the created PR
 
 ## Tips
 
@@ -131,6 +183,7 @@ After all checks pass, provide a concise summary:
 
 - [ ] Issue read and requirements understood (`gh issue view`)
 - [ ] Affected source files identified and read
+- [ ] Findings presented and user confirmed approach
 - [ ] Failing test reproduces the bug (or test plan for features)
 - [ ] Fix is minimal and focused
 - [ ] `__init__.py` export chain updated (if public API changed)
