@@ -7,13 +7,16 @@ Create an isolated worktree so this fix doesn't block or conflict with other in-
 ```bash
 git fetch origin main
 USER=$(git config user.name | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-git worktree add .claude/worktrees/issue-$ARGUMENTS -b "$USER/fix-issue-$ARGUMENTS" origin/main
+git worktree add .claude/worktrees/issue-$ARGUMENTS -B "$USER/fix-issue-$ARGUMENTS" origin/main
 cd .claude/worktrees/issue-$ARGUMENTS
+git submodule update --init --recursive
 ```
+
+`-B` (not `-b`) ensures this works even if the branch exists from a previous attempt — it resets it to `origin/main`. The submodule init is required because worktrees don't auto-initialize submodules, and most tests import from `bio_programming_tools`.
 
 Work inside this worktree for all subsequent steps. If the branch name doesn't capture the intent (e.g., it's a feature, not a fix), rename it after reading the issue with `git branch -m $USER/better-name`.
 
-If a worktree already exists for this issue, `cd` into it and `git pull origin main` to stay current.
+If a worktree already exists for this issue, `cd` into it and `git pull origin main && git submodule update --init --recursive` to stay current.
 
 ## Step 1: Read the Issue
 
@@ -159,7 +162,7 @@ Then offer to clean up the worktree:
 ```bash
 REPO_ROOT=$(git worktree list --porcelain | head -1 | sed 's/worktree //')
 cd "$REPO_ROOT"
-git worktree remove .claude/worktrees/issue-$ARGUMENTS
+git worktree remove --force .claude/worktrees/issue-$ARGUMENTS
 ```
 
 ## Step 8: Summary
