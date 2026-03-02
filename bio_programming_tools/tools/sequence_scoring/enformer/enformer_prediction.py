@@ -129,6 +129,7 @@ class EnformerConfig(BaseConfig):
     )
     output_tracks: List[int] = ConfigField(
         title="Output Tracks",
+        default=[0],
         description="Track indices to extract from model output",
     )
     species: Literal["human", "mouse"] = ConfigField(
@@ -143,17 +144,23 @@ class EnformerConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return EnformerInput(sequence="A" * 196608)
+
+
 @tool(
     key="enformer-prediction",
     label="Enformer Prediction",
     category="sequence_scoring",
-    input=EnformerInput,
-    config=EnformerConfig,
-    output=EnformerOutput,
+    input_class=EnformerInput,
+    config_class=EnformerConfig,
+    output_class=EnformerOutput,
     description="Gene expression and regulatory activity prediction using Enformer",
     uses_gpu=True,
+    example_input=example_input,
 )
-def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance=None) -> EnformerOutput:
+def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, instance=None) -> EnformerOutput:
     """Predict regulatory activity with Enformer.
 
     Args:

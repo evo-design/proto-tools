@@ -97,18 +97,24 @@ class ESM2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM2ScoringInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm2-score",
     label="ESM2 Scoring",
     category="masked_models",
-    input=ESM2ScoringInput,
-    config=ESM2ScoringConfig,
-    output=ESM2ScoringOutput,
+    input_class=ESM2ScoringInput,
+    config_class=ESM2ScoringConfig,
+    output_class=ESM2ScoringOutput,
     description="Score protein sequences using ESM2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_esm2_score(
-    inputs: ESM2ScoringInput, config: ESM2ScoringConfig,
+    inputs: ESM2ScoringInput, config: ESM2ScoringConfig | None = None,
     instance=None,
 ) -> ESM2ScoringOutput:
     """Score protein sequences using ESM2 language model.

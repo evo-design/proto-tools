@@ -183,19 +183,25 @@ class SegmaskerOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return SegmaskerInput(sequences=["MKTL"])
+
+
 @tool(
     key="segmasker-score",
     label="Segmasker Low-Complexity Detection",
     category="sequence_scoring",
-    input=SegmaskerInput,
-    config=SegmaskerConfig,
-    output=SegmaskerOutput,
+    input_class=SegmaskerInput,
+    config_class=SegmaskerConfig,
+    output_class=SegmaskerOutput,
     description="Detect low-complexity regions in protein sequences using NCBI segmasker",
+    example_input=example_input,
 )
 @tool_cache("segmasker-score")
 def run_segmasker(
     inputs: SegmaskerInput,
-    config: SegmaskerConfig,
+    config: SegmaskerConfig | None = None,
     instance=None,
 ) -> SegmaskerOutput:
     """Detect low-complexity regions in protein sequences using NCBI segmasker.
@@ -240,6 +246,7 @@ def run_segmasker(
         },
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "segmasker",
         input_data,

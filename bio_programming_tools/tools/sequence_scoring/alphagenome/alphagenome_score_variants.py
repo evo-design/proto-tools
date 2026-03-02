@@ -146,15 +146,26 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomeScoreVariantsInput(
+        variants=[AlphaGenomeVariant(
+            chromosome="chr1", interval_start=0, interval_end=196608,
+            variant_position=100000, reference_bases="A", alternate_bases="G",
+        )]
+    )
+
+
 @tool(
     key="alphagenome-score-variants",
     label="AlphaGenome Score Variants",
     category="sequence_scoring",
-    input=AlphaGenomeScoreVariantsInput,
-    config=AlphaGenomeScoreVariantsConfig,
-    output=AlphaGenomeScoreVariantsOutput,
+    input_class=AlphaGenomeScoreVariantsInput,
+    config_class=AlphaGenomeScoreVariantsConfig,
+    output_class=AlphaGenomeScoreVariantsOutput,
     description="Score variant effects in batch with AlphaGenome variant scorers",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="variants",
@@ -163,7 +174,7 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 )
 def run_alphagenome_score_variants(
     inputs: AlphaGenomeScoreVariantsInput,
-    config: AlphaGenomeScoreVariantsConfig,
+    config: AlphaGenomeScoreVariantsConfig | None = None,
     instance=None,
 ) -> AlphaGenomeScoreVariantsOutput:
     """Score variant effects in batch using AlphaGenome variant scorers."""

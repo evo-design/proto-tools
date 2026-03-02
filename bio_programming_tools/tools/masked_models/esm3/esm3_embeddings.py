@@ -136,17 +136,23 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM3EmbeddingsInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm3-embedding",
     label="ESM3 Embeddings",
     category="masked_models",
-    input=ESM3EmbeddingsInput,
-    config=ESM3EmbeddingsConfig,
-    output=ESM3EmbeddingsOutput,
+    input_class=ESM3EmbeddingsInput,
+    config_class=ESM3EmbeddingsConfig,
+    output_class=ESM3EmbeddingsOutput,
     description="Extract protein sequence embeddings and logits using ESM3",
     uses_gpu=True,
+    example_input=example_input,
 )
-def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig, instance=None) -> ESM3EmbeddingsOutput:
+def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance=None) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
     Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings

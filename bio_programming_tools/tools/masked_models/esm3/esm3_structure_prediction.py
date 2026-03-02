@@ -144,18 +144,24 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM3StructurePredictionInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm3-structure-prediction",
     label="ESM3 Structure Prediction",
     category="masked_models",
-    input=ESM3StructurePredictionInput,
-    config=ESM3StructurePredictionConfig,
-    output=ESM3StructurePredictionOutput,
+    input_class=ESM3StructurePredictionInput,
+    config_class=ESM3StructurePredictionConfig,
+    output_class=ESM3StructurePredictionOutput,
     description="Predict protein 3D structures using ESM3 generative model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_esm3_structure_prediction(
-    inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig,
+    inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig | None = None,
     instance=None,
 ) -> ESM3StructurePredictionOutput:
     """Predict protein 3D structures using ESM3 generative model.

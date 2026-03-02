@@ -77,19 +77,25 @@ PdbFetchFastaConfig = PdbFetchConfig
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PdbFetchFastaInput(pdb_id="1LBG")
+
+
 @tool(
     key="pdb-fetch-fasta",
     label="PDB Fetch FASTA",
     category="database_retrieval",
-    input=PdbFetchFastaInput,
-    config=PdbFetchConfig,
-    output=PdbFetchFastaOutput,
+    input_class=PdbFetchFastaInput,
+    config_class=PdbFetchConfig,
+    output_class=PdbFetchFastaOutput,
     description="Fetch chain sequences from RCSB PDB with protein/nucleotide classification",
     uses_gpu=False,
+    example_input=example_input,
 )
 def run_pdb_fetch_fasta(
     inputs: PdbFetchFastaInput,
-    config: PdbFetchConfig,
+    config: PdbFetchConfig | None = None,
     instance=None,
 ) -> PdbFetchFastaOutput:
     """Fetch chain sequences from RCSB PDB.

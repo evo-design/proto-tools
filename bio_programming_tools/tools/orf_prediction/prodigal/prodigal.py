@@ -288,6 +288,11 @@ class ProdigalOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ProdigalInput(input_sequences=["ATGCGTAAATAA"])
+
+
 @tool_cache_iterable(
     input_iterable_field="input_sequences",
     output_iterable_field="predicted_orfs",
@@ -297,12 +302,13 @@ class ProdigalOutput(BaseToolOutput):
     key="prodigal-prediction",
     label="Prodigal ORF Prediction",
     category="orf_prediction",
-    input=ProdigalInput,
-    config=ProdigalConfig,
-    output=ProdigalOutput,
+    input_class=ProdigalInput,
+    config_class=ProdigalConfig,
+    output_class=ProdigalOutput,
     description="Prokaryotic ORF and gene prediction using Prodigal",
+    example_input=example_input,
 )
-def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, instance=None) -> ProdigalOutput:
+def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None = None, instance=None) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
     Uses pyrodigal Python bindings for  gene prediction in bacterial and archaeal
@@ -347,6 +353,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
     output_data = ToolInstance.dispatch(
         "prodigal",
         {
+            "device": "cpu",
             "sequences": inputs.input_sequences,
             "config": {
                 "meta_mode": config.meta_mode,

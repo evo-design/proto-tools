@@ -155,3 +155,46 @@ def _find_undocumented_fields(config_model: Type) -> List[str]:
         if field_name not in all_docs:
             missing.append(field_name)
     return missing
+
+
+@pytest.mark.parametrize(
+    "config_model", [config_model for config_model in list_of_all_tool_config_models()]
+)
+def test_tool_config_accepts_none(config_model: Type):
+    """Test that all tool configs can be instantiated with default values.
+
+    This enables the @tool decorator to accept config=None and automatically
+    instantiate a default config, allowing simpler API usage:
+        run_tool(inputs)  # instead of run_tool(inputs, ToolConfig())
+
+    All config fields must have defaults for this to work.
+    """
+    # Verify every field explicitly has a default value or default_factory
+    from pydantic.fields import PydanticUndefined
+
+    fields_missing_defaults = []
+    for field_name, field_info in config_model.model_fields.items():
+        has_default = (
+            field_info.default is not PydanticUndefined
+            or field_info.default_factory is not None
+        )
+        if not has_default:
+            fields_missing_defaults.append(field_name)
+
+    assert not fields_missing_defaults, (
+        f"Config {config_model.__name__} has fields without defaults: "
+        f"{fields_missing_defaults}. All config fields must have defaults "
+        f"to support config=None auto-instantiation."
+    )
+
+    # Verify the config model can actually be instantiated with no args
+    try:
+        default_config = config_model()
+    except Exception as e:
+        pytest.fail(
+            f"Config {config_model.__name__} cannot be instantiated with default values: {e}. "
+            f"All config fields must have defaults to support config=None. "
+            f"Add defaults to all fields or make them optional."
+        )
+
+    assert isinstance(default_config, config_model)

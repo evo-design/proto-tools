@@ -171,18 +171,24 @@ class Evo1SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Evo1SampleInput(prompts=["ATCGATCG"])
+
+
 @tool(
     key="evo1-sample",
     label="Evo1 Sampling",
     category="causal_models",
-    input=Evo1SampleInput,
-    config=Evo1SampleConfig,
-    output=Evo1SampleOutput,
+    input_class=Evo1SampleInput,
+    config_class=Evo1SampleConfig,
+    output_class=Evo1SampleOutput,
     description="Sample DNA sequences using Evo1 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_evo1_sample(
-    inputs: Evo1SampleInput, config: Evo1SampleConfig, instance=None,
+    inputs: Evo1SampleInput, config: Evo1SampleConfig | None = None, instance=None,
 ) -> Evo1SampleOutput:
     """Sample DNA sequences using the Evo1 language model.
 

@@ -6,6 +6,7 @@ Supports the same CLI options and markers as the main bio-programming tests:
   --gpu        Run only GPU tests
   --all        Include slow tests
   --slow       Run only slow tests
+  --exhaustive Include exhaustive combinatorial tests (e.g., every tool × device)
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
   --env-report[=PATH]  Run venv smoke tests and generate compatibility report
@@ -28,12 +29,17 @@ import pytest
 
 from bio_programming_tools import setup_logging
 from bio_programming_tools.tools.tool_registry import ToolRegistry
+
+# Register testing tools so consistency tests cover them.
+# These are NOT exported via tools/__init__.py and are invisible outside tests.
+import bio_programming_tools.tools.testing  # noqa: F401
 from bio_programming_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
     get_captured_env,
     get_platform_id,
 )
+from bio_programming_tools.utils.device import number_of_visible_gpus
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 
@@ -452,6 +458,12 @@ def pytest_addoption(parser):
         help="Skip tests marked with skip_ci (mimics CI environment behavior)",
     )
     parser.addoption(
+        "--exhaustive",
+        action="store_true",
+        default=False,
+        help="Include exhaustive combinatorial tests (e.g., every tool × device transition)",
+    )
+    parser.addoption(
         "--no-log-console",
         action="store_true",
         default=False,
@@ -725,14 +737,23 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" not in item.keywords:
                 item.add_marker(skip_non_slow)
-    elif not run_all:
-        # By default (no --all flag), skip slow tests
+    elif not run_all and not config.getoption("--exhaustive"):
+        # By default, skip slow tests (--all or --exhaustive bypass this)
         skip_slow = pytest.mark.skip(
             reason="slow test (use --all to run, or --slow to run only slow tests)"
         )
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+    # Skip exhaustive tests unless --exhaustive is specified
+    if not config.getoption("--exhaustive"):
+        skip_exhaustive = pytest.mark.skip(
+            reason="exhaustive test (use --exhaustive to run)"
+        )
+        for item in items:
+            if "exhaustive" in item.keywords:
+                item.add_marker(skip_exhaustive)
 
     # Skip only_chimera tests when not on Chimera cluster
     if not is_on_chimera():
@@ -742,6 +763,18 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "only_chimera" in item.keywords:
                 item.add_marker(skip_not_chimera)
+
+    # Skip uses_gpu(n) tests when fewer than n GPUs are visible
+    visible_gpus = number_of_visible_gpus()
+    for item in items:
+        for marker in item.iter_markers("uses_gpu"):
+            required = marker.args[0] if marker.args else 1
+            if visible_gpus < required:
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=f"Requires {required} GPUs, only {visible_gpus} visible"
+                    )
+                )
 
 
 @pytest.fixture(scope="session", autouse=True)

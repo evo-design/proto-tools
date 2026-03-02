@@ -126,19 +126,30 @@ ToolRegistry.list_citations()          # Returns {tool_key: bibtex} for all tool
 ToolRegistry.get_tool_categories()  # Returns {tool_name: category} mapping
 ```
 
+**To get a tool's example input:**
+```python
+ToolRegistry.get_example_input("esmfold-prediction")  # Returns minimal valid Input instance
+```
+
 ### The Universal Tool Pattern
 
 Every tool follows this exact pattern — no exceptions:
 
 ```python
-@tool(key="tool-key", label="Tool Label", category="category_name", input=ToolInput, config=ToolConfig, output=ToolOutput, description="...")
-def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ToolInput(sequences=["MKTL"])
+
+@tool(key="tool-key", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input)
+def run_tool_name(inputs: ToolInput, config: ToolConfig | None = None) -> ToolOutput:
 ```
 
 - **Input** (`BaseToolInput`) — primary data (sequences, structures, files). Uses `extra="forbid"`.
-- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`.
+- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time** — if `config=None`, the decorator auto-instantiates the default config. All config fields must have defaults.
 - **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
-- **`@tool()`** decorator — handles error catching, timing, metadata population, registry.
+- **`@tool()`** decorator — handles error catching, timing, metadata population, registry, default config instantiation, and device allocation validation.
+- **`example_input`** — callable factory returning a minimal valid `Input` instance. Used by parametrized tests and as importable usage examples. Must be a public named function (not a lambda).
+- **`device_count`** (optional) — specifies expected device allocation ("1", "1-2", ">=1"). Validates at runtime: errors on under-allocation, warns on over-allocation. Defaults to "1".
 
 ### Tool Execution & Persistence (ToolInstance)
 
@@ -174,7 +185,228 @@ with ToolInstance.persist_tool("esmfold", instance_name="gpu0"):
 
 Persistent workers auto-restart when any `reload_on_change` config field changes between calls (device, model checkpoint, etc.). Mark fields with `ConfigField(..., reload_on_change=True)` and pass `reload_on=type(config).reload_fields()` to `dispatch()`.
 
-See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthrough with timing data.
+See `notes/tool_instance_example.ipynb` for a full walkthrough with timing data.
+
+### Device Management (DeviceManager)
+
+The **DeviceManager** (`utils/device_manager.py`) provides centralized GPU allocation tracking and automatic device management for persistent tool instances. It prevents GPU resource conflicts, implements LRU eviction when devices are full, and supports CPU offloading to keep models warm.
+
+**Key features:**
+- **Automatic allocation** — Tools request devices; DeviceManager tracks and assigns them
+- **LRU eviction** — When all GPUs are full, least recently used models are offloaded
+- **LRU eviction strategies** — RESTART (default, frees all memory) or CPU offload (keeps models warm in RAM)
+- **Thread-safe** — Handles concurrent device requests from multiple ToolInstances
+- **Configurable** — Environment variables or programmatic configuration
+- **Device awareness** — Respects `CUDA_VISIBLE_DEVICES`, auto-detects available GPUs
+
+**How it works:**
+
+1. When `ToolInstance` starts a persistent worker, it calls `DeviceManager.request_device()` to get an allocated device
+2. DeviceManager tracks all allocations with timestamps
+3. On each tool call, `ToolInstance` updates the `last_used` timestamp via `DeviceManager.update_last_used()`
+4. When all devices are full and a new request arrives, DeviceManager evicts the least recently used allocation
+5. On shutdown, `ToolInstance` calls `DeviceManager.release_device()` to free the allocation
+
+**Automatic allocation (recommended):**
+
+In single-GPU or simple multi-GPU scenarios, DeviceManager works transparently:
+
+```python
+from bio_programming_tools.utils.tool_instance import ToolInstance
+
+# DeviceManager automatically allocates cuda:0 (or next available GPU)
+with ToolInstance.persist():
+    for seq in sequences:
+        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
+        # First call: DeviceManager allocates cuda:0
+        # Subsequent calls: DeviceManager updates last_used timestamp
+    # On exit: DeviceManager releases cuda:0
+```
+
+**Explicit device control:**
+
+For multi-GPU workloads or explicit device placement, use the `.to(device)` API (PyTorch-style):
+
+```python
+# Create named instances and move to specific devices
+esmfold_gpu0 = ToolInstance.get("esmfold", instance_name="gpu0")
+esmfold_gpu1 = ToolInstance.get("esmfold", instance_name="gpu1")
+
+# Move to specific devices
+esmfold_gpu0.to("cuda:0")
+esmfold_gpu1.to("cuda:1")
+
+# Run on specific devices
+result1 = run_esmfold(inputs, config, instance="gpu0")  # Uses cuda:0
+result2 = run_esmfold(inputs, config, instance="gpu1")  # Uses cuda:1
+
+# Clean up
+esmfold_gpu0.shutdown()
+esmfold_gpu1.shutdown()
+```
+
+**Configuration:**
+
+DeviceManager can be configured via environment variables or the `configure()` method:
+
+**Environment variables:**
+- `BIO_TOOLS_MANAGED_DEVICES` — Comma-separated list of devices to manage (e.g., `"cuda:0,cuda:1,cuda:2"`)
+- `BIO_TOOLS_OFFLOAD_STRATEGY` — Eviction strategy: `"restart"` (default, frees all memory) or `"cpu"` (keeps models warm)
+- `BIO_TOOLS_ALLOW_MULTI_DEVICE` — Allow multiple models per device: `"true"` or `"false"` (default)
+
+**Programmatic configuration:**
+
+```python
+from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+
+dm = DeviceManager.get_instance()
+
+# Configure before first use
+dm.configure(
+    managed_devices=["cuda:0", "cuda:1"],     # Explicit device pool
+    offload_strategy=OffloadStrategy.RESTART,   # or OffloadStrategy.CPU
+    allow_multiple_per_device=False            # One model per device (default)
+)
+```
+
+**Offload strategies:**
+
+- **RESTART** (default) — On eviction, shuts down the worker entirely. Frees all memory, but next call pays full reload cost.
+- **CPU** — On eviction, moves model to CPU via `to_device("cpu")`. Fast reloading if needed again, but keeps memory allocated.
+
+**Device pool discovery:**
+
+DeviceManager auto-detects GPUs via `number_of_available_gpus()` and respects `CUDA_VISIBLE_DEVICES`:
+
+```python
+# Auto-detect all GPUs
+dm = DeviceManager.get_instance()
+dm.get_device_status()["available_devices"]  # ["cuda:0", "cuda:1", ...]
+
+# Respect CUDA_VISIBLE_DEVICES
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,2"
+dm = DeviceManager.get_instance()
+dm.get_device_status()["available_devices"]  # ["cuda:0", "cuda:2"]
+
+# Explicit device pool (overrides auto-detection)
+dm.configure(managed_devices=["cuda:1", "cuda:2"])
+```
+
+**Status monitoring:**
+
+```python
+status = DeviceManager.get_instance().get_device_status()
+# {
+#     "available_devices": ["cuda:0", "cuda:1"],
+#     "offload_strategy": "restart",
+#     "allow_multiple_per_device": False,
+#     "allocations": {
+#         "esmfold-abc123": {
+#             "tool_name": "esmfold",
+#             "device_id": "cuda:0",
+#             "allocated_at": 1234567890.0,
+#             "last_used": 1234567895.0
+#         }
+#     }
+# }
+```
+
+**The `to_device()` protocol:**
+
+All standalone scripts (`standalone/inference.py` or `standalone/run.py`) implement a `to_device(device: str) -> dict` function that DeviceManager calls to move models between devices. This function is invoked via the worker bootstrap protocol when `ToolInstance.to(device)` is called.
+
+**PyTorch tools** (ESMFold, Evo2, ESM2, ProteinMPNN, etc.):
+```python
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)  # Calls model.model.to(device) internally
+        return {"success": True, "device": device}
+    else:
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+```
+
+**JAX tools** (AlphaGenome):
+```python
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and hasattr(_model, "to_device"):
+        _model.to_device(device)  # JAX-specific device placement
+    return {"success": True, "device": device}
+```
+
+**CLI tools** (Boltz2, RFDiffusion3, BLAST, etc.):
+```python
+def to_device(device: str) -> dict:
+    """Passthrough for CLI tool - automatically unloads after each call."""
+    # CLI tools spawn subprocesses and naturally unload after each call
+    # This is a passthrough for standardization with other tools
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+```
+
+**When implementing new tools**, add `to_device()` to `standalone/inference.py` or `standalone/run.py` following the pattern above. The model wrapper class should have a `to_device(device: str)` method that handles the actual device move.
+
+**Logging:**
+
+DeviceManager logs all device operations at INFO level so users are aware of automatic moves:
+
+```
+INFO: Allocated device cuda:0 for esmfold instance esmfold-abc123
+INFO: Updated last_used for esmfold-abc123
+INFO: Moving esmfold-abc123 from cuda:0 to cpu (LRU eviction)
+INFO: Allocated device cuda:0 for evo2 instance evo2-def456
+INFO: Released device cuda:0 for esmfold-abc123
+```
+
+### Standalone Helpers for CLI Subprocess Device Routing
+
+**For tools that spawn CLI subprocesses** (e.g., Boltz2, RFDiffusion3, Protenix, AlphaFold3), the `get_subprocess_device_env()` helper ensures correct device routing when the parent process has `CUDA_VISIBLE_DEVICES` set.
+
+**The problem:** When DeviceManager allocates a logical device (e.g., `cuda:2`), the worker subprocess inherits the parent's `CUDA_VISIBLE_DEVICES` (e.g., `0,1,5,7`). CLI subprocesses need the physical GPU index (e.g., `5`) mapped from the logical index (2).
+
+**The solution:** The `utils/standalone_helpers.py` module provides `get_subprocess_device_env(device: str) -> Dict[str, str]` that maps logical device indices to physical GPU indices:
+
+```python
+from standalone_helpers import get_subprocess_device_env
+
+# Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+env = get_subprocess_device_env("cuda:2")  # Maps to physical GPU 5
+subprocess.run(cmd, env=env)  # CLI sees physical GPU 5 as its cuda:0
+```
+
+**How it works:**
+
+1. Worker bootstrap (`_worker_bootstrap.py`) auto-copies `standalone_helpers.py` to each tool's `standalone/standalone_helpers.py` at runtime
+2. Standalone scripts import `from standalone_helpers import get_subprocess_device_env`
+3. Helper reads parent's `CUDA_VISIBLE_DEVICES` (e.g., `"0,1,5,7"`)
+4. Maps logical device index (e.g., `cuda:2`) to physical GPU (e.g., `5`)
+5. Returns environment dict with `CUDA_VISIBLE_DEVICES=5`
+6. CLI subprocess sees physical GPU 5 as its only device (cuda:0)
+
+**Auto-copy mechanism:**
+- Source: `bio_programming_tools/utils/standalone_helpers.py` (tracked in git)
+- Destination: `{tool}/standalone/standalone_helpers.py` (not tracked, auto-generated)
+- Exception: AlphaFold3's `standalone_helpers.py` is manually copied and tracked (inference.py is in tool root, not standalone/)
+
+**Usage pattern in standalone/inference.py:**
+
+```python
+from standalone_helpers import get_subprocess_device_env
+
+def __call__(self, ..., device: str = "cuda", ...):
+    # Build CLI command
+    cmd = ["some-cli-tool", ...]
+
+    # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+    env = get_subprocess_device_env(device)
+
+    # Run CLI subprocess
+    subprocess.run(cmd, env=env)  # Preserves all env vars, maps CUDA_VISIBLE_DEVICES
+```
+
+**Consistency enforcement:** The test `tests/tool_infra_tests/test_device_manager.py::test_gpu_cli_tools_use_subprocess_device_helper` verifies that all GPU tools with subprocess calls properly import and use `get_subprocess_device_env()`. This prevents CLI tools from accessing unintended GPUs.
 
 ### Compute Dependency Management
 
@@ -396,6 +628,7 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
 | `utils/tool_instance.py` | `ToolInstance` — isolated environment execution with opt-in persistence |
+| `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
 | `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
@@ -431,9 +664,10 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 - Do **not** run `black` on this project — formatting is handled manually
 - isort line length: 88
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)
-- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`
+- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
 - **Before running GPU tests**, check if a GPU is available. If no GPU is detected, run CPU tests by default (`pytest --cpu`)
+- **Test logs**: Every pytest run saves a detailed log to `logs/` (project root). Log files are named `pytest_{timestamp}.log` or `pytest_{test_filter}.log` when using `-k`. Check these logs for debugging test failures instead of re-running tests — they include full DEBUG-level output from DeviceManager, ToolInstance, and worker subprocesses.
 
 ## Using bio_tools with Claude Code
 
@@ -452,6 +686,9 @@ inputs = {Tool}Input(...)   # Primary data: sequences, structures, files
 config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
 result = run_{tool}(inputs, config)
 # result.success, result.execution_time, result.errors, plus tool-specific fields
+
+# Config is optional — omit it to use all defaults:
+result = run_{tool}(inputs)
 ```
 
 ### Script vs Direct Execution

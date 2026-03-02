@@ -6,6 +6,7 @@ import hashlib
 import logging
 import subprocess
 import sys
+import tempfile
 import textwrap
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -29,7 +30,8 @@ from bio_programming_tools.utils.tool_instance import (
 def _make_fake_instance(
     tool_name: str = "esm2",
     device: str = "cpu",
-    first_run: bool = False,
+    needs_warmup: bool = False,
+    _tmp_dir: Path | None = None,
 ) -> ToolInstance:
     """Create a ToolInstance with fake paths, bypassing __init__.
 
@@ -39,14 +41,20 @@ def _make_fake_instance(
         Name of the tool
     device : str
         Device to use
-    first_run : bool
-        If False (default), mark the instance as having completed first run,
-        which disables warmup timeout. Set to True to test first-run behavior.
+    needs_warmup : bool
+        If False (default), pre-mark the default config as warmed up,
+        which disables warmup timeout. Set to True to test warmup behavior.
+    _tmp_dir : Path | None
+        If provided, use this as env_path (for marker file tests).
+        Otherwise creates a temp directory.
     """
     inst = ToolInstance.__new__(ToolInstance)
     inst.tool_name = tool_name
     inst.device = device
-    inst.env_path = Path("/fake/venv")
+    if _tmp_dir is not None:
+        inst.env_path = _tmp_dir
+    else:
+        inst.env_path = Path(tempfile.mkdtemp(prefix="test_toolinstance_"))
     inst.script_path = Path("/fake/inference.py")
     inst._tool_env_vars = {"passthrough": [], "set": []}
     inst._env_ready = True
@@ -55,8 +63,9 @@ def _make_fake_instance(
     inst._worker = None
     inst._reload_params = {}
 
-    # Mock first run state - create a mock method that returns the specified value
-    inst._is_first_run = lambda: first_run
+    # Pre-mark default config as warmed up unless testing warmup behavior
+    if not needs_warmup:
+        inst._mark_warmup_complete({})
 
     return inst
 
@@ -346,7 +355,7 @@ class TestOneshot:
                 pass
 
             env = mock_run.call_args.kwargs["env"]
-            assert env["TOOL_VENV_PATH"] == "/fake/venv"
+            assert env["TOOL_VENV_PATH"] == str(inst.env_path)
 
 
 class TestPersistTool:
@@ -770,51 +779,6 @@ class TestShutdownInstance:
 class TestDeviceRestart:
     """Test that persistent workers restart on device change."""
 
-    def test_persistent_worker_restarts_on_device_change(self):
-        """Changing device in input_dict should stop old worker and start new."""
-        inst = _make_fake_instance()
-        inst._reload_params = {"device": "cpu"}
-
-        mock_worker = MagicMock()
-        mock_worker.script_path = inst.script_path
-        inst._worker = mock_worker
-
-        with patch(
-            "bio_programming_tools.utils.tool_instance.PersistentWorker"
-        ) as MockPW:
-            new_worker = MagicMock()
-            new_worker.send.return_value = {"result": "ok"}
-            MockPW.return_value = new_worker
-
-            result = inst._run_persistent({"device": "cuda"})
-
-        mock_worker.stop.assert_called_once()
-        assert inst.device == "cuda"
-        MockPW.assert_called_once_with(
-            tool_name="esm2",
-            env_path=Path("/fake/venv"),
-            script_path=Path("/fake/inference.py"),
-            device="cuda",
-            tool_env_vars={"passthrough": [], "set": []},
-        )
-        assert result == {"result": "ok"}
-
-    def test_persistent_worker_no_restart_same_device(self):
-        """Same device should reuse existing worker without restart."""
-        inst = _make_fake_instance(device="cuda")
-        inst._reload_params = {"device": "cuda"}
-
-        mock_worker = MagicMock()
-        mock_worker.script_path = inst.script_path
-        mock_worker.send.return_value = {"result": "ok"}
-        inst._worker = mock_worker
-
-        result = inst._run_persistent({"device": "cuda"})
-
-        mock_worker.stop.assert_not_called()
-        mock_worker.send.assert_called_once_with({"device": "cuda"}, timeout=None)
-        assert result == {"result": "ok"}
-
     @patch.object(ToolInstance, "_oneshot")
     def test_dispatch_forwards_input_dict_to_oneshot(self, mock_oneshot: MagicMock):
         """dispatch() should forward input_dict (with device) to _oneshot."""
@@ -847,9 +811,8 @@ class TestReloadOnChange:
 
     def test_persistent_worker_restarts_on_reload_param_change(self):
         """Changing a tracked reload param should restart the worker."""
-        inst = _make_fake_instance(device="cuda")
+        inst = _make_fake_instance(device="cpu")
         inst._reload_params = {
-            "device": "cuda",
             "model_checkpoint": "esm2_t33_650M_UR50D",
         }
 
@@ -865,23 +828,21 @@ class TestReloadOnChange:
             MockPW.return_value = new_worker
 
             result = inst._run_persistent(
-                {"device": "cuda", "model_checkpoint": "esm2_t36_3B_UR50D"},
-                reload_on={"device", "model_checkpoint"},
+                {"device": "cpu", "model_checkpoint": "esm2_t36_3B_UR50D"},
+                reload_on={"model_checkpoint"},
             )
 
         mock_worker.stop.assert_called_once()
         MockPW.assert_called_once()
         assert inst._reload_params == {
-            "device": "cuda",
             "model_checkpoint": "esm2_t36_3B_UR50D",
         }
         assert result == {"result": "ok"}
 
     def test_persistent_worker_no_restart_same_reload_params(self):
         """Same reload params should reuse existing worker."""
-        inst = _make_fake_instance(device="cuda")
+        inst = _make_fake_instance(device="cpu")
         inst._reload_params = {
-            "device": "cuda",
             "model_checkpoint": "esm2_t33_650M_UR50D",
         }
 
@@ -891,40 +852,12 @@ class TestReloadOnChange:
         inst._worker = mock_worker
 
         result = inst._run_persistent(
-            {"device": "cuda", "model_checkpoint": "esm2_t33_650M_UR50D"},
-            reload_on={"device", "model_checkpoint"},
+            {"device": "cpu", "model_checkpoint": "esm2_t33_650M_UR50D"},
+            reload_on={"model_checkpoint"},
         )
 
         mock_worker.stop.assert_not_called()
         assert result == {"result": "ok"}
-
-    def test_reload_on_defaults_to_device(self):
-        """When reload_on is not passed, only device change triggers restart."""
-        inst = _make_fake_instance()
-        inst._reload_params = {"device": "cpu"}
-
-        mock_worker = MagicMock()
-        mock_worker.script_path = inst.script_path
-        mock_worker.send.return_value = {"result": "ok"}
-        inst._worker = mock_worker
-
-        # Change model_checkpoint but not device — no restart (not tracked)
-        inst._run_persistent(
-            {"device": "cpu", "model_checkpoint": "esm2_t36_3B_UR50D"},
-        )
-        mock_worker.stop.assert_not_called()
-
-        # Now change device — should restart
-        with patch(
-            "bio_programming_tools.utils.tool_instance.PersistentWorker"
-        ) as MockPW:
-            new_worker = MagicMock()
-            new_worker.send.return_value = {"result": "ok"}
-            MockPW.return_value = new_worker
-
-            inst._run_persistent({"device": "cuda"})
-
-        mock_worker.stop.assert_called_once()
 
     @patch.object(ToolInstance, "__init__", return_value=None)
     def test_dispatch_forwards_reload_on(self, mock_init: MagicMock):
@@ -932,14 +865,14 @@ class TestReloadOnChange:
         inst = ToolInstance.get("esm2")
         inst.run = MagicMock(return_value={"result": "ok"})
 
-        reload_fields = {"device", "model_checkpoint"}
+        reload_fields = {"model_checkpoint"}
         ToolInstance.dispatch(
             "esm2",
-            {"op": "score", "device": "cuda"},
+            {"op": "score", "device": "cpu"},
             reload_on=reload_fields,
         )
         inst.run.assert_called_once_with(
-            {"op": "score", "device": "cuda"},
+            {"op": "score", "device": "cpu"},
             script_path=None,
             verbose=False,
             timeout=600,
@@ -950,20 +883,20 @@ class TestReloadOnChange:
 class TestReloadFieldsClassmethod:
     """Test BaseConfig.reload_fields() classmethod."""
 
-    def test_base_config_reload_fields_includes_device(self):
-        """BaseConfig.reload_fields() should return {'device'}."""
+    def test_base_config_reload_fields_empty(self):
+        """BaseConfig.reload_fields() should return empty set."""
         from bio_programming_tools.utils.base_config import BaseConfig
 
-        assert BaseConfig.reload_fields() == {"device"}
+        assert BaseConfig.reload_fields() == set()
 
-    def test_subclass_inherits_device(self):
-        """Subclass without extra reload fields inherits device."""
+    def test_subclass_without_reload_fields(self):
+        """Subclass without extra reload fields has empty reload_fields."""
         from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
 
         class MyConfig(BaseConfig):
             param: int = ConfigField(default=1, description="test")
 
-        assert MyConfig.reload_fields() == {"device"}
+        assert MyConfig.reload_fields() == set()
 
     def test_subclass_with_reload_on_change(self):
         """Subclass with reload_on_change=True includes those fields."""
@@ -976,7 +909,7 @@ class TestReloadFieldsClassmethod:
                 reload_on_change=True,
             )
 
-        assert MyConfig.reload_fields() == {"device", "model_checkpoint"}
+        assert MyConfig.reload_fields() == {"model_checkpoint"}
 
     def test_reload_fields_excludes_non_reload(self):
         """Fields without reload_on_change are excluded."""
@@ -992,7 +925,6 @@ class TestReloadFieldsClassmethod:
 
         fields = MyConfig.reload_fields()
         assert "reload_me" in fields
-        assert "device" in fields
         assert "leave_me" not in fields
 
 
@@ -1017,7 +949,7 @@ class TestTimeout:
     def test_persistent_timeout_raises(self):
         """_run_persistent() should propagate TimeoutError from the worker."""
         inst = _make_fake_instance()
-        inst._reload_params = {"device": "cpu"}
+        inst._reload_params = {}
 
         mock_worker = MagicMock()
         mock_worker.script_path = inst.script_path
@@ -1084,6 +1016,122 @@ class TestTimeout:
 
         # Worker should have been stopped (process set to None)
         assert worker._process is None
+
+
+class TestWarmupTimeout:
+    """Test per-config warmup timeout for checkpoint downloads."""
+
+    def test_first_config_gets_warmup_timeout(self):
+        """A never-seen config combination should get extended warmup timeout."""
+        inst = _make_fake_instance(needs_warmup=True)
+        params = {"model_name": "protenix_mini_esm_v0.5.0"}
+
+        result = inst._apply_warmup_timeout(1200, params)
+        assert result == 2400  # warmup timeout (40 min)
+
+    def test_seen_config_gets_normal_timeout(self):
+        """A previously-completed config should get the normal timeout."""
+        inst = _make_fake_instance(needs_warmup=True)
+        params = {"model_name": "protenix_mini_esm_v0.5.0"}
+
+        # Mark this config as completed
+        inst._mark_warmup_complete(params)
+
+        result = inst._apply_warmup_timeout(1200, params)
+        assert result == 1200  # normal timeout
+
+    def test_different_configs_independent(self):
+        """Different config combos should have independent warmup markers."""
+        inst = _make_fake_instance(needs_warmup=True)
+        params_a = {"model_name": "protenix_base_default_v1.0.0"}
+        params_b = {"model_name": "protenix_mini_esm_v0.5.0"}
+
+        # Mark config A as completed
+        inst._mark_warmup_complete(params_a)
+
+        # Config A should get normal timeout
+        assert inst._apply_warmup_timeout(1200, params_a) == 1200
+        # Config B should still get warmup timeout
+        assert inst._apply_warmup_timeout(1200, params_b) == 2400
+
+    def test_empty_params_warmup(self):
+        """Empty reload_params (no reload_on_change fields) should still track warmup."""
+        inst = _make_fake_instance(needs_warmup=True)
+
+        # First run with empty params should get warmup
+        assert inst._apply_warmup_timeout(600, {}) == 2400
+
+        # After marking complete, should get normal timeout
+        inst._mark_warmup_complete({})
+        assert inst._apply_warmup_timeout(600, {}) == 600
+
+    def test_warmup_timeout_is_at_least_configured(self):
+        """Warmup timeout should be max(WARMUP, configured), not always WARMUP."""
+        inst = _make_fake_instance(needs_warmup=True)
+        params = {"model_name": "big_model"}
+
+        # If configured timeout is larger than warmup, use the larger one
+        result = inst._apply_warmup_timeout(5000, params)
+        assert result == 5000
+
+    def test_warmup_with_none_timeout(self):
+        """When timeout=None, warmup should still apply the WARMUP_TIMEOUT."""
+        inst = _make_fake_instance(needs_warmup=True)
+        params = {"model_name": "some_model"}
+
+        result = inst._apply_warmup_timeout(None, params)
+        assert result == 2400
+
+    def test_no_params_defaults_to_empty(self):
+        """Calling _apply_warmup_timeout without reload_params should use empty dict."""
+        inst = _make_fake_instance(needs_warmup=True)
+
+        # No reload_params arg → uses {} → first run
+        result = inst._apply_warmup_timeout(600)
+        assert result == 2400
+
+    def test_marker_deterministic(self):
+        """Same config params should produce the same marker path."""
+        inst = _make_fake_instance()
+        params = {"model_name": "esm_v1", "checkpoint": "ckpt_a"}
+        p1 = inst._config_marker_path(params)
+        p2 = inst._config_marker_path(params)
+        assert p1 == p2
+
+    def test_marker_different_for_different_configs(self):
+        """Different config params should produce different marker paths."""
+        inst = _make_fake_instance()
+        p1 = inst._config_marker_path({"model_name": "model_a"})
+        p2 = inst._config_marker_path({"model_name": "model_b"})
+        assert p1 != p2
+
+    def test_persistent_warmup_on_config_change(self):
+        """Switching to a new config in _run_persistent should trigger warmup timeout."""
+        inst = _make_fake_instance(device="cpu")
+        # Pre-mark old config as complete
+        old_params = {"model_checkpoint": "esm2_t33_650M_UR50D"}
+        inst._mark_warmup_complete(old_params)
+        inst._reload_params = dict(old_params)
+
+        mock_worker = MagicMock()
+        mock_worker.script_path = inst.script_path
+        inst._worker = mock_worker
+
+        with patch(
+            "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        ) as MockPW:
+            new_worker = MagicMock()
+            new_worker.send.return_value = {"result": "ok"}
+            MockPW.return_value = new_worker
+
+            inst._run_persistent(
+                {"device": "cpu", "model_checkpoint": "esm2_t36_3B_UR50D"},
+                reload_on={"model_checkpoint"},
+            )
+
+            # New config should have used warmup timeout (2400)
+            call_args = new_worker.send.call_args
+            assert call_args.kwargs.get("timeout") == 2400 or call_args[1].get("timeout") == 2400
 
 
 class TestThreadSafety:

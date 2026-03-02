@@ -61,17 +61,26 @@ PyHmmsearchConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PyHmmsearchInput(
+        sequences=["MKTL"],
+        hmm=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"),
+    )
+
+
 @tool(
     key="pyhmmer-hmmsearch",
     label="PyHMMER Profile Search",
     category="gene_annotation",
-    input=PyHmmsearchInput,
-    config=PyHmmsearchConfig,
-    output=PyHmmsearchOutput,
+    input_class=PyHmmsearchInput,
+    config_class=PyHmmsearchConfig,
+    output_class=PyHmmsearchOutput,
     description="Search HMM profile(s) against sequences using PyHMMER",
+    example_input=example_input,
 )
 @tool_cache("pyhmmer-hmmsearch")
-def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig, instance=None) -> PyHmmsearchOutput:
+def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | None = None, instance=None) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
     This function implements the hmmsearch algorithm, searching one or more HMM
@@ -121,6 +130,7 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig, i
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
+            "device": "cpu",
             "operation": "hmmsearch",
             "hmm_path": str(inputs.hmm),
             "sequences": inputs.sequences,

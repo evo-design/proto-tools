@@ -60,17 +60,26 @@ PyNhmmerConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PyNhmmerInput(
+        sequences=["ATCGATCG"],
+        target_sequences=["ATCGATCG", "GCTAGCTA"],
+    )
+
+
 @tool(
     key="pyhmmer-nhmmer",
     label="PyHMMER NHMMER Search",
     category="gene_annotation",
-    input=PyNhmmerInput,
-    config=PyNhmmerConfig,
-    output=PyNhmmerOutput,
+    input_class=PyNhmmerInput,
+    config_class=PyNhmmerConfig,
+    output_class=PyNhmmerOutput,
     description="Search nucleotide sequences against nucleotide database using PyHMMER",
+    example_input=example_input,
 )
 @tool_cache("pyhmmer-nhmmer")
-def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance=None) -> PyNhmmerOutput:
+def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance=None) -> PyNhmmerOutput:
     """Search nucleotide sequences against nucleotide database using PyHMMER.
 
     Args:
@@ -87,6 +96,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance=N
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
+            "device": "cpu",
             "operation": "nhmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,

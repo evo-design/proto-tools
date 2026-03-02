@@ -90,7 +90,6 @@ class BaseConfig(BaseModel):
         default="cpu",
         description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0')",
         hidden=True,
-        reload_on_change=True,
     )
 
     timeout: int = ConfigField(

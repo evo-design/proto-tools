@@ -153,17 +153,23 @@ class CreateBlastDbConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return CreateBlastDbInput(fasta=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"))
+
+
 @tool(
     key="blast-create-db",
     label="Create BLAST Database",
     category="gene_annotation",
-    input=CreateBlastDbInput,
-    config=CreateBlastDbConfig,
-    output=CreateBlastDbOutput,
+    input_class=CreateBlastDbInput,
+    config_class=CreateBlastDbConfig,
+    output_class=CreateBlastDbOutput,
     description="Create a local BLAST database from a FASTA file",
+    example_input=example_input,
 )
 def run_create_blast_db(
-    inputs: CreateBlastDbInput, config: CreateBlastDbConfig,
+    inputs: CreateBlastDbInput, config: CreateBlastDbConfig | None = None,
     instance=None,
 ) -> CreateBlastDbOutput:
     """
@@ -206,6 +212,7 @@ def run_create_blast_db(
     output_data = ToolInstance.dispatch(
         "blast",
         {
+            "device": "cpu",
             "operation": "create_blast_db",
             "fasta_path": str(fasta_path),
             "dbtype": config.dbtype,

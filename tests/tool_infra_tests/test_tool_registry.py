@@ -79,9 +79,9 @@ def test_tool_registry_register_decorator(clean_registry):
         key="mock-tool",
         label="Mock Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Mock tool for testing",
     )
     def mock_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -111,9 +111,9 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
         key="duplicate-tool",
         label="Duplicate Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="First registration",
     )
     def first_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -131,9 +131,9 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
             key="duplicate-tool",  # Same key
             label="Duplicate Tool 2",
             category="test",
-            input=AnotherMockToolInput,
-            config=AnotherMockToolConfig,
-            output=AnotherMockToolOutput,
+            input_class=AnotherMockToolInput,
+            config_class=AnotherMockToolConfig,
+            output_class=AnotherMockToolOutput,
             description="Second registration",
         )
         def second_tool(
@@ -157,9 +157,9 @@ def test_tool_registry_list_all(clean_registry):
         key="tool-1",
         label="Tool 1",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool 1",
     )
     def tool_1(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -174,9 +174,9 @@ def test_tool_registry_list_all(clean_registry):
         key="tool-2",
         label="Tool 2",
         category="test",
-        input=AnotherMockToolInput,
-        config=AnotherMockToolConfig,
-        output=AnotherMockToolOutput,
+        input_class=AnotherMockToolInput,
+        config_class=AnotherMockToolConfig,
+        output_class=AnotherMockToolOutput,
         description="Tool 2",
     )
     def tool_2(
@@ -220,9 +220,9 @@ def test_tool_registry_get_schema(clean_registry):
         key="schema-tool",
         label="Schema Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Schema tool",
     )
     def schema_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -266,9 +266,9 @@ def test_tool_registry_get_input_schema(clean_registry):
         key="input-schema-tool",
         label="Input Schema Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Input schema tool",
     )
     def input_schema_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -297,9 +297,9 @@ def test_tool_registry_get_schemas(clean_registry):
         key="both-schemas-tool",
         label="Both Schemas Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Both schemas tool",
     )
     def both_schemas_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
@@ -336,9 +336,9 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
         key="metadata-tool",
         label="Metadata Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool that tests metadata population",
     )
     def metadata_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
@@ -373,9 +373,9 @@ def test_tool_registry_decorator_handles_exceptions(clean_registry):
         key="failing-tool",
         label="Failing Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool that raises an exception",
     )
     def failing_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
@@ -405,9 +405,9 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
         key="warning-tool",
         label="Warning Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool that generates warnings",
     )
     def warning_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
@@ -435,9 +435,9 @@ def test_tool_output_error_access_raises_exception(clean_registry):
         key="error-access-tool",
         label="Error Access Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool that fails and tests error access",
     )
     def error_access_tool(
@@ -479,9 +479,9 @@ def test_tool_output_successful_access_works(clean_registry):
         key="success-access-tool",
         label="Success Access Tool",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="Tool that succeeds and tests field access",
     )
     def success_access_tool(
@@ -512,9 +512,9 @@ def test_tool_registry_list_gpu_tools(clean_registry):
         key="gpu-1",
         label="GPU 1",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="GPU 1",
         uses_gpu=True,
     )
@@ -525,9 +525,9 @@ def test_tool_registry_list_gpu_tools(clean_registry):
         key="cpu-1",
         label="CPU 1",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="CPU 1",
     )
     def cpu_1(inputs, config):
@@ -537,9 +537,9 @@ def test_tool_registry_list_gpu_tools(clean_registry):
         key="gpu-2",
         label="GPU 2",
         category="test",
-        input=MockToolInput,
-        config=MockToolConfig,
-        output=MockToolOutput,
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description="GPU 2",
         uses_gpu=True,
     )
@@ -584,7 +584,7 @@ def _register_and_run(registry, key, func):
     """Register a tool with mock types and run it with default inputs."""
     registry.register(
         key=key, label=key, category="test",
-        input=MockToolInput, config=MockToolConfig, output=MockToolOutput,
+        input_class=MockToolInput, config_class=MockToolConfig, output_class=MockToolOutput,
         description=key,
     )(func)
     spec = registry.get(key)
@@ -681,5 +681,177 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
     assert result.success is False
     assert call_count == 1
     assert "worker timed out" in result.errors[0]
+
+
+# ============================================================================
+# Device Count Validation Tests
+# ============================================================================
+
+
+class MockConfigWithDevice(BaseConfig):
+    """Mock config with device field for testing device validation."""
+    device: str = ConfigField(default="cpu", description="Device to use")
+
+
+def test_tool_registry_default_device_count(clean_registry):
+    """Test that device_count defaults to '1' when not specified."""
+
+    @clean_registry.register(
+        key="default-device-count",
+        label="Default Device Count Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool with default device_count",
+    )
+    def default_device_count_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("default-device-count")
+    assert spec.device_count == "1"
+
+
+def test_tool_registry_exact_device_count_validation_passes(clean_registry):
+    """Test that exact device count validation passes when allocation matches."""
+
+    @clean_registry.register(
+        key="exact-count-tool",
+        label="Exact Count Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockConfigWithDevice,
+        output_class=MockToolOutput,
+        description="Tool requiring exactly 1 device",
+        device_count="1",
+    )
+    def exact_count_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("exact-count-tool")
+    inputs = MockToolInput(input_data="test")
+    config = MockConfigWithDevice(device="cuda:0")
+
+    # Should not raise any errors
+    result = spec.function(inputs, config)
+    assert result.success is True
+
+
+def test_tool_registry_under_allocation_raises_error(clean_registry):
+    """Test that under-allocation raises ValueError."""
+
+    @clean_registry.register(
+        key="under-alloc-tool",
+        label="Under Allocation Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockConfigWithDevice,
+        output_class=MockToolOutput,
+        description="Tool requiring 2 devices",
+        uses_gpu=True,
+        device_count="2",
+    )
+    def under_alloc_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("under-alloc-tool")
+    inputs = MockToolInput(input_data="test")
+    config = MockConfigWithDevice(device="cuda:0")  # Only 1 device
+
+    # Should raise ValueError for under-allocation
+    with pytest.raises(ValueError, match="requires at least 2"):
+        spec.function(inputs, config)
+
+
+def test_tool_registry_over_allocation_logs_warning(clean_registry, caplog):
+    """Test that over-allocation logs a warning but succeeds."""
+    import logging
+
+    @clean_registry.register(
+        key="over-alloc-tool",
+        label="Over Allocation Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockConfigWithDevice,
+        output_class=MockToolOutput,
+        description="Tool requiring 1 device",
+        uses_gpu=True,
+        device_count="1",
+    )
+    def over_alloc_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("over-alloc-tool")
+    inputs = MockToolInput(input_data="test")
+    config = MockConfigWithDevice(device="cuda:0,1")  # 2 devices for tool that needs 1
+
+    with caplog.at_level(logging.WARNING):
+        result = spec.function(inputs, config)
+
+    # Should succeed despite over-allocation
+    assert result.success is True
+
+    # Should log a warning
+    assert "requires at most 1 device(s), but 2 requested" in caplog.text
+
+
+def test_tool_registry_range_device_count_validation_passes(clean_registry):
+    """Test that range device count validation passes when within range."""
+
+    @clean_registry.register(
+        key="range-count-tool",
+        label="Range Count Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockConfigWithDevice,
+        output_class=MockToolOutput,
+        description="Tool supporting 1-2 devices",
+        device_count="1-2",
+    )
+    def range_count_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("range-count-tool")
+    inputs = MockToolInput(input_data="test")
+
+    # Test with 1 device (min)
+    config1 = MockConfigWithDevice(device="cuda:0")
+    result1 = spec.function(inputs, config1)
+    assert result1.success is True
+
+    # Test with 2 devices (max)
+    config2 = MockConfigWithDevice(device="cuda:0,1")
+    result2 = spec.function(inputs, config2)
+    assert result2.success is True
+
+
+def test_tool_registry_open_ended_device_count_validation_passes(clean_registry):
+    """Test that open-ended device count validation passes."""
+
+    @clean_registry.register(
+        key="open-ended-tool",
+        label="Open Ended Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockConfigWithDevice,
+        output_class=MockToolOutput,
+        description="Tool supporting >=1 devices",
+        device_count=">=1",
+    )
+    def open_ended_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("open-ended-tool")
+    inputs = MockToolInput(input_data="test")
+
+    # Test with 1 device
+    config1 = MockConfigWithDevice(device="cuda:0")
+    result1 = spec.function(inputs, config1)
+    assert result1.success is True
+
+    # Test with 3 devices (auto-allocate)
+    config3 = MockConfigWithDevice(device="cudax3")
+    result3 = spec.function(inputs, config3)
+    assert result3.success is True
 
 

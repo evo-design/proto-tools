@@ -64,10 +64,34 @@ class {ToolName}Input(BaseToolInput):
 class {ToolName}Config(BaseConfig):
     """Configuration object for {ToolName}.
 
+    Inherits device (default: "cpu"), verbose, and timeout from BaseConfig.
+    GPU tools MUST override device default to "cuda".
+
     Attributes:
         param1 (int): Description. Default: 4.
         param2 (float): Description. Range: (0, 1]. Default: 0.5.
+        device (str): Overridden for GPU tools. Inherited "cpu" for CPU tools.
     """
+
+    # --- GPU tools ONLY: Override device default ---
+    # GPU-enabled tools MUST set device="cuda" (DeviceManager allocates specific GPUs)
+    # CPU-only tools inherit device="cpu" from BaseConfig — do NOT add a device field
+    device: str = ConfigField(
+        title="Device",
+        default="cuda",  # REQUIRED for GPU tools (uses_gpu=True); OMIT this for CPU tools
+        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        hidden=True,
+    )
+
+    # --- Model configuration (use reload_on_change=True for worker restarts) ---
+    # Parameters like model_checkpoint, model_size, etc. that require full
+    # model reload should have reload_on_change=True
+    model_checkpoint: str = ConfigField(
+        title="Model Checkpoint",
+        default="default-model",
+        description="Model checkpoint to load",
+        reload_on_change=True,  # Restart worker when this changes
+    )
 
     # --- Primary parameters (shown in UI by default) ---
     param1: int = ConfigField(
@@ -103,7 +127,6 @@ class {ToolName}Config(BaseConfig):
 
     # Note: verbose, timeout, and device are inherited from BaseConfig.
     # Only redeclare them if you need to override the default value.
-
 
 class {ToolName}Output(BaseToolOutput):
     """Output from {ToolName}.
@@ -165,15 +188,22 @@ class {ToolName}Output(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return {ToolName}Input(sequences=["ATGCGT"])
+
+
 @tool(
-    key="{tool-key}",
-    label="{Tool Display Label}",
-    category="{category}",
-    input={ToolName}Input,
-    config={ToolName}Config,
-    output={ToolName}Output,
+    key="{tool-key}",  # kebab-case, must include action (e.g., "blast-search", "esmfold-prediction")
+    label="{Tool Display Label}",  # Human-readable name for UI
+    category="{category}",  # REQUIRED: Tool category (e.g., "structure_prediction", "gene_annotation")
+    input_class={ToolName}Input,
+    config_class={ToolName}Config,
+    output_class={ToolName}Output,
     description="One-line description of what this tool does",
-    uses_gpu=False,  # Set True for GPU/AI model tools
+    uses_gpu=False,  # Set True for GPU/AI model tools (MUST also override device="cuda" in Config)
+    device_count="1",  # Optional: Device count requirement ("1", "1-2", ">=1", "<=2"). Defaults to "1"
+    example_input=example_input,  # Factory returning minimal valid input for parametrized tests
 )
 def run_{tool_name}(
     inputs: {ToolName}Input, config: {ToolName}Config

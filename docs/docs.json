@@ -39,6 +39,13 @@
 							"installation",
 							"quickstart"
 						]
+					},
+					{
+						"group": "Guides",
+						"pages": [
+							"tool-persistence",
+							"device-management"
+						]
 					}
 				]
 			},

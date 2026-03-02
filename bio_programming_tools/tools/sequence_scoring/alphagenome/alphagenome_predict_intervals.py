@@ -103,15 +103,23 @@ AlphaGenomePredictIntervalsConfig = AlphaGenomePredictConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomePredictIntervalsInput(
+        intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=196608)]
+    )
+
+
 @tool(
     key="alphagenome-predict-intervals",
     label="AlphaGenome Predict Intervals",
     category="sequence_scoring",
-    input=AlphaGenomePredictIntervalsInput,
-    config=AlphaGenomePredictIntervalsConfig,
-    output=AlphaGenomePredictIntervalsOutput,
+    input_class=AlphaGenomePredictIntervalsInput,
+    config_class=AlphaGenomePredictIntervalsConfig,
+    output_class=AlphaGenomePredictIntervalsOutput,
     description="Predict genomic signals for batched intervals using AlphaGenome",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="intervals",
@@ -120,7 +128,7 @@ AlphaGenomePredictIntervalsConfig = AlphaGenomePredictConfig
 )
 def run_alphagenome_predict_intervals(
     inputs: AlphaGenomePredictIntervalsInput,
-    config: AlphaGenomePredictIntervalsConfig,
+    config: AlphaGenomePredictIntervalsConfig | None = None,
     instance=None,
 ) -> AlphaGenomePredictIntervalsOutput:
     """Predict genomic features for batched intervals using AlphaGenome."""

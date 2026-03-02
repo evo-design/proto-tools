@@ -216,15 +216,21 @@ class AlphaFold2Config(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaFold2Input(complexes=["MKTL"])
+
+
 @tool(
     key="alphafold2-prediction",
     label="AlphaFold2 Structure Prediction",
     category="structure_prediction",
-    input=AlphaFold2Input,
-    config=AlphaFold2Config,
-    output=AlphaFold2Output,
+    input_class=AlphaFold2Input,
+    config_class=AlphaFold2Config,
+    output_class=AlphaFold2Output,
     description="Protein structure prediction using AlphaFold2 via ColabDesign",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
@@ -233,7 +239,7 @@ class AlphaFold2Config(StructurePredictionConfig):
 )
 def run_alphafold2(
     inputs: AlphaFold2Input,
-    config: AlphaFold2Config,
+    config: AlphaFold2Config | None = None,
     instance=None,
 ) -> AlphaFold2Output:
     """Predict protein 3D structures using AlphaFold2.

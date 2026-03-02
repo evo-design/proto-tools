@@ -49,4 +49,8 @@ file_store/
 # User-generated analysis scripts (examples are tracked)
 analyses/*
 !analyses/examples/
+
+# Auto-generated helpers in standalone directories (source is in utils/)
+**/standalone/standalone_helpers.py
+
 .claude/worktrees/

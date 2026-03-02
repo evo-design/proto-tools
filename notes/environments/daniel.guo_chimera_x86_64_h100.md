@@ -17,9 +17,9 @@
 
 ## Git
 
-- **Commit**: `4327297ba443`
-- **Branch**: `dguo/gcc14-nvcc-compat`
-- **Dirty**: Yes
+- **Commit**: `51b3f2a962be`
+- **Branch**: `device_management`
+- **Dirty**: No
 
 ## Environment Variables
 
@@ -70,19 +70,19 @@ SLURM_CPUS_ON_NODE=8
 SLURM_GPUS=1
 SLURM_GPUS_ON_NODE=1
 SLURM_GTIDS=0
-SLURM_JOBID=1720714
+SLURM_JOBID=1731563
 SLURM_JOB_ACCOUNT=hielab
 SLURM_JOB_CPUS_PER_NODE=8
-SLURM_JOB_END_TIME=1772210086
+SLURM_JOB_END_TIME=1772453338
 SLURM_JOB_GID=10004
-SLURM_JOB_GPUS=3
-SLURM_JOB_ID=1720714
+SLURM_JOB_GPUS=2
+SLURM_JOB_ID=1731563
 SLURM_JOB_NAME=1_sh_gpu
 SLURM_JOB_NODELIST=GPU71E4
 SLURM_JOB_NUM_NODES=1
 SLURM_JOB_PARTITION=evo_gpu_priority
 SLURM_JOB_QOS=normal
-SLURM_JOB_START_TIME=1772166886
+SLURM_JOB_START_TIME=1772410138
 SLURM_JOB_UID=10085
 SLURM_JOB_USER=daniel.guo
 SLURM_LAUNCH_NODE_IPADDR=172.18.140.10
@@ -92,18 +92,18 @@ SLURM_NNODES=1
 SLURM_NODEID=0
 SLURM_NODELIST=GPU71E4
 SLURM_OOM_KILL_STEP=0
-SLURM_PMIXP_ABORT_AGENT_PORT=39303
+SLURM_PMIXP_ABORT_AGENT_PORT=34721
 SLURM_PMIX_MAPPING_SERV=(vector,(0,1,1))
 SLURM_PRIO_PROCESS=0
 SLURM_PROCID=0
-SLURM_PTY_PORT=42169
-SLURM_PTY_WIN_COL=327
-SLURM_PTY_WIN_ROW=95
+SLURM_PTY_PORT=34889
+SLURM_PTY_WIN_COL=104
+SLURM_PTY_WIN_ROW=71
 SLURM_SRUN_COMM_HOST=172.18.140.10
-SLURM_SRUN_COMM_PORT=41245
+SLURM_SRUN_COMM_PORT=44681
 SLURM_STEPID=4294967290
 SLURM_STEP_ID=4294967290
-SLURM_STEP_LAUNCHER_PORT=41245
+SLURM_STEP_LAUNCHER_PORT=44681
 SLURM_STEP_NODELIST=GPU71E4
 SLURM_STEP_NUM_NODES=1
 SLURM_STEP_NUM_TASKS=1
@@ -111,12 +111,11 @@ SLURM_STEP_TASKS_PER_NODE=1
 SLURM_SUBMIT_DIR=/home/daniel.guo
 SLURM_SUBMIT_HOST=arc-slurm
 SLURM_TASKS_PER_NODE=8
-SLURM_TASK_PID=754197
+SLURM_TASK_PID=3171958
 SLURM_TOPOLOGY_ADDR=GPU71E4
 SLURM_TOPOLOGY_ADDR_PATTERN=node
 SRUN_DEBUG=3
-TERM=xterm-256color
-TERM_PROGRAM=WarpTerminal
+TERM=xterm-ghostty
 TMPDIR=/tmp
 USER=daniel.guo
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -152,6 +151,8 @@ TORCH_CUDA_ARCH_LIST=9.0
 TORCH_HOME=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env/cache/torch
 USER=daniel.guo
 VIRTUAL_ENV=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
+XLA_PYTHON_CLIENT_ALLOCATOR=platform
+XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
@@ -160,100 +161,100 @@ VIRTUAL_ENV=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/spl
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `evo1` | yes | ✅ | 269.4s | ✅ Pass |
-| `evo2` | yes | ✅ | 251.7s | ✅ Pass |
-| `progen2` | yes | ✅ | 93.3s | ✅ Pass |
+| `evo1` | yes | ✅ | 279.3s | ✅ Pass |
+| `evo2` | yes | ✅ | 256.6s | ✅ Pass |
+| `progen2` | yes | ✅ | 107.8s | ✅ Pass |
 
 ### Gene Annotation (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 45.0s | ✅ Pass |
-| `minced` | no | ✅ | 15.8s | ✅ Pass |
-| `mmseqs` | no | ✅ | 18.9s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 16.4s | ✅ Pass |
+| `blast` | no | ✅ | 69.7s | ✅ Pass |
+| `minced` | no | ✅ | 19.4s | ✅ Pass |
+| `mmseqs` | no | ✅ | 22.7s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 19.0s | ✅ Pass |
 
 ### Inverse Folding (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `ligandmpnn` | yes | ✅ | 73.8s | ✅ Pass |
-| `proteinmpnn` | yes | ✅ | 36.4s | ✅ Pass |
+| `ligandmpnn` | yes | ✅ | 88.1s | ✅ Pass |
+| `proteinmpnn` | yes | ✅ | 52.6s | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `esm2` | yes | ✅ | 44.6s | ✅ Pass |
-| `esm3` | yes | ✅ | 46.1s | ✅ Pass |
+| `esm2` | yes | ✅ | 48.4s | ✅ Pass |
+| `esm3` | yes | ✅ | 50.5s | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 17.2s | ✅ Pass |
-| `prodigal` | no | ✅ | 14.8s | ✅ Pass |
+| `orfipy` | no | ✅ | 17.7s | ✅ Pass |
+| `prodigal` | no | ✅ | 15.1s | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `splice_transformer` | yes | ✅ | 34.8s | ✅ Pass |
+| `splice_transformer` | yes | ✅ | 35.0s | ✅ Pass |
 
 ### Sequence Alignment (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `mafft` | no | ✅ | 22.4s | ✅ Pass |
+| `mafft` | no | ✅ | 23.9s | ✅ Pass |
 
 ### Sequence Scoring (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `borzoi` | yes | ✅ | 73.8s | ✅ Pass |
-| `enformer` | yes | ✅ | 38.0s | ✅ Pass |
+| `borzoi` | yes | ✅ | 75.5s | ✅ Pass |
+| `enformer` | yes | ✅ | 39.3s | ✅ Pass |
 
 ### Structure Alignment (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `tmalign` | no | ✅ | 26.5s | ✅ Pass |
+| `tmalign` | no | ✅ | 26.4s | ✅ Pass |
 | `tmalign` | no | ✅ | 0.1s | ✅ Pass |
-| `usalign` | no | ✅ | 39.0s | ✅ Pass |
+| `usalign` | no | ✅ | 38.3s | ✅ Pass |
 | `usalign` | no | ✅ | 0.1s | ✅ Pass |
 
 ### Structure Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `rfdiffusion3` | yes | ✅ | 218.6s | ✅ Pass |
+| `rfdiffusion3` | yes | ✅ | 107.6s | ✅ Pass |
 
 ### Structure Dynamics (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `bioemu` | yes | ✅ | 84.1s | ✅ Pass |
+| `bioemu` | yes | ✅ | 96.4s | ✅ Pass |
 
 ### Structure Prediction (7/7)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphafold2` | yes | ✅ | 864.2s | ✅ Pass |
-| `alphafold3` | yes | — | 61.9s | ✅ Pass |
-| `boltz2` | yes | ✅ | 128.2s | ✅ Pass |
-| `chai1` | yes | ✅ | 411.1s | ✅ Pass |
-| `esmfold` | yes | ✅ | 67.6s | ✅ Pass |
-| `protenix` | yes | ✅ | 337.0s | ✅ Pass |
-| `viennarna` | no | ✅ | 14.9s | ✅ Pass |
+| `alphafold2` | yes | ✅ | 894.0s | ✅ Pass |
+| `alphafold3` | yes | ✅ | 91.3s | ✅ Pass |
+| `boltz2` | yes | ✅ | 117.8s | ✅ Pass |
+| `chai1` | yes | ✅ | 370.0s | ✅ Pass |
+| `esmfold` | yes | ✅ | 56.3s | ✅ Pass |
+| `protenix` | yes | ✅ | 373.8s | ✅ Pass |
+| `viennarna` | no | ✅ | 15.4s | ✅ Pass |
 
 ### Unknown (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphagenome` | yes | ✅ | 182.4s | ✅ Pass |
-| `crispr_tracr` | no | ✅ | 233.9s | ✅ Pass |
-| `local_colabfold_search` | no | — | 69.1s | ✅ Pass |
+| `alphagenome` | yes | ✅ | 179.6s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 389.4s | ✅ Pass |
+| `local_colabfold_search` | no | — | 66.9s | ✅ Pass |
 | `structure_metrics` | no | ✅ | 18.8s | ✅ Pass |
 
 ---
-*Generated at 2026-02-27 02:02:08 by `pytest --env-report`*
+*Generated at 2026-03-01 17:34:44 by `pytest --env-report`*

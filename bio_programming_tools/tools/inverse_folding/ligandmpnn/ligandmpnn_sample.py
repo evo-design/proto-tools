@@ -7,11 +7,14 @@ from typing import Any, Dict, List
 from pydantic import Field
 from tqdm import tqdm
 
+from pathlib import Path
+
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
+    InverseFoldingStructureInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_cache import tool_cache
@@ -46,20 +49,30 @@ class LigandMPNNSequences(DesignedSequences):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return LigandMPNNSampleInput(
+        inputs=[InverseFoldingStructureInput(
+            structure=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"),
+        )]
+    )
+
+
 @tool(
     key="ligandmpnn-sample",
     label="LigandMPNN Sampling",
     category="inverse_folding",
-    input=LigandMPNNSampleInput,
-    config=LigandMPNNSampleConfig,
-    output=LigandMPNNSampleOutput,
+    input_class=LigandMPNNSampleInput,
+    config_class=LigandMPNNSampleConfig,
+    output_class=LigandMPNNSampleOutput,
     description="Sample protein sequences using LigandMPNN",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache("ligandmpnn-sample")
 def run_ligandmpnn_sample(
     inputs: LigandMPNNSampleInput,
-    config: LigandMPNNSampleConfig,
+    config: LigandMPNNSampleConfig | None = None,
     instance=None,
 ) -> LigandMPNNSampleOutput:
     """Sample protein sequences using LigandMPNN.

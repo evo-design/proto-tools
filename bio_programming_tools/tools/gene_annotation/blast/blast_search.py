@@ -637,18 +637,24 @@ class BlastSearchConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return BlastSearchInput(query="MKTLLILAVVAAALA")
+
+
 @tool(
     key="blast-search",
     label="BLAST Search",
     category="gene_annotation",
-    input=BlastSearchInput,
-    config=BlastSearchConfig,
-    output=BlastSearchOutput,
+    input_class=BlastSearchInput,
+    config_class=BlastSearchConfig,
+    output_class=BlastSearchOutput,
     description="Search sequences against BLAST databases (online or local)",
+    example_input=example_input,
 )
 @tool_cache("blast-search")
 def run_blast_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig,
+    inputs: BlastSearchInput, config: BlastSearchConfig | None = None,
     instance=None,
 ) -> BlastSearchOutput:
     """Search sequences against BLAST databases.
@@ -824,6 +830,7 @@ def _local_search(
         "additional_params": cli_params,
     }
 
+    input_data["device"] = "cpu"
     try:
         output_data = ToolInstance.dispatch(
             "blast",

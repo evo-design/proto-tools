@@ -181,15 +181,26 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomeScoreISMInput(
+        requests=[AlphaGenomeISM(
+            chromosome="chr1", interval_start=0, interval_end=196608,
+            ism_interval_start=100000, ism_interval_end=100010,
+        )]
+    )
+
+
 @tool(
     key="alphagenome-score-ism-variants-batch",
     label="AlphaGenome Score ISM Variants Batch",
     category="sequence_scoring",
-    input=AlphaGenomeScoreISMInput,
-    config=AlphaGenomeScoreISMConfig,
-    output=AlphaGenomeScoreISMOutput,
+    input_class=AlphaGenomeScoreISMInput,
+    config_class=AlphaGenomeScoreISMConfig,
+    output_class=AlphaGenomeScoreISMOutput,
     description="Run batched in-silico mutagenesis with AlphaGenome variant scorers",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="requests",
@@ -198,7 +209,7 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
 )
 def run_alphagenome_score_ism_variants_batch(
     inputs: AlphaGenomeScoreISMInput,
-    config: AlphaGenomeScoreISMConfig,
+    config: AlphaGenomeScoreISMConfig | None = None,
     instance=None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run batched in-silico mutagenesis using AlphaGenome variant scorers."""

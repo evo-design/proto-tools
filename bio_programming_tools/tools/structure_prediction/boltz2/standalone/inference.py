@@ -48,6 +48,7 @@ class Boltz2Model:
         self,
         input_yaml_path: str,
         output_dir: str,
+        device: str = "cuda",
         recycling_steps: int = 10,
         sampling_steps: int = 200,
         diffusion_samples: int = 25,
@@ -60,6 +61,7 @@ class Boltz2Model:
         Args:
             input_yaml_path: Path to input YAML file
             output_dir: Directory to write output to
+            device: Device for subprocess environment
             recycling_steps: Number of recycling steps
             sampling_steps: Number of sampling steps
             diffusion_samples: Number of diffusion samples
@@ -104,12 +106,17 @@ class Boltz2Model:
         logger.debug(f"Running Boltz command: {' '.join(cmd)}")
         sys.stdout.flush()
 
+        # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+        from standalone_helpers import get_subprocess_device_env
+
+        env = get_subprocess_device_env(device)
+
         # Run the command with stdout/stderr visible
         subprocess.run(
             cmd,
             check=True,
             text=True,
-            env=os.environ,
+            env=env,
             encoding="utf-8",
             stdout=sys.stdout if verbose else subprocess.DEVNULL,
             stderr=sys.stderr if verbose else subprocess.DEVNULL,
@@ -202,6 +209,7 @@ def dispatch(input_dict: dict) -> dict:
         return _model(
             input_yaml_path=input_dict["input_yaml_path"],
             output_dir=input_dict["output_dir"],
+            device=input_dict.get("device", "cuda"),
             recycling_steps=input_dict.get("recycling_steps", 10),
             sampling_steps=input_dict.get("sampling_steps", 200),
             diffusion_samples=input_dict.get("diffusion_samples", 25),
@@ -210,6 +218,21 @@ def dispatch(input_dict: dict) -> dict:
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+def to_device(device: str) -> dict:
+    """Passthrough for CLI tool - Boltz2 naturally unloads after each call."""
+    # Boltz2 is a CLI tool that spawns subprocesses and naturally unloads
+    # after each call, so explicit device management is not needed.
+    # This is a passthrough for standardization with other tools.
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(device=0)
 
 
 if __name__ == "__main__":

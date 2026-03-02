@@ -73,22 +73,6 @@ _ORGANISM_ENUMS = {
 }
 
 
-def _resolve_jax_device(device: str) -> tuple[jax.Device, str]:
-    """Resolve a JAX device and fail fast when the requested backend is unavailable."""
-    if device == "cuda":
-        try:
-            return jax.devices("gpu")[0], "cuda"
-        except Exception as exc:
-            raise RuntimeError(
-                "Requested AlphaGenome device 'cuda' but GPU backend is unavailable."
-            ) from exc
-
-    try:
-        return jax.devices(device)[0], device
-    except Exception as exc:
-        raise RuntimeError(
-            f"Requested AlphaGenome device '{device}' is unavailable."
-        ) from exc
 
 
 def _resolve_checkpoint_path(model_version: str) -> Optional[Path]:
@@ -317,7 +301,9 @@ class AlphaGenomeModel:
         if verbose:
             logger.info(f"Loading AlphaGenome model: {self.model_version} on {device}")
 
-        jax_device, resolved_device = _resolve_jax_device(device)
+        from standalone_helpers import resolve_jax_device
+
+        jax_device = resolve_jax_device(device)
         checkpoint_path = _resolve_checkpoint_path(self.model_version)
         if checkpoint_path is not None:
             if verbose:
@@ -330,7 +316,7 @@ class AlphaGenomeModel:
                     self.model_version,
                 )
             self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
-        self.device = resolved_device
+        self.device = device
         self._loaded = True
 
         if verbose:
@@ -339,29 +325,58 @@ class AlphaGenomeModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        JAX does not support moving models between devices, so this
-        reloads the model on the target device.
+        AlphaGenome is GPU-only — CPU loading is not supported because the
+        model requires XLA compilation (10+ minutes) that would be wasted
+        on a device where inference is impractical. When asked to move to
+        CPU (e.g., LRU eviction), we unload the model to free GPU memory
+        but preserve the XLA compilation cache so reloading on GPU is fast.
+
+        When called on an unloaded model (after CPU eviction), reloads on
+        the target GPU device.
         """
+        if device == "cpu":
+            logger.warning(
+                "AlphaGenome is GPU-only; unloading model instead of moving "
+                "to CPU. Model will reload on next GPU dispatch."
+            )
+            self.unload(clear_jax_caches=False)
+            return
+
         if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+            self.load(device)
+            return
 
         if self.device != device:
+            self.unload()
             self.load(device)
 
-    def unload(self, verbose: bool = False) -> None:
-        """Unload model to free GPU memory.
+    def unload(self, verbose: bool = False, clear_jax_caches: bool = True) -> None:
+        """Unload model and free memory.
 
-        JAX does not support moving models to CPU like PyTorch. Instead,
-        the model reference is deleted and the model will be reloaded on
-        the next call.
+        Parameters
+        ----------
+        verbose : bool
+            Log the unload operation.
+        clear_jax_caches : bool
+            If True (default), also clear JAX's XLA compilation caches.
+            Set to False when unloading for GPU eviction to preserve
+            compiled kernels — reloading on the same GPU can then skip
+            the expensive recompilation step.
         """
-        if self._loaded and self.device != "cpu":
-            if verbose:
-                logger.info(f"Unloading {self.__class__.__name__} from GPU")
+        if not self._loaded:
+            return
 
-            self.model = None
-            self.device = None
-            self._loaded = False
+        if verbose:
+            logger.info(f"Unloading {self.__class__.__name__} from {self.device}")
+
+        self.model = None
+        self.device = None
+        self._loaded = False
+
+        import gc
+        if clear_jax_caches:
+            jax.clear_caches()
+        gc.collect()
 
 
 # ============================================================================
@@ -517,6 +532,22 @@ def dispatch(input_dict: dict) -> dict:
 # ============================================================================
 # Standalone script entry point for venv execution
 # ============================================================================
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and hasattr(_model, "to_device"):
+        _model.to_device(device)
+    return {"success": True, "device": device}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_jax_memory_stats
+
+    return get_jax_memory_stats(device_index=0)
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

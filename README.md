@@ -16,19 +16,39 @@
 
 ## Installation
 
+### Recommended: Conda environment file
+
+Using the provided `environment.yml` installs Python, compilers, build tools, and system
+libraries that tool environments need when compiling from source. This is the most stable
+setup, especially on HPC and GPU nodes.
+
 ```bash
-# Using conda (recommended)
-conda create -n bio_tools python=3.12 -y
-conda activate bio_tools
+conda env create -f environment.yml
+conda activate bio-tools
+
+# For development
+pip install -e ".[dev]"
+pre-commit install
+```
+
+### Minimal setup
+
+If you already have compilers and system libraries available (e.g., via modules), a
+plain conda or venv environment works too:
+
+```bash
+# Using conda
+conda create -n bio-tools python=3.12 -y
+conda activate bio-tools
+pip install -e "."
 
 # Or using venv
 python -m venv .venv
 source .venv/bin/activate
-
-pip install .
+pip install -e "."
 
 # For development
-pip install ".[dev]"
+pip install -e ".[dev]"
 pre-commit install
 ```
 

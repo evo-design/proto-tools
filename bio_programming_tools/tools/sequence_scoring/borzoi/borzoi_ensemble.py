@@ -103,6 +103,7 @@ class BorzoiEnsembleConfig(BaseConfig):
     )
     output_tracks: List[int] = ConfigField(
         title="Output Tracks",
+        default=[0],
         description="Track indices to extract from model output",
     )
     species: Literal["human", "mouse"] = ConfigField(
@@ -136,18 +137,24 @@ class BorzoiEnsembleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return BorzoiInput(sequence="A" * 524288)
+
+
 @tool(
     key="borzoi-ensemble",
     label="Borzoi Ensemble",
     category="sequence_scoring",
-    input=BorzoiInput,
-    config=BorzoiEnsembleConfig,
-    output=BorzoiEnsembleOutput,
+    input_class=BorzoiInput,
+    config_class=BorzoiEnsembleConfig,
+    output_class=BorzoiEnsembleOutput,
     description="Regulatory activity prediction using all 4 Borzoi replicates",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_borzoi_ensemble(
-    inputs: BorzoiInput, config: BorzoiEnsembleConfig,
+    inputs: BorzoiInput, config: BorzoiEnsembleConfig | None = None,
     instance=None,
 ) -> BorzoiEnsembleOutput:
     """Predict regulatory activity using all Borzoi replicates.
@@ -184,7 +191,7 @@ def run_borzoi_ensemble(
             device=config.device,
             verbose=config.verbose,
         )
-        replicate_output = run_borzoi(inputs, replicate_config)
+        replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
         predictions.append(replicate_output.prediction)
 
     return BorzoiEnsembleOutput(

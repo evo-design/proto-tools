@@ -1,0 +1,320 @@
+"""
+AlphaFold3 Structure Prediction Pipeline.
+
+This script provides utilities for running AlphaFold3 structure predictions
+via Singularity containers, with support for MSA generation via ColabFold search.
+
+Worker protocol implementation for ToolInstance integration.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import subprocess
+import sys
+from typing import Any, Dict, Tuple
+
+import numpy as np
+from Bio import PDB
+
+logger = logging.getLogger(__name__)
+
+# Import from auto-copied standalone_helpers
+from standalone_helpers import get_subprocess_device_env
+
+
+class AlphaFold3ExecutionError(Exception):
+    """Raised when AlphaFold3 execution fails."""
+
+    pass
+
+
+AlphaFold3JSON = Dict[str, Any]
+
+
+def _extract_structure_and_scores(
+    output_dir: str,
+    name: str,
+    verbose: bool = False,
+) -> Tuple[str, Dict[str, Any]]:
+    """
+    Extract predicted structure and confidence scores from AlphaFold3 output.
+
+    Args:
+        output_dir: Directory containing AlphaFold3 output.
+        name: Name of the prediction job.
+        verbose: Whether to print progress messages.
+
+    Returns:
+        Tuple of (pdb_path, scores_dict).
+    """
+    alphafold3_results_folder = os.path.join(output_dir, name)
+    alphafold3_structure = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
+
+    # Convert mmCIF structure file to PDB format.
+    pdb_path = os.path.join(output_dir, f"{name}_af3.pdb")
+    parser = PDB.MMCIFParser(QUIET=True)
+    io = PDB.PDBIO()
+    structure = parser.get_structure("structure", alphafold3_structure)
+    io.set_structure(structure)
+    io.save(pdb_path)
+
+    # Extract confidence scores from AlphaFold3 JSON output files.
+    summary_confidences_path = os.path.join(
+        alphafold3_results_folder, f"{name}_summary_confidences.json"
+    )
+    full_confidences_path = os.path.join(alphafold3_results_folder, f"{name}_confidences.json")
+
+    with open(summary_confidences_path, "r") as f:
+        summary_metrics = json.load(f)
+    with open(full_confidences_path, "r") as f:
+        full_metrics = json.load(f)
+
+    alphafold3_scores: Dict[str, Any] = {}
+    alphafold3_scores["avg_plddt"] = float(np.mean(full_metrics["atom_plddts"]))
+    alphafold3_scores["avg_pae"] = float(np.mean(np.array(full_metrics["pae"])))
+    alphafold3_scores["ptm"] = summary_metrics.get("ptm")
+    alphafold3_scores["iptm"] = summary_metrics.get("iptm")
+    alphafold3_scores["ranking_score"] = summary_metrics.get("ranking_score")
+
+    with open(f"{output_dir}/metadata.json", "w") as f:
+        json.dump(alphafold3_scores, f, indent=2)
+
+    return pdb_path, alphafold3_scores
+
+
+# ============================================================================
+# Worker Protocol - AlphaFold3 Model Class
+# ============================================================================
+
+
+class AlphaFold3Model:
+    """Wrapper for AlphaFold3 Singularity execution."""
+
+    def __init__(self):
+        """Initialize model with unset paths."""
+        self._loaded = False
+        self.repo_path = None
+        self.sif_path = None
+        self.model_dir = None
+        self.db_dir = None
+
+    def load(self):
+        """Validate that all required Singularity paths are set and exist."""
+        required_paths = {
+            "repo_path": self.repo_path,
+            "sif_path": self.sif_path,
+            "model_dir": self.model_dir,
+            "db_dir": self.db_dir,
+        }
+
+        missing = [name for name, path in required_paths.items() if not path]
+        if missing:
+            raise ValueError(f"Missing required paths: {', '.join(missing)}")
+
+        for name, path in required_paths.items():
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"{name} does not exist: {path}")
+
+        self._loaded = True
+
+    def __call__(
+        self,
+        input_json_path: str,
+        output_dir: str,
+        device: str,
+        verbose: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Run AlphaFold3 prediction via Singularity.
+
+        MSA generation is handled in the main process before calling this method.
+        This method only runs the AlphaFold3 Singularity container and extracts results.
+
+        Args:
+            input_json_path: Path to AlphaFold3 input JSON file (with MSA paths already populated).
+            output_dir: Directory for output files.
+            device: Device for subprocess environment (e.g., "cuda:0").
+            verbose: Whether to print progress messages.
+
+        Returns:
+            Dict with keys:
+                - structure_pdb: Path to generated PDB file
+                - metrics: Dict of confidence scores
+
+        Raises:
+            AlphaFold3ExecutionError: If AlphaFold3 execution fails.
+        """
+        if not self._loaded:
+            self.load()
+
+        # Load input JSON from file (MSAs already generated by main process)
+        with open(input_json_path, "r") as f:
+            input_json = json.load(f)
+
+        # === Output directory handling ===
+        original_output_dir = output_dir
+        counter = 1
+        # Check if dir exists, if so, append .1, .2, etc.
+        while os.path.exists(output_dir):
+            output_dir = f"{original_output_dir}.{counter}"
+            counter += 1
+        os.makedirs(output_dir)
+        if counter > 1:
+            logger.debug(f"Output dir existed, created new directory: {output_dir}")
+
+        # Input directory was created by main process, get parent dir
+        input_dir = os.path.dirname(input_json_path)
+
+        # === UNCHANGED LOGIC: Path validation ===
+        for name, path in [
+            ("repo_path", self.repo_path),
+            ("model_dir", self.model_dir),
+            ("db_dir", self.db_dir),
+            ("sif_path", self.sif_path),
+        ]:
+            if not os.path.exists(path):
+                raise AlphaFold3ExecutionError(f"Path does not exist for {name}: {path}")
+
+        # === UNCHANGED LOGIC: Build Singularity command ===
+        run_cmds = [
+            "singularity",
+            "exec",
+            "--nv",
+            "--env",
+            "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu",
+            # Mount required directories into the container.
+            "--bind",
+            f"{output_dir}:/root/af_output",
+            "--bind",
+            f"{input_dir}:/root/af_input",
+            "--bind",
+            f"{self.model_dir}:/root/models",
+            "--bind",
+            f"{self.db_dir}:/root/public_databases",
+            "--bind",
+            f"{self.repo_path}:/root/alphafold3",
+            self.sif_path,
+            "python",
+            "/root/alphafold3/run_alphafold.py",
+            "--model_dir=/root/models",
+            "--db_dir=/root/public_databases",
+            "--output_dir=/root/af_output",
+            f"--json_path=/root/af_input/{os.path.basename(input_json_path)}",
+        ]
+
+        logger.debug(f"Executing AlphaFold3 via Singularity...")
+        logger.debug(f"  Input: {input_json_path}")
+        logger.debug(f"  Output: {output_dir}")
+
+        # === Get subprocess environment (now receives specific device from DeviceManager) ===
+        env = get_subprocess_device_env(device)
+
+        # === UNCHANGED LOGIC: Run Singularity subprocess ===
+        process = subprocess.Popen(
+            run_cmds,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+
+        stdout, stderr = process.communicate()
+
+        # === UNCHANGED LOGIC: Error handling ===
+        if process.returncode != 0:
+            error_msg = (
+                f"AlphaFold3 failed with return code {process.returncode}\n"
+                f"Command: {' '.join(run_cmds)}\n"
+                f"Stderr:\n{stderr}"
+            )
+            raise AlphaFold3ExecutionError(error_msg)
+
+        logger.debug("AlphaFold3 execution completed successfully.")
+
+        # === UNCHANGED LOGIC: Extract structure and scores ===
+        pdb_path, alphafold3_scores = _extract_structure_and_scores(
+            output_dir,
+            input_json["name"],
+            verbose=verbose,
+        )
+
+        # === Return as dict (instead of tuple) ===
+        return {
+            "structure_pdb": pdb_path,
+            "metrics": alphafold3_scores,
+        }
+
+    def to_device(self, device: str):
+        """Passthrough for CLI tool - Singularity handles device via environment."""
+        pass
+
+
+# ============================================================================
+# Worker Protocol Entry Points
+# ============================================================================
+
+_model: AlphaFold3Model | None = None
+
+
+def dispatch(input_dict: dict) -> dict:
+    """
+    Entry point for ToolInstance worker protocol.
+
+    MSA generation is handled in the main process, so this only runs AlphaFold3.
+
+    Args:
+        input_dict: Input parameters from ToolInstance.dispatch()
+
+    Returns:
+        Dict with structure_pdb and metrics
+    """
+    global _model
+
+    # Create model on first call and set paths
+    if _model is None:
+        _model = AlphaFold3Model()
+        _model.repo_path = input_dict.get("repo_path")
+        _model.sif_path = input_dict.get("sif_path")
+        _model.model_dir = input_dict.get("model_dir")
+        _model.db_dir = input_dict.get("db_dir")
+
+    # Delegate to model (MSAs already generated in main process)
+    # device must be provided by DeviceManager (no default)
+    return _model(
+        input_json_path=input_dict["input_json_path"],
+        output_dir=input_dict["output_dir"],
+        device=input_dict["device"],
+        verbose=input_dict.get("verbose", False),
+    )
+
+
+def to_device(device: str) -> dict:
+    """
+    DeviceManager callback for moving model to different device.
+
+    For AlphaFold3 (CLI tool), this is a passthrough - Singularity subprocess
+    handles device allocation via CUDA_VISIBLE_DEVICES environment variable.
+
+    Args:
+        device: Target device (e.g., "cpu", "cuda:0")
+
+    Returns:
+        Success status dict
+    """
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict:
+    """CLI tool — no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+
+
+# Worker protocol entry point
+if __name__ == "__main__":
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+    result = dispatch(input_data)
+    with open(sys.argv[2], "w") as f:
+        json.dump(result, f)

@@ -237,6 +237,7 @@ class AlphaGenomePredictConfig(BaseConfig):
     )
     requested_outputs: List[OutputTypeName] = ConfigField(
         title="Requested Outputs",
+        default=["RNA_SEQ"],
         description="Output type names to request from AlphaGenome",
     )
     ontology_terms: Optional[List[str]] = ConfigField(
@@ -255,6 +256,13 @@ class AlphaGenomePredictConfig(BaseConfig):
         title="Device",
         default="cuda",
         description="Device to run AlphaGenome inference on",
+        hidden=True,
+    )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1800,
+        ge=1,
+        description="Maximum execution time in seconds (AlphaGenome JAX compilation is slow on first run)",
         hidden=True,
     )
 

@@ -252,6 +252,14 @@ class MmseqsSearchProteinsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return MmseqsSearchProteinsInput(
+        query_sequences=["MKTL"],
+        mmseqs_db=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"),
+    )
+
+
 @tool_cache_iterable(
     input_iterable_field="query_sequences",
     output_iterable_field="results",
@@ -261,13 +269,14 @@ class MmseqsSearchProteinsConfig(BaseConfig):
     key="mmseqs-search-proteins",
     label="MMseqs2 Protein Search",
     category="gene_annotation",
-    input=MmseqsSearchProteinsInput,
-    config=MmseqsSearchProteinsConfig,
-    output=MmseqsSearchProteinsOutput,
+    input_class=MmseqsSearchProteinsInput,
+    config_class=MmseqsSearchProteinsConfig,
+    output_class=MmseqsSearchProteinsOutput,
     description="Search protein sequences using MMseqs2 with per-sequence results",
+    example_input=example_input,
 )
 def run_mmseqs_search_proteins(
-    inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig,
+    inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig | None = None,
     instance=None,
 ) -> MmseqsSearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
@@ -307,6 +316,7 @@ def run_mmseqs_search_proteins(
     output_data = ToolInstance.dispatch(
         "mmseqs",
         {
+            "device": "cpu",
             "operation": "protein_search",
             "sequences": sequences,
             "sequence_ids": sequence_ids,

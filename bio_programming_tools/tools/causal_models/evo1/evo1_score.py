@@ -105,18 +105,24 @@ class Evo1ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Evo1ScoringInput(sequences=["ATCGATCG"])
+
+
 @tool(
     key="evo1-score",
     label="Evo1 Scoring",
     category="causal_models",
-    input=Evo1ScoringInput,
-    config=Evo1ScoringConfig,
-    output=Evo1ScoringOutput,
+    input_class=Evo1ScoringInput,
+    config_class=Evo1ScoringConfig,
+    output_class=Evo1ScoringOutput,
     description="Score DNA sequences using Evo1 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_evo1_score(
-    inputs: Evo1ScoringInput, config: Evo1ScoringConfig, instance=None,
+    inputs: Evo1ScoringInput, config: Evo1ScoringConfig | None = None, instance=None,
 ) -> Evo1ScoringOutput:
     """Score DNA sequences using Evo1 autoregressive language model.
 

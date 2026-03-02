@@ -61,36 +61,26 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
         return False
 
 
-def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:
-    """Check and remove corrupted checkpoint files for a specific model.
+def _validate_single_checkpoint(checkpoint_path: Path) -> None:
+    """Validate a single checkpoint file, removing it if corrupted.
 
     Uses a `.validated` marker file to cache validation results and avoid
     re-validating unchanged checkpoints on every inference call.
 
     Args:
-        checkpoint_dir: Directory containing checkpoint files
-        model_name: Name of the model to check (e.g., 'protenix_mini_ism_v0.5.0')
+        checkpoint_path: Path to a .pt checkpoint file
     """
-    if not checkpoint_dir.exists():
-        return
-
-    checkpoint_path = checkpoint_dir / f"{model_name}.pt"
-    marker_path = checkpoint_dir / f"{model_name}.pt.validated"
-
-    if not checkpoint_path.exists():
-        return
+    marker_path = checkpoint_path.parent / f"{checkpoint_path.name}.validated"
 
     # Check if validation marker exists and checkpoint hasn't changed
     needs_validation = True
     if marker_path.exists():
         try:
-            # Read marker file (contains size and mtime from last validation)
             marker_data = marker_path.read_text().strip().split(',')
             if len(marker_data) == 2:
                 cached_size = int(marker_data[0])
                 cached_mtime = float(marker_data[1])
 
-                # Compare with current checkpoint
                 current_stat = checkpoint_path.stat()
                 if current_stat.st_size == cached_size and current_stat.st_mtime == cached_mtime:
                     logger.debug(f"Checkpoint validation cached (skipping): {checkpoint_path.name}")
@@ -106,10 +96,35 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
             marker_path.unlink(missing_ok=True)
             logger.info(f"Corrupted checkpoint removed. It will be re-downloaded on next use.")
         else:
-            # Validation passed - create/update marker file
             stat = checkpoint_path.stat()
             marker_path.write_text(f"{stat.st_size},{stat.st_mtime}")
             logger.debug(f"Validation marker created: {marker_path.name}")
+
+
+def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:
+    """Check and remove corrupted checkpoint files in the checkpoint directory.
+
+    Validates ALL .pt files in the directory (not just the named model),
+    because tools like protenix also download dependency checkpoints
+    (e.g., ESM2 embedding models) that can be corrupted by interrupted
+    downloads.
+
+    Uses `.validated` marker files to cache validation results and avoid
+    re-validating unchanged checkpoints on every inference call.
+
+    Args:
+        checkpoint_dir: Directory containing checkpoint files
+        model_name: Name of the primary model (used for logging only)
+    """
+    if not checkpoint_dir.exists():
+        return
+
+    pt_files = list(checkpoint_dir.glob("*.pt"))
+    if not pt_files:
+        return
+
+    for checkpoint_path in pt_files:
+        _validate_single_checkpoint(checkpoint_path)
 
 
 class ProtenixModel:
@@ -124,6 +139,7 @@ class ProtenixModel:
         self,
         input_json_path: str,
         output_dir: str,
+        device: str = "cuda",
         model_name: str = "protenix_base_default_v1.0.0",
         seeds: str = "0",
         num_diffusion_samples: int = 5,
@@ -138,6 +154,7 @@ class ProtenixModel:
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
             output_dir: Directory to write output to
+            device: Device for subprocess environment
             model_name: Protenix model variant to use
             seeds: Comma-separated seed values
             num_diffusion_samples: Number of diffusion samples per seed
@@ -183,6 +200,11 @@ class ProtenixModel:
 
         logger.debug(f"Running Protenix command: {' '.join(cmd)}")
 
+        # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+        from standalone_helpers import get_subprocess_device_env
+
+        env = get_subprocess_device_env(device)
+
         # Run Protenix CLI with working directory set to the parent of output_dir
         # This ensures ./esm_embeddings/ is created in the temp dir, not the repo root
         working_dir = str(Path(output_dir).parent)
@@ -191,7 +213,7 @@ class ProtenixModel:
             cmd,
             check=True,
             text=True,
-            env=os.environ,
+            env=env,
             encoding="utf-8",
             stdout=sys.stdout if verbose else subprocess.DEVNULL,
             stderr=sys.stderr if verbose else subprocess.DEVNULL,
@@ -337,6 +359,7 @@ def dispatch(input_dict: dict) -> dict:
         return _model(
             input_json_path=input_dict["input_json_path"],
             output_dir=input_dict["output_dir"],
+            device=input_dict.get("device", "cuda"),
             model_name=input_dict.get("model_name", "protenix_base_default_v1.0.0"),
             seeds=input_dict.get("seeds", "0"),
             num_diffusion_samples=input_dict.get("num_diffusion_samples", 5),
@@ -347,6 +370,17 @@ def dispatch(input_dict: dict) -> dict:
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Passthrough for CLI tool - Protenix naturally unloads after each call."""
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict:
+    """CLI tool — no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":

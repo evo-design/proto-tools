@@ -12,6 +12,7 @@ from logging import getLogger
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import torch
+from standalone_helpers import move_model_to_device
 from tqdm import tqdm
 
 logger = getLogger(__name__)
@@ -100,7 +101,7 @@ class ProGen2Model:
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device != device:
-            self.model = self.model.to(device)
+            self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:
@@ -419,6 +420,27 @@ def dispatch(input_dict: dict) -> dict:
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        # Model not loaded yet - will use device on next call
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
 
 
 if __name__ == "__main__":

@@ -185,6 +185,14 @@ class MmseqsSearchGenomesConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return MmseqsSearchGenomesInput(
+        query_genomes=["ATCGATCG"],
+        target_genomes=["ATCGATCG", "GCTAGCTA"],
+    )
+
+
 @tool_cache_iterable(
     input_iterable_field="query_genomes",
     output_iterable_field="results",
@@ -194,13 +202,14 @@ class MmseqsSearchGenomesConfig(BaseConfig):
     key="mmseqs-search-genomes",
     label="MMseqs Genome Search",
     category="gene_annotation",
-    input=MmseqsSearchGenomesInput,
-    config=MmseqsSearchGenomesConfig,
-    output=MmseqsSearchGenomesOutput,
+    input_class=MmseqsSearchGenomesInput,
+    config_class=MmseqsSearchGenomesConfig,
+    output_class=MmseqsSearchGenomesOutput,
     description="Execute nucleotide genome-to-genome search workflow",
+    example_input=example_input,
 )
 def run_mmseqs_search_genomes(
-    inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig,
+    inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig | None = None,
     instance=None,
 ) -> MmseqsSearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
@@ -240,6 +249,7 @@ def run_mmseqs_search_genomes(
     output_data = ToolInstance.dispatch(
         "mmseqs",
         {
+            "device": "cpu",
             "operation": "genome_search",
             "query_sequences": query_sequences,
             "query_ids": query_ids,

@@ -90,12 +90,13 @@ addopts = [
 ]
 markers = [
     "asyncio: mark test as requiring asyncio",
-    "uses_gpu: mark test as requiring GPU",
+    "uses_gpu: mark test as requiring GPU. Optional arg: @pytest.mark.uses_gpu(n) skips unless n GPUs are visible",
     "uses_cpu: mark test as CPU-only",
     "slow: Slow tests that may take several minutes",
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
     "only_chimera: Test only runs on Chimera cluster (arc-slurm)",
+    "exhaustive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --exhaustive is passed",
     "include_in_env_report: Include test in --env-report (one smoke test per tool). Accepts optional kwargs: tool='tool_name', category='category_name'",
 ]
 asyncio_mode = "auto"
@@ -123,6 +124,12 @@ exclude = [
     "build",
     "dist",
     "*.egg-info",
+]
+per-file-ignores = [
+    # Auto-copied by _worker_bootstrap.py at runtime; jax import is in a try/except
+    "**/standalone/standalone_helpers.py:F401",
+    # Source standalone_helpers has same pattern
+    "bio_programming_tools/utils/standalone_helpers.py:F401",
 ]
 
 [tool.mypy]

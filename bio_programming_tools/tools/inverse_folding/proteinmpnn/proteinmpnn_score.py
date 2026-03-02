@@ -101,15 +101,26 @@ class ProteinMPNNScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    from pathlib import Path
+    from bio_programming_tools.entities.structures import Structure
+    _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
+    return ProteinMPNNScoringInput(
+        sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))]
+    )
+
+
 @tool(
     key="proteinmpnn-score",
     label="ProteinMPNN Scoring",
     category="inverse_folding",
-    input=ProteinMPNNScoringInput,
-    config=ProteinMPNNScoringConfig,
-    output=ProteinMPNNScoringOutput,
+    input_class=ProteinMPNNScoringInput,
+    config_class=ProteinMPNNScoringConfig,
+    output_class=ProteinMPNNScoringOutput,
     description="Score protein sequences using ProteinMPNN",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="sequence_structure_pairs",
@@ -118,7 +129,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
 )
 def run_proteinmpnn_score(
     inputs: ProteinMPNNScoringInput,
-    config: ProteinMPNNScoringConfig,
+    config: ProteinMPNNScoringConfig | None = None,
     instance=None,
 ) -> ProteinMPNNScoringOutput:
     """Score protein sequences using ProteinMPNN structure-conditioned model.

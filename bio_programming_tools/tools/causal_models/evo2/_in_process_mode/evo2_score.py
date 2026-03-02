@@ -136,14 +136,14 @@ class Evo2ScoringConfig(BaseConfig):
     key="evo2-score-in-process",
     label="Evo2 Scoring (In-Process)",
     category="causal_models",
-    input=Evo2ScoringInput,
-    config=Evo2ScoringConfig,
-    output=Evo2ScoringOutput,
+    input_class=Evo2ScoringInput,
+    config_class=Evo2ScoringConfig,
+    output_class=Evo2ScoringOutput,
     description="Score DNA sequences using Evo2 language model (in-process mode)",
     uses_gpu=True,
 )
 def run_evo2_score(
-    inputs: Evo2ScoringInput, config: Evo2ScoringConfig,
+    inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
     instance=None,
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.

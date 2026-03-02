@@ -105,6 +105,11 @@ class StructureMetricsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta")])
+
+
 @tool_cache_iterable(
     input_iterable_field="pdb_paths",
     output_iterable_field="metrics",
@@ -114,13 +119,14 @@ class StructureMetricsConfig(BaseConfig):
     key="structure-metrics",
     label="Structure Quality Metrics",
     category="structure_prediction",
-    input=StructureMetricsInput,
-    config=StructureMetricsConfig,
-    output=StructureMetricsOutput,
+    input_class=StructureMetricsInput,
+    config_class=StructureMetricsConfig,
+    output_class=StructureMetricsOutput,
     description="Compute structural quality metrics (longest alpha helix, gyration radius) from PDB files",
+    example_input=example_input,
 )
 def run_structure_metrics(
-    inputs: StructureMetricsInput, config: StructureMetricsConfig, instance=None,
+    inputs: StructureMetricsInput, config: StructureMetricsConfig | None = None, instance=None,
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
 
@@ -149,6 +155,7 @@ def run_structure_metrics(
         "pdb_paths": inputs.pdb_paths,
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "structure_metrics",
         input_data,

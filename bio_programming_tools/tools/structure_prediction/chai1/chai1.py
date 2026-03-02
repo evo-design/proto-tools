@@ -204,22 +204,28 @@ class Chai1Config(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Chai1Input(complexes=["MKTL"])
+
+
 @tool(
     key="chai1-prediction",
     label="Chai1 Structure Prediction",
     category="structure_prediction",
-    input=Chai1Input,
-    config=Chai1Config,
-    output=Chai1Output,
+    input_class=Chai1Input,
+    config_class=Chai1Config,
+    output_class=Chai1Output,
     description="Multi-modal structure prediction using Chai1",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
     output_iterable_field="structures",
     tool_name="chai1-prediction",
 )
-def run_chai1(inputs: Chai1Input, config: Chai1Config, instance=None) -> Chai1Output:
+def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.
 
     Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,

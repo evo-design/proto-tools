@@ -172,19 +172,25 @@ class UniProtFetchConfig(BaseConfig):
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return UniProtFetchInput(uniprot_id="P04637")
+
+
 @tool(
     key="uniprot-fetch",
     label="UniProt Fetch",
     category="database_retrieval",
-    input=UniProtFetchInput,
-    config=UniProtFetchConfig,
-    output=UniProtFetchOutput,
+    input_class=UniProtFetchInput,
+    config_class=UniProtFetchConfig,
+    output_class=UniProtFetchOutput,
     description="Fetch protein entries from UniProt by accession or search by name and organism",
     uses_gpu=False,
+    example_input=example_input,
 )
 def run_uniprot_fetch(
     inputs: UniProtFetchInput,
-    config: UniProtFetchConfig,
+    config: UniProtFetchConfig | None = None,
     instance=None,
 ) -> UniProtFetchOutput:
     """Fetch protein entries from UniProt.

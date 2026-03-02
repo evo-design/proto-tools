@@ -103,15 +103,26 @@ AlphaGenomePredictVariantsConfig = AlphaGenomePredictConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomePredictVariantsInput(
+        variants=[AlphaGenomeVariant(
+            chromosome="chr1", interval_start=0, interval_end=196608,
+            variant_position=100000, reference_bases="A", alternate_bases="G",
+        )]
+    )
+
+
 @tool(
     key="alphagenome-predict-variants",
     label="AlphaGenome Predict Variants",
     category="sequence_scoring",
-    input=AlphaGenomePredictVariantsInput,
-    config=AlphaGenomePredictVariantsConfig,
-    output=AlphaGenomePredictVariantsOutput,
+    input_class=AlphaGenomePredictVariantsInput,
+    config_class=AlphaGenomePredictVariantsConfig,
+    output_class=AlphaGenomePredictVariantsOutput,
     description="Predict variant effects in batch using AlphaGenome",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="variants",
@@ -120,7 +131,7 @@ AlphaGenomePredictVariantsConfig = AlphaGenomePredictConfig
 )
 def run_alphagenome_predict_variants(
     inputs: AlphaGenomePredictVariantsInput,
-    config: AlphaGenomePredictVariantsConfig,
+    config: AlphaGenomePredictVariantsConfig | None = None,
     instance=None,
 ) -> AlphaGenomePredictVariantsOutput:
     """Predict variant effects in batch using AlphaGenome."""

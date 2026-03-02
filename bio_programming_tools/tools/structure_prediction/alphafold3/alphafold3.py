@@ -9,10 +9,11 @@ using AlphaFold3 from Google DeepMind.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import model_validator
 from tqdm import tqdm
@@ -33,8 +34,10 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_cache import tool_cache_iterable
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
-from .inference import AlphaFold3JSON, alphafold3_inference
+# Type alias for AlphaFold3 JSON format
+AlphaFold3JSON = Dict[str, Any]
 
 
 # ============================================================================
@@ -185,15 +188,21 @@ class AlphaFold3Config(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaFold3Input(complexes=["MKTL"])
+
+
 @tool(
     key="alphafold3-prediction",
     label="AlphaFold3 Structure Prediction",
     category="structure_prediction",
-    input=AlphaFold3Input,
-    config=AlphaFold3Config,
-    output=AlphaFold3Output,
+    input_class=AlphaFold3Input,
+    config_class=AlphaFold3Config,
+    output_class=AlphaFold3Output,
     description="Protein structure prediction using AlphaFold3",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
@@ -201,7 +210,7 @@ class AlphaFold3Config(StructurePredictionConfig):
     tool_name="alphafold3-prediction",
 )
 def run_alphafold3(
-    inputs: AlphaFold3Input, config: AlphaFold3Config,
+    inputs: AlphaFold3Input, config: AlphaFold3Config | None = None,
     instance=None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
@@ -216,6 +225,7 @@ def run_alphafold3(
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
+            # Determine output directory
             if config.output_dir is None:
                 # Create inside temp directory for auto-cleanup
                 output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")
@@ -223,17 +233,50 @@ def run_alphafold3(
                 # Create at specified path (persists after execution)
                 output_dir = f"{config.output_dir}_af3_results"
 
-            pdb_path, alphafold3_scores = alphafold3_inference(
-                input_json=input_json,
-                output_dir=output_dir,
-                use_msa=config.use_msa,
-                colabfold_search_config=config.colabfold_search_config,
-                repo_path=config.repo_path,
-                sif_path=config.sif_path,
-                model_dir=config.model_dir,
-                db_dir=config.db_dir,
+            # Create input directory for MSAs
+            input_dir = os.path.join(output_dir, "af3_inputs")
+            os.makedirs(input_dir, exist_ok=True)
+
+            # Generate MSAs if requested
+            if config.use_msa:
+                input_json = _generate_msas(
+                    input_json,
+                    input_dir,
+                    config.colabfold_search_config,
+                    verbose=config.verbose,
+                )
+            else:
+                logger.debug("MSA generation skipped (use_msa=False).")
+
+            # Write input JSON to file for worker protocol
+            input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
+            with open(input_json_path, "w") as f:
+                json.dump(input_json, f, indent=2)
+
+            # Prepare dispatch input
+            input_data = {
+                "input_json_path": input_json_path,
+                "output_dir": output_dir,
+                "device": config.device,
+                "repo_path": config.repo_path,
+                "sif_path": config.sif_path,
+                "model_dir": config.model_dir,
+                "db_dir": config.db_dir,
+                "verbose": config.verbose,
+            }
+
+            # Dispatch to worker (goes through DeviceManager)
+            output_data = ToolInstance.dispatch(
+                "alphafold3",
+                input_data,
+                instance=instance,
                 verbose=config.verbose,
+                timeout=getattr(config, 'timeout', None),
             )
+
+            # Extract results from dict
+            pdb_path = output_data["structure_pdb"]
+            alphafold3_scores = output_data["metrics"]
 
             output_structures.append(
                 Structure(
@@ -255,6 +298,113 @@ def run_alphafold3(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+def _generate_msas(
+    input_json_data: AlphaFold3JSON,
+    input_dir: str,
+    colabfold_search_config: ColabfoldSearchConfig,
+    verbose: bool = False,
+) -> AlphaFold3JSON:
+    """
+    Generate multiple sequence alignments (MSAs) for protein chains using ColabFold search.
+
+    Args:
+        input_json_data: AlphaFold3 input JSON dictionary to update with MSA paths.
+        input_dir: Directory for MSA output files (AlphaFold3 input directory).
+        colabfold_search_config: Configuration for ColabFold MSA search.
+        verbose: Whether to print progress messages.
+
+    Returns:
+        Updated input_json_data with MSA paths populated.
+    """
+    from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+        ColabfoldSearchInput,
+        run_colabfold_search,
+    )
+
+    name = input_json_data["name"]
+
+    # Collect unique sequences and track which chain indices use each.
+    seq_to_indices: Dict[str, List[int]] = {}
+    seq_to_name: Dict[str, str] = {}
+
+    for seq_idx, seq_entry in enumerate(input_json_data["sequences"]):
+        if "protein" not in seq_entry:
+            continue
+        sequence = seq_entry["protein"]["sequence"]
+        if sequence not in seq_to_indices:
+            chain_id = seq_entry["protein"]["id"]
+            if isinstance(chain_id, list):
+                chain_id = chain_id[0]
+            seq_to_indices[sequence] = []
+            seq_to_name[sequence] = f"{name}_{chain_id}_{seq_idx}"
+        seq_to_indices[sequence].append(seq_idx)
+
+    if not seq_to_indices:
+        logger.debug("No protein sequences found, skipping MSA generation.")
+        return input_json_data
+
+    unique_seqs = list(seq_to_indices.keys())
+    unique_names = [seq_to_name[s] for s in unique_seqs]
+
+    # Create queries for ColabFold search
+    queries = [(seq, name) for seq, name in zip(unique_seqs, unique_names)]
+    colabfold_input = ColabfoldSearchInput(queries=queries)
+
+    # Configure output directory for MSAs within the AlphaFold3 input directory
+    msa_config = colabfold_search_config.model_copy(deep=True)
+    msa_config.output_dir = input_dir
+    msa_config.verbose = verbose
+
+    logger.debug(
+        f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) using ColabFold search..."
+    )
+
+    # Run ColabFold search
+    try:
+        colabfold_output = run_colabfold_search(colabfold_input, msa_config)
+    except Exception as e:
+        raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
+
+    # Process results and assign MSA paths to chains
+    msa_paths: Dict[str, str] = {}
+
+    for result in colabfold_output.results:
+        if result.msa is not None:
+            # Write the MSA to A3M format for AlphaFold3
+            # The MSA class automatically handles insertion removal when loading A3M files
+            # and to_a3m_file() writes clean A3M without lowercase insertions
+            a3m_path = os.path.join(input_dir, "msas", f"{result.sequence_id}.a3m")
+            os.makedirs(os.path.dirname(a3m_path), exist_ok=True)
+            result.msa.to_a3m_file(a3m_path, query_index=0)
+
+            # Store relative path from input_dir
+            rel_path = os.path.relpath(a3m_path, input_dir)
+            msa_paths[result.sequence_id] = rel_path
+
+            logger.debug(
+                f"Generated MSA for {result.sequence_id}: {result.num_homologs_found} homologs found"
+            )
+        else:
+            logger.debug(f"Warning: No homologs found for {result.sequence_id}")
+
+    # Assign MSA paths back to all chains that use each sequence
+    for sequence, indices in seq_to_indices.items():
+        seq_name = seq_to_name[sequence]
+        if seq_name in msa_paths:
+            for idx in indices:
+                input_json_data["sequences"][idx]["protein"]["unpairedMsaPath"] = (
+                    msa_paths[seq_name]
+                )
+                chain_id = input_json_data["sequences"][idx]["protein"]["id"]
+                logger.debug(f"Assigned MSA '{msa_paths[seq_name]}' to chain {chain_id}")
+        else:
+            logger.debug(
+                f"Warning: No MSA available for sequence used in chain indices {indices}"
+            )
+
+    return input_json_data
+
+
 def _create_input_json_from_complex(
     sp_complex: StructurePredictionComplex,
     name: str,

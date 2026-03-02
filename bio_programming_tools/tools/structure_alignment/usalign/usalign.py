@@ -82,22 +82,31 @@ class USalignOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+_EXAMPLE_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+
+
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return USalignInput(pdb_text_1=_EXAMPLE_PDB, pdb_text_2=_EXAMPLE_PDB)
+
+
 @tool(
     key="usalign-alignment",
     label="USalign Structure Alignment",
     category="structure_alignment",
-    input=USalignInput,
-    config=USalignConfig,
-    output=USalignOutput,
+    input_class=USalignInput,
+    config_class=USalignConfig,
+    output_class=USalignOutput,
     uses_gpu=False,
     description=(
         "Universal structure alignment using USalign (Zhang et al., 2022). "
         "Supports monomers and multimers. Returns TM-scores normalized by "
         "each structure."
     ),
+    example_input=example_input,
 )
 def run_usalign(
-    inputs: USalignInput, config: USalignConfig, instance=None
+    inputs: USalignInput, config: USalignConfig | None = None, instance=None
 ) -> USalignOutput:
     """Run USalign on two PDB structures."""
     from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -107,6 +116,7 @@ def run_usalign(
         "pdb_text_2": inputs.pdb_text_2,
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "usalign",
         input_data,

@@ -8,11 +8,14 @@ import numpy as np
 from pydantic import Field
 from tqdm import tqdm
 
+from pathlib import Path
+
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
+    InverseFoldingStructureInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -48,19 +51,29 @@ class ProteinMPNNSequences(DesignedSequences):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ProteinMPNNSampleInput(
+        inputs=[InverseFoldingStructureInput(
+            structure=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"),
+        )]
+    )
+
+
 @tool(
     key="proteinmpnn-sample",
     label="ProteinMPNN Sampling",
     category="inverse_folding",
-    input=ProteinMPNNSampleInput,
-    config=ProteinMPNNSampleConfig,
-    output=ProteinMPNNSampleOutput,
+    input_class=ProteinMPNNSampleInput,
+    config_class=ProteinMPNNSampleConfig,
+    output_class=ProteinMPNNSampleOutput,
     description="Sample protein sequences using ProteinMPNN",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
-    config: ProteinMPNNSampleConfig,
+    config: ProteinMPNNSampleConfig | None = None,
     instance=None,
 ) -> ProteinMPNNSampleOutput:
     """Sample protein sequences using ProteinMPNN.

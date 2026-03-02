@@ -114,6 +114,14 @@ def run_create_blast_db(input_data: dict) -> dict:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
+def to_device(device: str) -> dict:
+    """Passthrough for CLI tool - automatically unloads after each call."""
+    # CLI tool that spawns subprocesses and naturally unloads after each call
+    # This is a passthrough for standardization with other tools
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(

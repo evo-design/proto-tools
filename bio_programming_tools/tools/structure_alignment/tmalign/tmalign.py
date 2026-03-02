@@ -82,21 +82,30 @@ class TMalignOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+_EXAMPLE_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+
+
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return TMalignInput(pdb_text_1=_EXAMPLE_PDB, pdb_text_2=_EXAMPLE_PDB)
+
+
 @tool(
     key="tmalign-alignment",
     label="TMalign Structure Alignment",
     category="structure_alignment",
-    input=TMalignInput,
-    config=TMalignConfig,
-    output=TMalignOutput,
+    input_class=TMalignInput,
+    config_class=TMalignConfig,
+    output_class=TMalignOutput,
     uses_gpu=False,
     description=(
         "Pairwise protein structure alignment using TMalign "
         "(Zhang & Skolnick, 2005). Returns TM-scores normalized by each chain."
     ),
+    example_input=example_input,
 )
 def run_tmalign(
-    inputs: TMalignInput, config: TMalignConfig, instance=None
+    inputs: TMalignInput, config: TMalignConfig | None = None, instance=None
 ) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
     from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -106,6 +115,7 @@ def run_tmalign(
         "pdb_text_2": inputs.pdb_text_2,
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "tmalign",
         input_data,

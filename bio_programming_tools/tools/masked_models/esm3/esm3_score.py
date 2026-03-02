@@ -92,18 +92,24 @@ class ESM3ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM3ScoringInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm3-score",
     label="ESM3 Scoring",
     category="masked_models",
-    input=ESM3ScoringInput,
-    config=ESM3ScoringConfig,
-    output=ESM3ScoringOutput,
+    input_class=ESM3ScoringInput,
+    config_class=ESM3ScoringConfig,
+    output_class=ESM3ScoringOutput,
     description="Score protein sequences using ESM3 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_esm3_score(
-    inputs: ESM3ScoringInput, config: ESM3ScoringConfig,
+    inputs: ESM3ScoringInput, config: ESM3ScoringConfig | None = None,
     instance=None,
 ) -> ESM3ScoringOutput:
     """Score protein sequences using ESM3 language model.

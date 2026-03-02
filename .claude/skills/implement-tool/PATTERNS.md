@@ -238,6 +238,138 @@ uv pip install -r requirements.txt
 echo "{ToolName} setup complete!"
 ```
 
+### Required Functions for AI Model Standalone Scripts
+
+**All GPU tools must implement two protocol functions in their standalone scripts** (inference.py or run.py):
+
+**IMPORTANT: Persistent vs Non-Persistent Tools**
+- **Persistent tools**: Keep a global `_model` object loaded in memory between calls (e.g., ESMFold, Evo2, ESM2)
+- **Non-persistent tools**: Create a new model instance on each call and unload it after (e.g., BioEmu)
+- **CLI tools**: Spawn subprocesses that naturally unload after completion (e.g., Boltz2, RFDiffusion3)
+
+#### 1. `to_device(device: str) -> dict`
+
+Enables DeviceManager to move models between GPUs and CPU for resource management.
+
+**Persistent PyTorch tools:**
+```python
+def to_device(device: str) -> dict:
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+```
+
+**CLI tools:**
+```python
+def to_device(device: str) -> dict:
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+```
+
+#### 2. `get_memory_stats() -> dict`
+
+Enables DeviceManager to query GPU memory usage for monitoring.
+
+**PyTorch tools:**
+```python
+from standalone_helpers import get_pytorch_memory_stats
+
+def get_memory_stats() -> dict:
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
+```
+
+**JAX tools:**
+```python
+from standalone_helpers import get_jax_memory_stats
+
+def get_memory_stats() -> dict:
+    return get_jax_memory_stats(device_index=0)
+```
+
+**Key points:**
+- Both functions must be defined at module level (not inside classes)
+- Import the appropriate helper from `standalone_helpers` (auto-copied by worker bootstrap)
+- `to_device()` must return a dict with `{"success": bool, "device": str}`
+- `get_memory_stats()` must return a dict with `{"available": bool, "framework": str, ...}`
+- The standalone helpers already include the 'framework' key in all return paths — just call them directly
+
+---
+
+### CLI Tools with Subprocess Calls — [Subagent 1: Standalone]
+
+**For tools that spawn CLI subprocesses** (e.g., Boltz2, RFDiffusion3, Protenix), use `get_subprocess_device_env()` from `standalone_helpers` to ensure correct device routing when parent has `CUDA_VISIBLE_DEVICES` set.
+
+**Why this is needed:** When DeviceManager allocates a logical device (e.g., `cuda:2`), the worker subprocess inherits the parent's `CUDA_VISIBLE_DEVICES` (e.g., `0,1,5,7`). The CLI subprocess needs the physical GPU index (e.g., `5`) mapped from the logical index (2).
+
+**standalone/run.py** — CLI subprocess pattern:
+```python
+"""
+{ToolName} standalone runner for ToolInstance venv execution.
+
+CRITICAL: This script runs in an isolated environment and CANNOT import from bio_programming_tools.
+Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (auto-copied).
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+
+from standalone_helpers import get_subprocess_device_env  # Auto-copied by worker bootstrap
+
+
+def run_operation(
+    input_data: dict,
+    device: str = "cuda",
+) -> dict:
+    """Run the CLI tool with correct device environment."""
+    cmd = [
+        "some-cli-tool",
+        "--input", input_data["input_file"],
+        "--output", input_data["output_dir"],
+    ]
+
+    # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+    env = get_subprocess_device_env(device)
+
+    # Run CLI subprocess with mapped device
+    subprocess.run(cmd, check=True, text=True, env=env, encoding="utf-8")
+
+    return {"status": "success"}
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print(f"Usage: python {sys.argv[0]} <input.json> <output.json>", file=sys.stderr)
+        sys.exit(1)
+
+    with open(sys.argv[1], "r") as f:
+        input_data = json.load(f)
+
+    device = input_data.get("device", "cuda")
+    operation = input_data["operation"]
+
+    if operation == "run":
+        output_data = run_operation(input_data, device=device)
+    else:
+        raise ValueError(f"Unknown operation: {operation}")
+
+    with open(sys.argv[2], "w") as f:
+        json.dump(output_data, f)
+```
+
+**Key points:**
+- Import `get_subprocess_device_env` from `standalone_helpers` (auto-copied by worker bootstrap)
+- Accept `device` parameter in operation functions
+- Call `env = get_subprocess_device_env(device)` before subprocess calls
+- Pass `env=env` to `subprocess.run()` or `subprocess.Popen()`
+
+---
+
 ### Batching Convention — [Subagent 1: Standalone + Phase 2: Contract]
 
 GPU tools should include `batch_size: int = ConfigField(default=1, ...)` in their config.

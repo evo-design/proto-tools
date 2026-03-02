@@ -204,6 +204,13 @@ class ProGen2SampleConfig(BaseConfig):
         - Original paper: https://www.cell.com/cell-systems/fulltext/S2405-4712(23)00272-7
     """
 
+    device: str = ConfigField(
+        title="Device",
+        default="cuda",
+        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        hidden=True,
+    )
+
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
         default="progen2-large",
         title="Model Checkpoint",
@@ -279,18 +286,24 @@ class ProGen2SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ProGen2SampleInput(prompts=["MKTL"])
+
+
 @tool(
     key="progen2-sample",
     label="ProGen2 Sampling",
     category="causal_models",
-    input=ProGen2SampleInput,
-    config=ProGen2SampleConfig,
-    output=ProGen2SampleOutput,
+    input_class=ProGen2SampleInput,
+    config_class=ProGen2SampleConfig,
+    output_class=ProGen2SampleOutput,
     description="Sample protein sequences using ProGen2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_progen2_sample(
-    inputs: ProGen2SampleInput, config: ProGen2SampleConfig,
+    inputs: ProGen2SampleInput, config: ProGen2SampleConfig | None = None,
     instance=None,
 ) -> ProGen2SampleOutput:
     """Generate protein sequences using ProGen2 autoregressive language model.

@@ -61,17 +61,26 @@ PyHmmscanConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PyHmmscanInput(
+        sequences=["MKTL"],
+        hmm_db=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"),
+    )
+
+
 @tool(
     key="pyhmmer-hmmscan",
     label="PyHMMER Scan",
     category="gene_annotation",
-    input=PyHmmscanInput,
-    config=PyHmmscanConfig,
-    output=PyHmmscanOutput,
+    input_class=PyHmmscanInput,
+    config_class=PyHmmscanConfig,
+    output_class=PyHmmscanOutput,
     description="Search sequences against HMM database using PyHMMER",
+    example_input=example_input,
 )
 @tool_cache("pyhmmer-hmmscan")
-def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instance=None) -> PyHmmscanOutput:
+def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance=None) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
     This function implements the hmmscan algorithm, searching protein sequences
@@ -123,6 +132,7 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instanc
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
+            "device": "cpu",
             "operation": "hmmscan",
             "hmm_db_path": str(inputs.hmm_db),
             "sequences": inputs.sequences,

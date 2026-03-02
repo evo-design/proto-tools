@@ -356,14 +356,14 @@ class Evo2SampleConfig(BaseConfig):
     key="evo2-sample-in-process",
     label="Evo2 Sampling (In-Process)",
     category="causal_models",
-    input=Evo2SampleInput,
-    config=Evo2SampleConfig,
-    output=Evo2SampleOutput,
+    input_class=Evo2SampleInput,
+    config_class=Evo2SampleConfig,
+    output_class=Evo2SampleOutput,
     description="Sample DNA sequences using Evo2 language model (in-process mode)",
     uses_gpu=True,
 )
 def run_evo2_sample(
-    inputs: Evo2SampleInput, config: Evo2SampleConfig,
+    inputs: Evo2SampleInput, config: Evo2SampleConfig | None = None,
     instance=None,
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.

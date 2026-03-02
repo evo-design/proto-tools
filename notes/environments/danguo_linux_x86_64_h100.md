@@ -8,7 +8,7 @@
 |----------|-------|
 | **OS** | Linux Linux 3.10.0-1160.139.1.el7.tuxcare.els4.x86_64 |
 | **Architecture** | x86_64 |
-| **Hostname** | `sh04-15n01.int` |
+| **Hostname** | `sh04-14n01.int` |
 | **Python** | 3.12.12 |
 | **RAM** | 2015.1 GB |
 | **GPU** | 1× NVIDIA H100 80GB HBM3 |
@@ -17,8 +17,8 @@
 
 ## Git
 
-- **Commit**: `f947e4790e75`
-- **Branch**: `main`
+- **Commit**: `51b3f2a962be`
+- **Branch**: `device_management`
 - **Dirty**: Yes
 
 ## Environment Variables
@@ -114,13 +114,13 @@ HF_HOME=/oak/stanford/groups/brianhie/danguo/.cache/huggingface
 HISTCONTROL=ignoreboth:erasedups
 HISTSIZE=1000
 HOME=/home/users/danguo
-HOSTNAME=sh04-15n01.int
+HOSTNAME=sh04-14n01.int
 HYDRA_BOOTSTRAP=slurm
 HYDRA_LAUNCHER_EXTRA_ARGS=--external-launcher
 INFOPATH=/share/software/user/open/nodejs/25.3.0/share/info
 I_MPI_HYDRA_BOOTSTRAP=slurm
 I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS=--external-launcher
-KRB5CCNAME=FILE:/tmp/krb5cc_369751_3VmI5ZFIrY
+KRB5CCNAME=FILE:/tmp/krb5cc_369751_QESSkk48v6
 LANG=en_US.UTF-8
 LC_CTYPE=C.UTF-8
 LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/.singularity.d/libs
@@ -149,12 +149,12 @@ LMOD_sys=Linux
 LOADEDMODULES=devel:math:gcc/14.2.0:nodejs/25.3.0:claude-code/2.1.38
 LOCAL_SCRATCH=/lscratch/danguo
 LOGNAME=danguo
-LS_COLORS=rs=0:di=38;5;27:ln=38;5;51:mh=44;38;5;15:pi=40;38;5;11:so=38;5;13:do=38;5;5:bd=48;5;232;38;5;11:cd=48;5;232;38;5;3:or=48;5;232;38;5;9:mi=05;48;5;232;38;5;15:su=48;5;196;38;5;15:sg=48;5;11;38;5;16:ca=4...
+LS_COLORS=su=00:sg=00:ca=00:or=40;31;01
 L_SCRATCH=/lscratch/danguo
-L_SCRATCH_JOB=/lscratch/danguo/17261351
+L_SCRATCH_JOB=/lscratch/danguo/17552256
 L_SCRATCH_USER=/lscratch/danguo
 MAIL=/var/spool/mail/danguo
-MANPATH=/share/software/user/open/lmod/lmod/share/man:/share/software/user/open/nodejs/25.3.0/share/man:/share/software/user/open/gcc/14.2.0/share/man:/usr/local/share/man:/usr/share/man
+MANPATH=/share/software/user/open/nodejs/25.3.0/share/man:/share/software/user/open/gcc/14.2.0/share/man:/share/software/user/open/lmod/lmod/share/man:/usr/local/share/man:/usr/share/man
 MKL_NUM_THREADS=8
 MODULEPATH=/share/software/modules/math:/share/software/modules/devel:/share/software/modules/categories
 MODULEPATH_ROOT=/share/software/modules
@@ -163,23 +163,23 @@ NVIDIA_DRIVER_CAPABILITIES=compute,utility
 NVIDIA_VISIBLE_DEVICES=all
 OAK=/oak/stanford/groups/brianhie
 OLDPWD=/home/groups/brianhie/danguo
-OMPI_MCA_orte_precondition_transports=0107632700000000-0107632700000000
+OMPI_MCA_orte_precondition_transports=010bd38000000000-010bd38000000000
 OMPI_MCA_plm_slurm_args=--external-launcher
 OMP_NUM_THREADS=8
 OPENBLAS_NUM_THREADS=8
 PATH=/home/users/danguo/miniforge3/envs/bio-programming/bin:/home/users/danguo/.local/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PMIX_BFROP_BUFFER_TYPE=PMIX_BFROP_BUFFER_NON_DESC
 PMIX_GDS_MODULE=shmem2,hash
-PMIX_HOSTNAME=sh04-15n01
-PMIX_NAMESPACE=slurm.pmix.17261351.0
+PMIX_HOSTNAME=sh04-14n01
+PMIX_NAMESPACE=slurm.pmix.17552256.0
 PMIX_RANK=0
 PMIX_SECURITY_MODE=native
-PMIX_SERVER_TMPDIR=/var/spool/slurmd/pmix.17261351.0/
-PMIX_SERVER_URI2=pmix-server.20960;tcp4://127.0.0.1:37757
-PMIX_SERVER_URI21=pmix-server.20960;tcp4://127.0.0.1:37757
-PMIX_SERVER_URI3=pmix-server.20960;tcp4://127.0.0.1:37757
-PMIX_SERVER_URI4=pmix-server.20960;tcp4://127.0.0.1:37757
-PMIX_SERVER_URI41=pmix-server.20960;tcp4://127.0.0.1:37757
+PMIX_SERVER_TMPDIR=/var/spool/slurmd/pmix.17552256.0/
+PMIX_SERVER_URI2=pmix-server.10038;tcp4://127.0.0.1:45892
+PMIX_SERVER_URI21=pmix-server.10038;tcp4://127.0.0.1:45892
+PMIX_SERVER_URI3=pmix-server.10038;tcp4://127.0.0.1:45892
+PMIX_SERVER_URI4=pmix-server.10038;tcp4://127.0.0.1:45892
+PMIX_SERVER_URI41=pmix-server.10038;tcp4://127.0.0.1:45892
 PMIX_SYSTEM_TMPDIR=/tmp
 PMIX_VERSION=5.0.3
 PROMPT_COMMAND=RET=$?;/bin/logger -t user_audit "username=$USER pid=$$ cmd=\"$(history 1 | /bin/sed "s/^[ ]*[0-9]\+[ ]*//" )\" newpwd=$PWD ret=$RET" 2>/dev/null
@@ -205,81 +205,80 @@ SINGULARITY_CONTAINER=/home/groups/brianhie/brianhie/simg/pytorch_latest.sif
 SINGULARITY_ENVIRONMENT=/.singularity.d/env/91-environment.sh
 SINGULARITY_NAME=pytorch_latest.sif
 SLURMD_DEBUG=2
-SLURMD_NODENAME=sh04-15n01
+SLURMD_NODENAME=sh04-14n01
 SLURM_CLUSTER_NAME=sherlock
 SLURM_CONF=/var/spool/slurmd/conf-cache/slurm.conf
 SLURM_CPUS_ON_NODE=8
 SLURM_CPUS_PER_TASK=8
-SLURM_CPU_BIND=quiet,mask_cpu:0x000003FC00000000
-SLURM_CPU_BIND_LIST=0x000003FC00000000
+SLURM_CPU_BIND=quiet,mask_cpu:0x000000000000FC03
+SLURM_CPU_BIND_LIST=0x000000000000FC03
 SLURM_CPU_BIND_TYPE=mask_cpu:
 SLURM_CPU_BIND_VERBOSE=quiet
 SLURM_DISTRIBUTION=block
 SLURM_GPUS=1
 SLURM_GPUS_ON_NODE=1
 SLURM_GTIDS=0
-SLURM_JOBID=17261351
+SLURM_JOBID=17552256
 SLURM_JOB_ACCOUNT=brianhie
 SLURM_JOB_CPUS_PER_NODE=8
-SLURM_JOB_END_TIME=1772203535
+SLURM_JOB_END_TIME=1772459598
 SLURM_JOB_GID=21859
 SLURM_JOB_GROUP=brianhie
-SLURM_JOB_ID=17261351
+SLURM_JOB_ID=17552256
 SLURM_JOB_NAME=bash
-SLURM_JOB_NODELIST=sh04-15n01
+SLURM_JOB_NODELIST=sh04-14n01
 SLURM_JOB_NUM_NODES=1
 SLURM_JOB_PARTITION=brianhie
 SLURM_JOB_QOS=normal
-SLURM_JOB_START_TIME=1772160331
+SLURM_JOB_START_TIME=1772416394
 SLURM_JOB_UID=369751
 SLURM_JOB_USER=danguo
-SLURM_LAUNCH_NODE_IPADDR=10.18.0.62
+SLURM_LAUNCH_NODE_IPADDR=10.19.0.64
 SLURM_LOCALID=0
 SLURM_MEM_PER_CPU=30720
 SLURM_MPI_TYPE=pmix
 SLURM_NNODES=1
 SLURM_NODEID=0
-SLURM_NODELIST=sh04-15n01
+SLURM_NODELIST=sh04-14n01
 SLURM_NPROCS=1
 SLURM_NTASKS=1
 SLURM_OOM_KILL_STEP=0
-SLURM_PMIXP_ABORT_AGENT_PORT=32782
+SLURM_PMIXP_ABORT_AGENT_PORT=45309
 SLURM_PMIX_MAPPING_SERV=(vector,(0,1,1))
 SLURM_PRIO_PROCESS=0
 SLURM_PROCID=0
-SLURM_PTY_PORT=33346
-SLURM_PTY_WIN_COL=327
-SLURM_PTY_WIN_ROW=95
+SLURM_PTY_PORT=34129
+SLURM_PTY_WIN_COL=146
+SLURM_PTY_WIN_ROW=30
 SLURM_SCRIPT_CONTEXT=prolog_task
-SLURM_SRUN_COMM_HOST=10.18.0.62
-SLURM_SRUN_COMM_PORT=36967
+SLURM_SRUN_COMM_HOST=10.19.0.64
+SLURM_SRUN_COMM_PORT=34899
 SLURM_STEPID=0
-SLURM_STEPMGR=sh04-15n01
-SLURM_STEP_GPUS=4
+SLURM_STEPMGR=sh04-14n01
+SLURM_STEP_GPUS=0
 SLURM_STEP_ID=0
-SLURM_STEP_LAUNCHER_PORT=36967
-SLURM_STEP_NODELIST=sh04-15n01
+SLURM_STEP_LAUNCHER_PORT=34899
+SLURM_STEP_NODELIST=sh04-14n01
 SLURM_STEP_NUM_NODES=1
 SLURM_STEP_NUM_TASKS=1
 SLURM_STEP_TASKS_PER_NODE=1
 SLURM_SUBMIT_DIR=/home/groups/brianhie/danguo
-SLURM_SUBMIT_HOST=sh02-ln02.stanford.edu
+SLURM_SUBMIT_HOST=sh03-ln04.stanford.edu
 SLURM_TASKS_PER_NODE=1
-SLURM_TASK_PID=20981
-SLURM_TOPOLOGY_ADDR=sh04.sh04-isw-15.sh04-15n01
+SLURM_TASK_PID=10068
+SLURM_TOPOLOGY_ADDR=sh04.sh04-isw-14.sh04-14n01
 SLURM_TOPOLOGY_ADDR_PATTERN=switch.switch.node
 SLURM_TRES_PER_TASK=cpu=8
 SLURM_UMASK=0022
 SRCC_PATH=/share/software/user/srcc/bin
 SRUN_CPUS_PER_TASK=8
 SRUN_DEBUG=3
-TERM=xterm-256color
-TERM_PROGRAM=WarpTerminal
+TERM=xterm-ghostty
 TMOUT=86400
 TMPDIR=/tmp
 TORCH_HOME=/oak/stanford/groups/brianhie/danguo/.cache/torch
 USER=danguo
-USER_PATH=/home/users/danguo/.local/bin:/home/users/danguo/.local/bin:/share/software/user/srcc/bin:/share/software/user/open/claude-code/2.1.38/bin:/share/software/user/open/nodejs/25.3.0/bin:/share/software/u...
+USER_PATH=/home/users/danguo/.local/bin:/share/software/user/open/claude-code/2.1.38/bin:/share/software/user/open/nodejs/25.3.0/bin:/share/software/user/open/gcc/14.2.0/bin:/share/software/user/srcc/bin:/home/...
 XDG_CACHE_HOME=/tmp
 XDG_RUNTIME_DIR=/tmp
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
@@ -304,7 +303,7 @@ __LMOD_REF_COUNT_LD_LIBRARY_PATH=/share/software/user/open/nodejs/25.3.0/lib:1;/
 __LMOD_REF_COUNT_LIBRARY_PATH=/share/software/user/open/nodejs/25.3.0/lib:1;/share/software/user/open/gcc/14.2.0/lib64:1;/share/software/user/open/gcc/14.2.0/lib:1
 __LMOD_REF_COUNT_MANPATH=/share/software/user/open/nodejs/25.3.0/share/man:1;/share/software/user/open/gcc/14.2.0/share/man:1;/share/software/user/open/lmod/lmod/share/man:1;/usr/local/share/man:1;/usr/share/man:1
 __LMOD_REF_COUNT_MODULEPATH=/share/software/modules/math:1;/share/software/modules/devel:1;/share/software/modules/categories:1
-__LMOD_REF_COUNT_PATH=/share/software/user/open/claude-code/2.1.38/bin:1;/share/software/user/open/nodejs/25.3.0/bin:1;/share/software/user/open/gcc/14.2.0/bin:1;/home/users/danguo/.local/bin:3;/share/software/user/srcc/bi...
+__LMOD_REF_COUNT_PATH=/share/software/user/open/claude-code/2.1.38/bin:1;/share/software/user/open/nodejs/25.3.0/bin:1;/share/software/user/open/gcc/14.2.0/bin:1;/share/software/user/srcc/bin:2;/home/users/danguo/miniforge...
 __LMOD_STACK_CC=false
 __LMOD_STACK_CPP=false
 __LMOD_STACK_CXX=false
@@ -337,6 +336,8 @@ TORCH_HOME=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/to
 USER=danguo
 VIRTUAL_ENV=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
 XDG_CACHE_HOME=/tmp
+XLA_PYTHON_CLIENT_ALLOCATOR=platform
+XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
@@ -345,99 +346,99 @@ XDG_CACHE_HOME=/tmp
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `evo1` | yes | ✅ | 641.6s | ✅ Pass |
-| `evo2` | yes | ✅ | 844.6s | ✅ Pass |
-| `progen2` | yes | ✅ | 581.1s | ✅ Pass |
+| `evo1` | yes | ✅ | 848.9s | ✅ Pass |
+| `evo2` | yes | ✅ | 796.5s | ✅ Pass |
+| `progen2` | yes | ✅ | 453.9s | ✅ Pass |
 
 ### Gene Annotation (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 112.8s | ✅ Pass |
-| `minced` | no | ✅ | 49.5s | ✅ Pass |
-| `mmseqs` | no | ✅ | 89.4s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 73.5s | ✅ Pass |
+| `blast` | no | ✅ | 82.0s | ✅ Pass |
+| `minced` | no | ✅ | 42.3s | ✅ Pass |
+| `mmseqs` | no | ✅ | 58.7s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 52.9s | ✅ Pass |
 
 ### Inverse Folding (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `ligandmpnn` | yes | ✅ | 776.0s | ✅ Pass |
-| `proteinmpnn` | yes | ✅ | 235.1s | ✅ Pass |
+| `ligandmpnn` | yes | ✅ | 656.9s | ✅ Pass |
+| `proteinmpnn` | yes | ✅ | 214.0s | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `esm2` | yes | ✅ | 383.3s | ✅ Pass |
-| `esm3` | yes | ✅ | 577.9s | ✅ Pass |
+| `esm2` | yes | ✅ | 306.1s | ✅ Pass |
+| `esm3` | yes | ✅ | 2185.2s | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 87.8s | ✅ Pass |
-| `prodigal` | no | ✅ | 42.4s | ✅ Pass |
+| `orfipy` | no | ✅ | 72.9s | ✅ Pass |
+| `prodigal` | no | ✅ | 37.9s | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `splice_transformer` | yes | ✅ | 323.0s | ✅ Pass |
+| `splice_transformer` | yes | ✅ | 288.4s | ✅ Pass |
 
 ### Sequence Alignment (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `mafft` | no | ✅ | 62.0s | ✅ Pass |
+| `mafft` | no | ✅ | 68.9s | ✅ Pass |
 
 ### Sequence Scoring (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `borzoi` | yes | ✅ | 477.3s | ✅ Pass |
-| `enformer` | yes | ✅ | 403.2s | ✅ Pass |
+| `borzoi` | yes | ✅ | 346.6s | ✅ Pass |
+| `enformer` | yes | ✅ | 295.9s | ✅ Pass |
 
 ### Structure Alignment (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `tmalign` | no | ✅ | 48.2s | ✅ Pass |
+| `tmalign` | no | ✅ | 37.6s | ✅ Pass |
 | `tmalign` | no | ✅ | 0.1s | ✅ Pass |
-| `usalign` | no | ✅ | 57.0s | ✅ Pass |
-| `usalign` | no | ✅ | 0.2s | ✅ Pass |
+| `usalign` | no | ✅ | 42.3s | ✅ Pass |
+| `usalign` | no | ✅ | 0.1s | ✅ Pass |
 
 ### Structure Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `rfdiffusion3` | yes | ✅ | 819.2s | ✅ Pass |
+| `rfdiffusion3` | yes | ✅ | 651.9s | ✅ Pass |
 
 ### Structure Dynamics (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `bioemu` | yes | ✅ | 1189.6s | ✅ Pass |
+| `bioemu` | yes | ✅ | 369.3s | ✅ Pass |
 
 ### Structure Prediction (6/6)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphafold2` | yes | ✅ | 373.1s | ✅ Pass |
-| `boltz2` | yes | ✅ | 607.3s | ✅ Pass |
-| `chai1` | yes | ✅ | 1054.1s | ✅ Pass |
-| `esmfold` | yes | ✅ | 476.9s | ✅ Pass |
-| `protenix` | yes | ✅ | 1055.1s | ✅ Pass |
-| `viennarna` | no | ✅ | 61.8s | ✅ Pass |
+| `alphafold2` | yes | ✅ | 343.6s | ✅ Pass |
+| `boltz2` | yes | ✅ | 497.5s | ✅ Pass |
+| `chai1` | yes | ✅ | 857.1s | ✅ Pass |
+| `esmfold` | yes | ✅ | 393.3s | ✅ Pass |
+| `protenix` | yes | ✅ | 683.8s | ✅ Pass |
+| `viennarna` | no | ✅ | 34.5s | ✅ Pass |
 
 ### Unknown (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphagenome` | yes | ✅ | 694.0s | ✅ Pass |
-| `crispr_tracr` | no | ✅ | 454.1s | ✅ Pass |
-| `local_colabfold_search` | no | — | 382.1s | ✅ Pass |
-| `structure_metrics` | no | ✅ | 83.8s | ✅ Pass |
+| `alphagenome` | yes | ✅ | 826.2s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 362.8s | ✅ Pass |
+| `local_colabfold_search` | no | — | 347.6s | ✅ Pass |
+| `structure_metrics` | no | ✅ | 71.7s | ✅ Pass |
 
 ---
-*Generated at 2026-02-27 06:08:16 by `pytest --env-report`*
+*Generated at 2026-03-01 21:24:25 by `pytest --env-report`*

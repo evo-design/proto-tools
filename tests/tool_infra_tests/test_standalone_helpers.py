@@ -1,0 +1,275 @@
+"""Tests for standalone_helpers.py
+
+Verifies that standalone helper functions behave identically to their
+counterparts in the main codebase. This ensures the duplicated logic
+stays in sync.
+"""
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from bio_programming_tools.utils.standalone_helpers import get_subprocess_device_env
+from bio_programming_tools.utils.device import determine_visible_devices
+
+
+# ============================================================================
+# Consistency Tests: standalone_helpers vs main codebase
+# ============================================================================
+
+
+def test_get_subprocess_device_env_matches_determine_visible_devices_cpu():
+    """Verify CPU device handling matches between standalone and main."""
+    env = get_subprocess_device_env("cpu")
+    expected = determine_visible_devices("cpu")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "get_subprocess_device_env('cpu') should match determine_visible_devices('cpu')"
+
+
+@pytest.mark.uses_gpu
+def test_get_subprocess_device_env_matches_determine_visible_devices_single(monkeypatch):
+    """Verify single GPU handling matches between standalone and main."""
+    # No parent CUDA_VISIBLE_DEVICES
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    env = get_subprocess_device_env("cuda:0")
+    expected = determine_visible_devices("cuda:0")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "get_subprocess_device_env should match determine_visible_devices for cuda:0"
+
+
+def test_get_subprocess_device_env_matches_determine_visible_devices_with_parent(monkeypatch):
+    """Verify device mapping matches when parent has CUDA_VISIBLE_DEVICES set."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,7")
+
+    # Test single device mapping
+    env = get_subprocess_device_env("cuda:0")
+    expected = determine_visible_devices("cuda:0")
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "Logical cuda:0 should map to physical GPU 3"
+
+    env = get_subprocess_device_env("cuda:1")
+    expected = determine_visible_devices("cuda:1")
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "Logical cuda:1 should map to physical GPU 5"
+
+    env = get_subprocess_device_env("cuda:2")
+    expected = determine_visible_devices("cuda:2")
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "Logical cuda:2 should map to physical GPU 7"
+
+
+def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
+    """Verify multi-device handling matches between standalone and main."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,5,7")
+
+    # Test multi-device shorthand: cuda:2,3
+    env = get_subprocess_device_env("cuda:2,3")
+    expected = determine_visible_devices("cuda:2,3")
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "cuda:2,3 should map to physical GPUs 5,7"
+
+    # Test multi-device verbose: cuda:0,cuda:1
+    env = get_subprocess_device_env("cuda:0,cuda:1")
+    expected = determine_visible_devices("cuda:0,cuda:1")
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+        "cuda:0,cuda:1 should map to physical GPUs 0,1"
+
+
+# ============================================================================
+# Standalone Helpers Specific Tests
+# ============================================================================
+
+
+def test_get_subprocess_device_env_returns_full_env():
+    """Verify get_subprocess_device_env returns a complete environment dict."""
+    env = get_subprocess_device_env("cpu")
+
+    # Should be a dict
+    assert isinstance(env, dict)
+
+    # Should contain CUDA_VISIBLE_DEVICES
+    assert "CUDA_VISIBLE_DEVICES" in env
+
+    # Should contain other environment variables (it's a copy of os.environ)
+    assert "PATH" in env
+
+
+def test_get_subprocess_device_env_doesnt_modify_parent_env(monkeypatch):
+    """Verify get_subprocess_device_env doesn't modify os.environ."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+    original = os.environ.get("CUDA_VISIBLE_DEVICES")
+
+    # Get subprocess env for different device
+    env = get_subprocess_device_env("cuda:1")
+
+    # Original environment should be unchanged
+    assert os.environ.get("CUDA_VISIBLE_DEVICES") == original
+
+    # Returned env should have mapped value
+    assert env["CUDA_VISIBLE_DEVICES"] != original
+
+
+def test_get_subprocess_device_env_warns_without_parent_cuda_visible_devices(monkeypatch, caplog):
+    """Verify warning is logged when CUDA_VISIBLE_DEVICES is not set."""
+    import logging
+
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        get_subprocess_device_env("cuda:0")
+
+    # Should log a warning
+    assert any("CUDA_VISIBLE_DEVICES not set" in record.message for record in caplog.records)
+
+
+def test_get_subprocess_device_env_handles_invalid_device_format(monkeypatch, caplog):
+    """Verify graceful handling of invalid device formats."""
+    import logging
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+
+    with caplog.at_level(logging.WARNING):
+        env = get_subprocess_device_env("invalid-device-string")
+
+    # Should log a warning about unexpected format
+    assert any("Unexpected device format" in record.message for record in caplog.records)
+
+    # Should still return an env dict with no GPU access (invalid = no devices)
+    assert isinstance(env, dict)
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+
+
+def test_get_subprocess_device_env_handles_index_out_of_range(monkeypatch, caplog):
+    """Verify graceful handling when device index exceeds parent's devices."""
+    import logging
+
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")  # Only 2 devices
+
+    with caplog.at_level(logging.ERROR):
+        env = get_subprocess_device_env("cuda:5")  # Index 5 doesn't exist
+
+    # Should log an error
+    assert any("exceeds parent CUDA_VISIBLE_DEVICES length" in record.message for record in caplog.records)
+
+    # Should return env with unchanged CUDA_VISIBLE_DEVICES (fallback)
+    assert env["CUDA_VISIBLE_DEVICES"] == "0,1"
+
+
+def test_get_subprocess_device_env_handles_spaces_in_parent(monkeypatch):
+    """Verify handling of spaces in parent CUDA_VISIBLE_DEVICES."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", " 3, 5 , 7 ")
+
+    env = get_subprocess_device_env("cuda:0")
+    expected = determine_visible_devices("cuda:0")
+
+    # Should strip spaces and map correctly
+    assert env["CUDA_VISIBLE_DEVICES"] == expected
+
+
+# ============================================================================
+# Edge Case Tests
+# ============================================================================
+
+
+def test_get_subprocess_device_env_multi_device_non_contiguous_mapping(monkeypatch):
+    """Verify multi-device mapping with non-contiguous parent devices.
+
+    Parent CUDA_VISIBLE_DEVICES=0,3,5 (3 physical GPUs).
+    Requesting cuda:0,2 (logical indices 0 and 2) should map to
+    physical GPUs 0 and 5, giving CUDA_VISIBLE_DEVICES=0,5.
+    """
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,3,5")
+
+    env = get_subprocess_device_env("cuda:0,2")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == "0,5"
+
+
+def test_get_subprocess_device_env_single_parent_device(monkeypatch):
+    """Verify behavior when parent has only one visible device."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
+
+    # Only cuda:0 should be valid
+    env = get_subprocess_device_env("cuda:0")
+    expected = determine_visible_devices("cuda:0")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == expected
+
+
+def test_get_subprocess_device_env_empty_parent(monkeypatch):
+    """Verify behavior when CUDA_VISIBLE_DEVICES is set but empty."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+
+    # Empty CUDA_VISIBLE_DEVICES falls through to no-parent path in
+    # get_subprocess_device_env, which uses the device index directly.
+    env = get_subprocess_device_env("cuda:0")
+    assert env["CUDA_VISIBLE_DEVICES"] == "0"
+
+
+# ============================================================================
+# JAX Environment Variable Tests
+# ============================================================================
+
+
+def test_gpu_subprocess_removes_jax_preallocation_restrictions(monkeypatch):
+    """GPU subprocesses should allow JAX preallocation (ephemeral process)."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+    # Simulate persistent_worker.py having set these restrictions
+    monkeypatch.setenv("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    monkeypatch.setenv("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+
+    env = get_subprocess_device_env("cuda:0")
+
+    # Subprocess gets GPU access — preallocation restrictions should be removed
+    assert "XLA_PYTHON_CLIENT_PREALLOCATE" not in env
+    assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
+    assert "JAX_PLATFORMS" not in env
+
+
+def test_cpu_subprocess_sets_jax_platforms_cpu(monkeypatch):
+    """CPU subprocesses should set JAX_PLATFORMS=cpu."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,2")
+    monkeypatch.setenv("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+
+    env = get_subprocess_device_env("cpu")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    assert env["JAX_PLATFORMS"] == "cpu"
+
+
+def test_gpu_subprocess_removes_jax_platforms_if_inherited(monkeypatch):
+    """GPU subprocesses should remove JAX_PLATFORMS if inherited from parent."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
+    monkeypatch.setenv("JAX_PLATFORMS", "cpu")  # Leftover from parent
+
+    env = get_subprocess_device_env("cuda:0")
+
+    # Subprocess gets GPU — should not be forced to CPU
+    assert "JAX_PLATFORMS" not in env
+
+
+def test_multi_gpu_subprocess_removes_jax_restrictions(monkeypatch):
+    """Multi-GPU subprocesses should also remove JAX preallocation restrictions."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1,5,7")
+    monkeypatch.setenv("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    monkeypatch.setenv("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+
+    env = get_subprocess_device_env("cuda:2,3")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == "5,7"
+    assert "XLA_PYTHON_CLIENT_PREALLOCATE" not in env
+    assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
+
+
+def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
+    """Invalid device format resulting in empty CVD should set JAX to CPU."""
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    env = get_subprocess_device_env("not-a-device")
+
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    assert env["JAX_PLATFORMS"] == "cpu"

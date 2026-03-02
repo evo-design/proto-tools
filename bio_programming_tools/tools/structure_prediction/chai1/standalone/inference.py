@@ -177,6 +177,21 @@ def dispatch(input_dict: dict) -> dict:
         raise ValueError(f"Unknown operation: {operation}")
 
 
+
+def to_device(device: str) -> dict:
+    """Passthrough - tool does not maintain persistent state."""
+    return {"success": True, "device": device}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
+
+
 if __name__ == "__main__":
     import json
 

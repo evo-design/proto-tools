@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import torch
+from standalone_helpers import move_model_to_device
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -321,15 +323,30 @@ class Evo2Model:
     # Helper Functions
     # ============================================================================
     def load(self, device: str, verbose: bool = False):
-        """Load Evo2 model and tokenizer to device."""
+        """Load Evo2 model and tokenizer to device.
+
+        Restricts CUDA_VISIBLE_DEVICES before loading so that vortex's
+        auto-sharding (``torch.cuda.device_count()``) only sees the
+        allocated GPU(s).
+        """
         if verbose:
             logger.info(f"Loading Evo2: {self.model_checkpoint} on {device}")
+
+        # Vortex auto-shards across all visible GPUs via torch.cuda.device_count().
+        # Restrict visibility to the allocated device(s) before model construction.
+        from standalone_helpers import get_subprocess_device_env
+        restricted_env = get_subprocess_device_env(device)
+        os.environ["CUDA_VISIBLE_DEVICES"] = restricted_env["CUDA_VISIBLE_DEVICES"]
+        logger.info(
+            f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} "
+            f"for device {device}"
+        )
 
         from evo2 import Evo2
         _cleanup_vortex_debug_log()
         self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
         self.tokenizer = self.model.tokenizer
-        self.model.model = self.model.model.to(device).eval()
+        self.model.model = self.model.model.eval()
 
         self.device = device
         self._loaded = True
@@ -337,14 +354,42 @@ class Evo2Model:
         if verbose:
             logger.info("Evo2 model loaded successfully")
 
+    def _reload_to_device(self, model, old_device: str, new_device: str):
+        """Custom move function: reload the model onto the target GPU.
+
+        Vortex auto-shards based on CUDA_VISIBLE_DEVICES at construction
+        time, so moving back to GPU requires a full reload rather than
+        a simple ``.to()`` call.  ``load()`` updates CUDA_VISIBLE_DEVICES
+        before constructing the model.
+        """
+        self.load(new_device)
+        return self.model.model
+
     def to_device(self, device: str) -> None:
-        """Move model to a different device."""
+        """Move model to a different device.
+
+        GPU → CPU uses standard PyTorch ``.to("cpu")``.
+        CPU → GPU (or GPU → GPU) fully reloads the model so that vortex
+        auto-shards onto the correct CUDA_VISIBLE_DEVICES.
+        """
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
-        if self.device != device:
-            self.model.model = self.model.model.to(device)
+        if self.device == device:
+            return
+
+        if device == "cpu":
+            # Standard offload — no reload needed
+            self.model.model = move_model_to_device(
+                self.model.model, self.device, device,
+            )
             self.device = device
+        else:
+            # Moving to GPU requires full reload (vortex auto-sharding)
+            self.model.model = move_model_to_device(
+                self.model.model, self.device, device,
+                custom_move_fn=self._reload_to_device,
+            )
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
@@ -531,6 +576,26 @@ def _cleanup_vortex_debug_log():
     debug_log = Path("activations_debug.log")
     if debug_log.exists():
         debug_log.unlink()
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        # Model not loaded yet - will use device on next call
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
 
 
 if __name__ == "__main__":

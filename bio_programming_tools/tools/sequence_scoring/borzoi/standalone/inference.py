@@ -77,13 +77,38 @@ class BorzoiModel:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def _reload_to_device(self, model, old_device: str, new_device: str):
+        """Custom move function: reload the model onto the target GPU.
+
+        Borzoi uses flash-attn/Triton kernels that cannot run on CPU, so
+        CPU→GPU transitions require a full reload rather than a simple .to().
+        """
+        self.load(new_device)
+        return self.model
+
     def to_device(self, device: str):
-        """Move model to a different device."""
+        """Move model to a different device.
+
+        GPU→GPU and GPU→CPU use standard .to(). CPU→GPU requires a full
+        reload because flash-attn/Triton kernels need fresh GPU initialization.
+        """
+        from standalone_helpers import move_model_to_device
+
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
-        if self.device != device:
-            self.model = self.model.to(device)
+        if self.device == device:
+            return
+
+        if self.device == "cpu" and device.startswith("cuda"):
+            # CPU→GPU: reload needed for flash-attn/Triton
+            self.model = move_model_to_device(
+                self.model, self.device, device,
+                custom_move_fn=self._reload_to_device,
+            )
+        else:
+            # GPU→GPU or GPU→CPU: standard .to() works
+            self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
 
     def __call__(
@@ -130,7 +155,6 @@ class BorzoiModel:
         else:
             prediction = output[0][output_tracks, :]
 
-        self.unload(verbose=verbose)
         return prediction
 
 
@@ -200,6 +224,27 @@ def dispatch(input_dict: dict) -> dict:
         }
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        # Model not loaded yet - will use device on next call
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
 
 
 if __name__ == "__main__":

@@ -181,18 +181,24 @@ class ESM3SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM3SampleInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm3-sample",
     label="ESM3 Sampling",
     category="masked_models",
-    input=ESM3SampleInput,
-    config=ESM3SampleConfig,
-    output=ESM3SampleOutput,
+    input_class=ESM3SampleInput,
+    config_class=ESM3SampleConfig,
+    output_class=ESM3SampleOutput,
     description="Sample protein sequences using ESM3 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_esm3_sample(
-    inputs: ESM3SampleInput, config: ESM3SampleConfig,
+    inputs: ESM3SampleInput, config: ESM3SampleConfig | None = None,
     instance=None,
 ) -> ESM3SampleOutput:
     """Sample or mutate protein sequences using ESM3 language model.

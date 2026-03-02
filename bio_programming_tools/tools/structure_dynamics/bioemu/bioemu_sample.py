@@ -187,17 +187,23 @@ class BioEmuConfig(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return BioEmuInput(complexes=["MKTL"])
+
+
 @tool(
     key="bioemu-sample",
     label="BioEmu Conformational Ensemble Sampling",
     category="structure_dynamics",
-    input=BioEmuInput,
-    config=BioEmuConfig,
-    output=BioEmuOutput,
+    input_class=BioEmuInput,
+    config_class=BioEmuConfig,
+    output_class=BioEmuOutput,
     description="Protein conformational ensemble sampling using BioEmu",
     uses_gpu=True,
+    example_input=example_input,
 )
-def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance=None) -> BioEmuOutput:
+def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance=None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 

@@ -187,15 +187,21 @@ class ESMFoldConfig(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESMFoldInput(complexes=["MKTL"])
+
+
 @tool(
     key="esmfold-prediction",
     label="ESMFold Structure Prediction",
     category="structure_prediction",
-    input=ESMFoldInput,
-    config=ESMFoldConfig,
-    output=ESMFoldOutput,
+    input_class=ESMFoldInput,
+    config_class=ESMFoldConfig,
+    output_class=ESMFoldOutput,
     description="Protein structure prediction using ESMFold",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
@@ -203,7 +209,7 @@ class ESMFoldConfig(StructurePredictionConfig):
     tool_name="esmfold-prediction",
 )
 def run_esmfold(
-    inputs: ESMFoldInput, config: ESMFoldConfig,
+    inputs: ESMFoldInput, config: ESMFoldConfig | None = None,
     instance=None,
 ) -> ESMFoldOutput:
     """Predict protein 3D structures using ESMFold.

@@ -488,15 +488,23 @@ def _ncbi_fetch_first_fasta(
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return SequenceFetchInput(requests=[
+        SequenceFetchRequest(target_name="TP53", organism="Homo sapiens", sequence_types=["protein"])
+    ])
+
+
 @tool(
     key="sequence-fetch",
     label="Multi-source Sequence Fetch",
     category="database_retrieval",
-    input=SequenceFetchInput,
-    config=SequenceFetchConfig,
-    output=SequenceFetchOutput,
+    input_class=SequenceFetchInput,
+    config_class=SequenceFetchConfig,
+    output_class=SequenceFetchOutput,
     description="Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB",
     uses_gpu=False,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="requests",
@@ -505,7 +513,7 @@ def _ncbi_fetch_first_fasta(
 )
 def run_sequence_fetch(
     inputs: SequenceFetchInput,
-    config: SequenceFetchConfig,
+    config: SequenceFetchConfig | None = None,
     instance=None,
 ) -> SequenceFetchOutput:
     """Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB.

@@ -102,6 +102,12 @@ def dispatch(input_dict: dict) -> dict:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
+def to_device(device: str) -> dict:
+    """Passthrough - tool does not maintain persistent state."""
+    return {"success": True, "device": device}
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(

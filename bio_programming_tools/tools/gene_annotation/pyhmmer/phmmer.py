@@ -60,17 +60,26 @@ PyPhmmerConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PyPhmmerInput(
+        sequences=["MKTL"],
+        target_sequences=["MKTL", "ARND"],
+    )
+
+
 @tool(
     key="pyhmmer-phmmer",
     label="PyHMMER PHMMER Search",
     category="gene_annotation",
-    input=PyPhmmerInput,
-    config=PyPhmmerConfig,
-    output=PyPhmmerOutput,
+    input_class=PyPhmmerInput,
+    config_class=PyPhmmerConfig,
+    output_class=PyPhmmerOutput,
     description="Search protein sequences against protein database using PyHMMER",
+    example_input=example_input,
 )
 @tool_cache("pyhmmer-phmmer")
-def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance=None) -> PyPhmmerOutput:
+def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance=None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
     This function implements the phmmer algorithm, which performs iterative
@@ -120,6 +129,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance=N
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
+            "device": "cpu",
             "operation": "phmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,

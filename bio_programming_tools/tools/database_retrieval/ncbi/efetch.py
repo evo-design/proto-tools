@@ -109,19 +109,25 @@ NCBIEfetchConfig = NCBIFetchConfig
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return NCBIEfetchInput(db="protein", identifier="NP_000537.3")
+
+
 @tool(
     key="ncbi-efetch",
     label="NCBI Entrez EFetch",
     category="database_retrieval",
-    input=NCBIEfetchInput,
-    config=NCBIFetchConfig,
-    output=NCBIEfetchOutput,
+    input_class=NCBIEfetchInput,
+    config_class=NCBIFetchConfig,
+    output_class=NCBIEfetchOutput,
     description="Fetch sequences and records from NCBI Entrez by accession or ID",
     uses_gpu=False,
+    example_input=example_input,
 )
 def run_ncbi_efetch(
     inputs: NCBIEfetchInput,
-    config: NCBIFetchConfig,
+    config: NCBIFetchConfig | None = None,
     instance=None,
 ) -> NCBIEfetchOutput:
     """Fetch sequences from NCBI Entrez databases.

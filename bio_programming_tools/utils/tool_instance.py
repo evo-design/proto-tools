@@ -64,6 +64,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from .base_config import DEFAULT_TIMEOUT
+from ._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
+from .device_manager import DeviceManager
 from .persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
@@ -71,6 +73,9 @@ from .persistent_worker import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Seconds to wait for a worker to complete a to_device move.
+DEVICE_MOVE_TIMEOUT = 200
 
 # ============================================================================
 # Singleton registry
@@ -210,8 +215,7 @@ class ToolInstance:
             input_dict["timeout"] or falls back to DEFAULT_TIMEOUT.
         reload_on : set[str] | None
             Config field names whose value changes should trigger a
-            persistent worker restart.  Defaults to ``{"device"}`` for
-            backward compatibility.
+            persistent worker restart.
         """
         # Prefer kwarg, fall back to input_dict, then DEFAULT_TIMEOUT
         if timeout is None:
@@ -274,15 +278,33 @@ class ToolInstance:
         verbose: bool = False,
         timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Run a tool in an ephemeral subprocess — no caching, no worker."""
+        """Run a tool in an ephemeral subprocess — no caching, no worker.
+
+        For GPU devices, acquires a transient lease from DeviceManager
+        to prevent concurrent one-shot calls from stomping the same GPU.
+        """
         inst = cls(tool_name)
         effective_script = Path(script_path) if script_path else inst.script_path
-        return inst._run_oneshot(
-            input_dict,
-            script_path=effective_script,
-            verbose=verbose,
-            timeout=timeout,
-        )
+        device = input_dict.get("device")
+
+        if device and device.startswith("cuda"):
+            dm = DeviceManager.get_instance()
+            lease_timeout = float((timeout or DEFAULT_TIMEOUT) + 60)
+            with dm.lease(tool_name, device=device, timeout=lease_timeout) as allocated:
+                leased_input = {**input_dict, "device": allocated}
+                return inst._run_oneshot(
+                    leased_input,
+                    script_path=effective_script,
+                    verbose=verbose,
+                    timeout=timeout,
+                )
+        else:
+            return inst._run_oneshot(
+                input_dict,
+                script_path=effective_script,
+                verbose=verbose,
+                timeout=timeout,
+            )
 
     @classmethod
     @contextmanager
@@ -427,7 +449,7 @@ class ToolInstance:
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
-        self._instance_lock = threading.Lock()  # protects _worker lifecycle
+        self._instance_lock = threading.RLock()  # protects _worker lifecycle
         self._worker: PersistentWorker | None = None
         # Tracks previous reload-field values for restart detection
         self._reload_params: dict[str, Any] = {}
@@ -486,9 +508,7 @@ class ToolInstance:
             try:
                 self._create_env()
             except Exception as exc:
-                # _create_env populates _build_failures with the stderr
-                # tail on setup.sh failure; for other exceptions, store
-                # the message as fallback.
+                # Store exception message as fallback if _create_env didn't populate _build_failures
                 if self.tool_name not in self._build_failures:
                     self._build_failures[self.tool_name] = str(exc)
                 raise
@@ -521,7 +541,7 @@ class ToolInstance:
             Maximum seconds to wait.
         reload_on : set[str] | None
             Config field names whose value changes should trigger a
-            persistent worker restart.  Defaults to ``{"device"}``.
+            persistent worker restart.
         """
         effective_script = Path(script_path) if script_path else self.script_path
         with self._instance_lock:
@@ -543,8 +563,16 @@ class ToolInstance:
         """
         self._ensure_env()
 
-    def shutdown(self) -> None:
-        """Stop the persistent worker (if any) and remove from cache."""
+    def shutdown(self, remove_from_cache: bool = True) -> None:
+        """Stop the persistent worker (if any) and optionally remove from cache.
+
+        Parameters
+        ----------
+        remove_from_cache : bool
+            If True, removes the instance from the ToolInstance cache after stopping the worker.
+            If False, keeps the instance in the cache so it can be restarted on next use.
+            Default is True.
+        """
         # Defensive: atexit may call shutdown() on a partially-initialized
         # instance if __init__ raised after the atexit handler was registered.
         instance_lock = getattr(self, "_instance_lock", None)
@@ -558,44 +586,207 @@ class ToolInstance:
             name = getattr(self, "tool_name", "?")
             logger.debug("Shutting down persistent worker for %s", name)
             worker.stop()
-        # Evict from cache by stored keys
-        with _lock:
-            cache = _active_cache()
-            for k in getattr(self, "_cache_keys", set()):
-                cache.pop(k, None)
+
+        # Release device from DeviceManager
+        cache_keys = getattr(self, "_cache_keys", set())
+        if cache_keys:
+            instance_name = next(iter(cache_keys))
+            device_manager = DeviceManager.get_instance()
+            device_manager.release_device(instance_name)
+
+        # Optionally evict from cache by stored keys
+        if remove_from_cache:
+            with _lock:
+                cache = _active_cache()
+                for k in cache_keys:
+                    cache.pop(k, None)
+
+    def _to(self, device: str) -> ToolInstance:
+        """Move this tool instance to a different device (internal).
+
+        Called by device mismatch detection in ``_run_persistent`` (e.g.,
+        recovery from CPU after eviction, or explicit device change).
+        Not part of the public API — device changes should be driven by
+        the config's ``device`` field at ``run()`` time.
+
+        Sends a ``to_device`` command to the persistent worker subprocess,
+        which moves the model to the specified device. Updates DeviceManager
+        allocation tracking.
+
+        Parameters
+        ----------
+        device : str
+            Target device (e.g., "cpu", "cuda", "cuda:0", "cuda:1").
+
+        Returns
+        -------
+        ToolInstance
+            Self, for method chaining.
+        """
+        with self._instance_lock:
+            # Get instance name for DeviceManager
+            instance_name = (
+                next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
+            )
+
+            # If no worker exists yet, just update internal device tracking
+            if self._worker is None:
+                self.device = device
+                logger.debug(
+                    "ToolInstance._to(%s): No worker yet, device will be used on first run",
+                    device,
+                )
+                return self
+
+            # Send to_device command to worker
+            def _move_worker(target_device: str) -> None:
+                """Callback to send to_device command to worker subprocess."""
+                if self._worker is not None:
+                    command = {"command": "to_device", "device": target_device}
+                    try:
+                        result = self._worker.send(command, timeout=DEVICE_MOVE_TIMEOUT)
+                        if not result.get("success", False):
+                            logger.warning(
+                                "Worker to_device returned success=False: %s", result
+                            )
+                    except Exception as e:
+                        logger.error("Failed to move worker to %s: %s", target_device, e)
+                        raise
+
+            # Update DeviceManager allocation and invoke move
+            device_manager = DeviceManager.get_instance()
+            resolved = device_manager.move_to_device(
+                instance_name=instance_name,
+                target_device=device,
+                worker_callback=_move_worker,
+            )
+
+            # Update internal tracking with resolved device (e.g., "cuda" → "cuda:0")
+            if resolved is not None:
+                self.device = resolved
+
+            return self
+
+    def get_memory_stats(self) -> dict[str, Any]:
+        """Get memory statistics from the worker process.
+
+        Queries the persistent worker subprocess for its current memory usage.
+        Only works with PyTorch and JAX tools that have implemented the
+        ``get_memory_stats()`` function in their standalone/inference.py.
+
+        Returns per-instance memory usage as reported by the framework (torch.cuda
+        or JAX), which tracks only the memory allocated by this specific model
+        instance within the worker process.
+
+        Returns
+        -------
+        dict[str, Any]
+            Memory statistics dictionary with standardized keys across frameworks:
+
+            **Common keys (all frameworks):**
+
+            - ``available`` (bool): Whether stats are available
+            - ``framework`` (str): "pytorch", "jax", or error info
+            - ``allocated_bytes`` (int): Currently allocated GPU memory in bytes
+            - ``max_allocated_bytes`` (int): Peak allocated memory since program start
+
+            **PyTorch-specific keys:**
+
+            - ``reserved_bytes`` (int): Reserved memory in PyTorch cache (not yet allocated)
+
+            **JAX-specific keys:**
+
+            - ``device_kind`` (str): Device type (e.g., "gpu", "cpu")
+            - Legacy: ``bytes_in_use``, ``peak_bytes_in_use`` (same as standardized keys)
+
+            **CLI tools or tools without support:**
+
+            - ``available`` (bool): False
+            - ``error`` (str): Error message or "not supported"
+
+        Example
+        -------
+        >>> tool = ToolInstance.get("esm2", instance_name="esm2_1")
+        >>> with ToolInstance.persist_tool("esm2", instance_name="esm2_1"):
+        ...     result = run_esm2_sample(inputs, config, instance="esm2_1")
+        ...     stats = tool.get_memory_stats()
+        ...     if stats["available"]:
+        ...         print(f"ESM2 using {stats['allocated_bytes'] / 1e9:.2f} GB")
+
+        Notes
+        -----
+        - Returns ``{"available": False}`` if no worker is running
+        - Only reports memory for THIS instance, not total GPU memory
+        - For total GPU memory across all processes, use
+          ``DeviceManager.get_gpu_memory_used("cuda:0")``
+        """
+        with self._instance_lock:
+            # If no worker, can't get stats
+            if self._worker is None:
+                return {
+                    "available": False,
+                    "error": "No worker running - start persistent worker first",
+                }
+
+            # Send get_memory_stats command to worker
+            command = {"command": "get_memory_stats"}
+            try:
+                result = self._worker.send(command, timeout=10)
+                return result
+            except Exception as e:
+                logger.error("Failed to get memory stats: %s", e)
+                return {"available": False, "error": str(e)}
 
     # ------------------------------------------------------------------
-    # First-run detection (for warm-up timeout)
+    # Warmup timeout — per-config first-run detection
     # ------------------------------------------------------------------
-    def _is_first_run(self) -> bool:
-        """Check if this is the first successful run of the tool.
+    def _config_marker_path(self, reload_params: dict[str, Any]) -> Path:
+        """Return the marker file path for a specific reload-param combination.
 
-        Returns True if the tool has never completed a successful run,
-        which indicates checkpoints may need to be downloaded.
+        Each unique set of reload_on_change values (e.g., model_name) gets its
+        own marker, so switching to a new checkpoint triggers the warmup timeout.
         """
-        marker_file = self.env_path / ".first_run_complete"
-        return not marker_file.exists()
+        key = hashlib.sha256(
+            json.dumps(reload_params, sort_keys=True, default=str).encode()
+        ).hexdigest()[:12]
+        return self.env_path / f".warmup_complete_{key}"
 
-    def _mark_first_run_complete(self) -> None:
-        """Mark that the first successful run is complete.
+    def _needs_warmup(self, reload_params: dict[str, Any]) -> bool:
+        """Check if this config combination has never completed successfully.
 
-        Creates a marker file to indicate that initial setup (including
-        any checkpoint downloads) has been completed successfully.
+        Returns True if this specific set of reload_on_change values has
+        never been run before, indicating checkpoints may need to be
+        downloaded (e.g., switching from protenix_base_default_v1.0.0 to
+        protenix_mini_esm_v0.5.0).
         """
-        marker_file = self.env_path / ".first_run_complete"
-        marker_file.touch()
+        return not self._config_marker_path(reload_params).exists()
 
-    def _apply_warmup_timeout(self, timeout: int | None) -> int | None:
-        """Apply warm-up timeout for first run.
+    def _mark_warmup_complete(self, reload_params: dict[str, Any]) -> None:
+        """Mark that a config combination completed successfully."""
+        try:
+            self._config_marker_path(reload_params).touch()
+        except OSError:
+            pass  # non-critical — worst case warmup timeout applies again
 
-        On the first run, tools may need to download large checkpoint files.
-        Use an extended timeout (40 minutes or the configured timeout,
-        whichever is larger) to allow time for downloads.
+    def _apply_warmup_timeout(
+        self,
+        timeout: int | None,
+        reload_params: dict[str, Any] | None = None,
+    ) -> int | None:
+        """Apply warm-up timeout for first run of a config combination.
+
+        On the first use of a reload_on_change config combination, tools
+        may need to download large checkpoint files. Use an extended
+        timeout (40 minutes or the configured timeout, whichever is
+        larger) to allow time for downloads.
 
         Parameters
         ----------
         timeout : int | None
             The configured timeout in seconds, or None for no timeout.
+        reload_params : dict[str, Any] | None
+            Current reload_on_change field values. Warmup applies
+            per-config (e.g., first use of each model variant).
 
         Returns
         -------
@@ -603,16 +794,23 @@ class ToolInstance:
             The effective timeout to use (extended on first run).
         """
         WARMUP_TIMEOUT = 2400  # 40 minutes
-        if self._is_first_run():
+        params = reload_params or {}
+        if self._needs_warmup(params):
             if timeout is None:
                 effective_timeout = WARMUP_TIMEOUT
             else:
                 effective_timeout = max(WARMUP_TIMEOUT, timeout)
             if timeout is None or effective_timeout > timeout:
+                config_desc = ""
+                if params:
+                    config_desc = " (config: %s)" % ", ".join(
+                        f"{k}={v!r}" for k, v in sorted(params.items())
+                    )
                 logger.info(
-                    "First run of %s detected, using extended warm-up timeout: "
+                    "First run of %s%s detected, using extended warm-up timeout: "
                     "%ds (configured: %s)",
                     self.tool_name,
+                    config_desc,
                     effective_timeout,
                     f"{timeout}s" if timeout is not None else "None",
                 )
@@ -644,9 +842,7 @@ class ToolInstance:
         """
         self._ensure_env()
         sp = script_path or self.script_path
-        # Default to {"device"} for backward compat with tools that don't
-        # pass reload_on explicitly.
-        reload_keys = reload_on or {"device"}
+        reload_keys = reload_on or set()
         reload_params = {k: input_dict.get(k) for k in reload_keys}
 
         if self._worker is not None:
@@ -671,10 +867,57 @@ class ToolInstance:
                 self._worker = None
 
         self._reload_params = reload_params
-        # Cache device for PersistentWorker constructor
-        self.device = input_dict.get("device", "cpu")
+
+        # Get instance name for DeviceManager (use first cache key if available)
+        instance_name = (
+            next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
+        )
 
         if self._worker is None:
+            # Request device from DeviceManager
+            device = input_dict.get("device", "cpu")
+            device_manager = DeviceManager.get_instance()
+
+            # Eviction callback — sends to_device directly to avoid lock ordering deadlock
+            def eviction_callback(action: str) -> None:
+                if action == "cpu":
+                    worker = self._worker
+                    if worker is not None:
+                        command = {"command": "to_device", "device": "cpu"}
+                        try:
+                            result = worker.send(command, timeout=DEVICE_MOVE_TIMEOUT)
+                            if not result.get("success", False):
+                                logger.warning(
+                                    "Worker to_device(cpu) returned success=False during eviction: %s",
+                                    result,
+                                )
+                        except Exception as e:
+                            logger.error("Failed to move worker to cpu during eviction: %s", e)
+                            raise
+                    self.device = "cpu"
+                elif action == "shutdown":
+                    # Stop worker directly to avoid lock ordering deadlock with shutdown()
+                    worker = self._worker
+                    self._worker = None
+                    if worker is not None:
+                        try:
+                            worker.stop()
+                        except Exception as e:
+                            logger.error(
+                                "Failed to stop worker during RESTART eviction: %s", e
+                            )
+
+            allocated_device = device_manager.request_device(
+                tool_name=self.tool_name,
+                instance_name=instance_name,
+                device=device,
+                eviction_callback=eviction_callback,
+            )
+
+            # Override input_dict device with allocated device
+            self.device = allocated_device
+            input_dict["device"] = allocated_device
+
             self._worker = PersistentWorker(
                 tool_name=self.tool_name,
                 env_path=self.env_path,
@@ -682,18 +925,37 @@ class ToolInstance:
                 device=self.device,
                 tool_env_vars=self._tool_env_vars,
             )
+        else:
+            device_manager = DeviceManager.get_instance()
+            requested_device = input_dict.get("device", "")
 
-        # Apply warm-up timeout for first run (checkpoint downloads)
-        effective_timeout = self._apply_warmup_timeout(timeout)
+            # Move worker if config requests a different device than current
+            needs_move = False
+            if requested_device == "cuda" and self.device.startswith("cuda"):
+                # Already on a GPU, generic "cuda" is satisfied
+                pass
+            elif requested_device and self.device != requested_device:
+                needs_move = True
+
+            if needs_move:
+                self._to(requested_device)
+
+            # Update last-used timestamp on each dispatch
+            device_manager.update_last_used(instance_name)
+
+            # Override input_dict device with worker's actual device
+            # (resolves generic "cuda" to specific "cuda:0", etc.)
+            input_dict["device"] = self.device
+
+        # Apply warm-up timeout for first use of this config combination
+        effective_timeout = self._apply_warmup_timeout(timeout, reload_params)
 
         try:
             result = self._worker.send(input_dict, timeout=effective_timeout)
-            # Mark first run complete on success
-            if self._is_first_run():
-                self._mark_first_run_complete()
+            self._mark_warmup_complete(reload_params)
             return result
         except Exception:
-            # Don't mark first run complete on failure
+            # Don't mark complete on failure
             raise
 
     # ------------------------------------------------------------------
@@ -716,6 +978,7 @@ class ToolInstance:
         """
         self._ensure_env()
         sp = script_path or self.script_path
+        copy_standalone_helpers(sp)
         device = input_dict.get("device", self.device)
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / "input.json"
@@ -740,7 +1003,7 @@ class ToolInstance:
                     device,
                 )
 
-            # Apply warm-up timeout for first run (checkpoint downloads)
+            # Apply warm-up timeout for first use of this config
             effective_timeout = self._apply_warmup_timeout(timeout)
 
             try:
@@ -767,9 +1030,7 @@ class ToolInstance:
 
             with open(output_path) as f:
                 result = json.load(f)
-                # Mark first run complete on success
-                if self._is_first_run():
-                    self._mark_first_run_complete()
+                self._mark_warmup_complete({})
                 return result
 
     # ------------------------------------------------------------------
@@ -1098,6 +1359,7 @@ class ToolInstance:
         env["PYTHON_EXE"] = str(self.env_path.absolute() / "bin" / "python")
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
+        env["PACKAGE_ROOT"] = str(Path(__file__).parent.parent.parent.absolute())
 
         proc = subprocess.Popen(
             ["bash", str(self.setup_script)],

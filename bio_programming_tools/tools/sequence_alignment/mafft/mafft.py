@@ -131,17 +131,23 @@ class MafftConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return MafftInput(sequences=["MKTL", "MKTA"])
+
+
 @tool_cache(tool_name="mafft-align")
 @tool(
     key="mafft-align",
     label="MAFFT Alignment",
     category="sequence_alignment",
-    input=MafftInput,
-    config=MafftConfig,
-    output=MafftOutput,
+    input_class=MafftInput,
+    config_class=MafftConfig,
+    output_class=MafftOutput,
     description="Multiple sequence alignment (MSA) using MAFFT (Multiple Alignment using Fast Fourier Transform)",
+    example_input=example_input,
 )
-def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance=None) -> MafftOutput:
+def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, instance=None) -> MafftOutput:
     """Perform multiple sequence alignment using MAFFT.
 
     Aligns input sequences using MAFFT with the specified method and
@@ -184,6 +190,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance=None) -> M
         "threads": config.threads,
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "mafft",
         input_data,

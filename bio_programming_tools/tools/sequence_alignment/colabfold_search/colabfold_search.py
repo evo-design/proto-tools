@@ -412,6 +412,11 @@ class ColabfoldSearchConfig(BaseConfig):
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ColabfoldSearchInput(queries=["MKTL"])
+
+
 @tool_cache_iterable(
     input_iterable_field="queries",
     output_iterable_field="results",
@@ -421,13 +426,14 @@ class ColabfoldSearchConfig(BaseConfig):
     key="colabfold-search",
     label="ColabFold MSA Search",
     category="sequence_alignment",
-    input=ColabfoldSearchInput,
-    config=ColabfoldSearchConfig,
-    output=ColabfoldSearchOutput,
+    input_class=ColabfoldSearchInput,
+    config_class=ColabfoldSearchConfig,
+    output_class=ColabfoldSearchOutput,
     description="Generate Multiple Sequence Alignments using ColabFold local database search",
+    example_input=example_input,
 )
 def run_colabfold_search(
-    inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig,
+    inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig | None = None,
     instance=None,
 ) -> ColabfoldSearchOutput:
     """Generate MSAs for protein sequences using ColabFold search, with options
@@ -664,6 +670,7 @@ def _local_search(
         }
 
         # Execute colabfold_search via standalone script
+        input_data["device"] = "cpu"
         output_data = ToolInstance.dispatch(
             "colabfold_search",
             input_data,
@@ -740,6 +747,7 @@ def _remote_search(
     }
 
     # Execute remote search via standalone script
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "colabfold_search",
         input_data,

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+from standalone_helpers import move_model_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,9 @@ class BioEmuModel:
         """Move model to another device."""
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model. Call load() first.")
-        self.device = device
+        if self.device != device:
+            self.model = move_model_to_device(self.model, self.device, device)
+            self.device = device
 
     def unload(self, verbose: bool = False) -> None:
         """Unload model and clear CUDA cache."""
@@ -196,6 +199,22 @@ def dispatch(input_dict: dict) -> dict:
         return run_bioemu_batch(input_dict)
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Passthrough for non-persistent tool - loads on each call."""
+    # BioEmu creates a new model instance on each call, so there's no
+    # persistent model to move. The device is passed in the input_dict.
+    return {"success": True, "device": device, "note": "non-persistent tool, loads on each call"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    # BioEmu doesn't persist models, so just report overall GPU memory state
+    return get_pytorch_memory_stats(device=0)
 
 
 if __name__ == "__main__":

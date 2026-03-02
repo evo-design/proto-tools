@@ -1,0 +1,260 @@
+---
+title: "Device Management"
+description: "Automatic GPU allocation, LRU eviction, and multi-GPU routing"
+icon: "microchip"
+---
+
+# Device Management
+
+The **DeviceManager** handles GPU allocation automatically — you request devices through the config `device` field and DeviceManager takes care of the rest: picking GPUs, tracking allocations, and evicting models when devices are full.
+
+```python python icon="python"
+from bio_programming_tools.tools.structure_prediction.esmfold import (
+    run_esmfold, ESMFoldInput, ESMFoldConfig,
+)
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from bio_programming_tools.utils import display_gpu_memory_usage
+```
+
+---
+
+## 1. Requesting a Device
+
+Every tool config has a `device` field. GPU tools default to `"cuda"`, CPU tools default to `"cpu"`. Device requests fall into two categories:
+
+### General requests (DeviceManager chooses the GPU)
+
+DeviceManager finds available GPUs, handles allocation, and triggers LRU eviction if everything is busy. This is the recommended approach — you don't need to know which GPUs are free.
+
+| Value | Meaning |
+|---|---|
+| `"cpu"` | Run on CPU |
+| `"cuda"` | Run on one GPU — DeviceManager picks which one |
+| `"cudax2"`, `"cudax3"`, ... | Run on N GPUs — DeviceManager picks which ones |
+
+### Specific requests (you choose the GPU)
+
+DeviceManager will place the model on exactly the device(s) you asked for. If that device is already occupied, it evicts whatever is there.
+
+| Value | Meaning |
+|---|---|
+| `"cuda:0"` | Run on exactly GPU 0 |
+| `"cuda:0,1"` or `"cuda:0,cuda:1"` | Run on exactly GPUs 0 and 1 |
+
+### Example: General vs Specific Allocation
+
+```python python icon="python"
+# General request: DeviceManager picks the GPU
+with ToolInstance.persist():
+    output = run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]))
+    display_gpu_memory_usage()
+
+# GPU 0:  15.0 /  85.5 GB  ██░░░░░░░░░░░░
+# GPU 1:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+# GPU 2:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+
+# Specific request: we pick the GPU
+with ToolInstance.persist():
+    output = run_esmfold(
+        ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+        ESMFoldConfig(device="cuda:2"),
+    )
+    display_gpu_memory_usage()
+
+# GPU 0:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+# GPU 1:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+# GPU 2:  15.0 /  85.5 GB  ██░░░░░░░░░░░░
+```
+
+### Limiting Managed Devices
+
+Restrict which GPUs DeviceManager uses with `configure(managed_devices=...)` or the `BIO_TOOLS_MANAGED_DEVICES` environment variable. Useful for reserving some GPUs for other work.
+
+```python python icon="python"
+dm = DeviceManager.get_instance()
+dm.configure(managed_devices=["cuda:1"])
+
+# General requests now only land on cuda:1
+with ToolInstance.persist():
+    output = run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]))
+    display_gpu_memory_usage()
+
+# GPU 0:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+# GPU 1:  15.0 /  85.5 GB  ██░░░░░░░░░░░░
+# GPU 2:   0.0 /  85.5 GB  ░░░░░░░░░░░░░░
+
+# Equivalent via environment variable:
+# export BIO_TOOLS_MANAGED_DEVICES="cuda:1"
+
+# Reset back to full pool
+DeviceManager.reset_instance()
+```
+
+---
+
+## 2. Eviction Strategies
+
+When all GPUs are full and a new model needs to load, DeviceManager evicts the **least recently used** model. There are two strategies for what happens to the evicted model:
+
+- **RESTART** (default) — the model's worker is shut down entirely. Frees all memory, but reloading later pays the full startup cost.
+- **CPU** — the model is moved to CPU RAM. It stays loaded and can be moved back to GPU quickly, but uses system memory.
+
+### RESTART (Default)
+
+The evicted model is shut down entirely. GPU memory is fully freed, but the next call reloads from scratch.
+
+```python python icon="python"
+DeviceManager.reset_instance()
+dm = DeviceManager.get_instance()
+dm.configure(managed_devices=["cuda:0"])
+
+with ToolInstance.persist_tool("esmfold", instance_name="A"):
+    run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]), instance="A")
+    # A: cuda:0 — 15 GB used
+
+    with ToolInstance.persist_tool("esmfold", instance_name="B"):
+        run_esmfold(ESMFoldInput(complexes=["GAVLTVLLGGLLLA"]), instance="B")
+        # RESTART evicts A — fully shut down
+        # B: cuda:0 — 15 GB used
+
+DeviceManager.reset_instance()
+```
+
+### CPU Offload
+
+With CPU strategy, the evicted model stays in RAM instead of being shut down. Moving it back to GPU is fast.
+
+```python python icon="python"
+DeviceManager.reset_instance()
+dm = DeviceManager.get_instance()
+dm.configure(managed_devices=["cuda:0"], offload_strategy=OffloadStrategy.CPU)
+
+with ToolInstance.persist_tool("esmfold", instance_name="A"):
+    run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]), instance="A")
+    # A: cuda:0
+
+    with ToolInstance.persist_tool("esmfold", instance_name="B"):
+        run_esmfold(ESMFoldInput(complexes=["GAVLTVLLGGLLLA"]), instance="B")
+        # A evicted to CPU, B: cuda:0
+
+        run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]), instance="A")
+        # Fast CPU → GPU reload (~7s vs ~15s), B evicted to CPU
+        # A: cuda:0, B: cpu
+
+DeviceManager.reset_instance()
+```
+
+### LRU Eviction Across Multiple GPUs
+
+With 2 GPUs and 3 instances, the first two fill both GPUs. The third triggers LRU eviction of whichever was used least recently.
+
+```python python icon="python"
+DeviceManager.reset_instance()
+dm = DeviceManager.get_instance()
+dm.configure(managed_devices=["cuda:0", "cuda:1"])
+
+with ToolInstance.persist_tool("esmfold", instance_name="A"):
+    run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]), instance="A")
+    # A: cuda:0
+
+    with ToolInstance.persist_tool("esmfold", instance_name="B"):
+        run_esmfold(ESMFoldInput(complexes=["GAVLTVLLGGLLLA"]), instance="B")
+        # A: cuda:0, B: cuda:1
+
+        with ToolInstance.persist_tool("esmfold", instance_name="C"):
+            run_esmfold(ESMFoldInput(complexes=["MGQQPGKVLGDQRR"]), instance="C")
+            # Evicts A (LRU) from cuda:0
+            # B: cuda:1, C: cuda:0
+
+DeviceManager.reset_instance()
+```
+
+---
+
+## 3. Multiple Models Per Device
+
+By default, DeviceManager allows **one model per GPU** — loading a second model triggers eviction. If you have enough GPU memory to fit multiple models, enable `allow_multiple_per_device=True` to pack them together.
+
+<Note>
+DeviceManager doesn't currently track model sizes or estimate memory usage — it's on you to make sure the models you're packing actually fit. If you overcommit, you'll get an OOM error.
+</Note>
+
+### Packing 4 Instances on 2 GPUs
+
+With `allow_multiple_per_device=True`, instances round-robin across the available GPUs instead of evicting.
+
+```python python icon="python"
+DeviceManager.reset_instance()
+dm = DeviceManager.get_instance()
+dm.configure(managed_devices=["cuda:0", "cuda:1"], allow_multiple_per_device=True)
+
+with ToolInstance.persist_tool("esmfold", instance_name="A"):
+    with ToolInstance.persist_tool("esmfold", instance_name="B"):
+        with ToolInstance.persist_tool("esmfold", instance_name="C"):
+            with ToolInstance.persist_tool("esmfold", instance_name="D"):
+
+                run_esmfold(ESMFoldInput(complexes=["MKTLLILAVVAAALA"]), instance="A")
+                # A: cuda:0
+
+                run_esmfold(ESMFoldInput(complexes=["GAVLTVLLGGLLLA"]), instance="B")
+                # A: cuda:0, B: cuda:1
+
+                run_esmfold(ESMFoldInput(complexes=["MGQQPGKVLGDQRR"]), instance="C")
+                # A: cuda:0, B: cuda:1, C: cuda:0
+
+                run_esmfold(ESMFoldInput(complexes=["ASTVKFLGPVLDAA"]), instance="D")
+                # A: cuda:0, B: cuda:1, C: cuda:0, D: cuda:1
+
+                display_gpu_memory_usage()
+                # GPU 0:  30.1 /  85.5 GB  ████░░░░░░░░░░
+                # GPU 1:  30.1 /  85.5 GB  ████░░░░░░░░░░
+
+DeviceManager.reset_instance()
+```
+
+---
+
+## Configuration Reference
+
+DeviceManager can be configured programmatically or via environment variables.
+
+### Environment Variables
+
+| Variable | Example | Description |
+|---|---|---|
+| `BIO_TOOLS_MANAGED_DEVICES` | `"cuda:0,cuda:1"` | Restrict device pool |
+| `BIO_TOOLS_OFFLOAD_STRATEGY` | `"restart"` or `"cpu"` | Eviction strategy |
+| `BIO_TOOLS_ALLOW_MULTI_DEVICE` | `"true"` or `"false"` | Multiple models per GPU |
+
+### Programmatic Configuration
+
+```python python icon="python"
+from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+
+dm = DeviceManager.get_instance()
+dm.configure(
+    managed_devices=["cuda:0", "cuda:1"],
+    offload_strategy=OffloadStrategy.CPU,
+    allow_multiple_per_device=False,
+)
+```
+
+### Status Monitoring
+
+```python python icon="python"
+status = DeviceManager.get_instance().get_device_status()
+# {
+#     "available_devices": ["cuda:0", "cuda:1"],
+#     "offload_strategy": "restart",
+#     "allow_multiple_per_device": False,
+#     "allocations": {
+#         "esmfold-abc123": {
+#             "tool_name": "esmfold",
+#             "device_id": "cuda:0",
+#             "allocated_at": 1234567890.0,
+#             "last_used": 1234567895.0
+#         }
+#     }
+# }
+```

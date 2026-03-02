@@ -224,6 +224,18 @@ def dispatch(input_dict: dict) -> dict:
     )
 
 
+def to_device(device: str) -> dict:
+    """Passthrough - tool does not maintain persistent state."""
+    return {"success": True, "device": device}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_jax_memory_stats
+
+    return get_jax_memory_stats(device_index=0)
+
+
 # ============================================================================
 # Standalone Script Entry Point
 # ============================================================================

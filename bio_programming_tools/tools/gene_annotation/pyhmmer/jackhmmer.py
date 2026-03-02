@@ -79,18 +79,27 @@ PyJackhmmerOutput = PyHmmerOutput
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return PyJackhmmerInput(
+        sequences=["MKTL"],
+        target_sequences=["MKTL", "ARND"],
+    )
+
+
 @tool(
     key="pyhmmer-jackhmmer",
     label="PyHMMER JackHMMER Search",
     category="gene_annotation",
-    input=PyJackhmmerInput,
-    config=PyJackhmmerConfig,
-    output=PyJackhmmerOutput,
+    input_class=PyJackhmmerInput,
+    config_class=PyJackhmmerConfig,
+    output_class=PyJackhmmerOutput,
     description="Iteratively search protein sequences against protein database using PyHMMER",
+    example_input=example_input,
 )
 @tool_cache("pyhmmer-jackhmmer")
 def run_pyhmmer_jackhmmer(
-    inputs: PyJackhmmerInput, config: PyJackhmmerConfig,
+    inputs: PyJackhmmerInput, config: PyJackhmmerConfig | None = None,
     instance=None,
 ) -> PyJackhmmerOutput:
     """Iteratively search protein sequences against protein database using PyHMMER.
@@ -109,6 +118,7 @@ def run_pyhmmer_jackhmmer(
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
+            "device": "cpu",
             "operation": "jackhmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,

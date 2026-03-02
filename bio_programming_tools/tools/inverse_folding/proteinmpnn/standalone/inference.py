@@ -188,9 +188,10 @@ class ProteinMPNNModel:
         # Lazy import ProteinMPNN from ColabDesign
         from colabdesign.mpnn import mk_mpnn_model
 
-        # Load the Flax module
+        # Load the Flax module (params land on CPU by default)
         self.model = mk_mpnn_model()
         self.params = self.model._model.params
+        self.device = "cpu"
 
         # Move the model parameters to the selected device
         self.to_device(device)
@@ -200,7 +201,9 @@ class ProteinMPNNModel:
             logger.info("ProteinMPNN model loaded successfully")
 
     def to_device(self, device: str):
-        """Move the model to the selected device."""
+        """Move the model params to the selected device via move_model_to_device."""
+        from standalone_helpers import move_model_to_device
+
         if self.model is None:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device == device:
@@ -209,20 +212,21 @@ class ProteinMPNNModel:
         if self.verbose:
             logger.info(f"Moving ProteinMPNN to {device}")
 
-        device_obj = self.jax.devices(device)[0]
-        self.params = self.jax.device_put(self.params, device_obj)
+        # params is a dict pytree — move_model_to_device handles via device_put
+        self.params = move_model_to_device(self.params, self.device, device)
         self.device = device
 
     def unload(self):
         """Move ProteinMPNN params back to CPU and free GPU HBM."""
+        from standalone_helpers import move_model_to_device
+
         if not self._loaded:
             return
 
         if self.verbose:
             logger.info("Unloading ProteinMPNN to CPU")
 
-        cpu = self.jax.devices("cpu")[0]
-        self.params = self.jax.device_put(self.params, cpu)
+        self.params = move_model_to_device(self.params, self.device, "cpu")
         self.device = "cpu"
 
 
@@ -294,6 +298,22 @@ def dispatch(input_dict: dict) -> dict:
             )
         else:
             raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and hasattr(_model, "to_device"):
+        _model.to_device(device)
+    return {"success": True, "device": device}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_jax_memory_stats
+
+    return get_jax_memory_stats(device_index=0)
 
 
 if __name__ == "__main__":

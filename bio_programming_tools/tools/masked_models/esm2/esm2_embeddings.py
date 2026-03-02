@@ -149,17 +149,23 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM2EmbeddingsInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm2-embedding",
     label="ESM2 Embeddings",
     category="masked_models",
-    input=ESM2EmbeddingsInput,
-    config=ESM2EmbeddingsConfig,
-    output=ESM2EmbeddingsOutput,
+    input_class=ESM2EmbeddingsInput,
+    config_class=ESM2EmbeddingsConfig,
+    output_class=ESM2EmbeddingsOutput,
     description="Extract protein sequence embeddings and logits using ESM2",
     uses_gpu=True,
+    example_input=example_input,
 )
-def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig, instance=None) -> ESM2EmbeddingsOutput:
+def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig | None = None, instance=None) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.
 
     Uses ESM2 from Meta AI to extract contextualized embeddings and per-position

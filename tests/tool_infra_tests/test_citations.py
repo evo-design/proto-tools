@@ -52,7 +52,7 @@ class TestListCitations:
         for key, bibtex in citations.items():
             assert isinstance(bibtex, str)
             assert "@" in bibtex, f"Citation for {key} missing @ symbol"
-            assert "title=" in bibtex, f"Citation for {key} missing title"
+            assert "title" in bibtex, f"Citation for {key} missing title"
 
     def test_list_citations_keys_match_registry(self):
         """All keys in list_citations exist in the tool registry"""

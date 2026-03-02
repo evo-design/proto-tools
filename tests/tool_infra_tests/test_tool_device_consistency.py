@@ -1,0 +1,190 @@
+"""Tests for tool device consistency, example_input completeness, and device movement."""
+from __future__ import annotations
+
+import time
+
+import pytest
+
+from bio_programming_tools.tools.tool_registry import ToolRegistry
+
+
+# ============================================================================
+# example_input completeness
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "tool_spec",
+    ToolRegistry.list_all(),
+    ids=lambda spec: spec.key,
+)
+def test_all_tools_have_example_input(tool_spec):
+    """Every tool must define example_input for parametrized testing."""
+    assert tool_spec.example_input is not None, (
+        f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
+    )
+    example = tool_spec.example_input()
+    assert isinstance(example, tool_spec.input_model), (
+        f"example_input() returned {type(example).__name__}, "
+        f"expected {tool_spec.input_model.__name__}"
+    )
+
+
+# ============================================================================
+# Device movement: eviction round-trip for every GPU tool
+# ============================================================================
+
+# Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
+# Tools requiring specific clusters get per-item markers via pytest.param.
+_CHIMERA_ONLY_KEYS = {"alphafold3-prediction"}
+
+_GPU_TOOLS = []
+for _spec in ToolRegistry.list_all():
+    if not _spec.uses_gpu or _spec.category == "testing":
+        continue
+    if _spec.key in _CHIMERA_ONLY_KEYS:
+        _GPU_TOOLS.append(
+            pytest.param(_spec, id=_spec.key, marks=pytest.mark.only_chimera)
+        )
+    else:
+        _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key))
+
+
+def _get_gpu_count_for_tool(spec) -> int:
+    """Determine how many GPUs a tool needs from its device_count spec."""
+    dc = spec.device_count
+    # "1" -> 1, "2" -> 2, "1-2" -> 1 (minimum), ">=1" -> 1, etc.
+    if dc.isdigit():
+        return int(dc)
+    if "-" in dc and not dc.startswith(">") and not dc.startswith("<"):
+        # Range like "1-2": use the minimum
+        return int(dc.split("-")[0])
+    if dc.startswith(">="):
+        return int(dc[2:])
+    # Fallback
+    return 1
+
+
+@pytest.mark.exhaustive
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+@pytest.mark.parametrize("tool_spec", _GPU_TOOLS)
+def test_gpu_tool_eviction_round_trip(tool_spec):
+    """Run a GPU tool, evict it with a mock tool, then run it again.
+
+    This exercises the full device lifecycle for every GPU tool:
+    1. Tool loads onto GPU via DeviceManager
+    2. Mock tool evicts it to CPU (LRU eviction)
+    3. Tool moves back to GPU on next run (device mismatch detection)
+
+    Verifies that every tool's standalone worker correctly handles
+    to_device() calls for both GPU->CPU and CPU->GPU transitions.
+    """
+    from unittest.mock import patch
+
+    from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+    from bio_programming_tools.utils.tool_instance import ToolInstance
+
+    n_gpus = _get_gpu_count_for_tool(tool_spec)
+
+    # Build managed device list: tool's GPUs + 1 extra for the evictor
+    # (so the evictor can load without needing to share a device)
+    # Actually, for eviction we want all GPUs occupied so the mock tool
+    # forces eviction. Use exactly n_gpus (tool fills them all, then
+    # mock tool evicts it).
+    managed_devices = [f"cuda:{i}" for i in range(n_gpus)]
+
+    with patch(
+        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        return_value=n_gpus,
+    ):
+        DeviceManager.reset_instance()
+        ToolInstance.clear_all()
+        dm = DeviceManager.get_instance()
+        dm.configure(
+            managed_devices=managed_devices,
+            offload_strategy=OffloadStrategy.CPU,
+        )
+
+        try:
+            # Extract the tool's registry key to derive a safe instance name
+            tool_key = tool_spec.key
+            instance_name = f"test_{tool_key.replace('-', '_')}"
+            # Derive the tool_name for ToolInstance (directory name, snake_case)
+            # The source_file path tells us: .../tools/{category}/{tool_dir}/{file}.py
+            tool_dir = tool_spec.source_file.parent.name
+
+            # --- Step 1: Run the tool on GPU ---
+            example = tool_spec.example_input()
+            with ToolInstance.persist_tool(tool_dir, instance_name=instance_name):
+                result1 = tool_spec.function(example, instance=instance_name)
+                assert result1.success, (
+                    f"{tool_key} failed on first run: {result1.errors}"
+                )
+
+                status = dm.get_device_status()
+                alloc = status["allocations"].get(instance_name)
+                assert alloc is not None, (
+                    f"{tool_key} not found in DeviceManager allocations"
+                )
+                initial_device = alloc["device_id"]
+                assert initial_device != "cpu", (
+                    f"{tool_key} should be on GPU, got {initial_device}"
+                )
+
+                time.sleep(0.01)  # Ensure LRU ordering
+
+                # --- Step 2: Mock tool evicts the real tool ---
+                from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+                    MockPyTorchToolConfig,
+                    MockPyTorchToolInput,
+                    run_mock_pytorch_tool,
+                )
+
+                mock_instance = f"evictor_{instance_name}"
+                with ToolInstance.persist_tool(
+                    "mock_pytorch_tool", instance_name=mock_instance
+                ):
+                    mock_result = run_mock_pytorch_tool(
+                        MockPyTorchToolInput(),
+                        MockPyTorchToolConfig(memory_mb=64),
+                        instance=mock_instance,
+                    )
+                    assert mock_result.success, (
+                        f"Mock tool failed while evicting {tool_key}: "
+                        f"{mock_result.errors}"
+                    )
+
+                    # Verify eviction happened
+                    status = dm.get_device_status()
+                    alloc = status["allocations"].get(instance_name)
+                    assert alloc is not None, (
+                        f"{tool_key} allocation disappeared after eviction"
+                    )
+                    assert alloc["device_id"] == "cpu", (
+                        f"{tool_key} should be evicted to CPU, "
+                        f"got {alloc['device_id']}"
+                    )
+
+                    time.sleep(0.01)
+
+                    # --- Step 3: Re-run the tool (should move back to GPU) ---
+                    example2 = tool_spec.example_input()
+                    result2 = tool_spec.function(example2, instance=instance_name)
+                    assert result2.success, (
+                        f"{tool_key} failed after eviction round-trip: "
+                        f"{result2.errors}"
+                    )
+
+                    status = dm.get_device_status()
+                    alloc = status["allocations"].get(instance_name)
+                    assert alloc is not None, (
+                        f"{tool_key} allocation missing after round-trip"
+                    )
+                    assert alloc["device_id"] != "cpu", (
+                        f"{tool_key} should be back on GPU after round-trip, "
+                        f"got {alloc['device_id']}"
+                    )
+        finally:
+            ToolInstance.clear_all()
+            DeviceManager.reset_instance()

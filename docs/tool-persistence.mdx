@@ -1,0 +1,150 @@
+---
+title: "Tool Persistence"
+description: "Keep models loaded across calls to avoid reloading on every invocation"
+icon: "bolt"
+---
+
+# Tool Persistence
+
+Every tool in `bio_programming_tools` runs in an **isolated virtual environment** via `ToolInstance`. This keeps heavy dependencies (PyTorch, ESM, etc.) out of the main environment while providing a clean interface for tool execution.
+
+By default, each `run_*` call spins up a fresh subprocess (safe, no leaks), but for batch workloads this means reloading the model every call. `ToolInstance` provides opt-in persistence to solve this.
+
+| Method | Caches? | Cleanup | Best for |
+|---|---|---|---|
+| Default (one-shot) | No | Automatic | Single calls, safety-first |
+| `ToolInstance.persist()` | Yes, auto | Automatic on exit | Batch jobs, optimization loops |
+| `ToolInstance.persist_tool()` | Yes, named tool | Automatic on exit | Multi-GPU, multiple instances |
+| `ToolInstance.get()` | Yes, until close | Manual | Long-running sessions |
+
+---
+
+## 1. Default Behavior (One-Shot)
+
+Every `run_*` function uses one-shot execution by default. Each call spins up an ephemeral subprocess, loads the model, runs inference, and exits. No leaked processes, no GPU memory retained.
+
+```python python icon="python"
+from bio_programming_tools.tools.structure_prediction.esmfold import (
+    run_esmfold, ESMFoldInput, ESMFoldConfig,
+)
+
+# Two consecutive calls — each loads the model from scratch
+output1 = run_esmfold(
+    ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+    ESMFoldConfig(device="cuda"),
+)
+# ~38s (model load + inference)
+
+output2 = run_esmfold(
+    ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+    ESMFoldConfig(device="cuda"),
+)
+# ~38s (model load + inference again)
+```
+
+---
+
+## 2. `persist()` Context Manager (Recommended)
+
+The simplest way to use persistence. Like `torch.inference_mode()`, just wrap your code — any tool called inside is auto-cached on first use, and everything is cleaned up on exit. No tool names needed upfront.
+
+```python python icon="python"
+from bio_programming_tools.utils.tool_instance import ToolInstance
+
+sequences = ["MKTLLILAVVAAALA", "MKTLLILAVVAAALA"]
+
+with ToolInstance.persist():
+    for seq in sequences:
+        output = run_esmfold(
+            ESMFoldInput(complexes=[seq]),
+            ESMFoldConfig(device="cuda"),
+        )
+
+# Call 1: ~39s (model load + inference)
+# Call 2:  ~1s (inference only)
+# Total:  ~40s
+```
+
+---
+
+## 3. `persist_tool()` — Tool-Specific Persistence
+
+When you need to name a specific tool or manage multiple instances (e.g., multi-GPU), use `persist_tool()` with an explicit tool name. For a single tool, it works just like `persist()` but scoped to one tool.
+
+```python python icon="python"
+with ToolInstance.persist_tool("esmfold"):
+    for seq in sequences:
+        output = run_esmfold(
+            ESMFoldInput(complexes=[seq]),
+            ESMFoldConfig(device="cuda"),
+        )
+```
+
+### Named Instances (Multi-GPU)
+
+When you need multiple instances of the same tool running simultaneously, use named instances and pass `instance=` to route calls to a specific worker.
+
+```python python icon="python"
+with ToolInstance.persist_tool("esmfold", instance_name="worker_a") as inst_a:
+    with ToolInstance.persist_tool("esmfold", instance_name="worker_b"):
+
+        # Route each call to a specific worker
+        out_a = run_esmfold(
+            ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+            ESMFoldConfig(device="cuda:0"),
+            instance=inst_a,            # pass the instance object
+        )
+
+        out_b = run_esmfold(
+            ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+            ESMFoldConfig(device="cuda:1"),
+            instance="worker_b",        # or pass the instance name
+        )
+```
+
+---
+
+## 4. `get()` / `shutdown()` — Manual Lifecycle
+
+For long-running sessions (e.g., interactive notebooks) where you want to keep a model warm across multiple cells. You control when the worker is created and destroyed.
+
+```python python icon="python"
+# Create a persistent instance — stays cached until explicitly shut down
+tool = ToolInstance.get("esmfold")
+
+for seq in sequences:
+    output = run_esmfold(
+        ESMFoldInput(complexes=[seq]),
+        ESMFoldConfig(device="cuda"),
+    )
+
+# Clean up when done — stops worker and evicts from cache
+tool.shutdown()
+
+# You can also shut down by name without a reference to the instance
+ToolInstance.shutdown_instance("esmfold")
+```
+
+---
+
+## 5. Auto-Restart on Config Changes
+
+Persistent workers automatically restart when any config field marked with `reload_on_change=True` changes between calls. This includes `device`, `model_checkpoint`, `model_name`, and other load-time parameters.
+
+There is no device parameter on `persist()` or `get()` — the worker detects config mismatches and restarts transparently.
+
+---
+
+## 6. Timeout
+
+Every tool call enforces a configurable timeout (default: 600 seconds / 10 minutes). If a call exceeds the timeout, the subprocess is killed and a `TimeoutError` is raised.
+
+```python python icon="python"
+# Set a 120-second timeout
+output = run_esmfold(
+    ESMFoldInput(complexes=["MKTLLILAVVAAALA"]),
+    ESMFoldConfig(device="cuda", timeout=120),
+)
+```
+
+For persistent workers, the timeout applies per-call — the worker itself stays alive for future calls even if one call times out.

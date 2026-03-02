@@ -166,18 +166,24 @@ class MmseqsClusteringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return MmseqsClusteringInput(input_sequences=["MKTL", "MKTL", "ARND"])
+
+
 @tool_cache(tool_name="mmseqs-clustering")
 @tool(
     key="mmseqs-clustering",
     label="MMseqs Clustering",
     category="gene_annotation",
-    input=MmseqsClusteringInput,
-    config=MmseqsClusteringConfig,
-    output=MmseqsClusteringOutput,
+    input_class=MmseqsClusteringInput,
+    config_class=MmseqsClusteringConfig,
+    output_class=MmseqsClusteringOutput,
     description="Perform sequence clustering using MMseqs2 to reduce redundancy",
+    example_input=example_input,
 )
 def run_mmseqs_clustering(
-    inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig,
+    inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig | None = None,
     instance=None,
 ) -> MmseqsClusteringOutput:
     """Perform sequence clustering using MMseqs2.
@@ -215,6 +221,7 @@ def run_mmseqs_clustering(
     output_data = ToolInstance.dispatch(
         "mmseqs",
         {
+            "device": "cpu",
             "operation": "clustering",
             "sequences": sequences,
             "sequence_ids": sequence_ids,

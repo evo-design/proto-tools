@@ -22,10 +22,63 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import sys
 import traceback
 from pathlib import Path
 from typing import Any
+
+
+def _copy_standalone_helpers(script_path: str) -> None:
+    """Copy standalone_helpers.py to the tool's standalone directory.
+
+    Checks if 'standalone' appears in the script's absolute path. If found,
+    places standalone_helpers.py in that standalone directory so it's importable by all
+    scripts in that tree.
+
+    If the script is not in a standalone directory, logs a warning and skips the copy.
+    This allows tools without standalone directories to still function.
+
+    Args:
+        script_path: Path to the standalone inference.py or run.py script
+    """
+    script = Path(script_path).resolve()
+
+    # Check if 'standalone' is in the path
+    if "standalone" not in script.parts:
+        sys.stderr.write(
+            f"[worker] Warning: Script {script_path} is not in a 'standalone' directory. "
+            f"Skipping standalone_helpers.py copy.\n"
+        )
+        return
+
+    # Find the standalone directory in the path
+    standalone_idx = script.parts.index("standalone")
+    standalone_dir = Path(*script.parts[:standalone_idx + 1])
+
+    # Determine target path for standalone_helpers.py
+    target_helpers = standalone_dir / "standalone_helpers.py"
+
+    # Find the canonical source (in utils/)
+    utils_dir = Path(__file__).parent
+    source_helpers = utils_dir / "standalone_helpers.py"
+
+    if not source_helpers.exists():
+        # This should never happen in a proper install, but handle gracefully
+        sys.stderr.write(
+            f"[worker] Warning: Could not find {source_helpers} to copy helpers\n"
+        )
+        return
+
+    # Always copy to ensure it's up to date
+    try:
+        shutil.copy2(source_helpers, target_helpers)
+        sys.stderr.write(f"[worker] Copied standalone_helpers to {target_helpers}\n")
+    except Exception as exc:
+        # Don't fail worker startup if helpers copy fails - tool may not need it
+        sys.stderr.write(
+            f"[worker] Warning: Failed to copy standalone_helpers.py: {exc}\n"
+        )
 
 
 def _load_module(script_path: str) -> Any:
@@ -115,15 +168,15 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Save the original stdout for JSON protocol writes, then redirect
-    # sys.stdout to sys.stderr.  This ensures any tool code that writes to
-    # sys.stdout (including subprocess calls with stdout=sys.stdout) goes
-    # through the parent's stderr drain thread and gets logged at DEBUG,
-    # instead of polluting the JSON protocol pipe.
+    # Redirect stdout to stderr so tool output doesn't pollute the JSON protocol pipe
     _json_out = sys.stdout
     sys.stdout = sys.stderr
 
     script_path = sys.argv[1]
+
+    # Copy standalone helpers to the tool's directory if not present
+    _copy_standalone_helpers(script_path)
+
     module = _load_module(script_path)
 
     dispatch = _find_dispatch(module)
@@ -155,9 +208,41 @@ def main() -> None:
         input_dict = request.get("input", {})
 
         try:
-            result = dispatch(input_dict)
-            result = _serialize(result)
-            response = {"id": request_id, "result": result}
+            # Check for special commands (to_device, etc.)
+            if "command" in input_dict:
+                command = input_dict["command"]
+                if command == "to_device":
+                    # Handle device move request
+                    device = input_dict.get("device", "cpu")
+                    if hasattr(module, "to_device"):
+                        result = module.to_device(device)
+                    else:
+                        # Graceful fallback if tool doesn't support to_device
+                        sys.stderr.write(
+                            f"[worker] Warning: {script_path} does not have to_device() function\n"
+                        )
+                        result = {"success": False, "error": "to_device not supported"}
+                    result = _serialize(result)
+                    response = {"id": request_id, "result": result}
+                elif command == "get_memory_stats":
+                    # Handle memory stats request
+                    if hasattr(module, "get_memory_stats"):
+                        result = module.get_memory_stats()
+                    else:
+                        # Graceful fallback if tool doesn't support get_memory_stats
+                        sys.stderr.write(
+                            f"[worker] Warning: {script_path} does not have get_memory_stats() function\n"
+                        )
+                        result = {"available": False, "error": "get_memory_stats not supported"}
+                    result = _serialize(result)
+                    response = {"id": request_id, "result": result}
+                else:
+                    raise ValueError(f"Unknown command: {command}")
+            else:
+                # Normal dispatch
+                result = dispatch(input_dict)
+                result = _serialize(result)
+                response = {"id": request_id, "result": result}
         except Exception:
             response = {"id": request_id, "error": traceback.format_exc()}
 

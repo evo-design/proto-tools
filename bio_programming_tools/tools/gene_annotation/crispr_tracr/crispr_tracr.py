@@ -156,6 +156,11 @@ class CrisprTracrConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return CrisprTracrInput(sequences=["ATCGATCG"])
+
+
 @tool_cache_iterable(
     input_iterable_field="sequences",
     output_iterable_field="predictions",
@@ -165,13 +170,14 @@ class CrisprTracrConfig(BaseConfig):
     key="crispr-tracr",
     label="CRISPRtracrRNA Prediction",
     category="gene_annotation",
-    input=CrisprTracrInput,
-    config=CrisprTracrConfig,
-    output=CrisprTracrOutput,
+    input_class=CrisprTracrInput,
+    config_class=CrisprTracrConfig,
+    output_class=CrisprTracrOutput,
     description="Predict tracrRNA sequences from nucleotide CRISPR loci",
+    example_input=example_input,
 )
 def run_crispr_tracr(
-    inputs: CrisprTracrInput, config: CrisprTracrConfig, instance=None,
+    inputs: CrisprTracrInput, config: CrisprTracrConfig | None = None, instance=None,
 ) -> CrisprTracrOutput:
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
 
@@ -212,6 +218,7 @@ def run_crispr_tracr(
         },
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "crispr_tracr", input_data, instance=instance, timeout=config.timeout,
     )

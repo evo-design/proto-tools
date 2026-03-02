@@ -174,18 +174,24 @@ class ViennaRNAConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ViennaRNAInput(sequences=["AUCGAUCG"])
+
+
 @tool(
     key="viennarna-prediction",
     label="ViennaRNA Secondary Structure Prediction",
     category="structure_prediction",
-    input=ViennaRNAInput,
-    config=ViennaRNAConfig,
-    output=ViennaRNAOutput,
+    input_class=ViennaRNAInput,
+    config_class=ViennaRNAConfig,
+    output_class=ViennaRNAOutput,
     description="RNA secondary structure prediction using ViennaRNA MFE folding",
+    example_input=example_input,
 )
 def run_viennarna(
     inputs: ViennaRNAInput,
-    config: ViennaRNAConfig,
+    config: ViennaRNAConfig | None = None,
     instance=None,
 ) -> ViennaRNAOutput:
     """
@@ -243,6 +249,7 @@ def run_viennarna(
     }
 
     # Call the inference script in the isolated venv
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "viennarna",
         input_data,

@@ -200,22 +200,29 @@ class Boltz2Config(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Boltz2Input(complexes=["MKTL"])
+
+
 @tool(
     key="boltz2-prediction",
     label="Boltz2 Structure Prediction",
     category="structure_prediction",
-    input=Boltz2Input,
-    config=Boltz2Config,
-    output=Boltz2Output,
+    input_class=Boltz2Input,
+    config_class=Boltz2Config,
+    output_class=Boltz2Output,
     description="Multi-modal structure prediction using Boltz2",
     uses_gpu=True,
+    device_count="1-2",
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
     output_iterable_field="structures",
     tool_name="boltz2-prediction",
 )
-def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance=None) -> Boltz2Output:
+def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance=None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.
 
     Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures

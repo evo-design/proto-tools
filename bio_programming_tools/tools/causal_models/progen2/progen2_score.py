@@ -125,18 +125,24 @@ class ProGen2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ProGen2ScoringInput(sequences=["MKTL"])
+
+
 @tool(
     key="progen2-score",
     label="ProGen2 Scoring",
     category="causal_models",
-    input=ProGen2ScoringInput,
-    config=ProGen2ScoringConfig,
-    output=ProGen2ScoringOutput,
+    input_class=ProGen2ScoringInput,
+    config_class=ProGen2ScoringConfig,
+    output_class=ProGen2ScoringOutput,
     description="Score protein sequences using ProGen2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_progen2_score(
-    inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig,
+    inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig | None = None,
     instance=None,
 ) -> ProGen2ScoringOutput:
     """Score protein sequences using ProGen2 autoregressive language model.

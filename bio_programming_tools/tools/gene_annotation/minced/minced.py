@@ -191,6 +191,11 @@ class MincedConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return MincedInput(sequences=["ATCGATCG"])
+
+
 @tool_cache_iterable(
     input_iterable_field="sequences",
     output_iterable_field="results",
@@ -200,12 +205,13 @@ class MincedConfig(BaseConfig):
     key="minced-crispr",
     label="MinCED CRISPR Array Detection",
     category="gene_annotation",
-    input=MincedInput,
-    config=MincedConfig,
-    output=MincedOutput,
+    input_class=MincedInput,
+    config_class=MincedConfig,
+    output_class=MincedOutput,
     description="Detect CRISPR arrays in nucleotide sequences using MinCED",
+    example_input=example_input,
 )
-def run_minced(inputs: MincedInput, config: MincedConfig, instance=None) -> MincedOutput:
+def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance=None) -> MincedOutput:
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
 
     Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
@@ -240,6 +246,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig, instance=None) -> Minc
         },
     }
 
+    input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "minced", input_data, instance=instance, timeout=config.timeout,
     )

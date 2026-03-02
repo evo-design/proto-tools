@@ -167,6 +167,7 @@ def dispatch(input_dict: dict) -> dict:
 
     kwargs = dict(input_dict)
     operation = kwargs.pop("operation", "predict")
+    kwargs.pop("device", None)  # ViennaRNA is CPU-only, doesn't use device
     if operation == "predict":
         return _model(**kwargs)
     else:
@@ -176,6 +177,12 @@ def dispatch(input_dict: dict) -> dict:
 # ============================================================================
 # Standalone Entry Point
 # ============================================================================
+
+def to_device(device: str) -> dict:
+    """Passthrough - tool does not maintain persistent state."""
+    return {"success": True, "device": device}
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")

@@ -184,18 +184,24 @@ class ESM2SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ESM2SampleInput(sequences=["MKTL"])
+
+
 @tool(
     key="esm2-sample",
     label="ESM2 Sampling",
     category="masked_models",
-    input=ESM2SampleInput,
-    config=ESM2SampleConfig,
-    output=ESM2SampleOutput,
+    input_class=ESM2SampleInput,
+    config_class=ESM2SampleConfig,
+    output_class=ESM2SampleOutput,
     description="Sample protein sequences using ESM2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_esm2_sample(
-    inputs: ESM2SampleInput, config: ESM2SampleConfig,
+    inputs: ESM2SampleInput, config: ESM2SampleConfig | None = None,
     instance=None,
 ) -> ESM2SampleOutput:
     """Sample or mutate protein sequences using ESM2 language model.

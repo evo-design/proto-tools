@@ -4,7 +4,19 @@ Shared utilities for bio_programming_tools.
 Config, helpers, sequence validation, I/O, caching, env management, device, logging.
 """
 from .base_config import BaseConfig, ConfigField
-from .device import determine_visible_devices, number_of_available_gpus
+from .device import (
+    determine_visible_devices,
+    display_gpu_memory_usage,
+    get_gpu_memory_info,
+    get_gpu_process_memory,
+    number_of_available_gpus,
+)
+from .device_manager import (
+    AllocationType,
+    DeviceManager,
+    OffloadStrategy,
+    SUPPORTED_DEVICE_PREFIXES,
+)
 from .http_session import build_http_session
 from .system_info import (
     capture_parent_env,
@@ -87,6 +99,14 @@ __all__ = [
     # Device
     "determine_visible_devices",
     "number_of_available_gpus",
+    "get_gpu_memory_info",
+    "get_gpu_process_memory",
+    "display_gpu_memory_usage",
+    # Device management
+    "AllocationType",
+    "DeviceManager",
+    "OffloadStrategy",
+    "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
     "build_http_session",
     # Logging

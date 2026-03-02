@@ -18,9 +18,61 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .device import determine_visible_devices
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _normalize_progress_line(line: str) -> str:
+    """Normalize progress bar lines to detect and skip similar consecutive lines.
+
+    Detects common progress bar patterns and normalizes variable parts:
+    - Progress bar visualizations: |███████▊  |, [=====>    ], etc.
+    - Percentages: 5%, 100%
+    - Ratios: 123/456, 1234 of 5678
+    - Time estimates: [00:00<00:04], 1:23 elapsed
+    - Rates: 980.92it/s, 1.2MB/s, 45.3%
+    - Additional trailing info after common separators
+
+    Returns the normalized line template for similarity comparison.
+    """
+    import re
+
+    normalized = line
+
+    # Normalize progress bar visualizations (|███|, [===>], etc.)
+    normalized = re.sub(r'[\|\[\(\{][^\|\]\)\}]*[\|\]\)\}]', '|BAR|', normalized)
+
+    # Normalize percentages
+    normalized = re.sub(r'\d+\.?\d*%', 'N%', normalized)
+
+    # Normalize count ratios
+    normalized = re.sub(r'\d+/\d+', 'N/N', normalized)
+    normalized = re.sub(r'\d+\s+of\s+\d+', 'N of N', normalized)
+
+    # Normalize time estimates ([HH:MM<HH:MM], <1:23, elapsed: 0:45)
+    normalized = re.sub(r'\[\d+:\d+(?::\d+)?<\d+:\d+(?::\d+)?\]', '[T<T]', normalized)
+    normalized = re.sub(r'<\d+:\d+(?::\d+)?', '<T', normalized)
+    normalized = re.sub(r'elapsed:\s*\d+:\d+(?::\d+)?', 'elapsed: T', normalized)
+
+    # Normalize rates (it/s, MB/s) and sizes (1.2MB, 500KB)
+    normalized = re.sub(r'\d+\.?\d*\s*[A-Za-z]+/s', 'N/s', normalized)
+    normalized = re.sub(r'\d+\.?\d*\s*[KMGT]?B\b', 'NB', normalized)
+
+    # Strip trailing info after separators in detected progress bars
+    if 'N%' in normalized or 'N/N' in normalized or '|BAR|' in normalized:
+        normalized = re.sub(r'(N%.*?N/s.*?),.*$', r'\1', normalized)
+        normalized = re.sub(r'(N%.*?N/s.*?)\s+[-|]\s+.*$', r'\1', normalized)
+
+    # Normalize remaining standalone numbers
+    normalized = re.sub(r'\b\d+\.?\d*\b', 'N', normalized)
+
+    return normalized
+
 
 # ============================================================================
 # Whitelist-based environment isolation
@@ -144,13 +196,13 @@ def _build_subprocess_env(
 
     env: dict[str, str] = {}
 
-    # 1. Copy only whitelisted vars from parent
+    # Copy only whitelisted vars from parent
     for var in _BASE_PASSTHROUGH:
         val = os.environ.get(var)
         if val is not None:
             env[var] = val
 
-    # 2. Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
+    # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
     path_parts: list[str] = []
     if tool_env_path:
         path_parts.append(str(Path(tool_env_path) / "bin"))
@@ -164,21 +216,25 @@ def _build_subprocess_env(
             path_parts.append(d)
     env["PATH"] = ":".join(path_parts)
 
-    # 3. Device visibility
-    env["CUDA_VISIBLE_DEVICES"] = determine_visible_devices(device=device)
-    if device == "cpu":
-        env["JAX_PLATFORMS"] = "cpu"
+    # Pass through parent's CUDA_VISIBLE_DEVICES (device placement handled by model.to())
+    parent_cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if parent_cvd is not None:
+        env["CUDA_VISIBLE_DEVICES"] = parent_cvd
 
-    # 4. Per-venv torch cache isolation
+    # Prevent JAX from preallocating GPU memory at import time (harmless for PyTorch)
+    env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    env["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+    # Per-venv torch cache isolation
     if tool_env_path:
         env["TORCH_HOME"] = str(Path(tool_env_path) / "cache" / "torch")
 
-    # 5. Inject compute environment detection (hardware-aware PyTorch/JAX specs)
+    # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from .compute_deps import detect_compute_environment
     compute_env = detect_compute_environment()
     env.update(compute_env)
 
-    # 6. Apply tool-specific env vars from env_vars.txt
+    # Apply tool-specific env vars from env_vars.txt
     if tool_env_vars:
         venv_str = str(Path(tool_env_path)) if tool_env_path else ""
 
@@ -200,16 +256,13 @@ def _build_subprocess_env(
             key, val = entry.split("=", 1)
             env[key] = val.replace("${VENV_PATH}", venv_str)
 
-    # 7. Point CONDA_PREFIX and VIRTUAL_ENV at the tool env (not the parent).
-    #    Read parent CONDA_PREFIX first — needed for conda/lib in step 8.
-    #    VIRTUAL_ENV needed because uv >=0.10 ignores CONDA_PREFIX for
-    #    micromamba-created envs.
+    # Point CONDA_PREFIX and VIRTUAL_ENV at tool env (read parent first for conda/lib below)
     parent_conda_prefix = os.environ.get("CONDA_PREFIX")
     if tool_env_path:
         env["CONDA_PREFIX"] = str(Path(tool_env_path))
         env["VIRTUAL_ENV"] = str(Path(tool_env_path))
 
-    # 8. Build LD_LIBRARY_PATH: tool [set] > parent LD > conda/lib
+    # Build LD_LIBRARY_PATH: tool [set] > parent LD > conda/lib
     ld_parts: list[str] = []
 
     # Tool-specific [set] LD_LIBRARY_PATH goes first (already in env from step 6)
@@ -288,35 +341,27 @@ class PersistentWorker:
     def _drain_stderr(self) -> None:
         """Background thread: read stderr lines from the worker process.
 
-        Deduplicates consecutive identical lines to reduce log noise from
+        Skips consecutive duplicate and similar lines to reduce log noise from
         progress bars and repeated status messages.
         """
         if self._process is None or self._process.stderr is None:
             return
         prev_line: str | None = None
-        repeat_count = 0
+        prev_normalized: str | None = None
         for line in self._process.stderr:
-            text = line.rstrip("\n")
+            text = line.rstrip()  # Strip all trailing whitespace
             if text:
                 self._stderr_lines.append(text)
+                # Fast path: skip exact duplicates
                 if text == prev_line:
-                    repeat_count += 1
                     continue
-                if repeat_count > 0:
-                    logger.debug(
-                        "[%s worker stderr] (previous line repeated %d more times)",
-                        self.tool_name,
-                        repeat_count,
-                    )
-                repeat_count = 0
+                # Slow path: normalize and check for progress bar similarity
+                normalized = _normalize_progress_line(text)
+                if normalized == prev_normalized:
+                    continue
                 logger.debug("[%s worker stderr] %s", self.tool_name, text)
                 prev_line = text
-        if repeat_count > 0:
-            logger.debug(
-                "[%s worker stderr] (previous line repeated %d more times)",
-                self.tool_name,
-                repeat_count,
-            )
+                prev_normalized = normalized
 
     def start(self) -> None:
         """Spawn the worker subprocess if not already running."""
@@ -419,12 +464,9 @@ class PersistentWorker:
                         f"Worker for {self.tool_name} timed out after {timeout}s"
                     )
 
-            # Read length header (length-prefixed protocol)
-            # Format: "LENGTH:<bytes>\n"
-            # This allows workers to output warnings/logs without breaking JSON parsing
-            # Skip any non-LENGTH lines (warnings, logs, etc.) until we find the header
+            # Read length-prefixed header, skipping non-LENGTH lines (warnings/logs)
             prev_stdout_line: str | None = None
-            stdout_repeat_count = 0
+            prev_stdout_normalized: str | None = None
             while True:
                 length_line = self._process.stdout.readline()
                 if not length_line:
@@ -436,28 +478,20 @@ class PersistentWorker:
 
                 length_line = length_line.strip()
                 if length_line.startswith("LENGTH:"):
-                    if stdout_repeat_count > 0:
-                        logger.debug(
-                            "[%s worker stdout] (previous line repeated %d more times)",
-                            self.tool_name,
-                            stdout_repeat_count,
-                        )
                     break
-                # Non-LENGTH line (warning/log) - log and skip, dedup consecutive
+                # Non-LENGTH line (warning/log) - skip duplicates and similar progress bars
+                # Fast path: skip exact duplicates
                 if length_line == prev_stdout_line:
-                    stdout_repeat_count += 1
                     continue
-                if stdout_repeat_count > 0:
-                    logger.debug(
-                        "[%s worker stdout] (previous line repeated %d more times)",
-                        self.tool_name,
-                        stdout_repeat_count,
-                    )
-                stdout_repeat_count = 0
+                # Slow path: normalize and check for progress bar similarity
+                normalized = _normalize_progress_line(length_line)
+                if normalized == prev_stdout_normalized:
+                    continue
                 logger.debug(
                     "[%s worker stdout] %s", self.tool_name, length_line
                 )
                 prev_stdout_line = length_line
+                prev_stdout_normalized = normalized
 
             try:
                 json_length = int(length_line.split(":", 1)[1])
@@ -516,5 +550,11 @@ class PersistentWorker:
                 self._killpg(signal.SIGKILL)          # force kill
                 self._process.wait(timeout=5)         # reap zombie
             finally:
+                for pipe in (self._process.stdout, self._process.stderr):
+                    if pipe and not pipe.closed:
+                        try:
+                            pipe.close()
+                        except Exception:
+                            pass
                 self._process = None
                 logger.debug("Stopped persistent worker for %s", self.tool_name)

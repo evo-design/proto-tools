@@ -30,6 +30,14 @@ Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents)
 
 **Key principle:** The core tool file (Input/Config/Output + `@tool()` + `run_*()`) is the **contract** everything else depends on. Write it first (sequential), then fan out to subagents (parallel).
 
+**CRITICAL: Standalone scripts run in isolated environments and MUST NOT import from `bio_programming_tools`:**
+- `from bio_programming_tools.utils import ...` — will fail at runtime
+- `from bio_programming_tools.entities import ...` — will fail at runtime
+- `from standalone_helpers import get_subprocess_device_env` — auto-copied by worker bootstrap (OK)
+- Standard library imports: `import json`, `import subprocess`, etc. (OK)
+- Dependencies from `requirements.txt`: `import torch`, `import numpy`, etc. (OK)
+- NEVER install `bio_programming_tools` in standalone environments (creates circular dependency, breaks isolation)
+
 ---
 
 ## Phase 0: Parse Input
@@ -112,6 +120,25 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    mkdir -p bio_programming_tools/tools/{category}/{tool_name}/examples
    ```
 
+   Target file tree:
+   ```
+   tools/{category}/
+   +-- shared_data_models.py   # Shared Input/Config/Output base classes (if category has 2+ tools)
+   +-- {tool_name}/
+   |   +-- __init__.py
+   |   +-- {tool_name}.py      # Core tool file (Input/Config/Output + @tool + run_*)
+   |   +-- cite.bib            # BibTeX citation (required)
+   |   +-- README.md
+   |   +-- examples/
+   |   |   +-- example.ipynb   # Working example notebook (required)
+   |   +-- standalone/
+   |   |   +-- setup.sh
+   |   |   +-- run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
+   |   |   +-- requirements.txt
+   |   |   +-- binary_config.py   # [optional]
+   +-- __init__.py
+   ```
+
 2. Write the core tool file `bio_programming_tools/tools/{category}/{tool_name}/{operation}.py` with:
    - Proper imports (including `from __future__ import annotations`)
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
@@ -180,7 +207,6 @@ Then launch all 5 subagents simultaneously:
 **What it produces:** `standalone/inference.py` (or `run.py`), `standalone/setup.sh`, `standalone/requirements.txt`, optionally `standalone/env_vars.txt`
 
 **Prompt template:**
-
 ```
 You are implementing the standalone execution environment for a bioinformatics tool.
 
@@ -245,6 +271,16 @@ HF_TOKEN
 [set]
 # Only if the tool needs LD_LIBRARY_PATH or other env vars
 ```
+
+**10C: Run all tests for the new tool**
+
+Run all tests (functional + infra) filtered to the new tool:
+
+```bash
+pytest --all --exhaustive -k "{tool_name}" -v
+```
+
+This runs the tool's functional tests AND the parametrized infra tests (`example_input`, device consistency, registry integration). A detailed log file is generated in `logs/` (project root).
 
 ---
 
@@ -507,15 +543,22 @@ CRITICAL RULES:
 5. **Run the validation checklist:**
    - [ ] File starts with `from __future__ import annotations`
    - [ ] Uses `logging.getLogger(__name__)`, never `print()`
-   - [ ] Input uses `Field()`, Config uses `ConfigField()`
-   - [ ] Output implements `output_format_options`, `output_format_default`, `_export_output()`
-   - [ ] `@tool()` has all 8 kwargs
+   - [ ] Input extends `BaseToolInput`, uses `Field()` (not ConfigField)
+   - [ ] Config extends `BaseConfig`, uses `ConfigField()` (not bare Field)
+   - [ ] Output extends `BaseToolOutput`, implements `output_format_options`, `output_format_default`, `_export_output()`
+   - [ ] Run function signature: `def run_*(inputs: *Input, config: *Config) -> *Output`
+   - [ ] Run function returns Output with `metadata={}` dict of key parameters
+   - [ ] `@tool()` has all 9 kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input
+   - [ ] `@tool()`: `uses_gpu=True` matches Config `device="cuda"` override
+   - [ ] `@tool()`: Optional `device_count` specifies expected device allocation ("1", "1-2", ">=1", etc.)
    - [ ] No try/except wrapping tool logic
+   - [ ] Google-style docstrings with Attributes (for classes) and Args/Returns/Examples (for functions)
    - [ ] `__init__.py` exports at all 4 levels
    - [ ] README.md exists with correct import paths
    - [ ] cite.bib exists with valid BibTeX
    - [ ] Example notebook exists
    - [ ] Tests written and importable
+   - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)
 
 ---
 

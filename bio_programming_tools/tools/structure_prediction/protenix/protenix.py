@@ -300,15 +300,21 @@ class ProtenixConfig(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return ProtenixInput(complexes=["MKTL"])
+
+
 @tool(
     key="protenix-prediction",
     label="Protenix Structure Prediction",
     category="structure_prediction",
-    input=ProtenixInput,
-    config=ProtenixConfig,
-    output=ProtenixOutput,
+    input_class=ProtenixInput,
+    config_class=ProtenixConfig,
+    output_class=ProtenixOutput,
     description="Multi-modal structure prediction using Protenix (open-source AlphaFold3)",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="complexes",
@@ -316,7 +322,7 @@ class ProtenixConfig(StructurePredictionConfig):
     tool_name="protenix-prediction",
 )
 def run_protenix(
-    inputs: ProtenixInput, config: ProtenixConfig,
+    inputs: ProtenixInput, config: ProtenixConfig | None = None,
     instance=None,
 ) -> ProtenixOutput:
     """Predict 3D structures using Protenix.

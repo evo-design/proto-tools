@@ -121,15 +121,21 @@ AlphaGenomePredictSequencesConfig = AlphaGenomePredictConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomePredictSequencesInput(sequences=["A" * 16384])
+
+
 @tool(
     key="alphagenome-predict-sequences",
     label="AlphaGenome Predict Sequences",
     category="sequence_scoring",
-    input=AlphaGenomePredictSequencesInput,
-    config=AlphaGenomePredictSequencesConfig,
-    output=AlphaGenomePredictSequencesOutput,
+    input_class=AlphaGenomePredictSequencesInput,
+    config_class=AlphaGenomePredictSequencesConfig,
+    output_class=AlphaGenomePredictSequencesOutput,
     description="Predict genomic signals from batched raw DNA sequences using AlphaGenome",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="sequences",
@@ -138,7 +144,7 @@ AlphaGenomePredictSequencesConfig = AlphaGenomePredictConfig
 )
 def run_alphagenome_predict_sequences(
     inputs: AlphaGenomePredictSequencesInput,
-    config: AlphaGenomePredictSequencesConfig,
+    config: AlphaGenomePredictSequencesConfig | None = None,
     instance=None,
 ) -> AlphaGenomePredictSequencesOutput:
     """Predict genomic features from batched raw DNA sequences using AlphaGenome."""

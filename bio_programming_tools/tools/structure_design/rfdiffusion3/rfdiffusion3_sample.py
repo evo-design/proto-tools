@@ -489,18 +489,24 @@ class RFdiffusion3Output(BaseToolOutput):
 # Config: RFdiffusion3Config
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
+
+
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
     category="structure_design",
-    input=RFdiffusion3Input,
-    config=RFdiffusion3Config,
-    output=RFdiffusion3Output,
+    input_class=RFdiffusion3Input,
+    config_class=RFdiffusion3Config,
+    output_class=RFdiffusion3Output,
     description="De novo protein structure design using RFdiffusion3",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache("rfdiffusion3-design")
-def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance=None) -> RFdiffusion3Output:
+def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance=None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
     Uses RFdiffusion3, a diffusion-based generative model, to design novel
@@ -574,11 +580,10 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         input_data = {
             "input_json_path": str(input_json_path),
             "output_dir": str(output_dir),
+            "device": config.device,
             "verbose": config.verbose,
             **config.get_cli_kwargs(),
         }
-        # Device is controlled via CUDA_VISIBLE_DEVICES env var set by ToolInstance
-        # RFdiffusion3 doesn't accept device as a CLI parameter
         output_data = ToolInstance.dispatch(
             "rfdiffusion3",
             input_data,

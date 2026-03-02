@@ -147,15 +147,23 @@ class AlphaGenomeScoreIntervalsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return AlphaGenomeScoreIntervalsInput(
+        intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=196608)]
+    )
+
+
 @tool(
     key="alphagenome-score-intervals",
     label="AlphaGenome Score Intervals",
     category="sequence_scoring",
-    input=AlphaGenomeScoreIntervalsInput,
-    config=AlphaGenomeScoreIntervalsConfig,
-    output=AlphaGenomeScoreIntervalsOutput,
+    input_class=AlphaGenomeScoreIntervalsInput,
+    config_class=AlphaGenomeScoreIntervalsConfig,
+    output_class=AlphaGenomeScoreIntervalsOutput,
     description="Score genomic intervals in batch with AlphaGenome interval scorers",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache_iterable(
     input_iterable_field="intervals",
@@ -164,7 +172,7 @@ class AlphaGenomeScoreIntervalsConfig(BaseConfig):
 )
 def run_alphagenome_score_intervals(
     inputs: AlphaGenomeScoreIntervalsInput,
-    config: AlphaGenomeScoreIntervalsConfig,
+    config: AlphaGenomeScoreIntervalsConfig | None = None,
     instance=None,
 ) -> AlphaGenomeScoreIntervalsOutput:
     """Score genomic intervals in batch using AlphaGenome interval scorers."""

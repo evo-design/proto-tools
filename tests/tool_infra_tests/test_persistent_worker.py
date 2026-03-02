@@ -20,6 +20,10 @@ from bio_programming_tools.utils.persistent_worker import (
 )
 
 
+# Path to standalone_standalone_helpers.py source
+STANDALONE_HELPERS_SOURCE = Path(__file__).parent.parent.parent / "bio_programming_tools" / "utils" / "standalone_standalone_helpers.py"
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -625,20 +629,30 @@ class TestCleanEnv:
             assert "TORCH_HOME" not in env
 
     @pytest.mark.parametrize(
-        "device, expect_jax",
-        [("cpu", "cpu"), ("cuda", None)],
+        "device",
+        ["cpu", "cuda"],
         ids=["cpu", "cuda"],
     )
-    def test_jax_platforms(self, device, expect_jax):
-        """JAX_PLATFORMS=cpu on CPU, absent on GPU."""
+    def test_jax_platforms_not_set(self, device):
+        """JAX_PLATFORMS should NOT be set for any device (allows later GPU access via device_put)."""
         env = _build_subprocess_env(device=device)
-
-        if expect_jax:
-            assert env["JAX_PLATFORMS"] == expect_jax
-        else:
-            assert "JAX_PLATFORMS" not in env
+        assert "JAX_PLATFORMS" not in env
 
     # -- Tool-specific env vars (env_vars.txt) --
+
+    def test_xla_preallocation_disabled_for_cpu(self):
+        """CPU device should disable JAX preallocation."""
+        env = _build_subprocess_env(device="cpu")
+
+        assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
+        assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
+
+    def test_xla_preallocation_disabled_for_cuda(self):
+        """GPU device should also disable JAX preallocation (DeviceManager handles placement)."""
+        env = _build_subprocess_env(device="cuda")
+
+        assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
+        assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
 
     @pytest.mark.parametrize(
         "parent_has_var",
@@ -815,3 +829,100 @@ class TestComputeEnvInjection:
 
         # Tool override should win
         assert env["RECOMMENDED_TORCH_SPEC"] == "torch==2.6.0"
+
+
+# ============================================================================
+# Helper File Copy Tests
+# ============================================================================
+
+
+def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
+    """Verify standalone_helpers.py is copied to standalone directory on worker startup."""
+    # Create a minimal fake tool environment
+    fake_env = tmp_path / "fake_env"
+    fake_env.mkdir()
+    (fake_env / "bin").mkdir()
+
+    # Create a Python executable symlink (points to current Python)
+    python_exe = fake_env / "bin" / "python"
+    python_exe.symlink_to(sys.executable)
+
+    # Create standalone directory for script
+    standalone_dir = tmp_path / "standalone"
+    standalone_dir.mkdir()
+
+    # Move echo script to standalone directory
+    script_path = standalone_dir / "test_script.py"
+    script_path.write_text(echo_script.read_text())
+
+    # Verify standalone_helpers.py doesn't exist yet
+    helpers_path = standalone_dir / "standalone_helpers.py"
+    assert not helpers_path.exists(), "standalone_helpers.py should not exist before worker starts"
+
+    # Start the worker
+    worker = PersistentWorker(
+        tool_name="test-tool",
+        env_path=fake_env,
+        script_path=script_path,
+    )
+
+    try:
+        worker.start()
+
+        # Call send to ensure worker has fully started
+        result = worker.send({"test": "data"})
+        assert result["echo"]["test"] == "data", "Worker should be functional"
+
+        # Verify standalone_helpers.py was copied
+        assert helpers_path.exists(), "standalone_helpers.py should be copied on worker startup"
+
+        # Verify content matches source exactly
+        if STANDALONE_HELPERS_SOURCE.exists():
+            source_content = STANDALONE_HELPERS_SOURCE.read_text()
+            copied_content = helpers_path.read_text()
+            assert copied_content == source_content, \
+                "Copied standalone_helpers.py should be identical to source standalone_standalone_helpers.py"
+
+    finally:
+        worker.stop()
+
+
+def test_helpers_not_copied_outside_standalone(tmp_path: Path):
+    """Verify standalone_helpers.py is not copied if script is not in a standalone/ directory."""
+    # Create a script in a non-standalone location
+    script = tmp_path / "script_not_in_standalone.py"
+    script.write_text(textwrap.dedent("""\
+        def dispatch(input_dict):
+            return {"result": "ok"}
+        """))
+
+    # Create a minimal fake tool environment
+    fake_env = tmp_path / "fake_env"
+    fake_env.mkdir()
+    (fake_env / "bin").mkdir()
+
+    # Create a Python executable symlink
+    python_exe = fake_env / "bin" / "python"
+    python_exe.symlink_to(sys.executable)
+
+    # Start worker with script NOT in standalone/ directory
+    worker = PersistentWorker(
+        tool_name="test-tool",
+        env_path=fake_env,
+        script_path=script,
+    )
+
+    try:
+        worker.start()
+
+        # Worker should still function (just without standalone_helpers.py)
+        result = worker.send({"test": "data"})
+        assert result["result"] == "ok"
+
+        # Verify standalone_helpers.py was NOT copied
+        helpers_path = tmp_path / "standalone_helpers.py"
+        assert not helpers_path.exists(), \
+            "standalone_helpers.py should not be copied for scripts outside standalone/ directories"
+
+    finally:
+        worker.stop()

@@ -10,7 +10,6 @@ from __future__ import annotations
 import gzip
 import json
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -47,6 +46,8 @@ class RFdiffusion3Model:
         self,
         input_json_path: str,
         output_dir: str,
+        # Device for subprocess environment
+        device: str = "cuda",
         # Common parameters (explicit for discoverability)
         n_batches: int = 1,
         diffusion_batch_size: int = 8,
@@ -126,12 +127,17 @@ class RFdiffusion3Model:
 
         logger.debug(f"Running RFdiffusion3 command: {' '.join(cmd)}")
 
+        # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
+        from standalone_helpers import get_subprocess_device_env
+
+        env = get_subprocess_device_env(device)
+
         # Run the command
         result = subprocess.run(
             cmd,
             check=True,
             text=True,
-            env=os.environ,
+            env=env,
             encoding="utf-8",
         )
 
@@ -248,15 +254,32 @@ def dispatch(input_dict: dict) -> dict:
 
     kwargs = dict(input_dict)
     kwargs.pop("operation", None)
+    device = kwargs.pop("device", "cuda")  # Extract device for subprocess environment
     rfdiffusion3_input_json = kwargs.pop("input_json_path")
     rfdiffusion3_output_dir = kwargs.pop("output_dir")
 
     return _model(
         input_json_path=rfdiffusion3_input_json,
         output_dir=rfdiffusion3_output_dir,
+        device=device,
         verbose=kwargs.pop("verbose", False),
         **kwargs,
     )
+
+
+
+def to_device(device: str) -> dict:
+    """Passthrough for CLI tool - automatically unloads after each call."""
+    # CLI tool that spawns subprocesses and naturally unloads after each call
+    # This is a passthrough for standardization with other tools
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(device=0)
 
 
 if __name__ == "__main__":

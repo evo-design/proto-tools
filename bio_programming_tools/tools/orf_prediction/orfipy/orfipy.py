@@ -292,6 +292,11 @@ class OrfipyOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return OrfipyInput(sequences=["ATGTACTATTCATTAA"])
+
+
 @tool_cache_iterable(
     input_iterable_field="sequences",
     output_iterable_field="predicted_orfs",
@@ -301,12 +306,13 @@ class OrfipyOutput(BaseToolOutput):
     key="orfipy-prediction",
     label="Orfipy ORF Prediction",
     category="orf_prediction",
-    input=OrfipyInput,
-    config=OrfipyConfig,
-    output=OrfipyOutput,
+    input_class=OrfipyInput,
+    config_class=OrfipyConfig,
+    output_class=OrfipyOutput,
     description="ORF (Open Reading Frame) prediction using Orfipy",
+    example_input=example_input,
 )
-def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance=None) -> OrfipyOutput:
+def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = None, instance=None) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
     Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
@@ -349,6 +355,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance=No
     output_data = ToolInstance.dispatch(
         "orfipy",
         {
+            "device": "cpu",
             "sequences": inputs.sequences,
             "sequence_ids": sequence_ids,
             "config": {

@@ -85,19 +85,25 @@ NCBIEsearchConfig = NCBIFetchConfig
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return NCBIEsearchInput(db="protein", search_term="insulin")
+
+
 @tool(
     key="ncbi-esearch",
     label="NCBI Entrez ESearch",
     category="database_retrieval",
-    input=NCBIEsearchInput,
-    config=NCBIFetchConfig,
-    output=NCBIEsearchOutput,
+    input_class=NCBIEsearchInput,
+    config_class=NCBIFetchConfig,
+    output_class=NCBIEsearchOutput,
     description="Search NCBI Entrez databases by query term to find matching IDs",
     uses_gpu=False,
+    example_input=example_input,
 )
 def run_ncbi_esearch(
     inputs: NCBIEsearchInput,
-    config: NCBIFetchConfig,
+    config: NCBIFetchConfig | None = None,
     instance=None,
 ) -> NCBIEsearchOutput:
     """Search NCBI Entrez databases by query term.

@@ -252,20 +252,30 @@ class SpliceTransformerOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return SpliceTransformerInput(
+        target_seqs=["ATCG" * 250],
+        left_contexts=["CGTA" * 1000],
+        right_contexts=["TACG" * 1000],
+    )
+
+
 @tool(
     key="splice-transformer-prediction",
     label="SpliceTransformer Splicing Prediction",
     category="rna_splicing",
-    input=SpliceTransformerInput,
-    config=SpliceTransformerConfig,
-    output=SpliceTransformerOutput,
+    input_class=SpliceTransformerInput,
+    config_class=SpliceTransformerConfig,
+    output_class=SpliceTransformerOutput,
     description="Tissue-specific splicing prediction using SpliceTransformer",
     uses_gpu=True,
+    example_input=example_input,
 )
 @tool_cache("splice-transformer-prediction")
 def run_splice_transformer(
     inputs: SpliceTransformerInput,
-    config: SpliceTransformerConfig,
+    config: SpliceTransformerConfig | None = None,
     instance=None,
 ) -> SpliceTransformerOutput:
     """Predict splice sites in RNA/DNA sequences using SpliceTransformer.

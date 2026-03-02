@@ -8,6 +8,7 @@ automatic schema generation for API/frontend integration.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 import traceback
@@ -34,12 +35,11 @@ IGNORED_WARNING_SUBSTRINGS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
-# NOTE: TimeoutError is intentionally excluded — ToolInstance and PersistentWorker
-# raise TimeoutError when a tool exceeds its configured timeout, and retrying with
-# the same limit would just time out again.
+# TimeoutError excluded — retrying with the same limit would just time out again
 _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
 from bio_programming_tools.utils import BaseConfig
+from bio_programming_tools.utils.device import parse_device_string, validate_device_allocation
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -58,6 +58,10 @@ class ToolSpec(BaseModel):
     category: str = Field(description="Tool category (e.g., 'gene_annotation')")
     description: str = Field(description="Detailed description of tool functionality")
     uses_gpu: bool = Field(default=False, description="Whether this tool requires a GPU")
+    device_count: str = Field(
+        default="1",
+        description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')"
+    )
 
     # Configuration model - serialized as JSON Schema
     config_model: Type[BaseModel] = Field(
@@ -68,6 +72,11 @@ class ToolSpec(BaseModel):
     input_model: Type[BaseToolInput] = Field(exclude=True)
     output_model: Type[BaseToolOutput] = Field(exclude=True)
     function: Callable = Field(exclude=True)
+    source_file: Path = Field(exclude=True, description="Path to the source file where the tool function is defined")
+    example_input: Callable[[], BaseToolInput] | None = Field(
+        default=None, exclude=True,
+        description="Factory returning a minimal valid input for testing",
+    )
 
     model_config = {
         "arbitrary_types_allowed": True,
@@ -136,11 +145,13 @@ class ToolRegistry:
         key: str,
         label: str,
         category: str,
-        input: Type[BaseToolInput],
-        config: Type[BaseConfig],
-        output: Type[BaseToolOutput],
+        input_class: Type[BaseToolInput],
+        config_class: Type[BaseConfig],
+        output_class: Type[BaseToolOutput],
         description: str,
         uses_gpu: bool = False,
+        device_count: str = "1",
+        example_input: Callable[[], BaseToolInput] | None = None,
     ):
         """
         Decorator to register a tool function and wrap execution with metadata tracking.
@@ -150,16 +161,19 @@ class ToolRegistry:
         2. Wraps the function to automatically track execution time
         3. Handles errors and returns standardized output with success/failure status
         4. Populates metadata fields (tool_id, execution_time, success, timestamp)
+        5. Validates device allocation against tool requirements
 
         Args:
             key: Unique identifier (e.g., "blast-search", "esm3-embedding")
             label: Readable display name (e.g., "BLAST Search", "ESM3 Embedding")
             category: Tool category matching directory name (e.g., "gene_annotation")
-            input: Pydantic model class for primary input validation
-            config: Pydantic model class for tool configuration validation
-            output: Pydantic model class for tool output validation
+            input_class: Pydantic model class for primary input validation
+            config_class: Pydantic model class for tool configuration validation
+            output_class: Pydantic model class for tool output validation
             description: Readable description
             uses_gpu: Whether this tool requires a GPU for execution
+            device_count: Expected device count (e.g., "1", "1-2", ">=1", "<=2").
+                Validates allocation: errors on under-allocation, warns on over-allocation.
 
         Returns:
             Decorator that wraps the function with metadata tracking
@@ -167,13 +181,45 @@ class ToolRegistry:
         def decorator(func: Callable):
             cls._check_duplicate(key, func.__name__)
 
+            # Capture source file from call stack (find first frame in tools directory)
+            stack = inspect.stack()
+            source_file = None
+            for frame_info in stack:
+                filename = frame_info.filename
+                # Look for the first frame in the tools directory (skip this registry file)
+                if '/tools/' in filename and 'tool_registry.py' not in filename:
+                    source_file = Path(filename)
+                    break
+
+            # Fallback to func's code if we couldn't find it in the stack
+            if source_file is None:
+                source_file = Path(func.__code__.co_filename)
+
             @wraps(func)
-            def wrapper(inputs: BaseToolInput, config: BaseConfig, instance: ToolInstance | None = None) -> BaseToolOutput:
+            def wrapper(inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
+                # If config is None, instantiate default config
+                if config is None:
+                    config = config_class()
+                    logger.debug(f"Tool {key}: config not provided, using default config")
+
                 start_time = time.time()
                 last_exception = None
                 last_traceback = ""
                 warning_list = []
+
+                # Validate device allocation against tool requirements
+                if hasattr(config, 'device'):
+                    device_str = str(config.device)
+                    if device_str != "cpu" and not uses_gpu:
+                        logger.warning(
+                            "Tool %s does not use a GPU but device=%r was requested; "
+                            "the tool will run on CPU regardless",
+                            key, device_str,
+                        )
+                    elif device_str != "cpu":
+                        _, requested_count = parse_device_string(device_str)
+                        validate_device_allocation(requested_count, device_count, key)
 
                 for attempt in range(1 + MAX_RETRIES):
                     try:
@@ -248,7 +294,7 @@ class ToolRegistry:
                         full_traceback = traceback.format_exc()
                         logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
 
-                        error_output = output.model_construct(
+                        error_output = output_class.model_construct(
                             tool_id=key,
                             execution_time=time.time() - start_time,
                             success=False,
@@ -265,7 +311,7 @@ class ToolRegistry:
                     f"{type(last_exception).__name__}: {last_exception}"
                 )
 
-                error_output = output.model_construct(
+                error_output = output_class.model_construct(
                     tool_id=key,
                     execution_time=time.time() - start_time,
                     success=False,
@@ -275,17 +321,20 @@ class ToolRegistry:
                 )
                 return error_output
 
-            # Register the tool spec with the original function
+            # Register the tool spec with the captured source file
             cls._registry[key] = ToolSpec(
                 key=key,
                 label=label,
                 category=category,
                 description=description,
                 uses_gpu=uses_gpu,
-                input_model=input,
-                config_model=config,
-                output_model=output,
+                device_count=device_count,
+                input_model=input_class,
+                config_model=config_class,
+                output_model=output_class,
                 function=wrapper,
+                source_file=source_file,
+                example_input=example_input,
             )
             return wrapper
         return decorator
@@ -347,6 +396,14 @@ class ToolRegistry:
             "config": cls.get_config_schema(key),
             "output": cls.get_output_schema(key),
         }
+
+    @classmethod
+    def get_example_input(cls, key: str) -> BaseToolInput | None:
+        """Get a minimal valid input instance for a tool, or None if not defined."""
+        spec = cls.get(key)
+        if spec.example_input is None:
+            return None
+        return spec.example_input()
 
     @classmethod
     def count(cls) -> int:

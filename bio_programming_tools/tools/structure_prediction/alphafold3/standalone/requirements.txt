@@ -1,0 +1,6 @@
+# Minimal dependencies for AlphaFold3 worker subprocess
+# - numpy: for confidence score processing
+# - biopython: for mmCIF to PDB conversion
+# MSA generation (ColabFold) runs in main process, not here
+numpy
+biopython

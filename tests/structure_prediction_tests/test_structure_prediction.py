@@ -275,21 +275,16 @@ def _release_between_predictors(request):
     Works inside the module-scoped ToolInstance.scope() from conftest.py.
     When predictor_name changes between consecutive tests, shuts down the
     previous predictor's worker so GPU memory is freed before the next
-    model loads.  Then caches the new predictor so dispatch() finds it.
+    model loads. Then caches the new predictor so dispatch() finds it.
 
     Not autouse — only parametrized tests have callspec.params. Applied
     via @pytest.mark.usefixtures on test_folding only.
-
-    Note: Skips alphafold3 as it uses Singularity container, not ToolInstance.
     """
     prev = getattr(request.module, "_active_predictor", None)
     predictor_name = request.node.callspec.params["predictor_name"]
-
-    # Skip alphafold3 - it uses Singularity container, not ToolInstance
-    if predictor_name != "alphafold3":
-        if prev is not None and prev != predictor_name and prev != "alphafold3":
-            ToolInstance.shutdown_instance(prev)
-        ToolInstance.get(predictor_name)
+    if prev is not None and prev != predictor_name:
+        ToolInstance.shutdown_instance(prev)
+    ToolInstance.get(predictor_name)
 
     request.module._active_predictor = predictor_name
     yield

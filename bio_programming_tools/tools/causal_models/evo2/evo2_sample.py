@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
@@ -233,6 +233,16 @@ class Evo2SampleConfig(BaseConfig):
         Evo2 is a large model. Smaller batch sizes and shorter sequences
         are recommended if memory is constrained.
     """
+    @model_validator(mode="after")
+    def _validate_40b(self):
+        if "40b" in self.model_checkpoint:
+            raise NotImplementedError(
+                f"The {self.model_checkpoint} model requires 2 GPUs with tensor "
+                "parallelism, which we haven't implemented into our device "
+                "manager system. Use a 7b or 1b variant instead."
+            )
+        return self
+
     # prompt params
     prepend_prompt: bool = ConfigField(
         title="Prepend Prompt",
@@ -342,18 +352,24 @@ class Evo2SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Evo2SampleInput(prompts=["ATCGATCG"])
+
+
 @tool(
     key="evo2-sample",
     label="Evo2 Sampling",
     category="causal_models",
-    input=Evo2SampleInput,
-    config=Evo2SampleConfig,
-    output=Evo2SampleOutput,
+    input_class=Evo2SampleInput,
+    config_class=Evo2SampleConfig,
+    output_class=Evo2SampleOutput,
     description="Sample DNA sequences using Evo2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_evo2_sample(
-    inputs: Evo2SampleInput, config: Evo2SampleConfig,
+    inputs: Evo2SampleInput, config: Evo2SampleConfig | None = None,
     instance=None,
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.

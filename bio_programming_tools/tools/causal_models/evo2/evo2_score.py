@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import List, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
@@ -86,6 +86,16 @@ class Evo2ScoringConfig(BaseConfig):
         - Evo2 is a large model; batch_size tuning may be needed for memory
     """
 
+    @model_validator(mode="after")
+    def _validate_40b(self):
+        if "40b" in self.model_checkpoint:
+            raise NotImplementedError(
+                f"The {self.model_checkpoint} model requires 2 GPUs with tensor "
+                "parallelism, which we haven't implemented into our device "
+                "manager system. Use a 7b or 1b variant instead."
+            )
+        return self
+
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="evo2_7b",
@@ -123,18 +133,24 @@ class Evo2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Evo2ScoringInput(sequences=["ATCGATCG"])
+
+
 @tool(
     key="evo2-score",
     label="Evo2 Scoring",
     category="causal_models",
-    input=Evo2ScoringInput,
-    config=Evo2ScoringConfig,
-    output=Evo2ScoringOutput,
+    input_class=Evo2ScoringInput,
+    config_class=Evo2ScoringConfig,
+    output_class=Evo2ScoringOutput,
     description="Score DNA sequences using Evo2 language model",
     uses_gpu=True,
+    example_input=example_input,
 )
 def run_evo2_score(
-    inputs: Evo2ScoringInput, config: Evo2ScoringConfig,
+    inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
     instance=None,
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.

@@ -80,19 +80,25 @@ NCBIEsummaryConfig = NCBIFetchConfig
 # ============================================================================
 
 
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return NCBIEsummaryInput(db="protein", identifier="NP_000537.3")
+
+
 @tool(
     key="ncbi-esummary",
     label="NCBI Entrez ESummary",
     category="database_retrieval",
-    input=NCBIEsummaryInput,
-    config=NCBIFetchConfig,
-    output=NCBIEsummaryOutput,
+    input_class=NCBIEsummaryInput,
+    config_class=NCBIFetchConfig,
+    output_class=NCBIEsummaryOutput,
     description="Retrieve record summary metadata from NCBI Entrez by ID",
     uses_gpu=False,
+    example_input=example_input,
 )
 def run_ncbi_esummary(
     inputs: NCBIEsummaryInput,
-    config: NCBIFetchConfig,
+    config: NCBIFetchConfig | None = None,
     instance=None,
 ) -> NCBIEsummaryOutput:
     """Retrieve record summary metadata from NCBI Entrez.

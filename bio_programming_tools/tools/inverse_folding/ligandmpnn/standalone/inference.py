@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import torch
+from standalone_helpers import move_model_to_device
 
 logger = getLogger(__name__)
 
@@ -172,6 +173,21 @@ class LigandMPNNModel:
         if verbose:
             logger.info("LigandMPNN model loaded successfully")
 
+    def to_device(self, device: str) -> None:
+        """Move model to a different device.
+
+        For LigandMPNN, this requires reloading the Foundry engine with the new device.
+        """
+        if not self._loaded:
+            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
+
+        if self.device != device:
+            # LigandMPNN uses Foundry engine which doesn't support standard .to() movement
+            # Use helper for consistency (it will handle gracefully), then reload engine
+            self._engine = move_model_to_device(self._engine, self.device, device)
+            # Foundry engine requires full reload for device change
+            self.load(device, verbose=False)
+
     def unload(self):
         """Unload the model to free GPU memory."""
         self._engine = None
@@ -251,6 +267,27 @@ def dispatch(input_dict: dict) -> dict:
             )
         else:
             raise ValueError(f"Unknown operation: {operation}")
+
+
+
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        # Model not loaded yet - will use device on next call
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
 
 
 if __name__ == "__main__":
