@@ -1,8 +1,5 @@
 # Evo2/Vortex installs are sensitive; see upstream repos if this fails.
-# https://github.com/ArcInstitute/evo2
-# https://github.com/Zymrael/vortex
-# Note: flash-attn, transformer-engine, and vtx are installed in setup.sh
+# Note: flash-attn, transformer-engine, vtx, and evo2 are installed in setup.sh
 # before this file to ensure correct installation order.
 
-evo2
 tqdm

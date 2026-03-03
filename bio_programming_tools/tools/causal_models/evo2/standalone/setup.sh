@@ -125,8 +125,10 @@ uv pip install --no-build-isolation "transformer_engine[pytorch]==2.5.0" --refre
 echo "Installing vortex..."
 uv pip install vtx
 
+echo "Installing evo2..."
+uv pip install evo2 --constraint <(echo "torch==2.6.0")
+
 echo "Installing dependencies from requirements.txt..."
-# Constrain torch to the pinned version to prevent evo2 package from upgrading it
 uv pip install -r requirements.txt --constraint <(echo "torch==2.6.0")
 
 echo "Upgrading triton..."

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 EVO2_MODEL_CHECKPOINTS = Literal[
     "evo2_7b",
+    "evo2_20b",
     "evo2_40b",
     "evo2_7b_base",
     "evo2_40b_base",
