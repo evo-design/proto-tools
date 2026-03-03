@@ -59,17 +59,22 @@ Some models are hosted in gated HuggingFace repositories that require both authe
 | Model | HuggingFace Repo | Notes |
 |-------|-----------------|-------|
 | ESM3 | [EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1) | Requires accepting EvolutionaryScale license |
-| AlphaGenome | [google/alphagenome](https://huggingface.co/google/alphagenome) | Requires accepting Google DeepMind terms |
+| AlphaGenome | [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Requires accepting Google DeepMind terms |
 
 To use these models:
 
 1. Create a [HuggingFace](https://huggingface.co) account
 2. Visit each model page above and **accept the license/terms**
 3. Create an [access token](https://huggingface.co/settings/tokens)
-4. Set the token in your environment:
+4. Install [HuggingFace CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli)
+   ```bash
+   curl -LsSf https://hf.co/cli/install.sh | bash
+   ```
+
+5. Set the token in your environment:
    ```bash
    export HF_TOKEN=hf_...
-   # Or log in with: huggingface-cli login
+   # Or log in with: hf auth login
    ```
 
 The setup scripts for gated models will check for access and provide a clear error if authentication is missing.
