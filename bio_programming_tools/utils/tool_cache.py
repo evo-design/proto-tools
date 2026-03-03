@@ -398,7 +398,7 @@ def tool_cache_iterable(
             output=ESMFoldOutput,
             description="Protein structure prediction using ESMFold",
             category="structure_prediction",
-            requires_gpu=True
+            uses_gpu=True
         )
         @tool_cache_iterable(
             input_iterable_field="complexes",

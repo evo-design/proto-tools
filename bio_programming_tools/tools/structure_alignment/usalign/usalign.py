@@ -37,7 +37,10 @@ class USalignInput(BaseToolInput):
 
 
 class USalignConfig(BaseConfig):
-    """Configuration for USalign alignment."""
+    """Configuration for USalign alignment.
+
+    No tool-specific parameters. Uses base parameters (verbose, device, timeout).
+    """
 
 
 class USalignOutput(BaseToolOutput):

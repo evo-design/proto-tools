@@ -93,7 +93,7 @@ class ToolTestResult:
     test_name: str
     status: str  # "passed", "failed", "skipped"
     duration_seconds: float
-    requires_gpu: bool
+    uses_gpu: bool
     env_path: str | None
     env_status: str  # "success", "build_failed", "not_found"
     error_message: str | None
@@ -152,7 +152,7 @@ class EnvReportCollector:
                 test_name=nodeid,
                 status=outcome,
                 duration_seconds=round(duration, 2),
-                requires_gpu=has_gpu_marker,
+                uses_gpu=has_gpu_marker,
                 env_path=env_path,
                 env_status=env_status,
                 error_message=error_message,
@@ -359,7 +359,7 @@ class EnvReportCollector:
                 duration = f"{r.duration_seconds:.1f}s" if r.status != "skipped" else "—"
 
                 # GPU indicator
-                gpu_req = "yes" if r.requires_gpu else "no"
+                gpu_req = "yes" if r.uses_gpu else "no"
 
                 # Venv status
                 if r.env_status == "success":

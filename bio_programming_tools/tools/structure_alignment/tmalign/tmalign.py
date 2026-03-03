@@ -37,7 +37,10 @@ class TMalignInput(BaseToolInput):
 
 
 class TMalignConfig(BaseConfig):
-    """Configuration for TMalign alignment."""
+    """Configuration for TMalign alignment.
+
+    No tool-specific parameters. Uses base parameters (verbose, device, timeout).
+    """
 
 
 class TMalignOutput(BaseToolOutput):
