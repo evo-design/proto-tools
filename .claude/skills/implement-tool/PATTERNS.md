@@ -55,6 +55,19 @@ def run_operation(input_data: dict) -> dict:
     return {"results": results}
 
 
+# ---------------------------------------------------------------------------
+# Device management protocol (required by DeviceManager)
+# ---------------------------------------------------------------------------
+def to_device(device: str) -> dict:
+    """Passthrough for CPU tool — no persistent model to move."""
+    return {"success": True, "device": device, "note": "CPU tool, auto-unloads"}
+
+
+def get_memory_stats() -> dict:
+    """CPU tool — no GPU memory to report."""
+    return {"available": False, "framework": "cpu", "note": "CPU tool"}
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(f"Usage: python {sys.argv[0]} <input.json> <output.json>", file=sys.stderr)
@@ -189,6 +202,27 @@ def dispatch(input_dict: dict) -> dict:
         raise ValueError(f"Unknown operation: {operation}")
 
 
+# ---------------------------------------------------------------------------
+# Device management protocol (required by DeviceManager)
+# ---------------------------------------------------------------------------
+def to_device(device: str) -> dict:
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+
+
+def get_memory_stats() -> dict:
+    """Report GPU memory usage (called by DeviceManager)."""
+    from standalone_helpers import get_pytorch_memory_stats  # Auto-copied by worker bootstrap
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input.json> <output.json>")
@@ -274,9 +308,8 @@ Enables DeviceManager to query GPU memory usage for monitoring.
 
 **PyTorch tools:**
 ```python
-from standalone_helpers import get_pytorch_memory_stats
-
 def get_memory_stats() -> dict:
+    from standalone_helpers import get_pytorch_memory_stats
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
     return get_pytorch_memory_stats(device)
@@ -284,9 +317,8 @@ def get_memory_stats() -> dict:
 
 **JAX tools:**
 ```python
-from standalone_helpers import get_jax_memory_stats
-
 def get_memory_stats() -> dict:
+    from standalone_helpers import get_jax_memory_stats
     return get_jax_memory_stats(device_index=0)
 ```
 

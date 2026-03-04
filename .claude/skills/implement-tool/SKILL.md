@@ -144,7 +144,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="ignore"`
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
-   - `@tool()` decorator with all 8 kwargs: key, label, category, input, config, output, description, uses_gpu
+   - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`)
    - `run_*()` function that calls `ToolInstance.dispatch()`
    - If category has shared data models, use type aliases (e.g., `ToolInput = InverseFoldingInput`)
 
@@ -251,6 +251,70 @@ CRITICAL RULES:
 - Match the operation names used in the contract's ToolInstance.dispatch() calls
 - Device handling: accept device from input_dict, pass to model.load()
 - Audit hardcoded values in the reference/research code (chain IDs, model paths, default parameters, assumed dimensions). If a value could vary across valid inputs, parameterize it — accept it from the dispatch input dict rather than hardcoding. For example, `chain_id="A"` should come from the input, not be a constant.
+
+### Required Device Management Protocol Functions
+
+> **Sync note:** These patterns are duplicated in PATTERNS.md (templates + reference section) because subagents can't see PATTERNS.md. If the protocol changes, update both files.
+
+All standalone scripts MUST implement two module-level protocol functions for DeviceManager integration. Add these AFTER the dispatch() function (or after operation functions for CPU tools), BEFORE `if __name__`.
+
+#### 1. `to_device(device: str) -> dict`
+Enables DeviceManager to move models between GPUs and CPU.
+
+**Persistent PyTorch tools** (global `_model` kept loaded):
+```python
+def to_device(device: str) -> dict:
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    else:
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+```
+
+**Non-persistent / CLI tools** (no persistent model state):
+```python
+def to_device(device: str) -> dict:
+    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+```
+
+#### 2. `get_memory_stats() -> dict`
+Enables DeviceManager to query GPU memory usage. Import the helper from `standalone_helpers` (auto-copied by worker bootstrap).
+
+**PyTorch tools:**
+```python
+def get_memory_stats() -> dict:
+    from standalone_helpers import get_pytorch_memory_stats
+    global _model
+    device = _model.device if _model and hasattr(_model, "device") else 0
+    return get_pytorch_memory_stats(device)
+```
+
+**JAX tools:**
+```python
+def get_memory_stats() -> dict:
+    from standalone_helpers import get_jax_memory_stats
+    return get_jax_memory_stats(device_index=0)
+```
+
+**CPU-only tools:**
+```python
+def get_memory_stats() -> dict:
+    return {"available": False, "framework": "cpu", "note": "CPU tool"}
+```
+
+**GPU CLI tools** (e.g., Boltz2, RFDiffusion3 — spawn subprocesses that use GPU):
+```python
+def get_memory_stats() -> dict:
+    from standalone_helpers import get_pytorch_memory_stats
+    return get_pytorch_memory_stats(device=0)
+```
+
+**Key rules:**
+- Both functions MUST be at module level (not inside classes)
+- `to_device()` returns `{"success": bool, "device": str}`
+- `get_memory_stats()` returns `{"available": bool, "framework": str, ...}`
+- Import `standalone_helpers` (auto-copied by worker bootstrap) — do NOT import from `bio_programming_tools`
 
 ### 2. setup.sh
 ```bash
@@ -558,6 +622,8 @@ CRITICAL RULES:
    - [ ] cite.bib exists with valid BibTeX
    - [ ] Example notebook exists
    - [ ] Tests written and importable
+   - [ ] Standalone script implements `to_device(device: str) -> dict` at module level
+   - [ ] Standalone script implements `get_memory_stats() -> dict` at module level
    - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)
 
 ---
@@ -613,13 +679,12 @@ If no issues found, print: []
 2. Fix all `"fix"` severity issues directly
 3. Fix `"cosmetic"` issues if quick (< 1 minute each)
 4. Re-run Phase 4 import/test checks if any fixes touched the tool file or standalone code
-5. **Log findings to Pilot Memory** — If any `"fix"` issues were found, save them to persistent memory so we can track how the pipeline fails over time:
+5. **Log findings to auto-memory** — If any `"fix"` issues were found, save them to persistent memory so we can track how the pipeline fails over time. Write (or append) to the auto-memory directory at `implement-tool-audits.md`:
    ```
-   mcp__plugin_pilot_mem-search__save_memory(
-       text="implement-tool audit for {tool_name}: {N} fix issues, {M} cosmetic. Fixes: {brief list of fix issues}. These indicate systemic gaps in the pipeline.",
-       title="implement-tool audit: {tool_name}",
-       project="bio-programming-tools"
-   )
+   ## {tool_name} audit — {date}
+   - {N} fix issues, {M} cosmetic
+   - Fixes: {brief list of fix issues}
+   - These indicate systemic gaps in the pipeline.
    ```
    This builds a dataset of pipeline failure modes that informs future skill improvements.
 
