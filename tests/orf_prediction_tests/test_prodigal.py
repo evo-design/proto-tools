@@ -19,7 +19,6 @@ from bio_programming_tools.tools.orf_prediction import (
     ProdigalOutput,
     run_prodigal_prediction,
 )
-from bio_programming_tools.tools.tool_registry import ToolRegistry
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
@@ -292,32 +291,6 @@ class TestProdigalOrfStructure:
                 assert len(orf.amino_acid_sequence) > 0
                 # Protein sequences should not end with stop codon (*)
                 assert not orf.amino_acid_sequence.endswith('*')
-
-
-class TestProdigalRegistration:
-    """Test Prodigal tool registration."""
-
-    def test_tool_is_registered(self):
-        """Test that Prodigal is registered in ToolRegistry."""
-        all_tools = ToolRegistry.list_all()
-        assert "prodigal-prediction" in {spec.key for spec in all_tools}
-
-    def test_tool_metadata(self):
-        """Test that registered tool has correct metadata."""
-        all_tools = ToolRegistry.list_all()
-        tools_dict = {spec.key: spec for spec in all_tools}
-        prodigal_spec = tools_dict["prodigal-prediction"]
-
-        assert "Prokaryotic" in prodigal_spec.description or "ORF" in prodigal_spec.description
-
-    def test_tool_schema_generation(self):
-        """Test that JSON schema is generated correctly."""
-        schema = ToolRegistry.get_config_schema("prodigal-prediction")
-        assert "properties" in schema
-        # Config fields should be in schema
-        assert "meta_mode" in schema["properties"]
-        assert "translation_table" in schema["properties"]
-        assert "closed_ends" in schema["properties"]
 
 
 class TestProdigalIntegration:

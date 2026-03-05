@@ -151,9 +151,10 @@ pre-commit install
 ### Testing
 
 ```bash
-pytest                          # Fast tests (skips slow)
+pytest                          # Fast tests (skips slow and integration)
 pytest --cpu                    # CPU tests only
-pytest --all                    # Include slow tests
+pytest --integration            # Include integration tests (hits external APIs)
+pytest --all                    # Include slow and integration tests
 pytest --env-report             # Generate environment compatibility report
 pytest --env-report --cpu       # CPU tools only
 ```

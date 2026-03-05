@@ -666,6 +666,7 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 - Flake8 only checks: F401 (unused imports), F841 (unused variables)
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
+- **Integration tests** (marked `@pytest.mark.integration`) hit external APIs (NCBI, UniProt, PDB) and are **skipped by default**. Run with `pytest --integration` or `pytest --all`.
 - **Before running GPU tests**, check if a GPU is available. If no GPU is detected, run CPU tests by default (`pytest --cpu`)
 - **Test logs**: Every pytest run saves a detailed log to `logs/` (project root). Log files are named `pytest_{timestamp}.log` or `pytest_{test_filter}.log` when using `-k`. Check these logs for debugging test failures instead of re-running tests — they include full DEBUG-level output from DeviceManager, ToolInstance, and worker subprocesses.
 

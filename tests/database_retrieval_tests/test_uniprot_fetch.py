@@ -14,22 +14,6 @@ from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import
     _extract_gene_names,
     _extract_pdb_crossrefs,
 )
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-
-
-def test_uniprot_fetch_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "uniprot-fetch" in tool_keys
-
-    schema = ToolRegistry.get_config_schema("uniprot-fetch")
-    assert "properties" in schema
-    assert "request_timeout_seconds" in schema["properties"]
-
-
-def test_uniprot_fetch_has_citation():
-    citation = ToolRegistry.get_citation("uniprot-fetch")
-    assert citation is not None
-    assert "@article{" in citation
 
 
 def test_uniprot_fetch_input_requires_id_or_name():

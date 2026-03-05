@@ -458,6 +458,12 @@ def pytest_addoption(parser):
         help="Skip tests marked with skip_ci (mimics CI environment behavior)",
     )
     parser.addoption(
+        "--integration",
+        action="store_true",
+        default=False,
+        help="Run integration tests (hit external APIs/services). Skipped by default.",
+    )
+    parser.addoption(
         "--exhaustive",
         action="store_true",
         default=False,
@@ -745,6 +751,15 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+    # Skip integration tests unless --integration or --all is specified
+    if not config.getoption("--integration") and not run_all:
+        skip_integration = pytest.mark.skip(
+            reason="integration test (use --integration to run, or --all for everything)"
+        )
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip_integration)
 
     # Skip exhaustive tests unless --exhaustive is specified
     if not config.getoption("--exhaustive"):
