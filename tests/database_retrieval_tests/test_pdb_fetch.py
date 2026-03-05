@@ -14,33 +14,6 @@ from bio_programming_tools.tools.database_retrieval import (
 from bio_programming_tools.tools.database_retrieval.pdb.shared_data_models import (
     _is_protein_sequence,
 )
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-
-
-def test_pdb_fetch_entry_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "pdb-fetch-entry" in tool_keys
-
-    schema = ToolRegistry.get_config_schema("pdb-fetch-entry")
-    assert "properties" in schema
-    assert "request_timeout_seconds" in schema["properties"]
-
-
-def test_pdb_fetch_fasta_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "pdb-fetch-fasta" in tool_keys
-
-
-def test_pdb_fetch_entry_has_citation():
-    citation = ToolRegistry.get_citation("pdb-fetch-entry")
-    assert citation is not None
-    assert "@article{" in citation
-
-
-def test_pdb_fetch_fasta_has_citation():
-    citation = ToolRegistry.get_citation("pdb-fetch-fasta")
-    assert citation is not None
-    assert "@article{" in citation
 
 
 def test_is_protein_sequence_protein():

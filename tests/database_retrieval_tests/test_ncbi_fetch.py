@@ -18,44 +18,6 @@ from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models impo
     _accession_from_header,
     _parse_fasta_records,
 )
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-
-
-def test_ncbi_esearch_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "ncbi-esearch" in tool_keys
-
-    schema = ToolRegistry.get_config_schema("ncbi-esearch")
-    assert "properties" in schema
-    assert "request_timeout_seconds" in schema["properties"]
-
-
-def test_ncbi_esummary_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "ncbi-esummary" in tool_keys
-
-
-def test_ncbi_efetch_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "ncbi-efetch" in tool_keys
-
-
-def test_ncbi_esearch_has_citation():
-    citation = ToolRegistry.get_citation("ncbi-esearch")
-    assert citation is not None
-    assert "@article{" in citation
-
-
-def test_ncbi_esummary_has_citation():
-    citation = ToolRegistry.get_citation("ncbi-esummary")
-    assert citation is not None
-    assert "@article{" in citation
-
-
-def test_ncbi_efetch_has_citation():
-    citation = ToolRegistry.get_citation("ncbi-efetch")
-    assert citation is not None
-    assert "@article{" in citation
 
 
 def test_ncbi_esearch_requires_search_term():

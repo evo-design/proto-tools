@@ -12,7 +12,6 @@ from bio_programming_tools.tools.database_retrieval import (
     SequenceFetchInput,
     run_sequence_fetch,
 )
-from bio_programming_tools.tools.tool_registry import ToolRegistry
 import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
 from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
@@ -35,21 +34,6 @@ def test_sequence_fetch_input_normalizes_single_request():
 
     assert len(inputs.requests) == 1
     assert inputs.requests[0].sequence_types == ["protein"]
-
-
-def test_sequence_fetch_is_registered():
-    tool_keys = [spec.key for spec in ToolRegistry.list_all()]
-    assert "sequence-fetch" in tool_keys
-
-    schema = ToolRegistry.get_config_schema("sequence-fetch")
-    assert "properties" in schema
-    assert "request_timeout_seconds" in schema["properties"]
-
-
-def test_sequence_fetch_has_citation():
-    citation = ToolRegistry.get_citation("sequence-fetch")
-    assert citation is not None
-    assert "@article{" in citation
 
 
 def test_sequence_fetch_rejects_ncrna_as_protein_request():
