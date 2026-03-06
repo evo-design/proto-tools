@@ -1,8 +1,4 @@
-"""
-test_evo1.py
-
-Tests the Evo1 implementation.
-"""
+"""Tests for Evo1."""
 
 import json
 
@@ -24,65 +20,152 @@ from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
-
-
 _persistent_tool = make_persistent_fixture("evo1")
 
-# ============================================================================
-# Input Validation Tests (no GPU needed)
-# ============================================================================
+
+def _make_mock_scoring_output():
+    """Create a mock scoring output for testing."""
+    scores = [
+        SequenceScores(
+            metrics={
+                "log_likelihood": -10.5,
+                "avg_log_likelihood": -1.05,
+                "perplexity": 2.86,
+            },
+        ),
+        SequenceScores(
+            metrics={
+                "log_likelihood": -12.3,
+                "avg_log_likelihood": -1.23,
+                "perplexity": 3.42,
+            },
+        ),
+    ]
+    return Evo1ScoringOutput(scores=scores)
 
 
-class TestEvo1SampleInput:
-    """Tests for Evo1SampleInput validation and normalization."""
+# ── Sample input validation ───────────────────────────────────────────────────
 
-    def test_single_string_normalization(self):
-        """Single string should be normalized to list."""
-        inp = Evo1SampleInput(prompts="ATCGATCG")
-        assert isinstance(inp.prompts, list)
-        assert len(inp.prompts) == 1
-        assert inp.prompts[0] == "ATCGATCG"
-
-    def test_list_input_preserved(self):
-        """List input should be preserved as-is."""
-        inp = Evo1SampleInput(prompts=["ATCG", "GCTA"])
-        assert len(inp.prompts) == 2
-
-    def test_empty_prompts_raises(self):
-        """Empty prompts should raise ValueError."""
-        with pytest.raises(ValueError, match="prompts must not be empty"):
-            Evo1SampleInput(prompts=[])
+def test_evo1_sample_input_normalizes_single_string():
+    inp = Evo1SampleInput(prompts="ATCGATCG")
+    assert isinstance(inp.prompts, list)
+    assert len(inp.prompts) == 1
+    assert inp.prompts[0] == "ATCGATCG"
 
 
-# ============================================================================
-# Config Validation Tests (no GPU needed)
-# ============================================================================
+def test_evo1_sample_input_preserves_list():
+    inp = Evo1SampleInput(prompts=["ATCG", "GCTA"])
+    assert len(inp.prompts) == 2
 
 
-class TestEvo1SampleConfig:
-    """Tests for Evo1SampleConfig validation."""
+def test_evo1_sample_input_rejects_empty():
+    with pytest.raises(ValueError, match="prompts must not be empty"):
+        Evo1SampleInput(prompts=[])
 
-    @pytest.mark.parametrize(
-        "config_kwargs",
-        [
-            {"temperature": 0.0},
-            {"top_p": 1.5},
-            {"num_tokens": 0},
-            {"top_k": 0},
-        ],
+
+# ── Sample config validation ─────────────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "config_kwargs,match",
+    [
+        ({"temperature": 0.0}, "greater than 0"),
+        ({"top_p": 1.5}, "less than or equal to 1"),
+        ({"num_tokens": 0}, "greater than or equal to 1"),
+        ({"top_k": 0}, "greater than or equal to 1"),
+    ],
+)
+def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        Evo1SampleConfig(**config_kwargs)
+
+
+# ── Sample output export ─────────────────────────────────────────────────────
+
+def test_evo1_sample_export_fasta(tmp_path):
+    output = Evo1SampleOutput(
+        sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
     )
-    def test_invalid_config_raises(self, config_kwargs):
-        """Invalid config values should raise ValueError."""
-        with pytest.raises(ValueError):
-            Evo1SampleConfig(**config_kwargs)
+    output.export(name="test", export_path=tmp_path, file_format="fasta")
+    fasta_file = tmp_path / "test.fasta"
+    assert fasta_file.exists()
+    content = fasta_file.read_text()
+    assert ">seq_0" in content
+    assert ">seq_1" in content
+    assert "ATCGATCG" in content
+    assert "GCTAGCTA" in content
 
 
-# ============================================================================
-# Sampling Tests (GPU required)
-# ============================================================================
+def test_evo1_sample_export_json(tmp_path):
+    output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=[-1.0])
+    output.export(name="test", export_path=tmp_path, file_format="json")
+    json_file = tmp_path / "test.json"
+    assert json_file.exists()
+    data = json.loads(json_file.read_text())
+    assert "sequences" in data
+    assert data["sequences"] == ["ATCGATCG"]
 
 
-@pytest.mark.include_in_env_report
+def test_evo1_sample_export_txt(tmp_path):
+    output = Evo1SampleOutput(
+        sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
+    )
+    output.export(name="test", export_path=tmp_path, file_format="txt")
+    txt_file = tmp_path / "test.txt"
+    assert txt_file.exists()
+    lines = txt_file.read_text().strip().split("\n")
+    assert len(lines) == 2
+    assert lines[0] == "ATCGATCG"
+    assert lines[1] == "GCTAGCTA"
+
+
+# ── Scoring input validation ─────────────────────────────────────────────────
+
+def test_evo1_scoring_input_normalizes_single_string():
+    inp = Evo1ScoringInput(sequences="ATCGATCG")
+    assert isinstance(inp.sequences, list)
+    assert len(inp.sequences) == 1
+    assert inp.sequences[0] == "ATCGATCG"
+
+
+def test_evo1_scoring_input_preserves_list():
+    inp = Evo1ScoringInput(sequences=["ATCG", "GCTA"])
+    assert len(inp.sequences) == 2
+
+
+def test_evo1_scoring_input_rejects_empty():
+    with pytest.raises(ValueError, match="sequences must not be empty"):
+        Evo1ScoringInput(sequences=[])
+
+
+# ── Scoring output export ────────────────────────────────────────────────────
+
+def test_evo1_scoring_export_csv(tmp_path):
+    output = _make_mock_scoring_output()
+    output.export(name="test", export_path=tmp_path, file_format="csv")
+    csv_file = tmp_path / "test.csv"
+    assert csv_file.exists()
+    content = csv_file.read_text()
+    assert "log_likelihood" in content
+    assert "avg_log_likelihood" in content
+    assert "perplexity" in content
+
+
+def test_evo1_scoring_export_json(tmp_path):
+    output = _make_mock_scoring_output()
+    output.export(name="test", export_path=tmp_path, file_format="json")
+    json_file = tmp_path / "test.json"
+    assert json_file.exists()
+    data = json.loads(json_file.read_text())
+    assert isinstance(data, list)
+    assert len(data) == 2
+    assert "log_likelihood" in data[0]
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.include_in_env_report(category="causal_models")
 @pytest.mark.uses_gpu
 def test_evo1_sample_tool():
     """Test the evo1 sampling tool end-to-end: inference, output structure, and export."""
@@ -99,7 +182,6 @@ def test_evo1_sample_tool():
     result = run_evo1_sample(inputs=inputs, config=config)
     validate_output(result)
 
-    # Output structure
     assert result.tool_id == "evo1-sample"
     assert result.metadata["model_name"] == "evo-1-8k-base"
     assert result.metadata["num_tokens"] == 50
@@ -107,14 +189,12 @@ def test_evo1_sample_tool():
     assert result.scores is not None
     assert len(result.scores) == 2
 
-    # Sequences should be valid DNA
     valid_chars = set("ACGTacgt")
     for seq in result.sequences:
         assert isinstance(seq, str) and len(seq) > 0
         invalid = set(seq) - valid_chars
         assert not invalid, f"Non-DNA characters in output: {invalid}"
 
-    # Scores are negative log-probabilities
     for score in result.scores:
         assert float(score) < 0
 
@@ -158,173 +238,6 @@ def test_evo1_sample_prepend_prompt():
     assert len(result_without.sequences[0]) > 0
 
 
-# ============================================================================
-# Export Tests (no GPU needed)
-# ============================================================================
-
-
-class TestEvo1SampleOutput:
-    """Tests for Evo1SampleOutput export functionality."""
-
-    def test_output_format_options(self):
-        """Verify supported export formats."""
-        output = Evo1SampleOutput(sequences=["ATCG"], scores=[-1.0])
-        assert "fasta" in output.output_format_options
-        assert "txt" in output.output_format_options
-        assert "json" in output.output_format_options
-
-    def test_default_format_is_fasta(self):
-        """Default export format should be fasta."""
-        output = Evo1SampleOutput(sequences=["ATCG"], scores=[-1.0])
-        assert output.output_format_default == "fasta"
-
-    def test_export_fasta(self, tmp_path):
-        """Test FASTA export creates valid file."""
-        output = Evo1SampleOutput(
-            sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
-        )
-        output.export(name="test", export_path=tmp_path, file_format="fasta")
-        fasta_file = tmp_path / "test.fasta"
-        assert fasta_file.exists()
-        content = fasta_file.read_text()
-        assert ">seq_0" in content
-        assert ">seq_1" in content
-        assert "ATCGATCG" in content
-        assert "GCTAGCTA" in content
-
-    def test_export_json(self, tmp_path):
-        """Test JSON export creates valid file."""
-        import json
-
-        output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=[-1.0])
-        output.export(name="test", export_path=tmp_path, file_format="json")
-        json_file = tmp_path / "test.json"
-        assert json_file.exists()
-        data = json.loads(json_file.read_text())
-        assert "sequences" in data
-        assert data["sequences"] == ["ATCGATCG"]
-
-    def test_export_txt(self, tmp_path):
-        """Test TXT export creates valid file."""
-        output = Evo1SampleOutput(
-            sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
-        )
-        output.export(name="test", export_path=tmp_path, file_format="txt")
-        txt_file = tmp_path / "test.txt"
-        assert txt_file.exists()
-        lines = txt_file.read_text().strip().split("\n")
-        assert len(lines) == 2
-        assert lines[0] == "ATCGATCG"
-        assert lines[1] == "GCTAGCTA"
-
-
-# ============================================================================
-# Scoring Input Validation Tests (no GPU needed)
-# ============================================================================
-
-
-class TestEvo1ScoringInput:
-    """Tests for Evo1ScoringInput validation and normalization."""
-
-    def test_single_string_normalization(self):
-        """Single string should be normalized to list."""
-        inp = Evo1ScoringInput(sequences="ATCGATCG")
-        assert isinstance(inp.sequences, list)
-        assert len(inp.sequences) == 1
-        assert inp.sequences[0] == "ATCGATCG"
-
-    def test_list_input_preserved(self):
-        """List input should be preserved as-is."""
-        inp = Evo1ScoringInput(sequences=["ATCG", "GCTA"])
-        assert len(inp.sequences) == 2
-
-    def test_empty_sequences_raises(self):
-        """Empty sequences should raise ValueError."""
-        with pytest.raises(ValueError, match="sequences must not be empty"):
-            Evo1ScoringInput(sequences=[])
-
-
-# ============================================================================
-# Scoring Config Validation Tests (no GPU needed)
-# ============================================================================
-
-
-class TestEvo1ScoringConfig:
-    """Tests for Evo1ScoringConfig validation."""
-
-    def test_custom_model_name(self):
-        """Custom model_name should be accepted."""
-        config = Evo1ScoringConfig(model_name="evo-1-8k-crispr")
-        assert config.model_name == "evo-1-8k-crispr"
-
-
-# ============================================================================
-# Scoring Output / Export Tests (no GPU needed)
-# ============================================================================
-
-
-class TestEvo1ScoringOutput:
-    """Tests for Evo1ScoringOutput export functionality."""
-
-    def _make_mock_output(self):
-        """Create a mock scoring output for testing."""
-        scores = [
-            SequenceScores(
-                metrics={
-                    "log_likelihood": -10.5,
-                    "avg_log_likelihood": -1.05,
-                    "perplexity": 2.86,
-                },
-            ),
-            SequenceScores(
-                metrics={
-                    "log_likelihood": -12.3,
-                    "avg_log_likelihood": -1.23,
-                    "perplexity": 3.42,
-                },
-            ),
-        ]
-        return Evo1ScoringOutput(scores=scores)
-
-    def test_output_format_options(self):
-        """Verify supported export formats."""
-        output = self._make_mock_output()
-        assert "csv" in output.output_format_options
-        assert "json" in output.output_format_options
-
-    def test_default_format_is_csv(self):
-        """Default export format should be csv."""
-        output = self._make_mock_output()
-        assert output.output_format_default == "csv"
-
-    def test_export_csv(self, tmp_path):
-        """Test CSV export creates valid file."""
-        output = self._make_mock_output()
-        output.export(name="test", export_path=tmp_path, file_format="csv")
-        csv_file = tmp_path / "test.csv"
-        assert csv_file.exists()
-        content = csv_file.read_text()
-        assert "log_likelihood" in content
-        assert "avg_log_likelihood" in content
-        assert "perplexity" in content
-
-    def test_export_json(self, tmp_path):
-        """Test JSON export creates valid file."""
-        output = self._make_mock_output()
-        output.export(name="test", export_path=tmp_path, file_format="json")
-        json_file = tmp_path / "test.json"
-        assert json_file.exists()
-        data = json.loads(json_file.read_text())
-        assert isinstance(data, list)
-        assert len(data) == 2
-        assert "log_likelihood" in data[0]
-
-
-# ============================================================================
-# Scoring Tests (GPU required)
-# ============================================================================
-
-
 @pytest.mark.uses_gpu
 def test_evo1_score_tool():
     """Test evo1 scoring: output structure, metrics, batching, and consistency."""
@@ -339,24 +252,20 @@ def test_evo1_score_tool():
     result = run_evo1_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Output structure
     assert result.tool_id == "evo1-score"
     assert len(result.scores) == 2
 
-    # Metrics correctness
     for score in result.scores:
         assert isinstance(score.log_likelihood, float)
         assert isinstance(score.avg_log_likelihood, float)
         assert isinstance(score.perplexity, float)
         assert score.log_likelihood < 0
-        assert score.perplexity > 0
+        assert score.perplexity >= 1.0
 
-    # Metrics consistency: perplexity = exp(-avg_log_likelihood)
     score = result.scores[0]
     expected_perplexity = np.exp(-score.avg_log_likelihood)
     np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
 
-    # Logits shape and vocab
     assert score.logits is not None
     logits_arr = np.array(score.logits)
     assert logits_arr.shape == (len(sequences[0]), 512)

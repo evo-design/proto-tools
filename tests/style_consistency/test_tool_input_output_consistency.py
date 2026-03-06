@@ -1,41 +1,28 @@
-"""
-Test to ensure tool inputs and outputs are defined consistently throughout the codebase
-for consistency of the API and frontend.
-"""
-from __future__ import annotations
+"""Tests for tool input and output consistency."""
 
-from typing import List, Tuple, Type
+import inspect
 
 import pytest
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from bio_programming_tools.tools.tool_registry import ToolRegistry
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
-# Defines the maximum length of a field description in characters
-MAX_FIELD_DESCRIPTION_LENGTH = 100
+_MAX_FIELD_DESCRIPTION_LENGTH = 100
 
 
-def list_tool_inputs_and_outputs() -> List[Tuple[Type, Type]]:
-    """
-    List of all tool inputs and outputs.
-    """
+def _list_tool_inputs_and_outputs():
+    """List of all tool inputs and outputs."""
     full_list = []
     for tool in ToolRegistry.list_all():
         full_list.append((tool.input_model, tool.output_model))
     return full_list
 
 
-@pytest.mark.parametrize(
-    "tool_input, tool_output",
-    [(tool_input, tool_output) for (tool_input, tool_output) in list_tool_inputs_and_outputs()],
-)
-def test_tool_input_and_output_consistency(tool_input: Type, tool_output: Type):
-    """
-    Test if tool inputs and outputs are defined consistently throughout the codebase
-    for consistency of the API and frontend.
-    """
-    import inspect
+# ── Input and output consistency ────────────────────────────────────────────
 
+@pytest.mark.parametrize("tool_input, tool_output", _list_tool_inputs_and_outputs())
+def test_tool_input_and_output_consistency(tool_input, tool_output):
+    """Test if tool inputs and outputs are defined consistently."""
     # Ensure tool input inherits from BaseToolInput
     assert issubclass(
         tool_input, BaseToolInput
@@ -102,14 +89,14 @@ def test_tool_input_and_output_consistency(tool_input: Type, tool_output: Type):
     )
 
 
-def _field_description_is_valid(description: str) -> str:
-    """
-    Check if the description is under MAX_FIELD_DESCRIPTION_LENGTH characters.
-    """
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _field_description_is_valid(description):
+    """Check if the description is under _MAX_FIELD_DESCRIPTION_LENGTH characters."""
     if description is None:
         return "is None"
-    if len(description) > MAX_FIELD_DESCRIPTION_LENGTH:
-        return f"is too long (currently {len(description)} characters, must be under {MAX_FIELD_DESCRIPTION_LENGTH} characters)"
+    if len(description) > _MAX_FIELD_DESCRIPTION_LENGTH:
+        return f"is too long (currently {len(description)} characters, must be under {_MAX_FIELD_DESCRIPTION_LENGTH} characters)"
     if not description.strip():
         return "description is empty or just whitespace"
     if "\n" in description:
@@ -117,10 +104,8 @@ def _field_description_is_valid(description: str) -> str:
     return ""
 
 
-def _find_missing_fields_in_docstring(docstring: str, field_names: List[str]) -> List[str]:
-    """
-    Find missing fields in the docstring.
-    """
+def _find_missing_fields_in_docstring(docstring, field_names):
+    """Find missing fields in the docstring."""
     missing_fields = []
     for field_name in field_names:
         if field_name not in docstring:

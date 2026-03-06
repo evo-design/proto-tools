@@ -1,38 +1,27 @@
-"""
-Pulls all tool config models from registered tools and checks for field definition
-consistency.
-"""
-from __future__ import annotations
+"""Tests for tool config consistency."""
 
-from typing import List, Type, Union, get_args, get_origin
+from typing import Union, get_args, get_origin
 
 import pytest
+from pydantic.fields import PydanticUndefined
 
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils import BaseConfig as ToolsBaseConfig
 
-# Defines the maximum length of a field title in characters
-MAX_FIELD_TITLE_LENGTH = 31
-
-# Defines the maximum length of a field description in characters
-MAX_FIELD_DESCRIPTION_LENGTH = 100
+_MAX_FIELD_TITLE_LENGTH = 31
+_MAX_FIELD_DESCRIPTION_LENGTH = 100
 
 
-def list_of_all_tool_config_models() -> List[Type]:
-    """
-    List of all config models of registered tools.
-    """
+def _list_of_all_tool_config_models():
+    """List of all config models of registered tools."""
     return [spec.config_model for spec in ToolRegistry.list_all()]
 
 
-@pytest.mark.parametrize(
-    "config_model", [config_model for config_model in list_of_all_tool_config_models()]
-)
-def test_tool_config_consistency(config_model: Type):
-    """
-    Determines if tool config models are defined consistently throughout the codebase
-    for consistency of the API and frontend.
-    """
+# ── Config field consistency ────────────────────────────────────────────────
+
+@pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
+def test_tool_config_consistency(config_model):
+    """Test if tool config models are defined consistently."""
     # Check if config_model is subclass of ToolsBaseConfig
     assert issubclass(config_model, ToolsBaseConfig), (
         f"Config model {config_model} is not a subclass of ToolsBaseConfig"
@@ -50,12 +39,12 @@ def test_tool_config_consistency(config_model: Type):
     # Ensure all fields are defined consistently
     for field_name, field_info in config_model.model_fields.items():
 
-        # TITLE: Ensure title is explicitly provided and is under 45 characters
+        # TITLE: Ensure title is explicitly provided and is under limit
         title = field_info.title
         assert title is not None, f"{config_model.__name__}.{field_name} is missing title. "
         assert (
-            len(title) <= MAX_FIELD_TITLE_LENGTH
-        ), f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {MAX_FIELD_TITLE_LENGTH} characters). "
+            len(title) <= _MAX_FIELD_TITLE_LENGTH
+        ), f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {_MAX_FIELD_TITLE_LENGTH} characters). "
 
         # DESCRIPTION: Must exist and be concise (~15 words / ~90 chars for tooltip)
         description_error = _field_description_is_valid(field_info.description)
@@ -125,42 +114,10 @@ def test_tool_config_consistency(config_model: Type):
     )
 
 
-def _field_description_is_valid(description: str) -> str:
-    """
-    Check if the description is under MAX_FIELD_DESCRIPTION_LENGTH characters.
-    """
-    if description is None:
-        return "is None"
-    if len(description) > MAX_FIELD_DESCRIPTION_LENGTH:
-        return f"is too long (currently {len(description)} characters, must be under {MAX_FIELD_DESCRIPTION_LENGTH} characters)"
-    if not description.strip():
-        return "description is empty or just whitespace"
-    if "\n" in description:
-        return "description contains newline characters. Please use single line descriptions."
-    return ""
+# ── Default config instantiation ────────────────────────────────────────────
 
-
-def _find_undocumented_fields(config_model: Type) -> List[str]:
-    """
-    Return field names that don't appear in any docstring across the MRO.
-    """
-    # Collect all docstrings from the class and its superclasses
-    all_docs = ""
-    for cls in config_model.__mro__:
-        if cls.__doc__:
-            all_docs += cls.__doc__
-
-    missing = []
-    for field_name in config_model.model_fields:
-        if field_name not in all_docs:
-            missing.append(field_name)
-    return missing
-
-
-@pytest.mark.parametrize(
-    "config_model", [config_model for config_model in list_of_all_tool_config_models()]
-)
-def test_tool_config_accepts_none(config_model: Type):
+@pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
+def test_tool_config_accepts_none(config_model):
     """Test that all tool configs can be instantiated with default values.
 
     This enables the @tool decorator to accept config=None and automatically
@@ -170,8 +127,6 @@ def test_tool_config_accepts_none(config_model: Type):
     All config fields must have defaults for this to work.
     """
     # Verify every field explicitly has a default value or default_factory
-    from pydantic.fields import PydanticUndefined
-
     fields_missing_defaults = []
     for field_name, field_info in config_model.model_fields.items():
         has_default = (
@@ -188,13 +143,35 @@ def test_tool_config_accepts_none(config_model: Type):
     )
 
     # Verify the config model can actually be instantiated with no args
-    try:
-        default_config = config_model()
-    except Exception as e:
-        pytest.fail(
-            f"Config {config_model.__name__} cannot be instantiated with default values: {e}. "
-            f"All config fields must have defaults to support config=None. "
-            f"Add defaults to all fields or make them optional."
-        )
-
+    default_config = config_model()
     assert isinstance(default_config, config_model)
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _field_description_is_valid(description):
+    """Check if the description is under _MAX_FIELD_DESCRIPTION_LENGTH characters."""
+    if description is None:
+        return "is None"
+    if len(description) > _MAX_FIELD_DESCRIPTION_LENGTH:
+        return f"is too long (currently {len(description)} characters, must be under {_MAX_FIELD_DESCRIPTION_LENGTH} characters)"
+    if not description.strip():
+        return "description is empty or just whitespace"
+    if "\n" in description:
+        return "description contains newline characters. Please use single line descriptions."
+    return ""
+
+
+def _find_undocumented_fields(config_model):
+    """Return field names that don't appear in any docstring across the MRO."""
+    # Collect all docstrings from the class and its superclasses
+    all_docs = ""
+    for cls in config_model.__mro__:
+        if cls.__doc__:
+            all_docs += cls.__doc__
+
+    missing = []
+    for field_name in config_model.model_fields:
+        if field_name not in all_docs:
+            missing.append(field_name)
+    return missing

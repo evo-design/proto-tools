@@ -1,8 +1,4 @@
-"""
-test_esm2.py
-
-Tests the ESM2 implementation
-"""
+"""Tests for ESM2."""
 
 import numpy as np
 import pytest
@@ -22,13 +18,28 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _persistent_tool = make_persistent_fixture("esm2")
 
 
-# ============================================================================
-# Embedding Tests
-# ============================================================================
+# ── Input validation ─────────────────────────────────────────────────────────
+
+def test_esm2_scoring_input_normalizes_single_string():
+    inp = ESM2ScoringInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+def test_esm2_embeddings_input_normalizes_single_string():
+    inp = ESM2EmbeddingsInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+
+# ── Embedding tests ───────────────────────────────────────────────────────────
 
 @pytest.mark.uses_gpu
 def test_esm2_forward_pass():
-
     sequences = ["TARGET"] * 10 + ["TEST"] * 30
 
     inputs = ESM2EmbeddingsInput(sequences=sequences)
@@ -36,25 +47,20 @@ def test_esm2_forward_pass():
 
     result = run_esm2_embeddings(inputs=inputs, config=config)
 
-    # Check mean embedding shape (result.mean_embeddings is List[List[float]])
     assert len(result.mean_embeddings) == 40, "Should have 40 sequences"
     assert len(result.mean_embeddings[0]) == 1280, "Embedding dimension should be 1280"
 
-    # Check attention mask shape (result.attention_masks is List[List[int]])
     assert len(result.attention_masks) == 40, "Should have 40 attention masks"
     assert len(result.attention_masks[0]) == 6, "Attention mask length should be 6"
 
-    # Check logit shape (result.logits is List[List[List[float]]])
     assert len(result.logits) == 40, "Should have 40 logit arrays"
     assert len(result.logits[0]) == 6, "Logit sequence length should be 6"
     assert len(result.logits[0][0]) == 20, "Logit vocab size should be 20"
 
 
-# ============================================================================
-# Scoring Tests
-# ============================================================================
+# ── Scoring tests ─────────────────────────────────────────────────────────────
 
-@pytest.mark.include_in_env_report
+@pytest.mark.include_in_env_report(category="masked_models")
 @pytest.mark.uses_gpu
 def test_esm2_score_tool():
     """Test the esm2 scoring tool with run_esm2_score."""
@@ -70,30 +76,24 @@ def test_esm2_score_tool():
     result = run_esm2_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Validate tool output structure
     assert result.tool_id == "esm2-score"
     assert len(result.scores) == 2
-    # ESM2 returns AA-only vocab (20 standard amino acids) as a list
     assert isinstance(result.vocab, list), f"Vocab should be a list, got {type(result.vocab)}"
     assert len(result.vocab) == 20, f"ESM2 vocab should have 20 tokens, got {len(result.vocab)}"
 
     for seq, score in zip(sequences, result.scores):
-        # Check metrics
         assert "log_likelihood" in score.metrics
         assert "avg_log_likelihood" in score.metrics
         assert "perplexity" in score.metrics
 
-        # Validate values
         assert score.perplexity >= 1.0
         assert score.log_likelihood < 0
 
-        # Logits should be present with correct shape (as nested lists)
         assert score.logits is not None
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
         assert len(score.logits) == len(seq), f"Logits length should be {len(seq)}, got {len(score.logits)}"
         assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
 
-    # Verify perplexity = exp(-avg_log_likelihood)
     for score in result.scores:
         expected_ppl = np.exp(-score.avg_log_likelihood)
         np.testing.assert_allclose(score.perplexity, expected_ppl, rtol=1e-5)
@@ -102,9 +102,8 @@ def test_esm2_score_tool():
 @pytest.mark.uses_gpu
 def test_esm2_score_different_sequences():
     """Test that model produces different perplexities for different sequences."""
-    # Different sequences should produce different perplexities
-    seq1 = "MVLSPADKTNVKAAW"  # Natural-looking sequence
-    seq2 = "AAAAAAAAAAAAAAAA"  # Homopolymer
+    seq1 = "MVLSPADKTNVKAAW"
+    seq2 = "AAAAAAAAAAAAAAAA"
 
     inputs = ESM2ScoringInput(sequences=[seq1, seq2])
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
@@ -114,29 +113,24 @@ def test_esm2_score_different_sequences():
     ppl1 = result.scores[0].perplexity
     ppl2 = result.scores[1].perplexity
 
-    # Different sequences should have different perplexities
     assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-
-    # Both should be valid perplexities
     assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
 def test_esm2_score_metrics_consistency():
     """Test that scoring metrics are mathematically consistent."""
-    inputs = ESM2ScoringInput(sequences=["MVLSPADKTNVKAAW"])
+    _seq = "MVLSPADKTNVKAAW"
+    inputs = ESM2ScoringInput(sequences=[_seq])
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
     score = result.scores[0]
 
-    # Verify perplexity = exp(-avg_log_likelihood)
     expected_perplexity = np.exp(-score.avg_log_likelihood)
     np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
 
-    # Verify avg = total / length
-    seq_len = 15  # MVLSPADKTNVKAAW
-    expected_avg = score.log_likelihood / seq_len
+    expected_avg = score.log_likelihood / len(_seq)
     np.testing.assert_allclose(score.avg_log_likelihood, expected_avg, rtol=1e-5)
 
 
@@ -156,7 +150,7 @@ def test_esm2_score_batched():
         assert score.log_likelihood < 0
         logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
-        assert logits.shape[1] == 20  # Vocab size
+        assert logits.shape[1] == 20
 
 
 @pytest.mark.uses_gpu
@@ -169,14 +163,12 @@ def test_esm2_score_variable_length():
     result = run_esm2_score(inputs=inputs, config=config)
 
     for seq, score in zip(sequences, result.scores):
-        # Logits should have correct shape for each sequence (as nested lists)
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
         assert len(score.logits) == len(seq), (
             f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"
         )
         assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
 
-        # Metrics should be valid
         assert score.perplexity >= 1.0
         assert score.log_likelihood < 0
 
@@ -184,22 +176,18 @@ def test_esm2_score_variable_length():
 @pytest.mark.uses_gpu
 def test_esm2_score_single_sequence():
     """Test esm2 scoring with a single sequence (string input)."""
-    # Single sequence should work
     inputs = ESM2ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Should score 1 sequence
     assert len(result.scores) == 1
-    assert result.scores[0].perplexity > 0
+    assert result.scores[0].perplexity >= 1.0
     assert result.scores[0].logits is not None
 
 
-# ============================================================================
-# Logits-Specific Tests
-# ============================================================================
+# ── Logits-specific tests ─────────────────────────────────────────────────────
 
 @pytest.mark.uses_gpu
 def test_esm2_score_logits_disabled_by_default():
@@ -209,13 +197,11 @@ def test_esm2_score_logits_disabled_by_default():
     config = ESM2ScoringConfig(
         model_checkpoint="esm2_t33_650M_UR50D",
         verbose=False,
-        # return_logits defaults to False
     )
 
     result = run_esm2_score(inputs=inputs, config=config)
     validate_output(result)
 
-    # Logits should be None when return_logits=False
     for score in result.scores:
         assert score.logits is None, "Logits should be None when return_logits=False"
 
@@ -236,20 +222,11 @@ def test_esm2_score_logits_serialization():
 
     score = result.scores[0]
 
-    # Logits should be serialized as nested lists (not tensors)
-    assert isinstance(score.logits, (list, np.ndarray)), "Logits should be list or ndarray"
+    assert isinstance(score.logits, list), "Logits should be a list"
+    assert len(score.logits) > 0, "Logits list should not be empty"
+    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
+    assert len(score.logits[0]) == 20, "Inner logits list should have 20 elements (vocab size)"
 
-    if isinstance(score.logits, list):
-        # Verify nested list structure
-        assert len(score.logits) > 0, "Logits list should not be empty"
-        assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-        assert len(score.logits[0]) == 20, "Inner logits list should have 20 elements (vocab size)"
-
-        # Verify all values are numeric
-        for position_logits in score.logits:
-            for logit_value in position_logits:
-                assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
-    else:
-        # If ndarray, verify shape
-        assert score.logits.ndim == 2, "Logits should be 2D array"
-        assert score.logits.shape[1] == 20, "Vocab size should be 20"
+    for position_logits in score.logits:
+        for logit_value in position_logits:
+            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
