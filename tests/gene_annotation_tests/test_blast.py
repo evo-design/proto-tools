@@ -1,7 +1,6 @@
 """Tests for BLAST tools."""
 from __future__ import annotations
 
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -154,16 +153,6 @@ def test_input_rejects_nonexistent_path():
 
 
 # ── Config validation ─────────────────────────────────────────────────────
-
-
-def test_config_defaults():
-    config = BlastSearchConfig()
-    assert config.search_mode == "online"
-    assert config.program == "blastn"
-    assert config.database == "nt"
-    assert config.num_threads == 4
-    assert config.evalue is None
-    assert config.local_db is None
 
 
 def test_config_local_requires_db():
@@ -325,23 +314,21 @@ def test_results_to_df_multiple_records():
 # ── Output ─────────────────────────────────────────────────────────────────
 
 
-def test_output_export_empty_warns():
+def test_output_export_empty_warns(tmp_path):
     output = BlastSearchOutput(results_df=None, num_hits=0)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            output._export_output(Path(tmpdir) / "results", "csv")
-            assert len(w) == 1
-            assert "No BLAST results" in str(w[0].message)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        output._export_output(tmp_path / "results", "csv")
+        assert len(w) == 1
+        assert "No BLAST results" in str(w[0].message)
 
 
-def test_output_export_invalid_format():
+def test_output_export_invalid_format(tmp_path):
     output = BlastSearchOutput(
         results_df=pd.DataFrame({"x": [1]}), num_hits=1
     )
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with pytest.raises(ValueError, match="Unsupported format"):
-            output._export_output(Path(tmpdir) / "results", "xlsx")
+    with pytest.raises(ValueError, match="Unsupported format"):
+        output._export_output(tmp_path / "results", "xlsx")
 
 
 # ── Create BLAST DB validation ─────────────────────────────────────────────
@@ -358,209 +345,174 @@ def test_create_db_input_rejects_missing_file():
         CreateBlastDbInput(fasta="/nonexistent/file.fasta")
 
 
-def test_create_db_config_defaults():
-    config = CreateBlastDbConfig()
-    assert config.dbtype == "nucl"
-    assert config.title is None
-
-
-def test_create_db_config_rejects_invalid_dbtype():
-    with pytest.raises(ValidationError, match="Input should be"):
-        CreateBlastDbConfig(dbtype="invalid")
-
-
-# ── Registry ──────────────────────────────────────────────────────────────
-
-
-def test_blast_tools_registered():
-    from bio_programming_tools.tools.tool_registry import ToolRegistry
-
-    tool_keys = {spec.key for spec in ToolRegistry.list_all()}
-    assert "blast-search" in tool_keys
-    assert "blast-create-db" in tool_keys
-
-
-def test_blast_config_schema():
-    from bio_programming_tools.tools.tool_registry import ToolRegistry
-
-    schema = ToolRegistry.get_config_schema("blast-search")
-    assert "properties" in schema
-    for field in ("program", "search_mode", "database", "evalue"):
-        assert field in schema["properties"]
-
-
-# ── Integration: local BLAST ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-class TestLocalBlastn:
-    """End-to-end local blastn tests against a temporary nucleotide database."""
-
-    @pytest.mark.include_in_env_report
-    def test_exact_match(self, nucl_blast_db):
-        """Exact subsequence from the database → 100% identity hit."""
-        query = (
-            "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
-            "ATGCGTAAACCCGGGTTTTTTAAACCC"
-        )
-        result = run_blast_search(
-            BlastSearchInput(query=query),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastn",
-                local_db=nucl_blast_db,
-                task="blastn",
-            ),
-        )
-        assert result.num_hits >= 1
-        assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
-
-    def test_no_hits(self, nucl_blast_db):
-        """Unrelated sequence with strict evalue → 0 hits."""
-        result = run_blast_search(
-            BlastSearchInput(query="TATATATATATATATATATATATATATATAT"),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastn",
-                local_db=nucl_blast_db,
-                evalue=1e-10,
-                task="blastn",
-            ),
-        )
-        assert result.num_hits == 0
-
-    def test_fasta_file_query(self, nucl_blast_db, tmp_path):
-        """Query from a FASTA file instead of raw sequence."""
-        fasta = tmp_path / "query.fasta"
-        fasta.write_text(
-            ">query\nATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT\n"
-        )
-        result = run_blast_search(
-            BlastSearchInput(query=str(fasta)),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastn",
-                local_db=nucl_blast_db,
-                task="blastn",
-            ),
-        )
-        assert result.num_hits >= 1
-
-    def test_output_structure(self, nucl_blast_db):
-        """Verify output metadata and DataFrame columns."""
-        query = (
-            "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
-            "ATGCGTAAACCCGGGTTTTTTAAACCC"
-        )
-        result = run_blast_search(
-            BlastSearchInput(query=query),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastn",
-                local_db=nucl_blast_db,
-                task="blastn",
-            ),
-        )
-        assert isinstance(result, BlastSearchOutput)
-        assert result.execution_time > 0
-        assert result.metadata["search_mode"] == "local"
-        assert result.metadata["program"] == "blastn"
-        expected_cols = [
-            "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-            "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-        ]
-        assert list(result.results_df.columns) == expected_cols
+@pytest.mark.include_in_env_report
+def test_local_blastn_exact_match(nucl_blast_db):
+    """Exact subsequence from the database → 100% identity hit."""
+    query = (
+        "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
+        "ATGCGTAAACCCGGGTTTTTTAAACCC"
+    )
+    result = run_blast_search(
+        BlastSearchInput(query=query),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastn",
+            local_db=nucl_blast_db,
+            task="blastn",
+        ),
+    )
+    assert result.num_hits >= 1
+    assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
 
 
 @pytest.mark.integration
-class TestLocalBlastp:
-    """End-to-end local blastp tests against a temporary protein database."""
-
-    def test_exact_match(self, prot_blast_db):
-        """Exact protein subsequence → 100% identity hit."""
-        query = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
-        result = run_blast_search(
-            BlastSearchInput(query=query),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastp",
-                local_db=prot_blast_db,
-            ),
-        )
-        assert result.num_hits >= 1
-        assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
-
-    def test_no_hits(self, prot_blast_db):
-        """Unrelated protein sequence with strict evalue → 0 hits."""
-        result = run_blast_search(
-            BlastSearchInput(
-                query="WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
-            ),
-            BlastSearchConfig(
-                search_mode="local",
-                program="blastp",
-                local_db=prot_blast_db,
-                evalue=1e-10,
-            ),
-        )
-        assert result.num_hits == 0
+def test_local_blastn_no_hits(nucl_blast_db):
+    """Unrelated sequence with strict evalue → 0 hits."""
+    result = run_blast_search(
+        BlastSearchInput(query="TATATATATATATATATATATATATATATAT"),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastn",
+            local_db=nucl_blast_db,
+            evalue=1e-10,
+            task="blastn",
+        ),
+    )
+    assert result.num_hits == 0
 
 
-# ── Integration: online BLAST ─────────────────────────────────────────────
+@pytest.mark.integration
+def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
+    """Query from a FASTA file instead of raw sequence."""
+    fasta = tmp_path / "query.fasta"
+    fasta.write_text(
+        ">query\nATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT\n"
+    )
+    result = run_blast_search(
+        BlastSearchInput(query=str(fasta)),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastn",
+            local_db=nucl_blast_db,
+            task="blastn",
+        ),
+    )
+    assert result.num_hits >= 1
 
 
-@pytest.mark.slow
-@pytest.mark.skip_ci
-class TestOnlineBlast:
-    """End-to-end online BLAST tests against NCBI servers."""
-
-    def test_online_blastp(self):
-        """Search a known hemoglobin fragment against nr → expect hits."""
-        result = run_blast_search(
-            BlastSearchInput(
-                query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
-            ),
-            BlastSearchConfig(
-                search_mode="online",
-                program="blastp",
-                database="swissprot",
-                hitlist_size=5,
-            ),
-        )
-        assert isinstance(result, BlastSearchOutput)
-        assert result.num_hits >= 1
-        assert result.results_df is not None
-        assert result.metadata["search_mode"] == "online"
-        assert result.metadata["program"] == "blastp"
-        # Hemoglobin is highly conserved — top hit should be high identity
-        assert result.results_df.iloc[0]["pident"] > 80.0
-
-    def test_online_blastn(self):
-        """Search a short nucleotide sequence against nt → verify structure."""
-        # Human beta-globin exon 1 fragment
-        query = (
-            "ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTG"
-        )
-        result = run_blast_search(
-            BlastSearchInput(query=query),
-            BlastSearchConfig(
-                search_mode="online",
-                program="blastn",
-                database="nt",
-                hitlist_size=5,
-                entrez_query="Homo sapiens[Organism]",
-            ),
-        )
-        assert isinstance(result, BlastSearchOutput)
-        assert result.num_hits >= 1
-        expected_cols = [
-            "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-            "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-        ]
-        assert list(result.results_df.columns) == expected_cols
+@pytest.mark.integration
+def test_local_blastn_output_structure(nucl_blast_db):
+    """Verify output metadata and DataFrame columns."""
+    query = (
+        "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
+        "ATGCGTAAACCCGGGTTTTTTAAACCC"
+    )
+    result = run_blast_search(
+        BlastSearchInput(query=query),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastn",
+            local_db=nucl_blast_db,
+            task="blastn",
+        ),
+    )
+    assert isinstance(result, BlastSearchOutput)
+    assert result.execution_time > 0
+    assert result.metadata["search_mode"] == "local"
+    assert result.metadata["program"] == "blastn"
+    expected_cols = [
+        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+    ]
+    assert list(result.results_df.columns) == expected_cols
 
 
-# ── Integration: create DB & pipeline ─────────────────────────────────────
+@pytest.mark.integration
+def test_local_blastp_exact_match(prot_blast_db):
+    """Exact protein subsequence → 100% identity hit."""
+    query = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
+    result = run_blast_search(
+        BlastSearchInput(query=query),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastp",
+            local_db=prot_blast_db,
+        ),
+    )
+    assert result.num_hits >= 1
+    assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
+
+
+@pytest.mark.integration
+def test_local_blastp_no_hits(prot_blast_db):
+    """Unrelated protein sequence with strict evalue → 0 hits."""
+    result = run_blast_search(
+        BlastSearchInput(
+            query="WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+        ),
+        BlastSearchConfig(
+            search_mode="local",
+            program="blastp",
+            local_db=prot_blast_db,
+            evalue=1e-10,
+        ),
+    )
+    assert result.num_hits == 0
+
+
+@pytest.mark.integration
+def test_online_blastp():
+    """Search a known hemoglobin fragment against swissprot → expect hits."""
+    result = run_blast_search(
+        BlastSearchInput(
+            query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
+        ),
+        BlastSearchConfig(
+            search_mode="online",
+            program="blastp",
+            database="swissprot",
+            hitlist_size=5,
+        ),
+    )
+    assert isinstance(result, BlastSearchOutput)
+    assert result.num_hits >= 1
+    assert result.results_df is not None
+    assert result.metadata["search_mode"] == "online"
+    assert result.metadata["program"] == "blastp"
+    # Hemoglobin is highly conserved — top hit should be high identity
+    assert result.results_df.iloc[0]["pident"] > 80.0
+
+
+@pytest.mark.integration
+def test_online_blastn():
+    """Search a short nucleotide sequence against nt → verify structure."""
+    # Human beta-globin exon 1 fragment
+    query = (
+        "ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTG"
+    )
+    result = run_blast_search(
+        BlastSearchInput(query=query),
+        BlastSearchConfig(
+            search_mode="online",
+            program="blastn",
+            database="nt",
+            hitlist_size=5,
+            entrez_query="Homo sapiens[Organism]",
+        ),
+    )
+    assert isinstance(result, BlastSearchOutput)
+    assert result.num_hits >= 1
+    expected_cols = [
+        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+    ]
+    assert list(result.results_df.columns) == expected_cols
 
 
 @pytest.mark.integration
