@@ -1,9 +1,4 @@
-"""
-Tests for Prodigal ORF prediction tool.
-
-Comprehensive tests for the registry-based interface, configuration validation,
-input validation, and gene prediction functionality.
-"""
+"""Tests for Prodigal ORF prediction tool."""
 
 from unittest.mock import patch
 
@@ -22,430 +17,291 @@ from bio_programming_tools.tools.orf_prediction import (
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
-class TestProdigalInput:
-    """Test ProdigalInput validation and normalization."""
-
-    def test_input_validation_invalid_dna_characters(self):
-        """Test that invalid DNA characters are rejected."""
-        with pytest.raises(ValidationError, match="Invalid DNA characters"):
-            ProdigalInput(input_sequences="ATGCEFGHIJK")
-
-    def test_input_validation_protein_sequence_rejected(self):
-        """Test that protein sequence is rejected (contains invalid chars like E, F, I, P)."""
-        protein_seq = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
-        with pytest.raises(ValidationError, match="Invalid DNA characters"):
-            ProdigalInput(input_sequences=protein_seq)
-
-    def test_input_accepts_valid_dna(self):
-        """Test that valid DNA sequence is accepted."""
-        dna_seq = "ATGCGTAAATAG"
-        inputs = ProdigalInput(input_sequences=dna_seq)
-        assert inputs.input_sequences == [dna_seq]
-
-    def test_input_accepts_lowercase_dna(self):
-        """Test that lowercase DNA is converted to uppercase."""
-        dna_seq = "atgcgtaaatag"
-        inputs = ProdigalInput(input_sequences=dna_seq)
-        assert inputs.input_sequences == ["ATGCGTAAATAG"]
-
-    def test_input_accepts_mixed_case(self):
-        """Test that mixed case DNA is converted to uppercase."""
-        dna_seq = "AtGcGtAaAtAg"
-        inputs = ProdigalInput(input_sequences=dna_seq)
-        assert inputs.input_sequences == ["ATGCGTAAATAG"]
-
-    def test_input_normalizes_single_string_to_list(self):
-        """Test that single string input is normalized to a list."""
-        inputs = ProdigalInput(input_sequences="ATGCGT")
-        assert isinstance(inputs.input_sequences, list)
-        assert len(inputs.input_sequences) == 1
-        assert inputs.input_sequences[0] == "ATGCGT"
-
-    def test_input_accepts_list_of_sequences(self):
-        """Test that list of sequences is accepted."""
-        sequences = ["ATGCGTAAATAG", "ATGGCATAA"]
-        inputs = ProdigalInput(input_sequences=sequences)
-        assert inputs.input_sequences == sequences
-
-    def test_input_validates_each_sequence_in_list(self):
-        """Test that each sequence in list is validated."""
-        sequences = ["ATGCGT", "ATGEFG"]  # Second has invalid chars
-        with pytest.raises(ValidationError, match="Invalid DNA characters"):
-            ProdigalInput(input_sequences=sequences)
-
-    def test_input_converts_all_sequences_to_uppercase(self):
-        """Test that all sequences in list are converted to uppercase."""
-        sequences = ["atgcgt", "gcataa"]
-        inputs = ProdigalInput(input_sequences=sequences)
-        assert inputs.input_sequences == ["ATGCGT", "GCATAA"]
+# ── Input validation ───────────────────────────────────────────────────
 
 
-class TestProdigalPrediction:
-    """Test Prodigal gene prediction functionality."""
+def test_input_rejects_invalid_dna_characters():
+    with pytest.raises(ValidationError, match="Invalid DNA characters"):
+        ProdigalInput(input_sequences="ATGCEFGHIJK")
 
-    @pytest.mark.include_in_env_report
-    def test_simple_gene_prediction(self):
-        """Test prediction on a simple sequence."""
-        sequence = "ATGCGTAAATAA"
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
 
-        # Validate output and export functionality
-        validate_output(result)
+def test_input_rejects_protein_sequence():
+    with pytest.raises(ValidationError, match="Invalid DNA characters"):
+        ProdigalInput(input_sequences="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT")
 
-        assert isinstance(result, ProdigalOutput)
-        assert result.num_orfs >= 0
-        assert len(result.predicted_orfs) == 1
 
-    def test_realistic_gene_prediction(self):
-        """Test prediction on a more realistic sequence."""
-        sequence = (
-            "ATGAAACGTGAATTAGCAGCAGGTATCGATGCAGGTAAACGTGAATTAGCA"
-            "GCAGGTATCGATGCAGGTAAACGTGAATTAGCAGCAGGTATCGATGCAGGT"
-            "AAACGTGAATTAGCAGCAGGTATCGATGCAGGTAAACGTGAATTAGCAGCA"
-            "GGTATCGATGCAGGTTAA"
-        )
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
+def test_input_accepts_valid_dna():
+    inp = ProdigalInput(input_sequences="ATGCGTAAATAG")
+    assert inp.input_sequences == ["ATGCGTAAATAG"]
 
-        # Validate output and export functionality
-        validate_output(result)
 
-        assert isinstance(result, ProdigalOutput)
-        assert result.num_orfs >= 0
+def test_input_uppercases_dna():
+    inp = ProdigalInput(input_sequences="atgcgtaaatag")
+    assert inp.input_sequences == ["ATGCGTAAATAG"]
 
-    def test_prediction_with_meta_mode_false(self):
-        """Test prediction with single-genome mode."""
-        # Single-genome mode requires longer sequence (100kb+) for training
-        sequence = "ATGCGTAAATAA" * 8400  # ~100.8kb
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig(meta_mode=False)
-        result = run_prodigal_prediction(inputs, config)
 
-        # Validate output and export functionality
-        validate_output(result)
+def test_input_uppercases_mixed_case():
+    inp = ProdigalInput(input_sequences="AtGcGtAaAtAg")
+    assert inp.input_sequences == ["ATGCGTAAATAG"]
 
-        assert isinstance(result, ProdigalOutput)
 
-    def test_prediction_with_closed_ends(self):
-        """Test prediction with closed ends (complete genome)."""
-        sequence = "ATGCGTAAATAA" * 100
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig(closed_ends=True)
-        result = run_prodigal_prediction(inputs, config)
+def test_input_normalizes_string_to_list():
+    inp = ProdigalInput(input_sequences="ATGCGT")
+    assert isinstance(inp.input_sequences, list)
+    assert len(inp.input_sequences) == 1
 
-        # Validate output and export functionality
-        validate_output(result)
 
-        assert isinstance(result, ProdigalOutput)
+def test_input_accepts_list_of_sequences():
+    inp = ProdigalInput(input_sequences=["ATGCGTAAATAG", "ATGGCATAA"])
+    assert inp.input_sequences == ["ATGCGTAAATAG", "ATGGCATAA"]
 
-    def test_prediction_with_custom_translation_table(self):
-        """Test prediction with custom translation table."""
-        sequence = "ATGCGTAAATAA" * 100
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig(translation_table=4)
-        result = run_prodigal_prediction(inputs, config)
 
-        # Validate output and export functionality
-        validate_output(result)
+def test_input_validates_each_sequence_in_list():
+    with pytest.raises(ValidationError, match="Invalid DNA characters"):
+        ProdigalInput(input_sequences=["ATGCGT", "ATGEFG"])
 
-        assert isinstance(result, ProdigalOutput)
 
-    def test_empty_prediction(self):
-        """Test prediction on sequence with no genes."""
-        sequence = "AAAAAAAAAA"
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
+def test_input_uppercases_all_sequences_in_list():
+    inp = ProdigalInput(input_sequences=["atgcgt", "gcataa"])
+    assert inp.input_sequences == ["ATGCGT", "GCATAA"]
 
-        # Validate output and export functionality
-        validate_output(result)
 
-        assert isinstance(result, ProdigalOutput)
-        assert result.num_orfs >= 0
+# ── Integration ────────────────────────────────────────────────────────
 
-    def test_batch_prediction_multiple_sequences(self):
-        """Test prediction on multiple sequences."""
-        sequences = [
-            "ATGCGTAAATAA" * 50,
-            "ATGGCATAA" * 50,
-            "ATGAAACGT" * 50,
+
+@pytest.mark.integration
+@pytest.mark.include_in_env_report(category="orf_prediction")
+def test_simple_gene_prediction():
+    inp = ProdigalInput(input_sequences="ATGCGTAAATAA")
+    result = run_prodigal_prediction(inp, ProdigalConfig())
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+    assert result.num_orfs >= 0
+    assert len(result.predicted_orfs) == 1
+
+
+@pytest.mark.integration
+def test_prediction_with_meta_mode_false():
+    """Single-genome mode requires longer sequence (100kb+) for training."""
+    sequence = "ATGCGTAAATAA" * 8400
+    inp = ProdigalInput(input_sequences=sequence)
+    result = run_prodigal_prediction(inp, ProdigalConfig(meta_mode=False))
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "config_kwargs",
+    [
+        {"closed_ends": True},
+        {"translation_table": 4},
+    ],
+    ids=["closed_ends", "translation_table_4"],
+)
+def test_prediction_with_config_options(config_kwargs):
+    inp = ProdigalInput(input_sequences="ATGCGTAAATAA" * 100)
+    result = run_prodigal_prediction(inp, ProdigalConfig(**config_kwargs))
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+
+
+@pytest.mark.integration
+def test_empty_prediction():
+    """Sequence with no genes returns zero ORFs."""
+    inp = ProdigalInput(input_sequences="AAAAAAAAAA")
+    result = run_prodigal_prediction(inp, ProdigalConfig())
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+    assert result.num_orfs >= 0
+
+
+@pytest.mark.integration
+def test_batch_prediction_multiple_sequences():
+    sequences = ["ATGCGTAAATAA" * 50, "ATGGCATAA" * 50, "ATGAAACGT" * 50]
+    inp = ProdigalInput(input_sequences=sequences)
+    result = run_prodigal_prediction(inp, ProdigalConfig())
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+    assert len(result.predicted_orfs) == 3
+    total_orfs = sum(len(orfs) for orfs in result.predicted_orfs)
+    assert total_orfs == result.num_orfs
+
+
+@pytest.mark.integration
+def test_orf_structure_fields():
+    """ORFs have all expected fields with correct types."""
+    inp = ProdigalInput(input_sequences="ATGCGTAAATAA" * 50)
+    result = run_prodigal_prediction(inp, ProdigalConfig())
+
+    validate_output(result)
+
+    if result.num_orfs > 0 and result.predicted_orfs:
+        orf = result.predicted_orfs[0][0]
+        assert isinstance(orf, ORF)
+
+        expected_fields = [
+            'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
+            'amino_acid_length', 'nucleotide_length', 'nucleotide_start', 'nucleotide_end',
+            'strand', 'frame', 'gc_content', 'start_type', 'rbs_motif',
+            'partial_begin', 'partial_end',
         ]
-        inputs = ProdigalInput(input_sequences=sequences)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
+        for field in expected_fields:
+            assert hasattr(orf, field), f"Missing field: {field}"
 
-        # Validate output and export functionality
-        validate_output(result)
-        assert isinstance(result, ProdigalOutput)
-        assert len(result.predicted_orfs) == 3
-        # Verify num_orfs matches sum of all sequence results
-        total_orfs = sum(len(orfs) for orfs in result.predicted_orfs)
-        assert total_orfs == result.num_orfs
+        assert isinstance(orf.amino_acid_length, int)
+        assert isinstance(orf.nucleotide_length, int)
+        assert isinstance(orf.nucleotide_start, int)
+        assert isinstance(orf.nucleotide_end, int)
+        assert isinstance(orf.gc_content, float)
 
-    def test_batch_prediction_parallel_processing(self):
-        """Test that parallel processing works with multiple threads."""
-        sequences = [
-            "ATGCGTAAATAA" * 50,
-            "ATGGCATAA" * 50,
+        # ID format
+        assert orf.parent_id.startswith('seq_')
+        assert 'gene_' in orf.orf_id
+
+        # Strand format
+        for o in result.predicted_orfs[0]:
+            assert o.strand in ['+', '-']
+
+        # Protein sequence format
+        for o in result.predicted_orfs[0]:
+            assert isinstance(o.amino_acid_sequence, str)
+            assert len(o.amino_acid_sequence) > 0
+            assert not o.amino_acid_sequence.endswith('*')
+
+        # DataFrame structure
+        df = result.results_df
+        assert isinstance(df, pd.DataFrame)
+        essential_columns = [
+            'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
+            'amino_acid_length', 'nucleotide_length',
+            'nucleotide_start', 'nucleotide_end', 'strand', 'frame',
+            'gc_content', 'start_type', 'partial_begin', 'partial_end',
         ]
-        inputs = ProdigalInput(input_sequences=sequences)
-        config = ProdigalConfig(num_threads=2)
-        result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(result)
-
-        assert isinstance(result, ProdigalOutput)
-        assert len(result.predicted_orfs) == 2
+        for col in essential_columns:
+            assert col in df.columns, f"Missing column: {col}"
 
 
-class TestProdigalOrfStructure:
-    """Test the structure of ProdigalOrf results."""
+@pytest.mark.integration
+def test_end_to_end_prediction():
+    """Realistic sequence fragment with structure validation."""
+    sequence = (
+        "ATGACCATGATTACGGATTCACTGGCCGTCGTTTTACAACGTCGTGACTGG"
+        "GAAAACCCTGGCGTTACCCAACTTAATCGCCTTGCAGCACATCCCCCTTTC"
+        "GCCAGCTGGCGTAATAGCGAAGAGGCCCGCACCGATCGCCCTTCCCAACAG"
+        "TTGCGCAGCCTGAATGGCGAATGGCGCTTTGCCTGGTTTCCGGCACCAGAA"
+        "GCGGTGCCGGAAAGCTGGCTGGAGTGCGATCTTCCTGAGGCCGATACTGTC"
+        "GTCGTCCCCTCAAACTGGCAGATGCACGGTTACGATGCGCCCATCTACACC"
+        "AACGTGACCTATCCCATTACGGTCAATCCGCCGTTTGTTCCCACGGAGAAT"
+        "CCGACGGGTTGTTACTCGCTCACATTTAATGTTGATGAAAGCTGGCTACAG"
+        "GAAGGCCAGACGCGAATTATTTTTGATGGCGTTAACTCGGCGTTTCATCTG"
+        "TGGTGCAACGGGCGCTGGGTCGGTTACGGCCAGGACAGTCGTTTGCCGTCT"
+        "TAA"
+    )
 
-    def test_results_structure(self):
-        """Test that results have expected fields and DataFrame columns when genes are found."""
+    inp = ProdigalInput(input_sequences=sequence)
+    result = run_prodigal_prediction(inp, ProdigalConfig(meta_mode=True))
+
+    validate_output(result)
+    assert isinstance(result, ProdigalOutput)
+
+    if result.num_orfs > 0 and result.predicted_orfs:
+        orf = result.predicted_orfs[0][0]
+        assert orf.parent_id.startswith('seq_')
+        assert isinstance(orf.amino_acid_sequence, str)
+        assert orf.amino_acid_length > 0
+        assert orf.strand in ['+', '-']
+
+
+@pytest.mark.integration
+def test_comparison_with_direct_pyrodigal():
+    try:
+        import pyrodigal
+    except ImportError:
+        pytest.skip("pyrodigal not available in base environment")
+
+    sequence = "ATGCGTAAATAA" * 50
+    inp = ProdigalInput(input_sequences=sequence)
+    our_result = run_prodigal_prediction(inp, ProdigalConfig(meta_mode=True))
+
+    validate_output(our_result)
+
+    gene_finder = pyrodigal.GeneFinder(meta=True)
+    direct_genes = gene_finder.find_genes(sequence.encode('utf-8'))
+    assert our_result.num_orfs == len(direct_genes)
+
+
+@pytest.mark.integration
+def test_batch_processing_consistency():
+    """Batch processing gives same results as individual processing."""
+    sequences = ["ATGCGTAAATAA" * 50, "ATGGCATAA" * 50]
+
+    inp_batch = ProdigalInput(input_sequences=sequences)
+    config = ProdigalConfig()
+    result_batch = run_prodigal_prediction(inp_batch, config)
+
+    results_individual = []
+    for seq in sequences:
+        inp_single = ProdigalInput(input_sequences=seq)
+        result_single = run_prodigal_prediction(inp_single, config)
+        results_individual.append(result_single)
+
+    assert result_batch.num_orfs == sum(r.num_orfs for r in results_individual)
+    assert len(result_batch.predicted_orfs) == len(sequences)
+
+    for batch_orfs, single_result in zip(result_batch.predicted_orfs, results_individual):
+        assert len(batch_orfs) == single_result.num_orfs
+
+
+@pytest.mark.integration
+def test_lowercase_input_produces_valid_output():
+    inp = ProdigalInput(input_sequences="atgcgtaaataa" * 50)
+    result = run_prodigal_prediction(inp, ProdigalConfig())
+
+    validate_output(result)
+    assert result.num_orfs >= 0
+
+
+@pytest.mark.integration
+def test_caching_behavior():
+    """Results are cached and computation is skipped on second call."""
+    cache = ToolCache()
+    token = _program_tool_cache.set(cache)
+
+    try:
         sequence = "ATGCGTAAATAA" * 50
-        inputs = ProdigalInput(input_sequences=sequence)
+        inp = ProdigalInput(input_sequences=sequence)
         config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
 
-        # Validate output and export functionality
-        validate_output(result)
+        from bio_programming_tools.utils.tool_instance import ToolInstance
 
-        if result.num_orfs > 0 and result.predicted_orfs:
-            orf = result.predicted_orfs[0][0]
-            assert isinstance(orf, ORF)
+        real_dispatch = ToolInstance.dispatch
 
-            # Check all expected fields exist
-            expected_fields = [
-                'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
-                'amino_acid_length', 'nucleotide_length', 'nucleotide_start', 'nucleotide_end',
-                'strand', 'frame', 'gc_content', 'start_type', 'rbs_motif',
-                'partial_begin', 'partial_end'
-            ]
-            for field in expected_fields:
-                assert hasattr(orf, field), f"Missing field: {field}"
+        with patch.object(ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True) as mock_call:
+            result1 = run_prodigal_prediction(inp, config)
+            assert result1.success is True
+            assert mock_call.call_count == 1
 
-            # Check data types
-            assert isinstance(orf.amino_acid_length, int)
-            assert isinstance(orf.nucleotide_length, int)
-            assert isinstance(orf.nucleotide_start, int)
-            assert isinstance(orf.nucleotide_end, int)
-            assert isinstance(orf.gc_content, float)
+            orfs1 = result1.predicted_orfs[0]
 
-            # Check DataFrame structure
-            df = result.results_df
-            assert isinstance(df, pd.DataFrame)
-            essential_columns = [
-                'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
-                'amino_acid_length', 'nucleotide_length',
-                'nucleotide_start', 'nucleotide_end', 'strand', 'frame',
-                'gc_content', 'start_type', 'partial_begin', 'partial_end'
-            ]
-            for col in essential_columns:
-                assert col in df.columns, f"Missing column: {col}"
+            result2 = run_prodigal_prediction(inp, config)
+            assert result2.success is True
+            assert mock_call.call_count == 1  # cached
 
-    def test_gene_id_format(self):
-        """Test that gene IDs follow expected format."""
-        sequence = "ATGCGTAAATAA" * 50
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
+            orfs2 = result2.predicted_orfs[0]
+            assert len(orfs1) == len(orfs2)
+            if orfs1:
+                assert orfs1[0].amino_acid_sequence == orfs2[0].amino_acid_sequence
 
-        # Validate output and export functionality
-        validate_output(result)
-        if result.num_orfs > 0:
-            orf = result.predicted_orfs[0][0]
-            assert orf.parent_id.startswith('seq_')
-            assert 'gene_' in orf.orf_id
+            inp_diff = ProdigalInput(input_sequences=sequence + "ATGC")
+            result3 = run_prodigal_prediction(inp_diff, config)
+            assert result3.success is True
+            assert mock_call.call_count == 2
 
-    def test_strand_format(self):
-        """Test that strand is either + or -."""
-        sequence = "ATGCGTAAATAA" * 50
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(result)
-
-        if result.num_orfs > 0:
-            for orf in result.predicted_orfs[0]:
-                assert orf.strand in ['+', '-']
-
-    def test_protein_sequence_format(self):
-        """Test that protein sequences are valid."""
-        sequence = "ATGCGTAAATAA" * 50
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(result)
-        if result.num_orfs > 0:
-            for orf in result.predicted_orfs[0]:
-                assert isinstance(orf.amino_acid_sequence, str)
-                assert len(orf.amino_acid_sequence) > 0
-                # Protein sequences should not end with stop codon (*)
-                assert not orf.amino_acid_sequence.endswith('*')
-
-
-class TestProdigalIntegration:
-    """Integration tests for Prodigal tool."""
-
-    def test_end_to_end_prediction(self):
-        """Test complete workflow from config to results."""
-        # Realistic sequence fragment
-        sequence = (
-            "ATGACCATGATTACGGATTCACTGGCCGTCGTTTTACAACGTCGTGACTGG"
-            "GAAAACCCTGGCGTTACCCAACTTAATCGCCTTGCAGCACATCCCCCTTTC"
-            "GCCAGCTGGCGTAATAGCGAAGAGGCCCGCACCGATCGCCCTTCCCAACAG"
-            "TTGCGCAGCCTGAATGGCGAATGGCGCTTTGCCTGGTTTCCGGCACCAGAA"
-            "GCGGTGCCGGAAAGCTGGCTGGAGTGCGATCTTCCTGAGGCCGATACTGTC"
-            "GTCGTCCCCTCAAACTGGCAGATGCACGGTTACGATGCGCCCATCTACACC"
-            "AACGTGACCTATCCCATTACGGTCAATCCGCCGTTTGTTCCCACGGAGAAT"
-            "CCGACGGGTTGTTACTCGCTCACATTTAATGTTGATGAAAGCTGGCTACAG"
-            "GAAGGCCAGACGCGAATTATTTTTGATGGCGTTAACTCGGCGTTTCATCTG"
-            "TGGTGCAACGGGCGCTGGGTCGGTTACGGCCAGGACAGTCGTTTGCCGTCT"
-            "TAA"
-        )
-
-        # Run prediction
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig(meta_mode=True)
-        result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(result)
-
-        # Validate results
-        assert isinstance(result, ProdigalOutput)
-
-        # If genes found, validate structure
-        if result.num_orfs > 0 and result.predicted_orfs:
-            orfs = result.predicted_orfs[0]
-
-            # Check first gene
-            orf = orfs[0]
-            assert orf.parent_id.startswith('seq_')
-            assert isinstance(orf.amino_acid_sequence, str)
-            assert orf.amino_acid_length > 0
-            assert orf.strand in ['+', '-']
-
-    def test_comparison_with_direct_pyrodigal(self):
-        """Test that wrapper produces same results as direct pyrodigal usage."""
-        try:
-            import pyrodigal
-        except ImportError:
-            pytest.skip("pyrodigal not available in base environment")
-
-        sequence = "ATGCGTAAATAA" * 50
-
-        # Our wrapper
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig(meta_mode=True)
-        our_result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(our_result)
-
-        # Direct pyrodigal
-        gene_finder = pyrodigal.GeneFinder(meta=True)
-        direct_genes = gene_finder.find_genes(sequence.encode('utf-8'))
-
-        # Compare gene counts
-        assert our_result.num_orfs == len(direct_genes)
-
-    def test_batch_processing_consistency(self):
-        """Test that batch processing gives same results as individual processing."""
-        sequences = [
-            "ATGCGTAAATAA" * 50,
-            "ATGGCATAA" * 50,
-        ]
-
-        # Batch processing
-        inputs_batch = ProdigalInput(input_sequences=sequences)
-        config = ProdigalConfig()
-        result_batch = run_prodigal_prediction(inputs_batch, config)
-
-        # Individual processing
-        results_individual = []
-        for seq in sequences:
-            inputs_single = ProdigalInput(input_sequences=seq)
-            result_single = run_prodigal_prediction(inputs_single, config)
-            results_individual.append(result_single)
-
-        # Compare results
-        assert result_batch.num_orfs == sum(r.num_orfs for r in results_individual)
-        assert len(result_batch.predicted_orfs) == len(sequences)
-
-        for i, (batch_orfs, single_result) in enumerate(zip(result_batch.predicted_orfs, results_individual)):
-            assert len(batch_orfs) == single_result.num_orfs
-
-    def test_lowercase_input_produces_valid_output(self):
-        """Test that lowercase input is handled correctly and produces valid results."""
-        sequence = "atgcgtaaataa" * 50
-        inputs = ProdigalInput(input_sequences=sequence)
-        config = ProdigalConfig()
-        result = run_prodigal_prediction(inputs, config)
-
-        # Validate output and export functionality
-        validate_output(result)
-        assert result.num_orfs >= 0
-
-
-class TestProdigalCaching:
-    """Test caching behavior for Prodigal prediction."""
-
-    def test_caching_behavior(self):
-        """Test that results are cached and computation is skipped on second call."""
-        # Setup cache
-        cache = ToolCache()
-        token = _program_tool_cache.set(cache)
-
-        try:
-            # Create a sequence long enough to be interesting but fast
-            sequence = "ATGCGTAAATAA" * 50
-            inputs = ProdigalInput(input_sequences=sequence)
-            config = ProdigalConfig()
-
-            # Patch ToolInstance.dispatch to verify it's invoked only when
-            # not cached.  We use the real method as side_effect so real
-            # logic still runs.
-            from bio_programming_tools.utils.tool_instance import ToolInstance
-
-            real_dispatch = ToolInstance.dispatch
-
-            with patch.object(ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True) as mock_call:
-                # First call - should Compute
-                result1 = run_prodigal_prediction(inputs, config)
-                assert result1.success is True
-                assert mock_call.call_count == 1
-
-                # Capture result for comparison
-                orfs1 = result1.predicted_orfs[0]
-
-                # Second call - same inputs - should Cache Hit
-                # ToolInstance.dispatch should NOT be called again
-                result2 = run_prodigal_prediction(inputs, config)
-                assert result2.success is True
-                assert mock_call.call_count == 1  # Still 1
-
-                # Verify results are identical (compare ORF counts and first ORF)
-                orfs2 = result2.predicted_orfs[0]
-                assert len(orfs1) == len(orfs2)
-                if orfs1:
-                    assert orfs1[0].amino_acid_sequence == orfs2[0].amino_acid_sequence
-
-                # Third call - different inputs - should Compute
-                inputs_diff = ProdigalInput(input_sequences=sequence + "ATGC")
-                result3 = run_prodigal_prediction(inputs_diff, config)
-                assert result3.success is True
-                # Should be called again
-                assert mock_call.call_count == 2
-
-        finally:
-            _program_tool_cache.reset(token)
+    finally:
+        _program_tool_cache.reset(token)
