@@ -658,6 +658,35 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 
 **The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 
+## Test Conventions
+
+All tests use **flat functions** (no test classes). Follow these patterns when writing new tests:
+
+### Structure
+- **One-liner module docstring**: `"""Tests for {tool/entity name}."""`
+- **Flat functions only**: No `class Test*` — use descriptive function names instead (e.g., `test_blast_search_exact_match`)
+- **Section separators**: Use light `# ── Section name ──...` separators to group related tests. Use `# ---------------------------------------------------------------------------` + `# Integration tests` for the integration boundary
+- **Module-level fixtures**: Use `@pytest.fixture` at module level, not inside classes. Use `@pytest.fixture(scope="module")` for expensive setup (e.g., loading structures)
+- **Module-level constants**: Deduplicate repeated values (paths, test data) as module constants prefixed with `_` (e.g., `_SETUP_SH`, `_CRISPR_SEQUENCE`)
+
+### Assertions
+- **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")` — never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`
+- **No trivial tests**: Don't test that Pydantic stores default values or that constructors store arguments. Test computed properties, validators, normalization, and error cases
+- **`tmp_path` over `tempfile`**: Use pytest's built-in `tmp_path` fixture, not `tempfile.mkdtemp()` or `tempfile.TemporaryDirectory`
+
+### Markers
+- **`@pytest.mark.integration`**: Tests that call `ToolInstance.dispatch()` for CPU tools (requires standalone tool environment). Skipped by default; run with `--integration`
+- **`@pytest.mark.uses_gpu`**: Tests that call `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU is available. Implies environment requirement — do **not** also add `@pytest.mark.integration`
+- **`@pytest.mark.include_in_env_report(category="...")`**: Add to the primary integration/GPU test for each tool. Category must match the tool's category (e.g., `"gene_annotation"`, `"inverse_folding"`)
+- **No `@pytest.mark.skip_ci`** for tests of core dependencies: If a package is in `pyproject.toml` dependencies, its tests should run without special markers
+- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`
+
+### Naming
+- **Validation tests**: `test_{model}_rejects_{what}` (e.g., `test_search_proteins_input_rejects_empty`)
+- **Property tests**: `test_{model}_{property}` (e.g., `test_crispr_array_num_repeats`)
+- **Export tests**: `test_export_{format}` (e.g., `test_export_csv`)
+- **Integration tests**: `test_{tool}_{scenario}` (e.g., `test_run_minced_with_crispr_sequence`)
+
 ## Configuration
 
 - Python >=3.10, Pydantic >=2.0

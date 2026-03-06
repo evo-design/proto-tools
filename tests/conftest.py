@@ -3,8 +3,8 @@ Test configuration for bio_programming_tools test suite.
 
 Supports the same CLI options and markers as the main bio-programming tests:
   --cpu        Run only CPU tests
-  --gpu        Run only GPU tests
-  --all        Include slow tests
+  --gpu        Run only GPU tests (skip CPU tests)
+  --all        Include slow and GPU tests
   --slow       Run only slow tests
   --exhaustive Include exhaustive combinatorial tests (e.g., every tool × device)
   --skip-ci    Skip tests marked skip_ci (mimics CI)
@@ -443,7 +443,7 @@ def pytest_addoption(parser):
         "--all",
         action="store_true",
         default=False,
-        help="Run all tests including slow tests",
+        help="Run all tests including slow and GPU tests",
     )
     parser.addoption(
         "--slow",
@@ -730,6 +730,18 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "uses_cpu" in item.keywords and "uses_gpu" not in item.keywords:
                 item.add_marker(skip_cpu)
+
+    # Default: skip GPU tests unless --integration (with GPU available) or --all
+    elif not (
+        config.getoption("--all")
+        or (config.getoption("--integration") and _gpu_available())
+    ):
+        skip_gpu = pytest.mark.skip(
+            reason="GPU test (use --gpu, --integration with GPU, or --all to run)"
+        )
+        for item in items:
+            if "uses_gpu" in item.keywords:
+                item.add_marker(skip_gpu)
 
     # Handle slow test filtering
     run_all = config.getoption("--all")

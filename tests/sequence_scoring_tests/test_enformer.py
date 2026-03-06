@@ -1,12 +1,11 @@
-"""
-test_enformer.py
+"""Tests for Enformer regulatory activity prediction tool."""
 
-Tests for Enformer regulatory activity prediction tool.
-"""
+import random
 
 import pytest
 from pydantic import ValidationError
 
+from bio_programming_tools.tools.sequence_scoring.enformer import ENFORMER_CONTEXT
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -14,167 +13,141 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _persistent_tool = make_persistent_fixture("enformer")
 
 
-# Enformer constants
-ENFORMER_CONTEXT = 196_608
-
-
-def generate_random_dna_sequence(length: int, seed: int = 42) -> str:
+def _random_dna(length: int, seed: int = 42) -> str:
     """Generate a random DNA sequence of given length."""
-    import random
-    random.seed(seed)
-    return "".join(random.choices("ACGT", k=length))
+    rng = random.Random(seed)
+    return "".join(rng.choices("ACGT", k=length))
 
 
-class TestEnformerInputValidation:
-    """Tests for Enformer input and config validation."""
+# ── Input validation ──────────────────────────────────────────────────────────
 
-    def test_enformer_input_valid(self):
-        """Test valid Enformer input is accepted."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
+def test_enformer_input_valid():
+    """Valid sequence of the required length is accepted."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
-        sequence = generate_random_dna_sequence(ENFORMER_CONTEXT)
-        inputs = EnformerInput(sequence=sequence)
-        assert len(inputs.sequence) == ENFORMER_CONTEXT
-
-    def test_enformer_input_invalid_length(self):
-        """Test that sequences with invalid length are rejected."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
-
-        # Too short
-        with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
-            EnformerInput(sequence="ATCG" * 100)
-
-        # Too long
-        with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
-            EnformerInput(sequence="ATCG" * 100000)
-
-    def test_enformer_config_valid(self):
-        """Test valid Enformer config is accepted."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-        config = EnformerConfig(
-            output_tracks=[0, 1, 2, 3],
-            species="human",
-            device="cuda",
-        )
-        assert config.species == "human"
-        assert config.output_tracks == [0, 1, 2, 3]
-
-    def test_enformer_config_invalid_species(self):
-        """Test that invalid species is rejected."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-        with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
-            EnformerConfig(output_tracks=[0], species="zebrafish")
+    seq = _random_dna(ENFORMER_CONTEXT)
+    inp = EnformerInput(sequence=seq)
+    assert len(inp.sequence) == ENFORMER_CONTEXT
 
 
-class TestEnformerPrediction:
-    """Tests for Enformer prediction functionality."""
+@pytest.mark.parametrize("seq,label", [
+    ("ATCG" * 100, "too short"),
+    ("ATCG" * 100_000, "too long"),
+])
+def test_enformer_input_rejects_wrong_length(seq, label):
+    """Sequences that are not exactly ENFORMER_CONTEXT bp are rejected."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
-    @pytest.mark.include_in_env_report
-    @pytest.mark.uses_gpu
-    def test_enformer_prediction_human(self):
-        """Test Enformer prediction for human genome."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import (
-            EnformerConfig,
-            EnformerInput,
-            run_enformer,
-        )
+    with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
+        EnformerInput(sequence=seq)
 
-        sequence = generate_random_dna_sequence(ENFORMER_CONTEXT)
-        inputs = EnformerInput(sequence=sequence)
-        config = EnformerConfig(
-            output_tracks=[0, 1, 2],
-            species="human",
-            verbose=False,
-        )
 
-        result = run_enformer(inputs, config)
+def test_enformer_input_rejects_empty():
+    """Empty sequences are rejected."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
-        # Validate output
-        validate_output(result)
+    with pytest.raises((ValueError, ValidationError), match="[Ss]equence"):
+        EnformerInput(sequence="")
 
-        # Check output structure
-        assert result.tool_id == "enformer-prediction"
-        assert result.species == "human"
-        assert result.output_tracks == [0, 1, 2]
-        assert result.sequence == sequence
-        assert result.sequence_length == ENFORMER_CONTEXT
 
-        # Check prediction shape (896 positions, 3 tracks)
-        assert len(result.prediction) == 896
-        assert len(result.prediction[0]) == 3
+def test_enformer_input_rejects_invalid_nucleotides():
+    """Sequences containing invalid nucleotide characters are rejected."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
 
-    @pytest.mark.uses_gpu
-    def test_enformer_prediction_mouse(self):
-        """Test Enformer prediction for mouse genome."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import (
-            EnformerConfig,
-            EnformerInput,
-            run_enformer,
-        )
+    bad_seq = "X" * ENFORMER_CONTEXT
+    with pytest.raises((ValueError, ValidationError), match="[Ii]nvalid"):
+        EnformerInput(sequence=bad_seq)
 
-        sequence = generate_random_dna_sequence(ENFORMER_CONTEXT, seed=123)
-        inputs = EnformerInput(sequence=sequence)
-        config = EnformerConfig(
-            output_tracks=[0, 5, 10],
-            species="mouse",
-            verbose=False,
-        )
 
-        result = run_enformer(inputs, config)
+# ── Config validation ─────────────────────────────────────────────────────────
 
-        validate_output(result)
+def test_enformer_config_default_species():
+    """Default species is 'human'."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
 
-        assert result.species == "mouse"
-        assert len(result.prediction) == 896
-        assert len(result.prediction[0]) == 3
+    config = EnformerConfig(output_tracks=[0])
+    assert config.species == "human"
 
-    @pytest.mark.uses_gpu
-    def test_enformer_prediction_single_track(self):
-        """Test Enformer prediction with single output track."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import (
-            EnformerConfig,
-            EnformerInput,
-            run_enformer,
-        )
 
-        sequence = generate_random_dna_sequence(ENFORMER_CONTEXT, seed=456)
-        inputs = EnformerInput(sequence=sequence)
-        config = EnformerConfig(
-            output_tracks=[0],
-            species="human",
-            verbose=False,
-        )
+def test_enformer_config_rejects_invalid_species():
+    """Species values other than 'human' or 'mouse' are rejected."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
 
-        result = run_enformer(inputs, config)
+    with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
+        EnformerConfig(output_tracks=[0], species="zebrafish")
 
-        validate_output(result)
 
-        assert len(result.prediction) == 896
-        assert len(result.prediction[0]) == 1
+# ---------------------------------------------------------------------------
+# Integration tests
 
-    @pytest.mark.uses_gpu
-    def test_enformer_prediction_many_tracks(self):
-        """Test Enformer prediction with many output tracks."""
-        from bio_programming_tools.tools.sequence_scoring.enformer import (
-            EnformerConfig,
-            EnformerInput,
-            run_enformer,
-        )
+@pytest.mark.include_in_env_report(category="sequence_scoring")
+@pytest.mark.uses_gpu
+def test_enformer_prediction_human():
+    """Enformer produces a [896, num_tracks] output matrix for human sequences."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import (
+        EnformerConfig,
+        EnformerInput,
+        run_enformer,
+    )
 
-        sequence = generate_random_dna_sequence(ENFORMER_CONTEXT, seed=789)
-        inputs = EnformerInput(sequence=sequence)
-        # Request first 100 human tracks
-        config = EnformerConfig(
-            output_tracks=list(range(100)),
-            species="human",
-            verbose=False,
-        )
+    seq = _random_dna(ENFORMER_CONTEXT)
+    inputs = EnformerInput(sequence=seq)
+    config = EnformerConfig(output_tracks=[0, 1, 2], species="human", verbose=False)
 
-        result = run_enformer(inputs, config)
+    result = run_enformer(inputs, config)
 
-        validate_output(result)
+    validate_output(result)
+    assert result.tool_id == "enformer-prediction"
+    assert result.species == "human"
+    assert result.output_tracks == [0, 1, 2]
+    assert result.sequence == seq
+    assert result.sequence_length == ENFORMER_CONTEXT
+    assert len(result.prediction) == 896
+    assert len(result.prediction[0]) == 3
 
-        assert len(result.prediction) == 896
-        assert len(result.prediction[0]) == 100
+
+@pytest.mark.uses_gpu
+def test_enformer_prediction_mouse():
+    """Enformer produces a [896, num_tracks] output matrix for mouse sequences."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import (
+        EnformerConfig,
+        EnformerInput,
+        run_enformer,
+    )
+
+    seq = _random_dna(ENFORMER_CONTEXT, seed=123)
+    inputs = EnformerInput(sequence=seq)
+    config = EnformerConfig(output_tracks=[0, 5, 10], species="mouse", verbose=False)
+
+    result = run_enformer(inputs, config)
+
+    validate_output(result)
+    assert result.species == "mouse"
+    assert len(result.prediction) == 896
+    assert len(result.prediction[0]) == 3
+
+
+@pytest.mark.parametrize("track_indices,expected_n_tracks", [
+    ([0], 1),
+    (list(range(100)), 100),
+])
+@pytest.mark.uses_gpu
+def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
+    """Output matrix second dimension matches the number of requested tracks."""
+    from bio_programming_tools.tools.sequence_scoring.enformer import (
+        EnformerConfig,
+        EnformerInput,
+        run_enformer,
+    )
+
+    seq = _random_dna(ENFORMER_CONTEXT, seed=456)
+    inputs = EnformerInput(sequence=seq)
+    config = EnformerConfig(
+        output_tracks=track_indices, species="human", verbose=False
+    )
+
+    result = run_enformer(inputs, config)
+
+    validate_output(result)
+    assert len(result.prediction) == 896
+    assert len(result.prediction[0]) == expected_n_tracks
