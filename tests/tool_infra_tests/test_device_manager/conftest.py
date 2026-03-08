@@ -1,14 +1,10 @@
 """Shared fixtures for DeviceManager tests."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import (
-    DeviceManager,
-)
+from bio_programming_tools.utils.device_manager import DeviceManager
 
 
 @pytest.fixture
@@ -34,11 +30,9 @@ def mock_0_gpus():
 @pytest.fixture
 def device_manager(mock_2_gpus):
     """Create a fresh DeviceManager instance for each test with 2 GPUs."""
-    # Reset singleton
     DeviceManager.reset_instance()
     dm = DeviceManager.get_instance()
     yield dm
-    # Clean up
     DeviceManager.reset_instance()
 
 

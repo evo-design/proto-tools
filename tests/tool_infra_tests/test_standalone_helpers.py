@@ -1,10 +1,4 @@
-"""Tests for standalone_helpers.py
-
-Verifies that standalone helper functions behave identically to their
-counterparts in the main codebase. This ensures the duplicated logic
-stays in sync.
-"""
-from __future__ import annotations
+"""Tests for standalone_helpers.py."""
 
 import os
 
@@ -14,9 +8,7 @@ from bio_programming_tools.utils.standalone_helpers import get_subprocess_device
 from bio_programming_tools.utils.device import determine_visible_devices
 
 
-# ============================================================================
-# Consistency Tests: standalone_helpers vs main codebase
-# ============================================================================
+# ── Consistency: standalone_helpers vs main codebase ──────────────────────────
 
 
 def test_get_subprocess_device_env_matches_determine_visible_devices_cpu():
@@ -79,9 +71,7 @@ def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
         "cuda:0,cuda:1 should map to physical GPUs 0,1"
 
 
-# ============================================================================
-# Standalone Helpers Specific Tests
-# ============================================================================
+# ── Standalone helpers specific tests ─────────────────────────────────────────
 
 
 def test_get_subprocess_device_env_returns_full_env():
@@ -170,9 +160,7 @@ def test_get_subprocess_device_env_handles_spaces_in_parent(monkeypatch):
     assert env["CUDA_VISIBLE_DEVICES"] == expected
 
 
-# ============================================================================
-# Edge Case Tests
-# ============================================================================
+# ── Edge cases ────────────────────────────────────────────────────────────────
 
 
 def test_get_subprocess_device_env_multi_device_non_contiguous_mapping(monkeypatch):
@@ -210,9 +198,7 @@ def test_get_subprocess_device_env_empty_parent(monkeypatch):
     assert env["CUDA_VISIBLE_DEVICES"] == "0"
 
 
-# ============================================================================
-# JAX Environment Variable Tests
-# ============================================================================
+# ── JAX environment variables ─────────────────────────────────────────────────
 
 
 def test_gpu_subprocess_removes_jax_preallocation_restrictions(monkeypatch):

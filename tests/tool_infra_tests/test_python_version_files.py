@@ -1,12 +1,13 @@
-from __future__ import annotations
+"""Tests for python_version.txt validation."""
 
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from bio_programming_tools.utils.tool_instance import ToolInstance
+
+_SETUP_SH_CONTENT = "#!/bin/bash\necho test"
 
 
 def _make_test_instance(setup_dir: Path) -> ToolInstance:
@@ -17,157 +18,140 @@ def _make_test_instance(setup_dir: Path) -> ToolInstance:
     return inst
 
 
-class TestPythonVersionValidation:
-    """Tests for python_version.txt file format validation."""
-
-    def test_valid_major_minor_format(self):
-        """Test that major.minor format is accepted."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("3.11")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            assert tool._get_python_version() == "3.11"
-
-    def test_valid_major_minor_patch_format(self):
-        """Test that major.minor.patch format is accepted."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("3.11.5")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            assert tool._get_python_version() == "3.11.5"
-
-    def test_missing_file_defaults_to_current_python(self):
-        """Test that missing python_version.txt defaults to current Python version."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            expected = f"{sys.version_info.major}.{sys.version_info.minor}"
-            assert tool._get_python_version() == expected
-
-    def test_empty_file_raises_error(self):
-        """Test that empty python_version.txt raises clear error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            with pytest.raises(ValueError, match=r"python_version\.txt.*is empty"):
-                tool._get_python_version()
-
-    def test_multiple_lines_raises_error(self):
-        """Test that multiple lines in python_version.txt raises error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("3.11\n3.12\n")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            with pytest.raises(ValueError):
-                tool._get_python_version()
-
-    def test_invalid_format_raises_error(self):
-        """Test that invalid version format raises error."""
-        invalid_versions = [
-            "3",           # Only major
-            "python3.11",  # Text prefix
-            "v3.11",       # Version prefix
-            "3.11.5.2",    # Too many parts
-            "3.x",         # Non-numeric
-            "latest",      # Non-version string
-        ]
-
-        for invalid in invalid_versions:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                setup_dir = Path(tmpdir)
-                (setup_dir / "python_version.txt").write_text(invalid)
-                (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-                tool = _make_test_instance(setup_dir)
-                with pytest.raises(ValueError, match=r"Invalid.*version"):
-                    tool._get_python_version()
-
-    def test_unsupported_version_raises_error(self):
-        """Test that Python versions before 3.8 are rejected."""
-        unsupported_versions = ["2.7", "3.6", "3.7"]
-
-        for version in unsupported_versions:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                setup_dir = Path(tmpdir)
-                (setup_dir / "python_version.txt").write_text(version)
-                (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-                tool = _make_test_instance(setup_dir)
-                with pytest.raises(ValueError, match=r"(Unsupported|version.*3\.8)"):
-                    tool._get_python_version()
-
-    def test_whitespace_is_stripped(self):
-        """Test that leading/trailing whitespace is handled gracefully."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("  3.11  \n")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            assert tool._get_python_version() == "3.11"
-
-    def test_comments_not_allowed(self):
-        """Test that comments in python_version.txt raise error."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            setup_dir = Path(tmpdir)
-            (setup_dir / "python_version.txt").write_text("3.11  # Use Python 3.11")
-            (setup_dir / "setup.sh").write_text("#!/bin/bash\necho test")
-
-            tool = _make_test_instance(setup_dir)
-            with pytest.raises(ValueError, match=r"Invalid.*version"):
-                tool._get_python_version()
+# ── Format validation ────────────────────────────────────────────────────────
 
 
-class TestExistingPythonVersionFiles:
-    """Test all existing python_version.txt files in the codebase."""
+def test_valid_major_minor_format(tmp_path):
+    """major.minor format is accepted."""
+    (tmp_path / "python_version.txt").write_text("3.11")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
 
-    def test_all_existing_python_version_files_are_valid(self):
-        """Discover and validate all python_version.txt files in tools directory."""
-        tools_dir = Path(__file__).parent.parent.parent / "bio_programming_tools" / "tools"
+    tool = _make_test_instance(tmp_path)
+    assert tool._get_python_version() == "3.11"
 
-        # Find all python_version.txt files
-        version_files = list(tools_dir.glob("**/standalone/python_version.txt"))
 
-        # If no files exist yet, test passes (we're future-proofing)
-        if not version_files:
-            pytest.skip("No python_version.txt files found yet")
+def test_valid_major_minor_patch_format(tmp_path):
+    """major.minor.patch format is accepted."""
+    (tmp_path / "python_version.txt").write_text("3.11.5")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
 
-        # Validate each file
-        errors = []
-        for version_file in version_files:
-            tool_name = version_file.parent.parent.parent.name
-            setup_script = version_file.parent / "setup.sh"
+    tool = _make_test_instance(tmp_path)
+    assert tool._get_python_version() == "3.11.5"
 
-            try:
-                # Create a minimal ToolInstance to test _get_python_version()
-                tool = ToolInstance.__new__(ToolInstance)
-                tool.tool_name = tool_name
-                tool.setup_script = setup_script
 
-                version = tool._get_python_version()
+def test_missing_file_defaults_to_current_python(tmp_path):
+    """Missing python_version.txt defaults to current Python version."""
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
 
-                # Validate format
-                parts = version.split(".")
-                assert len(parts) in (2, 3), f"{tool_name}: version must be major.minor or major.minor.patch"
-                assert all(part.isdigit() for part in parts), f"{tool_name}: version parts must be numeric"
+    tool = _make_test_instance(tmp_path)
+    expected = f"{sys.version_info.major}.{sys.version_info.minor}"
+    assert tool._get_python_version() == expected
 
-                # Validate minimum version
-                major, minor = int(parts[0]), int(parts[1])
-                assert (major, minor) >= (3, 8), f"{tool_name}: minimum Python 3.8 required"
 
-            except Exception as e:
-                errors.append(f"{tool_name} ({version_file}): {e}")
+def test_whitespace_is_stripped(tmp_path):
+    """Leading/trailing whitespace is handled gracefully."""
+    (tmp_path / "python_version.txt").write_text("  3.11  \n")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
 
-        if errors:
-            pytest.fail("Invalid python_version.txt files found:\n" + "\n".join(errors))
+    tool = _make_test_instance(tmp_path)
+    assert tool._get_python_version() == "3.11"
+
+
+# ── Rejection cases ──────────────────────────────────────────────────────────
+
+
+def test_empty_file_raises_error(tmp_path):
+    """Empty python_version.txt raises clear error."""
+    (tmp_path / "python_version.txt").write_text("")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
+
+    tool = _make_test_instance(tmp_path)
+    with pytest.raises(ValueError, match=r"python_version\.txt.*is empty"):
+        tool._get_python_version()
+
+
+def test_multiple_lines_raises_error(tmp_path):
+    """Multiple lines in python_version.txt raises error."""
+    (tmp_path / "python_version.txt").write_text("3.11\n3.12\n")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
+
+    tool = _make_test_instance(tmp_path)
+    with pytest.raises(ValueError, match=r"Invalid.*version"):
+        tool._get_python_version()
+
+
+@pytest.mark.parametrize("invalid", [
+    "3",           # Only major
+    "python3.11",  # Text prefix
+    "v3.11",       # Version prefix
+    "3.11.5.2",    # Too many parts
+    "3.x",         # Non-numeric
+    "latest",      # Non-version string
+])
+def test_invalid_format_raises_error(tmp_path, invalid):
+    """Invalid version formats are rejected."""
+    (tmp_path / "python_version.txt").write_text(invalid)
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
+
+    tool = _make_test_instance(tmp_path)
+    with pytest.raises(ValueError, match=r"Invalid.*version"):
+        tool._get_python_version()
+
+
+@pytest.mark.parametrize("version", ["2.7", "3.6", "3.7"])
+def test_unsupported_version_raises_error(tmp_path, version):
+    """Python versions before 3.8 are rejected."""
+    (tmp_path / "python_version.txt").write_text(version)
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
+
+    tool = _make_test_instance(tmp_path)
+    with pytest.raises(ValueError, match=r"(Unsupported|version.*3\.8)"):
+        tool._get_python_version()
+
+
+def test_comments_not_allowed(tmp_path):
+    """Comments in python_version.txt raise error."""
+    (tmp_path / "python_version.txt").write_text("3.11  # Use Python 3.11")
+    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
+
+    tool = _make_test_instance(tmp_path)
+    with pytest.raises(ValueError, match=r"Invalid.*version"):
+        tool._get_python_version()
+
+
+# ── Codebase-wide validation ─────────────────────────────────────────────────
+
+
+def test_all_existing_python_version_files_are_valid():
+    """Discover and validate all python_version.txt files in tools directory."""
+    tools_dir = Path(__file__).parent.parent.parent / "bio_programming_tools" / "tools"
+
+    version_files = list(tools_dir.glob("**/standalone/python_version.txt"))
+
+    if not version_files:
+        pytest.skip("No python_version.txt files found yet")
+
+    errors = []
+    for version_file in version_files:
+        tool_name = version_file.parent.parent.parent.name
+        setup_script = version_file.parent / "setup.sh"
+
+        try:
+            tool = ToolInstance.__new__(ToolInstance)
+            tool.tool_name = tool_name
+            tool.setup_script = setup_script
+
+            version = tool._get_python_version()
+
+            parts = version.split(".")
+            assert len(parts) in (2, 3), f"{tool_name}: version must be major.minor or major.minor.patch"
+            assert all(part.isdigit() for part in parts), f"{tool_name}: version parts must be numeric"
+
+            major, minor = int(parts[0]), int(parts[1])
+            assert (major, minor) >= (3, 8), f"{tool_name}: minimum Python 3.8 required"
+
+        except Exception as e:
+            errors.append(f"{tool_name} ({version_file}): {e}")
+
+    if errors:
+        pytest.fail("Invalid python_version.txt files found:\n" + "\n".join(errors))

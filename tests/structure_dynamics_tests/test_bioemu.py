@@ -1,5 +1,4 @@
-"""Tests for the BioEmu conformational ensemble sampling tool."""
-from __future__ import annotations
+"""Tests for BioEmu."""
 
 from unittest.mock import patch
 
@@ -16,172 +15,169 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
+_SAMPLE_SEQUENCE = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
 
-@pytest.fixture
-def sample_sequence() -> str:
-    """A short valid protein sequence."""
-    return "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
-
-
-@pytest.fixture
-def sample_pdb_content() -> str:
-    """Minimal valid PDB content for one residue."""
-    return (
-        "ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\n"
-        "ATOM      2  CA  MET A   1       1.458   0.000   0.000  1.00  0.00           C\n"
-        "ATOM      3  C   MET A   1       2.009   1.420   0.000  1.00  0.00           C\n"
-        "END\n"
-    )
+_SAMPLE_PDB_CONTENT = (
+    "ATOM      1  N   MET A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+    "ATOM      2  CA  MET A   1       1.458   0.000   0.000  1.00  0.00           C\n"
+    "ATOM      3  C   MET A   1       2.009   1.420   0.000  1.00  0.00           C\n"
+    "END\n"
+)
 
 
-class TestBioEmuInput:
-    """Tests for BioEmuInput validation."""
+# ── Input validation ─────────────────────────────────────────────────────────
 
-    def test_rejects_multi_chain_complex(self, sample_sequence: str):
-        """Test that multi-chain complexes are rejected."""
-        with pytest.raises(ValueError, match="single-chain"):
+
+def test_input_rejects_multi_chain_complex():
+    with pytest.raises(ValueError, match="single-chain"):
+        BioEmuInput(
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[
+                        {"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"},
+                        {"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"},
+                    ]
+                )
+            ]
+        )
+
+
+def test_input_rejects_non_protein_entity():
+    with pytest.raises(ValueError, match="only supports: protein"):
+        BioEmuInput(
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[{"sequence": "ACGT", "entity_type": "dna"}]
+                )
+            ]
+        )
+
+
+def test_input_rejects_invalid_amino_acids():
+    with patch(
+        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+        return_value={"1", "2", "3"},
+    ):
+        with pytest.raises(ValueError, match="Invalid protein characters"):
             BioEmuInput(
                 complexes=[
                     StructurePredictionComplex(
                         chains=[
-                            {"sequence": sample_sequence, "entity_type": "protein"},
-                            {"sequence": sample_sequence, "entity_type": "protein"},
+                            {
+                                "sequence": "MVLSPADKTNVKAAW123",
+                                "entity_type": "protein",
+                            }
                         ]
                     )
                 ]
             )
 
-    def test_rejects_non_protein_entity(self):
-        """Test that non-protein entities are rejected."""
-        with pytest.raises(ValueError, match="only supports: protein"):
+
+def test_input_warns_on_long_sequence(caplog):
+    long_sequence = "A" * 600
+    with patch(
+        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+        return_value=set(),
+    ):
+        with caplog.at_level("WARNING"):
             BioEmuInput(
                 complexes=[
                     StructurePredictionComplex(
-                        chains=[{"sequence": "ACGT", "entity_type": "dna"}]
+                        chains=[
+                            {
+                                "sequence": long_sequence,
+                                "entity_type": "protein",
+                            }
+                        ]
                     )
                 ]
             )
-
-    def test_rejects_invalid_amino_acids(self):
-        """Test that invalid amino acid characters are rejected."""
-        with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
-            return_value={"1", "2", "3"},
-        ):
-            with pytest.raises(ValueError, match="Invalid protein characters"):
-                BioEmuInput(
-                    complexes=[
-                        StructurePredictionComplex(
-                            chains=[
-                                {
-                                    "sequence": "MVLSPADKTNVKAAW123",
-                                    "entity_type": "protein",
-                                }
-                            ]
-                        )
-                    ]
-                )
-
-    def test_warns_on_long_sequence(self, caplog):
-        """Test that long sequences log a warning."""
-        long_sequence = "A" * 600
-        with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
-            return_value=set(),
-        ):
-            with caplog.at_level("WARNING"):
-                BioEmuInput(
-                    complexes=[
-                        StructurePredictionComplex(
-                            chains=[
-                                {
-                                    "sequence": long_sequence,
-                                    "entity_type": "protein",
-                                }
-                            ]
-                        )
-                    ]
-                )
-        assert "500 residues" in caplog.text
+    assert "500 residues" in caplog.text
 
 
-class TestBioEmuConfig:
-    """Tests for BioEmuConfig validation."""
-
-    def test_invalid_values(self):
-        """Test config validation for invalid values."""
-        with pytest.raises(ValueError):
-            BioEmuConfig(num_samples=0)
-        with pytest.raises(ValueError):
-            BioEmuConfig(batch_size=0)
-        with pytest.raises(ValueError):
-            BioEmuConfig(model_name="invalid-model")
+# ── Config validation ────────────────────────────────────────────────────────
 
 
-class TestRunBioEmu:
-    """Tests for run_bioemu."""
+def test_config_rejects_num_samples_zero():
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        BioEmuConfig(num_samples=0)
 
-    @pytest.mark.include_in_env_report
-    @pytest.mark.uses_gpu
-    def test_bioemu_sample_tool(self):
-        """Test BioEmu conformational ensemble sampling end-to-end."""
-        sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
-        inputs = BioEmuInput(
-            complexes=[
-                StructurePredictionComplex(
-                    chains=[{"sequence": sequence, "entity_type": "protein"}]
-                )
+
+def test_config_rejects_batch_size_zero():
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        BioEmuConfig(batch_size=0)
+
+
+def test_config_rejects_invalid_model_name():
+    with pytest.raises(ValueError, match="Input should be"):
+        BioEmuConfig(model_name="invalid-model")
+
+
+# ── Output assembly (mocked dispatch) ────────────────────────────────────────
+
+
+def test_multiple_complexes_produce_separate_ensembles():
+    complex_ = StructurePredictionComplex(
+        chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}]
+    )
+    bioemu_input = BioEmuInput(complexes=[complex_, complex_])
+    bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
+
+    with patch(
+        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+    ) as mock_cls:
+        mock_cls.dispatch.return_value = {
+            "results": [
+                {
+                    "pdb_frames": [_SAMPLE_PDB_CONTENT] * 3,
+                    "num_frames": 3,
+                    "num_residues": len(_SAMPLE_SEQUENCE),
+                },
+                {
+                    "pdb_frames": [_SAMPLE_PDB_CONTENT] * 7,
+                    "num_frames": 7,
+                    "num_residues": len(_SAMPLE_SEQUENCE),
+                },
             ]
-        )
-        config = BioEmuConfig(num_samples=5, verbose=False)
+        }
+        result = run_bioemu(bioemu_input, bioemu_config)
 
-        result = run_bioemu(inputs, config)
-        validate_output(result)
+    assert len(result.ensembles) == 2
+    assert len(result.ensembles[0].structures) == 3
+    assert len(result.ensembles[1].structures) == 7
+    assert result.metadata["num_complexes"] == 2
+    assert result.metadata["total_structures"] == 10
 
-        assert result.tool_id == "bioemu-sample"
-        assert len(result.ensembles) == 1
-        assert len(result.ensembles[0].structures) >= 1
-        assert result.metadata["num_complexes"] == 1
-        assert result.metadata["model_name"] == "bioemu-v1.1"
 
-        for structure in result.ensembles[0].structures:
-            assert isinstance(structure, Structure)
-            assert structure.structure_pdb is not None
-            assert len(structure.structure_pdb) > 0
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
 
-    def test_multiple_complexes(
-        self,
-        sample_sequence: str,
-        sample_pdb_content: str,
-    ):
-        """Test that multiple complexes produce separate ensembles."""
-        complex_ = StructurePredictionComplex(
-            chains=[{"sequence": sample_sequence, "entity_type": "protein"}]
-        )
-        bioemu_input = BioEmuInput(complexes=[complex_, complex_])
-        bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
-        with patch(
-            "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
-        ) as mock_cls:
-            mock_cls.dispatch.return_value = {
-                "results": [
-                    {
-                        "pdb_frames": [sample_pdb_content] * 3,
-                        "num_frames": 3,
-                        "num_residues": len(sample_sequence),
-                    },
-                    {
-                        "pdb_frames": [sample_pdb_content] * 7,
-                        "num_frames": 7,
-                        "num_residues": len(sample_sequence),
-                    },
-                ]
-            }
-            result = run_bioemu(bioemu_input, bioemu_config)
+@pytest.mark.include_in_env_report(category="structure_dynamics")
+@pytest.mark.uses_gpu
+def test_bioemu_sample_end_to_end():
+    """Test BioEmu conformational ensemble sampling end-to-end."""
+    sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
+    inputs = BioEmuInput(
+        complexes=[
+            StructurePredictionComplex(
+                chains=[{"sequence": sequence, "entity_type": "protein"}]
+            )
+        ]
+    )
+    config = BioEmuConfig(num_samples=5, verbose=False)
 
-        assert len(result.ensembles) == 2
-        assert len(result.ensembles[0].structures) == 3
-        assert len(result.ensembles[1].structures) == 7
-        assert result.metadata["num_complexes"] == 2
-        assert result.metadata["total_structures"] == 10
+    result = run_bioemu(inputs, config)
+    validate_output(result)
+
+    assert result.tool_id == "bioemu-sample"
+    assert len(result.ensembles) == 1
+    assert len(result.ensembles[0].structures) >= 1
+    assert result.metadata["num_complexes"] == 1
+    assert result.metadata["model_name"] == "bioemu-v1.1"
+
+    for structure in result.ensembles[0].structures:
+        assert isinstance(structure, Structure)
+        assert structure.structure_pdb is not None
+        assert len(structure.structure_pdb) > 0

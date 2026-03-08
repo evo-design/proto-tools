@@ -1,7 +1,5 @@
 """Tests for tool protocol compliance (to_device, get_memory_stats, etc)."""
 
-from __future__ import annotations
-
 import re
 
 import pytest
@@ -31,10 +29,7 @@ def _find_standalone_script(tool_spec):
     return None
 
 
-# ============================================================================
-# Consolidated standalone protocol compliance
-# ============================================================================
-
+# ── Standalone protocol compliance ──────────────────────────────────────
 
 @pytest.mark.parametrize(
     "tool_spec", _all_gpu_specs, ids=lambda spec: spec.key
@@ -46,7 +41,7 @@ def test_standalone_protocol_compliance(tool_spec):
     - Has a module-level to_device(device: str) -> dict function
     - to_device() returns a dict with "success" key
     - If to_device() delegates to _model.to_device(), the model class has that method
-    - If the tool has a model class to_device(), it uses move_model_to_device() or unload→reload
+    - If the tool has a model class to_device(), it uses move_model_to_device() or unload->reload
     - If the tool uses subprocess calls, it uses get_subprocess_device_env() helper
     - If the tool imports JAX, it uses centralized resolve_jax_device() helper
     """
@@ -96,7 +91,7 @@ def test_standalone_protocol_compliance(tool_spec):
                 )
 
     # --- 5. Model class to_device() must use move_model_to_device() helper
-    #         OR a clean unload→reload cycle (for opaque models like AlphaGenome
+    #         OR a clean unload->reload cycle (for opaque models like AlphaGenome
     #         that cannot be moved via jax.device_put or model.to()) ---
     class_to_device = re.search(
         r'class\s+\w+.*?^\s+def\s+to_device\s*\(self,\s*device:\s*str\)\s*->\s*None:',
@@ -110,7 +105,7 @@ def test_standalone_protocol_compliance(tool_spec):
         if not has_move_helper and not has_unload_reload:
             violations.append(
                 "Model class has to_device() but doesn't use move_model_to_device() helper "
-                "or a clean unload→reload cycle"
+                "or a clean unload->reload cycle"
             )
 
     # --- 6. CLI tools with subprocess must use get_subprocess_device_env() ---
@@ -156,10 +151,7 @@ def test_standalone_protocol_compliance(tool_spec):
     )
 
 
-# ============================================================================
-# Config-level checks (no standalone script needed)
-# ============================================================================
-
+# ── Config-level checks ────────────────────────────────────────────────
 
 @pytest.mark.parametrize(
     "tool_spec", _all_gpu_specs, ids=lambda spec: spec.key
@@ -195,10 +187,9 @@ def test_gpu_tools_default_to_generic_cuda(tool_spec):
     )
 
 
-# ============================================================================
-# Runtime checks (require GPU)
-# ============================================================================
-
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
 
 @pytest.mark.uses_gpu
 @pytest.mark.integration
