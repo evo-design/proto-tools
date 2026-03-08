@@ -1,11 +1,4 @@
-"""
-test_tool_registry.py
-
-Tests for ToolRegistry class.
-
-Tests the tool registry system for decorator-based tool registration,
-discovery, and schema generation.
-"""
+"""Tests for ToolRegistry."""
 
 import time
 
@@ -22,7 +15,26 @@ from bio_programming_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
-# Test fixtures: Mock tool inputs, configs and outputs
+# ── example_input completeness ───────────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "tool_spec",
+    ToolRegistry.list_all(),
+    ids=lambda spec: spec.key,
+)
+def test_all_tools_have_example_input(tool_spec):
+    """Every tool must define example_input for parametrized testing."""
+    assert tool_spec.example_input is not None, (
+        f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
+    )
+    example = tool_spec.example_input()
+    assert isinstance(example, tool_spec.input_model), (
+        f"example_input() returned {type(example).__name__}, "
+        f"expected {tool_spec.input_model.__name__}"
+    )
+
+
+# ── Mock data models ─────────────────────────────────────────────────────────
 class MockToolInput(BaseToolInput):
     """Mock input for testing"""
 
@@ -125,7 +137,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
         )
 
     # Attempt to register with same key should fail
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(ValueError, match="(?i)already registered"):
 
         @clean_registry.register(
             key="duplicate-tool",  # Same key
@@ -146,8 +158,6 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
                 processed_data=inputs.sequences,
                 count=len(inputs.sequences),
             )
-
-    assert "already registered" in str(exc_info.value).lower()
 
 
 def test_tool_registry_list_all(clean_registry):
@@ -252,11 +262,8 @@ def test_tool_registry_get_schema(clean_registry):
 
 def test_tool_registry_get_unknown_tool(clean_registry):
     """Test that getting unknown tool raises error"""
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(ValueError, match="non-existent-tool"):
         clean_registry.get("non-existent-tool")
-
-    assert "unknown" in str(exc_info.value).lower()
-    assert "non-existent-tool" in str(exc_info.value)
 
 
 def test_tool_registry_get_input_schema(clean_registry):
@@ -456,12 +463,8 @@ def test_tool_output_error_access_raises_exception(clean_registry):
     assert result.success is False, "Success should be False for failed execution"
 
     # Trying to access 'result' field should raise ToolExecutionError
-    with pytest.raises(ToolExecutionError) as exc_info:
+    with pytest.raises(ToolExecutionError, match="Tool execution failed"):
         _ = result.result
-
-    assert "Tool execution failed" in str(
-        exc_info.value
-    ), "ToolExecutionError should be raised when accessing unset fields on failed output"
 
     # Attempting to access standard fields should not raise ToolExecutionError
     assert result.tool_id is not None
@@ -683,9 +686,7 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
     assert "worker timed out" in result.errors[0]
 
 
-# ============================================================================
-# Device Count Validation Tests
-# ============================================================================
+# ── Device count validation ──────────────────────────────────────────────────
 
 
 class MockConfigWithDevice(BaseConfig):

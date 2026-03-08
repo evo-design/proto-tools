@@ -1,5 +1,4 @@
 """Tests for device string parsing and CUDA_VISIBLE_DEVICES generation."""
-from __future__ import annotations
 
 import pytest
 
@@ -11,9 +10,7 @@ from bio_programming_tools.utils.device import (
     parse_device_string,
 )
 
-# ============================================================================
-# parse_device_string() Tests
-# ============================================================================
+# ── parse_device_string() ────────────────────────────────────────────────────
 
 
 def test_parse_device_string_cpu():
@@ -112,9 +109,7 @@ def test_parse_device_string_whitespace_handling():
     assert count == 2
 
 
-# ============================================================================
-# determine_visible_devices() Tests
-# ============================================================================
+# ── determine_visible_devices() ──────────────────────────────────────────────
 
 
 def test_determine_visible_devices_cpu():
@@ -173,7 +168,6 @@ def test_determine_visible_devices_multi_explicit_verbose():
         assert result == "1,3"
 
 
-
 def test_determine_visible_devices_invalid_index_exceeds_gpus():
     """Test that device index exceeding available GPUs raises ValueError."""
     # This test assumes system has fewer than 100 GPUs
@@ -184,9 +178,7 @@ def test_determine_visible_devices_invalid_index_exceeds_gpus():
         determine_visible_devices("cuda:50,51")
 
 
-# ============================================================================
-# Device Count Requirement Parsing Tests
-# ============================================================================
+# ── Device count requirement parsing ─────────────────────────────────────────
 
 
 def test_parse_device_count_exact():
@@ -279,8 +271,9 @@ def test_validate_device_allocation_within_range():
 
 def test_validate_device_allocation_over_allocation(caplog):
     """Test validation warns on over-allocation (more than max)."""
-    from bio_programming_tools.utils.device import validate_device_allocation
     import logging
+
+    from bio_programming_tools.utils.device import validate_device_allocation
 
     with caplog.at_level(logging.WARNING):
         # Requesting 2 devices for tool that needs exactly 1
@@ -311,9 +304,7 @@ def test_validate_device_allocation_under_allocation():
         validate_device_allocation(0, "1-2", "test-tool")
 
 
-# ============================================================================
-# Tests for CUDA_VISIBLE_DEVICES mapping
-# ============================================================================
+# ── CUDA_VISIBLE_DEVICES mapping ─────────────────────────────────────────────
 
 
 def test_determine_visible_devices_with_parent_cuda_visible_devices(monkeypatch):
@@ -378,9 +369,7 @@ def test_determine_visible_devices_cpu_ignores_parent(monkeypatch):
     assert determine_visible_devices("cpu") == ""
 
 
-# ============================================================================
-# number_of_physical_gpus() and number_of_visible_gpus() Tests
-# ============================================================================
+# ── number_of_physical_gpus() and number_of_visible_gpus() ───────────────────
 
 
 def test_number_of_physical_gpus_returns_positive_or_zero():

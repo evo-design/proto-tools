@@ -1,38 +1,14 @@
-"""Tests for tool device consistency, example_input completeness, and device movement."""
-from __future__ import annotations
+"""Tests for GPU tool eviction round-trip across all registered GPU tools."""
 
 import time
+from unittest.mock import patch
 
 import pytest
 
 from bio_programming_tools.tools.tool_registry import ToolRegistry
+from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from bio_programming_tools.utils.tool_instance import ToolInstance
 
-
-# ============================================================================
-# example_input completeness
-# ============================================================================
-
-
-@pytest.mark.parametrize(
-    "tool_spec",
-    ToolRegistry.list_all(),
-    ids=lambda spec: spec.key,
-)
-def test_all_tools_have_example_input(tool_spec):
-    """Every tool must define example_input for parametrized testing."""
-    assert tool_spec.example_input is not None, (
-        f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
-    )
-    example = tool_spec.example_input()
-    assert isinstance(example, tool_spec.input_model), (
-        f"example_input() returned {type(example).__name__}, "
-        f"expected {tool_spec.input_model.__name__}"
-    )
-
-
-# ============================================================================
-# Device movement: eviction round-trip for every GPU tool
-# ============================================================================
 
 # Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
 # Tools requiring specific clusters get per-item markers via pytest.param.
@@ -80,15 +56,9 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
     Verifies that every tool's standalone worker correctly handles
     to_device() calls for both GPU->CPU and CPU->GPU transitions.
     """
-    from unittest.mock import patch
-
-    from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
-    from bio_programming_tools.utils.tool_instance import ToolInstance
-
     n_gpus = _get_gpu_count_for_tool(tool_spec)
 
     # Build managed device list: tool's GPUs + 1 extra for the evictor
-    # (so the evictor can load without needing to share a device)
     # Actually, for eviction we want all GPUs occupied so the mock tool
     # forces eviction. Use exactly n_gpus (tool fills them all, then
     # mock tool evicts it).

@@ -1,6 +1,4 @@
-"""Integration tests with real tool instances."""
-
-from __future__ import annotations
+"""Tests for DeviceManager integration with real tool instances."""
 
 import time
 
@@ -8,6 +6,10 @@ import pytest
 
 from bio_programming_tools.utils.device_manager import OffloadStrategy
 
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
