@@ -664,10 +664,13 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 ### Structure
 - **One-liner module docstring**: `"""Tests for {tool/entity name}."""`
+- **No `from __future__ import annotations`** in test files
 - **Flat functions only**: No `class Test*` — use descriptive function names instead (e.g., `test_blast_search_exact_match`)
 - **Section separators**: Use light `# ── Section name ──...` separators to group related tests. Use `# ---------------------------------------------------------------------------` + `# Integration tests` for the integration boundary
+- **File ordering**: Unit tests first, then the integration boundary separator, then integration/GPU tests
 - **Module-level fixtures**: Use `@pytest.fixture` at module level, not inside classes. Use `@pytest.fixture(scope="module")` for expensive setup (e.g., loading structures)
 - **Module-level constants**: Deduplicate repeated values (paths, test data) as module constants prefixed with `_` (e.g., `_SETUP_SH`, `_CRISPR_SEQUENCE`)
+- **Test directory naming**: `tests/{category}_tests/` matching `tools/{category}/`
 
 ### Assertions
 - **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")` — never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`

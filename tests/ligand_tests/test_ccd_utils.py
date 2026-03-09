@@ -21,6 +21,7 @@ def test_map_known_smiles_to_ccd():
     assert result == "SEP"
 
 
+@pytest.mark.integration
 def test_map_unknown_smiles_returns_none():
     result = map_smiles_to_ccd_code("INVALID_SMILES_XYZ123")
     assert result is None
@@ -251,6 +252,7 @@ def test_whitespace_in_ccd_code():
     assert result is None
 
 
+@pytest.mark.integration
 def test_case_sensitivity_smiles():
     smiles_sep = map_ccd_code_to_smiles("SEP")
     result1 = map_smiles_to_ccd_code(smiles_sep)

@@ -202,12 +202,12 @@ def test_lease_timeout_raises(device_manager_1gpu):
     def hold_lease():
         with dm.lease("tool1", device="cuda"):
             acquired.set()
-            time.sleep(2)  # Hold longer than timeout
+            time.sleep(0.3)  # Hold longer than timeout
 
     def timeout_lease():
         acquired.wait(timeout=5)
         try:
-            with dm.lease("tool2", device="cuda", timeout=0.2):
+            with dm.lease("tool2", device="cuda", timeout=0.1):
                 pass
         except TimeoutError as e:
             error.append(e)
@@ -217,8 +217,8 @@ def test_lease_timeout_raises(device_manager_1gpu):
     t1.start()
     t2.start()
 
-    t2.join(timeout=5)
-    t1.join(timeout=5)
+    t2.join(timeout=3)
+    t1.join(timeout=3)
 
     assert len(error) == 1
     assert "Timed out" in str(error[0])
@@ -279,8 +279,8 @@ def test_concurrent_leases_on_2_gpus(device_manager):
         with device_manager.lease("tool3", device="cuda", timeout=10) as device:
             third_device.append(device)
 
-    t1 = threading.Thread(target=acquire_lease, args=("tool1", 0.5))
-    t2 = threading.Thread(target=acquire_lease, args=("tool2", 0.5))
+    t1 = threading.Thread(target=acquire_lease, args=("tool1", 0.2))
+    t2 = threading.Thread(target=acquire_lease, args=("tool2", 0.2))
     t3 = threading.Thread(target=third_lease)
 
     t1.start()

@@ -1241,7 +1241,9 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
         """Simulate 'python -m venv' creating the directory."""
         inst.env_path.mkdir(parents=True, exist_ok=True)
 
-    with patch(
+    with patch.object(
+        inst, "_ensure_micromamba", return_value=Path("/fake/micromamba"),
+    ), patch(
         "bio_programming_tools.utils.tool_instance.subprocess.run",
         side_effect=_create_env_dir,
     ), patch(

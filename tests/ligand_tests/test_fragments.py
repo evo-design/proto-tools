@@ -7,6 +7,7 @@ from bio_programming_tools.entities.ligands import Fragment
 from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 
+@pytest.mark.integration
 def test_fragment_from_valid_smiles():
     smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
     with open(smi_path) as f:
@@ -22,6 +23,7 @@ def test_fragment_from_invalid_smiles():
         Fragment("INVALIDSMILES")
 
 
+@pytest.mark.integration
 def test_fragment_from_mol_object():
     smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
     with open(smi_path) as f:
@@ -35,6 +37,7 @@ def test_fragment_from_mol_object():
     assert Chem.MolToSmiles(Chem.RemoveHs(mol), canonical=True) == frag.smiles
 
 
+@pytest.mark.integration
 def test_generate_conformers():
     smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
     with open(smi_path) as f:
@@ -46,6 +49,7 @@ def test_generate_conformers():
         assert conf is not None
 
 
+@pytest.mark.integration
 def test_fragment_name_assignment():
     smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
     with open(smi_path) as f:

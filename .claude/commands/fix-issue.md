@@ -61,19 +61,24 @@ Parallelize exploration aggressively — launch multiple sub-agents to search di
 Tests are organized by tool category:
 ```
 tests/
-├── test_blast.py, test_mmseqs.py, test_pyhmmer.py
+├── conftest.py
+├── causal_models_tests/        # evo1, evo2, progen2
+├── masked_models_tests/        # esm2, esm3
+├── database_retrieval_tests/
+├── gene_annotation_tests/
 ├── inverse_folding_tests/
-├── language_model_tests/
 ├── ligand_tests/
 ├── orf_prediction_tests/
+├── rna_splicing_tests/
 ├── sequence_alignment_tests/
 ├── sequence_scoring_tests/
+├── structure_alignment_tests/
 ├── structure_design_tests/
 ├── structure_dynamics_tests/
 ├── structure_prediction_tests/
 ├── structure_tests/
-├── tool_infra_tests/
-└── conftest.py
+├── style_consistency_tests/
+└── tool_infra_tests/
 ```
 
 ## Step 3: Present Findings — STOP and wait for user
