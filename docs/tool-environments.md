@@ -77,12 +77,12 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 - Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
 - Driver 535-549: torch 2.4-2.6.x (CUDA 12.2; 2.7+ ships CUDA 12.8 runtime libs)
 - Driver 525-534: torch 2.4-2.6.x (CUDA 12.0-12.1)
-- Driver <525: torch 2.1-2.3 (CUDA 11.x era)
+- Driver &lt;525: torch 2.1-2.3 (CUDA 11.x era)
 
 **JAX** (driver + CUDA → jax version + variant):
 - Driver 525+: jax[cuda12] 0.4.20+ (all CUDA 12.x)
 - Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x, not yet used)
-- Driver <525: jax[cuda11] 0.4.20+ (CUDA 11.x)
+- Driver &lt;525: jax[cuda11] 0.4.20+ (CUDA 11.x)
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
 

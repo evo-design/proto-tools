@@ -51,7 +51,7 @@ AlphaGenome jointly predicts all of these signals from DNA sequence alone, lever
 | `alphagenome-score-intervals` | Score batched genomic intervals with interval scorers | List of intervals (auto-wraps single) | List of tidy score records |
 | `alphagenome-score-ism-variants-batch` | Batched in-silico mutagenesis | List of ISM requests (auto-wraps single) | List of tidy score records |
 
-All tools accept either a single input item (auto-wrapped into a list) or an explicit list for batch processing. All tools use `@tool_cache_iterable` for per-item caching.
+All tools accept either a single input item (auto-wrapped into a list) or an explicit list for batch processing. All tools use `cacheable=True` on `@tool()` for per-item caching.
 
 **Prediction tools** return raw spatial tracks (matrices) suitable for visualization and custom downstream analysis. **Scoring tools** return tidy tabular records (one row per scorer-track-gene combination) suitable for ranking and filtering.
 
@@ -179,7 +179,7 @@ print(f"ISM scores: {len(result[0].scores)} records")
 - **First run is slow**: Model weights are downloaded from Hugging Face on first use. Subsequent runs load from the local cache.
 - **GPU required**: AlphaGenome requires a CUDA GPU.
 - **Auto-wrapping**: All batched tools accept a single item (dict, model instance, or string) which is automatically wrapped into a one-element list. This avoids the need for explicit list syntax for single-input use cases.
-- **Per-item caching**: All tools use `@tool_cache_iterable` which caches results per individual input item. Duplicate items in a batch are computed only once.
+- **Per-item caching**: All tools use `cacheable=True` on `@tool()` which caches results per individual input item. Duplicate items in a batch are computed only once.
 - **Variant position validation**: The variant position must fall within `[interval_start, interval_end)`. The ISM sub-interval must be fully contained within the main interval.
 - **Scorer selection**: Passing `None` for `variant_scorers` or `interval_scorers` uses all recommended scorers, which provides comprehensive coverage but is slower. Specify individual scorers when you only need specific assay types.
 - **ISM sub-intervals**: Keep ISM windows small (tens to low hundreds of bp). Each position generates 3 alternate allele predictions, so computation scales linearly with window size.

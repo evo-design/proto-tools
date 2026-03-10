@@ -129,7 +129,7 @@ config = ESM2EmbeddingsConfig(
 result = run_esm2_embeddings(inputs, config)
 
 # Cluster embeddings
-embeddings = np.array(result.mean_embeddings)
+embeddings = np.array([r.mean_embedding for r in result.results])
 kmeans = KMeans(n_clusters=2).fit(embeddings)
 print(f"Cluster assignments: {kmeans.labels_}")
 ```
@@ -181,7 +181,7 @@ config = ESM2EmbeddingsConfig(
 )
 
 result = run_esm2_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
+print(f"Processed {len(result.results)} sequences")
 ```
 
 ## Best Practices & Gotchas
@@ -265,20 +265,8 @@ print(f"Processed {result.num_sequences} sequences")
 
 ### Output
 
-<ResponseField name="logits" type="array">
-  Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].
-</ResponseField>
-
-<ResponseField name="attention_masks" type="List[array]" required>
-  Attention masks for each sequence (shape: [num_sequences, seq_len])
-</ResponseField>
-
-<ResponseField name="mean_embeddings" type="array">
-  Mean embeddings for each sequence (averaged over sequence length)
-</ResponseField>
-
-<ResponseField name="num_sequences" type="integer" required>
-  Number of sequences processed
+<ResponseField name="results" type="List[SequenceEmbedding]" required>
+  Per-sequence embedding results
 </ResponseField>
   </Tab>
   <Tab title="ESM2 Sampling">

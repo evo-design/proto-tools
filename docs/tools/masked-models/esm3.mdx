@@ -107,8 +107,8 @@ inputs = ESM3EmbeddingsInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
 config = ESM3EmbeddingsConfig(verbose=True)
 
 result = run_esm3_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
-print(f"Embedding dim: {len(result.mean_embeddings[0])}")
+print(f"Processed {len(result.results)} sequences")
+print(f"Embedding dim: {len(result.results[0].mean_embedding)}")
 ```
 
 **Example 2: Predict structure**
@@ -179,7 +179,7 @@ config = ESM3EmbeddingsConfig(
 )
 
 result = run_esm3_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
+print(f"Processed {len(result.results)} sequences")
 ```
 
 ## Best Practices & Gotchas
@@ -252,20 +252,8 @@ print(f"Processed {result.num_sequences} sequences")
 
 ### Output
 
-<ResponseField name="logits" type="array">
-  Per-position amino acid logits. Shape: [num_sequences, seq_len, vocab_size].
-</ResponseField>
-
-<ResponseField name="attention_masks" type="List[array]" required>
-  Attention masks for each sequence (shape: [num_sequences, seq_len])
-</ResponseField>
-
-<ResponseField name="mean_embeddings" type="array">
-  Mean embeddings for each sequence (averaged over sequence length)
-</ResponseField>
-
-<ResponseField name="num_sequences" type="integer" required>
-  Number of sequences processed
+<ResponseField name="results" type="List[SequenceEmbedding]" required>
+  Per-sequence embedding results
 </ResponseField>
   </Tab>
   <Tab title="ESM3 Sampling">
