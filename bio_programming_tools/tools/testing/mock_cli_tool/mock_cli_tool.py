@@ -46,6 +46,7 @@ class MockCLIToolConfig(BaseConfig):
         title="Device",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
 
     scale_factor: float = ConfigField(
@@ -148,7 +149,7 @@ def run_mock_cli_tool(
             "scale_factor": config.scale_factor,
         },
         instance=instance,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return MockCLIToolOutput(**result)

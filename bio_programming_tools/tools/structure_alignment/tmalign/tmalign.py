@@ -123,8 +123,7 @@ def run_tmalign(
         "tmalign",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     return TMalignOutput(

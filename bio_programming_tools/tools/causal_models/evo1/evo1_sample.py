@@ -165,6 +165,7 @@ class Evo1SampleConfig(BaseConfig):
         default="cuda",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
 
 
@@ -186,6 +187,8 @@ def example_input():
     description="Sample DNA sequences using Evo1 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="prompts",
+    iterable_output_field="sequences",
 )
 def run_evo1_sample(
     inputs: Evo1SampleInput, config: Evo1SampleConfig | None = None, instance=None,
@@ -226,9 +229,7 @@ def run_evo1_sample(
             "verbose": config.verbose,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     sequences = result["sequences"]

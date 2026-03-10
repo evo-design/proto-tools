@@ -14,7 +14,6 @@ from pydantic import Field, field_serializer, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
@@ -271,8 +270,8 @@ def example_input():
     description="Tissue-specific splicing prediction using SpliceTransformer",
     uses_gpu=True,
     example_input=example_input,
+    cacheable=True,
 )
-@tool_cache("splice-transformer-prediction")
 def run_splice_transformer(
     inputs: SpliceTransformerInput,
     config: SpliceTransformerConfig | None = None,
@@ -343,9 +342,7 @@ def run_splice_transformer(
         "splice_transformer",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     prediction = np.array(output_data["prediction"])

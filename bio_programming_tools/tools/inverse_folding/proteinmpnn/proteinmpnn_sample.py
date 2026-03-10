@@ -70,6 +70,8 @@ def example_input():
     description="Sample protein sequences using ProteinMPNN",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="inputs",
+    iterable_output_field="designed_sequences",
 )
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
@@ -121,8 +123,7 @@ def run_proteinmpnn_sample(
                 "proteinmpnn",
                 input_dict,
                 instance=instance,
-                verbose=config.verbose,
-                timeout=config.timeout,
+                config=config,
             )
             all_seqs.extend(result["seq"])
             all_perp.extend(np.exp(result["score"]).tolist())

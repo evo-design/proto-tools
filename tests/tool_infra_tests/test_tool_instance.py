@@ -296,17 +296,20 @@ def test_dispatch_with_tool_instance_object():
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_passes_script_path(mock_init: MagicMock):
-    """dispatch() should forward script_path to cached instance."""
+    """dispatch() should forward script_path and config-derived args to cached instance."""
+    from bio_programming_tools.utils.base_config import BaseConfig
+
     inst = ToolInstance.get("esm2")
     inst.run = MagicMock(return_value={"result": "ok"})
 
-    ToolInstance.dispatch("esm2", {}, script_path="/custom/script.py", verbose=True)
+    cfg = BaseConfig(verbose=True)
+    ToolInstance.dispatch("esm2", {}, script_path="/custom/script.py", config=cfg)
     inst.run.assert_called_once_with(
         {},
         script_path="/custom/script.py",
         verbose=True,
         timeout=600,
-        reload_on=None,
+        reload_on=set(),
     )
 
 
@@ -882,23 +885,30 @@ def test_persistent_worker_no_restart_same_reload_params():
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_forwards_reload_on(mock_init: MagicMock):
-    """dispatch() should forward reload_on to cached instance.run()."""
+def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
+    """dispatch() should derive reload_on from config's reload_fields()."""
+    from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+
+    class TestConfig(BaseConfig):
+        model_checkpoint: str = ConfigField(
+            default="default", description="model", reload_on_change=True,
+        )
+
     inst = ToolInstance.get("esm2")
     inst.run = MagicMock(return_value={"result": "ok"})
 
-    reload_fields = {"model_checkpoint"}
+    cfg = TestConfig()
     ToolInstance.dispatch(
         "esm2",
         {"op": "score", "device": "cpu"},
-        reload_on=reload_fields,
+        config=cfg,
     )
     inst.run.assert_called_once_with(
         {"op": "score", "device": "cpu"},
         script_path=None,
         verbose=False,
         timeout=600,
-        reload_on=reload_fields,
+        reload_on={"model_checkpoint"},
     )
 
 
@@ -986,15 +996,18 @@ def test_persistent_timeout_raises():
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_reads_timeout_from_input_dict(
+def test_dispatch_reads_timeout_from_config(
     mock_init: MagicMock, mock_oneshot: MagicMock
 ):
-    """dispatch() should extract timeout from input_dict and forward it."""
+    """dispatch() should use timeout from config object."""
+    from bio_programming_tools.utils.base_config import BaseConfig
+
     mock_oneshot.return_value = {"result": "ok"}
-    ToolInstance.dispatch("esm2", {"op": "score", "timeout": 60})
+    cfg = BaseConfig(timeout=60)
+    ToolInstance.dispatch("esm2", {"op": "score"}, config=cfg)
     mock_oneshot.assert_called_once_with(
         "esm2",
-        {"op": "score", "timeout": 60},
+        {"op": "score"},
         script_path=None,
         verbose=False,
         timeout=60,

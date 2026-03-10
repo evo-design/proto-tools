@@ -87,7 +87,7 @@ def test_real_tool_eviction_cpu_strategy():
                 result3 = run_mock_pytorch_tool(input1, config1, instance="mock_1")
                 assert result3.success, f"Evicted tool (on CPU) failed: {result3.errors}"
                 assert (
-                    len(result3.result) > 0
+                    len(result3.results) > 0
                 ), "Evicted tool should still produce results"
 
     finally:
@@ -241,7 +241,7 @@ def test_evicted_instance_variable_still_works():
         # Verify the restarted instance works correctly
         result4 = run_mock_pytorch_tool(input1, config1, instance="mock_1")
         assert result4.success, "Restarted instance should continue working"
-        assert len(result4.result) > 0, "Should produce results"
+        assert len(result4.results) > 0, "Should produce results"
 
     finally:
         # Clean up

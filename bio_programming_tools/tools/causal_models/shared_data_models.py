@@ -62,6 +62,7 @@ class CausalModelScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
 
 
@@ -224,6 +225,7 @@ class CausalModelSampleConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
 
 

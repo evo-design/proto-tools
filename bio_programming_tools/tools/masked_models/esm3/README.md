@@ -130,12 +130,16 @@ All tools take a tool-specific input with one or more protein sequences:
 
 ### ESM3EmbeddingsOutput (Embeddings)
 
-| Field | Type | Shape | Description |
-|-------|------|-------|-------------|
-| `mean_embeddings` | `List[List[float]]` | `[num_seq, embed_dim]` | Mean-pooled sequence embeddings |
-| `logits` | `List[List[List[float]]]` | `[num_seq, seq_len, vocab_size]` | Per-position logits |
-| `attention_masks` | `List[List[int]]` | `[num_seq, seq_len]` | Valid position masks |
-| `num_sequences` | `int` | - | Sequences processed |
+| Field | Type | Description |
+|-------|------|-------------|
+| `results` | `List[SequenceEmbedding]` | Per-sequence embedding results (primary field) |
+
+**`SequenceEmbedding` fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `mean_embedding` | `List[float]` | Mean-pooled embedding vector for one sequence |
+| `attention_mask` | `List[int]` | Binary mask: 1 = valid position, 0 = padding |
+| `logits` | `Optional[List[List[float]]]` | Per-position logits (seq_len, vocab_size). Only present if `return_logits=True` |
 
 ### ESM3SampleOutput
 
@@ -211,8 +215,8 @@ inputs = ESM3EmbeddingsInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
 config = ESM3EmbeddingsConfig(verbose=True)
 
 result = run_esm3_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
-print(f"Embedding dim: {len(result.mean_embeddings[0])}")
+print(f"Processed {len(result.results)} sequences")
+print(f"Embedding dim: {len(result.results[0].mean_embedding)}")
 ```
 
 **Example 2: Predict structure**
@@ -283,7 +287,7 @@ config = ESM3EmbeddingsConfig(
 )
 
 result = run_esm3_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
+print(f"Processed {len(result.results)} sequences")
 ```
 
 ## Best Practices & Gotchas

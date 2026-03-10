@@ -8,7 +8,7 @@ ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein s
 - **Input**: Protein sequences (with optional identifiers)
 - **Output**: MSA objects per query sequence
 - **Execution**: CPU (local venv via `ToolInstance`), optional GPU for MMSeqs2
-- **Caching**: Per-item caching via `@tool_cache_iterable`
+- **Caching**: Per-item caching via `cacheable=True` on `@tool()`
 
 ## When to Use This Tool
 
@@ -222,7 +222,7 @@ if msa is not None:
 ## Best Practices & Gotchas
 
 - **Remote mode is rate-limited.** The ColabFold API server has usage limits. For large batches (>50 sequences), use local mode with a downloaded database.
-- **Results are cached per sequence.** The `@tool_cache_iterable` decorator caches results per query, so re-running with the same sequences skips the search. This works even if you add new sequences to the batch.
+- **Results are cached per sequence.** The `cacheable=True` flag on `@tool()` enables per-item caching, so re-running with the same sequences skips the search. This works even if you add new sequences to the batch.
 - **MSA is `None` when no homologs are found.** Always check `result.msa is not None` before accessing MSA properties. The `num_homologs_found` property safely returns 0 in this case.
 - **Sequence IDs must be unique.** If you provide duplicate `sequence_id` values, validation will fail. Auto-generated IDs are derived from sequence hashes and are guaranteed unique for distinct sequences.
 - **Local databases require setup.** For local mode, download databases using the provided `setup_databases.sh` script. The UniRef30 database is ~70 GB on disk.

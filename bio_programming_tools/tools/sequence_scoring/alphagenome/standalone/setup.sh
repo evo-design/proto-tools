@@ -19,42 +19,28 @@ if [ "${ALPHAGENOME_JAX_VARIANT:-}" != "" ] && [ "$JAX_VARIANT" != "cuda12" ] &&
     exit 1
 fi
 
-USE_LOCAL_CUDA_ENV=$(echo "${ALPHAGENOME_USE_LOCAL_CUDA_ENV:-false}" | tr '[:upper:]' '[:lower:]')
-if [ "$USE_LOCAL_CUDA_ENV" = "true" ]; then
-    if [ -z "${VENV_PATH:-}" ]; then
-        echo "ERROR: VENV_PATH is required when ALPHAGENOME_USE_LOCAL_CUDA_ENV=true"
-        exit 1
+# ============================================================================
+# Install CUDA toolkit via micromamba (JAX needs CUDA libs on LD_LIBRARY_PATH)
+# ============================================================================
+CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-}"
+if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ] && [ -n "${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}" ]; then
+    # Backward compatibility with prior exact-version override.
+    CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_VERSION}"
+fi
+if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
+    if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
+        CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
+    else
+        CUDA_TOOLKIT_CONSTRAINT="12.*"
     fi
-    MAMBA_ROOT="$VENV_PATH/micromamba"
-    mkdir -p "$MAMBA_ROOT"
-    if [ ! -f "$MAMBA_ROOT/bin/micromamba" ]; then
-        echo "Installing micromamba..."
-        curl -Ls "https://micro.mamba.pm/api/micromamba/linux-64/latest" | tar -xvj -C "$MAMBA_ROOT" bin/micromamba
-    fi
-    export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
-    eval "$($MAMBA_ROOT/bin/micromamba shell hook -s posix)"
-
-    CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-}"
-    if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ] && [ -n "${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}" ]; then
-        # Backward compatibility with prior exact-version override.
-        CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_VERSION}"
-    fi
-    if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
-        # Use centrally detected CUDA version
-        if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
-            CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
-        else
-            CUDA_TOOLKIT_CONSTRAINT="12.*"
-        fi
-    fi
-    echo "Installing local CUDA env (toolkit=${CUDA_TOOLKIT_CONSTRAINT}) via micromamba..."
-    micromamba create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-        "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
-        "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
-        "cudnn"
-
-    export CUDA_HOME="$VENV_PATH/cuda_env"
-    export LD_LIBRARY_PATH="${CUDA_HOME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
+echo "Installing CUDA toolkit ${CUDA_TOOLKIT_CONSTRAINT} locally via micromamba..."
+if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+    "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
+    "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
+    "cudnn"; then
+    echo "ERROR: Failed to install CUDA toolkit via micromamba"
+    exit 1
 fi
 
 echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"

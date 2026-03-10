@@ -20,7 +20,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
@@ -417,11 +416,6 @@ def example_input():
     return ColabfoldSearchInput(queries=["MKTL"])
 
 
-@tool_cache_iterable(
-    input_iterable_field="queries",
-    output_iterable_field="results",
-    tool_name="colabfold-search",
-)
 @tool(
     key="colabfold-search",
     label="ColabFold MSA Search",
@@ -431,6 +425,9 @@ def example_input():
     output_class=ColabfoldSearchOutput,
     description="Generate Multiple Sequence Alignments using ColabFold local database search",
     example_input=example_input,
+    iterable_input_field="queries",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_colabfold_search(
     inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig | None = None,
@@ -676,8 +673,7 @@ def _local_search(
             input_data,
             instance=instance,
             script_path=standalone_script,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
 
         if not output_data.get("success", False):
@@ -753,8 +749,7 @@ def _remote_search(
         input_data,
         instance=instance,
         script_path=standalone_script,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     if not output_data.get("success", False):

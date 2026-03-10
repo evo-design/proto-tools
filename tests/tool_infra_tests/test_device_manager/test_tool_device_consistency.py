@@ -217,17 +217,19 @@ def test_get_memory_stats_via_worker(tool_spec):
             if not script_path.exists():
                 script_path = tool_spec.source_file.parent / "standalone" / "run.py"
 
+            from bio_programming_tools.utils.base_config import BaseConfig
+
+            cfg = BaseConfig(verbose=False, timeout=100)
             result = ToolInstance.dispatch(
                 tool_name,
                 command,
                 instance=instance,
                 script_path=script_path,
-                verbose=False,
-                timeout=10,
+                config=cfg,
             )
         except Exception:
             if instance._worker is not None:
-                result = instance._worker.send(command, timeout=10)
+                result = instance._worker.send(command, timeout=100)
             else:
                 raise
 

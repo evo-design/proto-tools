@@ -14,7 +14,6 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput
 
@@ -87,6 +86,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution)",
         hidden=True,
+        include_in_key=False,
         examples=["cuda", "cpu"],
     )
 
@@ -121,11 +121,9 @@ def example_input():
     description="Score protein sequences using ProteinMPNN",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="sequence_structure_pairs",
-    output_iterable_field="scores",
-    tool_name="proteinmpnn-score",
+    iterable_input_field="sequence_structure_pairs",
+    iterable_output_field="scores",
+    cacheable=True,
 )
 def run_proteinmpnn_score(
     inputs: ProteinMPNNScoringInput,
@@ -199,8 +197,7 @@ def run_proteinmpnn_score(
             "proteinmpnn",
             input_dict,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
         scores.append(
             SequenceScores(

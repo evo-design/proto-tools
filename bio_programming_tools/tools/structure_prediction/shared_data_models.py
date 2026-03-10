@@ -659,6 +659,11 @@ class StructurePredictionInput(BaseToolInput):
         description="List of complexes to predict structure for containing chains and entity types."
     )
 
+    @classmethod
+    def item_cost(cls, item: StructurePredictionComplex) -> float:
+        """Cost ~ total residues across all chains in the complex."""
+        return float(item.sum_of_chain_lengths())
+
     @field_validator("complexes", mode="before", check_fields=False)
     @classmethod
     def normalize_complexes(cls, value):
@@ -757,6 +762,7 @@ class StructurePredictionConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
     )
 
 

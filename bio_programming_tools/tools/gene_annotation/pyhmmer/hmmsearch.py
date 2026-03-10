@@ -6,7 +6,6 @@ from pathlib import Path
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_cache import tool_cache
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -78,8 +77,8 @@ def example_input():
     output_class=PyHmmsearchOutput,
     description="Search HMM profile(s) against sequences using PyHMMER",
     example_input=example_input,
+    cacheable=True,
 )
-@tool_cache("pyhmmer-hmmsearch")
 def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | None = None, instance=None) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
@@ -141,7 +140,7 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
             "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Convert results to DataFrames

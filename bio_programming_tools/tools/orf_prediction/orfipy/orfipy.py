@@ -16,7 +16,6 @@ from pydantic import ConfigDict, Field, computed_field, field_validator
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
@@ -297,11 +296,6 @@ def example_input():
     return OrfipyInput(sequences=["ATGTACTATTCATTAA"])
 
 
-@tool_cache_iterable(
-    input_iterable_field="sequences",
-    output_iterable_field="predicted_orfs",
-    tool_name="orfipy-prediction",
-)
 @tool(
     key="orfipy-prediction",
     label="Orfipy ORF Prediction",
@@ -311,12 +305,15 @@ def example_input():
     output_class=OrfipyOutput,
     description="ORF (Open Reading Frame) prediction using Orfipy",
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="predicted_orfs",
+    cacheable=True,
 )
 def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = None, instance=None) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
     Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
-    Processing is batched but caching is handled per-sequence via @tool_cache_iterable.
+    Processing is batched but caching is handled per-sequence via cacheable=True.
 
     Args:
         inputs (OrfipyInput): Validated input containing one or more DNA sequences
@@ -370,8 +367,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
             },
         },
         instance=instance,
-        verbose=False,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Reconstruct ORF objects from returned dicts

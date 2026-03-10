@@ -241,6 +241,7 @@ class InverseFoldingConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution)",
         hidden=True,
+        include_in_key=False,
         examples=["cuda", "cpu"],
     )
 

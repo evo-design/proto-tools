@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 # ============================================================================
@@ -260,11 +259,6 @@ def example_input():
     )
 
 
-@tool_cache_iterable(
-    input_iterable_field="query_sequences",
-    output_iterable_field="results",
-    tool_name="mmseqs-search-proteins",
-)
 @tool(
     key="mmseqs-search-proteins",
     label="MMseqs2 Protein Search",
@@ -274,6 +268,9 @@ def example_input():
     output_class=MmseqsSearchProteinsOutput,
     description="Search protein sequences using MMseqs2 with per-sequence results",
     example_input=example_input,
+    iterable_input_field="query_sequences",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_mmseqs_search_proteins(
     inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig | None = None,
@@ -327,7 +324,7 @@ def run_mmseqs_search_proteins(
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Parse results

@@ -14,7 +14,6 @@ from pydantic import ConfigDict, Field, field_validator
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
@@ -136,7 +135,6 @@ def example_input():
     return MafftInput(sequences=["MKTL", "MKTA"])
 
 
-@tool_cache(tool_name="mafft-align")
 @tool(
     key="mafft-align",
     label="MAFFT Alignment",
@@ -146,6 +144,7 @@ def example_input():
     output_class=MafftOutput,
     description="Multiple sequence alignment (MSA) using MAFFT (Multiple Alignment using Fast Fourier Transform)",
     example_input=example_input,
+    cacheable=True,
 )
 def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, instance=None) -> MafftOutput:
     """Perform multiple sequence alignment using MAFFT.
@@ -195,8 +194,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         "mafft",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Extract results from output

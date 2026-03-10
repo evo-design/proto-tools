@@ -124,8 +124,7 @@ def run_usalign(
         "usalign",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     return USalignOutput(

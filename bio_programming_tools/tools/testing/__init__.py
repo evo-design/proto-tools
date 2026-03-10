@@ -35,6 +35,7 @@ from .mock_pytorch_tool import (
     MockPyTorchToolConfig,
     MockPyTorchToolInput,
     MockPyTorchToolOutput,
+    MockPyTorchToolResult,
     run_mock_pytorch_tool,
 )
 
@@ -62,5 +63,6 @@ __all__ = [
     "MockPyTorchToolConfig",
     "MockPyTorchToolInput",
     "MockPyTorchToolOutput",
+    "MockPyTorchToolResult",
     "run_mock_pytorch_tool",
 ]

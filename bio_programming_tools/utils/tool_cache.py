@@ -3,20 +3,26 @@ tool_cache.py
 
 Tool cache utilities for caching expensive tool operations.
 
-This module provides program-scoped caching capabilities for tools via a decorator
-that transparently handles result caching based on input parameters. Each Program
-instance maintains its own isolated cache using Python's contextvars.
+This module provides program-scoped caching capabilities for tools. Caching is
+enabled by setting ``cacheable=True`` on the ``@tool()`` decorator, which
+auto-selects the strategy:
+
+- **Iterable tools** (have ``iterable_input_field``) → per-item cache
+  (strip cached items, dispatch uncached only, stitch results back).
+- **Non-iterable tools** → whole-output cache (hash full inputs + config).
+
+Each Program instance maintains its own isolated cache using Python's
+contextvars.
 """
 from __future__ import annotations
 
-import functools
 import hashlib
-import inspect
 import json
 import logging
 import sys
 from contextvars import ContextVar
-from typing import Any, Callable, TypeVar
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -26,8 +32,6 @@ logger = logging.getLogger(__name__)
 _program_tool_cache: ContextVar[ToolCache | None] = ContextVar(
     "_program_tool_cache", default=None
 )
-
-T = TypeVar("T")
 
 
 def _get_obj_size(obj: Any, seen: set[int] = None) -> int:
@@ -215,11 +219,16 @@ def _serialize_for_cache_key(obj: Any) -> str:
     Convert any object to a string representation suitable for cache key generation.
 
     Handles Pydantic models, basic types, lists, dicts, etc.
+    Fields marked with ``include_in_key=False`` on their ConfigField are excluded.
     """
     if isinstance(obj, BaseModel):
-        # For Pydantic models, convert to dict first then JSON for deterministic serialization
-        # Exclude verbose field since it only affects logging, not computation results
-        model_dict = obj.model_dump(exclude_none=True, exclude={"verbose"})
+        # Exclude fields marked include_in_key=False (device, verbose, timeout, etc.)
+        from bio_programming_tools.utils.base_config import BaseConfig
+        if isinstance(obj, BaseConfig):
+            exclude = obj.cache_exclude_fields()
+        else:
+            exclude = set()
+        model_dict = obj.model_dump(exclude_none=True, exclude=exclude)
         return json.dumps(model_dict, sort_keys=True, default=str)
     elif isinstance(obj, (dict, list, tuple)):
         # For collections, use JSON with sorted keys
@@ -257,333 +266,171 @@ def _generate_cache_key(tool_name: str, *args, **kwargs) -> str:
     return hashlib.md5(combined.encode()).hexdigest()[:16]
 
 
-def tool_cache(tool_name: str | None = None, enabled: bool = True) -> Callable:
-    """
-    Decorator that adds transparent caching to tool functions. Reads cache from
-    the program-scoped contextvar set by the Optimizer.
+@dataclass
+class DeduplicatedItems:
+    """Result of deduplicating a list of items by cache key.
 
-    This decorator caches the entire output based on the complete input and config.
-    For tools that process batches of independent items, consider using
-    @tool_cache_iterable instead for more granular caching.
+    Attributes:
+        unique_items: Deduplicated items in first-occurrence order.
+        unique_keys: Cache keys for each unique item (1:1 with unique_items).
+        index_map: Maps every original position to its unique index.
+            ``index_map[i]`` is ``(i, unique_idx)`` where ``unique_idx``
+            indexes into ``unique_items``.
+    """
+    unique_items: list[Any]
+    unique_keys: list[str]
+    index_map: list[tuple[int, int]]
+
+
+def deduplicate_items(
+    items: list[Any],
+    key_fn: Callable[[Any], str],
+) -> DeduplicatedItems:
+    """Deduplicate items by a serialization key function.
 
     Args:
-        tool_name: Optional name for the tool. If not provided, uses the function name.
-            When provided, use the registry key (kebab-case, e.g. "mafft-align") for consistency.
-            Tool functions use the run_ prefix (e.g. run_mafft_align); registry keys use kebab-case.
-        enabled: Whether caching is enabled. Useful for testing.
+        items: List of items to deduplicate.
+        key_fn: Callable that produces a deterministic string key for each item.
 
-    Example:
-        @tool(
-            key="sequence-analysis",
-            label="Sequence Analysis",
-            input=SequenceInput,
-            config=AnalysisConfig,
-            output=AnalysisOutput,
-            description="Analyze DNA sequences",
-            category="analysis"
-        )
-        @tool_cache("sequence-analysis")
-        def analyze_sequence(
-            inputs: SequenceInput,
-            config: AnalysisConfig
-        ) -> AnalysisOutput:
-            # Expensive computation here
-            result = expensive_analysis(inputs.sequence, config.threshold)
-            return AnalysisOutput(
-                score=result.score,
-            )
-
-        # First call - cache miss, computation runs
-        result1 = analyze_sequence(
-            SequenceInput(sequence="ACGT"),
-            AnalysisConfig(threshold=0.5)
-        )
-
-        # Second call with same inputs - cache hit, returns cached result
-        result2 = analyze_sequence(
-            SequenceInput(sequence="ACGT"),
-            AnalysisConfig(threshold=0.5)
-        )
-
-        # Different inputs - cache miss, computation runs
-        result3 = analyze_sequence(
-            SequenceInput(sequence="TGCA"),
-            AnalysisConfig(threshold=0.5)
-        )
+    Returns:
+        A ``DeduplicatedItems`` with unique items, their keys, and a full
+        index map from original positions to unique positions.
     """
+    unique_items: list[Any] = []
+    unique_keys: list[str] = []
+    key_to_unique_idx: dict[str, int] = {}
+    index_map: list[tuple[int, int]] = []
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        actual_tool_name = tool_name or func.__name__
+    for i, item in enumerate(items):
+        k = key_fn(item)
+        if k not in key_to_unique_idx:
+            unique_idx = len(unique_items)
+            key_to_unique_idx[k] = unique_idx
+            unique_items.append(item)
+            unique_keys.append(k)
+        else:
+            unique_idx = key_to_unique_idx[k]
+        index_map.append((i, unique_idx))
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> T:
-            # If caching is disabled, just run the function
-            if not enabled:
-                return func(*args, **kwargs)
-
-            # Get cache from contextvar
-            cache = _program_tool_cache.get()
-            if cache is None:
-                # No cache set - run without caching
-                return func(*args, **kwargs)
-
-            # Bind arguments to function signature to normalize positional/keyword args
-            sig = inspect.signature(func)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()  # Apply defaults for correct cache key generation
-
-            # Generate cache key using normalized arguments
-            cache_key = _generate_cache_key(actual_tool_name, *args, **kwargs)
-
-            # Check cache
-            cached_result = cache.get(actual_tool_name, cache_key)
-            if cached_result is not None:
-                logger.debug(f"[Cache Hit] {actual_tool_name}: Using cached result")
-                return cached_result
-
-            # Run the function
-            logger.debug(f"[Cache Miss] {actual_tool_name}: Computing result")
-
-            result = func(*args, **kwargs)
-
-            # Cache the result
-            cache.set(actual_tool_name, cache_key, result)
-
-            return result
-
-        # Add utility methods to the wrapper
-        wrapper.clear_cache = lambda: clear_tool_cache(actual_tool_name)
-        wrapper.cache_info = lambda: get_cache_info(actual_tool_name)
-
-        return wrapper
-
-    return decorator
+    return DeduplicatedItems(
+        unique_items=unique_items,
+        unique_keys=unique_keys,
+        index_map=index_map,
+    )
 
 
-def tool_cache_iterable(
-    input_iterable_field: str,
-    output_iterable_field: str,
-    tool_name: str | None = None,
-    enabled: bool = True,
-) -> Callable:
+# ============================================================================
+# Per-item cache helpers (used by @tool wrapper for iterable cacheable tools)
+# ============================================================================
+
+@dataclass
+class CacheStripResult:
+    """Result of stripping cached items from an iterable input.
+
+    Attributes:
+        uncached_items: Items that were not found in cache.
+        uncached_indices: Original indices of uncached items (1:1 with uncached_items).
+        cached_results: Mapping from original index to cached result item.
+        cache_keys: Cache keys for uncached items (1:1 with uncached_items).
     """
-    Decorator that adds iterable-level caching to tool functions that process
-    independent items in batches.
+    uncached_items: list[Any] = field(default_factory=list)
+    uncached_indices: list[int] = field(default_factory=list)
+    cached_results: dict[int, Any] = field(default_factory=dict)
+    cache_keys: list[str] = field(default_factory=list)
 
-    Unlike @tool_cache which caches the entire output based on all inputs,
-    this decorator caches individual items within an iterable. This is ideal
-    for batch processing tools where each item is processed independently
-    (e.g., structure prediction for multiple protein complexes).
+    @property
+    def all_cached(self) -> bool:
+        """True when every item was found in cache."""
+        return len(self.uncached_items) == 0
 
-    The decorator:
-    1. Checks cache for each item in the input iterable individually
-    2. Only passes uncached items to the underlying function
-    3. Combines cached and newly computed results in original order
-    4. Caches newly computed items for future calls
+
+def cache_strip_items(
+    tool_name: str,
+    items: list[Any],
+    config: Any,
+) -> CacheStripResult | None:
+    """Look up each item in the active cache, returning cached vs uncached split.
 
     Args:
-        input_iterable_field: Name of the field in the input Pydantic model that contains the iterable
-            of items to process as independent cache entries.
-        output_iterable_field: Name of the field in the output Pydantic model that contains the iterable
-            of output items corresponding to the same order as the input iterable.
-        tool_name: Optional name for the tool. If not provided, uses the function name.
-        enabled: Whether caching is enabled. Useful for testing.
+        tool_name: Registry key of the tool.
+        items: List of input items (already deduped).
+        config: Tool config (included in per-item cache key).
 
-    Example:
-        @tool(
-            key="esmfold-prediction",
-            label="ESMFold Structure Prediction",
-            input=ESMFoldInput,
-            config=ESMFoldConfig,
-            output=ESMFoldOutput,
-            description="Protein structure prediction using ESMFold",
-            category="structure_prediction",
-            uses_gpu=True
-        )
-        @tool_cache_iterable(
-            input_iterable_field="complexes",
-            output_iterable_field="structures",
-            tool_name="esmfold-prediction"
-        )
-        def run_esmfold(
-            inputs: ESMFoldInput,
-            config: ESMFoldConfig
-        ) -> ESMFoldOutput:
-            # Process complexes and return structures
-            structures = [predict_structure(c) for c in inputs.complexes]
-            return ESMFoldOutput(
-                structures=structures,
-            )
-
-        # First call with 3 complexes - all cache misses
-        result1 = run_esmfold(
-            ESMFoldInput(complexes=[complex_A, complex_B, complex_C]),
-            ESMFoldConfig()
-        )
-        # Computes all 3 structures, caches each individually
-
-        # Second call with overlapping complexes - partial cache hits
-        result2 = run_esmfold(
-            ESMFoldInput(complexes=[complex_A, complex_D, complex_C]),
-            ESMFoldConfig()
-        )
-        # Returns cached A and C, only computes D
-        # result2.structures = [cached_A, computed_D, cached_C]
-
-        # Third call with all cached - all cache hits
-        result3 = run_esmfold(
-            ESMFoldInput(complexes=[complex_B, complex_A]),
-            ESMFoldConfig()
-        )
-        # Returns all cached, no computation
-        # result3.execution_time = 0.0
-
-    Notes:
-        - Order is preserved: output[i] always corresponds to input[i]
-        - Config changes invalidate cache for all items
-        - Verbose mode shows cache hit/miss statistics per call
+    Returns:
+        A ``CacheStripResult``, or ``None`` if no active cache exists.
     """
+    cache = _program_tool_cache.get()
+    if cache is None:
+        return None
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        actual_tool_name = tool_name or func.__name__
+    result = CacheStripResult()
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> T:
-            # If caching is disabled, just run the function
-            if not enabled:
-                return func(*args, **kwargs)
+    for idx, item in enumerate(items):
+        cache_key = _generate_cache_key(
+            tool_name, input_item=item, config=config
+        )
+        cached = cache.get(tool_name, cache_key)
+        if cached is not None:
+            result.cached_results[idx] = cached
+        else:
+            result.uncached_items.append(item)
+            result.uncached_indices.append(idx)
+            result.cache_keys.append(cache_key)
 
-            # Get cache from contextvar
-            cache = _program_tool_cache.get()
-            if cache is None:
-                # No cache set - run without caching
-                return func(*args, **kwargs)
+    num_hits = len(result.cached_results)
+    total = len(items)
+    logger.debug(
+        "[Iterable Cache Stats] %s: %d cache hits, %d misses out of %d items",
+        tool_name, num_hits, total - num_hits, total,
+    )
 
-            # Bind arguments to function signature to normalize positional/keyword args
-            sig = inspect.signature(func)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()  # Apply defaults for correct cache key generation
+    return result
 
-            # Extract inputs and config
-            inputs = bound_args.arguments.get("inputs")
-            config = bound_args.arguments.get("config")
 
-            # Extract the iterable field from the inputs
-            input_items = getattr(inputs, input_iterable_field)
+def cache_store_items(
+    tool_name: str,
+    cache_keys: list[str],
+    result_items: list[Any],
+) -> None:
+    """Write newly computed items into the active cache.
 
-            # Track which items need computation vs which are already cached
-            cached_results: dict[int, Any] = {}  # orig_idx -> cached_result
-            unique_uncached_keys: list[str] = []  # ordered unique cache keys
-            unique_uncached_items: list[Any] = []  # 1:1 with unique_uncached_keys
-            key_to_unique_idx: dict[str, int] = {}  # cache_key -> index in unique lists
-            uncached_index_map: list[tuple[int, int]] = []  # (orig_idx, unique_idx)
+    Args:
+        tool_name: Registry key of the tool.
+        cache_keys: Cache keys (1:1 with result_items).
+        result_items: Computed result items to store.
+    """
+    cache = _program_tool_cache.get()
+    if cache is None:
+        return
 
-            # For each item in the input iterable
-            for idx, item in enumerate(input_items):
-                # Generate cache key
-                cache_key = _generate_cache_key(
-                    actual_tool_name, input_item=item, config=config
-                )
+    for key, item in zip(cache_keys, result_items):
+        cache.set(tool_name, key, item)
 
-                # Check cache
-                cached_result = cache.get(actual_tool_name, cache_key)
-                if cached_result is not None:
-                    cached_results[idx] = cached_result
-                else:
-                    # Deduplicate: only add to unique lists on first occurrence
-                    if cache_key not in key_to_unique_idx:
-                        unique_idx = len(unique_uncached_keys)
-                        key_to_unique_idx[cache_key] = unique_idx
-                        unique_uncached_keys.append(cache_key)
-                        unique_uncached_items.append(item)
-                    else:
-                        unique_idx = key_to_unique_idx[cache_key]
-                    uncached_index_map.append((idx, unique_idx))
 
-            # Log cache statistics
-            num_cache_hits = len(cached_results)
-            num_unique_misses = len(unique_uncached_items)
-            num_duplicates = len(uncached_index_map) - num_unique_misses
-            total_items = len(input_items)
-            dedup_info = ""
-            if num_duplicates > 0:
-                dedup_info = f", {num_duplicates} duplicate{'s' if num_duplicates != 1 else ''} removed"
-            logger.debug(
-                f"[Iterable Cache Stats] {actual_tool_name}: {num_cache_hits} cache hits, "
-                f"{num_unique_misses} unique misses out of {total_items} items"
-                + dedup_info
-            )
+def cache_stitch_items(
+    strip: CacheStripResult,
+    computed_items: list[Any],
+    total_count: int,
+) -> list[Any]:
+    """Merge cached and freshly computed items back into original order.
 
-            # Get the input and output pydantic model classes from the ToolRegistry
-            # Imported here to avoid circular import: utils -> tool_registry -> tools -> utils
-            from bio_programming_tools.tools.tool_registry import ToolRegistry
-            tool_spec = ToolRegistry.get(actual_tool_name)
-            input_model = tool_spec.input_model
-            output_model = tool_spec.output_model
+    Args:
+        strip: The ``CacheStripResult`` from ``cache_strip_items``.
+        computed_items: Newly computed items (1:1 with ``strip.uncached_indices``).
+        total_count: Total number of items in the original (pre-strip) input.
 
-            # If everything is cached, return the cached results in a new OutputPydantic model
-            if num_unique_misses == 0:
-                logger.debug(f"[Iterable Cache] {actual_tool_name}: full cache hit, skipping computation")
-                output_instance = output_model(
-                    tool_id=actual_tool_name,
-                    execution_time=0.0,
-                    success=True,
-                    warnings=[],
-                    metadata={},
-                    **{
-                        output_iterable_field: [
-                            cached_results[i] for i in range(total_items)
-                        ]
-                    },
-                )
-                return output_instance
+    Returns:
+        Merged list of length ``total_count`` with items in original order.
+    """
+    result_map = dict(strip.cached_results)
+    for orig_idx, item in zip(strip.uncached_indices, computed_items):
+        result_map[orig_idx] = item
+    return [result_map[i] for i in range(total_count)]
 
-            # If there are some items that need computation
-            else:
-                logger.debug(
-                    f"[Iterable Cache] {actual_tool_name}: computing "
-                    f"{num_unique_misses} unique uncached items"
-                )
-                # Create new input model instance with only unique uncached items
-                input_data = inputs.model_dump()
-                input_data[input_iterable_field] = unique_uncached_items
-                input_model_instance = input_model(**input_data)
 
-                # Run the function on unique uncached items only
-                tool_output = func(inputs=input_model_instance, config=config)
-
-                # Cache the results (1:1 with unique_uncached_keys)
-                result_iterable = getattr(tool_output, output_iterable_field, [])
-                for cache_key, result_item in zip(
-                    unique_uncached_keys, result_iterable
-                ):
-                    cache.set(actual_tool_name, cache_key, result_item)
-
-                # Reconstruct the final ordering
-                result_map = dict(cached_results)
-                for orig_idx, unique_idx in uncached_index_map:
-                    result_map[orig_idx] = result_iterable[unique_idx]
-
-                final_output_iterable = [result_map[i] for i in range(total_items)]
-
-                output_instance = output_model(
-                    tool_id=tool_output.tool_id,
-                    execution_time=tool_output.execution_time,
-                    success=tool_output.success,
-                    warnings=tool_output.warnings,
-                    metadata=tool_output.metadata,
-                    **{output_iterable_field: final_output_iterable},
-                )
-                return output_instance
-
-        # Add utility methods to the wrapper
-        wrapper.clear_cache = lambda: clear_tool_cache(actual_tool_name)
-        wrapper.cache_info = lambda: get_cache_info(actual_tool_name)
-
-        return wrapper
-
-    return decorator
-
+# ============================================================================
+# Module-level cache management functions
+# ============================================================================
 
 def clear_cache() -> None:
     """
@@ -612,17 +459,13 @@ def clear_tool_cache(tool_name: str) -> int:
     return 0
 
 
-def get_cache_info(tool_name: str | None = None) -> dict[str, Any]:
+def get_cache_info() -> dict[str, Any]:
     """
     Get information about the cache.
-
-    Args:
-        tool_name: Not currently used, but reserved for future filtering
 
     Returns:
         Dictionary with cache statistics
     """
-    _ = tool_name  # Reserved for future use
     cache = _program_tool_cache.get()
     if cache:
         return cache.get_info()

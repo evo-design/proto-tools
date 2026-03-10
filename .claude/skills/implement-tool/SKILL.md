@@ -142,7 +142,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 2. Write the core tool file `bio_programming_tools/tools/{category}/{tool_name}/{operation}.py` with:
    - Proper imports (including `from __future__ import annotations`)
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
-   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="ignore"`
+   - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="ignore"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
    - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`)
    - `run_*()` function that calls `ToolInstance.dispatch()`

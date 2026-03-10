@@ -32,7 +32,6 @@ from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_protein_chars,
 )
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 
 # ============================================================================
@@ -202,11 +201,9 @@ def example_input():
     description="Protein structure prediction using ESMFold",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="esmfold-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_esmfold(
     inputs: ESMFoldInput, config: ESMFoldConfig | None = None,
@@ -313,8 +310,7 @@ def run_esmfold(
             "esmfold",
             input_data,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
 
         all_results.extend(output_data["results"])

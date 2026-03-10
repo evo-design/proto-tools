@@ -36,8 +36,6 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-
 logger = getLogger(__name__)
 
 # ============================================================================
@@ -216,11 +214,9 @@ def example_input():
     uses_gpu=True,
     device_count="1-2",
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="boltz2-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance=None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.
@@ -579,8 +575,7 @@ def run_boltz2_on_complex(
             "boltz2",
             input_data,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
 
         cif_output = output_data["structure_cif_output"]

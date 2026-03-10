@@ -856,3 +856,369 @@ def test_tool_registry_open_ended_device_count_validation_passes(clean_registry)
     assert result3.success is True
 
 
+# ── Iterable dedup in @tool wrapper ──────────────────────────────────────────
+
+
+class MockIterableInput(BaseToolInput):
+    """Input with an iterable field for dedup tests."""
+    items: list[str] = Field(description="Items to process")
+
+
+class MockIterableOutput(MockToolOutputBase):
+    """Output with an iterable field for dedup tests."""
+    results: list[str] = Field(description="Processed results")
+
+
+def _register_cacheable_iterable(registry, key, func):
+    """Helper to register a cacheable iterable tool."""
+    registry.register(
+        key=key,
+        label=key,
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=MockIterableOutput,
+        description=key,
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=True,
+    )(func)
+    return registry.get(key)
+
+
+def test_tool_wrapper_deduplicates_iterable_items(clean_registry):
+    """@tool should dedup iterable items and expand results back."""
+    received_items = []
+
+    def run_dedup_test(inputs, config=None, instance=None):
+        received_items.extend(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "dedup-test", run_dedup_test)
+    inputs = MockIterableInput(items=["a", "b", "a", "c", "b"])
+    config = MockToolConfig(param1="v")
+
+    result = spec.function(inputs, config)
+
+    # Function should only receive 3 unique items
+    assert len(received_items) == 3
+    assert received_items == ["a", "b", "c"]
+
+    # Output should be expanded to match original 5 positions
+    assert result.results == ["out_a", "out_b", "out_a", "out_c", "out_b"]
+    assert result.success is True
+
+
+def test_tool_wrapper_no_dedup_for_unique_items(clean_registry):
+    """@tool should pass through when all items are already unique."""
+    received_items = []
+
+    def run_no_dedup(inputs, config=None, instance=None):
+        received_items.extend(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "no-dedup-test", run_no_dedup)
+    inputs = MockIterableInput(items=["a", "b", "c"])
+    config = MockToolConfig(param1="v")
+
+    result = spec.function(inputs, config)
+
+    assert received_items == ["a", "b", "c"]
+    assert result.results == ["out_a", "out_b", "out_c"]
+
+
+def test_tool_wrapper_dedup_single_item_skipped(clean_registry):
+    """@tool should skip dedup for single-item inputs."""
+    received_items = []
+
+    def run_single(inputs, config=None, instance=None):
+        received_items.extend(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "single-item-test", run_single)
+    inputs = MockIterableInput(items=["only"])
+    config = MockToolConfig(param1="v")
+
+    result = spec.function(inputs, config)
+
+    assert received_items == ["only"]
+    assert result.results == ["out_only"]
+
+
+def test_tool_wrapper_dedup_all_duplicates(clean_registry):
+    """@tool should reduce all-duplicate input to a single item."""
+    received_items = []
+
+    def run_all_dupes(inputs, config=None, instance=None):
+        received_items.extend(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "all-dupes-test", run_all_dupes)
+    inputs = MockIterableInput(items=["x", "x", "x", "x"])
+    config = MockToolConfig(param1="v")
+
+    result = spec.function(inputs, config)
+
+    assert len(received_items) == 1
+    assert received_items == ["x"]
+    assert result.results == ["out_x", "out_x", "out_x", "out_x"]
+
+
+def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
+    """@tool should NOT dedup when cacheable=False (generative tools)."""
+    received_items = []
+
+    @clean_registry.register(
+        key="no-cache-test",
+        label="No Cache Test",
+        category="test",
+        input_class=MockIterableInput,
+        config_class=MockToolConfig,
+        output_class=MockIterableOutput,
+        description="Generative tool without cache",
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=False,
+    )
+    def run_no_cache(inputs, config=None, instance=None):
+        received_items.extend(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = clean_registry.get("no-cache-test")
+    inputs = MockIterableInput(items=["a", "a", "a"])
+    config = MockToolConfig(param1="v")
+
+    result = spec.function(inputs, config)
+
+    # All 3 identical items should be passed through (no dedup)
+    assert len(received_items) == 3
+    assert received_items == ["a", "a", "a"]
+    assert result.results == ["out_a", "out_a", "out_a"]
+
+
+# ── Cacheable flow through @tool wrapper ──────────────────────────────────────
+
+
+@pytest.fixture
+def _setup_cache():
+    """Set up cache in contextvar before each test, clear after."""
+    from bio_programming_tools.utils.tool_cache import ToolCache, _program_tool_cache
+    cache = ToolCache()
+    _program_tool_cache.set(cache)
+    yield cache
+    _program_tool_cache.set(None)
+
+
+def test_cacheable_iterable_full_hit_skips_dispatch(clean_registry, _setup_cache):
+    """Cacheable iterable tool returns cached results without calling func."""
+    call_count = 0
+
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += len(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "cache-hit-iter", run_tool)
+    config = MockToolConfig(param1="v")
+
+    # First call: all miss
+    result1 = spec.function(MockIterableInput(items=["a", "b"]), config)
+    assert call_count == 2
+    assert result1.results == ["out_a", "out_b"]
+
+    # Second call: all cached, func should NOT be called again
+    result2 = spec.function(MockIterableInput(items=["a", "b"]), config)
+    assert call_count == 2  # unchanged
+    assert result2.results == ["out_a", "out_b"]
+    assert result2.execution_time == 0.0  # full cache hit
+
+
+def test_cacheable_iterable_partial_hit(clean_registry, _setup_cache):
+    """Cacheable iterable tool dispatches only uncached items."""
+    call_count = 0
+
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += len(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "cache-partial", run_tool)
+    config = MockToolConfig(param1="v")
+
+    # First call: cache "a" and "b"
+    spec.function(MockIterableInput(items=["a", "b"]), config)
+    assert call_count == 2
+
+    # Second call: "a" cached, "c" new
+    result = spec.function(MockIterableInput(items=["a", "c"]), config)
+    assert call_count == 3  # only "c" dispatched
+    assert result.results == ["out_a", "out_c"]
+
+
+def test_cacheable_whole_output_hit_skips_dispatch(clean_registry, _setup_cache):
+    """Cacheable non-iterable tool returns cached output on second call."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="cache-hit-whole",
+        label="Whole Cache Hit",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Whole-output cache test",
+        cacheable=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockToolOutput(result=f"processed_{inputs.input_data}")
+
+    spec = clean_registry.get("cache-hit-whole")
+    inputs = MockToolInput(input_data="test")
+    config = MockToolConfig(param1="v")
+
+    result1 = spec.function(inputs, config)
+    assert call_count == 1
+    assert result1.result == "processed_test"
+
+    # Second call: cache hit
+    result2 = spec.function(inputs, config)
+    assert call_count == 1  # unchanged
+    assert result2.result == "processed_test"
+
+
+def test_cacheable_whole_output_different_inputs(clean_registry, _setup_cache):
+    """Different inputs produce different cache entries for whole-output tools."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="cache-diff-inputs",
+        label="Cache Diff Inputs",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Different inputs test",
+        cacheable=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockToolOutput(result=f"processed_{inputs.input_data}")
+
+    spec = clean_registry.get("cache-diff-inputs")
+    config = MockToolConfig(param1="v")
+
+    spec.function(MockToolInput(input_data="a"), config)
+    assert call_count == 1
+
+    spec.function(MockToolInput(input_data="b"), config)
+    assert call_count == 2  # different input, cache miss
+
+    # Original input still cached
+    spec.function(MockToolInput(input_data="a"), config)
+    assert call_count == 2  # cache hit
+
+
+def test_no_cache_when_contextvar_none(clean_registry):
+    """Non-cached tools skip all cache logic when no cache is set."""
+    call_count = 0
+
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += len(inputs.items)
+        return MockIterableOutput(
+            results=[f"out_{x}" for x in inputs.items],
+        )
+
+    spec = _register_cacheable_iterable(clean_registry, "no-ctx-cache", run_tool)
+    config = MockToolConfig(param1="v")
+
+    # No cache set (contextvar is None) — every call dispatches
+    spec.function(MockIterableInput(items=["a"]), config)
+    assert call_count == 1
+
+    spec.function(MockIterableInput(items=["a"]), config)
+    assert call_count == 2  # no caching, called again
+
+
+def test_non_cacheable_tool_skips_cache_logic(clean_registry, _setup_cache):
+    """Non-cacheable tool runs func every time even with active cache."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="non-cacheable",
+        label="Non Cacheable",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Non-cacheable tool",
+        cacheable=False,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        return MockToolOutput(result=f"processed_{inputs.input_data}")
+
+    spec = clean_registry.get("non-cacheable")
+    inputs = MockToolInput(input_data="test")
+    config = MockToolConfig(param1="v")
+
+    spec.function(inputs, config)
+    assert call_count == 1
+
+    spec.function(inputs, config)
+    assert call_count == 2  # no caching
+
+
+def test_cacheable_on_toolspec(clean_registry):
+    """cacheable flag is stored on ToolSpec."""
+
+    @clean_registry.register(
+        key="cacheable-spec",
+        label="Cacheable Spec",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Test cacheable on spec",
+        cacheable=True,
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result="ok")
+
+    spec = clean_registry.get("cacheable-spec")
+    assert spec.cacheable is True
+
+    @clean_registry.register(
+        key="non-cacheable-spec",
+        label="Non Cacheable Spec",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Test non-cacheable on spec",
+    )
+    def run_tool2(inputs, config=None, instance=None):
+        return MockToolOutput(result="ok")
+
+    spec2 = clean_registry.get("non-cacheable-spec")
+    assert spec2.cacheable is False
+
+

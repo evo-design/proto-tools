@@ -254,8 +254,7 @@ def run_viennarna(
         "viennarna",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Convert results back to ViennaRNAResult objects

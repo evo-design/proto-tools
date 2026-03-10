@@ -109,7 +109,7 @@ def example_input():
     """Minimal valid input for testing and examples."""
     return ToolInput(sequences=["MKTL"])
 
-@tool(key="tool-key", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input)
+@tool(key="tool-key", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input, iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
 def run_tool_name(inputs: ToolInput, config: ToolConfig | None = None) -> ToolOutput:
 ```
 
@@ -141,6 +141,8 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `ToolCache`, `cache_strip_items`, `cache_store_items`, `cache_stitch_items` |
 | `utils/tool_instance.py` | `ToolInstance` — isolated environment execution with opt-in persistence |
+| `utils/tool_pool.py` | `ToolPool` — multi-GPU parallel execution with LPT scheduling |
+| `utils/device.py` | GPU detection, `DeviceSpec`, `number_of_visible_gpus()`, `determine_visible_devices()` |
 | `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
@@ -158,7 +160,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 
 ## Rules When Implementing Tools
 
-- Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them
+- Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them. `ConfigField` supports `reload_on_change=True` (triggers worker restart) and `include_in_key=False` (excludes from cache key). `include_in_key` defaults to `True`; set it to `False` for fields that don't affect computation (device, verbose, timeout — already excluded on `BaseConfig`)
 - Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`

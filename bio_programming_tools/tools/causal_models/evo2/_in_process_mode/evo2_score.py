@@ -108,6 +108,7 @@ class Evo2ScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
     batch_size: int = ConfigField(
         title="Batch Size",

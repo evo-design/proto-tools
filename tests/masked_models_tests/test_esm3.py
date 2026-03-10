@@ -53,15 +53,15 @@ def test_esm3_forward_pass():
     result = run_esm3_embeddings(inputs=inputs, config=config)
     assert result.success, "ESM3 embeddings failed"
 
-    assert len(result.mean_embeddings) == 40, "Should have 40 sequences"
-    assert len(result.mean_embeddings[0]) == 1536, "Embedding dimension should be 1536"
+    # SequenceEmbedding bundle (primary field)
+    assert len(result.results) == 40, "Should have 40 SequenceEmbedding objects"
+    assert len(result.results[0].mean_embedding) == 1536, "Embedding dimension should be 1536"
+    assert len(result.results[0].attention_mask) == 6, "Attention mask length should be 6"
+    assert result.results[0].logits is not None
+    assert len(result.results[0].logits) == 6, "Logit sequence length should be 6"
 
-    assert len(result.attention_masks) == 40, "Should have 40 attention masks"
-    assert len(result.attention_masks[0]) == 6, "Attention mask length should be 6"
-
-    assert len(result.logits) == 40, "Should have 40 logit arrays"
-    assert len(result.logits[0]) == 6, "Logit sequence length should be 6"
-    assert len(result.logits[0][0]) == 20, "Logit vocab size should be 20"
+    # Logit details
+    assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
 
 
 @pytest.mark.uses_gpu

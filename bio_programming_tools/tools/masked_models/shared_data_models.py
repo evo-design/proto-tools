@@ -86,21 +86,46 @@ class MaskedModelConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
+    )
+
+
+class SequenceEmbedding(BaseModel):
+    """Per-sequence embedding data bundle.
+
+    Bundles all per-sequence outputs (embedding, attention mask, logits) into a
+    single object so the caching/dedup system in tool_registry can correctly
+    expand all parallel fields together via ``iterable_output_field="results"``.
+
+    Follows the same pattern as ``SequenceScores`` for scoring tools.
+
+    Attributes:
+        mean_embedding: Mean-pooled embedding vector for one sequence.
+        attention_mask: Binary mask indicating valid positions (1) vs padding (0).
+        logits: Optional per-position amino acid logits for one sequence.
+    """
+
+    mean_embedding: List[float] = Field(
+        description="Mean-pooled embedding vector (averaged over sequence length)",
+    )
+    attention_mask: List[int] = Field(
+        description="Binary mask: 1 = valid position, 0 = padding",
+    )
+    logits: Optional[List[List[float]]] = Field(
+        default=None,
+        description="Per-position amino acid logits (seq_len, vocab_size)",
     )
 
 
 class MaskedModelOutput(BaseToolOutput):
     """Base output for masked language model embedding tools.
 
-    Contains mean-pooled sequence embeddings and metadata.
+    Contains per-sequence embedding results bundled as ``SequenceEmbedding``
+    objects.
     """
 
-    mean_embeddings: Optional[List[List[float]]] = Field(
-        default=None,
-        description="Mean embeddings for each sequence (averaged over sequence length)",
-    )
-    num_sequences: int = Field(
-        description="Number of sequences processed",
+    results: List[SequenceEmbedding] = Field(
+        description="Per-sequence embedding results",
     )
 
     model_config = ConfigDict(
@@ -116,7 +141,7 @@ class MaskedModelOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
-        if self.mean_embeddings is None:
+        if not self.results:
             import warnings
             warnings.warn(
                 "No embeddings to export. The model output contains no embedding data.",
@@ -126,7 +151,8 @@ class MaskedModelOutput(BaseToolOutput):
             return
 
         import numpy as np
-        data = np.array(self.mean_embeddings)
+        embeddings = [r.mean_embedding for r in self.results]
+        data = np.array(embeddings)
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "csv":
@@ -134,13 +160,13 @@ class MaskedModelOutput(BaseToolOutput):
         elif file_format == "json":
             import json
             with open(path, "w") as f:
-                json.dump(self.mean_embeddings, f)
+                json.dump(embeddings, f)
         elif file_format == "npy":
             np.save(path, data)
         elif file_format == "pt":
             try:
                 import torch
-                torch.save(torch.tensor(self.mean_embeddings), path)
+                torch.save(torch.tensor(embeddings), path)
             except ImportError:
                 raise ImportError("PyTorch ('torch') is required for .pt export. Please install it.")
         else:
@@ -196,6 +222,7 @@ class MaskedModelScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
 
 

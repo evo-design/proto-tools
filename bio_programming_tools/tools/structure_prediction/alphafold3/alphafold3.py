@@ -33,7 +33,6 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 # Type alias for AlphaFold3 JSON format
@@ -203,11 +202,9 @@ def example_input():
     description="Protein structure prediction using AlphaFold3",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="alphafold3-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_alphafold3(
     inputs: AlphaFold3Input, config: AlphaFold3Config | None = None,
@@ -270,8 +267,7 @@ def run_alphafold3(
                 "alphafold3",
                 input_data,
                 instance=instance,
-                verbose=config.verbose,
-                timeout=getattr(config, 'timeout', None),
+                config=config,
             )
 
             # Extract results from dict

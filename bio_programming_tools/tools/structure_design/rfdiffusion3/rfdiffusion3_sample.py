@@ -23,7 +23,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from bio_programming_tools.entities.structures import Structure
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
@@ -364,6 +363,7 @@ class RFdiffusion3Config(BaseConfig):
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
     )
 
     def get_cli_kwargs(self) -> Dict[str, Any]:
@@ -504,8 +504,10 @@ def example_input():
     description="De novo protein structure design using RFdiffusion3",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="design_specs",
+    iterable_output_field="output_structures",
+    cacheable=True,
 )
-@tool_cache("rfdiffusion3-design")
 def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance=None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
@@ -588,8 +590,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
             "rfdiffusion3",
             input_data,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
 
     output_structures = []

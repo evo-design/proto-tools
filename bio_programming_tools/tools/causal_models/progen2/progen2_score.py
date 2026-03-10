@@ -106,6 +106,7 @@ class ProGen2ScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -140,6 +141,9 @@ def example_input():
     description="Score protein sequences using ProGen2 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="scores",
+    cacheable=True,
 )
 def run_progen2_score(
     inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig | None = None,
@@ -203,9 +207,7 @@ def run_progen2_score(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     logits = result.get("logits")

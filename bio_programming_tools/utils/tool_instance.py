@@ -63,7 +63,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .base_config import DEFAULT_TIMEOUT
+from .base_config import DEFAULT_TIMEOUT, BaseConfig
 from ._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
 from .device_manager import DeviceManager
 from .persistent_worker import (
@@ -183,9 +183,7 @@ class ToolInstance:
         *,
         instance: str | ToolInstance | None = None,
         script_path: Path | str | None = None,
-        verbose: bool = False,
-        timeout: int | None = None,
-        reload_on: set[str] | None = None,
+        config: BaseConfig | None = None,
     ) -> dict[str, Any]:
         """Run a tool, reusing a cached persistent instance if one exists.
 
@@ -208,18 +206,21 @@ class ToolInstance:
             *tool_name* as the cache key.
         script_path : Path | str | None
             Override the default standalone script.
-        verbose : bool
-            Whether to log progress.
-        timeout : int | None
-            Maximum execution time in seconds. If None, reads from
-            input_dict["timeout"] or falls back to DEFAULT_TIMEOUT.
-        reload_on : set[str] | None
-            Config field names whose value changes should trigger a
-            persistent worker restart.
+        config : BaseConfig | None
+            Tool configuration object. When provided, ``verbose``,
+            ``timeout``, and ``reload_on`` are derived automatically.
+            When *None*, defaults are used (verbose=False,
+            timeout=DEFAULT_TIMEOUT, reload_on=None).
         """
-        # Prefer kwarg, fall back to input_dict, then DEFAULT_TIMEOUT
-        if timeout is None:
-            timeout = input_dict.get("timeout", DEFAULT_TIMEOUT)
+        # Derive execution parameters from config
+        if config is not None:
+            verbose = config.verbose
+            timeout = config.timeout
+            reload_on = type(config).reload_fields()
+        else:
+            verbose = False
+            timeout = DEFAULT_TIMEOUT
+            reload_on = None
         # Path 1: caller passed a ToolInstance object directly
         if isinstance(instance, ToolInstance):
             logger.debug("dispatch(%s): using provided ToolInstance", tool_name)
@@ -248,9 +249,10 @@ class ToolInstance:
         # Path 3: persist mode — auto-create and cache instead of one-shot
         if _persist_mode.get():
             logger.debug(
-                "dispatch(%s): persist mode, auto-caching instance", tool_name
+                "dispatch(%s): persist mode, auto-caching instance (key=%r)",
+                tool_name, key,
             )
-            inst = cls.get(tool_name)
+            inst = cls.get(tool_name, instance_name=key)
             return inst.run(
                 input_dict,
                 script_path=script_path,

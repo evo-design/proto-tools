@@ -47,6 +47,7 @@ class MockJAXMultiGPUToolConfig(BaseConfig):
         title="Device",
         description="Device spec for 2 GPUs (cudax2, cuda:0,1)",
         hidden=True,
+        include_in_key=False,
     )
 
     hidden_size: int = ConfigField(
@@ -158,7 +159,7 @@ def run_mock_jax_multi_gpu_tool(
             "memory_mb": config.memory_mb,
         },
         instance=instance,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return MockJAXMultiGPUToolOutput(**result)

@@ -17,7 +17,6 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -68,8 +67,10 @@ def example_input():
     description="Sample protein sequences using LigandMPNN",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="inputs",
+    iterable_output_field="designed_sequences",
+    cacheable=True,
 )
-@tool_cache("ligandmpnn-sample")
 def run_ligandmpnn_sample(
     inputs: LigandMPNNSampleInput,
     config: LigandMPNNSampleConfig | None = None,
@@ -114,8 +115,7 @@ def run_ligandmpnn_sample(
                 "ligandmpnn",
                 input_dict,
                 instance=instance,
-                verbose=config.verbose,
-                timeout=config.timeout,
+                config=config,
             )
             all_seqs.extend(result["sequences"])
             all_metrics.extend(result["metrics"])

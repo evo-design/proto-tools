@@ -335,6 +335,7 @@ class Evo2SampleConfig(BaseConfig):
         default="cuda",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
     keep_on_gpu: bool = ConfigField(
         title="Keep on GPU",

@@ -14,8 +14,40 @@ import logging
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+PROTO_DEFAULT_CONCURRENCY = 16
+
+
+def _run_nvidia_smi_query(*args: str) -> str | None:
+    """Run nvidia-smi query, returning stdout or None on failure."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi"] + list(args),
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.stdout if result.returncode == 0 else None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+@dataclass(frozen=True)
+class DeviceSpec:
+    """Structured result from :func:`parse_device_string`.
+
+    Attributes:
+        kind: ``"cpu"``, ``"cuda"``, or ``"proto"``.
+        devices: Explicit device IDs when provided (e.g. ``["cuda:0"]``),
+            ``None`` for auto-allocate CUDA, or ``None`` for proto.
+        count: Number of CUDA devices requested (always 1 for cpu/proto).
+        concurrency: Parallel-request cap for proto devices, 0 otherwise.
+    """
+    kind: str
+    devices: list[str] | None
+    count: int
+    concurrency: int = 0
 
 
 def number_of_physical_gpus() -> int:
@@ -36,18 +68,12 @@ def number_of_physical_gpus() -> int:
         >>> number_of_physical_gpus()  # Still returns all physical GPUs
         8
     """
-    try:
-        out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if out.returncode == 0:
-            # nvidia-smi returns one line per GPU, each containing total count;
-            # the number of lines equals the number of GPUs.
-            return len(out.stdout.strip().splitlines())
-        return 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return 0
+    out = _run_nvidia_smi_query("--query-gpu=count", "--format=csv,noheader")
+    if out is not None:
+        # nvidia-smi returns one line per GPU, each containing total count;
+        # the number of lines equals the number of GPUs.
+        return len(out.strip().splitlines())
+    return 0
 
 
 def number_of_visible_gpus() -> int:
@@ -153,78 +179,98 @@ def get_gpu_memory_used_physical(physical_device_id: int) -> int:
         - Returns bytes for consistency with torch.cuda.memory_allocated()
         - Works across nvidia-smi versions using standard --query-gpu interface
     """
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                f"--id={physical_device_id}",
-                "--query-gpu=memory.used",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
+    out = _run_nvidia_smi_query(
+        f"--id={physical_device_id}",
+        "--query-gpu=memory.used",
+        "--format=csv,noheader,nounits",
+    )
+    if out is not None:
+        try:
             # nvidia-smi returns memory in MiB, convert to bytes
-            mib = int(result.stdout.strip())
+            mib = int(out.strip())
             return mib * 1024 * 1024
-        return 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
-        return 0
+        except ValueError:
+            return 0
+    return 0
 
 
-def parse_device_string(device: str) -> tuple[list[str] | None, int]:
-    """Parse device string into (specific_devices, num_devices).
+def _parse_count_suffix(device: str, prefix: str) -> int:
+    """Extract and validate a positive integer count after *prefix*.
 
-    Supports multiple device string formats for single and multi-GPU allocation.
+    *prefix* must include the separator character (e.g. ``"cudax"``,
+    ``"proto:"``, ``"protox"``), so the remainder is purely numeric.
+
+    Raises:
+        ValueError: If the suffix is missing, non-numeric, zero, or negative.
+    """
+    suffix = device[len(prefix):]
+    if not suffix:
+        raise ValueError(f"Invalid device string: '{device}' (missing count)")
+    try:
+        num = int(suffix)
+    except ValueError:
+        raise ValueError(f"Invalid device string: '{device}' (count must be integer)")
+    if num < 1:
+        raise ValueError(f"Invalid count in '{device}': must be >= 1")
+    return num
+
+
+def parse_device_string(device: str) -> DeviceSpec:
+    """Parse a device string into a structured :class:`DeviceSpec`.
+
+    Supports CPU, CUDA (single/multi, auto/explicit), and proto device strings.
 
     Args:
-        device: Device string to parse
+        device: Device string to parse.
 
     Returns:
-        Tuple of (specific_devices, num_devices) where:
-        - specific_devices: List of explicit device IDs if provided, None for auto-allocate
-        - num_devices: Number of devices requested
+        A :class:`DeviceSpec` describing the parsed device.
 
     Examples:
         >>> parse_device_string("cpu")
-        (["cpu"], 1)
+        DeviceSpec(kind='cpu', devices=['cpu'], count=1, concurrency=0)
         >>> parse_device_string("cuda")
-        (None, 1)
+        DeviceSpec(kind='cuda', devices=None, count=1, concurrency=0)
         >>> parse_device_string("cudax2")
-        (None, 2)
+        DeviceSpec(kind='cuda', devices=None, count=2, concurrency=0)
         >>> parse_device_string("cuda:0")
-        (["cuda:0"], 1)
+        DeviceSpec(kind='cuda', devices=['cuda:0'], count=1, concurrency=0)
         >>> parse_device_string("cuda:0,1")
-        (["cuda:0", "cuda:1"], 2)
-        >>> parse_device_string("cuda:0,cuda:1")
-        (["cuda:0", "cuda:1"], 2)
+        DeviceSpec(kind='cuda', devices=['cuda:0', 'cuda:1'], count=2, concurrency=0)
+        >>> parse_device_string("proto")
+        DeviceSpec(kind='proto', devices=None, count=1, concurrency=16)
+        >>> parse_device_string("proto:64")
+        DeviceSpec(kind='proto', devices=None, count=1, concurrency=64)
+        >>> parse_device_string("protox64")
+        DeviceSpec(kind='proto', devices=None, count=1, concurrency=64)
 
     Raises:
-        ValueError: If device string format is invalid
+        ValueError: If device string format is invalid.
     """
     device = device.strip()
 
     # CPU
     if device == "cpu":
-        return (["cpu"], 1)
+        return DeviceSpec(kind="cpu", devices=["cpu"], count=1)
+
+    # Proto: "proto", "proto:64", "protox64"
+    if device == "proto":
+        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=PROTO_DEFAULT_CONCURRENCY)
+    if device.startswith("protox"):
+        concurrency = _parse_count_suffix(device, "protox")
+        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=concurrency)
+    if device.startswith("proto:"):
+        concurrency = _parse_count_suffix(device, "proto:")
+        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=concurrency)
 
     # Auto-allocate N GPUs: "cudax2", "cudax3", etc.
     if device.startswith("cudax"):
-        try:
-            num = int(device[5:])  # Extract number after "cudax"
-            if num < 1:
-                raise ValueError(f"Invalid GPU count in '{device}': must be >= 1")
-            return (None, num)
-        except (ValueError, IndexError) as e:
-            if "must be >= 1" in str(e):
-                raise
-            raise ValueError(f"Invalid device string: '{device}'")
+        num = _parse_count_suffix(device, "cudax")
+        return DeviceSpec(kind="cuda", devices=None, count=num)
 
     # Single auto-allocate GPU
     if device == "cuda":
-        return (None, 1)
+        return DeviceSpec(kind="cuda", devices=None, count=1)
 
     # Explicit device(s)
     if "," not in device:
@@ -239,7 +285,7 @@ def parse_device_string(device: str) -> tuple[list[str] | None, int]:
             int(idx_str)  # Validate it's a number
         except ValueError:
             raise ValueError(f"Invalid device: '{device}' (index must be integer)")
-        return ([device], 1)
+        return DeviceSpec(kind="cuda", devices=[device], count=1)
 
     # Multiple explicit devices: "cuda:0,1" or "cuda:0,cuda:1"
     parts = [p.strip() for p in device.split(",")]
@@ -263,10 +309,66 @@ def parse_device_string(device: str) -> tuple[list[str] | None, int]:
                 f"shorthand '{part}' without prefix"
             )
 
-    return (devices, len(devices))
+    return DeviceSpec(kind="cuda", devices=devices, count=len(devices))
 
 
-def determine_visible_devices(device: int | str) -> str:
+def _get_parent_device_list() -> list[str] | None:
+    """Return parsed CUDA_VISIBLE_DEVICES from the parent environment, or None."""
+    parent_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if parent_visible and parent_visible.strip():
+        return [d.strip() for d in parent_visible.split(",")]
+    return None
+
+
+def _validate_and_map_cuda_indices(
+    cuda_indices: list[int],
+    parent_device_list: list[str] | None,
+) -> list[str]:
+    """Validate CUDA indices against available GPUs and map to physical indices.
+
+    Args:
+        cuda_indices: Logical CUDA device indices to validate.
+        parent_device_list: Parsed CUDA_VISIBLE_DEVICES, or None.
+
+    Returns:
+        Physical device index strings, deduplicated and in input order.
+
+    Raises:
+        ValueError: If no GPUs available or an index exceeds visible GPUs.
+    """
+    if not cuda_indices:
+        return []
+
+    num_gpus = len(parent_device_list) if parent_device_list else number_of_available_gpus()
+    max_idx = max(cuda_indices)
+
+    if num_gpus == 0:
+        raise ValueError(
+            "Requested CUDA devices but no GPUs detected "
+            "(check CUDA_VISIBLE_DEVICES or nvidia-smi)"
+        )
+    if max_idx >= num_gpus:
+        if parent_device_list:
+            raise ValueError(
+                f"Device index {max_idx} exceeds parent "
+                f"CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
+            )
+        else:
+            raise ValueError(
+                f"Device index {max_idx} exceeds available GPUs ({num_gpus})"
+            )
+
+    seen: set[str] = set()
+    physical: list[str] = []
+    for idx in cuda_indices:
+        mapped = parent_device_list[idx] if parent_device_list else str(idx)
+        if mapped not in seen:
+            seen.add(mapped)
+            physical.append(mapped)
+    return physical
+
+
+def determine_visible_devices(device: int | str | list[int | str]) -> str:
     """
     Returns a string corresponding to the CUDA_VISIBLE_DEVICES environment variable
     for a given device or devices.
@@ -275,8 +377,13 @@ def determine_visible_devices(device: int | str) -> str:
     the parent process has CUDA_VISIBLE_DEVICES set, mapping logical indices to
     physical device indices.
 
+    When given a list, collects all CUDA indices across entries, validates them
+    in a single pass (one nvidia-smi call), and returns the deduplicated physical
+    indices. Non-CUDA entries (cpu, proto) are skipped.
+
     Args:
-        device: Device specification (int, single device string, or multi-device string)
+        device: Device specification — int, single device string, or list of
+            ints/strings (e.g. ``["cuda:0", "cuda:1", "proto"]``).
 
     Returns:
         CUDA_VISIBLE_DEVICES value (comma-separated device indices)
@@ -292,6 +399,8 @@ def determine_visible_devices(device: int | str) -> str:
         "0,1"
         >>> determine_visible_devices("cuda:0,cuda:1")
         "0,1"
+        >>> determine_visible_devices(["cuda:0", "cuda:1", "proto"])
+        "0,1"
 
         With parent CUDA_VISIBLE_DEVICES=3,5,7:
         >>> os.environ["CUDA_VISIBLE_DEVICES"] = "3,5,7"
@@ -303,17 +412,26 @@ def determine_visible_devices(device: int | str) -> str:
     Raises:
         ValueError: If device indices exceed available GPUs
     """
-    import os
+    parent_device_list = _get_parent_device_list()
+
+    # List input: collect all CUDA indices, validate once, return physical indices
+    if isinstance(device, list):
+        all_cuda_indices: list[int] = []
+        for d in device:
+            if isinstance(d, int):
+                all_cuda_indices.append(d)
+                continue
+            spec = parse_device_string(d)
+            if spec.kind != "cuda" or spec.devices is None:
+                continue
+            for dev in spec.devices:
+                all_cuda_indices.append(int(dev.split(":")[1]))
+        physical = _validate_and_map_cuda_indices(all_cuda_indices, parent_device_list)
+        return ",".join(physical)
 
     # If we are using the CPU, set no devices to be visible
     if device == "cpu":
         return ""
-
-    # Get parent's CUDA_VISIBLE_DEVICES to map logical -> physical indices
-    parent_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
-    parent_device_list: list[str] | None = None
-    if parent_visible and parent_visible.strip():
-        parent_device_list = [d.strip() for d in parent_visible.split(",")]
 
     # Handle integer device index (legacy support)
     if isinstance(device, int):
@@ -323,7 +441,6 @@ def determine_visible_devices(device: int | str) -> str:
             raise ValueError(
                 f"Device index {device_int} is greater than the number of available GPUs ({num_gpus})"
             )
-        # Map to physical device if parent has CUDA_VISIBLE_DEVICES set
         if parent_device_list:
             if device_int >= len(parent_device_list):
                 raise ValueError(
@@ -334,54 +451,24 @@ def determine_visible_devices(device: int | str) -> str:
 
     # Parse device string
     device_str = str(device)
-    specific_devices, num_devices = parse_device_string(device_str)
+    spec = parse_device_string(device_str)
 
-    # If auto-allocate (specific_devices is None), fall back to sequential allocation
+    # If auto-allocate (spec.devices is None), fall back to sequential allocation
     # Note: DeviceManager should resolve "cudax2" to specific devices before calling this
-    if specific_devices is None:
+    if spec.devices is None:
         if parent_device_list:
             # Map sequential indices to parent's visible devices
-            return ",".join(parent_device_list[i] for i in range(min(num_devices, len(parent_device_list))))
-        return ",".join(str(i) for i in range(num_devices))
+            return ",".join(parent_device_list[i] for i in range(min(spec.count, len(parent_device_list))))
+        return ",".join(str(i) for i in range(spec.count))
 
     # CPU case
-    if len(specific_devices) == 1 and specific_devices[0] == "cpu":
+    if len(spec.devices) == 1 and spec.devices[0] == "cpu":
         return ""
 
-    # Extract indices from device list and validate
-    indices = []
-    # Use parent device list length if available, otherwise use detected GPU count
-    num_gpus = len(parent_device_list) if parent_device_list else number_of_available_gpus()
-
-    for dev in specific_devices:
-        if not dev.startswith("cuda:"):
-            raise ValueError(f"Invalid device: {dev}")
-
-        idx_str = dev.split(":", 1)[1]
-        try:
-            idx = int(idx_str)
-            # Validate against visible GPUs (parent's list or system GPUs)
-            if idx >= num_gpus:
-                if parent_device_list:
-                    raise ValueError(
-                        f"Device index {idx} exceeds parent CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
-                    )
-                else:
-                    raise ValueError(
-                        f"Device index {idx} exceeds available GPUs ({num_gpus})"
-                    )
-
-            # Map logical index to physical device
-            if parent_device_list:
-                indices.append(parent_device_list[idx])
-            else:
-                indices.append(str(idx))
-        except ValueError as e:
-            if "exceeds" in str(e) or "index" in str(e):
-                raise
-            raise ValueError(f"Invalid device index: {idx_str}")
-
-    return ",".join(indices)
+    # Extract CUDA indices and delegate validation + mapping
+    cuda_indices = [int(dev.split(":", 1)[1]) for dev in spec.devices]
+    physical = _validate_and_map_cuda_indices(cuda_indices, parent_device_list)
+    return ",".join(physical)
 
 
 def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
@@ -571,22 +658,16 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
         GPU 0: 1.2 GB / 80.0 GB
         GPU 1: 15.3 GB / 80.0 GB
     """
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,name,memory.total,memory.used,memory.free",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return []
+    out = _run_nvidia_smi_query(
+        "--query-gpu=index,name,memory.total,memory.used,memory.free",
+        "--format=csv,noheader,nounits",
+    )
+    if out is None:
+        return []
 
+    try:
         gpus = []
-        for line in result.stdout.strip().split("\n"):
+        for line in out.strip().split("\n"):
             if not line.strip():
                 continue
             parts = [p.strip() for p in line.split(",")]
@@ -599,8 +680,7 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
                     "free_bytes": int(parts[4]) * 1024 * 1024,
                 })
         return gpus
-
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+    except ValueError:
         return []
 
 
@@ -630,25 +710,19 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
         GPU index is inferred from PCI bus ID by querying nvidia-smi for the mapping.
         If the mapping fails, gpu_index will be -1.
     """
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-compute-apps=gpu_bus_id,pid,process_name,used_memory",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return []
+    out = _run_nvidia_smi_query(
+        "--query-compute-apps=gpu_bus_id,pid,process_name,used_memory",
+        "--format=csv,noheader,nounits",
+    )
+    if out is None:
+        return []
 
+    try:
         # Build PCI bus ID to GPU index mapping
         bus_to_index = _get_pci_bus_to_index_mapping()
 
         processes = []
-        for line in result.stdout.strip().split("\n"):
+        for line in out.strip().split("\n"):
             if not line.strip():
                 continue
             parts = [p.strip() for p in line.split(",")]
@@ -663,8 +737,7 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
                     "used_bytes": int(parts[3]) * 1024 * 1024,  # MiB to bytes
                 })
         return processes
-
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+    except ValueError:
         return []
 
 
@@ -675,30 +748,23 @@ def _get_pci_bus_to_index_mapping() -> dict[str, int]:
         Dict mapping PCI bus ID (str) to GPU index (int)
         Empty dict if query fails
     """
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index,pci.bus_id",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return {}
+    out = _run_nvidia_smi_query(
+        "--query-gpu=index,pci.bus_id",
+        "--format=csv,noheader,nounits",
+    )
+    if out is None:
+        return {}
 
+    try:
         mapping = {}
-        for line in result.stdout.strip().split("\n"):
+        for line in out.strip().split("\n"):
             if not line.strip():
                 continue
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 2:
                 mapping[parts[1]] = int(parts[0])
         return mapping
-
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+    except ValueError:
         return {}
 
 

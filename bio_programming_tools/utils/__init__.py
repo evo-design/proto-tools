@@ -31,6 +31,7 @@ from .system_info import (
     get_platform_info,
 )
 from .tool_instance import ToolInstance
+from .tool_pool import ToolPool
 from .helpers import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
@@ -50,8 +51,6 @@ from .tool_cache import (
     clear_cache,
     clear_tool_cache,
     get_cache_info,
-    tool_cache,
-    tool_cache_iterable,
 )
 from .tool_io import BaseToolInput, BaseToolOutput, ToolExecutionError
 
@@ -88,14 +87,14 @@ __all__ = [
     "BaseToolOutput",
     "ToolExecutionError",
     # Caching
-    "tool_cache",
-    "tool_cache_iterable",
     "clear_cache",
     "clear_tool_cache",
     "get_cache_info",
     "ToolCache",
     # Tool instance management
     "ToolInstance",
+    # Tool pool (parallel execution)
+    "ToolPool",
     # Device
     "determine_visible_devices",
     "number_of_available_gpus",

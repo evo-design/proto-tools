@@ -30,7 +30,6 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField, return_invalid_protein_chars
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +182,7 @@ class AlphaFold2Config(StructurePredictionConfig):
         le=5,
         description="Which AlphaFold2 model parameter set to use (1-5)",
         advanced=True,
+        reload_on_change=True,
     )
     num_ensemble_models: int = ConfigField(
         title="Ensemble Models",
@@ -231,11 +231,9 @@ def example_input():
     description="Protein structure prediction using AlphaFold2 via ColabDesign",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="alphafold2-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_alphafold2(
     inputs: AlphaFold2Input,
@@ -331,7 +329,7 @@ def run_alphafold2(
             "alphafold2",
             input_data,
             instance=instance,
-            verbose=config.verbose,
+            config=config,
         )
 
         # Post-process: create Structure from PDB output

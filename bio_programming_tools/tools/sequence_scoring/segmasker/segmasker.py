@@ -12,7 +12,6 @@ from pydantic import ConfigDict, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
@@ -197,8 +196,8 @@ def example_input():
     output_class=SegmaskerOutput,
     description="Detect low-complexity regions in protein sequences using NCBI segmasker",
     example_input=example_input,
+    cacheable=True,
 )
-@tool_cache("segmasker-score")
 def run_segmasker(
     inputs: SegmaskerInput,
     config: SegmaskerConfig | None = None,
@@ -251,8 +250,7 @@ def run_segmasker(
         "segmasker",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     results_df = pd.DataFrame(output_data["results_data"])

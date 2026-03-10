@@ -34,8 +34,6 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-
 logger = getLogger(__name__)
 
 ProtenixModelName = Literal[
@@ -315,11 +313,9 @@ def example_input():
     description="Multi-modal structure prediction using Protenix (open-source AlphaFold3)",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="protenix-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_protenix(
     inputs: ProtenixInput, config: ProtenixConfig | None = None,
@@ -427,9 +423,7 @@ def run_protenix(
             "protenix",
             input_data,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
-            reload_on=type(config).reload_fields(),
+            config=config,
         )
 
     # Parse results for each complex

@@ -81,6 +81,7 @@ class {ToolName}Config(BaseConfig):
         default="cuda",  # REQUIRED for GPU tools (uses_gpu=True); OMIT this for CPU tools
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
     )
 
     # --- Model configuration (use reload_on_change=True for worker restarts) ---

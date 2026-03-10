@@ -173,7 +173,7 @@ def test_a100_driver_550():
 
 
 def test_old_gpu_driver_535():
-    """Older GPU with driver 535 (CUDA 12.2) should get torch 2.4+, jax[cuda12]."""
+    """Older GPU with driver 535 (CUDA 12.2) should get torch 2.4-2.6.x, jax[cuda12]."""
     fake_gpu_info = GPUInfo(
         available=True,
         count=1,
@@ -198,7 +198,7 @@ def test_old_gpu_driver_535():
     assert env["DETECTED_COMPUTE_PLATFORM"] == "cuda"
     assert env["DETECTED_DRIVER_VERSION"] == "535"
     assert env["DETECTED_CUDA_VERSION"] == "12"
-    assert env["RECOMMENDED_TORCH_SPEC"] == "torch>=2.4,<3"
+    assert env["RECOMMENDED_TORCH_SPEC"] == "torch>=2.4,<2.7"
     assert env["RECOMMENDED_JAX_SPEC"] == "jax[cuda12]>=0.4.20,<1"
     assert env["RECOMMENDED_JAX_VARIANT"] == "cuda12"
 

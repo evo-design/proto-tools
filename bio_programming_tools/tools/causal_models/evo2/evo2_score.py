@@ -115,6 +115,7 @@ class Evo2ScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
     batch_size: int = ConfigField(
         title="Batch Size",
@@ -149,6 +150,9 @@ def example_input():
     description="Score DNA sequences using Evo2 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="scores",
+    cacheable=True,
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
@@ -209,9 +213,7 @@ def run_evo2_score(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     # Serialize tensors to nested lists at tool boundary if needed

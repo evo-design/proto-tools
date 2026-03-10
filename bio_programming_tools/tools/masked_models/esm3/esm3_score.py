@@ -80,6 +80,7 @@ class ESM3ScoringConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on",
         hidden=True,
+        include_in_key=False,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -107,6 +108,9 @@ def example_input():
     description="Score protein sequences using ESM3 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="scores",
+    cacheable=True,
 )
 def run_esm3_score(
     inputs: ESM3ScoringInput, config: ESM3ScoringConfig | None = None,
@@ -174,9 +178,7 @@ def run_esm3_score(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     sequence_scores = [

@@ -209,6 +209,7 @@ class ProGen2SampleConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
     )
 
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
@@ -301,6 +302,8 @@ def example_input():
     description="Sample protein sequences using ProGen2 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="prompts",
+    iterable_output_field="sequences",
 )
 def run_progen2_sample(
     inputs: ProGen2SampleInput, config: ProGen2SampleConfig | None = None,
@@ -383,9 +386,7 @@ def run_progen2_sample(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return ProGen2SampleOutput(

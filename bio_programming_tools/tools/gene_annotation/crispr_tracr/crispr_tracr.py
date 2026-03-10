@@ -21,7 +21,6 @@ from bio_programming_tools.utils import (
     BaseToolOutput,
     ConfigField,
     resolve_sequence_ids,
-    tool_cache_iterable,
 )
 
 
@@ -161,11 +160,6 @@ def example_input():
     return CrisprTracrInput(sequences=["ATCGATCG"])
 
 
-@tool_cache_iterable(
-    input_iterable_field="sequences",
-    output_iterable_field="predictions",
-    tool_name="crispr-tracr",
-)
 @tool(
     key="crispr-tracr",
     label="CRISPRtracrRNA Prediction",
@@ -175,6 +169,9 @@ def example_input():
     output_class=CrisprTracrOutput,
     description="Predict tracrRNA sequences from nucleotide CRISPR loci",
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="predictions",
+    cacheable=True,
 )
 def run_crispr_tracr(
     inputs: CrisprTracrInput, config: CrisprTracrConfig | None = None, instance=None,
@@ -220,7 +217,7 @@ def run_crispr_tracr(
 
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
-        "crispr_tracr", input_data, instance=instance, timeout=config.timeout,
+        "crispr_tracr", input_data, instance=instance, config=config,
     )
 
     predictions = [TracrPrediction(**p) for p in output_data["predictions"]]

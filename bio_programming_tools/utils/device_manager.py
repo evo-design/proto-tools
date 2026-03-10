@@ -426,17 +426,17 @@ class DeviceManager:
         existing_str = self._device_str(existing.device_ids)
 
         from bio_programming_tools.utils.device import parse_device_string
-        specific_devices, num_requested = parse_device_string(device)
+        spec = parse_device_string(device)
 
-        if specific_devices is not None:
+        if spec.devices is not None:
             # Specific device(s) requested — must match exactly.
-            compatible = existing.device_ids == specific_devices
+            compatible = existing.device_ids == spec.devices
         else:
             # General CUDA requested — any GPU allocation with the
             # right device count is compatible.
             compatible = (
                 existing_str != "cpu"
-                and len(existing.device_ids) == num_requested
+                and len(existing.device_ids) == spec.count
             )
 
         if not compatible:
@@ -900,7 +900,7 @@ class DeviceManager:
 
             # Parse device string
             from bio_programming_tools.utils.device import parse_device_string
-            specific_devices, num_requested = parse_device_string(device)
+            spec = parse_device_string(device)
 
             # Validate callback — always required since a CPU allocation
             # may later be moved to GPU and need eviction support.
@@ -911,7 +911,7 @@ class DeviceManager:
                 )
 
             # Handle CPU allocation
-            if specific_devices and specific_devices[0] == "cpu":
+            if spec.devices and spec.devices[0] == "cpu":
                 return self._create_allocation(
                     tool_name, instance_name, ["cpu"], eviction_callback,
                 )
@@ -926,14 +926,14 @@ class DeviceManager:
                 )
 
             # Explicit device(s) requested
-            if specific_devices:
+            if spec.devices:
                 return self._allocate_specific_devices(
-                    tool_name, instance_name, specific_devices, eviction_callback
+                    tool_name, instance_name, spec.devices, eviction_callback
                 )
 
             # Auto-allocate N GPUs
             return self._allocate_n_devices(
-                tool_name, instance_name, num_requested, eviction_callback
+                tool_name, instance_name, spec.count, eviction_callback
             )
 
     def release_device(self, instance_name: str) -> None:
@@ -1047,7 +1047,7 @@ class DeviceManager:
             Resolved device string (e.g., "cuda:0").
         """
         from bio_programming_tools.utils.device import parse_device_string
-        specific_devices, num_requested = parse_device_string(device)
+        spec = parse_device_string(device)
 
         # Fail fast if no GPUs exist at all
         all_devices = self._get_available_devices()
@@ -1064,14 +1064,14 @@ class DeviceManager:
         with self._device_available:
             while True:
                 try:
-                    if specific_devices:
+                    if spec.devices:
                         result = self._allocate_specific_devices(
-                            tool_name, lease_id, specific_devices, noop_callback,
+                            tool_name, lease_id, spec.devices, noop_callback,
                             AllocationType.TRANSIENT,
                         )
                     else:
                         result = self._allocate_n_devices(
-                            tool_name, lease_id, num_requested, noop_callback,
+                            tool_name, lease_id, spec.count, noop_callback,
                             AllocationType.TRANSIENT,
                         )
                     return result
@@ -1356,8 +1356,8 @@ class DeviceManager:
             else:
                 # Parse multi-GPU targets (e.g., "cuda:2,3" → ["cuda:2", "cuda:3"])
                 from bio_programming_tools.utils.device import parse_device_string
-                specific_devices, _ = parse_device_string(target_device)
-                resolved_devices = specific_devices if specific_devices else [target_device]
+                spec = parse_device_string(target_device)
+                resolved_devices = spec.devices if spec.devices else [target_device]
                 self._resolve_device_conflicts(
                     resolved_devices, exclude_instance=instance_name,
                 )

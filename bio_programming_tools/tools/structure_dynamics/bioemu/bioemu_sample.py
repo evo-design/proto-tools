@@ -202,6 +202,8 @@ def example_input():
     description="Protein conformational ensemble sampling using BioEmu",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="complexes",
+    iterable_output_field="ensembles",
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance=None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
@@ -220,9 +222,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
             "verbose": config.verbose,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
     raw_results = output["results"]
 

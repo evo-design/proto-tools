@@ -20,6 +20,7 @@ def ConfigField(
     advanced: bool = False,
     hidden: bool = False,
     reload_on_change: bool = False,
+    include_in_key: bool = True,
     **kwargs,
 ) -> Any:
     """
@@ -30,6 +31,9 @@ def ConfigField(
         hidden: If True, field is hidden from UI completely
         reload_on_change: If True, changing this field between persistent
             worker calls triggers a subprocess restart.
+        include_in_key: If False, field is excluded from tool cache key
+            generation. Fields that don't affect computation results (device,
+            verbose, timeout) should set this to False.
 
         **kwargs: All other standard Pydantic Field arguments
 
@@ -41,6 +45,7 @@ def ConfigField(
     json_schema_extra["advanced"] = advanced
     json_schema_extra["hidden"] = hidden
     json_schema_extra["reload_on_change"] = reload_on_change
+    json_schema_extra["include_in_key"] = include_in_key
 
     kwargs["json_schema_extra"] = json_schema_extra
 
@@ -56,10 +61,26 @@ class BaseConfig(BaseModel):
         device: Device to run the tool on.
         timeout: Maximum execution time in seconds.
 
+    Properties:
+        devices_per_instance: Number of GPUs each worker needs (default 1).
+            Override in tool configs where the active model variant determines
+            GPU requirements — e.g., a large checkpoint may need 2 GPUs while
+            the small variant fits on 1. ``ToolPool`` reads this at dispatch
+            time to group devices into worker slots.
+
     Example:
         >>> class MyToolConfig(BaseConfig):
         ...     param1: int
         ...     param2: str
+
+        Multi-GPU override::
+
+            class Evo2Config(BaseConfig):
+                checkpoint: str = ConfigField(default="7b")
+
+                @property
+                def devices_per_instance(self) -> int:
+                    return 4 if self.checkpoint == "40b" else 1
     """
 
     model_config = ConfigDict(
@@ -74,6 +95,7 @@ class BaseConfig(BaseModel):
         default=False,
         description="Whether to print status messages",
         hidden=True,
+        include_in_key=False,
     )
 
     @classmethod
@@ -85,11 +107,21 @@ class BaseConfig(BaseModel):
             if (info.json_schema_extra or {}).get("reload_on_change", False)
         }
 
+    @classmethod
+    def cache_exclude_fields(cls) -> set[str]:
+        """Return field names marked with ``include_in_key=False``."""
+        return {
+            name
+            for name, info in cls.model_fields.items()
+            if not (info.json_schema_extra or {}).get("include_in_key", True)
+        }
+
     device: str = ConfigField(
         title="Device",
         default="cpu",
         description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0')",
         hidden=True,
+        include_in_key=False,
     )
 
     timeout: int = ConfigField(
@@ -98,4 +130,22 @@ class BaseConfig(BaseModel):
         ge=1,
         description="Maximum execution time in seconds",
         hidden=True,
+        include_in_key=False,
     )
+
+    @property
+    def devices_per_instance(self) -> int:
+        """Number of GPUs each ToolPool worker needs for this configuration.
+
+        ToolPool reads this at dispatch time to group its device list into
+        worker slots.  For example, with ``devices=["cuda:0", "cuda:1",
+        "cuda:2", "cuda:3"]`` and ``devices_per_instance == 2``, ToolPool
+        creates 2 workers: one on ``cuda:0,cuda:1`` and one on
+        ``cuda:2,cuda:3``.
+
+        This lives on Config (not ToolSpec) because the required device count
+        can depend on a runtime config value — e.g., a large model checkpoint
+        may need 4 GPUs while the small variant fits on 1.  Override in tool
+        config subclasses where this applies; the default is 1.
+        """
+        return 1

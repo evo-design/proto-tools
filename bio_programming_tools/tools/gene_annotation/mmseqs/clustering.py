@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 from .search_proteins import DEFAULT_MIN_SEQ_ID
@@ -171,7 +170,6 @@ def example_input():
     return MmseqsClusteringInput(input_sequences=["MKTL", "MKTL", "ARND"])
 
 
-@tool_cache(tool_name="mmseqs-clustering")
 @tool(
     key="mmseqs-clustering",
     label="MMseqs Clustering",
@@ -181,6 +179,7 @@ def example_input():
     output_class=MmseqsClusteringOutput,
     description="Perform sequence clustering using MMseqs2 to reduce redundancy",
     example_input=example_input,
+    cacheable=True,
 )
 def run_mmseqs_clustering(
     inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig | None = None,
@@ -228,7 +227,7 @@ def run_mmseqs_clustering(
             "min_seq_id": config.min_seq_id,
         },
         instance=instance,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Parse cluster assignments

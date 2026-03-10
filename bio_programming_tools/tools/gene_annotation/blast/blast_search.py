@@ -12,7 +12,6 @@ from pydantic import ConfigDict, Field, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
@@ -651,8 +650,8 @@ def example_input():
     output_class=BlastSearchOutput,
     description="Search sequences against BLAST databases (online or local)",
     example_input=example_input,
+    cacheable=True,
 )
-@tool_cache("blast-search")
 def run_blast_search(
     inputs: BlastSearchInput, config: BlastSearchConfig | None = None,
     instance=None,
@@ -836,7 +835,7 @@ def _local_search(
             "blast",
             input_data,
             instance=instance,
-            timeout=config.timeout,
+            config=config,
         )
     finally:
         # Clean up temp file if we created one

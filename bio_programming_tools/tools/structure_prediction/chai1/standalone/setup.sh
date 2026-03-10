@@ -22,9 +22,15 @@ uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
+echo "Upgrading triton..."
+# torch 2.6.0 pins triton==3.2.0, which has a PY_SSIZE_T_CLEAN bug causing
+# runtime failures with conda-forge Python 3.12. Upgrade AFTER all other installs
+# to prevent uv from downgrading it back to 3.2.0 via torch's dependency.
+uv pip install --upgrade triton
+
 # Warn if GPU compute capability may be incompatible with chai_lab's pinned torch version.
 if command -v nvidia-smi &> /dev/null; then
-    compute_cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n1 | tr -d '[:space:]')
+    compute_cap=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n1 | tr -d '[:space:]') || true
     if [ -n "$compute_cap" ]; then
         major=$(echo "$compute_cap" | cut -d. -f1)
         minor=$(echo "$compute_cap" | cut -d. -f2)

@@ -13,6 +13,26 @@ pip install uv
 JAX_VARIANT="${ALPHAFOLD2_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
 JAX_SPEC="${ALPHAFOLD2_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
 
+# ============================================================================
+# Install CUDA toolkit via micromamba (JAX needs CUDA libs on LD_LIBRARY_PATH)
+# ============================================================================
+CUDA_TOOLKIT_CONSTRAINT="${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
+if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
+    if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
+        CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
+    else
+        CUDA_TOOLKIT_CONSTRAINT="12.*"
+    fi
+fi
+echo "Installing CUDA toolkit ${CUDA_TOOLKIT_CONSTRAINT} locally via micromamba..."
+if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+    "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
+    "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
+    "cudnn"; then
+    echo "ERROR: Failed to install CUDA toolkit via micromamba"
+    exit 1
+fi
+
 echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
 echo "Detected driver: ${DETECTED_DRIVER_VERSION:-unknown}, CUDA: ${DETECTED_CUDA_VERSION:-unknown}"
 echo "Installing JAX: ${JAX_SPEC}"

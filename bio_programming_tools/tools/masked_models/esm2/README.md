@@ -143,12 +143,16 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 
 ### ESM2EmbeddingsOutput (Embeddings)
 
-| Field | Type | Shape | Description |
-|-------|------|-------|-------------|
-| `mean_embeddings` | `List[List[float]]` | `[num_seq, embed_dim]` | Mean-pooled sequence embeddings |
-| `logits` | `List[List[List[float]]]` | `[num_seq, seq_len, 20]` | Per-position amino acid logits (AA-only) |
-| `attention_masks` | `List[List[int]]` | `[num_seq, seq_len]` | Valid position masks (1=valid, 0=padding) |
-| `num_sequences` | `int` | - | Number of sequences processed |
+| Field | Type | Description |
+|-------|------|-------------|
+| `results` | `List[SequenceEmbedding]` | Per-sequence embedding results (primary field) |
+
+**`SequenceEmbedding` fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `mean_embedding` | `List[float]` | Mean-pooled embedding vector for one sequence |
+| `attention_mask` | `List[int]` | Binary mask: 1 = valid position, 0 = padding |
+| `logits` | `Optional[List[List[float]]]` | Per-position amino acid logits (seq_len, 20). Only present if `return_logits=True` |
 
 ### ESM2SampleOutput
 
@@ -218,7 +222,7 @@ config = ESM2EmbeddingsConfig(
 result = run_esm2_embeddings(inputs, config)
 
 # Cluster embeddings
-embeddings = np.array(result.mean_embeddings)
+embeddings = np.array([r.mean_embedding for r in result.results])
 kmeans = KMeans(n_clusters=2).fit(embeddings)
 print(f"Cluster assignments: {kmeans.labels_}")
 ```
@@ -270,7 +274,7 @@ config = ESM2EmbeddingsConfig(
 )
 
 result = run_esm2_embeddings(inputs, config)
-print(f"Processed {result.num_sequences} sequences")
+print(f"Processed {len(result.results)} sequences")
 ```
 
 ## Best Practices & Gotchas

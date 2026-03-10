@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Optional
-
-from pydantic import Field
+from typing import Literal
 
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
     MaskedModelOutput,
+    SequenceEmbedding,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
@@ -43,49 +42,18 @@ class ESM2EmbeddingsOutput(MaskedModelOutput):
     Inherits from ``MaskedModelOutput``.
 
     Attributes:
-        mean_embeddings (List[List[float]]): Mean-pooled sequence embeddings for
-            each input sequence. Shape: ``[num_sequences, embedding_dim]`` where
-            ``embedding_dim`` depends on the model variant (e.g., 1280 for
-            ``esm2_t33_650M_UR50D``). These embeddings capture the overall semantic
-            representation of each protein sequence and are useful for:
+        results (List[SequenceEmbedding]): Per-sequence embedding results. Each
+            ``SequenceEmbedding`` contains:
 
-            - Sequence similarity comparisons
-            - Clustering and classification tasks
-            - Downstream machine learning models
-            - Visualization via dimensionality reduction
-
-        num_sequences (int): Total number of sequences that were processed in the
-            inference run. This count matches the length of the input sequences list
-            and all output lists.
-
-        logits (List[List[List[float]]]): Per-position amino acid logits.
-            Shape: ``[num_sequences, seq_len, vocab_size]`` where ``vocab_size`` is 20.
-            Useful for:
-
-            - Identifying uncertain positions in sequences
-            - Guided protein design and mutagenesis
-            - Computing sequence likelihoods and perplexities
-            - Zero-shot variant effect prediction
-
-        attention_masks (List[List[int]]): Binary masks indicating valid positions
-            in each sequence. Shape: ``[num_sequences, seq_len]``. Values are:
-
-            - ``1``: Valid amino acid position
-            - ``0``: Padding position (for batched sequences of different lengths)
-
-            Use these masks to filter out padding when analyzing embeddings or logits.
+            - ``mean_embedding``: Mean-pooled embedding vector (e.g., 1280-dim for
+              ``esm2_t33_650M_UR50D``)
+            - ``attention_mask``: Binary mask (1 = valid, 0 = padding)
+            - ``logits``: Optional per-position amino acid logits (seq_len, 20)
 
     Note:
         All outputs are returned as nested Python lists (moved to CPU) for
         serialization and downstream processing.
     """
-    logits: Optional[List[List[List[float]]]] = Field(
-        default=None,
-        description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
-    )
-    attention_masks: List[List[int]] = Field(
-        description="Attention masks for each sequence (shape: [num_sequences, seq_len])",
-    )
 
 # Config:
 class ESM2EmbeddingsConfig(MaskedModelConfig):
@@ -164,6 +132,9 @@ def example_input():
     description="Extract protein sequence embeddings and logits using ESM2",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig | None = None, instance=None) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.
@@ -196,12 +167,12 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
         ...     verbose=True
         ... )
         >>> result = run_esm2_embeddings(inputs, config)
-        >>> print(f"Processed {result.num_sequences} sequences")
-        >>> print(f"Embedding dimension: {len(result.mean_embeddings[0])}")
+        >>> print(f"Processed {len(result.results)} sequences")
+        >>> print(f"Embedding dimension: {len(result.results[0].mean_embedding)}")
         >>>
         >>> # Analyze position-specific predictions
         >>> import numpy as np
-        >>> logits_array = np.array(result.logits[0])  # First sequence
+        >>> logits_array = np.array(result.results[0].logits)  # First sequence
         >>> predicted_tokens = np.argmax(logits_array, axis=-1)
         >>>
         >>> # Extract embeddings using smaller model on CPU
@@ -235,10 +206,17 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
+
+    results = [
+        SequenceEmbedding(
+            mean_embedding=outputs["mean_embeddings"][i],
+            attention_mask=outputs["attention_masks"][i],
+            logits=outputs["logits"][i] if outputs["logits"] else None,
+        )
+        for i in range(len(inputs.sequences))
+    ]
 
     return ESM2EmbeddingsOutput(
         metadata={
@@ -247,8 +225,5 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
             "batch_size": config.batch_size,
             "device": config.device,
         },
-        mean_embeddings=outputs["mean_embeddings"],
-        logits=outputs["logits"],
-        attention_masks=outputs["attention_masks"],
-        num_sequences=len(inputs.sequences),
+        results=results,
     )

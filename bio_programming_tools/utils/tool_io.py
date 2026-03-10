@@ -42,6 +42,15 @@ class BaseToolInput(BaseModel):
         validate_default=True,  # Validate default values
     )
 
+    @classmethod
+    def item_cost(cls, item: Any) -> float:
+        """Estimated cost of processing a single item (for ToolPool scheduling).
+
+        Override in subclasses to provide cost-aware scheduling. Default is
+        uniform cost (1.0), which degrades LPT to round-robin.
+        """
+        return 1.0
+
 class BaseToolOutput(BaseModel, ABC):
     """
     Base class for all tool outputs with standardized metadata.

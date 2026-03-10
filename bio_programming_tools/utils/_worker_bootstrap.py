@@ -73,7 +73,6 @@ def _copy_standalone_helpers(script_path: str) -> None:
     # Always copy to ensure it's up to date
     try:
         shutil.copy2(source_helpers, target_helpers)
-        sys.stderr.write(f"[worker] Copied standalone_helpers to {target_helpers}\n")
     except Exception as exc:
         # Don't fail worker startup if helpers copy fails - tool may not need it
         sys.stderr.write(

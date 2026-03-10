@@ -10,7 +10,6 @@ from typing import Any, Iterator, List, Optional, Union
 from pydantic import Field, field_validator, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -201,11 +200,9 @@ def example_input():
     description="Run batched in-silico mutagenesis with AlphaGenome variant scorers",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="requests",
-    output_iterable_field="results",
-    tool_name="alphagenome-score-ism-variants-batch",
+    iterable_input_field="requests",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_alphagenome_score_ism_variants_batch(
     inputs: AlphaGenomeScoreISMInput,
@@ -237,12 +234,9 @@ def run_alphagenome_score_ism_variants_batch(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
-            "timeout": config.timeout,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     scores = dispatch_result["scores"]

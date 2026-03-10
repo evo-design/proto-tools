@@ -40,6 +40,16 @@ _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
 from bio_programming_tools.utils import BaseConfig
 from bio_programming_tools.utils.device import parse_device_string, validate_device_allocation
+from bio_programming_tools.utils.tool_cache import (
+    CacheStripResult,
+    _generate_cache_key,
+    _program_tool_cache,
+    _serialize_for_cache_key,
+    cache_stitch_items,
+    cache_store_items,
+    cache_strip_items,
+    deduplicate_items,
+)
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -76,6 +86,18 @@ class ToolSpec(BaseModel):
     example_input: Callable[[], BaseToolInput] | None = Field(
         default=None, exclude=True,
         description="Factory returning a minimal valid input for testing",
+    )
+    iterable_input_field: str | None = Field(
+        default=None, exclude=True,
+        description="Input field name containing the iterable list of items (for ToolPool fan-out)",
+    )
+    iterable_output_field: str | None = Field(
+        default=None, exclude=True,
+        description="Output field name containing the iterable list of results (for ToolPool fan-out)",
+    )
+    cacheable: bool = Field(
+        default=False, exclude=True,
+        description="Whether this tool's results should be cached in the program-scoped cache",
     )
 
     model_config = {
@@ -152,6 +174,9 @@ class ToolRegistry:
         uses_gpu: bool = False,
         device_count: str = "1",
         example_input: Callable[[], BaseToolInput] | None = None,
+        iterable_input_field: str | None = None,
+        iterable_output_field: str | None = None,
+        cacheable: bool = False,
     ):
         """
         Decorator to register a tool function and wrap execution with metadata tracking.
@@ -180,6 +205,12 @@ class ToolRegistry:
         """
         def decorator(func: Callable):
             cls._check_duplicate(key, func.__name__)
+
+            if (iterable_input_field is None) != (iterable_output_field is None):
+                raise ValueError(
+                    f"Tool '{key}': iterable_input_field and iterable_output_field "
+                    f"must both be set or both be None"
+                )
 
             # Capture source file from call stack (find first frame in tools directory)
             stack = inspect.stack()
@@ -218,8 +249,79 @@ class ToolRegistry:
                             key, device_str,
                         )
                     elif device_str != "cpu":
-                        _, requested_count = parse_device_string(device_str)
-                        validate_device_allocation(requested_count, device_count, key)
+                        device_spec = parse_device_string(device_str)
+                        validate_device_allocation(device_spec.count, device_count, key)
+
+                # --- Dedup + Cache (cacheable tools only) ---
+                deduped = None
+                original_items = None
+                strip = None
+                whole_cache_key = None
+                spec = cls._registry.get(key)
+
+                if cacheable and spec and spec.iterable_input_field:
+                    # Iterable path: dedup then strip cached items
+                    original_items = list(getattr(inputs, spec.iterable_input_field))
+                    if len(original_items) > 1:
+                        deduped = deduplicate_items(original_items, key_fn=_serialize_for_cache_key)
+                        if len(deduped.unique_items) < len(original_items):
+                            inputs = inputs.model_copy(update={spec.iterable_input_field: deduped.unique_items})
+                            logger.debug(
+                                "Tool %s: dedup %d → %d unique items",
+                                key, len(original_items), len(deduped.unique_items),
+                            )
+
+                    # Strip cached items from the (possibly deduped) input
+                    current_items = list(getattr(inputs, spec.iterable_input_field))
+                    strip = cache_strip_items(key, current_items, config)
+                    if strip is not None and strip.all_cached:
+                        logger.debug("[Iterable Cache] %s: full cache hit, skipping dispatch", key)
+                        cached_list = [strip.cached_results[i] for i in range(len(current_items))]
+                        # Expand dedup if needed
+                        if deduped and len(deduped.unique_items) < len(original_items):
+                            cached_list = [cached_list[uid] for _, uid in deduped.index_map]
+                        result = output_class(
+                            tool_id=key,
+                            execution_time=0.0,
+                            success=True,
+                            warnings=[],
+                            metadata={},
+                            **{spec.iterable_output_field: cached_list},
+                        )
+                        return result
+
+                    # Narrow inputs to uncached items only
+                    if strip is not None and strip.uncached_items:
+                        inputs = inputs.model_copy(update={spec.iterable_input_field: strip.uncached_items})
+
+                elif cacheable:
+                    # Whole-output path: check full cache
+                    cache = _program_tool_cache.get()
+                    if cache is not None:
+                        whole_cache_key = _generate_cache_key(key, inputs, config)
+                        cached = cache.get(key, whole_cache_key)
+                        if cached is not None:
+                            logger.debug("[Cache Hit] %s: using cached result", key)
+                            return cached
+
+                # --- Dispatch (pool or local) ---
+
+                # Check for active ToolPool (transparent parallel dispatch)
+                from bio_programming_tools.utils.tool_pool import get_active_pool, is_pool_executing
+                pool = get_active_pool()
+                if pool is not None and not is_pool_executing():
+                    if spec and spec.iterable_input_field is not None:
+                        result = pool._parallel_dispatch(key, func, inputs, config)
+                        result.tool_id = key
+                        result.success = True
+                        result.execution_time = time.time() - start_time
+                        if result.timestamp is None:
+                            result.timestamp = datetime.now()
+                        result = _post_dispatch_cache_and_expand(
+                            key, spec, cacheable, result, strip, deduped,
+                            original_items, whole_cache_key,
+                        )
+                        return result
 
                 for attempt in range(1 + MAX_RETRIES):
                     try:
@@ -267,6 +369,12 @@ class ToolRegistry:
 
                                     # Re-emit warnings so they still get logged/printed
                                     _re_emit_warnings(filtered_warnings)
+
+                            # Post-dispatch: cache store, stitch, dedup expand
+                            result = _post_dispatch_cache_and_expand(
+                                key, spec, cacheable, result, strip, deduped,
+                                original_items, whole_cache_key,
+                            )
 
                             logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
                             return result
@@ -335,6 +443,9 @@ class ToolRegistry:
                 function=wrapper,
                 source_file=source_file,
                 example_input=example_input,
+                iterable_input_field=iterable_input_field,
+                iterable_output_field=iterable_output_field,
+                cacheable=cacheable,
             )
             return wrapper
         return decorator
@@ -500,6 +611,48 @@ class ToolRegistry:
             else:
                 error_msg += f"\nExisting tool: {existing_label}"
             raise ValueError(error_msg)
+
+
+def _post_dispatch_cache_and_expand(
+    key: str,
+    spec: ToolSpec | None,
+    is_cacheable: bool,
+    result: BaseToolOutput,
+    strip: CacheStripResult | None,
+    deduped: Any | None,
+    original_items: list | None,
+    whole_cache_key: str | None,
+) -> BaseToolOutput:
+    """Store results in cache and expand deduped items back to original positions.
+
+    Called after both pool and local dispatch paths to avoid duplicating
+    cache-store / stitch / dedup-expand logic.
+    """
+    if is_cacheable and spec and spec.iterable_input_field:
+        # Iterable cache store + stitch
+        computed_items = getattr(result, spec.iterable_output_field, [])
+        if strip is not None and strip.cached_results:
+            cache_store_items(key, strip.cache_keys, computed_items)
+            total = len(strip.cached_results) + len(strip.uncached_items)
+            stitched = cache_stitch_items(strip, computed_items, total)
+            setattr(result, spec.iterable_output_field, stitched)
+        elif strip is not None:
+            # No cached items existed, but we still store the new ones
+            cache_store_items(key, strip.cache_keys, computed_items)
+
+        # Expand deduped results back to original positions
+        if deduped and original_items and len(deduped.unique_items) < len(original_items):
+            unique_results = getattr(result, spec.iterable_output_field)
+            expanded = [unique_results[uid] for _, uid in deduped.index_map]
+            setattr(result, spec.iterable_output_field, expanded)
+
+    elif is_cacheable and whole_cache_key is not None:
+        # Whole-output cache store
+        cache = _program_tool_cache.get()
+        if cache is not None:
+            cache.set(key, whole_cache_key, result)
+
+    return result
 
 
 def _re_emit_warnings(warning_list: List[Warning]) -> None:

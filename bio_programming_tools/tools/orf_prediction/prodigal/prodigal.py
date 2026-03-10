@@ -23,7 +23,6 @@ from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_dna_chars,
 )
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
@@ -293,11 +292,6 @@ def example_input():
     return ProdigalInput(input_sequences=["ATGCGTAAATAA"])
 
 
-@tool_cache_iterable(
-    input_iterable_field="input_sequences",
-    output_iterable_field="predicted_orfs",
-    tool_name="prodigal-prediction",
-)
 @tool(
     key="prodigal-prediction",
     label="Prodigal ORF Prediction",
@@ -307,6 +301,9 @@ def example_input():
     output_class=ProdigalOutput,
     description="Prokaryotic ORF and gene prediction using Prodigal",
     example_input=example_input,
+    iterable_input_field="input_sequences",
+    iterable_output_field="predicted_orfs",
+    cacheable=True,
 )
 def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None = None, instance=None) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
@@ -363,8 +360,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None
             },
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     # Reconstruct ORF objects from returned dicts

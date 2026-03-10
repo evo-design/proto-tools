@@ -132,6 +132,7 @@ class BorzoiConfig(BaseConfig):
         default="cuda",
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
+        include_in_key=False,
     )
     output_tracks: List[int] = ConfigField(
         title="Output Tracks",
@@ -223,9 +224,7 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance
             "verbose": config.verbose,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return BorzoiOutput(

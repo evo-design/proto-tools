@@ -1,6 +1,6 @@
 # Linux x86_64 Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-100%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-33-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-0-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-97%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-41-brightgreen) ![Failed](https://img.shields.io/badge/failed-1-red) ![Skipped](https://img.shields.io/badge/skipped-0-lightgrey)
 
 ## Platform
 
@@ -9,7 +9,7 @@
 | **OS** | Linux Linux 5.15.0-1086-nvidia |
 | **Architecture** | x86_64 |
 | **Hostname** | `ashleylab-h100` |
-| **Python** | 3.12.12 |
+| **Python** | 3.12.13 |
 | **RAM** | 2015.6 GB |
 | **GPU** | 8× NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3, NVIDIA H100 80GB HBM3 |
 | **CUDA** | 12.2 |
@@ -17,9 +17,9 @@
 
 ## Git
 
-- **Commit**: `5c8918c9d60d`
-- **Branch**: `device_management`
-- **Dirty**: Yes
+- **Commit**: `afcf77285f71`
+- **Branch**: `bv/parallel`
+- **Dirty**: No
 
 ## Environment Variables
 
@@ -30,14 +30,12 @@ CONDA_DEFAULT_ENV=bio-tools
 CONDA_EXE=/home/viggiano/miniconda3/bin/conda
 CONDA_PREFIX=/projects/viggiano/envs/bio-tools
 CONDA_PREFIX_1=/home/viggiano/miniconda3
-CONDA_PREFIX_2=/projects/viggiano/envs/bio_tools
+CONDA_PREFIX_2=/projects/viggiano/envs/bio-tools
 CONDA_PREFIX_3=/home/viggiano/miniconda3
-CONDA_PREFIX_4=/projects/viggiano/envs/bio_tools
-CONDA_PREFIX_5=/home/viggiano/miniconda3
-CONDA_PREFIX_6=/projects/viggiano/envs/bio_tools
 CONDA_PROMPT_MODIFIER=(bio-tools) 
 CONDA_PYTHON_EXE=/home/viggiano/miniconda3/bin/python
-CONDA_SHLVL=7
+CONDA_SHLVL=4
+CUDA_VISIBLE_DEVICES=5,6,7
 DISABLE_PANDERA_IMPORT_WARNING=True
 HOME=/home/viggiano
 LANG=en_US.UTF-8
@@ -58,9 +56,10 @@ RDBASE=/projects/viggiano/envs/bio-tools/lib/python3.12/site-packages/rdkit
 SHELL=/bin/bash
 SHLVL=2
 TERM=tmux-256color
+TERMINFO_DIRS=/home/viggiano/.terminfo:/home/viggiano/.terminfo:/home/viggiano/.terminfo:/home/viggiano/.terminfo:/home/viggiano/.terminfo:/home/viggiano/.terminfo:
 TERM_PROGRAM=tmux
 TERM_PROGRAM_VERSION=3.2a
-TMUX=/tmp/tmux-1013/default,152215,0
+TMUX=/tmp/tmux-1013/default,582927,0
 TMUX_PANE=%0
 USER=viggiano
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -73,7 +72,8 @@ _=/projects/viggiano/envs/bio-tools/bin/pytest
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/splice_transformer_env
+CONDA_PREFIX=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/viennarna_env
+CUDA_VISIBLE_DEVICES=5,6,7
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
@@ -81,118 +81,142 @@ HOME=/home/viggiano
 LANG=en_US.UTF-8
 LD_LIBRARY_PATH=/projects/viggiano/envs/bio-tools/lib
 LOGNAME=viggiano
-PATH=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/splice_transformer_env/bin:/usr/local/cuda/bin:/home/viggiano/.local/bin:/opt/bin:/home/viggiano/.cargo/bin:/projects/viggiano/envs/bi...
+PATH=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/viennarna_env/bin:/home/viggiano/.local/bin:/usr/local/cuda/bin:/opt/bin:/home/viggiano/.cargo/bin:/projects/viggiano/envs/bio-tools/b...
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
-RECOMMENDED_TORCH_SPEC=torch>=2.4,<3
+RECOMMENDED_TORCH_SPEC=torch>=2.4,<2.7
 SHELL=/bin/bash
 TORCH_CUDA_ARCH_LIST=9.0
-TORCH_HOME=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/splice_transformer_env/cache/torch
+TORCH_HOME=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/viennarna_env/cache/torch
 USER=viggiano
-VIRTUAL_ENV=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/splice_transformer_env
+VIRTUAL_ENV=/raid/projects/viggiano/codebases/bio-programming-tools/tool_envs/viennarna_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
 
-### Causal Models (3/3)
+### Causal Models (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `evo1` | yes | ✅ | 102.8s | ✅ Pass |
-| `evo2` | yes | ✅ | 86.1s | ✅ Pass |
-| `progen2` | yes | ✅ | 39.5s | ✅ Pass |
+| `evo1` | yes | ✅ | 355.3s | ✅ Pass |
+| `evo2` | yes | ✅ | 255.3s | ✅ Pass |
+| `evo2` | yes | ✅ | 428.4s | ✅ Pass |
+| `progen2` | yes | ✅ | 78.2s | ✅ Pass |
 
 ### Gene Annotation (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 28.7s | ✅ Pass |
-| `minced` | no | ✅ | 6.2s | ✅ Pass |
-| `mmseqs` | no | ✅ | 8.2s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 5.8s | ✅ Pass |
+| `blast` | no | ✅ | 97.0s | ✅ Pass |
+| `minced` | no | ✅ | 21.1s | ✅ Pass |
+| `mmseqs` | no | ✅ | 35.1s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 25.5s | ✅ Pass |
 
 ### Inverse Folding (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `ligandmpnn` | yes | ✅ | 36.7s | ✅ Pass |
-| `proteinmpnn` | yes | ✅ | 34.0s | ✅ Pass |
+| `ligandmpnn` | yes | ✅ | 116.7s | ✅ Pass |
+| `proteinmpnn` | yes | ✅ | 158.3s | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `esm2` | yes | ✅ | 20.2s | ✅ Pass |
-| `esm3` | yes | ✅ | 20.3s | ✅ Pass |
+| `esm2` | yes | ✅ | 51.0s | ✅ Pass |
+| `esm3` | yes | ✅ | 88.5s | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 6.4s | ✅ Pass |
-| `prodigal` | no | ✅ | 5.8s | ✅ Pass |
+| `orfipy` | no | ✅ | 22.1s | ✅ Pass |
+| `prodigal` | no | ✅ | 21.8s | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `splice_transformer` | yes | ✅ | 17.5s | ✅ Pass |
+| `splice_transformer` | yes | ✅ | 52.5s | ✅ Pass |
 
 ### Sequence Alignment (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `mafft` | no | ✅ | 8.7s | ✅ Pass |
+| `mafft` | no | ✅ | 28.4s | ✅ Pass |
 
 ### Sequence Scoring (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `borzoi` | yes | ✅ | 37.1s | ✅ Pass |
-| `enformer` | yes | ✅ | 18.5s | ✅ Pass |
+| `borzoi` | yes | ✅ | 105.4s | ✅ Pass |
+| `enformer` | yes | ✅ | 70.3s | ✅ Pass |
 
 ### Structure Alignment (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `tmalign` | no | ✅ | 14.4s | ✅ Pass |
+| `tmalign` | no | ✅ | 50.9s | ✅ Pass |
 | `tmalign` | no | ✅ | 0.0s | ✅ Pass |
-| `usalign` | no | ✅ | 25.0s | ✅ Pass |
-| `usalign` | no | ✅ | 0.0s | ✅ Pass |
+| `usalign` | no | ✅ | 85.3s | ✅ Pass |
+| `usalign` | no | ✅ | 0.1s | ✅ Pass |
 
 ### Structure Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `rfdiffusion3` | yes | ✅ | 43.9s | ✅ Pass |
+| `rfdiffusion3` | yes | ✅ | 96.8s | ✅ Pass |
 
 ### Structure Dynamics (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `bioemu` | yes | ✅ | 34.6s | ✅ Pass |
+| `bioemu` | yes | ✅ | 104.1s | ✅ Pass |
 
-### Structure Prediction (6/6)
+### Structure Prediction (13/14)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphafold2` | yes | ✅ | 92.2s | ✅ Pass |
-| `boltz2` | yes | ✅ | 88.2s | ✅ Pass |
-| `chai1` | yes | ✅ | 268.2s | ✅ Pass |
-| `esmfold` | yes | ✅ | 29.2s | ✅ Pass |
-| `protenix` | yes | ✅ | 302.1s | ✅ Pass |
-| `viennarna` | no | ✅ | 5.8s | ✅ Pass |
+| `alphafold2` | yes | ✅ | 174.0s | ✅ Pass |
+| `boltz2` | yes | ✅ | 419.9s | ✅ Pass |
+| `chai1` | yes | ✅ | 392.1s | ✅ Pass |
+| `esmfold` | yes | ✅ | 74.0s | ✅ Pass |
+| `protenix` | yes | ✅ | 773.6s | ✅ Pass |
+| `protenix` | yes | ✅ | 471.6s | ✅ Pass |
+| `protenix` | yes | ✅ | 504.2s | ✅ Pass |
+| `protenix` | yes | ✅ | 2400.8s | ❌ Fail |
+| `protenix` | yes | ✅ | 202.0s | ✅ Pass |
+| `protenix` | yes | ✅ | 838.9s | ✅ Pass |
+| `protenix` | yes | ✅ | 1294.2s | ✅ Pass |
+| `protenix` | yes | ✅ | 182.9s | ✅ Pass |
+| `protenix` | yes | ✅ | 408.6s | ✅ Pass |
+| `viennarna` | no | ✅ | 14.1s | ✅ Pass |
 
 ### Unknown (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphagenome` | yes | ✅ | 134.6s | ✅ Pass |
-| `crispr_tracr` | no | ✅ | 86.8s | ✅ Pass |
-| `local_colabfold_search` | no | — | 37.0s | ✅ Pass |
-| `structure_metrics` | no | ✅ | 6.4s | ✅ Pass |
+| `alphagenome` | yes | ✅ | 343.3s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 272.5s | ✅ Pass |
+| `local_colabfold_search` | no | — | 150.5s | ✅ Pass |
+| `structure_metrics` | no | ✅ | 33.1s | ✅ Pass |
+
+## Failure Details
+
+### ❌ `protenix`
+
+**Test**: `tests/structure_prediction_tests/test_protenix.py::test_protenix_model_variants[protenix_base_constraint_v0.5.0]`
+
+**Note**: Checkpoint download for this model variant is flakey and fails intermittently. The downloaded `.pt` file was corrupted (`PytorchStreamReader failed reading zip archive: failed finding central directory`), causing the worker to hang until the 2400s timeout. Deleting the cached checkpoint and re-running usually fixes it.
+
+```
+tests/structure_prediction_tests/test_protenix.py:123: in test_protenix_model_variants
+    assert output.success
+E   assert False
+E    +  where False = <[ToolExecutionError('Attempt to access field of tool output after failure: TimeoutError: Worker for protenix timed out after 2400s\n\nError Messages:\nWorker for protenix timed out after 2400s\nTraceback (most recent call last):\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/tools/tool_registry.py", line 345, in wrapper\n    result = func(inputs, config, instance)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/tools/structure_prediction/protenix/protenix.py", line 422, in run_protenix\n    output_data = ToolInstance.dispatch(\n                  ^^^^^^^^^^^^^^^^^^^^^^\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 241, in dispatch\n    return cached.run(\n           ^^^^^^^^^^^\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 549, in run\n    return self._run_persistent(\n           ^^^^^^^^^^^^^^^^^^^^^\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/utils/tool_instance.py", line 955, in _run_persistent\n    result = self._worker.send(input_dict, timeout=effective_timeout)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/raid/projects/viggiano/codebases/bio-programming-tools/bio_programming_tools/utils/persistent_worker.py", line 463, in send\n    raise TimeoutError(\nTimeoutError: Worker for protenix timed out after 2400s\n') raised in repr()] StructurePredictionOutput object at 0x7f9539d2b5c0>.success
+```
 
 ---
-*Generated at 2026-03-01 15:58:02 by `pytest --env-report`*
+*Generated at 2026-03-08 22:05:29 by `pytest --env-report`* (boltz2/chai1 re-verified 2026-03-08 after triton upgrade + SIGPIPE fix)

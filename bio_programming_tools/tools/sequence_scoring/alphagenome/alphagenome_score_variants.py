@@ -11,7 +11,6 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -140,6 +139,7 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
         default="cuda",
         description="Device to run AlphaGenome inference on",
         hidden=True,
+        include_in_key=False,
     )
 
 
@@ -166,11 +166,9 @@ def example_input():
     description="Score variant effects in batch with AlphaGenome variant scorers",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="variants",
-    output_iterable_field="results",
-    tool_name="alphagenome-score-variants",
+    iterable_input_field="variants",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_alphagenome_score_variants(
     inputs: AlphaGenomeScoreVariantsInput,
@@ -203,12 +201,9 @@ def run_alphagenome_score_variants(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
-            "timeout": config.timeout,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     scores = dispatch_result["scores"]

@@ -341,6 +341,7 @@ class Evo2SampleConfig(BaseConfig):
         default="cuda",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -368,6 +369,8 @@ def example_input():
     description="Sample DNA sequences using Evo2 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="prompts",
+    iterable_output_field="sequences",
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput, config: Evo2SampleConfig | None = None,
@@ -445,9 +448,7 @@ def run_evo2_sample(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     # Serialize tensors to nested lists at tool boundary if needed

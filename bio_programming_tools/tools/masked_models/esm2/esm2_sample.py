@@ -172,6 +172,7 @@ class ESM2SampleConfig(BaseConfig):
         default="cuda",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -199,6 +200,8 @@ def example_input():
     description="Sample protein sequences using ESM2 language model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="sequences",
 )
 def run_esm2_sample(
     inputs: ESM2SampleInput, config: ESM2SampleConfig | None = None,
@@ -275,9 +278,7 @@ def run_esm2_sample(
             "return_logits": config.return_logits,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return ESM2SampleOutput(

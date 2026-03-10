@@ -492,7 +492,7 @@ def test_evict_then_restart_preserves_correctness():
         inst_a = ToolInstance.get("mock_pytorch_tool", instance_name="a")
         result1 = _run_tool(_pytorch_tool, "a")
         assert result1.success
-        first_output = result1.result  # Save for comparison
+        first_output = result1.results  # Save for comparison
         _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                            label="after loading tool A")
 
@@ -512,7 +512,7 @@ def test_evict_then_restart_preserves_correctness():
         # Re-run A — should restart and produce same-shape output
         result2 = _run_tool(_pytorch_tool, "a")
         assert result2.success
-        assert len(result2.result) == len(first_output), \
+        assert len(result2.results) == len(first_output), \
             "Restarted tool should produce same-shape output"
         _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                            label="after tool A restart")

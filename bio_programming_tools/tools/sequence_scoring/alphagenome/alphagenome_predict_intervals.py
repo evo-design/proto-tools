@@ -9,7 +9,6 @@ from typing import Any, Iterator, List, Union
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
@@ -120,11 +119,9 @@ def example_input():
     description="Predict genomic signals for batched intervals using AlphaGenome",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="intervals",
-    output_iterable_field="results",
-    tool_name="alphagenome-predict-intervals",
+    iterable_input_field="intervals",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_alphagenome_predict_intervals(
     inputs: AlphaGenomePredictIntervalsInput,
@@ -149,12 +146,9 @@ def run_alphagenome_predict_intervals(
             "organism": config.organism,
             "model_version": config.model_version,
             "device": config.device,
-            "timeout": config.timeout,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     predictions = dispatch_result["predictions"]

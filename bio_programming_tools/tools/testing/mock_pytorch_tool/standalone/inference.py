@@ -1,8 +1,9 @@
 """Standalone inference script for mock PyTorch tool.
 
 This script runs in an isolated environment and implements a minimal PyTorch
-model for testing DeviceManager functionality. It's designed to be fast (<1s)
-while still exercising device management, memory tracking, and worker protocols.
+model for testing DeviceManager and ToolPool functionality. It's designed to be
+fast (<1s) while still exercising device management, memory tracking, and
+worker protocols.
 """
 from __future__ import annotations
 
@@ -70,19 +71,12 @@ class MockPyTorchToolModel:
         logger.info(f"Moved model to {self._device}")
 
     def run(self, data: list[float]) -> dict[str, Any]:
-        """Run inference on input data."""
-        # Convert input to tensor
+        """Run inference on a single data item."""
         x = torch.tensor(data, dtype=torch.float32, device=self._device)
-
-        # Run forward pass
         with torch.no_grad():
             output = self.model(x)
-
-        # Convert output to list
-        result = output.cpu().tolist()
-
         return {
-            "result": result,
+            "result": output.cpu().tolist(),
             "device_used": str(self._device),
         }
 
@@ -104,7 +98,7 @@ def dispatch(input_dict: dict) -> dict:
     global _model
 
     # Extract parameters
-    data = input_dict.get("data", [1.0, 2.0, 3.0, 4.0])
+    data_items = input_dict.get("data_items", [[1.0, 2.0, 3.0, 4.0]])
     device = input_dict.get("device", "cuda")
     hidden_size = input_dict.get("hidden_size", 128)
     memory_mb = input_dict.get("memory_mb", 512)
@@ -117,8 +111,10 @@ def dispatch(input_dict: dict) -> dict:
             device=device,
         )
 
-    # Run inference
-    return _model.run(data)
+    # Run inference on each data item
+    results = [_model.run(item) for item in data_items]
+
+    return {"results": results}
 
 
 def to_device(device: str) -> dict:

@@ -47,6 +47,7 @@ class MockJAXToolConfig(BaseConfig):
         title="Device",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
 
     hidden_size: int = ConfigField(
@@ -144,7 +145,7 @@ def run_mock_jax_tool(
             "memory_mb": config.memory_mb,
         },
         instance=instance,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return MockJAXToolOutput(**result)

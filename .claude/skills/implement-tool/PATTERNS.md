@@ -24,7 +24,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
         "{tool_name}",
         input_data,
         script_path=Path(__file__).parent / "standalone" / "run.py",
-        verbose=config.verbose,
+        config=config,
     )
 
     return ToolOutput(
@@ -127,8 +127,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
             "device": config.device,
         },
         script_path=Path(__file__).parent / "standalone" / "inference.py",
-        verbose=config.verbose,
-        reload_on=type(config).reload_fields(),  # Restart worker if device/checkpoint changes
+        config=config,
     )
 
     return ToolOutput(results=result["results"])
@@ -456,27 +455,22 @@ echo "{ToolName} setup complete!"
 
 ## Caching Patterns — [Phase 2: Contract]
 
-### Whole-result caching (for tools with single output)
+Add `cacheable=True` to the `@tool()` decorator. The wrapper auto-selects strategy:
+- **Iterable tools** (have `iterable_input_field`) → per-item cache (strip/stitch)
+- **Non-iterable tools** → whole-output cache
+
 ```python
-@tool(key="tool-key", ...)
-@tool_cache("tool-key")
+# Per-item caching (tools processing lists/batches):
+@tool(key="tool-key", ..., iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
+def run_tool_name(inputs, config) -> Output:
+
+# Whole-output caching (tools with single output):
+@tool(key="tool-key", ..., cacheable=True)
 def run_tool_name(inputs, config) -> Output:
 ```
-Note: `@tool_cache` goes BELOW `@tool`.
 
-### Per-item caching (for tools processing lists/batches)
-```python
-@tool_cache_iterable(
-    input_iterable_field="sequences",       # List field in Input
-    output_iterable_field="results",        # List field in Output
-    tool_name="tool-key",
-)
-@tool(key="tool-key", ...)
-def run_tool_name(inputs, config) -> Output:
-```
-Note: `@tool_cache_iterable` goes ABOVE `@tool`.
-
-Import from: `from bio_programming_tools.utils.tool_cache import tool_cache, tool_cache_iterable`
+No separate imports needed — caching is built into the `@tool()` decorator.
+Generative tools (e.g., samplers) should NOT set `cacheable=True`.
 
 ---
 

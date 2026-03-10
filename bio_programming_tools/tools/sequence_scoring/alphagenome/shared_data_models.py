@@ -257,6 +257,7 @@ class AlphaGenomePredictConfig(BaseConfig):
         default="cuda",
         description="Device to run AlphaGenome inference on",
         hidden=True,
+        include_in_key=False,
     )
     timeout: int = ConfigField(
         title="Timeout",

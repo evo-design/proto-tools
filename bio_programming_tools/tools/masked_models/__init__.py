@@ -1,3 +1,4 @@
+from .shared_data_models import SequenceEmbedding
 from .esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
@@ -32,6 +33,8 @@ from .esm3 import (
 )
 
 __all__ = [
+    # Shared data models
+    "SequenceEmbedding",
     # ESM2 - Embeddings
     "run_esm2_embeddings",
     "ESM2EmbeddingsInput",

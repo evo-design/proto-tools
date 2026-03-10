@@ -1,14 +1,14 @@
-"""Mock PyTorch tool for testing DeviceManager functionality.
+"""Mock PyTorch tool for testing DeviceManager and ToolPool functionality.
 
 This is a minimal PyTorch tool designed for fast testing of device management,
-memory tracking, and worker lifecycle. It loads a tiny model in <1 second while
-still exercising all DeviceManager code paths.
+memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
+in <1 second while still exercising all DeviceManager and ToolPool code paths.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
@@ -24,12 +24,12 @@ class MockPyTorchToolInput(BaseToolInput):
     """Input for mock PyTorch tool.
 
     Fields:
-        data: Input data to pass through the model.
+        data_items: List of data vectors to process through the model.
     """
 
-    data: list[float] = Field(
-        default=[1.0, 2.0, 3.0, 4.0],
-        description="Input data to pass through the model (any length)",
+    data_items: list[list[float]] = Field(
+        default=[[1.0, 2.0, 3.0, 4.0]],
+        description="List of data items to process (each is a 4-element float vector)",
     )
 
 
@@ -47,6 +47,7 @@ class MockPyTorchToolConfig(BaseConfig):
         title="Device",
         description="Device to run on",
         hidden=True,
+        include_in_key=False,
     )
 
     hidden_size: int = ConfigField(
@@ -64,20 +65,22 @@ class MockPyTorchToolConfig(BaseConfig):
     )
 
 
+class MockPyTorchToolResult(BaseModel):
+    """Single result from mock PyTorch tool."""
+
+    result: list[float] = Field(description="Output from the model")
+    device_used: str = Field(description="Device the model ran on")
+
+
 class MockPyTorchToolOutput(BaseToolOutput):
     """Output from mock PyTorch tool.
 
     Fields:
-        result: Output from the model.
-        device_used: Device the model ran on.
+        results: List of results, one per input data item.
     """
 
-    result: list[float] = Field(
-        description="Output from the model"
-    )
-
-    device_used: str = Field(
-        description="Device the model ran on"
+    results: list[MockPyTorchToolResult] = Field(
+        description="Results from the model, one per input data item"
     )
 
     @property
@@ -96,11 +99,15 @@ class MockPyTorchToolOutput(BaseToolOutput):
 
         if file_format == "json":
             with open(path, "w") as f:
-                json.dump({"result": self.result, "device_used": self.device_used}, f, indent=2)
+                json.dump(
+                    {"results": [r.model_dump() for r in self.results]},
+                    f,
+                    indent=2,
+                )
         elif file_format == "txt":
             with open(path, "w") as f:
-                f.write(f"Device: {self.device_used}\n")
-                f.write(f"Result: {self.result}\n")
+                for i, r in enumerate(self.results):
+                    f.write(f"Item {i}: device={r.device_used}, result={r.result}\n")
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -122,10 +129,12 @@ def example_input():
     input_class=MockPyTorchToolInput,
     config_class=MockPyTorchToolConfig,
     output_class=MockPyTorchToolOutput,
-    description="Minimal PyTorch tool for testing device management",
+    description="Minimal PyTorch tool for testing device management and ToolPool",
     uses_gpu=True,
     device_count="1",
     example_input=example_input,
+    iterable_input_field="data_items",
+    iterable_output_field="results",
 )
 def run_mock_pytorch_tool(
     inputs: MockPyTorchToolInput,
@@ -138,13 +147,13 @@ def run_mock_pytorch_tool(
     result = ToolInstance.dispatch(
         "mock_pytorch_tool",
         {
-            "data": inputs.data,
+            "data_items": [list(item) for item in inputs.data_items],
             "device": config.device,
             "hidden_size": config.hidden_size,
             "memory_mb": config.memory_mb,
         },
         instance=instance,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return MockPyTorchToolOutput(**result)

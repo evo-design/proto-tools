@@ -159,6 +159,9 @@ def example_input():
     description="Predict protein 3D structures using ESM3 generative model",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_esm3_structure_prediction(
     inputs: ESM3StructurePredictionInput, config: ESM3StructurePredictionConfig | None = None,
@@ -228,9 +231,7 @@ def run_esm3_structure_prediction(
             "verbose": config.verbose,
         },
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
-        reload_on=type(config).reload_fields(),
+        config=config,
     )
 
     return ESM3StructurePredictionOutput(

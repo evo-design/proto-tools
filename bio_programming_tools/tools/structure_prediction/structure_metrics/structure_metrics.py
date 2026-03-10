@@ -18,7 +18,6 @@ from bio_programming_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
-    tool_cache_iterable,
 )
 
 
@@ -110,11 +109,6 @@ def example_input():
     return StructureMetricsInput(pdb_paths=[str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta")])
 
 
-@tool_cache_iterable(
-    input_iterable_field="pdb_paths",
-    output_iterable_field="metrics",
-    tool_name="structure-metrics",
-)
 @tool(
     key="structure-metrics",
     label="Structure Quality Metrics",
@@ -124,6 +118,9 @@ def example_input():
     output_class=StructureMetricsOutput,
     description="Compute structural quality metrics (longest alpha helix, gyration radius) from PDB files",
     example_input=example_input,
+    iterable_input_field="pdb_paths",
+    iterable_output_field="metrics",
+    cacheable=True,
 )
 def run_structure_metrics(
     inputs: StructureMetricsInput, config: StructureMetricsConfig | None = None, instance=None,
@@ -160,8 +157,7 @@ def run_structure_metrics(
         "structure_metrics",
         input_data,
         instance=instance,
-        verbose=config.verbose,
-        timeout=config.timeout,
+        config=config,
     )
 
     metrics = [StructureMetrics(**m) for m in output_data["metrics"]]

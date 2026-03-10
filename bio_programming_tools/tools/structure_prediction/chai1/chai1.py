@@ -31,8 +31,6 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_cache import tool_cache_iterable
-
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
 # ============================================================================
@@ -219,11 +217,9 @@ def example_input():
     description="Multi-modal structure prediction using Chai1",
     uses_gpu=True,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="complexes",
-    output_iterable_field="structures",
-    tool_name="chai1-prediction",
+    iterable_input_field="complexes",
+    iterable_output_field="structures",
+    cacheable=True,
 )
 def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.
@@ -546,8 +542,7 @@ def run_chai1_on_complex(
             "chai1",
             input_data,
             instance=instance,
-            verbose=config.verbose,
-            timeout=config.timeout,
+            config=config,
         )
 
         cif_output = result["cif_output"]

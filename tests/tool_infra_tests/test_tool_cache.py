@@ -1,23 +1,22 @@
 """Tests for tool_cache."""
 
 from typing import List, Union
-from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
 from bio_programming_tools.utils.tool_cache import (
+    CacheStripResult,
     ToolCache,
     _get_obj_size,
     _program_tool_cache,
-    clear_cache,
-    get_cache_info,
-    tool_cache,
-    tool_cache_iterable,
+    _serialize_for_cache_key,
+    cache_stitch_items,
+    cache_store_items,
+    cache_strip_items,
+    deduplicate_items,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.utils import BaseConfig
-from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -36,1072 +35,197 @@ def empty_cache():
     return ToolCache()
 
 
-def _mock_tool_registry_get(tool_name: str, input_model, output_model):
-    """Helper to create a mock ToolSpec for ToolRegistry.get()."""
-    mock_spec = MagicMock()
-    mock_spec.input_model = input_model
-    mock_spec.output_model = output_model
-    return mock_spec
+# ── CacheStripResult tests ──────────────────────────────────────────────────
+
+def test_cache_strip_result_all_cached():
+    """all_cached property returns True when uncached_items is empty."""
+    result = CacheStripResult(
+        uncached_items=[],
+        uncached_indices=[],
+        cached_results={0: "a", 1: "b"},
+        cache_keys=[],
+    )
+    assert result.all_cached is True
 
 
-# ── Tool caching decorator tests ───────────────────────────────────────────
-
-def test_tool_cache_decorator_basic(_setup_cache):
-    """Test basic tool_cache decorator functionality."""
-    call_count = 0
-
-    @tool_cache("test_tool")
-    def expensive_function(x: int, y: int) -> int:
-        nonlocal call_count
-        call_count += 1
-        return x + y
-
-    # First call should execute function
-    result1 = expensive_function(5, 3)
-    assert result1 == 8
-    assert call_count == 1
-
-    # Second call with same args should use cache
-    result2 = expensive_function(5, 3)
-    assert result2 == 8
-    assert call_count == 1  # Still 1, not 2
-
-    # Different args should execute function again
-    result3 = expensive_function(10, 7)
-    assert result3 == 17
-    assert call_count == 2
+def test_cache_strip_result_not_all_cached():
+    """all_cached property returns False when there are uncached items."""
+    result = CacheStripResult(
+        uncached_items=["x"],
+        uncached_indices=[2],
+        cached_results={0: "a", 1: "b"},
+        cache_keys=["key_x"],
+    )
+    assert result.all_cached is False
 
 
-def test_tool_cache_with_pydantic_models(_setup_cache):
-    """Test caching with Pydantic model inputs."""
-    call_count = 0
-
-    class TestConfig(BaseModel):
-        value: int
-        text: str
-        threshold: float = 0.5
-
-    class TestOutput(BaseModel):
-        result: int
-        message: str
-
-    @tool_cache("pydantic_tool")
-    def process_config(config: TestConfig) -> TestOutput:
-        nonlocal call_count
-        call_count += 1
-        return TestOutput(
-            result=config.value * 2,
-            message=f"Processed {config.text}"
-        )
-
-    config1 = TestConfig(value=5, text="test", threshold=0.8)
-    config2 = TestConfig(value=5, text="test", threshold=0.8)  # Same content
-    config3 = TestConfig(value=5, text="test", threshold=0.9)  # Different threshold
-
-    # First call executes
-    result1 = process_config(config1)
-    assert result1.result == 10
-    assert call_count == 1
-
-    # Same config should use cache
-    result2 = process_config(config2)
-    assert result2.result == 10
-    assert call_count == 1  # Still 1
-
-    # Different config executes again
-    result3 = process_config(config3)
-    assert result3.result == 10
-    assert call_count == 2
+def test_cache_strip_result_empty():
+    """Empty CacheStripResult is all_cached (vacuously true)."""
+    result = CacheStripResult()
+    assert result.all_cached is True
 
 
-def test_cache_disabled_mode(_setup_cache):
-    """Test that caching can be disabled."""
-    call_count = 0
+# ── cache_strip_items tests ──────────────────────────────────────────────────
 
-    @tool_cache("test_tool", enabled=False)
-    def no_cache_function(x: int) -> int:
-        nonlocal call_count
-        call_count += 1
-        return x * 2
-
-    # Every call should execute the function
-    result1 = no_cache_function(5)
-    assert result1 == 10
-    assert call_count == 1
-
-    result2 = no_cache_function(5)
-    assert result2 == 10
-    assert call_count == 2  # Should increment
+def test_cache_strip_items_no_cache():
+    """Returns None when no active cache exists."""
+    _program_tool_cache.set(None)
+    result = cache_strip_items("test-tool", ["a", "b"], None)
+    assert result is None
 
 
-def test_cache_info_tracking(_setup_cache):
-    """Test cache info retrieval."""
-    @tool_cache("info_tool")
-    def cached_func(x: int) -> int:
-        return x * x
+def test_cache_strip_items_all_miss(_setup_cache):
+    """All items are uncached on first call."""
+    items = ["item_a", "item_b", "item_c"]
+    result = cache_strip_items("test-tool", items, None)
 
-    # Initially empty
-    info = get_cache_info()
-    assert info["total_entries"] == 0
-
-    # Add some cached entries
-    cached_func(5)
-    cached_func(10)
-
-    info = get_cache_info()
-    assert info["total_entries"] == 2
-
-    # Clear and check
-    clear_cache()
-    info = get_cache_info()
-    assert info["total_entries"] == 0
+    assert result is not None
+    assert len(result.uncached_items) == 3
+    assert len(result.cached_results) == 0
+    assert result.all_cached is False
+    assert len(result.cache_keys) == 3
 
 
-def test_verbose_mode_reporting(_setup_cache, caplog):
-    """Test verbose mode cache hit/miss reporting."""
-    import logging
+def test_cache_strip_items_all_hit(_setup_cache):
+    """All items are cached after a store."""
+    config = None
+    items = ["item_a", "item_b"]
 
-    class VerboseInput(BaseToolInput):
-        value: int
+    # First call: all miss
+    strip1 = cache_strip_items("test-tool", items, config)
+    assert strip1.all_cached is False
 
-    class VerboseConfig(BaseConfig):
-        multiplier: int = 2
-        verbose: bool = True
+    # Simulate storing results
+    cache_store_items("test-tool", strip1.cache_keys, ["res_a", "res_b"])
 
-    @tool_cache("verbose_tool")
-    def verbose_function(inputs: VerboseInput, config: VerboseConfig) -> int:
-        return inputs.value * config.multiplier
-
-    inputs = VerboseInput(value=5)
-    config = VerboseConfig(multiplier=2, verbose=True)
-
-    # First call should report cache miss
-    with caplog.at_level(logging.DEBUG):
-        _ = verbose_function(inputs, config)
-    assert "[Cache Miss]" in caplog.text
-
-    caplog.clear()
-
-    # Second call should report cache hit
-    with caplog.at_level(logging.DEBUG):
-        _ = verbose_function(inputs, config)
-    assert "[Cache Hit]" in caplog.text
+    # Second call: all hit
+    strip2 = cache_strip_items("test-tool", items, config)
+    assert strip2 is not None
+    assert strip2.all_cached is True
+    assert strip2.cached_results == {0: "res_a", 1: "res_b"}
 
 
-def test_cache_isolation_between_tools(_setup_cache):
-    """Test that different tools have isolated cache entries."""
-    @tool_cache("tool1")
-    def func1(x: int) -> str:
-        return f"tool1: {x}"
+def test_cache_strip_items_partial_hit(_setup_cache):
+    """Some items cached, some not."""
+    config = None
 
-    @tool_cache("tool2")
-    def func2(x: int) -> str:
-        return f"tool2: {x}"
+    # Store one item
+    strip1 = cache_strip_items("test-tool", ["a"], config)
+    cache_store_items("test-tool", strip1.cache_keys, ["result_a"])
 
-    # Same input, different tools
-    result1 = func1(5)
-    result2 = func2(5)
+    # Query with mix of cached and new
+    strip2 = cache_strip_items("test-tool", ["a", "b", "c"], config)
+    assert strip2 is not None
+    assert len(strip2.cached_results) == 1
+    assert strip2.cached_results[0] == "result_a"
+    assert strip2.uncached_items == ["b", "c"]
+    assert strip2.uncached_indices == [1, 2]
+    assert len(strip2.cache_keys) == 2
 
-    assert result1 == "tool1: 5"
-    assert result2 == "tool2: 5"
 
-    # Check cache has 2 entries (one per tool)
-    info = get_cache_info()
+# ── cache_store_items tests ──────────────────────────────────────────────────
+
+def test_cache_store_items_no_cache():
+    """Does nothing when no active cache exists."""
+    _program_tool_cache.set(None)
+    # Should not raise
+    cache_store_items("test-tool", ["key1"], ["val1"])
+
+
+def test_cache_store_items_populates_cache(_setup_cache):
+    """Stored items are retrievable from cache."""
+    cache_store_items("test-tool", ["k1", "k2"], ["v1", "v2"])
+
+    cache = _setup_cache
+    assert cache.get("test-tool", "k1") == "v1"
+    assert cache.get("test-tool", "k2") == "v2"
+
+    info = cache.get_info()
     assert info["total_entries"] == 2
 
 
-def test_complex_nested_pydantic_models(_setup_cache):
-    """Test caching with nested Pydantic models."""
-    call_count = 0
+# ── cache_stitch_items tests ─────────────────────────────────────────────────
 
-    class InnerConfig(BaseModel):
-        threshold: float
-        method: str
-
-    class OuterConfig(BaseModel):
-        inner: InnerConfig
-        sequences: str
-        max_results: int = 10
-
-    @tool_cache("nested_tool")
-    def process_nested(config: OuterConfig) -> dict:
-        nonlocal call_count
-        call_count += 1
-        return {"processed": True, "sequences": config.sequences}
-
-    config1 = OuterConfig(
-        inner=InnerConfig(threshold=0.5, method="blast"),
-        sequences="ACGT",
-        max_results=20
+def test_cache_stitch_items_all_cached():
+    """Stitching with no computed items returns cached items in order."""
+    strip = CacheStripResult(
+        uncached_items=[],
+        uncached_indices=[],
+        cached_results={0: "a", 1: "b", 2: "c"},
+        cache_keys=[],
     )
+    result = cache_stitch_items(strip, [], 3)
+    assert result == ["a", "b", "c"]
 
-    config2 = OuterConfig(
-        inner=InnerConfig(threshold=0.5, method="blast"),
-        sequences="ACGT",
-        max_results=20
-    )  # Same content
 
-    config3 = OuterConfig(
-        inner=InnerConfig(threshold=0.5, method="mmseqs"),  # Different
-        sequences="ACGT",
-        max_results=20
+def test_cache_stitch_items_all_computed():
+    """Stitching with no cached items returns computed items in order."""
+    strip = CacheStripResult(
+        uncached_items=["x", "y", "z"],
+        uncached_indices=[0, 1, 2],
+        cached_results={},
+        cache_keys=["k1", "k2", "k3"],
     )
-
-    # First call
-    _ = process_nested(config1)
-    assert call_count == 1
-
-    # Same config should use cache
-    _ = process_nested(config2)
-    assert call_count == 1
-
-    # Different config should execute
-    _ = process_nested(config3)
-    assert call_count == 2
+    result = cache_stitch_items(strip, ["rx", "ry", "rz"], 3)
+    assert result == ["rx", "ry", "rz"]
 
 
-def test_cache_with_sequence_in_config(_setup_cache):
-    """Test that sequences in configs are properly included in cache key."""
-    call_count = 0
-
-    class SequenceConfig(BaseModel):
-        sequences: str
-        param1: int = 10
-
-    @tool_cache("sequence_tool")
-    def process_sequence(config: SequenceConfig) -> str:
-        nonlocal call_count
-        call_count += 1
-        return f"Processed {len(config.sequences)} chars"
-
-    # Same parameters, different sequences
-    config1 = SequenceConfig(sequences="ACGT", param1=10)
-    config2 = SequenceConfig(sequences="TGCA", param1=10)
-
-    _ = process_sequence(config1)
-    assert call_count == 1
-
-    _ = process_sequence(config2)
-    assert call_count == 2  # Should execute again due to different sequence
-
-    # Same sequence should use cache
-    config3 = SequenceConfig(sequences="ACGT", param1=10)
-    _ = process_sequence(config3)
-    assert call_count == 2  # Still 2, used cache
-
-
-def test_input_config_pattern_caching(_setup_cache):
-    """Test caching with the new input/config pattern."""
-    call_count = 0
-
-    class ToolInput(BaseToolInput):
-        sequence: str
-        data_type: str = "dna"
-
-    class ToolConfig(BaseConfig):
-        threshold: float = 0.5
-        max_results: int = 10
-        verbose: bool = False
-
-    @tool_cache("input_config_tool")
-    def process_with_input_config(inputs: ToolInput, config: ToolConfig) -> dict:
-        nonlocal call_count
-        call_count += 1
-        return {
-            "sequence_length": len(inputs.sequence),
-            "processed": True,
-            "threshold_used": config.threshold
-        }
-
-    # Test 1: Same inputs and config should use cache
-    inputs1 = ToolInput(sequence="ACGT", data_type="dna")
-    config1 = ToolConfig(threshold=0.5, max_results=10)
-
-    result1 = process_with_input_config(inputs1, config1)
-    assert call_count == 1
-    assert result1["sequence_length"] == 4
-
-    # Same inputs and config should hit cache
-    inputs2 = ToolInput(sequence="ACGT", data_type="dna")
-    config2 = ToolConfig(threshold=0.5, max_results=10)
-
-    _ = process_with_input_config(inputs2, config2)
-    assert call_count == 1  # Should still be 1 (cache hit)
-
-    # Test 2: Different inputs should execute again
-    inputs3 = ToolInput(sequence="TGCA", data_type="dna")  # Different sequence
-    config3 = ToolConfig(threshold=0.5, max_results=10)
-
-    _ = process_with_input_config(inputs3, config3)
-    assert call_count == 2  # Should increment
-
-    # Test 3: Different config should execute again
-    inputs4 = ToolInput(sequence="ACGT", data_type="dna")  # Same as first
-    config4 = ToolConfig(threshold=0.8, max_results=10)  # Different threshold
-
-    _ = process_with_input_config(inputs4, config4)
-    assert call_count == 3  # Should increment
-
-    # Test 4: Verbose flag should not affect caching (excluded from cache key)
-    inputs5 = ToolInput(sequence="ACGT", data_type="dna")
-    config5 = ToolConfig(threshold=0.5, max_results=10, verbose=True)  # verbose=True
-
-    _ = process_with_input_config(inputs5, config5)
-    assert call_count == 3  # Should still be 3 if verbose is excluded from cache key
-
-
-def test_verbose_not_in_cache_key(_setup_cache, capsys):
-    """Test that verbose flag doesn't affect cache key but still shows messages."""
-    call_count = 0
-
-    class TestInput(BaseToolInput):
-        value: int
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-        verbose: bool = False
-
-    @tool_cache("verbose_cache_test")
-    def test_function(inputs: TestInput, config: TestConfig) -> int:
-        nonlocal call_count
-        call_count += 1
-        return inputs.value * config.multiplier
-
-    inputs = TestInput(value=5)
-
-    # First call with verbose=False
-    config1 = TestConfig(multiplier=2, verbose=False)
-    _ = test_function(inputs, config1)
-    assert call_count == 1
-    captured = capsys.readouterr()
-    assert "[Cache Miss]" not in captured.out  # No output when verbose=False
-
-    # Second call with verbose=True, same other parameters
-    config2 = TestConfig(multiplier=2, verbose=True)
-    _ = test_function(inputs, config2)
-
-    # If verbose is properly excluded from cache key, this should be a cache hit
-    # Note: This test assumes verbose is excluded from cache key serialization
-    captured = capsys.readouterr()
-    # The behavior depends on whether verbose is excluded from cache key
-    # If included: should see Cache Miss, call_count=2
-    # If excluded: should see Cache Hit, call_count=1
-
-
-def test_program_scoped_isolation(_setup_cache):
-    """Test that different programs have isolated caches."""
-    call_count = 0
-
-    @tool_cache("isolation_test")
-    def cached_func(x: int) -> int:
-        nonlocal call_count
-        call_count += 1
-        return x * 2
-
-    # Program 1: Run function and cache result
-    cache1 = ToolCache()
-    _program_tool_cache.set(cache1)
-
-    result1 = cached_func(5)
-    assert result1 == 10
-    assert call_count == 1
-
-    # Same call in Program 1 should use cache
-    result2 = cached_func(5)
-    assert result2 == 10
-    assert call_count == 1  # Still 1, used cache
-
-    # Program 2: Different cache, should NOT see Program 1's results
-    cache2 = ToolCache()
-    _program_tool_cache.set(cache2)
-
-    result3 = cached_func(5)  # Same input as Program 1
-    assert result3 == 10
-    assert call_count == 2  # Incremented! Program 2 has isolated cache
-
-    # Verify each cache has independent entries
-    assert cache1.get_info()["total_entries"] == 1
-    assert cache2.get_info()["total_entries"] == 1
-
-
-# ── Iterable caching tests ─────────────────────────────────────────────────
-
-def test_iterable_cache_basic(_setup_cache):
-    """Test basic iterable caching functionality."""
-
-    call_count = 0
-
-    class Item(BaseModel):
-        value: int
-
-    class TestIterableInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestIterableOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get(
-        "iterable_test", TestIterableInput, TestIterableOutput
+def test_cache_stitch_items_mixed():
+    """Stitching interleaves cached and computed items correctly."""
+    strip = CacheStripResult(
+        uncached_items=["b", "d"],
+        uncached_indices=[1, 3],
+        cached_results={0: "cached_a", 2: "cached_c"},
+        cache_keys=["kb", "kd"],
     )
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="iterable_test",
-        )
-        def process_items(
-            inputs: TestIterableInput, config: TestConfig
-        ) -> TestIterableOutput:
-            nonlocal call_count
-            call_count += len(inputs.items)
-            return TestIterableOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="iterable_test",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # First call with 3 items - all cache misses
-        inputs1 = TestIterableInput(items=[Item(value=1), Item(value=2), Item(value=3)])
-        config = TestConfig(multiplier=2)
-
-        result1 = process_items(inputs1, config)
-        assert result1.results == [2, 4, 6]
-        assert call_count == 3
-
-        # Second call with overlapping items - should only compute new ones
-        inputs2 = TestIterableInput(items=[Item(value=1), Item(value=4), Item(value=3)])
-        result2 = process_items(inputs2, config)
-        assert result2.results == [2, 8, 6]
-        assert call_count == 4  # Only item with value=4 was computed
-
-        # Third call with all cached items
-        inputs3 = TestIterableInput(items=[Item(value=1), Item(value=2)])
-        result3 = process_items(inputs3, config)
-        assert result3.results == [2, 4]
-        assert call_count == 4  # No new computations
+    result = cache_stitch_items(strip, ["computed_b", "computed_d"], 4)
+    assert result == ["cached_a", "computed_b", "cached_c", "computed_d"]
 
 
-def test_iterable_cache_preserves_order(_setup_cache):
-    """Test that iterable caching preserves the original order of items."""
+# ── Roundtrip: strip → store → stitch ────────────────────────────────────────
 
-    class Item(BaseModel):
-        id: str
+def test_strip_store_stitch_roundtrip(_setup_cache):
+    """Full roundtrip: strip cached, store computed, stitch back."""
+    config = None
 
-    class TestInput(BaseToolInput):
-        items: list[Item]
+    # Call 1: cache items A, B
+    items1 = ["A", "B"]
+    strip1 = cache_strip_items("rt-tool", items1, config)
+    computed1 = ["result_A", "result_B"]
+    cache_store_items("rt-tool", strip1.cache_keys, computed1)
+    stitched1 = cache_stitch_items(strip1, computed1, len(items1))
+    assert stitched1 == ["result_A", "result_B"]
 
-    class TestConfig(BaseConfig):
-        prefix: str = "result_"
+    # Call 2: A cached, C new
+    items2 = ["A", "C"]
+    strip2 = cache_strip_items("rt-tool", items2, config)
+    assert strip2.cached_results[0] == "result_A"
+    assert strip2.uncached_items == ["C"]
 
-    class TestOutput(MockToolOutputBase):
-        results: list[str]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("order_test", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="order_test",
-        )
-        def process_with_order(inputs: TestInput, config: TestConfig) -> TestOutput:
-            return TestOutput(
-                results=[f"{config.prefix}{item.id}" for item in inputs.items],
-                tool_id="order_test",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # First call - cache items A, B, C
-        inputs1 = TestInput(items=[Item(id="A"), Item(id="B"), Item(id="C")])
-        config = TestConfig(prefix="result_")
-        result1 = process_with_order(inputs1, config)
-        assert result1.results == ["result_A", "result_B", "result_C"]
-
-        # Second call with different order and one new item
-        inputs2 = TestInput(
-            items=[Item(id="C"), Item(id="D"), Item(id="A"), Item(id="B")]
-        )
-        result2 = process_with_order(inputs2, config)
-        assert result2.results == ["result_C", "result_D", "result_A", "result_B"]
+    computed2 = ["result_C"]
+    cache_store_items("rt-tool", strip2.cache_keys, computed2)
+    stitched2 = cache_stitch_items(strip2, computed2, len(items2))
+    assert stitched2 == ["result_A", "result_C"]
 
 
-def test_iterable_cache_disabled_mode(_setup_cache):
-    """Test that iterable caching can be disabled."""
-
-    call_count = 0
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
+def test_strip_different_configs_separate_cache(_setup_cache):
+    """Different configs produce different cache entries."""
+    class Cfg(BaseConfig):
         multiplier: int = 2
 
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Note: enabled=False means no ToolRegistry.get() is called, so no mock needed
-    @tool_cache_iterable(
-        input_iterable_field="items", output_iterable_field="results", enabled=False
-    )
-    def no_cache_function(inputs: TestInput, config: TestConfig) -> TestOutput:
-        nonlocal call_count
-        call_count += len(inputs.items)
-        return TestOutput(
-            results=[item.value * config.multiplier for item in inputs.items],
-            tool_id="no_cache_test",
-            execution_time=0.0,
-            success=True,
-        )
-
-    inputs = TestInput(items=[Item(value=1), Item(value=2)])
-    config = TestConfig(multiplier=2)
-
-    # First call
-    _ = no_cache_function(inputs, config)
-    assert call_count == 2
-
-    # Second call with same items should compute again
-    _ = no_cache_function(inputs, config)
-    assert call_count == 4  # Should increment
-
-
-def test_iterable_cache_verbose_mode(_setup_cache, caplog):
-    """Test verbose mode reporting for iterable caching."""
-    import logging
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-        verbose: bool = True
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("verbose_iterable", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="verbose_iterable",
-        )
-        def verbose_function(inputs: TestInput, config: TestConfig) -> TestOutput:
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="verbose_iterable",
-                execution_time=0.0,
-                success=True,
-            )
-
-        inputs = TestInput(items=[Item(value=1), Item(value=2)])
-        config = TestConfig(multiplier=2, verbose=True)
-
-        # First call should report cache misses
-        with caplog.at_level(logging.DEBUG):
-            _ = verbose_function(inputs, config)
-        assert "[Iterable Cache Stats]" in caplog.text
-        assert "0 cache hits, 2 unique misses out of 2 items" in caplog.text
-
-        caplog.clear()
-
-        # Second call should report cache hits
-        with caplog.at_level(logging.DEBUG):
-            _ = verbose_function(inputs, config)
-        assert "[Iterable Cache Stats]" in caplog.text
-        assert "2 cache hits, 0 unique misses out of 2 items" in caplog.text
-
-
-def test_iterable_cache_with_different_configs(_setup_cache):
-    """Test that different configs produce different cache entries."""
-
-    call_count = 0
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("config_test", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="config_test",
-        )
-        def process_with_config(inputs: TestInput, config: TestConfig) -> TestOutput:
-            nonlocal call_count
-            call_count += len(inputs.items)
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="config_test",
-                execution_time=0.0,
-                success=True,
-            )
-
-        inputs = TestInput(items=[Item(value=5)])
-
-        # First call with multiplier=2
-        config1 = TestConfig(multiplier=2)
-        result1 = process_with_config(inputs, config1)
-        assert result1.results == [10]
-        assert call_count == 1
-
-        # Second call with same items but different config
-        config2 = TestConfig(multiplier=3)
-        result2 = process_with_config(inputs, config2)
-        assert result2.results == [15]
-        assert call_count == 2  # Should recompute
-
-        # Third call with original config should use cache
-        config3 = TestConfig(multiplier=2)
-        result3 = process_with_config(inputs, config3)
-        assert result3.results == [10]
-        assert call_count == 2  # Should not recompute
-
-
-def test_iterable_cache_all_cached_scenario(_setup_cache):
-    """Test scenario where all items are cached."""
-
-    call_count = 0
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        pass
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("all_cached_test", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="all_cached_test",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            nonlocal call_count
-            call_count += len(inputs.items)
-            return TestOutput(
-                results=[item.value * 2 for item in inputs.items],
-                tool_id="all_cached_test",
-                execution_time=1.5,
-                success=True,
-            )
-
-        config = TestConfig()
-
-        # First call - cache all items
-        inputs1 = TestInput(items=[Item(value=1), Item(value=2), Item(value=3)])
-        _ = process_items(inputs1, config)
-        assert call_count == 3
-
-        # Second call with all cached items
-        inputs2 = TestInput(items=[Item(value=1), Item(value=2), Item(value=3)])
-        result2 = process_items(inputs2, config)
-
-        assert result2.results == [2, 4, 6]
-        assert call_count == 3  # No additional computations
-        assert result2.execution_time == 0.0  # Cached result has 0 execution time
-        assert result2.success is True
-
-
-def test_iterable_cache_partial_overlap(_setup_cache):
-    """Test scenario with partial overlap between calls."""
-
-    computation_log = []
-
-    class Item(BaseModel):
-        id: str
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        pass
-
-    class TestOutput(MockToolOutputBase):
-        results: list[str]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("partial_overlap_test", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="partial_overlap_test",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            for item in inputs.items:
-                computation_log.append(item.id)
-            return TestOutput(
-                results=[f"processed_{item.id}" for item in inputs.items],
-                tool_id="partial_overlap_test",
-                execution_time=0.0,
-                success=True,
-            )
-
-        config = TestConfig()
-
-        # First call
-        inputs1 = TestInput(
-            items=[Item(id="A", value=1), Item(id="B", value=2), Item(id="C", value=3)]
-        )
-        _ = process_items(inputs1, config)
-        assert computation_log == ["A", "B", "C"]
-
-        # Second call with 50% overlap
-        inputs2 = TestInput(
-            items=[
-                Item(id="B", value=2),
-                Item(id="C", value=3),
-                Item(id="D", value=4),
-                Item(id="E", value=5),
-            ]
-        )
-        result2 = process_items(inputs2, config)
-
-        # Only D and E should be computed
-        assert computation_log == ["A", "B", "C", "D", "E"]
-        assert result2.results == [
-            "processed_B",
-            "processed_C",
-            "processed_D",
-            "processed_E",
-        ]
-
-
-def test_iterable_cache_info_tracking(_setup_cache):
-    """Test cache info tracking for iterable caching."""
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        pass
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    # Mock ToolRegistry.get() to return mock spec
-    mock_spec = _mock_tool_registry_get("cache_info_test", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="cache_info_test",
-        )
-        def cached_func(inputs: TestInput, config: TestConfig) -> TestOutput:
-            return TestOutput(
-                results=[item.value * 2 for item in inputs.items],
-                tool_id="cache_info_test",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # Initially empty
-        info = get_cache_info()
-        assert info["total_entries"] == 0
-
-        # Add some cached entries (each item is cached separately)
-        config = TestConfig()
-        inputs1 = TestInput(items=[Item(value=1), Item(value=2), Item(value=3)])
-        cached_func(inputs1, config)
-
-        info = get_cache_info()
-        assert info["total_entries"] == 3  # 3 items cached
-
-        # Add more unique items
-        inputs2 = TestInput(items=[Item(value=4), Item(value=5)])
-        cached_func(inputs2, config)
-
-        info = get_cache_info()
-        assert info["total_entries"] == 5  # 5 unique items
-
-        # Clear and check
-        clear_cache()
-        info = get_cache_info()
-        assert info["total_entries"] == 0
-
-
-# ── Iterable cache deduplication tests ──────────────────────────────────────
-
-def test_iterable_cache_dedup_all_duplicates(_setup_cache):
-    """Test that all-duplicate inputs dispatch only one item to the function."""
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    mock_spec = _mock_tool_registry_get("dedup_all", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        received_items = []
-
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="dedup_all",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            received_items.extend(inputs.items)
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="dedup_all",
-                execution_time=0.0,
-                success=True,
-            )
-
-        inputs = TestInput(items=[Item(value=1), Item(value=1), Item(value=1)])
-        config = TestConfig(multiplier=2)
-
-        result = process_items(inputs, config)
-
-        # Function should only receive 1 unique item
-        assert len(received_items) == 1
-        assert received_items[0].value == 1
-
-        # All 3 output positions should have the same result
-        assert result.results == [2, 2, 2]
-
-
-def test_iterable_cache_dedup_mixed(_setup_cache):
-    """Test dedup with a mix of unique and duplicate uncached items."""
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    mock_spec = _mock_tool_registry_get("dedup_mixed", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        received_items = []
-
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="dedup_mixed",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            received_items.extend(inputs.items)
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="dedup_mixed",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # [1, 2, 1, 3, 2] -> function should receive [1, 2, 3]
-        inputs = TestInput(items=[
-            Item(value=1), Item(value=2), Item(value=1),
-            Item(value=3), Item(value=2),
-        ])
-        config = TestConfig(multiplier=2)
-
-        result = process_items(inputs, config)
-
-        # Function should only receive 3 unique items
-        assert len(received_items) == 3
-        assert [item.value for item in received_items] == [1, 2, 3]
-
-        # Output should preserve original ordering
-        assert result.results == [2, 4, 2, 6, 4]
-        # output[0] == output[2] (both value=1)
-        assert result.results[0] == result.results[2]
-        # output[1] == output[4] (both value=2)
-        assert result.results[1] == result.results[4]
-
-
-def test_iterable_cache_dedup_with_cached_hits(_setup_cache):
-    """Test dedup when some items are already cached."""
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    mock_spec = _mock_tool_registry_get("dedup_cached", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        call_log = []
-
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="dedup_cached",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            call_log.append([item.value for item in inputs.items])
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="dedup_cached",
-                execution_time=0.0,
-                success=True,
-            )
-
-        config = TestConfig(multiplier=2)
-
-        # First call: cache items 1 and 2
-        inputs1 = TestInput(items=[Item(value=1), Item(value=2)])
-        process_items(inputs1, config)
-        assert call_log == [[1, 2]]
-
-        # Second call: [1, 3, 3, 2] -> function should only receive [3]
-        inputs2 = TestInput(items=[
-            Item(value=1), Item(value=3), Item(value=3), Item(value=2),
-        ])
-        result = process_items(inputs2, config)
-
-        assert call_log == [[1, 2], [3]]
-        assert result.results == [2, 6, 6, 4]
-
-
-def test_iterable_cache_dedup_preserves_order(_setup_cache):
-    """Test that dedup preserves exact output ordering with string items."""
-
-    class Item(BaseModel):
-        id: str
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        prefix: str = "out_"
-
-    class TestOutput(MockToolOutputBase):
-        results: list[str]
-
-    mock_spec = _mock_tool_registry_get("dedup_order", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="dedup_order",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            return TestOutput(
-                results=[f"{config.prefix}{item.id}" for item in inputs.items],
-                tool_id="dedup_order",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # ["C", "A", "C", "B", "A"]
-        inputs = TestInput(items=[
-            Item(id="C"), Item(id="A"), Item(id="C"),
-            Item(id="B"), Item(id="A"),
-        ])
-        config = TestConfig(prefix="out_")
-
-        result = process_items(inputs, config)
-
-        assert result.results == ["out_C", "out_A", "out_C", "out_B", "out_A"]
-
-
-def test_iterable_cache_dedup_logging(_setup_cache, caplog):
-    """Test that log messages contain 'unique misses' and 'duplicates'."""
-    import logging
-
-    class Item(BaseModel):
-        value: int
-
-    class TestInput(BaseToolInput):
-        items: list[Item]
-
-    class TestConfig(BaseConfig):
-        multiplier: int = 2
-
-    class TestOutput(MockToolOutputBase):
-        results: list[int]
-
-    mock_spec = _mock_tool_registry_get("dedup_log", TestInput, TestOutput)
-
-    with patch("bio_programming_tools.tools.tool_registry.ToolRegistry.get", return_value=mock_spec):
-        @tool_cache_iterable(
-            input_iterable_field="items",
-            output_iterable_field="results",
-            tool_name="dedup_log",
-        )
-        def process_items(inputs: TestInput, config: TestConfig) -> TestOutput:
-            return TestOutput(
-                results=[item.value * config.multiplier for item in inputs.items],
-                tool_id="dedup_log",
-                execution_time=0.0,
-                success=True,
-            )
-
-        # [1, 2, 1] -> 0 hits, 2 unique misses, 1 duplicate
-        inputs = TestInput(items=[Item(value=1), Item(value=2), Item(value=1)])
-        config = TestConfig(multiplier=2)
-
-        with caplog.at_level(logging.DEBUG):
-            process_items(inputs, config)
-
-        assert "unique misses" in caplog.text
-        assert "duplicate" in caplog.text
-        assert "0 cache hits, 2 unique misses out of 3 items, 1 duplicate removed" in caplog.text
+    config_a = Cfg(multiplier=2)
+    config_b = Cfg(multiplier=3)
+
+    items = ["X"]
+
+    # Store with config_a
+    strip_a = cache_strip_items("cfg-tool", items, config_a)
+    cache_store_items("cfg-tool", strip_a.cache_keys, ["result_2x"])
+
+    # Same item with config_b should miss
+    strip_b = cache_strip_items("cfg-tool", items, config_b)
+    assert strip_b.all_cached is False
+    assert strip_b.uncached_items == ["X"]
 
 
 # ── Clear configuration logic tests ─────────────────────────────────────────
@@ -1282,3 +406,68 @@ def test_circular_reference_safety():
         pytest.fail("Recursive size calculation crashed on circular reference")
 
     assert cache.current_size > 0
+
+
+# ── deduplicate_items unit tests ─────────────────────────────────────────────
+
+def test_deduplicate_items_all_unique():
+    """All unique items should be returned unchanged."""
+    items = ["a", "b", "c"]
+    result = deduplicate_items(items, key_fn=str)
+
+    assert result.unique_items == ["a", "b", "c"]
+    assert len(result.unique_keys) == 3
+    assert result.index_map == [(0, 0), (1, 1), (2, 2)]
+
+
+def test_deduplicate_items_all_duplicates():
+    """All-duplicate input should return a single unique item."""
+    items = ["x", "x", "x"]
+    result = deduplicate_items(items, key_fn=str)
+
+    assert result.unique_items == ["x"]
+    assert len(result.unique_keys) == 1
+    assert result.index_map == [(0, 0), (1, 0), (2, 0)]
+
+
+def test_deduplicate_items_mixed():
+    """Mixed input should preserve first-occurrence order."""
+    items = ["a", "b", "a", "c", "b"]
+    result = deduplicate_items(items, key_fn=str)
+
+    assert result.unique_items == ["a", "b", "c"]
+    assert result.index_map == [(0, 0), (1, 1), (2, 0), (3, 2), (4, 1)]
+
+
+def test_deduplicate_items_empty():
+    """Empty input should return empty results."""
+    result = deduplicate_items([], key_fn=str)
+
+    assert result.unique_items == []
+    assert result.unique_keys == []
+    assert result.index_map == []
+
+
+def test_deduplicate_items_preserves_order():
+    """First occurrence order is preserved in unique_items."""
+    items = ["c", "a", "c", "b", "a"]
+    result = deduplicate_items(items, key_fn=str)
+
+    assert result.unique_items == ["c", "a", "b"]
+    # Verify index_map lets us reconstruct original list
+    reconstructed = [result.unique_items[uid] for _, uid in result.index_map]
+    assert reconstructed == items
+
+
+def test_deduplicate_items_with_pydantic_models():
+    """Test dedup with Pydantic models using _serialize_for_cache_key."""
+
+    class Item(BaseModel):
+        value: int
+
+    items = [Item(value=1), Item(value=2), Item(value=1), Item(value=3)]
+    result = deduplicate_items(items, key_fn=_serialize_for_cache_key)
+
+    assert len(result.unique_items) == 3
+    assert [it.value for it in result.unique_items] == [1, 2, 3]
+    assert result.index_map == [(0, 0), (1, 1), (2, 0), (3, 2)]

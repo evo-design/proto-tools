@@ -17,7 +17,7 @@ from Bio.Seq import transcribe
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, tool_cache_iterable
+from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 # Database tool imports — orchestrator calls these directly
@@ -505,11 +505,9 @@ def example_input():
     description="Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB",
     uses_gpu=False,
     example_input=example_input,
-)
-@tool_cache_iterable(
-    input_iterable_field="requests",
-    output_iterable_field="results",
-    tool_name="sequence-fetch",
+    iterable_input_field="requests",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_sequence_fetch(
     inputs: SequenceFetchInput,

@@ -20,7 +20,6 @@ from bio_programming_tools.utils import (
     BaseToolOutput,
     ConfigField,
     resolve_sequence_ids,
-    tool_cache_iterable,
 )
 
 
@@ -196,11 +195,6 @@ def example_input():
     return MincedInput(sequences=["ATCGATCG"])
 
 
-@tool_cache_iterable(
-    input_iterable_field="sequences",
-    output_iterable_field="results",
-    tool_name="minced-crispr",
-)
 @tool(
     key="minced-crispr",
     label="MinCED CRISPR Array Detection",
@@ -210,6 +204,9 @@ def example_input():
     output_class=MincedOutput,
     description="Detect CRISPR arrays in nucleotide sequences using MinCED",
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="results",
+    cacheable=True,
 )
 def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance=None) -> MincedOutput:
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
@@ -248,7 +245,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
-        "minced", input_data, instance=instance, timeout=config.timeout,
+        "minced", input_data, instance=instance, config=config,
     )
 
     results = []
