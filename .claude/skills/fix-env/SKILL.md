@@ -136,13 +136,13 @@ Add comments explaining what, why, and why it's safe for other platforms.
 
 ## Reference Documentation
 
-- **Cache management**: See "Cache Management for ABI-Sensitive Packages" in CLAUDE.md
-- **Compute deps**: See "Compute Dependency Management" in CLAUDE.md for hardware detection
-- **GCC/nvcc compat**: See "GCC/nvcc Compatibility for CUDA JIT Tools" in CLAUDE.md for version mapping
-- **Compile-from-source**: See "Compile-from-Source Tools" in CLAUDE.md for TMalign/USalign pattern
-- **Python versions**: See "Python Version Specification" in CLAUDE.md for python_version.txt
-- **Binary installation**: See "Binary Installation" in CLAUDE.md for install_binary.py usage
-- **env_vars.txt format**: See "env_vars.txt sections" under "Compute Dependency Management" in CLAUDE.md
-- **Device management**: See "Device Management (DeviceManager)" in CLAUDE.md for GPU allocation, LRU eviction, `to_device()` protocol
-- **Standalone helpers**: See "Standalone Helpers for CLI Subprocess Device Routing" in CLAUDE.md for `get_subprocess_device_env()`
+- **Cache management**: See "Cache Management for ABI-Sensitive Packages" in `docs/tool-environments.md`
+- **Compute deps**: See "Compute Dependency Management" in `docs/tool-environments.md` for hardware detection
+- **GCC/nvcc compat**: See "GCC/nvcc Compatibility for CUDA JIT Tools" in `docs/tool-environments.md` for version mapping
+- **Compile-from-source**: See "Compile-from-Source Tools" in `docs/tool-environments.md` for TMalign/USalign pattern
+- **Python versions**: See "Python Version Specification" in `docs/tool-environments.md` for python_version.txt
+- **Binary installation**: See "Binary Installation" in `docs/tool-environments.md` for install_binary.py usage
+- **env_vars.txt format**: See "env_vars.txt sections" under "Compute Dependency Management" in `docs/tool-environments.md`
+- **Device management**: See `docs/device-management.mdx` for GPU allocation and LRU eviction; see `docs/tool-environments.md` for `to_device()` protocol
+- **Standalone helpers**: See "Standalone Helpers for CLI Subprocess Device Routing" in `docs/tool-environments.md` for `get_subprocess_device_env()`
 - **Platform reports**: See `notes/environments/` for per-machine compatibility reports

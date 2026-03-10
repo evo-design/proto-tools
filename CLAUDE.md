@@ -26,14 +26,7 @@ Update notes/ when you discover something **every developer needs to know** (pla
 
 ### Auto-memory
 
-Claude's personal memory across sessions. Save to auto-memory when you discover something **non-obvious during a session**:
-
-- Debugging that took multiple attempts → save root cause + fix
-- Undocumented tool/model behavior → save the quirk + workaround
-- Non-obvious architectural coupling → save the discovery
-- Platform-specific issues (Modal cold starts, GPU memory limits, etc.)
-
-Do NOT save to auto-memory: anything already in CLAUDE.md or notes/ (avoid duplication), temporary task context, or information other developers need (use notes/ instead).
+Save to auto-memory when you discover something **non-obvious during a session** (debugging that took multiple attempts, undocumented behavior, non-obvious coupling, platform-specific issues). Do NOT save anything already in CLAUDE.md or notes/.
 
 ## Documentation
 
@@ -54,21 +47,22 @@ isort bio_programming_tools
 
 ## Keeping Docs in Sync
 
-When a code change alters behavior documented in this file or any `SKILL.md`, update the docs in the same change. Key mappings:
+When a code change alters behavior documented in this file, any `SKILL.md`, or `docs/*.md`, update the docs in the same change. Key mappings:
 
 | Code area | Update in |
 |---|---|
-| `utils/persistent_worker.py` | CLAUDE.md (env_vars.txt sections, Tool Execution & Persistence) |
-| `utils/compute_deps.py` | CLAUDE.md (Compute Dependency Management, compatibility matrices) |
-| `utils/tool_instance.py` | CLAUDE.md (Tool Execution & Persistence) |
+| `utils/persistent_worker.py` | `docs/tool-environments.md`, `docs/tool-persistence.mdx` |
+| `utils/compute_deps.py` | `docs/tool-environments.md` (compatibility matrices) |
+| `utils/tool_instance.py` | `docs/tool-persistence.mdx` |
+| `utils/device_manager.py` | `docs/device-management.mdx` |
 | `utils/tool_io.py`, `tools/tool_registry.py` | CLAUDE.md (Universal Tool Pattern, Key File Paths) |
-| `utils/install_binary.py` | CLAUDE.md (Binary Installation) |
-| `standalone/env_vars.txt` (any tool) | CLAUDE.md (env_vars.txt sections — update tool lists if adding/removing `[set]` LD_LIBRARY_PATH) |
-| `standalone/setup.sh` patterns | CLAUDE.md (Standard PyTorch/JAX setup pattern, Cache Management), `fix-env` SKILL.md |
-| `standalone/python_version.txt` | CLAUDE.md (Python Version Specification) |
+| `utils/install_binary.py` | `docs/tool-environments.md` (Binary Installation) |
+| `standalone/env_vars.txt` (any tool) | `docs/tool-environments.md` |
+| `standalone/setup.sh` patterns | `docs/tool-environments.md`, `fix-env` SKILL.md |
+| `standalone/python_version.txt` | `docs/tool-environments.md` |
 | New tool added/removed | CLAUDE.md (Package Hierarchy if structure changes), Key File Paths |
 | New skills or commands added | CLAUDE.md Skills & Commands section |
-| pytest markers, test patterns | CLAUDE.md Configuration |
+| pytest markers, test patterns | `docs/testing.md`, CLAUDE.md Configuration |
 
 ## Architecture
 
@@ -95,40 +89,15 @@ bio_programming_tools/
 
 ### Tool Registry — Quick Navigation
 
-Every tool is registered via the `@tool()` decorator and discoverable through `ToolRegistry`. Tools are organized as `tools/{category}/{tool_name}/`.
+Every tool is registered via `@tool()` and discoverable through `ToolRegistry`. Tools are at `tools/{category}/{tool_name}/`.
 
-**To find a tool's source code:**
-1. List category directories: `ls bio_programming_tools/tools/` — each subdirectory is a category
-2. List tools in a category: `ls bio_programming_tools/tools/{category}/` — each subdirectory is a tool
-3. Read the tool's `__init__.py` to see its exported classes and run function
-4. Each tool's main implementation is in `{tool_name}/{tool_name}.py` (or `{tool_name}/{operation}.py` for multi-operation tools)
-
-**To programmatically discover all registered tools:**
 ```python
 from bio_programming_tools.tools import ToolRegistry
-for spec in ToolRegistry.list_all():
-    print(f"{spec.key}: {spec.label} — {spec.description}")
-```
 
-**To get a tool's schemas:**
-```python
-ToolRegistry.get_schemas("tool-key")  # Returns input, config, output JSON schemas
-```
-
-**To get a tool's citation:**
-```python
-ToolRegistry.get_citation("tool-key")  # Returns BibTeX string
-ToolRegistry.list_citations()          # Returns {tool_key: bibtex} for all tools
-```
-
-**To get tool categories:**
-```python
-ToolRegistry.get_tool_categories()  # Returns {tool_name: category} mapping
-```
-
-**To get a tool's example input:**
-```python
-ToolRegistry.get_example_input("esmfold-prediction")  # Returns minimal valid Input instance
+ToolRegistry.list_all()                          # All registered tools
+ToolRegistry.get_schemas("tool-key")             # Input, config, output JSON schemas
+ToolRegistry.get_citation("tool-key")            # BibTeX string
+ToolRegistry.get_example_input("esmfold-prediction")  # Minimal valid Input
 ```
 
 ### The Universal Tool Pattern
@@ -145,480 +114,24 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig | None = None) -> ToolOu
 ```
 
 - **Input** (`BaseToolInput`) — primary data (sequences, structures, files). Uses `extra="forbid"`.
-- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time** — if `config=None`, the decorator auto-instantiates the default config. All config fields must have defaults.
+- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time** — if `config=None`, the decorator auto-instantiates defaults. All config fields must have defaults.
 - **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
-- **`@tool()`** decorator — handles error catching, timing, metadata population, registry, default config instantiation, and device allocation validation.
-- **`example_input`** — callable factory returning a minimal valid `Input` instance. Used by parametrized tests and as importable usage examples. Must be a public named function (not a lambda).
-- **`device_count`** (optional) — specifies expected device allocation ("1", "1-2", ">=1"). Validates at runtime: errors on under-allocation, warns on over-allocation. Defaults to "1".
+- **`@tool()`** — handles error catching, timing, metadata, registry, default config, and device allocation validation.
+- **`example_input`** — callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
+- **`device_count`** (optional) — expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
+- **`devices_per_instance`** — a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Defaults to 1. Override in tool config subclasses where needed.
 
-### Tool Execution & Persistence (ToolInstance)
+### Tool Execution & Persistence
 
-Tools run in **isolated micromamba-based environments** via `ToolInstance` (`utils/tool_instance.py`). This keeps heavy dependencies (PyTorch, ESM, etc.) out of the main environment and allows per-tool Python version control.
+Tools run in **isolated micromamba-based environments** via `ToolInstance`. One-shot by default (ephemeral subprocess per call). Use `ToolInstance.persist()` for batch workloads. See `docs/tool-persistence.mdx` for full API.
 
-**One-shot (default):** Each `run_*` call spins up an ephemeral subprocess — safe, no leaked processes or GPU memory. Every call pays the full model load cost. Device is read from `config.device` (a `BaseConfig` field, default `"cpu"`; GPU tool configs override to `"cuda"`).
+### Device Management
 
-**Opt-in persistence:** For batch workloads where model loading dominates runtime, keep the worker subprocess alive across calls:
+**DeviceManager** (`utils/device_manager.py`) provides centralized GPU allocation with LRU eviction. Works transparently with `ToolInstance.persist()`. See `docs/device-management.mdx` for full API and configuration. See `docs/tool-environments.md` for the `to_device()` protocol when implementing new tools.
 
-```python
-# Auto-persist everything (recommended) — all tools auto-cached, cleaned up on exit
-with ToolInstance.persist():
-    for seq in sequences:
-        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
+### Standalone Environments
 
-# Tool-specific persistence — for named instances / multi-GPU
-with ToolInstance.persist_tool("esmfold"):
-    for seq in sequences:
-        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
-
-# Manual persistence — for long-running sessions
-tool = ToolInstance.get("esmfold")
-result = run_esmfold(inputs, config)
-tool.shutdown()
-```
-
-Tool wrappers accept an `instance=` parameter to route calls to a specific instance (useful for multi-GPU):
-
-```python
-with ToolInstance.persist_tool("esmfold", instance_name="gpu0"):
-    result = run_esmfold(inputs, config, instance="gpu0")
-```
-
-Persistent workers auto-restart when any `reload_on_change` config field changes between calls (device, model checkpoint, etc.). Mark fields with `ConfigField(..., reload_on_change=True)` and pass `reload_on=type(config).reload_fields()` to `dispatch()`.
-
-See `notes/tool_instance_example.ipynb` for a full walkthrough with timing data.
-
-### Device Management (DeviceManager)
-
-The **DeviceManager** (`utils/device_manager.py`) provides centralized GPU allocation tracking and automatic device management for persistent tool instances. It prevents GPU resource conflicts, implements LRU eviction when devices are full, and supports CPU offloading to keep models warm.
-
-**Key features:**
-- **Automatic allocation** — Tools request devices; DeviceManager tracks and assigns them
-- **LRU eviction** — When all GPUs are full, least recently used models are offloaded
-- **LRU eviction strategies** — RESTART (default, frees all memory) or CPU offload (keeps models warm in RAM)
-- **Thread-safe** — Handles concurrent device requests from multiple ToolInstances
-- **Configurable** — Environment variables or programmatic configuration
-- **Device awareness** — Respects `CUDA_VISIBLE_DEVICES`, auto-detects available GPUs
-
-**How it works:**
-
-1. When `ToolInstance` starts a persistent worker, it calls `DeviceManager.request_device()` to get an allocated device
-2. DeviceManager tracks all allocations with timestamps
-3. On each tool call, `ToolInstance` updates the `last_used` timestamp via `DeviceManager.update_last_used()`
-4. When all devices are full and a new request arrives, DeviceManager evicts the least recently used allocation
-5. On shutdown, `ToolInstance` calls `DeviceManager.release_device()` to free the allocation
-
-**Automatic allocation (recommended):**
-
-In single-GPU or simple multi-GPU scenarios, DeviceManager works transparently:
-
-```python
-from bio_programming_tools.utils.tool_instance import ToolInstance
-
-# DeviceManager automatically allocates cuda:0 (or next available GPU)
-with ToolInstance.persist():
-    for seq in sequences:
-        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
-        # First call: DeviceManager allocates cuda:0
-        # Subsequent calls: DeviceManager updates last_used timestamp
-    # On exit: DeviceManager releases cuda:0
-```
-
-**Explicit device control:**
-
-For multi-GPU workloads or explicit device placement, use the `.to(device)` API (PyTorch-style):
-
-```python
-# Create named instances and move to specific devices
-esmfold_gpu0 = ToolInstance.get("esmfold", instance_name="gpu0")
-esmfold_gpu1 = ToolInstance.get("esmfold", instance_name="gpu1")
-
-# Move to specific devices
-esmfold_gpu0.to("cuda:0")
-esmfold_gpu1.to("cuda:1")
-
-# Run on specific devices
-result1 = run_esmfold(inputs, config, instance="gpu0")  # Uses cuda:0
-result2 = run_esmfold(inputs, config, instance="gpu1")  # Uses cuda:1
-
-# Clean up
-esmfold_gpu0.shutdown()
-esmfold_gpu1.shutdown()
-```
-
-**Configuration:**
-
-DeviceManager can be configured via environment variables or the `configure()` method:
-
-**Environment variables:**
-- `BIO_TOOLS_MANAGED_DEVICES` — Comma-separated list of devices to manage (e.g., `"cuda:0,cuda:1,cuda:2"`)
-- `BIO_TOOLS_OFFLOAD_STRATEGY` — Eviction strategy: `"restart"` (default, frees all memory) or `"cpu"` (keeps models warm)
-- `BIO_TOOLS_ALLOW_MULTI_DEVICE` — Allow multiple models per device: `"true"` or `"false"` (default)
-
-**Programmatic configuration:**
-
-```python
-from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
-
-dm = DeviceManager.get_instance()
-
-# Configure before first use
-dm.configure(
-    managed_devices=["cuda:0", "cuda:1"],     # Explicit device pool
-    offload_strategy=OffloadStrategy.RESTART,   # or OffloadStrategy.CPU
-    allow_multiple_per_device=False            # One model per device (default)
-)
-```
-
-**Offload strategies:**
-
-- **RESTART** (default) — On eviction, shuts down the worker entirely. Frees all memory, but next call pays full reload cost.
-- **CPU** — On eviction, moves model to CPU via `to_device("cpu")`. Fast reloading if needed again, but keeps memory allocated.
-
-**Device pool discovery:**
-
-DeviceManager auto-detects GPUs via `number_of_available_gpus()` and respects `CUDA_VISIBLE_DEVICES`:
-
-```python
-# Auto-detect all GPUs
-dm = DeviceManager.get_instance()
-dm.get_device_status()["available_devices"]  # ["cuda:0", "cuda:1", ...]
-
-# Respect CUDA_VISIBLE_DEVICES
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,2"
-dm = DeviceManager.get_instance()
-dm.get_device_status()["available_devices"]  # ["cuda:0", "cuda:2"]
-
-# Explicit device pool (overrides auto-detection)
-dm.configure(managed_devices=["cuda:1", "cuda:2"])
-```
-
-**Status monitoring:**
-
-```python
-status = DeviceManager.get_instance().get_device_status()
-# {
-#     "available_devices": ["cuda:0", "cuda:1"],
-#     "offload_strategy": "restart",
-#     "allow_multiple_per_device": False,
-#     "allocations": {
-#         "esmfold-abc123": {
-#             "tool_name": "esmfold",
-#             "device_id": "cuda:0",
-#             "allocated_at": 1234567890.0,
-#             "last_used": 1234567895.0
-#         }
-#     }
-# }
-```
-
-**The `to_device()` protocol:**
-
-All standalone scripts (`standalone/inference.py` or `standalone/run.py`) implement a `to_device(device: str) -> dict` function that DeviceManager calls to move models between devices. This function is invoked via the worker bootstrap protocol when `ToolInstance.to(device)` is called.
-
-**PyTorch tools** (ESMFold, Evo2, ESM2, ProteinMPNN, etc.):
-```python
-def to_device(device: str) -> dict:
-    """Move model to specified device (called by DeviceManager)."""
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)  # Calls model.model.to(device) internally
-        return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
-```
-
-**JAX tools** (AlphaGenome):
-```python
-def to_device(device: str) -> dict:
-    """Move model to specified device (called by DeviceManager)."""
-    global _model
-    if _model is not None and hasattr(_model, "to_device"):
-        _model.to_device(device)  # JAX-specific device placement
-    return {"success": True, "device": device}
-```
-
-**CLI tools** (Boltz2, RFDiffusion3, BLAST, etc.):
-```python
-def to_device(device: str) -> dict:
-    """Passthrough for CLI tool - automatically unloads after each call."""
-    # CLI tools spawn subprocesses and naturally unload after each call
-    # This is a passthrough for standardization with other tools
-    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
-```
-
-**When implementing new tools**, add `to_device()` to `standalone/inference.py` or `standalone/run.py` following the pattern above. The model wrapper class should have a `to_device(device: str)` method that handles the actual device move.
-
-**Logging:**
-
-DeviceManager logs all device operations at INFO level so users are aware of automatic moves:
-
-```
-INFO: Allocated device cuda:0 for esmfold instance esmfold-abc123
-INFO: Updated last_used for esmfold-abc123
-INFO: Moving esmfold-abc123 from cuda:0 to cpu (LRU eviction)
-INFO: Allocated device cuda:0 for evo2 instance evo2-def456
-INFO: Released device cuda:0 for esmfold-abc123
-```
-
-### Standalone Helpers for CLI Subprocess Device Routing
-
-**For tools that spawn CLI subprocesses** (e.g., Boltz2, RFDiffusion3, Protenix, AlphaFold3), the `get_subprocess_device_env()` helper ensures correct device routing when the parent process has `CUDA_VISIBLE_DEVICES` set.
-
-**The problem:** When DeviceManager allocates a logical device (e.g., `cuda:2`), the worker subprocess inherits the parent's `CUDA_VISIBLE_DEVICES` (e.g., `0,1,5,7`). CLI subprocesses need the physical GPU index (e.g., `5`) mapped from the logical index (2).
-
-**The solution:** The `utils/standalone_helpers.py` module provides `get_subprocess_device_env(device: str) -> Dict[str, str]` that maps logical device indices to physical GPU indices:
-
-```python
-from standalone_helpers import get_subprocess_device_env
-
-# Get subprocess environment with correct CUDA_VISIBLE_DEVICES
-env = get_subprocess_device_env("cuda:2")  # Maps to physical GPU 5
-subprocess.run(cmd, env=env)  # CLI sees physical GPU 5 as its cuda:0
-```
-
-**How it works:**
-
-1. Worker bootstrap (`_worker_bootstrap.py`) auto-copies `standalone_helpers.py` to each tool's `standalone/standalone_helpers.py` at runtime
-2. Standalone scripts import `from standalone_helpers import get_subprocess_device_env`
-3. Helper reads parent's `CUDA_VISIBLE_DEVICES` (e.g., `"0,1,5,7"`)
-4. Maps logical device index (e.g., `cuda:2`) to physical GPU (e.g., `5`)
-5. Returns environment dict with `CUDA_VISIBLE_DEVICES=5`
-6. CLI subprocess sees physical GPU 5 as its only device (cuda:0)
-
-**Auto-copy mechanism:**
-- Source: `bio_programming_tools/utils/standalone_helpers.py` (tracked in git)
-- Destination: `{tool}/standalone/standalone_helpers.py` (not tracked, auto-generated)
-- Exception: AlphaFold3's `standalone_helpers.py` is manually copied and tracked (inference.py is in tool root, not standalone/)
-
-**Usage pattern in standalone/inference.py:**
-
-```python
-from standalone_helpers import get_subprocess_device_env
-
-def __call__(self, ..., device: str = "cuda", ...):
-    # Build CLI command
-    cmd = ["some-cli-tool", ...]
-
-    # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
-    env = get_subprocess_device_env(device)
-
-    # Run CLI subprocess
-    subprocess.run(cmd, env=env)  # Preserves all env vars, maps CUDA_VISIBLE_DEVICES
-```
-
-**Consistency enforcement:** The test `tests/tool_infra_tests/test_device_manager.py::test_gpu_cli_tools_use_subprocess_device_helper` verifies that all GPU tools with subprocess calls properly import and use `get_subprocess_device_env()`. This prevents CLI tools from accessing unintended GPUs.
-
-### Compute Dependency Management
-
-Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`utils/compute_deps.py`) to automatically select compatible package versions based on the host's NVIDIA driver and CUDA versions. This eliminates fragile bash version detection scattered across tool setup scripts.
-
-**How it works:**
-
-1. `persistent_worker.py` calls `detect_compute_environment()` when building the subprocess environment
-2. Detection inspects `nvidia-smi` output to extract driver and CUDA versions
-3. Compatibility matrices map driver major versions to package version constraints
-4. Environment variables are injected into the subprocess before `setup.sh` runs
-5. Tool setup scripts consume these variables to install the right package versions
-
-**Environment variables injected:**
-
-| Variable | Example Value | Description |
-|---|---|---|
-| `DETECTED_COMPUTE_PLATFORM` | `"nvidia-gpu"` or `"cpu"` | Hardware platform detected |
-| `DETECTED_DRIVER_VERSION` | `"570.122.3"` | NVIDIA driver version |
-| `DETECTED_CUDA_VERSION` | `"12.6"` | CUDA version |
-| `RECOMMENDED_TORCH_SPEC` | `"torch>=2.10,<3"` | PyTorch version constraint for detected driver |
-| `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.5,<1"` | JAX version constraint with CUDA plugin |
-| `RECOMMENDED_JAX_VARIANT` | `"cuda12"` | JAX CUDA variant (cuda12, cuda13) |
-
-**Standard PyTorch setup pattern** (see `esm2`, `esmfold`, `boltz2`):
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-echo "Installing uv package manager..."
-pip install uv
-
-# Install hardware-aware PyTorch version (from centralized detection)
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
-
-echo "Installing remaining dependencies..."
-uv pip install -r requirements.txt
-```
-
-**Standard JAX setup pattern** (see `alphagenome`):
-
-```bash
-JAX_VARIANT="${TOOL_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
-JAX_SPEC="${TOOL_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
-
-echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
-echo "Installing JAX: ${JAX_SPEC}"
-uv pip install "${JAX_SPEC}"
-```
-
-**Tool-specific overrides:**
-
-Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`). This allows per-tool customization while maintaining the centralized detection infrastructure.
-
-**env_vars.txt sections:**
-
-Each tool's `standalone/env_vars.txt` supports two sections:
-- `[passthrough]` — Variable names copied from the parent environment (e.g., `HF_TOKEN`)
-- `[set]` — Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
-
-**Auto-set environment variables** (always injected by `_build_subprocess_env()`):
-- `CONDA_PREFIX` — set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
-- `VIRTUAL_ENV` — set to the **tool env path** for uv >=0.10 compatibility (uv doesn't recognise micromamba-created envs via CONDA_PREFIX alone)
-- `PATH` — `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs. Parent PATH is carried over to preserve HPC module-loaded tools (git, gcc, curl, etc.) and conda/bin
-- `LD_LIBRARY_PATH` — tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (libgomp, libstdc++). Parent LD is carried over to preserve NVIDIA driver, CUDA, and HPC module-loaded libs
-
-**Pinned-version tools:**
-
-Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
-- `evo1`: `torch==2.7.1` (flash-attn ABI compatibility)
-- `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
-- `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
-
-**Compatibility matrices:**
-
-Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
-
-PyTorch (driver → torch version):
-- Driver 570+: torch 2.8+ (CUDA 12.8 native support)
-- Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
-- Driver 535-549: torch 2.4+ (CUDA 12.2 native support)
-- Driver 525-534: torch 2.4+ (CUDA 12.0-12.1 native support)
-- Driver <525: torch 2.1-2.3 (CUDA 11.x era)
-
-JAX (driver + CUDA → jax version + variant):
-- Driver 525+: jax[cuda12] 0.4.20+ (all CUDA 12.x)
-- Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x, not yet used)
-- Driver <525: jax[cuda11] 0.4.20+ (CUDA 11.x)
-
-See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage of all hardware configurations.
-
-### GCC/nvcc Compatibility for CUDA JIT Tools
-
-Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-forge inside their `cuda_env`. The GCC version is chosen per-tool based on the CUDA toolkit version installed, following NVIDIA's official host compiler support matrix.
-
-**CUDA → max GCC mapping:**
-- CUDA 12.1: GCC ≤12
-- CUDA 12.4: GCC ≤13.2
-- CUDA 12.6: GCC ≤14
-- CUDA 12.8: GCC ≤14
-
-**Per-tool versions:**
-- **evo1** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
-- **protenix** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
-- **evo2** (latest CUDA ~12.8): `"gcc=14.*" "gxx=14.*"`
-
-**Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default. Sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects. Pinning to glibc 2.17 avoids this. Not needed for evo2 since CUDA 12.8's nvcc handles newer sysroot headers.
-
-**Pattern:**
-1. Add `gcc`/`gxx` (+ `sysroot_linux-64` if needed) to the micromamba create command — `$CUDA_HOME/bin` is already in PATH, so `gcc` resolves to the conda-forge version automatically
-2. For runtime JIT tools (protenix): also set `CC`/`CXX` in `sitecustomize.py` since `_BASE_PASSTHROUGH` doesn't include compiler vars
-
-### Cache Management for ABI-Sensitive Packages
-
-Tools that install C++ extensions with ABI dependencies (torch, flash-attn, transformer-engine) must clear package manager caches to prevent compatibility issues. Cached wheels may be built against different PyTorch/CUDA/compiler versions, causing runtime failures with symbols like `undefined symbol: _ZN3c105ErrorC2ENS_14SourceLocationESs`.
-
-**Why this is needed:**
-
-Package managers (uv, pip) cache downloaded wheels globally per user. When multiple users share the same machine, or when a user rebuilds after system updates, cached wheels may be incompatible:
-- flash-attn wheel built for torch 2.5.0 won't work with torch 2.6.0
-- torch wheel for CUDA 12.4 won't work with CUDA 12.8 drivers
-- Cached wheels persist across tool environment rebuilds
-
-**Standard pattern for ABI-sensitive tools:**
-
-All tools with pinned torch versions and C++ extensions (evo1, evo2, borzoi) must follow this pattern in `setup.sh`:
-
-```bash
-echo "Installing uv package manager..."
-pip install uv
-
-# Clear caches BEFORE installing any ABI-sensitive packages
-echo "Clearing package caches for ABI-sensitive dependencies..."
-uv cache clean torch 2>/dev/null || true
-uv cache clean flash-attn 2>/dev/null || true
-uv cache clean transformer-engine 2>/dev/null || true  # if used
-
-# Install with --refresh flag as defense-in-depth
-echo "Installing torch..."
-uv pip install torch==X.Y.Z --torch-backend=auto --refresh
-
-echo "Installing flash-attn..."
-uv pip install --no-build-isolation flash-attn==A.B.C --refresh
-
-# Validate the deepest import used by runtime code
-if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then
-    echo "flash-attn wheel has ABI mismatch, rebuilding from source..."
-    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==A.B.C
-fi
-```
-
-**Key requirements:**
-
-1. **Clear caches early**: Call `uv cache clean <package>` after installing uv, before installing packages
-2. **Add --refresh flag**: Use `--refresh` on all ABI-sensitive installs (torch, flash-attn, transformer-engine)
-3. **Validate deep imports**: Test the actual C++ extension import (e.g., `flash_attn_2_cuda`), not just the Python wrapper
-4. **Graceful failure**: Use `2>/dev/null || true` to handle missing cache entries
-
-**For direct URL installs** (e.g., GitHub release wheels):
-
-Use pip's `--force-reinstall` instead of `--refresh`:
-
-```bash
-pip install --force-reinstall https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.7cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
-```
-
-**Reference implementations:**
-
-- `bio_programming_tools/tools/causal_models/evo1/standalone/setup.sh`
-- `bio_programming_tools/tools/causal_models/evo2/standalone/setup.sh`
-- `bio_programming_tools/tools/sequence_scoring/borzoi/standalone/setup.sh`
-
-### Python Version Specification
-
-Tools can optionally specify their required Python version via `standalone/python_version.txt`. This enables per-tool Python version control for compatibility with dependencies that don't provide wheels for newer Python versions.
-
-**Format:** Single line containing version in `major.minor` or `major.minor.patch` format (e.g., `3.11` or `3.11.5`)
-
-**Example `python_version.txt`:**
-```
-3.11
-```
-
-**Validation:**
-- File must contain exactly one non-empty line
-- Version must be `>=3.8`
-- Format must be `major.minor` or `major.minor.patch` with numeric components only
-- No comments, prefixes, or extra whitespace
-- If file is missing, defaults to current Python version (3.12)
-
-**Rebuilds:** The python_version.txt content is included in the environment setup hash. Changing the version triggers an automatic rebuild of the tool environment.
-
-**Example use case:** Protenix requires `scikit-learn-extra==0.3.0`, which has no Python 3.12 wheels. Adding `python_version.txt` with `3.11` creates the environment with Python 3.11, allowing it to use conda-forge's binary wheels.
-
-See `tests/tool_infra_tests/test_python_version_files.py` for validation tests.
-
-### Binary Installation (`install_binary.py`)
-
-Tools that need external binaries (not available via pip) must use the shared `utils/install_binary.py` utility — never raw `curl`/`wget` in `setup.sh`.
-
-1. Create `standalone/binary_config.py` with:
-   - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
-   - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into the tool environment's `bin/`
-2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <tool_name>` (see blast or mmseqs for the standard pattern)
-
-For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys and generate any wrapper scripts in `extract()`.
-
-### Compile-from-Source Tools
-
-Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed — just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
+Tools with heavy dependencies run in isolated micromamba environments with centralized hardware detection (`utils/compute_deps.py`). See `docs/tool-environments.md` for setup patterns, env_vars.txt, GCC/nvcc compatibility, cache management, binary installation, and Python version specification.
 
 ### Key File Paths
 
@@ -626,7 +139,7 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 |---|---|
 | `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
-| `utils/tool_cache.py` | `@tool_cache`, `@tool_cache_iterable` |
+| `utils/tool_cache.py` | `ToolCache`, `cache_strip_items`, `cache_store_items`, `cache_stitch_items` |
 | `utils/tool_instance.py` | `ToolInstance` — isolated environment execution with opt-in persistence |
 | `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
@@ -648,147 +161,62 @@ Tools distributed as C/C++ source (no prebuilt binaries) compile during `setup.s
 - Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them
 - Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
-- `batch_size` fields default to `1` (safe by default, prevents OOM). The tool layer owns the batching loop — callers (generators, constraints) pass all inputs plus `batch_size` to the tool in one call. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
+- `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
 - Use `from __future__ import annotations` at the top of every file
 - Use `logging.getLogger(__name__)` — never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
-- Every tool directory must include a `cite.bib` file with the BibTeX citation for the underlying paper/tool
-- Every tool directory must include an `examples/example.ipynb` notebook with working code, exact imports, API reference tables, and example output
+- Every tool directory must include a `cite.bib` file and an `examples/example.ipynb` notebook
 
 **The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 
 ## Test Conventions
 
-All tests use **flat functions** (no test classes). Follow these patterns when writing new tests:
+Flat functions only (no test classes). See `docs/testing.md` for full conventions (structure, assertions, markers, naming).
 
-### Structure
-- **One-liner module docstring**: `"""Tests for {tool/entity name}."""`
-- **No `from __future__ import annotations`** in test files
-- **Flat functions only**: No `class Test*` — use descriptive function names instead (e.g., `test_blast_search_exact_match`)
-- **Section separators**: Use light `# ── Section name ──...` separators to group related tests. Use `# ---------------------------------------------------------------------------` + `# Integration tests` for the integration boundary
-- **File ordering**: Unit tests first, then the integration boundary separator, then integration/GPU tests
-- **Module-level fixtures**: Use `@pytest.fixture` at module level, not inside classes. Use `@pytest.fixture(scope="module")` for expensive setup (e.g., loading structures)
-- **Module-level constants**: Deduplicate repeated values (paths, test data) as module constants prefixed with `_` (e.g., `_SETUP_SH`, `_CRISPR_SEQUENCE`)
-- **Test directory naming**: `tests/{category}_tests/` matching `tools/{category}/`
-
-### Assertions
-- **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")` — never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`
-- **No trivial tests**: Don't test that Pydantic stores default values or that constructors store arguments. Test computed properties, validators, normalization, and error cases
-- **`tmp_path` over `tempfile`**: Use pytest's built-in `tmp_path` fixture, not `tempfile.mkdtemp()` or `tempfile.TemporaryDirectory`
-
-### Markers
-- **`@pytest.mark.integration`**: Tests that call `ToolInstance.dispatch()` for CPU tools (requires standalone tool environment). Skipped by default; run with `--integration`
-- **`@pytest.mark.uses_gpu`**: Tests that call `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU is available. Implies environment requirement — do **not** also add `@pytest.mark.integration`
-- **`@pytest.mark.include_in_env_report(category="...")`**: Add to the primary integration/GPU test for each tool. Category must match the tool's category (e.g., `"gene_annotation"`, `"inverse_folding"`)
-- **No `@pytest.mark.skip_ci`** for tests of core dependencies: If a package is in `pyproject.toml` dependencies, its tests should run without special markers
-- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`
-
-### Naming
-- **Validation tests**: `test_{model}_rejects_{what}` (e.g., `test_search_proteins_input_rejects_empty`)
-- **Property tests**: `test_{model}_{property}` (e.g., `test_crispr_array_num_repeats`)
-- **Export tests**: `test_export_{format}` (e.g., `test_export_csv`)
-- **Integration tests**: `test_{tool}_{scenario}` (e.g., `test_run_minced_with_crispr_sequence`)
+**Quick reference**: `@pytest.mark.integration` for CPU dispatch tests (skipped by default, run with `--integration`). `@pytest.mark.uses_gpu` for GPU dispatch tests (auto-skipped without GPU).
 
 ## Configuration
 
 - Python >=3.10, Pydantic >=2.0
-- Do **not** run `black` on this project — formatting is handled manually
+- Do **not** run `black` — formatting is handled manually
 - isort line length: 88
-- Flake8 only checks: F401 (unused imports), F841 (unused variables)
+- Flake8 only checks: F401, F841
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
-- Tests auto-mark as `uses_cpu` unless explicitly marked `uses_gpu`
-- **Integration tests** (marked `@pytest.mark.integration`) hit external APIs (NCBI, UniProt, PDB) and are **skipped by default**. Run with `pytest --integration` or `pytest --all`.
-- **Before running GPU tests**, check if a GPU is available. If no GPU is detected, run CPU tests by default (`pytest --cpu`)
-- **Test logs**: Every pytest run saves a detailed log to `logs/` (project root). Log files are named `pytest_{timestamp}.log` or `pytest_{test_filter}.log` when using `-k`. Check these logs for debugging test failures instead of re-running tests — they include full DEBUG-level output from DeviceManager, ToolInstance, and worker subprocesses.
+- Integration tests are **skipped by default** — run with `pytest --integration` or `pytest --all`
+- Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
+- Test logs saved to `logs/` — check these instead of re-running tests
 
 ## Using bio_tools with Claude Code
 
 When a user asks to run a bioinformatics tool:
-1. **Find the tool**: Browse `bio_programming_tools/tools/` to find the right category and tool directory, or use `ToolRegistry.list_all()` to discover available tools
-2. **Read README + notebook**: `bio_programming_tools/tools/{category}/{tool}/README.md` for parameters, thresholds, and biological context; `examples/example.ipynb` for working code with exact imports and real output
-3. **Read API**: Read the tool's `Input`/`Config`/`Output` classes for the exact Pydantic schema
+1. **Find the tool**: Browse `bio_programming_tools/tools/` or use `ToolRegistry.list_all()`
+2. **Read README + notebook**: `tools/{category}/{tool}/README.md` and `examples/example.ipynb`
+3. **Read API**: Tool's `Input`/`Config`/`Output` classes for the Pydantic schema
 4. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
-
-Start with READMEs and notebooks for API details. Read `.py` source only if you need deeper implementation context.
 
 ```python
 from bio_programming_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
 
-inputs = {Tool}Input(...)   # Primary data: sequences, structures, files
-config = {Tool}Config(...)  # Parameters: evalue, num_threads, seeds
-result = run_{tool}(inputs, config)
+result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 # result.success, result.execution_time, result.errors, plus tool-specific fields
-
-# Config is optional — omit it to use all defaults:
-result = run_{tool}(inputs)
+# Config is optional — omit to use all defaults: run_{tool}({Tool}Input(...))
 ```
 
-### Script vs Direct Execution
+For script patterns, batch persistence, GPU tools, and citations, see `docs/usage-guide.md`.
 
-Infer from context whether to **write a script** or **execute directly**:
+## Skills & Commands
 
-**Write a script** to `./analyses/{descriptive_name}_{YYYY-MM-DD}.py` when:
-- The user says "write", "create", "set up", "notebook", or similar authoring language
-- The task is a multi-step pipeline or expensive GPU job
-- The user will likely iterate on parameters or review before running
-- When unclear — default to writing a script (safer, reproducible)
+- **`implement-tool`** — Full lifecycle for implementing a new tool wrapper
+- **`fix-env`** — Debug and fix tool environment setup failures
+- **`/fix-issue <number>`** — Full GitHub issue fix lifecycle
 
-**Execute directly** (run inline via Bash, include code in the response) when:
-- The user says "what is", "how many", "show me", "quick", "find", or similar query language
-- The task is a simple one-off lookup or quick check
-- The answer is more important than the script
+## Detailed Reference Docs
 
-In either case, always show the equivalent Python code so the user can reproduce the result.
-
-### Script Structure
-
-Generated scripts should follow this structure:
-
-```python
-"""
-Brief description of what this analysis does.
-Generated: {date}
-"""
-from bio_programming_tools.tools.{category}.{tool} import ...
-
-# --- Configuration (review these) ---
-# All parameters in one place with comments explaining choices
-
-# --- Run ---
-# Tool execution
-
-# --- Results ---
-# Parse and display output
-```
-
-For multi-step pipelines, use one script with `# === Step N: Description ===` section headers.
-
-### Batch Persistence
-
-For batch workloads or loops calling the same tool repeatedly, use `ToolInstance.persist()` to avoid reloading the model on every call:
-
-```python
-from bio_programming_tools.utils.tool_instance import ToolInstance
-
-with ToolInstance.persist():
-    for seq in sequences:
-        result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
-```
-
-### GPU Tools
-
-Some tools require GPU access. Check a tool's Config class for a `device` field (defaulting to `"cuda"`). When writing scripts for GPU tools, note the GPU requirement in a comment at the top of the script.
-
-### Citations
-
-Every tool has a BibTeX citation accessible via `ToolRegistry.get_citation("tool-key")`. When writing analysis scripts or reports, include citations for the tools used. Use `ToolRegistry.list_citations()` for all citations.
-
-## Skills (`.claude/skills/`) & Commands (`.claude/commands/`)
-
-Skills:
-- **fix-env** — Debug and fix tool environment setup failures (ABI mismatches, network failures, OOM, platform detection, CUDA headers)
-- **implement-tool** — Full lifecycle for implementing a new tool wrapper (directory structure, data models, @tool decorator, ToolInstance, export chain, caching, tests, README, cite.bib, example notebook)
-
-Commands (invoked with `/command-name [args]`):
-- **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
+| File | Contents |
+|---|---|
+| `docs/tool-environments.md` | Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol |
+| `docs/device-management.mdx` | DeviceManager user guide (auto-generated — don't edit directly) |
+| `docs/tool-persistence.mdx` | ToolInstance user guide (auto-generated — don't edit directly) |
+| `docs/testing.md` | Test structure, assertions, markers, naming conventions |
+| `docs/usage-guide.md` | Script patterns, batch persistence, GPU tools, citations |
