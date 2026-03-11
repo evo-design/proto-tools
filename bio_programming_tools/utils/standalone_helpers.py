@@ -126,14 +126,10 @@ def get_subprocess_device_env(device: str) -> Dict[str, str]:
     """
     env = os.environ.copy()
 
-    # Fail fast on generic "cuda" - tools must use specific device indices
+    # Normalize bare "cuda" to "cuda:0" — standard PyTorch usage for single-GPU
+    # environments (e.g. Modal containers) where there's no DeviceManager
     if device == "cuda":
-        raise ValueError(
-            "Device string 'cuda' (no index) is not supported by get_subprocess_device_env(). "
-            "Expected specific device like 'cuda:0', 'cuda:1', etc. "
-            "This indicates a tool bypassing DeviceManager. "
-            "Tools should use ToolInstance.dispatch() which allocates specific devices."
-        )
+        device = "cuda:0"
 
     # Handle CPU device
     if device == "cpu":
