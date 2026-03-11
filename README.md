@@ -110,7 +110,7 @@ with ToolInstance.persist():
         result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
 ```
 
-See `bio_programming_tools/tools/tool_instance_example.ipynb` for a full walkthrough with timing comparisons.
+See `notes/tool_instance_example.ipynb` for a full walkthrough with timing comparisons.
 
 ## Using with Claude Code
 

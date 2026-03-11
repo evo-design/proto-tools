@@ -166,7 +166,6 @@ class ColabFoldSearchWrapper:
             raise NotImplementedError(
                 "GPU acceleration is not currently supported for colabfold_search"
             )
-            cmd.extend(["--gpu", "1"])
 
         logger.debug(f"Running command: {' '.join(cmd)}")
 
