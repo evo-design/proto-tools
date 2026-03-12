@@ -22,11 +22,20 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any
+
+# Responses larger than this (in bytes) are written to a temp file instead of
+# being sent through the pipe.  With line-buffered text mode, flush() writes
+# the entire payload in one call — if it exceeds the OS pipe buffer (~1 MB on
+# Linux), the write blocks until the reader drains, risking deadlock.  100 MB
+# stays well above the pipe buffer while keeping file I/O overhead negligible.
+_FILE_FALLBACK_THRESHOLD = 100_000_000
 
 
 def _copy_standalone_helpers(script_path: str) -> None:
@@ -160,6 +169,34 @@ def _serialize(value: Any) -> Any:
     return value
 
 
+def _send_response(json_out: Any, response_json: str) -> None:
+    """Send a JSON response to the parent process.
+
+    Small payloads use the PROTO_LENGTH-prefixed pipe protocol.  When the
+    serialized JSON exceeds ``_FILE_FALLBACK_THRESHOLD`` bytes, the payload is
+    written to a temporary file and a ``PROTO_FILE:<path>`` header is sent instead.
+    This avoids pipe deadlocks on large responses.
+    """
+    if len(response_json) > _FILE_FALLBACK_THRESHOLD:
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="bpt_worker_")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(response_json)
+        except Exception:
+            # Clean up on write failure
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise
+        json_out.write(f"PROTO_FILE:{path}\n")
+        json_out.flush()
+    else:
+        json_out.write(f"PROTO_LENGTH:{len(response_json)}\n")
+        json_out.write(response_json)
+        json_out.flush()
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         sys.stderr.write(
@@ -198,9 +235,7 @@ def main() -> None:
             # Can't parse request — write error with no id
             error_response = {"id": None, "error": f"Invalid JSON: {exc}"}
             response_json = json.dumps(error_response, separators=(",", ":"))
-            _json_out.write(f"LENGTH:{len(response_json)}\n")
-            _json_out.write(response_json)
-            _json_out.flush()
+            _send_response(_json_out, response_json)
             continue
 
         request_id = request.get("id")
@@ -245,12 +280,9 @@ def main() -> None:
         except Exception:
             response = {"id": request_id, "error": traceback.format_exc()}
 
-        # Length-prefixed protocol: send byte count then JSON
-        # This allows libraries to output warnings/logs without breaking JSON parsing
+        # Length-prefixed protocol (or file fallback for large payloads)
         response_json = json.dumps(response, separators=(",", ":"))
-        _json_out.write(f"LENGTH:{len(response_json)}\n")
-        _json_out.write(response_json)
-        _json_out.flush()
+        _send_response(_json_out, response_json)
 
 
 if __name__ == "__main__":

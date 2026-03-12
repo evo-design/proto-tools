@@ -665,7 +665,7 @@ def test_devices_per_instance_override():
 # Integration tests (require GPU)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.uses_gpu
+@pytest.mark.uses_gpu(2)
 @pytest.mark.slow
 def test_gpu_fanout_items_land_on_different_gpus():
     """Items should be dispatched to different physical GPUs."""
@@ -705,7 +705,7 @@ def test_gpu_fanout_items_land_on_different_gpus():
         DeviceManager.reset_instance()
 
 
-@pytest.mark.uses_gpu
+@pytest.mark.uses_gpu(2)
 @pytest.mark.slow
 def test_gpu_fanout_results_in_original_order():
     """Results must be reassembled in original input order."""
@@ -756,7 +756,7 @@ def test_gpu_fanout_results_in_original_order():
         DeviceManager.reset_instance()
 
 
-@pytest.mark.uses_gpu
+@pytest.mark.uses_gpu(2)
 @pytest.mark.slow
 def test_gpu_fanout_persistence_across_pool_calls():
     """Workers should persist across calls within the same pool context.
@@ -811,7 +811,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
         DeviceManager.reset_instance()
 
 
-@pytest.mark.uses_gpu
+@pytest.mark.uses_gpu(2)
 @pytest.mark.slow
 def test_gpu_fanout_single_item_bypasses_pool():
     """A single-item input should bypass pool overhead."""
