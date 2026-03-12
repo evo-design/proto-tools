@@ -83,7 +83,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
         batch_size (int): Number of sequences to process in parallel. Larger batches
             improve throughput but require more GPU memory. Optimal values depend on
             GPU memory, model size, and sequence lengths. Typical values range from
-            1 (safest) to 128 (faster, more memory). Default: 128.
+            1 (safest) to 128 (faster, more memory). Default: 1.
 
         device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
             ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
