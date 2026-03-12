@@ -128,6 +128,14 @@ class Boltz2Config(MSAStructurePredictionConfig):
             prediction. Automatically set to the minimum of available CPU cores or 4.
             Must be at least 1. Default: ``min(cpu_count, 4)``.
 
+        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
+            for protein chains using ColabFold search. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``True``.
+
+        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+            ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``None``.
+
         verbose (bool): Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
