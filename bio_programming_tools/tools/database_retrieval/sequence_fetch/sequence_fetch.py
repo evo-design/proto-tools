@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 # Database tool imports — orchestrator calls these directly
 from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
@@ -137,7 +137,7 @@ class SequenceFetchInput(BaseToolInput):
         requests (List[SequenceFetchRequest]): One or more retrieval requests.
     """
 
-    requests: List[SequenceFetchRequest] = Field(description="One or more retrieval requests")
+    requests: List[SequenceFetchRequest] = InputField(description="One or more retrieval requests")
 
     @field_validator("requests", mode="before")
     @classmethod

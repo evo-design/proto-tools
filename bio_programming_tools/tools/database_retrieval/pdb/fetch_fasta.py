@@ -12,7 +12,7 @@ from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import (
     PdbChain,
@@ -35,7 +35,7 @@ class PdbFetchFastaInput(BaseToolInput):
         pdb_id: PDB accession (e.g. '1LBG').
     """
 
-    pdb_id: str = Field(description="PDB accession (e.g. '1LBG')")
+    pdb_id: str = InputField(description="PDB accession (e.g. '1LBG')")
 
 
 class PdbFetchFastaOutput(BaseToolOutput):

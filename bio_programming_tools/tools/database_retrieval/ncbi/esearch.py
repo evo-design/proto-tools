@@ -12,7 +12,7 @@ from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import NCBIFetchConfig, _ncbi_esearch
 
@@ -32,13 +32,13 @@ class NCBIEsearchInput(BaseToolInput):
         max_results: Maximum number of IDs to return from the search.
     """
 
-    db: Literal["protein", "nuccore", "gene"] = Field(
+    db: Literal["protein", "nuccore", "gene"] = InputField(
         description="NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'"
     )
-    search_term: str = Field(
+    search_term: str = InputField(
         description="NCBI search query (e.g. 'lacI[Gene] AND Escherichia coli[Organism]')",
     )
-    max_results: int = Field(
+    max_results: int = InputField(
         default=5,
         ge=1,
         le=100,

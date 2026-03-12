@@ -12,7 +12,7 @@ from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import (
     NCBIFastaRecord,
@@ -42,27 +42,27 @@ class NCBIEfetchInput(BaseToolInput):
         strand: Strand for nucleotide retrieval (+ or -).
     """
 
-    db: Literal["protein", "nuccore", "gene"] = Field(
+    db: Literal["protein", "nuccore", "gene"] = InputField(
         description="NCBI database to query: 'protein', 'nuccore' (nucleotide core), or 'gene'"
     )
-    identifier: str = Field(
+    identifier: str = InputField(
         description="Accession or NCBI ID for efetch (e.g. 'NP_000537.3', '7157')",
     )
-    return_format: Literal["fasta", "fasta_cds_na"] = Field(
+    return_format: Literal["fasta", "fasta_cds_na"] = InputField(
         default="fasta",
         description="NCBI rettype: 'fasta' for sequences, 'fasta_cds_na' for CDS",
     )
-    seq_start: Optional[int] = Field(
+    seq_start: Optional[int] = InputField(
         default=None,
         ge=1,
         description="Start position for subsequence extraction (1-indexed, inclusive)",
     )
-    seq_stop: Optional[int] = Field(
+    seq_stop: Optional[int] = InputField(
         default=None,
         ge=1,
         description="Stop position for subsequence extraction (1-indexed, inclusive)",
     )
-    strand: Optional[Literal["+", "-"]] = Field(
+    strand: Optional[Literal["+", "-"]] = InputField(
         default=None,
         description="Strand for nucleotide retrieval",
     )

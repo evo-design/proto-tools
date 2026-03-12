@@ -21,6 +21,7 @@ from bio_programming_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    InputField,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
@@ -46,7 +47,7 @@ class Evo1SampleInput(BaseToolInput):
             Can be a single prompt string or a list of prompt strings.
     """
 
-    prompts: List[str] = Field(description="Prompt sequences for generation")
+    prompts: List[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
     @classmethod

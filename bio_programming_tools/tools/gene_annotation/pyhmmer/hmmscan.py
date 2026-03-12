@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_io import InputField
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -36,7 +37,7 @@ class PyHmmscanInput(PyHmmerInput):
             will be searched against the query sequences.
     """
 
-    hmm_db: str | Path = Field(description="Path to HMM database file")
+    hmm_db: str | Path = InputField(description="Path to HMM database file")
 
     @field_validator("hmm_db", mode="before")
     @classmethod

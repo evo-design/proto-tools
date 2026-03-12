@@ -10,7 +10,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import (
     AlphaGenomePredictConfig,
@@ -49,7 +49,7 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
             must match a supported context length.
     """
 
-    sequences: List[str] = Field(description="Raw DNA sequences for prediction")
+    sequences: List[str] = InputField(description="Raw DNA sequences for prediction")
 
     @field_validator("sequences", mode="before")
     @classmethod

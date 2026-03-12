@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.tool_io import InputField
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -32,7 +33,7 @@ class PyNhmmerInput(PyHmmerInput):
             strings.
     """
 
-    target_sequences: List[str] = Field(
+    target_sequences: List[str] = InputField(
         description="Target nucleotide sequences as: single sequence string or list of sequence strings"
     )
 

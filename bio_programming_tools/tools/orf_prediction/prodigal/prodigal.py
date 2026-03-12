@@ -23,7 +23,7 @@ from bio_programming_tools.utils import (
     ConfigField,
     return_invalid_dna_chars,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -46,7 +46,7 @@ class ProdigalInput(BaseToolInput):
             contain only valid DNA nucleotides including IUPAC ambiguity codes.
             Empty sequences are not allowed.
     """
-    input_sequences: List[str] = Field(
+    input_sequences: List[str] = InputField(
         description="DNA sequence(s) to analyze for open reading frames"
     )
 

@@ -75,11 +75,11 @@ def test_protenix_config_defaults():
     assert config.num_pairformer_cycles == 10
 
 
-def test_protenix_config_sync_nested_colabfold_verbose():
-    """sync_nested_config model validator propagates verbose to nested config."""
+def test_protenix_config_colabfold_lazy_init():
+    """colabfold_search_config is None by default, initialized lazily in preprocess."""
     config = ProtenixConfig(verbose=True)
-    assert config.colabfold_search_config is not None
-    assert config.colabfold_search_config.verbose is True
+    # Not eagerly initialized — stays None until preprocess() is called
+    assert config.colabfold_search_config is None
 
 
 def test_protenix_input_accepts_string_shorthand():

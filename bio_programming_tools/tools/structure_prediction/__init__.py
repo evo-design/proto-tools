@@ -18,6 +18,7 @@ from .protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_proteni
 from .shared_data_models import (  # noqa: F401
     Chain,
     ChainModification,
+    MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionConfig,
     StructurePredictionInput,

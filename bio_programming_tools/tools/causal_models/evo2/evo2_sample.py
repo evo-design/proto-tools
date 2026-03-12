@@ -10,7 +10,7 @@ from pydantic import Field, field_validator, model_validator
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class Evo2SampleInput(BaseToolInput):
             The model will autoregressively generate DNA continuing from these prompts.
     """
 
-    prompts: List[str] = Field(description="Prompt sequences for generation")
+    prompts: List[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
     @classmethod

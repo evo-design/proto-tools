@@ -17,23 +17,17 @@ import os
 import string
 import tempfile
 from logging import getLogger
-from typing import List, Literal, Optional
-
-from pydantic import model_validator
+from typing import List, Literal
 
 from bio_programming_tools.entities.structures import BFactorType, Structure
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    run_colabfold_search,
-)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionConfig,
+    MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
+
 logger = getLogger(__name__)
 
 ProtenixModelName = Literal[
@@ -64,6 +58,8 @@ class ProtenixInput(StructurePredictionInput):
         complexes (List[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         Protenix supports entity types: ``"protein"``, ``"dna"``, ``"rna"``, and ``"ligand"``.
@@ -139,14 +135,14 @@ class ProtenixInput(StructurePredictionInput):
 ProtenixOutput = StructurePredictionOutput
 
 # Config:
-class ProtenixConfig(StructurePredictionConfig):
+class ProtenixConfig(MSAStructurePredictionConfig):
     """Configuration object for Protenix structure prediction.
 
     This class defines configuration parameters for running Protenix, an open-source
     reimplementation of AlphaFold3 by ByteDance Research. Protenix is a multi-modal
     structure prediction model supporting proteins, DNA, RNA, and ligands.
 
-    Inherits from ``StructurePredictionConfig``.
+    Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
         model_name (str): Protenix model variant to use. Available models:
@@ -187,15 +183,6 @@ class ProtenixConfig(StructurePredictionConfig):
             docking tasks such as antibody-antigen complexes.
             Default: ``[0]``.
 
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. If ``False``, runs in single-sequence
-            mode without MSAs. Default: ``True``.
-
-        colabfold_search_config (ColabfoldSearchConfig): Configuration for ColabFold
-            MSA search. Controls search mode (local/remote), database paths, and other
-            MSA generation parameters. Only used when ``use_msa=True``.
-            Default: Uses ColabfoldSearchConfig defaults.
-
         num_diffusion_samples (int): Number of independent structure samples to generate
             per seed. Only the best sample (by ranking score) is returned. Higher values
             explore more of the conformational space but increase computation time.
@@ -235,25 +222,6 @@ class ProtenixConfig(StructurePredictionConfig):
         advanced=True,
     )
 
-    use_msa: bool = ConfigField(
-        title="Use MSA",
-        default=True,
-        description=(
-            "Whether to generate and use MSAs for protein chains "
-            "using ColabFold search"
-        ),
-    )
-
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
-        title="ColabFold Search Config",
-        default=None,
-        description=(
-            "Nested configuration for ColabFold MSA search. "
-            "If None, uses default settings."
-        ),
-        hidden=True,
-    )
-
     num_diffusion_samples: int = ConfigField(
         title="Number of Diffusion Samples",
         default=5,
@@ -285,14 +253,6 @@ class ProtenixConfig(StructurePredictionConfig):
         description="Maximum execution time in seconds (base models need ~10-15 min on slower GPUs)",
         hidden=True,
     )
-
-    @model_validator(mode="after")
-    def sync_nested_config(self):
-        """Sync verbose flag with nested colabfold_search_config."""
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
-        return self
 
 
 # ============================================================================
@@ -392,9 +352,9 @@ def run_protenix(
         for i in range(len(inputs.complexes)):
             batch_json.extend(inputs.to_json(i, name=f"protenix_job_{i}"))
 
-        # Generate MSAs and inject paths into the batch JSON if needed
-        if config.use_msa:
-            _inject_msa_paths(batch_json, inputs, config, temp_dir)
+        # Write pre-computed MSAs and inject paths into the batch JSON
+        if inputs.msas:
+            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)
 
         # Write the batch input JSON
         input_json_path = os.path.join(temp_dir, "protenix_input.json")
@@ -479,23 +439,19 @@ def _extract_protein_sequences_and_chain_ids(
     return protein_seqs, protein_chain_ids
 
 
-def _inject_msa_paths(
+def _write_msas_to_batch_json(
     batch_json: list[dict],
     inputs: ProtenixInput,
     config: ProtenixConfig,
     temp_dir: str,
 ) -> None:
-    """Generate MSAs via ColabFold and inject file paths into the batch JSON.
-
-    For each complex, extracts protein chains, runs ColabFold search, writes
-    A3M files, and sets ``unpairedMsaPath`` on the corresponding proteinChain
-    entries in the batch JSON.
+    """Write pre-computed MSAs to A3M files and inject paths into batch JSON.
 
     Args:
-        batch_json: List of Protenix job dicts (modified in place)
-        inputs: ProtenixInput with the original complexes
-        config: ProtenixConfig with MSA settings
-        temp_dir: Directory for writing A3M files
+        batch_json: List of Protenix job dicts (modified in place).
+        inputs: ProtenixInput with the original complexes and pre-computed MSAs.
+        config: ProtenixConfig with verbose setting.
+        temp_dir: Directory for writing A3M files.
     """
     msa_dir = os.path.join(temp_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)
@@ -509,48 +465,22 @@ def _inject_msa_paths(
         if not protein_seqs:
             continue
 
-        if config.verbose:
-            logger.info(
-                f"Generating MSAs for {len(protein_seqs)} protein chain(s) "
-                f"in complex {job_idx} using ColabFold search..."
-            )
-
-        # Run ColabFold search for all protein chains in this complex
-        queries = list(zip(protein_seqs, protein_chain_ids))
-        colabfold_input = ColabfoldSearchInput(queries=queries)
-
-        try:
-            colabfold_output = run_colabfold_search(
-                colabfold_input, config.colabfold_search_config
-            )
-        except Exception as e:
-            raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
-
-        # Write A3M files and build a mapping of chain_id -> a3m_path
-        msa_paths = {}
-        for result in colabfold_output.results:
-            if result.msa is not None:
-                a3m_path = os.path.join(
-                    msa_dir, f"job_{job_idx}_{result.sequence_id}.a3m"
-                )
-                result.msa.to_a3m_file(a3m_path, query_index=0)
-                msa_paths[result.sequence_id] = a3m_path
+        msa_paths: dict[str, str] = {}
+        for seq, chain_id in zip(protein_seqs, protein_chain_ids):
+            if seq in inputs.msas:
+                a3m_path = os.path.join(msa_dir, f"job_{job_idx}_{chain_id}.a3m")
+                inputs.msas[seq].to_a3m_file(a3m_path, query_index=0)
+                msa_paths[chain_id] = a3m_path
 
                 if config.verbose:
                     logger.info(
-                        f"Generated MSA for chain {result.sequence_id}: "
-                        f"{result.num_homologs_found} homologs found"
-                    )
-            else:
-                if config.verbose:
-                    logger.warning(
-                        f"No homologs found for chain {result.sequence_id}"
+                        f"Assigned MSA to chain {chain_id} in complex {job_idx} "
+                        f"({len(inputs.msas[seq])} sequences)"
                     )
 
         # Inject MSA paths into the job's proteinChain entries
         for seq_entry in job["sequences"]:
             if "proteinChain" in seq_entry:
-                # Find the chain ID for this protein entry by matching sequence
                 chain_seq = seq_entry["proteinChain"]["sequence"]
                 for chain_id, protein_seq in zip(protein_chain_ids, protein_seqs):
                     if protein_seq == chain_seq and chain_id in msa_paths:

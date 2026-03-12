@@ -10,7 +10,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import (
     AlphaGenomePredictConfig,
@@ -34,7 +34,7 @@ class AlphaGenomePredictVariantsInput(BaseToolInput):
             A single variant is auto-wrapped into a list.
     """
 
-    variants: List[AlphaGenomeVariant] = Field(
+    variants: List[AlphaGenomeVariant] = InputField(
         description="Variants (with intervals) for prediction",
     )
 

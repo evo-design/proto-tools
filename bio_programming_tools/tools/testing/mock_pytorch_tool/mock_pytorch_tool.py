@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -27,7 +27,7 @@ class MockPyTorchToolInput(BaseToolInput):
         data_items: List of data vectors to process through the model.
     """
 
-    data_items: list[list[float]] = Field(
+    data_items: list[list[float]] = InputField(
         default=[[1.0, 2.0, 3.0, 4.0]],
         description="List of data items to process (each is a 4-element float vector)",
     )

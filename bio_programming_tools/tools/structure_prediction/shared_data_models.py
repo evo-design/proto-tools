@@ -1,8 +1,9 @@
 """Shared data models (configs and outputs) for structure prediction tools."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import ClassVar, Iterator, List, Optional, Set, Union
+from typing import Any, ClassVar, Iterator, List, Optional, Set, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -12,12 +13,18 @@ from bio_programming_tools.entities.ligands.ccd_utils import (
     get_modifications_for_component,
 )
 from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+    ColabfoldSearchConfig,
+)
+from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.utils import (
     BaseConfig,
     ConfigField,
     detect_sequence_type,
 )
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+
+logger = logging.getLogger(__name__)
 
 
 class ChainModification(BaseModel):
@@ -595,6 +602,10 @@ class StructurePredictionInput(BaseToolInput):
             corresponding entity types. After validation, always a list of
             ``StructurePredictionComplex`` instances regardless of input format.
 
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence
+            string. Populated by ``Config.preprocess()`` via ColabFold search, or
+            supplied directly to skip MSA generation. Default: ``None``.
+
         SUPPORTED_ENTITY_TYPES (Set[str]): Set of entity types supported by this tool.
             Must be defined by subclasses. Valid options: "protein", "dna", "rna",
             "ligand", "glycan".
@@ -655,8 +666,13 @@ class StructurePredictionInput(BaseToolInput):
                 f"Example: ALLOWS_CHAIN_MODIFICATIONS = True"
             )
 
-    complexes: List[StructurePredictionComplex] = Field(
+    complexes: List[StructurePredictionComplex] = InputField(
         description="List of complexes to predict structure for containing chains and entity types."
+    )
+    msas: dict[str, MSA] | None = InputField(
+        default=None,
+        description="Pre-computed MSAs keyed by sequence. Populated by preprocess() or supplied directly.",
+        hidden=True,
     )
 
     @classmethod
@@ -766,6 +782,45 @@ class StructurePredictionConfig(BaseConfig):
     )
 
 
+class MSAStructurePredictionConfig(StructurePredictionConfig):
+    """Configuration for structure prediction models that support MSA-based inference.
+
+    Extends ``StructurePredictionConfig`` with optional MSA generation via ColabFold
+    search. Tools that support MSA preprocessing should inherit from this class.
+
+    Attributes:
+        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
+            for protein chains using ColabFold search. If ``False``, runs in single-sequence
+            mode without MSAs. Default: ``True``.
+
+        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+            ColabFold MSA search. Only used when ``use_msa=True``.
+            Default: Uses ColabfoldSearchConfig defaults.
+    """
+
+    use_msa: bool = ConfigField(
+        title="Use MSA",
+        default=True,
+        description="Whether to generate and use MSAs for protein chains using ColabFold search",
+    )
+    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
+        title="ColabFold Search Config",
+        default=None,
+        description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
+        hidden=True,
+    )
+
+    def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:
+        if not self.use_msa:
+            return inputs
+        if self.colabfold_search_config is None:
+            self.colabfold_search_config = ColabfoldSearchConfig()
+        self.colabfold_search_config.verbose = self.verbose
+        return _preprocess_structure_prediction_msas(
+            inputs, self.colabfold_search_config, self.verbose
+        )
+
+
 class StructurePredictionOutput(BaseToolOutput):
     """Output from structure prediction models.
 
@@ -830,3 +885,77 @@ class StructurePredictionOutput(BaseToolOutput):
                 structure.write_cif(path / f"structure_{structure_idx}.cif")
             else:
                 raise ValueError(f"Invalid file format: {file_format}")
+
+
+# ============================================================================
+# Shared preprocessing
+# ============================================================================
+def _preprocess_structure_prediction_msas(
+    inputs: StructurePredictionInput,
+    colabfold_search_config: Any,
+    verbose: bool = False,
+) -> StructurePredictionInput:
+    """Generate MSAs for all unique protein sequences and attach to inputs.
+
+    Collects unique protein sequences across all complexes, runs ColabFold
+    search once, and stores the raw MSA objects on ``inputs.msas`` keyed by
+    sequence string. Skips ColabFold if MSAs are already supplied.
+
+    Args:
+        inputs: Structure prediction input containing complexes.
+        colabfold_search_config: ColabFold search configuration.
+        verbose: Whether to log progress.
+
+    Returns:
+        Updated inputs with ``msas`` field populated.
+    """
+    if inputs.msas is not None:
+        if verbose:
+            logger.info(
+                f"Using {len(inputs.msas)} pre-supplied MSA(s), "
+                f"skipping ColabFold search"
+            )
+        return inputs
+
+    from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+        ColabfoldSearchInput,
+        run_colabfold_search,
+    )
+
+    # Collect unique protein sequences across all complexes
+    unique_seqs: dict[str, str] = {}  # sequence -> query name
+    for comp in inputs.complexes:
+        for chain in comp.chains:
+            if chain.entity_type == "protein" and chain.sequence not in unique_seqs:
+                unique_seqs[chain.sequence] = f"seq_{len(unique_seqs)}"
+
+    if not unique_seqs:
+        return inputs
+
+    if verbose:
+        logger.info(
+            f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) "
+            f"using ColabFold search..."
+        )
+
+    queries = [(seq, name) for seq, name in unique_seqs.items()]
+    colabfold_input = ColabfoldSearchInput(queries=queries)
+    colabfold_output = run_colabfold_search(colabfold_input, colabfold_search_config)
+
+    # Build MSA dict keyed by sequence
+    name_to_seq = {v: k for k, v in unique_seqs.items()}
+    msas: dict[str, MSA] = {}
+    for result in colabfold_output.results:
+        if result.msa is not None:
+            seq = name_to_seq[result.sequence_id]
+            msas[seq] = result.msa
+            if verbose:
+                logger.info(
+                    f"Generated MSA for {result.sequence_id}: "
+                    f"{result.num_homologs_found} homologs found"
+                )
+        else:
+            if verbose:
+                logger.warning(f"No homologs found for {result.sequence_id}")
+
+    return inputs.model_copy(update={"msas": msas}) if msas else inputs

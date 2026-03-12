@@ -16,7 +16,7 @@ from pydantic import ConfigDict, Field, computed_field, field_validator
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -42,10 +42,10 @@ class OrfipyInput(BaseToolInput):
             These IDs are used as ``parent_id`` in the output ORFs.
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="DNA sequence(s) to analyze for open reading frames"
     )
-    sequence_ids: Optional[List[str]] = Field(
+    sequence_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )

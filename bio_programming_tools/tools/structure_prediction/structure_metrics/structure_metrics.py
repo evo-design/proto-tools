@@ -18,6 +18,7 @@ from bio_programming_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    InputField,
 )
 
 
@@ -44,7 +45,7 @@ class StructureMetricsInput(BaseToolInput):
         pdb_paths (List[str]): List of paths to PDB files to analyze.
     """
 
-    pdb_paths: List[str] = Field(
+    pdb_paths: List[str] = InputField(
         description="List of PDB file paths to compute structure metrics for"
     )
 

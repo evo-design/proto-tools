@@ -221,14 +221,10 @@ def _serialize_for_cache_key(obj: Any) -> str:
     Handles Pydantic models, basic types, lists, dicts, etc.
     Fields marked with ``include_in_key=False`` on their ConfigField are excluded.
     """
-    if isinstance(obj, BaseModel):
-        # Exclude fields marked include_in_key=False (device, verbose, timeout, etc.)
-        from bio_programming_tools.utils.base_config import BaseConfig
-        if isinstance(obj, BaseConfig):
-            exclude = obj.cache_exclude_fields()
-        else:
-            exclude = set()
-        model_dict = obj.model_dump(exclude_none=True, exclude=exclude)
+    if hasattr(obj, "cache_key"):
+        return obj.cache_key()
+    elif isinstance(obj, BaseModel):
+        model_dict = obj.model_dump(exclude_none=True)
         return json.dumps(model_dict, sort_keys=True, default=str)
     elif isinstance(obj, (dict, list, tuple)):
         # For collections, use JSON with sorted keys

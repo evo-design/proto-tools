@@ -18,6 +18,23 @@ def _list_tool_inputs_and_outputs():
     return full_list
 
 
+def _list_tool_input_models():
+    """List of all tool input models."""
+    return [spec.input_model for spec in ToolRegistry.list_all()]
+
+
+# ── InputField consistency ─────────────────────────────────────────────────
+
+@pytest.mark.parametrize("tool_input", _list_tool_input_models())
+def test_tool_input_uses_input_field(tool_input):
+    """Ensure every Input field uses InputField() instead of plain Field()."""
+    for field_name, field_info in tool_input.model_fields.items():
+        json_schema_extra = field_info.json_schema_extra or {}
+        assert json_schema_extra.get("_field_type") == "InputField", (
+            f"{tool_input.__name__}.{field_name} must use InputField() instead of Field()."
+        )
+
+
 # ── Input and output consistency ────────────────────────────────────────────
 
 @pytest.mark.parametrize("tool_input, tool_output", _list_tool_inputs_and_outputs())

@@ -14,7 +14,7 @@ from bio_programming_tools.utils import (
     return_invalid_nucleotide_chars,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class EnformerInput(BaseToolInput):
             196,608 bp and only contain valid nucleotide characters.
     """
 
-    sequence: str = Field(description="DNA sequence to score")
+    sequence: str = InputField(description="DNA sequence to score")
 
     @field_validator("sequence")
     @classmethod

@@ -14,7 +14,7 @@ from pydantic import ConfigDict, Field, field_validator
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -33,10 +33,10 @@ class MafftInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="List of sequences to align (minimum 2 required)",
     )
-    sequence_ids: Optional[List[str]] = Field(
+    sequence_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )

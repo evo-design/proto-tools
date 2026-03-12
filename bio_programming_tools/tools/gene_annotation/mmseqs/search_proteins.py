@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 # ============================================================================
 # Constants
@@ -99,14 +99,14 @@ class MmseqsSearchProteinsInput(BaseToolInput):
             - Path to a pre-built MMseqs2 database (created with ``mmseqs createdb``)
     """
 
-    query_sequences: List[str] = Field(
+    query_sequences: List[str] = InputField(
         description="List of protein sequences to search",
     )
-    sequence_ids: Optional[List[str]] = Field(
+    sequence_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
-    mmseqs_db: str = ConfigField(
+    mmseqs_db: str = InputField(
         description="Path to target database (FASTA file or MMseqs2 database)"
     )
 

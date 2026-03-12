@@ -51,6 +51,8 @@ class ESMFoldInput(StructurePredictionInput):
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains. Total length across all chains
             in a complex must not exceed 2,400 residues.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         ESMFold only supports protein sequences (amino acids). DNA, RNA, ligands,

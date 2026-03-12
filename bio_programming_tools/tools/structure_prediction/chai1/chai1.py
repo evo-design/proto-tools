@@ -12,25 +12,21 @@ import os
 import tempfile
 from typing import List, Optional
 
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    run_colabfold_search,
-)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+    MSAStructurePredictionConfig,
     StructurePredictionComplex,
-    StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
+
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
 # ============================================================================
@@ -50,6 +46,8 @@ class Chai1Input(StructurePredictionInput):
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, ligands, and/or glycans. Total
             length across all chains in a complex must not exceed 2,048 residues.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         Chai1 supports entity types: ``"protein"``, ``"ligand"``, and ``"glycan"``.
@@ -80,28 +78,19 @@ class Chai1Input(StructurePredictionInput):
 Chai1Output = StructurePredictionOutput
 
 # Config:
-class Chai1Config(StructurePredictionConfig):
+class Chai1Config(MSAStructurePredictionConfig):
     """Configuration object for Chai1 structure prediction.
 
     This class defines configuration parameters for running Chai1, a multi-modal
     structure prediction model supporting proteins, ligands, and glycans.
 
-    Inherits from ``StructurePredictionConfig``.
+    Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
         use_esm_embeddings (bool): Whether to use ESM (Evolutionary Scale Modeling)
             embeddings for improved predictions. ESM embeddings provide evolutionary
             context from large-scale protein language models, typically improving
             prediction quality. Default: ``True``.
-
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. If ``False``, runs without MSAs.
-            Default: ``True``.
-
-        colabfold_search_config (ColabfoldSearchConfig): Configuration for ColabFold
-            MSA search. Controls search mode (local/remote), database paths, and other
-            MSA generation parameters. Only used when ``use_msa=True``.
-            Default: Uses ColabfoldSearchConfig defaults.
 
         num_trunk_recycles (int): Number of iterative refinement passes through
             the trunk network. Higher values produce more refined structures but
@@ -144,18 +133,6 @@ class Chai1Config(StructurePredictionConfig):
         advanced=True,
     )
 
-    use_msa: bool = ConfigField(
-        title="Use MSA",
-        default=True,
-        description="Whether to generate and use MSAs for protein chains using ColabFold search",
-    )
-
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
-        title="ColabFold Search Config",
-        default=None,
-        description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
-        hidden=True,
-    )
     num_trunk_recycles: int = ConfigField(
         title="Number of Trunk Recycles",
         default=3,
@@ -191,13 +168,6 @@ class Chai1Config(StructurePredictionConfig):
         hidden=True,
     )
 
-    @model_validator(mode="after")
-    def sync_nested_config(self):
-        """Sync verbose flag with nested colabfold_search_config."""
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
-        return self
 
 # ============================================================================
 # Tool Implementation
@@ -293,7 +263,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
     results = []
 
     for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)):
-        results.append(run_chai1_on_complex(comp=comp, config=config, instance=instance))
+        results.append(run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance))
     return Chai1Output(
         structures=results,
     )
@@ -396,70 +366,6 @@ def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
     return fasta_content
 
 
-def _generate_msa_pqt_files(
-    comp: StructurePredictionComplex,
-    config: Chai1Config,
-    output_dir: str,
-) -> Optional[str]:
-    """Generate MSA files in Chai1's .pqt format using ColabFold search.
-
-    Args:
-        comp: Complex containing chains and entity types
-        config: Chai1 configuration with MSA settings
-        output_dir: Directory where .pqt files will be written
-
-    Returns:
-        Path to directory containing .pqt files, or None if no MSAs generated
-    """
-    # Extract protein sequences for MSA generation
-    protein_seqs = []
-    for chain in comp.chains:
-        if chain.entity_type == "protein":
-            protein_seqs.append(chain.sequence)
-
-    if not protein_seqs:
-        return None
-
-    # Use ColabFold search tool to generate MSAs
-    logger.debug(
-        f"Generating MSAs for {len(protein_seqs)} protein chain(s) using ColabFold search..."
-    )
-
-    # Create queries with hash of uppercased sequence
-    # NOTE: Defines the sequence ID as the hash of the sequence
-    queries = [(seq, _hash_sequence(seq.upper())) for seq in protein_seqs]
-    colabfold_input = ColabfoldSearchInput(queries=queries)
-
-    try:
-        colabfold_output = run_colabfold_search(colabfold_input, config.colabfold_search_config)
-    except Exception as e:
-        raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
-
-    # Convert MSAs to Chai1's .pqt format
-    pqt_dir = os.path.join(output_dir, "msa_pqt")
-    os.makedirs(pqt_dir, exist_ok=True)
-
-    for query, result in zip(colabfold_input.queries, colabfold_output.results):
-        if result.msa is not None:
-            # Convert MSA directly to Chai1's .pqt format
-            # NOTE: Chai1 expects the filename to be the hash of the sequence
-            pqt_path = os.path.join(pqt_dir, f"{query.sequence_id}.aligned.pqt")
-            _msa_to_pqt_file(
-                msa=result.msa,
-                pqt_path=pqt_path,
-                query_index=0,
-                source_database="uniref90",
-            )
-
-            logger.debug(
-                f"Generated MSA for {query.sequence_id}: {result.num_homologs_found} homologs found"
-            )
-        else:
-            logger.debug(f"Warning: No homologs found for {query.sequence_id}")
-
-    return pqt_dir
-
-
 def _serialize_pqt_files(pqt_dir: str) -> dict[str, bytes]:
     """Read .pqt files from directory and serialize them as bytes.
 
@@ -482,6 +388,7 @@ def _serialize_pqt_files(pqt_dir: str) -> dict[str, bytes]:
 def run_chai1_on_complex(
     comp: StructurePredictionComplex,
     config: Chai1Config,
+    msas: dict | None = None,
     instance=None,
 ) -> Structure:
     """
@@ -506,21 +413,27 @@ def run_chai1_on_complex(
         output_dir = os.path.join(temp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
-        # Handle ColabFold MSA generation if needed
+        # Write pre-computed MSAs to Parquet files
         msa_directory = None
-        if config.use_msa:
-            # Configure output directory for MSAs (local mode requires this)
-            msa_config = config.colabfold_search_config.model_copy(deep=True)
-            msa_config.output_dir = temp_dir
-
-            # Temporarily swap config to use the modified one for local execution
-            original_config = config.colabfold_search_config
-            config.colabfold_search_config = msa_config
-            try:
-                msa_directory = _generate_msa_pqt_files(comp, config, temp_dir)
-            finally:
-                # Restore original config
-                config.colabfold_search_config = original_config
+        if config.use_msa and msas:
+            pqt_dir = os.path.join(temp_dir, "msa_pqt")
+            os.makedirs(pqt_dir, exist_ok=True)
+            for chain in comp.chains:
+                if chain.entity_type == "protein" and chain.sequence in msas:
+                    seq_hash = _hash_sequence(chain.sequence.upper())
+                    pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
+                    _msa_to_pqt_file(
+                        msa=msas[chain.sequence],
+                        pqt_path=pqt_path,
+                        query_index=0,
+                    )
+                    if config.verbose:
+                        logger.info(
+                            f"Assigned MSA to protein chain "
+                            f"({len(msas[chain.sequence])} sequences)"
+                        )
+            if os.listdir(pqt_dir):
+                msa_directory = pqt_dir
 
         # Prepare input data for inference script
         input_data = {

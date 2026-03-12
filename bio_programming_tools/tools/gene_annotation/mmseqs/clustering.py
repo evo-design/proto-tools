@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .search_proteins import DEFAULT_MIN_SEQ_ID
 
@@ -63,10 +63,10 @@ class MmseqsClusteringInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
-    input_sequences: List[str] = Field(
+    input_sequences: List[str] = InputField(
         description="List of sequences to cluster",
     )
-    sequence_ids: Optional[List[str]] = Field(
+    sequence_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )

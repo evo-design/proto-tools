@@ -9,7 +9,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .search_proteins import (
     DEFAULT_GENOME_SENSITIVITY,
@@ -40,17 +40,17 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (target_0, target_1, ...).
     """
 
-    query_genomes: List[str] = Field(
+    query_genomes: List[str] = InputField(
         description="List of query genome sequences (nucleotide)"
     )
-    query_ids: Optional[List[str]] = Field(
+    query_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
-    target_genomes: List[str] = Field(
+    target_genomes: List[str] = InputField(
         description="List of target genome sequences to search against"
     )
-    target_ids: Optional[List[str]] = Field(
+    target_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional target identifiers (defaults to target_0, target_1, ...)",
     )

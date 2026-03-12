@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import List, Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 
 from bio_programming_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
@@ -13,7 +13,7 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class ProGen2ScoringInput(BaseToolInput):
             automatically prepended if not present.
     """
 
-    sequences: List[str] = Field(description="Protein sequences to score")
+    sequences: List[str] = InputField(description="Protein sequences to score")
 
     @field_validator("sequences", mode="before")
     @classmethod

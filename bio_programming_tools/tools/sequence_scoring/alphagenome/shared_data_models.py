@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
 # ============================================================================
@@ -62,12 +62,12 @@ class AlphaGenomeInterval(BaseToolInput):
         interval_end (int): Interval end (0-based, exclusive).
     """
 
-    chromosome: str = Field(description="Chromosome identifier, e.g. 'chr1'")
-    interval_start: int = Field(
+    chromosome: str = InputField(description="Chromosome identifier, e.g. 'chr1'")
+    interval_start: int = InputField(
         ge=0,
         description="Interval start (0-based, inclusive)",
     )
-    interval_end: int = Field(
+    interval_end: int = InputField(
         ge=1,
         description="Interval end (0-based, exclusive)",
     )
@@ -94,12 +94,12 @@ class AlphaGenomeVariant(AlphaGenomeInterval):
         alternate_bases (str): Alternate allele, e.g. ``'G'`` or ``'GTT'``.
     """
 
-    variant_position: int = Field(
+    variant_position: int = InputField(
         ge=0,
         description="Variant genomic position (0-based)",
     )
-    reference_bases: str = Field(description="Reference allele, e.g. 'A' or 'AC'")
-    alternate_bases: str = Field(description="Alternate allele, e.g. 'G' or 'GTT'")
+    reference_bases: str = InputField(description="Reference allele, e.g. 'A' or 'AC'")
+    alternate_bases: str = InputField(description="Alternate allele, e.g. 'G' or 'GTT'")
 
     @field_validator("reference_bases", "alternate_bases")
     @classmethod

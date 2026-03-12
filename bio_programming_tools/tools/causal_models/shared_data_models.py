@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
 
@@ -25,7 +25,7 @@ class CausalModelScoringInput(BaseToolInput):
             or a list of strings.
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Sequences to score",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -197,7 +197,7 @@ class CausalModelSampleInput(BaseToolInput):
             Can be provided as a single string or a list of strings.
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Prompt sequence(s) to condition generation on",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )

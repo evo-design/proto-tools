@@ -39,6 +39,8 @@ class BioEmuInput(StructurePredictionInput):
         complexes (List[StructurePredictionComplex]): Protein complexes to sample.
             BioEmu supports monomer-only inputs, so each complex must contain one
             protein chain.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
     """
 
     SUPPORTED_ENTITY_TYPES = {"protein"}

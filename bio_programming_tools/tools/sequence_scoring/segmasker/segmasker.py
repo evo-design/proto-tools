@@ -12,7 +12,7 @@ from pydantic import ConfigDict, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 class SegmaskerInput(BaseToolInput):
@@ -32,7 +32,7 @@ class SegmaskerInput(BaseToolInput):
             sequences are handled gracefully (assigned 0.0 low-complexity fraction).
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Protein sequence(s) to analyze for low-complexity regions"
     )
 

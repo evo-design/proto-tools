@@ -6,6 +6,7 @@ Base input/output classes for standardized tool results with metadata tracking.
 
 from __future__ import annotations
 
+import json
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -13,6 +14,37 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def InputField(
+    default: Any = ...,
+    *,
+    title: str = None,
+    description: str = None,
+    hidden: bool = False,
+    advanced: bool = False,
+    include_in_key: bool = True,
+    **kwargs,
+) -> Any:
+    """Custom Field wrapper for tool Input classes.
+
+    Adds UI metadata flags to json_schema_extra, matching the pattern
+    established by ``ConfigField`` for Config classes.
+
+    Args:
+        hidden: If True, field is hidden from UI completely.
+        advanced: If True, field appears in "Advanced" section of UI.
+        include_in_key: If False, field is excluded from tool cache key
+            generation.
+        **kwargs: All other standard Pydantic Field arguments.
+    """
+    json_schema_extra = kwargs.get("json_schema_extra", {})
+    json_schema_extra["hidden"] = hidden
+    json_schema_extra["advanced"] = advanced
+    json_schema_extra["include_in_key"] = include_in_key
+    json_schema_extra["_field_type"] = "InputField"
+    kwargs["json_schema_extra"] = json_schema_extra
+    return Field(default, title=title, description=description, **kwargs)
 
 
 class ToolExecutionError(Exception):
@@ -41,6 +73,22 @@ class BaseToolInput(BaseModel):
         use_enum_values=True,  # Serialize enums as values
         validate_default=True,  # Validate default values
     )
+
+    @classmethod
+    def cache_exclude_fields(cls) -> set[str]:
+        """Return field names marked with ``include_in_key=False``."""
+        return {
+            name
+            for name, info in cls.model_fields.items()
+            if not (info.json_schema_extra or {}).get("include_in_key", True)
+        }
+
+    def cache_key(self) -> str:
+        """Deterministic string for cache key generation, excluding non-key fields."""
+        model_dict = self.model_dump(
+            exclude_none=True, exclude=self.cache_exclude_fields()
+        )
+        return json.dumps(model_dict, sort_keys=True, default=str)
 
     @classmethod
     def item_cost(cls, item: Any) -> float:

@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import Field
-
-from bio_programming_tools.utils.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceStructurePair,
@@ -25,7 +23,7 @@ class LigandMPNNScoringInput(BaseToolInput):
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
-    sequence_structure_pairs: List[SequenceStructurePair] = Field(
+    sequence_structure_pairs: List[SequenceStructurePair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 

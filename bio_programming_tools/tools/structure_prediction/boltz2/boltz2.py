@@ -17,25 +17,19 @@ import string
 import tempfile
 import warnings
 from logging import getLogger
-from typing import Optional
 
 import yaml
-from pydantic import model_validator
 from tqdm import tqdm
 
 from bio_programming_tools.entities.structures import BFactorType, Structure
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    run_colabfold_search,
-)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionConfig,
+    MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
+
 logger = getLogger(__name__)
 
 # ============================================================================
@@ -54,6 +48,8 @@ class Boltz2Input(StructurePredictionInput):
         complexes (List[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         Boltz2 supports entity types: ``"protein"``, ``"dna"``, ``"rna"``, and ``"ligand"``.
@@ -105,24 +101,15 @@ class Boltz2Input(StructurePredictionInput):
 Boltz2Output = StructurePredictionOutput
 
 # Config:
-class Boltz2Config(StructurePredictionConfig):
+class Boltz2Config(MSAStructurePredictionConfig):
     """Configuration object for Boltz2 structure prediction.
 
     This class defines configuration parameters for running Boltz2, a multi-modal
     structure prediction model supporting proteins, DNA, RNA, and ligands.
 
-    Inherits from ``StructurePredictionConfig``.
+    Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. If ``False``, runs in single-sequence
-            mode without MSAs. Default: ``True``.
-
-        colabfold_search_config (ColabfoldSearchConfig): Configuration for ColabFold
-            MSA search. Controls search mode (local/remote), database paths, and other
-            MSA generation parameters. Only used when ``use_msa=True``.
-            Default: Uses ColabfoldSearchConfig defaults.
-
         recycling_steps (int): Number of iterative refinement passes through the
             model. Higher values produce more refined structures but increase
             computation time. Typical range: 3-20. Must be at least 0.
@@ -147,18 +134,6 @@ class Boltz2Config(StructurePredictionConfig):
 
     """
 
-    use_msa: bool = ConfigField(
-        title="Use MSA",
-        default=True,
-        description="Whether to generate and use MSAs for protein chains using ColabFold search",
-    )
-
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
-        title="ColabFold Search Config",
-        default=None,
-        description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
-        hidden=True,
-    )
     recycling_steps: int = ConfigField(
         title="Number of Recycling Steps",
         default=10,
@@ -187,14 +162,6 @@ class Boltz2Config(StructurePredictionConfig):
         description="Number of workers for prediction",
         hidden=True,
     )
-    @model_validator(mode="after")
-    def sync_nested_config(self):
-        """Sync verbose flag with nested colabfold_search_config."""
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
-        return self
-
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -324,7 +291,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         results.append(
             run_boltz2_on_complex(
                 yaml_content=yaml_content, config=config, sp_complex=inputs.complexes[i],
-                instance=instance,
+                msas=inputs.msas, instance=instance,
             )
         )
     return Boltz2Output(structures=results)
@@ -404,65 +371,6 @@ def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], lis
     return protein_seqs, protein_chain_ids
 
 
-def _generate_msa_csv_files(
-    protein_seqs: list[str],
-    protein_chain_ids: list[str],
-    config: Boltz2Config,
-    output_dir: str,
-) -> Optional[dict[str, str]]:
-    """Generate MSA files in Boltz's CSV format using ColabFold search.
-
-    Args:
-        protein_seqs: List of protein sequences
-        protein_chain_ids: List of chain IDs (A, B, C...) corresponding to sequences
-        config: Boltz2 configuration with MSA settings
-        output_dir: Directory where CSV files will be written
-
-    Returns:
-        Dictionary mapping chain_id -> csv_path, or None if no protein sequences
-    """
-    if not protein_seqs:
-        return None
-
-    # Use ColabFold search tool to generate MSAs
-    if config.verbose:
-        logger.info(
-            f"Generating MSAs for {len(protein_seqs)} protein chain(s) using ColabFold search..."
-        )
-
-    queries = [(seq, name) for seq, name in zip(protein_seqs, protein_chain_ids)]
-    colabfold_input = ColabfoldSearchInput(queries=queries)
-
-    try:
-        colabfold_output = run_colabfold_search(colabfold_input, config.colabfold_search_config)
-    except Exception as e:
-        raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
-
-    # Convert MSAs to Boltz's CSV format
-    msa_dir = os.path.join(output_dir, "msas")
-    os.makedirs(msa_dir, exist_ok=True)
-
-    msa_paths = {}
-    for result in colabfold_output.results:
-        if result.msa is not None:
-            # Write MSA in CSV format with pairing keys
-            csv_path = os.path.join(msa_dir, f"{result.sequence_id}.csv")
-            _msa_to_csv_file(msa=result.msa, csv_path=csv_path, query_index=0)
-
-            # Store path for later use
-            msa_paths[result.sequence_id] = csv_path
-
-            if config.verbose:
-                logger.info(
-                    f"Generated MSA for chain {result.sequence_id}: {result.num_homologs_found} homologs found"
-                )
-        else:
-            if config.verbose:
-                logger.warning(f"No homologs found for chain {result.sequence_id}")
-
-    return msa_paths if msa_paths else None
-
-
 def _serialize_csv_files(msa_paths: dict[str, str]) -> dict[str, bytes]:
     """Read CSV files and serialize them as bytes.
 
@@ -484,6 +392,7 @@ def run_boltz2_on_complex(
     yaml_content: str,
     config: Boltz2Config,
     sp_complex,
+    msas: dict | None = None,
     instance=None,
 ) -> Structure:
     """
@@ -504,52 +413,42 @@ def run_boltz2_on_complex(
         output_dir = os.path.join(temp_dir, "boltz2_output")
         os.makedirs(output_dir)
 
-        # Handle ColabFold MSA generation if needed
-        msa_paths = None
+        # Write pre-computed MSAs to CSV files and update YAML
+        msa_paths: dict[str, str] = {}
         if config.use_msa:
-            # Extract protein sequences and generate MSAs
             protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(sp_complex)
+            if protein_seqs and msas:
+                msa_dir = os.path.join(temp_dir, "msas")
+                os.makedirs(msa_dir, exist_ok=True)
+                for seq, chain_id in zip(protein_seqs, protein_chain_ids):
+                    if seq in msas:
+                        csv_path = os.path.join(msa_dir, f"{chain_id}.csv")
+                        _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
+                        msa_paths[chain_id] = csv_path
+                        if config.verbose:
+                            logger.info(
+                                f"Assigned MSA to chain {chain_id} "
+                                f"({len(msas[seq])} sequences)"
+                            )
 
+            # Update YAML: set MSA paths or "empty" for all protein chains
             if protein_seqs:
-                # Configure output directory for MSAs (local mode requires this)
-                msa_config = config.colabfold_search_config.model_copy(deep=True)
-                msa_config.output_dir = temp_dir
-
-                # Temporarily swap config to use the modified one for local execution
-                original_config = config.colabfold_search_config
-                config.colabfold_search_config = msa_config
-                try:
-                    msa_paths = _generate_msa_csv_files(
-                        protein_seqs, protein_chain_ids, config, temp_dir
-                    )
-                finally:
-                    # Restore original config
-                    config.colabfold_search_config = original_config
-
-                # Update YAML content to include MSA paths or set empty for chains without MSAs
                 yaml_dict = yaml.safe_load(yaml_content)
                 for seq_entry in yaml_dict["sequences"]:
                     for entity_type in seq_entry:
                         chain_id = seq_entry[entity_type]["id"]
-                        # Handle both string and list formats for chain ID
                         if isinstance(chain_id, list):
                             chain_id = chain_id[0] if chain_id else None
-
-                        # Only set MSA for protein chains
                         if entity_type == "protein" and chain_id:
-                            if msa_paths and chain_id in msa_paths:
-                                # Use the generated MSA
+                            if chain_id in msa_paths:
                                 seq_entry[entity_type]["msa"] = msa_paths[chain_id]
                             else:
-                                # No MSA found for this chain, set to empty
                                 seq_entry[entity_type]["msa"] = "empty"
-                                print(f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ")
                                 warnings.warn(
-                                    f"No Homologs were found by ColabFold for chain {chain_id} - setting msa='empty'. ",
+                                    f"No homologs found for chain {chain_id} - setting msa='empty'.",
                                     UserWarning,
-                                    stacklevel=2
+                                    stacklevel=2,
                                 )
-
                 yaml_content = yaml.dump(
                     yaml_dict, sort_keys=False, default_flow_style=False
                 )

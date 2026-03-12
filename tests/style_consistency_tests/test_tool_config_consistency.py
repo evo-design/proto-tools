@@ -68,24 +68,10 @@ def test_tool_config_consistency(config_model):
                     f"{config_model.__name__}.{field_name} default value is None but annotation is not Optional[...]"
                 )
 
-        # ADVANCED FLAG: Must exist and be a boolean
+        # CONFIG FIELD TYPE: Must be created via ConfigField()
         json_schema_extra = field_info.json_schema_extra or {}
-        assert "advanced" in json_schema_extra, (
-            f"{config_model.__name__}.{field_name} missing 'advanced' flag. "
-            "Add: Field(..., json_schema_extra={{'advanced': False}})"
-        )
-        assert isinstance(json_schema_extra["advanced"], bool), (
-            f"{config_model.__name__}.{field_name} 'advanced' flag is not a boolean. "
-            "Add: Field(..., json_schema_extra={{'advanced': False}})"
-        )
-
-        assert "hidden" in json_schema_extra, (
-            f"{config_model.__name__}.{field_name} missing 'hidden' flag. "
-            "Add: Field(..., json_schema_extra={{'hidden': False}})"
-        )
-        assert isinstance(json_schema_extra["hidden"], bool), (
-            f"{config_model.__name__}.{field_name} 'hidden' flag is not a boolean. "
-            "Add: Field(..., json_schema_extra={{'hidden': False}})"
+        assert json_schema_extra.get("_field_type") == "ConfigField", (
+            f"{config_model.__name__}.{field_name} must use ConfigField() instead of Field()."
         )
 
         # Pull advanced and hidden flags

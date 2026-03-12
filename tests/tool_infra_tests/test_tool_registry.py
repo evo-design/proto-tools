@@ -1222,3 +1222,57 @@ def test_cacheable_on_toolspec(clean_registry):
     assert spec2.cacheable is False
 
 
+# ── preprocess hook ──────────────────────────────────────────────────────────
+
+
+class PreprocessConfig(BaseConfig):
+    """Config that transforms inputs via preprocess."""
+
+    prefix: str = ConfigField(default="PRE", description="Prefix to add")
+
+    def preprocess(self, inputs):
+        return inputs.model_copy(
+            update={"input_data": f"{self.prefix}_{inputs.input_data}"}
+        )
+
+
+def test_preprocess_hook_called_by_wrapper(clean_registry):
+    """The @tool wrapper must call config.preprocess(inputs) before execution."""
+
+    @clean_registry.register(
+        key="preprocess-test",
+        label="Preprocess Test",
+        category="test",
+        input_class=MockToolInput,
+        config_class=PreprocessConfig,
+        output_class=MockToolOutput,
+        description="Test preprocess hook",
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result=inputs.input_data)
+
+    inputs = MockToolInput(input_data="hello")
+    config = PreprocessConfig(prefix="PRE")
+    result = run_tool(inputs, config)
+    assert result.result == "PRE_hello"
+
+
+def test_preprocess_default_noop(clean_registry):
+    """BaseConfig.preprocess() returns inputs unchanged."""
+
+    @clean_registry.register(
+        key="preprocess-noop-test",
+        label="Preprocess Noop Test",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Test default preprocess is noop",
+    )
+    def run_tool(inputs, config=None, instance=None):
+        return MockToolOutput(result=inputs.input_data)
+
+    inputs = MockToolInput(input_data="unchanged")
+    config = MockToolConfig(param1="x")
+    result = run_tool(inputs, config)
+    assert result.result == "unchanged"

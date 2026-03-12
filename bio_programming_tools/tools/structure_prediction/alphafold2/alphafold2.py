@@ -10,21 +10,14 @@ using the original AlphaFold2 model through the ColabDesign JAX wrapper.
 from __future__ import annotations
 
 import logging
-import string
 from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, model_validator
 from tqdm import tqdm
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-    ColabfoldSearchInput,
-    run_colabfold_search,
-)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
-    StructurePredictionComplex,
-    StructurePredictionConfig,
+    MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
@@ -50,6 +43,8 @@ class AlphaFold2Input(StructurePredictionInput):
         complexes (List[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
 
     Note:
         AlphaFold2 only supports protein sequences (amino acids). DNA, RNA, ligands,
@@ -114,23 +109,15 @@ AlphaFold2Output = StructurePredictionOutput
 
 
 # Config:
-class AlphaFold2Config(StructurePredictionConfig):
+class AlphaFold2Config(MSAStructurePredictionConfig):
     """Configuration object for AlphaFold2 structure prediction.
 
     This class defines configuration parameters for running AlphaFold2 via
     the ColabDesign JAX wrapper.
 
-    Inherits from ``StructurePredictionConfig``.
+    Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains using ColabFold search. If ``False``, runs in single-sequence
-            mode without MSAs. Default: ``True``.
-
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
-            ColabFold MSA search. Only used when ``use_msa=True``.
-            Default: Uses ColabfoldSearchConfig defaults.
-
         num_recycles (int): Number of recycling iterations through the model.
             Higher values can improve accuracy at the cost of computation time.
             Range: 0-48. Default: 3.
@@ -156,17 +143,6 @@ class AlphaFold2Config(StructurePredictionConfig):
             from ``BaseConfig``. Default: ``False``.
     """
 
-    use_msa: bool = ConfigField(
-        title="Use MSA",
-        default=True,
-        description="Whether to generate and use MSAs for protein chains using ColabFold search",
-    )
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
-        title="ColabFold Search Config",
-        default=None,
-        description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
-        hidden=True,
-    )
     num_recycles: int = ConfigField(
         title="Number of Recycles",
         default=3,
@@ -207,9 +183,6 @@ class AlphaFold2Config(StructurePredictionConfig):
                 "Use model_num to select a specific parameter set, or "
                 "num_ensemble_models to average multiple models."
             )
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
         return self
 
 
@@ -290,27 +263,24 @@ def run_alphafold2(
         desc="Folding structures (AlphaFold2)",
         unit="structure",
     ):
-        # Generate MSA if requested (single-chain only)
+        # Read pre-computed MSA (single-chain only)
         msa_a3m_content = None
-        if config.use_msa:
+        if inputs.msas:
             if complex_data["num_chains"] > 1:
                 logger.info(
                     "MSA not yet supported for multi-chain complexes, "
                     "running without MSA"
                 )
             else:
-                protein_seqs, protein_chain_ids = (
-                    _extract_protein_sequences_and_chain_ids(
-                        inputs.complexes[complex_data["complex_idx"]]
-                    )
-                )
-                if protein_seqs:
-                    msa_dict = _generate_msa_for_alphafold2(
-                        protein_seqs, protein_chain_ids, config
-                    )
-                    if msa_dict:
-                        # Single-chain: extract the A3M string directly
-                        msa_a3m_content = next(iter(msa_dict.values()))
+                protein_seq = inputs.complexes[complex_data["complex_idx"]].chains[0].sequence
+                msa = inputs.msas.get(protein_seq)
+                if msa is not None:
+                    msa_a3m_content = msa.to_a3m_string()
+                    if config.verbose:
+                        logger.info(
+                            f"Loaded MSA for complex {complex_data['complex_idx']} "
+                            f"({len(msa)} sequences)"
+                        )
 
         # Prepare input data for standalone dispatch
         input_data = {
@@ -357,80 +327,3 @@ def run_alphafold2(
         },
     )
 
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-def _extract_protein_sequences_and_chain_ids(
-    sp_complex: StructurePredictionComplex,
-) -> tuple[list[str], list[str]]:
-    """Extract protein sequences and their chain IDs from a complex.
-
-    Args:
-        sp_complex: StructurePredictionComplex instance containing chain information
-
-    Returns:
-        Tuple of (protein_seqs, protein_chain_ids) where chain IDs are uppercase letters
-    """
-    all_chain_ids = list(string.ascii_uppercase)
-    protein_seqs = []
-    protein_chain_ids = []
-    for i, chain in enumerate(sp_complex.chains):
-        if chain.entity_type == "protein":
-            protein_seqs.append(chain.sequence)
-            protein_chain_ids.append(all_chain_ids[i])
-    return protein_seqs, protein_chain_ids
-
-
-def _generate_msa_for_alphafold2(
-    protein_seqs: list[str],
-    protein_chain_ids: list[str],
-    config: AlphaFold2Config,
-) -> Optional[dict[str, str]]:
-    """Generate MSAs for protein sequences using ColabFold search.
-
-    Returns a dict mapping chain_id -> A3M string content, or None if no
-    protein sequences or no homologs found.
-
-    Args:
-        protein_seqs: List of protein sequences
-        protein_chain_ids: List of chain IDs (A, B, C...) corresponding to sequences
-        config: AlphaFold2 configuration with MSA settings
-
-    Returns:
-        Dictionary mapping chain_id -> A3M content string, or None
-    """
-    if not protein_seqs:
-        return None
-
-    if config.verbose:
-        logger.info(
-            f"Generating MSAs for {len(protein_seqs)} protein chain(s) using ColabFold search..."
-        )
-
-    queries = [(seq, name) for seq, name in zip(protein_seqs, protein_chain_ids)]
-    colabfold_input = ColabfoldSearchInput(queries=queries)
-
-    try:
-        colabfold_output = run_colabfold_search(
-            colabfold_input, config.colabfold_search_config
-        )
-    except Exception as e:
-        raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
-
-    # Serialize MSAs as A3M strings
-    msa_a3m_content = {}
-    for result in colabfold_output.results:
-        if result.msa is not None:
-            msa_a3m_content[result.sequence_id] = result.msa.to_a3m_string()
-
-            if config.verbose:
-                logger.info(
-                    f"Generated MSA for chain {result.sequence_id}: "
-                    f"{result.num_homologs_found} homologs found"
-                )
-        else:
-            if config.verbose:
-                logger.warning(f"No homologs found for chain {result.sequence_id}")
-
-    return msa_a3m_content if msa_a3m_content else None

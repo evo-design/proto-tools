@@ -52,7 +52,7 @@ from .tool_cache import (
     clear_tool_cache,
     get_cache_info,
 )
-from .tool_io import BaseToolInput, BaseToolOutput, ToolExecutionError
+from .tool_io import BaseToolInput, BaseToolOutput, InputField, ToolExecutionError
 
 __all__ = [
     # Config
@@ -85,6 +85,7 @@ __all__ = [
     # I/O
     "BaseToolInput",
     "BaseToolOutput",
+    "InputField",
     "ToolExecutionError",
     # Caching
     "clear_cache",

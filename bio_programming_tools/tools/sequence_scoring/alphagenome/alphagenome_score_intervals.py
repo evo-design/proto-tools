@@ -12,7 +12,7 @@ from pydantic import Field, field_validator
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .shared_data_models import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
@@ -38,7 +38,7 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
             A single interval is auto-wrapped into a list.
     """
 
-    intervals: List[AlphaGenomeInterval] = Field(
+    intervals: List[AlphaGenomeInterval] = InputField(
         description="Genomic intervals for scoring",
     )
 

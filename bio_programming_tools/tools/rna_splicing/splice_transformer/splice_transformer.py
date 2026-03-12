@@ -14,7 +14,7 @@ from pydantic import Field, field_serializer, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +105,13 @@ class SpliceTransformerInput(BaseToolInput):
         but uses the full context for accurate splice site identification.
     """
 
-    target_seqs: List[str] = Field(
+    target_seqs: List[str] = InputField(
         description="Sequence(s) on which to make splicing predictions",
     )
-    left_contexts: List[str] = Field(
+    left_contexts: List[str] = InputField(
         description="Sequence(s) of the left context. Must be the same length as target_seqs",
     )
-    right_contexts: List[str] = Field(
+    right_contexts: List[str] = InputField(
         description="Sequence(s) of the right context. Must be the same length as target_seqs",
     )
 

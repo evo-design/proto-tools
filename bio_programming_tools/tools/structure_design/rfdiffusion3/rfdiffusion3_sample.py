@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from bio_programming_tools.entities.structures import Structure
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -224,11 +224,11 @@ class RFdiffusion3Input(BaseToolInput):
         ... )
     """
 
-    design_specs: List[RFdiffusion3DesignSpec] = Field(
+    design_specs: List[RFdiffusion3DesignSpec] = InputField(
         default_factory=list,
         description="List of design specifications",
     )
-    raw_json: Optional[str] = Field(
+    raw_json: Optional[str] = InputField(
         default=None,
         description="Raw JSON string for advanced RFdiffusion3 configuration",
     )

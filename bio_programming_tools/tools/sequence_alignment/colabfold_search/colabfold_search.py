@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class ColabfoldSearchInput(BaseToolInput):
         >>> inputs = ColabfoldSearchInput(queries=[query1])
     """
 
-    queries: List[ColabfoldSearchQuery] = Field(
+    queries: List[ColabfoldSearchQuery] = InputField(
         description="List of protein sequences to search for homologs"
     )
 

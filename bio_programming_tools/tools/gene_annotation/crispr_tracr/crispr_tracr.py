@@ -20,6 +20,7 @@ from bio_programming_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    InputField,
     resolve_sequence_ids,
 )
 
@@ -69,10 +70,10 @@ class CrisprTracrInput(BaseToolInput):
         sequence_ids (Optional[List[str]]): Optional sequence identifiers.
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Nucleotide sequence(s) to predict tracrRNA from"
     )
-    sequence_ids: Optional[List[str]] = Field(
+    sequence_ids: Optional[List[str]] = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )

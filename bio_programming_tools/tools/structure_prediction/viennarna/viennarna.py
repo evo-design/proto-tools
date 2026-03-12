@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -43,7 +43,7 @@ class ViennaRNAInput(BaseToolInput):
         (containing T) will be converted to RNA (T -> U) before folding
         unless DNA parameters are explicitly loaded.
     """
-    sequences: List[str] = Field(description="List of input RNA sequences")
+    sequences: List[str] = InputField(description="List of input RNA sequences")
 
     @field_validator("sequences")
     @classmethod

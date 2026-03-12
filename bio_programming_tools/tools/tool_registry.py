@@ -304,6 +304,9 @@ class ToolRegistry:
                             logger.debug("[Cache Hit] %s: using cached result", key)
                             return cached
 
+                # --- Preprocess inputs via config hook ---
+                inputs = config.preprocess(inputs)
+
                 # --- Dispatch (pool or local) ---
 
                 # Check for active ToolPool (transparent parallel dispatch)

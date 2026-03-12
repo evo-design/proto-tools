@@ -15,19 +15,15 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional
 
-from pydantic import model_validator
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.ligands import map_smiles_to_ccd_code
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    ColabfoldSearchConfig,
-)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+    MSAStructurePredictionConfig,
     StructurePredictionComplex,
-    StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
@@ -55,6 +51,8 @@ class AlphaFold3Input(StructurePredictionInput):
         complexes (List[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more sequences of proteins, DNA, RNA, or ligands.
+        msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
+            Populated by preprocess() or supplied directly. Default: None.
     """
 
     # AlphaFold3 supports all standard entity types except glycan
@@ -65,13 +63,13 @@ class AlphaFold3Input(StructurePredictionInput):
 AlphaFold3Output = StructurePredictionOutput
 
 # Config:
-class AlphaFold3Config(StructurePredictionConfig):
+class AlphaFold3Config(MSAStructurePredictionConfig):
     """Configuration object for AlphaFold3 structure prediction.
 
     This class defines configuration parameters for running AlphaFold3, a state-of-the-art
     multi-modal structure predictor.
 
-    Inherits from ``StructurePredictionConfig``.
+    Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
         name (str): Name of the folding job. Default: ``"af3_job"``.
@@ -80,14 +78,6 @@ class AlphaFold3Config(StructurePredictionConfig):
             Note: AlphaFold3 will do five diffusion samples per seed, so this often can be
             set to a single seed. More seeds are required for complex docking tasks,
             such as antibody-antigen docking.
-
-        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
-            for protein chains. If ``False``, skips MSA generation. Default: ``True``.
-
-        colabfold_search_config (ColabfoldSearchConfig): Configuration for ColabFold
-            MSA search. Controls search mode (local/remote), database paths, and other
-            MSA generation parameters. Only used if ``use_msa`` is ``True``.
-            Default: Uses ColabfoldSearchConfig defaults.
 
         output_dir (Optional[str]): Path prefix for the AlphaFold3 output directory.
             Appends ``_af3_results`` to the provided string. If ``None`` (default),
@@ -128,19 +118,6 @@ class AlphaFold3Config(StructurePredictionConfig):
         advanced=True,
     )
 
-    use_msa: bool = ConfigField(
-        title="Use MSA",
-        default=True,
-        description="Whether to generate and use MSAs for protein chains",
-    )
-
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
-        title="ColabFold Search Config",
-        default=None,
-        description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
-        hidden=True,
-    )
-
     output_dir: Optional[str] = ConfigField(
         title="Output Directory Prefix",
         default=None,
@@ -175,14 +152,6 @@ class AlphaFold3Config(StructurePredictionConfig):
         description="Path to AlphaFold3 sequence database",
         hidden=True,
     )
-
-    @model_validator(mode="after")
-    def sync_nested_config(self):
-        """Sync verbose flag with nested colabfold_search_config."""
-        if self.colabfold_search_config is None:
-            self.colabfold_search_config = ColabfoldSearchConfig()
-        self.colabfold_search_config.verbose = self.verbose
-        return self
 
 # ============================================================================
 # Tool Implementation
@@ -234,16 +203,11 @@ def run_alphafold3(
             input_dir = os.path.join(output_dir, "af3_inputs")
             os.makedirs(input_dir, exist_ok=True)
 
-            # Generate MSAs if requested
-            if config.use_msa:
-                input_json = _generate_msas(
-                    input_json,
-                    input_dir,
-                    config.colabfold_search_config,
-                    verbose=config.verbose,
+            # Write pre-computed MSAs to A3M files
+            if inputs.msas:
+                input_json = _assign_msas_to_input_json(
+                    input_json, inputs.msas, input_dir, config.verbose
                 )
-            else:
-                logger.debug("MSA generation skipped (use_msa=False).")
 
             # Write input JSON to file for worker protocol
             input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
@@ -294,108 +258,47 @@ def run_alphafold3(
 # ============================================================================
 # Helper Functions
 # ============================================================================
-def _generate_msas(
+def _assign_msas_to_input_json(
     input_json_data: AlphaFold3JSON,
+    msas: dict[str, object],
     input_dir: str,
-    colabfold_search_config: ColabfoldSearchConfig,
     verbose: bool = False,
 ) -> AlphaFold3JSON:
-    """
-    Generate multiple sequence alignments (MSAs) for protein chains using ColabFold search.
+    """Write pre-computed MSAs to A3M files and assign paths to input JSON.
 
     Args:
         input_json_data: AlphaFold3 input JSON dictionary to update with MSA paths.
-        input_dir: Directory for MSA output files (AlphaFold3 input directory).
-        colabfold_search_config: Configuration for ColabFold MSA search.
+        msas: Pre-computed MSAs keyed by sequence string.
+        input_dir: Directory for MSA output files.
         verbose: Whether to print progress messages.
 
     Returns:
         Updated input_json_data with MSA paths populated.
     """
-    from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-        ColabfoldSearchInput,
-        run_colabfold_search,
-    )
-
-    name = input_json_data["name"]
-
-    # Collect unique sequences and track which chain indices use each.
-    seq_to_indices: Dict[str, List[int]] = {}
-    seq_to_name: Dict[str, str] = {}
+    msa_dir = os.path.join(input_dir, "msas")
+    os.makedirs(msa_dir, exist_ok=True)
 
     for seq_idx, seq_entry in enumerate(input_json_data["sequences"]):
         if "protein" not in seq_entry:
             continue
         sequence = seq_entry["protein"]["sequence"]
-        if sequence not in seq_to_indices:
-            chain_id = seq_entry["protein"]["id"]
-            if isinstance(chain_id, list):
-                chain_id = chain_id[0]
-            seq_to_indices[sequence] = []
-            seq_to_name[sequence] = f"{name}_{chain_id}_{seq_idx}"
-        seq_to_indices[sequence].append(seq_idx)
+        msa = msas.get(sequence)
+        if msa is None:
+            continue
 
-    if not seq_to_indices:
-        logger.debug("No protein sequences found, skipping MSA generation.")
-        return input_json_data
+        chain_id = seq_entry["protein"]["id"]
+        if isinstance(chain_id, list):
+            chain_id = chain_id[0]
 
-    unique_seqs = list(seq_to_indices.keys())
-    unique_names = [seq_to_name[s] for s in unique_seqs]
+        a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{seq_idx}.a3m")
+        msa.to_a3m_file(a3m_path, query_index=0)
 
-    # Create queries for ColabFold search
-    queries = [(seq, name) for seq, name in zip(unique_seqs, unique_names)]
-    colabfold_input = ColabfoldSearchInput(queries=queries)
+        rel_path = os.path.relpath(a3m_path, input_dir)
+        seq_entry["protein"]["unpairedMsaPath"] = rel_path
 
-    # Configure output directory for MSAs within the AlphaFold3 input directory
-    msa_config = colabfold_search_config.model_copy(deep=True)
-    msa_config.output_dir = input_dir
-    msa_config.verbose = verbose
-
-    logger.debug(
-        f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) using ColabFold search..."
-    )
-
-    # Run ColabFold search
-    try:
-        colabfold_output = run_colabfold_search(colabfold_input, msa_config)
-    except Exception as e:
-        raise RuntimeError(f"ColabFold MSA search failed: {e}") from e
-
-    # Process results and assign MSA paths to chains
-    msa_paths: Dict[str, str] = {}
-
-    for result in colabfold_output.results:
-        if result.msa is not None:
-            # Write the MSA to A3M format for AlphaFold3
-            # The MSA class automatically handles insertion removal when loading A3M files
-            # and to_a3m_file() writes clean A3M without lowercase insertions
-            a3m_path = os.path.join(input_dir, "msas", f"{result.sequence_id}.a3m")
-            os.makedirs(os.path.dirname(a3m_path), exist_ok=True)
-            result.msa.to_a3m_file(a3m_path, query_index=0)
-
-            # Store relative path from input_dir
-            rel_path = os.path.relpath(a3m_path, input_dir)
-            msa_paths[result.sequence_id] = rel_path
-
-            logger.debug(
-                f"Generated MSA for {result.sequence_id}: {result.num_homologs_found} homologs found"
-            )
-        else:
-            logger.debug(f"Warning: No homologs found for {result.sequence_id}")
-
-    # Assign MSA paths back to all chains that use each sequence
-    for sequence, indices in seq_to_indices.items():
-        seq_name = seq_to_name[sequence]
-        if seq_name in msa_paths:
-            for idx in indices:
-                input_json_data["sequences"][idx]["protein"]["unpairedMsaPath"] = (
-                    msa_paths[seq_name]
-                )
-                chain_id = input_json_data["sequences"][idx]["protein"]["id"]
-                logger.debug(f"Assigned MSA '{msa_paths[seq_name]}' to chain {chain_id}")
-        else:
-            logger.debug(
-                f"Warning: No MSA available for sequence used in chain indices {indices}"
+        if verbose:
+            logger.info(
+                f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)"
             )
 
     return input_json_data

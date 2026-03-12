@@ -12,7 +12,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +79,13 @@ class BlastSearchInput(BaseToolInput):
             during validation. Read-only — do not set manually.
     """
 
-    query: str = Field(
+    query: str = InputField(
         description=(
             "Query sequence string or path to a FASTA file containing "
             "query sequence(s)"
         ),
     )
-    query_type: Literal["sequence", "fasta_path"] = Field(
+    query_type: Literal["sequence", "fasta_path"] = InputField(
         default="sequence",
         description=(
             "Auto-inferred query type: 'sequence' for raw string, "

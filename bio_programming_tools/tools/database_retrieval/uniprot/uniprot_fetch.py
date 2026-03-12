@@ -16,7 +16,7 @@ from pydantic import Field, model_validator
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -41,23 +41,23 @@ class UniProtFetchInput(BaseToolInput):
             ranking.
     """
 
-    uniprot_id: Optional[str] = Field(
+    uniprot_id: Optional[str] = InputField(
         default=None,
         description="UniProt accession for direct entry lookup",
     )
-    target_name: Optional[str] = Field(
+    target_name: Optional[str] = InputField(
         default=None,
         description="Gene or protein name for search",
     )
-    organism: Optional[str] = Field(
+    organism: Optional[str] = InputField(
         default=None,
         description="Organism for search disambiguation",
     )
-    prefer_pdb_crossref: bool = Field(
+    prefer_pdb_crossref: bool = InputField(
         default=False,
         description="When searching, prefer entries that have linked PDB structures",
     )
-    max_candidates: int = Field(
+    max_candidates: int = InputField(
         default=5,
         ge=1,
         le=25,

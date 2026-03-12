@@ -8,7 +8,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -28,7 +28,7 @@ class CreateBlastDbInput(BaseToolInput):
             For protein databases, sequences should be amino acids.
     """
 
-    fasta: str = Field(
+    fasta: str = InputField(
         description="Path to the input FASTA file containing sequences to create a BLAST database from"
     )
 

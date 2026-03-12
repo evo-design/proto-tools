@@ -12,7 +12,7 @@ from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -27,7 +27,7 @@ class MockCLIToolInput(BaseToolInput):
         data: Input data to pass through the CLI subprocess.
     """
 
-    data: list[float] = Field(
+    data: list[float] = InputField(
         default=[1.0, 2.0, 3.0, 4.0],
         description="Input data to pass through the CLI subprocess",
     )

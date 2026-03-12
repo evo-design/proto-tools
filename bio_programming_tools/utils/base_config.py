@@ -4,6 +4,7 @@ Base configuration class for all pydantic configs.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -46,6 +47,7 @@ def ConfigField(
     json_schema_extra["hidden"] = hidden
     json_schema_extra["reload_on_change"] = reload_on_change
     json_schema_extra["include_in_key"] = include_in_key
+    json_schema_extra["_field_type"] = "ConfigField"
 
     kwargs["json_schema_extra"] = json_schema_extra
 
@@ -116,6 +118,13 @@ class BaseConfig(BaseModel):
             if not (info.json_schema_extra or {}).get("include_in_key", True)
         }
 
+    def cache_key(self) -> str:
+        """Deterministic string for cache key generation, excluding non-key fields."""
+        model_dict = self.model_dump(
+            exclude_none=True, exclude=self.cache_exclude_fields()
+        )
+        return json.dumps(model_dict, sort_keys=True, default=str)
+
     device: str = ConfigField(
         title="Device",
         default="cpu",
@@ -149,3 +158,7 @@ class BaseConfig(BaseModel):
         config subclasses where this applies; the default is 1.
         """
         return 1
+
+    def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
+        """Transform inputs before tool execution. Override in subclasses."""
+        return inputs

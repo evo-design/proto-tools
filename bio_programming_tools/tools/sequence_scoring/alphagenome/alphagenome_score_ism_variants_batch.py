@@ -11,7 +11,7 @@ from pydantic import Field, field_validator, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 from .alphagenome_score_variants import AlphaGenomeScoreVariantsConfig
 from .shared_data_models import AlphaGenomeInterval, AlphaGenomeScoreOutput
@@ -39,24 +39,24 @@ class AlphaGenomeISM(AlphaGenomeInterval):
         alternate_bases (Optional[str]): Optional existing variant alt allele.
     """
 
-    ism_interval_start: int = Field(
+    ism_interval_start: int = InputField(
         ge=0,
         description="ISM sub-interval start (0-based, inclusive)",
     )
-    ism_interval_end: int = Field(
+    ism_interval_end: int = InputField(
         ge=1,
         description="ISM sub-interval end (0-based, exclusive)",
     )
-    variant_position: Optional[int] = Field(
+    variant_position: Optional[int] = InputField(
         default=None,
         ge=0,
         description="Optional existing variant position for ISM context (0-based)",
     )
-    reference_bases: Optional[str] = Field(
+    reference_bases: Optional[str] = InputField(
         default=None,
         description="Optional existing variant reference allele",
     )
-    alternate_bases: Optional[str] = Field(
+    alternate_bases: Optional[str] = InputField(
         default=None,
         description="Optional existing variant alternate allele",
     )
@@ -106,7 +106,7 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
             A single request is auto-wrapped into a list.
     """
 
-    requests: List[AlphaGenomeISM] = Field(
+    requests: List[AlphaGenomeISM] = InputField(
         description="ISM requests to process",
     )
 

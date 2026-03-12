@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 from bio_programming_tools.utils import BaseConfig, ConfigField
 
 
@@ -35,7 +35,7 @@ class MaskedModelInput(BaseToolInput):
             (20 standard amino acids + X (any amino acid) + * (stop codon)).
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])",
         examples=[
             "MVLSP",
@@ -184,7 +184,7 @@ class MaskedModelScoringInput(BaseToolInput):
             string or a list of strings.
     """
 
-    sequences: List[str] = Field(
+    sequences: List[str] = InputField(
         description="Protein sequences to score",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )

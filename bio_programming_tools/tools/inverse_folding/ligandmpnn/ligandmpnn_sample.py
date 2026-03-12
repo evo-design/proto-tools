@@ -41,7 +41,7 @@ class LigandMPNNSequences(DesignedSequences):
     ligandmpnn_metrics: List[Dict[str, Any]] = Field(
         description="Metrics returned by LigandMPNN",
         title="LigandMPNN Metrics",
-        advanced=True,
+        json_schema_extra={"advanced": True},
     )
 
 

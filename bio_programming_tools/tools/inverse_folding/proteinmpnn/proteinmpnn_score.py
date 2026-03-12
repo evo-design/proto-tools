@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from pydantic import Field
 from tqdm import tqdm
 
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
@@ -15,7 +14,7 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput
+from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ class ProteinMPNNScoringInput(BaseToolInput):
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
-    sequence_structure_pairs: List[SequenceStructurePair] = Field(
+    sequence_structure_pairs: List[SequenceStructurePair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 
