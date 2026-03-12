@@ -196,7 +196,6 @@ class FAMPNNModel:
             for pdb_out in pdb_paths_out:
                 all_pdb_strings.append(Path(pdb_out).read_text())
 
-        self.unload()
         return {
             "sequences": all_sequences,
             "pdb_strings": all_pdb_strings,
@@ -217,7 +216,7 @@ class FAMPNNModel:
         verbose: bool = False,
     ) -> Dict[str, Any]:
         """Pack sidechains onto a backbone given known sequence."""
-        if not self._loaded:
+        if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
         elif self.device != device:
             self.to_device(device)
@@ -332,7 +331,6 @@ class FAMPNNModel:
             for pdb_out in pdb_paths_out:
                 all_pdb_strings.append(Path(pdb_out).read_text())
 
-        self.unload()
         return {
             "pdb_strings": all_pdb_strings,
             "psce": all_psce,
@@ -409,7 +407,6 @@ class FAMPNNModel:
                     for res_num in range(rc.restype_num)
                 }
 
-        self.unload()
         return {"scores": scores_dict}
 
     @staticmethod
@@ -513,7 +510,6 @@ class FAMPNNModel:
 
             scores_all += scores
 
-        self.unload()
         # Return original 1-indexed mutation strings in the output
         return {
             "mutations": mutations,

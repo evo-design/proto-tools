@@ -14,6 +14,10 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 
 
 class FAMPNNStructureInput(InverseFoldingStructureInput):
@@ -40,10 +44,6 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
         default=None,
         description="Chain IDs to residue positions with known sidechain coordinates to condition on (1-indexed).",
     )
-from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 
 logger = logging.getLogger(__name__)
 
