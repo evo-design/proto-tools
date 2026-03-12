@@ -223,10 +223,6 @@ result.export("protenix_output/", file_format="pdb")
   Random seeds for structure sampling. Each seed produces num_diffusion_samples independent samples.
 </ParamField>
 
-<ParamField path="use_msa" type="boolean" default="True">
-  Whether to generate and use MSAs for protein chains using ColabFold search
-</ParamField>
-
 <ParamField path="num_diffusion_samples" type="integer" default="5">
   Number of independent structure samples per seed (only the best is returned)
 </ParamField>
@@ -237,6 +233,10 @@ result.export("protenix_output/", file_format="pdb")
 
 <ParamField path="num_pairformer_cycles" type="integer" default="10">
   Number of Pairformer recycling iterations (higher=more refined but slower)
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
 </ParamField>
 
 ### Output

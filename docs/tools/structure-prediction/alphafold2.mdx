@@ -247,10 +247,6 @@ with ToolInstance.persist():
 
 ### Configuration
 
-<ParamField path="use_msa" type="boolean" default="True">
-  Whether to generate and use MSAs for protein chains using ColabFold search
-</ParamField>
-
 <ParamField path="num_recycles" type="integer" default="3">
   Number of recycling iterations (higher=more refined but slower)
 </ParamField>
@@ -265,6 +261,10 @@ with ToolInstance.persist():
 
 <ParamField path="seed" type="integer">
   Random seed for reproducibility. If None, uses non-deterministic initialization.
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
 </ParamField>
 
 ### Output
