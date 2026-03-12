@@ -202,10 +202,6 @@ for structure in result.structures:
 
 ### Configuration
 
-<ParamField path="use_msa" type="boolean" default="True">
-  Whether to generate and use MSAs for protein chains using ColabFold search
-</ParamField>
-
 <ParamField path="recycling_steps" type="integer" default="10">
   Number of iterative refinement passes (higher=more refined structures but slower)
 </ParamField>
@@ -216,6 +212,10 @@ for structure in result.structures:
 
 <ParamField path="diffusion_samples" type="integer" default="25">
   Number of independent structure samples to generate (Only best is returned for each complex)
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
 </ParamField>
 
 ### Output

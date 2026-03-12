@@ -201,10 +201,6 @@ for structure in result.structures:
   Whether to use ESM embeddings for improved predictions
 </ParamField>
 
-<ParamField path="use_msa" type="boolean" default="True">
-  Whether to generate and use MSAs for protein chains using ColabFold search
-</ParamField>
-
 <ParamField path="num_trunk_recycles" type="integer" default="3">
   Number of iterative refinement passes through the trunk network
 </ParamField>
@@ -219,6 +215,10 @@ for structure in result.structures:
 
 <ParamField path="num_trunk_samples" type="integer" default="1">
   Number of independent trunk forward passes per diffusion sample
+</ParamField>
+
+<ParamField path="use_msa" type="boolean" default="True">
+  Whether to generate and use MSAs for protein chains using ColabFold search
 </ParamField>
 
 ### Output
