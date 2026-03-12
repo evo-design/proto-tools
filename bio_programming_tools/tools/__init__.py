@@ -99,7 +99,7 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
 )
 
 # Inverse folding tools
-from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN
+from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN; FAMPNN
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
@@ -123,6 +123,27 @@ from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN
     run_ligandmpnn_score,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
+    AllMutationsScoreResult,
+    FAMPNNPackConfig,
+    FAMPNNPackInput,
+    FAMPNNPackingResult,
+    FAMPNNSampleConfig,
+    FAMPNNSampleInput,
+    FAMPNNSampleOutput,
+    FAMPNNScoreAllMutationsConfig,
+    FAMPNNScoreAllMutationsInput,
+    FAMPNNScoreAllMutationsOutput,
+    FAMPNNScoreConfig,
+    FAMPNNScoreInput,
+    FAMPNNScoreOutput,
+    FAMPNNSequences,
+    FAMPNNStructureInput,
+    MutationInput,
+    MutationScoreResult,
+    run_fampnn_pack,
+    run_fampnn_sample,
+    run_fampnn_score,
+    run_fampnn_score_all_mutations,
 )
 
 # ORF prediction tools
@@ -492,6 +513,28 @@ __all__ = [
     "LigandMPNNScoringConfig",
     "LigandMPNNScoringOutput",
     "LigandMPNNSequences",
+    # Inverse folding - FAMPNN
+    "AllMutationsScoreResult",
+    "FAMPNNPackConfig",
+    "FAMPNNPackInput",
+    "FAMPNNPackingResult",
+    "FAMPNNSampleConfig",
+    "FAMPNNSampleInput",
+    "FAMPNNSampleOutput",
+    "FAMPNNScoreAllMutationsConfig",
+    "FAMPNNScoreAllMutationsInput",
+    "FAMPNNScoreAllMutationsOutput",
+    "FAMPNNScoreConfig",
+    "FAMPNNScoreInput",
+    "FAMPNNScoreOutput",
+    "FAMPNNSequences",
+    "FAMPNNStructureInput",
+    "MutationInput",
+    "MutationScoreResult",
+    "run_fampnn_pack",
+    "run_fampnn_sample",
+    "run_fampnn_score",
+    "run_fampnn_score_all_mutations",
     # Inverse folding - Shared
     "SequenceStructurePair",
     "InverseFoldingStructureInput",

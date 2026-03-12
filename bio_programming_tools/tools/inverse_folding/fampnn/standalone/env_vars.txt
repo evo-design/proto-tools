@@ -1,0 +1,5 @@
+[passthrough]
+FAMPNN_WEIGHTS_DIR
+
+[set]
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib

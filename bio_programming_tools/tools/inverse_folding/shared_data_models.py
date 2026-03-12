@@ -130,11 +130,17 @@ class InverseFoldingStructureInput(BaseModel):
                         f"Valid positions: {chain_positions}"
                     )
 
-        return {
+        result = {
             "structure": resolved_structure,
             "chain_ids": resolved_chain_ids,
             "fixed_positions": fixed_positions,
         }
+        # Pass through extra keys for subclasses (e.g., fixed_sidechain_positions)
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if k not in result:
+                    result[k] = v
+        return result
 
     @property
     def structure_pdb(self) -> str:

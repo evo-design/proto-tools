@@ -1,0 +1,17 @@
+scipy
+biopython
+gemmi
+natsort
+omegaconf
+hydra-core
+einops
+torchtyping
+dm-tree
+timm
+jaxtyping
+joblib
+rdkit
+pandas
+tqdm
+pyyaml
+# fampnn installed separately in setup.sh (upstream lacks __init__.py files)
