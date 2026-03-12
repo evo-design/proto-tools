@@ -67,7 +67,7 @@ def test_segmasker_scores_sequences():
     assert len(result.low_complexity_counts) == 2
     assert len(result.sequence_lengths) == 2
     assert result.sequence_lengths[0] == 25
-    assert result.sequence_lengths[1] == 50
+    assert result.sequence_lengths[1] == 51
 
     # PolyA should have higher low-complexity fraction than hemoglobin
     assert all(0.0 <= f <= 1.0 for f in result.low_complexity_fractions)

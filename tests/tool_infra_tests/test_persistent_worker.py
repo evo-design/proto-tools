@@ -1,5 +1,6 @@
 """Tests for PersistentWorker and _worker_bootstrap."""
 
+import json
 import logging
 import os
 import signal
@@ -931,5 +932,77 @@ def test_helpers_not_copied_outside_standalone(tmp_path: Path):
         assert not helpers_path.exists(), \
             "standalone_helpers.py should not be copied for scripts outside standalone/ directories"
 
+    finally:
+        worker.stop()
+
+
+# ── File-based fallback for large responses ──────────────────────────────────
+
+
+def test_send_response_small_payload_uses_length_protocol():
+    """Small payloads should use the PROTO_LENGTH: pipe protocol."""
+    from io import StringIO
+
+    from bio_programming_tools.utils._worker_bootstrap import _send_response
+
+    buf = StringIO()
+    payload = '{"id":"abc","result":{"x":1}}'
+    _send_response(buf, payload)
+
+    output = buf.getvalue()
+    assert output.startswith("PROTO_LENGTH:")
+    header, body = output.split("\n", 1)
+    assert header == f"PROTO_LENGTH:{len(payload)}"
+    assert body == payload
+
+
+def test_send_response_large_payload_uses_file_protocol(monkeypatch):
+    """Payloads above the threshold should use the PROTO_FILE: protocol."""
+    import io
+
+    import bio_programming_tools.utils._worker_bootstrap as _wb
+
+    # Use a tiny threshold so we don't allocate 100MB in tests
+    monkeypatch.setattr(_wb, "_FILE_FALLBACK_THRESHOLD", 1000)
+
+    buf = io.StringIO()
+    padding = "x" * 1100
+    payload = json.dumps({"id": "abc", "result": {"data": padding}}, separators=(",", ":"))
+    assert len(payload) > 1000
+
+    _wb._send_response(buf, payload)
+
+    output = buf.getvalue()
+    assert output.startswith("PROTO_FILE:")
+    file_path = output.strip().split(":", 1)[1]
+
+    # File should exist with the correct content
+    assert Path(file_path).exists()
+    with open(file_path) as f:
+        assert f.read() == payload
+
+    # Clean up
+    os.unlink(file_path)
+
+
+def test_file_fallback_end_to_end(tmp_path: Path):
+    """End-to-end: worker returns a large payload via the PROTO_FILE: protocol."""
+    # Use a tiny threshold (1KB) so we don't allocate 100MB in tests.
+    # The threshold is set inside the worker subprocess via the script.
+    script = tmp_path / "large_script.py"
+    script.write_text(textwrap.dedent("""\
+        import bio_programming_tools.utils._worker_bootstrap as _wb
+        _wb._FILE_FALLBACK_THRESHOLD = 1000
+
+        def dispatch(input_dict):
+            return {"data": "x" * 2000}
+        """))
+
+    worker = _make_worker(script)
+    try:
+        result = worker.send({})
+        assert "data" in result
+        assert len(result["data"]) == 2000
+        assert result["data"] == "x" * 2000
     finally:
         worker.stop()

@@ -13,6 +13,7 @@ import os
 import select
 import signal
 import subprocess
+import tempfile
 import threading
 import uuid
 from pathlib import Path
@@ -469,58 +470,76 @@ class PersistentWorker:
                         f"Worker for {self.tool_name} timed out after {timeout}s"
                     )
 
-            # Read length-prefixed header, skipping non-LENGTH lines (warnings/logs)
+            # Read header, skipping non-protocol lines (warnings/logs).
+            # Header is either PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path>
+            # (large payload written to a temp file by the worker).
             prev_stdout_line: str | None = None
             prev_stdout_normalized: str | None = None
             while True:
-                length_line = self._process.stdout.readline()
-                if not length_line:
+                header_line = self._process.stdout.readline()
+                if not header_line:
                     stderr_tail = "\n".join(self._stderr_lines[-20:])
                     raise RuntimeError(
                         f"Worker for {self.tool_name} closed stdout unexpectedly.\n"
                         f"stderr:\n{stderr_tail}"
                     )
 
-                length_line = length_line.strip()
-                if length_line.startswith("LENGTH:"):
+                header_line = header_line.strip()
+                if header_line.startswith("PROTO_LENGTH:") or header_line.startswith("PROTO_FILE:"):
                     break
-                # Non-LENGTH line (warning/log) - skip duplicates and similar progress bars
-                # Fast path: skip exact duplicates
-                if length_line == prev_stdout_line:
+                # Non-protocol line (warning/log) — skip duplicates / progress bars
+                if header_line == prev_stdout_line:
                     continue
-                # Slow path: normalize and check for progress bar similarity
-                normalized = _normalize_progress_line(length_line)
+                normalized = _normalize_progress_line(header_line)
                 if normalized == prev_stdout_normalized:
                     continue
                 logger.debug(
-                    "[%s worker stdout] %s", self.tool_name, length_line
+                    "[%s worker stdout] %s", self.tool_name, header_line
                 )
-                prev_stdout_line = length_line
+                prev_stdout_line = header_line
                 prev_stdout_normalized = normalized
 
-            try:
-                json_length = int(length_line.split(":", 1)[1])
-            except (ValueError, IndexError) as exc:
-                raise RuntimeError(
-                    f"Worker for {self.tool_name} sent invalid LENGTH header: "
-                    f"{length_line!r}"
-                ) from exc
+            # Branch on header type
+            if header_line.startswith("PROTO_FILE:"):
+                # Large payload — worker wrote JSON to a temp file
+                file_path = header_line.split(":", 1)[1]
+                if not file_path.startswith(tempfile.gettempdir()):
+                    logger.warning(
+                        "Worker for %s sent file path outside temp directory: %s",
+                        self.tool_name, file_path,
+                    )
+                try:
+                    with open(file_path) as f:
+                        response = json.load(f)
+                finally:
+                    try:
+                        os.unlink(file_path)
+                    except OSError:
+                        pass
+            else:
+                # Standard LENGTH-prefixed pipe payload
+                try:
+                    json_length = int(header_line.split(":", 1)[1])
+                except (ValueError, IndexError) as exc:
+                    raise RuntimeError(
+                        f"Worker for {self.tool_name} sent invalid LENGTH header: "
+                        f"{header_line!r}"
+                    ) from exc
 
-            # Read exactly json_length bytes
-            response_bytes = self._process.stdout.read(json_length)
-            if len(response_bytes) != json_length:
-                raise RuntimeError(
-                    f"Worker for {self.tool_name} sent incomplete JSON: "
-                    f"expected {json_length} bytes, got {len(response_bytes)}"
-                )
+                response_bytes = self._process.stdout.read(json_length)
+                if len(response_bytes) != json_length:
+                    raise RuntimeError(
+                        f"Worker for {self.tool_name} sent incomplete JSON: "
+                        f"expected {json_length} bytes, got {len(response_bytes)}"
+                    )
 
-            try:
-                response = json.loads(response_bytes)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    f"Worker for {self.tool_name} returned invalid JSON: "
-                    f"{response_bytes!r}"
-                ) from exc
+                try:
+                    response = json.loads(response_bytes)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(
+                        f"Worker for {self.tool_name} returned invalid JSON: "
+                        f"{response_bytes!r}"
+                    ) from exc
 
             if response.get("id") != request_id:
                 raise RuntimeError(
