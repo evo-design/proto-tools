@@ -198,6 +198,7 @@ def example_input():
     output_class=FAMPNNScoreOutput,
     description="Score protein mutations with full-atom context using FAMPNN",
     uses_gpu=True,
+    cacheable=True,
     example_input=example_input,
     iterable_input_field="inputs",
     iterable_output_field="results",

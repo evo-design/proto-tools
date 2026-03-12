@@ -188,6 +188,7 @@ def run_fampnn_pack(
     ):
         struct_pdbs, struct_psce = [], []
         remaining = config.num_samples_per_structure
+        chunk_idx = 0
         while remaining > 0:
             chunk = min(config.batch_size, remaining)
             input_dict = {
@@ -196,7 +197,7 @@ def run_fampnn_pack(
                 "num_samples": chunk,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
                 "scn_step_scale": config.scn_step_scale,
-                "seed": config.seed,
+                "seed": config.seed + chunk_idx,
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,
@@ -211,6 +212,7 @@ def run_fampnn_pack(
             )
             struct_pdbs.extend(result["pdb_strings"])
             struct_psce.extend(result["psce"])
+            chunk_idx += 1
             remaining -= chunk
 
         all_packed.append(struct_pdbs)
