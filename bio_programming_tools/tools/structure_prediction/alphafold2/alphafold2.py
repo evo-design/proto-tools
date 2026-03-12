@@ -136,6 +136,14 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         seed (Optional[int]): Random seed for reproducibility. If ``None``, uses
             non-deterministic initialization. Default: ``None``.
 
+        use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
+            for protein chains using ColabFold search. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``True``.
+
+        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+            ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
+            ``MSAStructurePredictionConfig``. Default: ``None``.
+
         device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
