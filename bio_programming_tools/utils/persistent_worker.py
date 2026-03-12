@@ -104,6 +104,11 @@ _BASE_PASSTHROUGH = {
     # XDG dirs — model caches (HF, torch) respect these for default locations
     "XDG_CACHE_HOME",
     "XDG_DATA_HOME",
+    # HuggingFace — model download paths; evo2 crashes if HF_HUB_CACHE is None
+    "HF_HOME",
+    "HF_HUB_CACHE",
+    "HF_TOKEN",
+    "HUGGING_FACE_HUB_TOKEN",
     # Network proxy — tools download model weights and need proxy config
     "HTTP_PROXY",
     "HTTPS_PROXY",

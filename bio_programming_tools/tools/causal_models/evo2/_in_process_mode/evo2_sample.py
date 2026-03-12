@@ -227,11 +227,6 @@ class Evo2SampleConfig(BaseConfig):
         device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
             Default: ``"cuda"``.
 
-        keep_on_gpu (bool): Whether to keep the model loaded on device memory after
-            generation completes. Set to ``True`` for multiple generation runs
-            (faster, uses GPU memory) or ``False`` to free GPU memory.
-            Default: ``True``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
@@ -336,12 +331,6 @@ class Evo2SampleConfig(BaseConfig):
         description="Device to run on",
         hidden=True,
         include_in_key=False,
-    )
-    keep_on_gpu: bool = ConfigField(
-        title="Keep on GPU",
-        default=True,
-        description="Whether to keep model on device memory for future generation calls",
-        hidden=True,
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -459,10 +448,6 @@ def run_evo2_sample(
         "kv_caches": batch_result["kv_caches"],
         "logits": batch_result["logits"],
     }
-
-    # Move to CPU if requested (frees GPU memory)
-    if not config.keep_on_gpu:
-        model.unload()
 
     # Serialize tensors to nested lists at tool boundary
     logits = result["logits"]
