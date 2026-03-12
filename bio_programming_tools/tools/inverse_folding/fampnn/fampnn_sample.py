@@ -68,6 +68,14 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
     iterative masked language modeling and sidechain diffusion.
 
     Attributes:
+        num_sequences_per_structure: Total number of sequences to generate per
+            input structure.
+        batch_size: Number of sequences to process simultaneously on GPU.
+            Defaults to num_sequences_per_structure.
+        temperature: Controls randomness in sampling from logits.
+        excluded_amino_acids: List of amino acids not allowed in the sequence.
+            Not supported by FAMPNN (raises ValueError if set).
+        seed: Random seed to use for sampling.
         model_variant: FAMPNN checkpoint variant. '0.3' for sequence design
             (PDB-trained, 0.3A noise), '0.0' for sidechain packing (PDB-trained,
             0.0A noise), '0.3_cath' for mutation scoring (CATH-trained).
