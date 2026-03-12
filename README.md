@@ -3,6 +3,7 @@
 # Tools Hub for Biological AI Models and Computational Biology
 [![Lint Check](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml)
 [![Run Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
+[![Run Integration Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml)
 [![docs_autogen](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml)
 
 ## Related Repositories
