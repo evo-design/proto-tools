@@ -26,7 +26,7 @@ echo "Creating isolated conda environment (Python 3.8 + scikit-learn 0.22)..."
 echo "CRISPRidentify's pickled models require sklearn 0.22 (incompatible with 3.12)."
 echo "Using $VENV_PATH/conda_deps to avoid polluting base env..."
 
-# Detect platform for micromamba download and package installation.
+# Detect platform for package installation.
 # scikit-learn 0.22, vmatch, and several bioconda tools only have x86_64
 # builds.  On macOS arm64 we force osx-64 packages and run via Rosetta 2.
 # Linux aarch64 is unsupported because there is no transparent x86_64
@@ -40,20 +40,6 @@ if [ "$OS" = "Linux" ] && [ "$ARCH" != "x86_64" ]; then
     exit 1
 fi
 
-# Platform for downloading micromamba binary
-if [ "$OS" = "Linux" ]; then
-    MAMBA_PLATFORM="linux-64"
-elif [ "$OS" = "Darwin" ]; then
-    if [ "$ARCH" = "arm64" ]; then
-        MAMBA_PLATFORM="osx-arm64"
-    else
-        MAMBA_PLATFORM="osx-64"
-    fi
-else
-    echo "Unsupported platform: $OS $ARCH"
-    exit 1
-fi
-
 # Platform for package installation (force x86_64 on macOS arm64)
 MAMBA_EXTRA_ARGS=()
 if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
@@ -61,17 +47,8 @@ if [ "$OS" = "Darwin" ] && [ "$ARCH" = "arm64" ]; then
     MAMBA_EXTRA_ARGS=(--platform osx-64)
 fi
 
-# Install micromamba if not already available
-MAMBA_ROOT="$VENV_PATH/micromamba"
-MAMBA_BIN="$MAMBA_ROOT/bin/micromamba"
-if [ ! -x "$MAMBA_BIN" ]; then
-    echo "Installing micromamba ($MAMBA_PLATFORM)..."
-    mkdir -p "$MAMBA_ROOT/bin"
-    curl -fsSL "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" | tar -xvj -C "$MAMBA_ROOT/bin" --strip-components=1 bin/micromamba
-fi
-
-# Initialize micromamba for this shell
-export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
+# Use the project-level micromamba provided by tool_instance.py
+export MAMBA_ROOT_PREFIX="$VENV_PATH/micromamba"
 eval "$("$MAMBA_BIN" shell hook -s posix)"
 
 echo "Creating conda environment with micromamba..."
