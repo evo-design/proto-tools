@@ -1563,10 +1563,9 @@ def test_run_oneshot_reads_output(tmp_path: Path):
 
 def test_init_loads_env_vars():
     """ToolInstance should parse env_vars.txt from the standalone dir."""
-    inst = ToolInstance("esm3")
-    # esm3 has an env_vars.txt with [passthrough] HF_TOKEN, HUGGING_FACE_HUB_TOKEN
-    assert "HF_TOKEN" in inst._tool_env_vars["passthrough"]
-    assert "HUGGING_FACE_HUB_TOKEN" in inst._tool_env_vars["passthrough"]
+    inst = ToolInstance("alphagenome")
+    # alphagenome has an env_vars.txt with [passthrough] ALPHAGENOME_CHECKPOINT_PATH
+    assert "ALPHAGENOME_CHECKPOINT_PATH" in inst._tool_env_vars["passthrough"]
 
 
 def test_init_empty_env_vars_for_tool_without_file():
