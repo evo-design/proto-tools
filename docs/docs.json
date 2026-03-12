@@ -82,6 +82,7 @@
 					{
 						"group": "Inverse Folding",
 						"pages": [
+							"tools/inverse-folding/fampnn",
 							"tools/inverse-folding/ligandmpnn",
 							"tools/inverse-folding/proteinmpnn"
 						]
