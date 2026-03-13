@@ -11,6 +11,7 @@ from pydantic import Field
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_io import BaseToolInput
+from bio_programming_tools.utils.cloud_dispatch import _cloud_dispatch_with_retry
 from bio_programming_tools.utils.tool_pool import (
     DeviceCapability,
     ToolPool,
@@ -30,9 +31,14 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 def clean_registry():
     """Provide a clean registry for each test."""
     original_registry = ToolRegistry._registry.copy()
+    original_backend = ToolRegistry._execution_backend
+    original_batch_backend = ToolRegistry._execution_backend_batch
     ToolRegistry._registry.clear()
+    ToolRegistry._execution_backend_batch = None
     yield ToolRegistry
     ToolRegistry._registry = original_registry
+    ToolRegistry._execution_backend = original_backend
+    ToolRegistry._execution_backend_batch = original_batch_backend
 
 
 # ── Mock models ─────────────────────────────────────────────────────────────
@@ -91,6 +97,46 @@ def _register_mock_tool(registry, key="mock-process",
         )
 
     return run_mock_process, call_log
+
+
+def _make_mock_backend(tool_key="mock-process"):
+    """Create a mock cloud backend that processes items."""
+    call_log = []
+
+    def mock_backend(key, inputs, config):
+        items = inputs.items
+        call_log.append({"key": key, "items": list(items)})
+        return MockOutput(
+            results=[f"cloud_{item}" for item in items],
+            tool_id=key,
+            execution_time=0.01,
+            success=True,
+        )
+
+    return mock_backend, call_log
+
+
+def _make_mock_batch_backend(tool_key="mock-process"):
+    """Create a mock batch cloud backend (simulates .starmap())."""
+    call_log = []
+
+    def mock_batch_backend(key, inputs_list, config):
+        call_log.append({
+            "key": key,
+            "n_inputs": len(inputs_list),
+            "all_items": [list(inp.items) for inp in inputs_list],
+        })
+        outputs = []
+        for inputs in inputs_list:
+            outputs.append(MockOutput(
+                results=[f"batch_{item}" for item in inputs.items],
+                tool_id=key,
+                execution_time=0.01,
+                success=True,
+            ))
+        return outputs
+
+    return mock_batch_backend, call_log
 
 
 # ── LPT scheduling tests ───────────────────────────────────────────────────
@@ -447,18 +493,266 @@ def test_dispatch_collects_warnings_and_errors(clean_registry):
     assert result.errors == ["err_d"]
 
 
-def test_dispatch_proto_enters_persistence():
-    """Proto-only pool still enters ToolInstance.persist()."""
+def test_dispatch_persistence_entered():
+    """Pool still enters ToolInstance.persist()."""
     with patch("bio_programming_tools.utils.tool_instance.ToolInstance.persist") as mock_persist:
         mock_ctx = MagicMock()
         mock_persist.return_value = mock_ctx
-        pool = ToolPool(devices=["proto"])
-        pool.__enter__()
+        pool = ToolPool(devices=["cuda:0"])
+        # Patch GPU validation
+        with patch("bio_programming_tools.utils.tool_pool.determine_visible_devices"):
+            pool.__enter__()
         try:
             assert pool._persist_ctx is mock_ctx
             mock_ctx.__enter__.assert_called_once()
         finally:
             pool.__exit__(None, None, None)
+
+
+# ── Remote parameter tests ────────────────────────────────────────────────
+
+def test_remote_invalid_value_raises():
+    """Invalid remote value should raise ValueError."""
+    with pytest.raises(ValueError, match="remote must be"):
+        ToolPool(remote="invalid")
+
+
+@pytest.mark.parametrize("remote_value", [True, "cloud"])
+def test_remote_requires_backend(clean_registry, remote_value):
+    """remote=True and remote='cloud' should raise if no backend is registered."""
+    clean_registry._execution_backend = None
+    pool = ToolPool(remote=remote_value)
+    with pytest.raises(RuntimeError, match="cloud backend"):
+        pool.__enter__()
+
+
+def test_remote_cloud_no_local_devices(clean_registry):
+    """remote='cloud' should have empty local devices."""
+    mock_backend = MagicMock()
+    clean_registry._execution_backend = mock_backend
+    pool = ToolPool(remote="cloud")
+    with patch("bio_programming_tools.utils.tool_instance.ToolInstance.persist") as mp:
+        mp.return_value = MagicMock()
+        pool.__enter__()
+    try:
+        assert pool._devices == []
+    finally:
+        pool.__exit__(None, None, None)
+
+
+def test_remote_true_hybrid_zero_gpus(clean_registry):
+    """remote=True with 0 local GPUs should still enter (cloud handles it)."""
+    mock_backend = MagicMock()
+    clean_registry._execution_backend = mock_backend
+    pool = ToolPool(remote=True)
+    with patch("bio_programming_tools.utils.tool_pool.number_of_available_gpus", return_value=0), \
+         patch("bio_programming_tools.utils.tool_instance.ToolInstance.persist") as mp:
+        mp.return_value = MagicMock()
+        pool.__enter__()
+    try:
+        assert pool._devices == []
+    finally:
+        pool.__exit__(None, None, None)
+
+
+# ── Cloud dispatch tests ────────────────────────────────────────────────────
+
+def test_remote_cloud_dispatches_all_items(clean_registry):
+    """remote='cloud' should dispatch all items through the cloud backend."""
+    func, _ = _register_mock_tool(clean_registry)
+    mock_backend, backend_log = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+
+    pool = ToolPool(remote="cloud")
+    pool._devices = []
+    pool._remote = "cloud"
+
+    inputs = MockInput(items=["a", "b", "c"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    # All items dispatched to cloud (one per call)
+    assert len(backend_log) == 3
+    all_backend_items = []
+    for call in backend_log:
+        all_backend_items.extend(call["items"])
+    assert sorted(all_backend_items) == ["a", "b", "c"]
+
+    # Results reassembled in order
+    assert result.results == ["cloud_a", "cloud_b", "cloud_c"]
+
+
+def test_remote_true_hybrid_overflow_to_cloud(clean_registry):
+    """remote=True should send overflow items to cloud."""
+    call_log = []
+
+    def raw_func(inputs, config=None, instance=None):
+        """Raw tool function (not the @tool wrapper)."""
+        call_log.append({
+            "items": list(inputs.items),
+            "device": config.device if config else None,
+            "instance": instance,
+        })
+        return MockOutput(
+            results=[f"local_{item}" for item in inputs.items],
+            tool_id="mock-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    # Register tool for spec lookup (but we pass raw_func to _parallel_dispatch)
+    _register_mock_tool(clean_registry)
+
+    mock_backend, backend_log = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+
+    pool = ToolPool(devices=["cuda:0"], remote=True)
+    pool._devices = ["cuda:0"]
+    pool._remote = True
+
+    # 4 items, 1 local slot → 1 local, 3 cloud
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", raw_func, inputs, config)
+
+    assert len(result.results) == 4
+    # First item goes local, rest go to cloud
+    assert len(call_log) == 1
+    assert len(backend_log) == 3
+
+    # Results in original order (local = local_, cloud = cloud_)
+    assert result.results[0] == "local_a"
+    assert result.results[1] == "cloud_b"
+    assert result.results[2] == "cloud_c"
+    assert result.results[3] == "cloud_d"
+
+
+def test_remote_true_all_items_fit_locally(clean_registry):
+    """remote=True with enough local slots should not use cloud."""
+    call_log = []
+
+    def raw_func(inputs, config=None, instance=None):
+        call_log.append({"items": list(inputs.items)})
+        return MockOutput(
+            results=[f"local_{item}" for item in inputs.items],
+            tool_id="mock-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    _register_mock_tool(clean_registry)
+    mock_backend, backend_log = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+
+    pool = ToolPool(devices=["cuda:0", "cuda:1"], remote=True)
+    pool._devices = ["cuda:0", "cuda:1"]
+    pool._remote = True
+
+    # 2 items, 2 local slots → all local
+    inputs = MockInput(items=["a", "b"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", raw_func, inputs, config)
+
+    assert len(result.results) == 2
+    assert len(call_log) == 2
+    assert len(backend_log) == 0
+    assert result.results == ["local_a", "local_b"]
+
+
+def test_remote_cloud_single_item(clean_registry):
+    """remote='cloud' with single item should dispatch to cloud."""
+    func, _ = _register_mock_tool(clean_registry)
+    mock_backend, backend_log = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+
+    pool = ToolPool(remote="cloud")
+    pool._devices = []
+    pool._remote = "cloud"
+
+    inputs = MockInput(items=["solo"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    assert len(backend_log) == 1
+    assert result.results == ["cloud_solo"]
+
+
+# ── Retry tests ──────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("exc_cls,fail_count", [
+    (ConnectionError, 2),
+    (TimeoutError, 1),
+])
+def test_retry_succeeds_after_transient_failure(exc_cls, fail_count):
+    """Cloud dispatch should retry on transient errors (ConnectionError, TimeoutError)."""
+    call_count = 0
+
+    def flaky_backend(tool_key, inputs, config):
+        nonlocal call_count
+        call_count += 1
+        if call_count <= fail_count:
+            raise exc_cls("transient")
+        return MockOutput(
+            results=["ok"],
+            tool_id=tool_key,
+            execution_time=0.01,
+            success=True,
+        )
+
+    result = _cloud_dispatch_with_retry(
+        flaky_backend, "test-tool",
+        MockInput(items=["x"]), MockConfig(),
+        max_retries=3,
+    )
+    assert call_count == fail_count + 1
+    assert result.results == ["ok"]
+
+
+def test_retry_exhausted_raises():
+    """Cloud dispatch should raise after all retries exhausted."""
+    def always_fail(tool_key, inputs, config):
+        raise ConnectionError("persistent failure")
+
+    with pytest.raises(ConnectionError, match="persistent failure"):
+        _cloud_dispatch_with_retry(
+            always_fail, "test-tool",
+            MockInput(items=["x"]), MockConfig(),
+            max_retries=3,
+        )
+
+
+def test_retry_non_retryable_fails_immediately():
+    """Non-retryable exceptions should not be retried."""
+    call_count = 0
+
+    def bad_backend(tool_key, inputs, config):
+        nonlocal call_count
+        call_count += 1
+        raise ValueError("bad input")
+
+    with pytest.raises(ValueError, match="bad input"):
+        _cloud_dispatch_with_retry(
+            bad_backend, "test-tool",
+            MockInput(items=["x"]), MockConfig(),
+            max_retries=3,
+        )
+    assert call_count == 1  # No retries
+
+
+def test_retry_none_result_raises_runtime_error():
+    """Backend returning None should raise RuntimeError."""
+    def none_backend(tool_key, inputs, config):
+        return None
+
+    with pytest.raises(RuntimeError, match="returned None"):
+        _cloud_dispatch_with_retry(
+            none_backend, "test-tool",
+            MockInput(items=["x"]), MockConfig(),
+        )
 
 
 # ── Tool interception tests ─────────────────────────────────────────────────
@@ -637,6 +931,142 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
     serialized = spec.model_dump()
     assert "iterable_input_field" not in serialized
     assert "iterable_output_field" not in serialized
+
+
+# ── Batch backend tests ──────────────────────────────────────────────────────
+
+def test_batch_backend_used_when_registered(clean_registry):
+    """When batch backend is registered, cloud dispatch uses it instead of fan-out."""
+    func, _ = _register_mock_tool(clean_registry)
+    mock_backend, _ = _make_mock_backend()
+    mock_batch, batch_log = _make_mock_batch_backend()
+    clean_registry._execution_backend = mock_backend
+    clean_registry._execution_backend_batch = mock_batch
+
+    pool = ToolPool(remote="cloud")
+    pool._devices = []
+    pool._remote = "cloud"
+
+    inputs = MockInput(items=["a", "b", "c"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    # Batch backend called once with all 3 items
+    assert len(batch_log) == 1
+    assert batch_log[0]["n_inputs"] == 3
+    assert result.results == ["batch_a", "batch_b", "batch_c"]
+
+
+def test_batch_backend_hybrid_overflow(clean_registry):
+    """Hybrid mode: local items use LPT, overflow uses batch backend."""
+    call_log = []
+
+    def raw_func(inputs, config=None, instance=None):
+        call_log.append({"items": list(inputs.items)})
+        return MockOutput(
+            results=[f"local_{item}" for item in inputs.items],
+            tool_id="mock-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    _register_mock_tool(clean_registry)
+    mock_backend, _ = _make_mock_backend()
+    mock_batch, batch_log = _make_mock_batch_backend()
+    clean_registry._execution_backend = mock_backend
+    clean_registry._execution_backend_batch = mock_batch
+
+    pool = ToolPool(devices=["cuda:0"], remote=True)
+    pool._devices = ["cuda:0"]
+    pool._remote = True
+
+    # 4 items, 1 local slot → 1 local, 3 cloud (batch)
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", raw_func, inputs, config)
+
+    assert len(result.results) == 4
+    assert len(call_log) == 1  # 1 local call
+    assert len(batch_log) == 1  # 1 batch call for 3 items
+    assert batch_log[0]["n_inputs"] == 3
+    assert result.results[0] == "local_a"
+    assert result.results[1] == "batch_b"
+
+
+# ── Dispatch stats tests ────────────────────────────────────────────────────
+
+def test_dispatch_stats_hybrid(clean_registry):
+    """Hybrid dispatch should report both local and cloud items in stats."""
+    call_log = []
+
+    def raw_func(inputs, config=None, instance=None):
+        call_log.append(True)
+        return MockOutput(
+            results=[f"local_{item}" for item in inputs.items],
+            tool_id="mock-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    _register_mock_tool(clean_registry)
+    mock_backend, _ = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+    clean_registry._execution_backend_batch = None
+
+    pool = ToolPool(devices=["cuda:0"], remote=True)
+    pool._devices = ["cuda:0"]
+    pool._remote = True
+
+    inputs = MockInput(items=["a", "b", "c"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", raw_func, inputs, config)
+
+    stats = result.metadata["dispatch_stats"]
+    assert stats["total_items"] == 3
+    assert stats["local_items"] == 1
+    assert stats["cloud_items"] == 2
+    assert stats["local_devices"] == 1
+    assert stats["batch_dispatch"] is False
+
+
+# ── Silent cloud-only warning test ──────────────────────────────────────────
+
+def test_remote_true_zero_gpus_warns(clean_registry, caplog):
+    """remote=True with 0 GPUs should log a warning about silent cloud-only."""
+    import logging
+
+    mock_backend = MagicMock()
+    clean_registry._execution_backend = mock_backend
+    pool = ToolPool(remote=True)
+    with patch("bio_programming_tools.utils.tool_pool.number_of_available_gpus", return_value=0), \
+         patch("bio_programming_tools.utils.tool_instance.ToolInstance.persist") as mp:
+        mp.return_value = MagicMock()
+        with caplog.at_level(logging.WARNING, logger="bio_programming_tools.utils.tool_pool"):
+            pool.__enter__()
+    try:
+        assert "no local GPUs detected" in caplog.text
+        assert "remote='cloud'" in caplog.text
+    finally:
+        pool.__exit__(None, None, None)
+
+
+# ── set_execution_backend integration test ───────────────────────────────────
+
+def test_set_execution_backend_with_batch(clean_registry):
+    """set_execution_backend should accept optional batch_backend."""
+    single = MagicMock()
+    batch = MagicMock()
+
+    clean_registry.set_execution_backend(single, batch)
+    assert clean_registry._execution_backend is single
+    assert clean_registry._execution_backend_batch is batch
+
+    clean_registry.clear_execution_backend()
+    assert clean_registry._execution_backend is None
+    assert clean_registry._execution_backend_batch is None
 
 
 # ── devices_per_instance tests ──────────────────────────────────────────────

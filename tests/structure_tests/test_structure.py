@@ -245,7 +245,7 @@ def test_serialize_to_dict(protein_from_pdb_file):
     assert "structure_format" in serialized
     assert "b_factor_type" in serialized
     assert serialized["structure_format"] == "pdb"
-    assert serialized["b_factor_type"] == "UNSPECIFIED"
+    assert serialized["b_factor_type"] == "unspecified"
 
 
 def test_validate_from_dict(protein_from_pdb_file):
@@ -294,13 +294,13 @@ def test_validate_from_dict_with_b_factor_type():
 def test_validate_from_dict_missing_structure():
     with pytest.raises(ValueError, match="Missing 'structure'"):
         Structure._validate_from_dict(
-            {"b_factor_type": "UNSPECIFIED", "structure_format": "pdb"}
+            {"b_factor_type": "unspecified", "structure_format": "pdb"}
         )
 
 
 def test_validate_from_dict_missing_structure_format():
     ps = Structure._validate_from_dict(
-        {"structure": "ATOM  1", "b_factor_type": "UNSPECIFIED"}
+        {"structure": "ATOM  1", "b_factor_type": "unspecified"}
     )
     assert ps.structure_format == "pdb"
 
@@ -314,3 +314,13 @@ def test_validate_from_dict_with_structure_instance(protein_from_pdb_file):
 def test_visualize(protein_from_pdb_file):
     """Ensure visualize method does not fail."""
     _ = protein_from_pdb_file.visualize(show_legend=False)
+
+
+# ── Metrics serialization ────────────────────────────────────────────────────
+
+def test_metrics_survive_serialize_deserialize_round_trip():
+    """Metrics dict should survive _serialize_to_dict → _validate_from_dict."""
+    protein = Structure(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
+    serialized = protein._serialize_to_dict()
+    reconstructed = Structure._validate_from_dict(serialized)
+    assert reconstructed.metrics == {"plddt": 85.2, "ptm": 0.9}

@@ -7,6 +7,10 @@ ToolPool intercepts @tool-decorated function calls, partitions input items
 across persistent workers on different devices using cost-aware LPT scheduling,
 runs them concurrently via ThreadPoolExecutor, and reassembles results in
 original order.
+
+Cloud dispatch uses ``ToolRegistry._execution_backend`` — the backend is
+registered by bio-programming at startup. ToolPool never imports
+deployment code directly, keeping bio-programming-tools standalone-safe.
 """
 from __future__ import annotations
 
@@ -15,12 +19,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from bio_programming_tools.utils.device import (
     determine_visible_devices,
     number_of_available_gpus,
-    parse_device_string,
 )
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
@@ -141,6 +144,23 @@ def lpt_schedule(
     return assignments
 
 
+def _build_dispatch_stats(
+    total_items: int,
+    local_items: int,
+    cloud_items: int,
+    local_devices: int,
+    batch_dispatch: bool = False,
+) -> dict:
+    """Build dispatch stats dict for output metadata."""
+    return {
+        "total_items": total_items,
+        "local_items": local_items,
+        "cloud_items": cloud_items,
+        "local_devices": local_devices,
+        "batch_dispatch": batch_dispatch,
+    }
+
+
 # ============================================================================
 # ToolPool
 # ============================================================================
@@ -150,42 +170,71 @@ class ToolPool:
 
     Usage::
 
-        with ToolPool(devices=["cuda:0", "cuda:1", "cuda:2", "cuda:3"]):
-            result = run_esmfold(ESMFoldInput(complexes=all_100), ESMFoldConfig())
-            # 100 complexes partitioned across 4 GPUs, run in parallel
-
-        # Auto-detect all visible GPUs
+        # Auto-detect all visible GPUs (default, local only)
         with ToolPool():
             result = run_boltz2(inputs, config)
+
+        # Explicit local GPUs
+        with ToolPool(devices=["cuda:0", "cuda:1", "cuda:2", "cuda:3"]):
+            result = run_esmfold(ESMFoldInput(complexes=all_100), ESMFoldConfig())
+
+        # Hybrid: local GPUs first, overflow to cloud
+        with ToolPool(remote=True):
+            result = run_esmfold(inputs, config)
+
+        # Cloud only — skip local GPUs entirely
+        with ToolPool(remote="cloud"):
+            result = run_esmfold(inputs, config)
 
     The pool intercepts ``@tool``-decorated function calls transparently.
     Only tools that declare ``iterable_input_field`` / ``iterable_output_field``
     on their ``@tool()`` decorator are parallelized; other tools pass through
     to normal single-worker execution (but still benefit from persistence).
 
+    **Remote modes:**
+
+    - ``remote=False`` (default) — local GPUs only. Free compute.
+    - ``remote=True`` — hybrid: fill local GPU slots first via LPT,
+      overflow items dispatch to cloud. Local is preferred (free GPUs).
+    - ``remote="cloud"`` — cloud only: skip local GPUs, fan out all items
+      via the registered cloud backend. The backend autoscales workers.
+
+    Cloud dispatch uses ``ToolRegistry._execution_backend``, which is
+    registered by bio-programming at startup. No cross-repo imports needed.
+
     Multi-GPU tools override ``BaseConfig.devices_per_instance`` (a
     ``@property``, not a field) to tell the pool how many GPUs each worker
     needs.  The pool groups its device list into slots of that size — e.g.,
     4 GPUs with ``devices_per_instance == 2`` yields 2 workers on
-    ``cuda:0,cuda:1`` and ``cuda:2,cuda:3``.  This is on Config (not
-    ToolSpec) because the GPU requirement can depend on a runtime config
-    value such as the active checkpoint size.
+    ``cuda:0,cuda:1`` and ``cuda:2,cuda:3``.
     """
 
     def __init__(
         self,
         devices: list[str] | str | None = None,
+        remote: bool | Literal["cloud"] = False,
     ):
         """
         Args:
             devices: Device strings for the pool. Accepts a list
                 (e.g. ``["cuda:0", "cuda:1"]``), a single string
-                (e.g. ``"cuda:0"`` or ``"proto"``), or ``None`` to
-                auto-detect all visible GPUs.
+                (e.g. ``"cuda:0"``), or ``None`` to auto-detect all
+                visible GPUs. Ignored when ``remote="cloud"``.
+            remote: Cloud dispatch mode.
+                - ``False`` (default): local only.
+                - ``True``: hybrid — local GPUs + cloud overflow.
+                - ``"cloud"``: cloud only, skip local GPUs.
         """
         if isinstance(devices, str):
             devices = [devices]
+
+        if remote not in (False, True, "cloud"):
+            raise ValueError(
+                f"remote must be False, True, or 'cloud', got {remote!r}"
+            )
+
         self._devices_arg = devices
+        self._remote = remote
         self._persist_ctx = None
         self._token = None
 
@@ -193,23 +242,44 @@ class ToolPool:
         if _active_pool.get() is not None:
             raise RuntimeError("ToolPool contexts cannot be nested")
 
-        # Resolve devices
-        if self._devices_arg is not None:
+        from bio_programming_tools.tools.tool_registry import ToolRegistry
+
+        # Validate backend if remote is truthy
+        if self._remote and ToolRegistry._execution_backend is None:
+            raise RuntimeError(
+                "remote=True requires a cloud backend. "
+                "Register a cloud backend via ToolRegistry.set_execution_backend() first."
+            )
+
+        # Resolve local devices
+        if self._remote == "cloud":
+            # Cloud-only: no local devices needed
+            self._devices: list[str] = []
+        elif self._devices_arg is not None:
             self._devices = list(self._devices_arg)
-            # Validate CUDA devices exist (raises ValueError if not)
-            determine_visible_devices(self._devices)
+            if self._devices:
+                determine_visible_devices(self._devices)
         else:
             n = number_of_available_gpus()
-            if n == 0:
+            if n == 0 and not self._remote:
                 raise RuntimeError(
                     "ToolPool requires at least one GPU. "
                     "No GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)."
                 )
             self._devices = [f"cuda:{i}" for i in range(n)]
 
-        logger.info("ToolPool entering with devices: %s", self._devices)
+        if self._remote is True and not self._devices:
+            logger.warning(
+                "ToolPool(remote=True): no local GPUs detected — all items "
+                "will dispatch to cloud. Consider using remote='cloud' explicitly."
+            )
 
-        # Always enter persistence — proto is a dispatch-level concern, not pool-level
+        logger.info(
+            "ToolPool entering with devices: %s, remote=%s",
+            self._devices, self._remote,
+        )
+
+        # Enter persistence context for local workers
         self._persist_ctx = ToolInstance.persist()
         self._persist_ctx.__enter__()
 
@@ -245,14 +315,6 @@ class ToolPool:
         """
         from bio_programming_tools.tools.tool_registry import ToolRegistry
 
-        # Proto check — any proto device in the pool triggers NotImplementedError
-        proto_devices = [d for d in self._devices if parse_device_string(d).kind == "proto"]
-        if proto_devices:
-            raise NotImplementedError(
-                f"Proto (cloud worker) execution is not yet implemented for '{tool_key}'. "
-                f"Remove proto devices from ToolPool for local-only parallel execution."
-            )
-
         # Look up ToolSpec
         spec = ToolRegistry.get(tool_key)
         iterable_input_field = spec.iterable_input_field
@@ -262,8 +324,8 @@ class ToolPool:
         items = list(getattr(inputs, iterable_input_field))
         n_items = len(items)
 
-        # Single-item optimization: skip pool overhead
-        if n_items <= 1:
+        # Single-item optimization: skip pool overhead (local only)
+        if n_items <= 1 and self._remote != "cloud":
             token = _pool_executing.set(True)
             try:
                 return func(inputs, config)
@@ -277,116 +339,158 @@ class ToolPool:
             for i, item in enumerate(items)
         ]
 
-        # Group devices by devices_per_instance
-        dpi = config.devices_per_instance
-        device_groups = []
-        for i in range(0, len(self._devices), dpi):
-            group = self._devices[i:i + dpi]
-            if len(group) == dpi:
-                device_groups.append(",".join(group))
-        leftover = len(self._devices) - len(device_groups) * dpi
-        if leftover > 0:
-            logger.warning(
-                "ToolPool: %d device(s) unused (devices_per_instance=%d, total=%d)",
-                leftover, dpi, len(self._devices),
-            )
-        # If no complete groups possible, use all devices as one group
-        if not device_groups:
-            device_groups = [",".join(self._devices)]
+        # Determine local vs cloud split
+        local_devices = list(self._devices)
 
-        # Build DeviceCapability list
+        # Group local devices by devices_per_instance
+        dpi = config.devices_per_instance
+        device_groups: list[str] = []
+        if local_devices:
+            for i in range(0, len(local_devices), dpi):
+                group = local_devices[i:i + dpi]
+                if len(group) == dpi:
+                    device_groups.append(",".join(group))
+            leftover = len(local_devices) - len(device_groups) * dpi
+            if leftover > 0:
+                logger.warning(
+                    "ToolPool: %d device(s) unused (devices_per_instance=%d, total=%d)",
+                    leftover, dpi, len(local_devices),
+                )
+            # If no complete groups possible, use all local devices as one group
+            if local_devices and not device_groups:
+                device_groups = [",".join(local_devices)]
+
+        # Build DeviceCapability list for local groups
         capabilities = [DeviceCapability(device_id=dg) for dg in device_groups]
 
-        # Schedule
-        assignments = lpt_schedule(work_items, capabilities)
-
-        # Filter out empty assignments
-        active_assignments = [a for a in assignments if a.items]
+        # Split items between local and cloud
+        if self._remote == "cloud":
+            # Cloud only — all items go to cloud
+            local_work_items: list[WorkItem] = []
+            cloud_work_items = work_items
+        elif self._remote is True:
+            # Hybrid — fill local slots, overflow to cloud
+            n_local_slots = len(capabilities)
+            if n_local_slots == 0:
+                # No local GPUs available, all to cloud
+                local_work_items = []
+                cloud_work_items = work_items
+            elif n_items <= n_local_slots:
+                # Fewer items than local slots — all local
+                local_work_items = work_items
+                cloud_work_items = []
+            else:
+                # Fill local, overflow to cloud
+                local_work_items = work_items[:n_local_slots]
+                cloud_work_items = work_items[n_local_slots:]
+        else:
+            # Local only
+            local_work_items = work_items
+            cloud_work_items = []
 
         logger.info(
-            "ToolPool dispatching %s: %d items across %d workers (devices_per_instance=%d)",
-            tool_key, n_items, len(active_assignments), dpi,
+            "ToolPool dispatching %s: %d items (%d local, %d cloud, "
+            "devices_per_instance=%d)",
+            tool_key, n_items, len(local_work_items), len(cloud_work_items), dpi,
         )
 
-        # Execute partitions in parallel
-        output_model = spec.output_model
-
-        def _run_partition(assignment: WorkerAssignment) -> tuple[list[tuple[int, Any]], Any]:
-            """Run a single partition on its assigned device. Returns (indexed_results, raw_output)."""
-            token = _pool_executing.set(True)
-            try:
-                device_id = assignment.device.device_id
-                # Sanitize device_id for use as instance name
-                worker_name = f"{tool_key}-pool-{device_id.replace(':', '_').replace(',', '_')}"
-
-                # Build partition input
-                partition_items = [wi.item for wi in assignment.items]
-                partition_input = inputs.model_copy(update={iterable_input_field: partition_items})
-
-                # Copy config with device overridden
-                config_copy = config.model_copy(update={"device": device_id})
-
-                # Call the cache-wrapped function with instance routing
-                result = func(partition_input, config_copy, instance=worker_name)
-
-                # Extract output items
-                output_items = getattr(result, iterable_output_field, [])
-                if len(output_items) != len(assignment.items):
-                    raise RuntimeError(
-                        f"ToolPool: {tool_key} returned {len(output_items)} "
-                        f"items but expected {len(assignment.items)} for "
-                        f"device {assignment.device.device_id}"
-                    )
-                indexed = [
-                    (wi.original_index, item)
-                    for wi, item in zip(assignment.items, output_items)
-                ]
-                return indexed, result
-            finally:
-                _pool_executing.reset(token)
-
+        # Execute local partitions via LPT
         all_indexed: list[tuple[int, Any]] = []
         all_warnings: list[str] = []
         all_errors: list[str] = []
         last_result = None
+        output_model = spec.output_model
 
-        # ThreadPoolExecutor threads don't inherit ContextVars, so workers
-        # wouldn't see _persist_mode=True and would fall back to one-shot.
-        # Create a context copy per thread so each runs with persistence.
-        with ThreadPoolExecutor(max_workers=len(active_assignments)) as executor:
-            contexts = [contextvars.copy_context() for _ in active_assignments]
-            futures = [
-                executor.submit(ctx.run, _run_partition, a)
-                for ctx, a in zip(contexts, active_assignments)
-            ]
-            for future, assignment in zip(futures, active_assignments):
+        if local_work_items and capabilities:
+            assignments = lpt_schedule(local_work_items, capabilities)
+            active_assignments = [a for a in assignments if a.items]
+
+            def _run_local_partition(assignment: WorkerAssignment) -> tuple[list[tuple[int, Any]], Any]:
+                """Run a single partition on a local device."""
+                token = _pool_executing.set(True)
                 try:
-                    indexed, result = future.result()
-                except Exception as e:
-                    raise RuntimeError(
-                        f"ToolPool partition failed on device "
-                        f"{assignment.device.device_id} "
-                        f"({len(assignment.items)} items, indices "
-                        f"{[wi.original_index for wi in assignment.items]})"
-                    ) from e
-                all_indexed.extend(indexed)
-                all_warnings.extend(getattr(result, "warnings", []))
-                all_errors.extend(getattr(result, "errors", []))
-                last_result = result
+                    device_id = assignment.device.device_id
+                    partition_items = [wi.item for wi in assignment.items]
+                    partition_input = inputs.model_copy(update={iterable_input_field: partition_items})
+                    worker_name = f"{tool_key}-pool-{device_id.replace(':', '_').replace(',', '_')}"
+                    config_copy = config.model_copy(update={"device": device_id})
+                    result = func(partition_input, config_copy, instance=worker_name)
+
+                    output_items = getattr(result, iterable_output_field, [])
+                    if len(output_items) != len(assignment.items):
+                        raise RuntimeError(
+                            f"ToolPool: {tool_key} returned {len(output_items)} "
+                            f"items but expected {len(assignment.items)} for "
+                            f"device {device_id}"
+                        )
+                    indexed = [
+                        (wi.original_index, item)
+                        for wi, item in zip(assignment.items, output_items)
+                    ]
+                    return indexed, result
+                finally:
+                    _pool_executing.reset(token)
+
+            with ThreadPoolExecutor(max_workers=len(active_assignments)) as executor:
+                contexts = [contextvars.copy_context() for _ in active_assignments]
+                futures = [
+                    executor.submit(ctx.run, _run_local_partition, a)
+                    for ctx, a in zip(contexts, active_assignments)
+                ]
+                for future, assignment in zip(futures, active_assignments):
+                    try:
+                        indexed, result = future.result()
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"ToolPool partition failed on device "
+                            f"{assignment.device.device_id} "
+                            f"({len(assignment.items)} items, indices "
+                            f"{[wi.original_index for wi in assignment.items]})"
+                        ) from e
+                    all_indexed.extend(indexed)
+                    all_warnings.extend(getattr(result, "warnings", []))
+                    all_errors.extend(getattr(result, "errors", []))
+                    last_result = result
+
+        # Execute cloud items via fan-out (no LPT — cloud backend autoscales)
+        if cloud_work_items:
+            backend = ToolRegistry._execution_backend
+            if backend is None:
+                raise RuntimeError(
+                    "remote dispatch requested but no cloud backend registered"
+                )
+
+            from bio_programming_tools.utils.cloud_dispatch import dispatch_cloud_items
+
+            cloud_indexed, cloud_warnings, cloud_errors, cloud_last = (
+                dispatch_cloud_items(
+                    backend, tool_key, cloud_work_items,
+                    inputs, config,
+                    iterable_input_field, iterable_output_field,
+                )
+            )
+            all_indexed.extend(cloud_indexed)
+            all_warnings.extend(cloud_warnings)
+            all_errors.extend(cloud_errors)
+            if cloud_last is not None:
+                last_result = cloud_last
 
         # Reassemble in original order
         all_indexed.sort(key=lambda x: x[0])
         merged_items = [item for _, item in all_indexed]
 
-        # Construct merged output
-        # NOTE: tool_id, success, execution_time are set by the @tool wrapper
-        # after _parallel_dispatch returns — don't duplicate them here.
+        metadata = dict(last_result.metadata) if last_result else {}
+        metadata["dispatch_stats"] = _build_dispatch_stats(
+            n_items, len(local_work_items), len(cloud_work_items), len(capabilities),
+            batch_dispatch=ToolRegistry._execution_backend_batch is not None,
+        )
+
         merged_output = output_model.model_construct(
             **{
                 iterable_output_field: merged_items,
                 "warnings": all_warnings,
                 "errors": all_errors,
-                "metadata": last_result.metadata if last_result else {},
+                "metadata": metadata,
             }
         )
 

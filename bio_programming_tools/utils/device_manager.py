@@ -976,7 +976,7 @@ class DeviceManager:
         - They **wait** when all GPUs are held by other transient leases
         - They are **auto-released** on context exit
 
-        Non-GPU devices (cpu, proto, etc.) yield immediately with no tracking.
+        Non-GPU devices (cpu, etc.) yield immediately with no tracking.
 
         Parameters
         ----------

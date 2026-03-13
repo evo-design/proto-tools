@@ -149,17 +149,32 @@ class ToolRegistry:
 
     _registry: Dict[str, ToolSpec] = {}
     _execution_backend: Optional[Callable] = None
+    _execution_backend_batch: Optional[Callable] = None
 
     @classmethod
-    def set_execution_backend(cls, backend: Callable) -> None:
-        """Register external execution backend.
-        Called with (tool_key, inputs, config) -> Optional[BaseToolOutput].
-        Return output to handle the call, or None to fall through to local."""
+    def set_execution_backend(
+        cls,
+        backend: Callable,
+        batch_backend: Optional[Callable] = None,
+    ) -> None:
+        """Register external execution backend(s).
+
+        Args:
+            backend: Single-item dispatch.
+                Called with ``(tool_key, inputs, config) -> Optional[BaseToolOutput]``.
+                Return output to handle the call, or None to fall through to local.
+            batch_backend: Batch dispatch (optional, used by ToolPool).
+                Called with ``(tool_key, list[inputs], config) -> list[BaseToolOutput]``.
+                When available, ToolPool uses this for a single ``.map()`` call
+                instead of N × single dispatches.
+        """
         cls._execution_backend = backend
+        cls._execution_backend_batch = batch_backend
 
     @classmethod
     def clear_execution_backend(cls) -> None:
         cls._execution_backend = None
+        cls._execution_backend_batch = None
 
     @classmethod
     def register(

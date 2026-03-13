@@ -6,7 +6,6 @@ import pytest
 
 from bio_programming_tools.utils.device import (
     DeviceSpec,
-    PROTO_DEFAULT_CONCURRENCY,
     determine_visible_devices,
     number_of_available_gpus,
     number_of_physical_gpus,
@@ -23,7 +22,6 @@ def test_parse_device_string_cpu():
     assert spec.kind == "cpu"
     assert spec.devices == ["cpu"]
     assert spec.count == 1
-    assert spec.concurrency == 0
 
 
 def test_parse_device_string_single_auto():
@@ -117,56 +115,6 @@ def test_parse_device_string_whitespace_handling():
 
 
 # ============================================================================
-# parse_device_string() Tests — Proto
-# ============================================================================
-
-
-def test_parse_proto_default():
-    """Bare 'proto' gets default concurrency."""
-    spec = parse_device_string("proto")
-    assert spec.kind == "proto"
-    assert spec.devices is None
-    assert spec.count == 1
-    assert spec.concurrency == PROTO_DEFAULT_CONCURRENCY
-
-
-def test_parse_proto_colon():
-    """'proto:64' sets concurrency via colon syntax."""
-    spec = parse_device_string("proto:64")
-    assert spec.kind == "proto"
-    assert spec.concurrency == 64
-
-
-def test_parse_proto_x_suffix():
-    """'protox64' sets concurrency via x-suffix syntax."""
-    spec = parse_device_string("protox64")
-    assert spec.kind == "proto"
-    assert spec.concurrency == 64
-
-
-def test_parse_proto_colon_and_x_equivalent():
-    """'proto:32' and 'protox32' produce equivalent DeviceSpecs."""
-    assert parse_device_string("proto:32") == parse_device_string("protox32")
-
-
-def test_parse_proto_invalid_zero():
-    """Proto concurrency of 0 raises ValueError."""
-    with pytest.raises(ValueError, match="must be >= 1"):
-        parse_device_string("proto:0")
-
-
-def test_parse_proto_invalid_negative():
-    """Negative proto concurrency raises ValueError."""
-    with pytest.raises(ValueError, match="must be >= 1"):
-        parse_device_string("protox-1")
-
-
-def test_parse_proto_invalid_text():
-    """Non-numeric proto suffix raises ValueError."""
-    with pytest.raises(ValueError, match="count must be integer"):
-        parse_device_string("proto:abc")
-
-
 def test_parse_cuda_returns_devicespec():
     """All CUDA variants return DeviceSpec with kind='cuda'."""
     for device_str in ("cuda", "cudax2", "cuda:0", "cuda:0,1"):
@@ -179,7 +127,7 @@ def test_devicespec_frozen():
     """DeviceSpec is immutable."""
     spec = parse_device_string("cuda")
     with pytest.raises(AttributeError):
-        spec.kind = "proto"
+        spec.kind = "cpu"
 
 
 def _expected_physical(*logical_indices: int) -> str:
@@ -471,18 +419,18 @@ def test_determine_visible_devices_list_basic():
 
 
 def test_determine_visible_devices_list_skips_non_cuda():
-    """Non-CUDA entries (proto, cpu) are skipped in list input."""
+    """Non-CUDA entries (cpu) are skipped in list input."""
     num_gpus = number_of_available_gpus()
     if num_gpus < 1:
         pytest.skip(f"Test requires 1+ GPU, found {num_gpus}")
 
-    result = determine_visible_devices(["cuda:0", "proto"])
+    result = determine_visible_devices(["cuda:0", "cpu"])
     assert result == _expected_physical(0)
 
 
-def test_determine_visible_devices_list_proto_only():
-    """List with only proto/cpu entries returns empty string."""
-    result = determine_visible_devices(["proto", "cpu"])
+def test_determine_visible_devices_list_cpu_only():
+    """List with only cpu entries returns empty string."""
+    result = determine_visible_devices(["cpu"])
     assert result == ""
 
 

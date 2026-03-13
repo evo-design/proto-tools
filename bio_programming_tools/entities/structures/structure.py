@@ -635,7 +635,7 @@ class Structure:
         # Reconstruct from serialized format
         structure = value.get("structure")
         structure_format = value.get("structure_format")
-        b_factor_type_str = value.get("b_factor_type", "UNSPECIFIED")
+        b_factor_type_str = value.get("b_factor_type", "unspecified")
 
         if structure is None:
             raise ValueError("Missing 'structure' in serialized data")
@@ -650,9 +650,10 @@ class Structure:
         instance = cls.__new__(cls)
         instance.structure = structure
         instance.structure_format = structure_format
-        instance.b_factor_type = BFactorType[b_factor_type_str]
+        instance.b_factor_type = BFactorType(b_factor_type_str)
         instance._gemmi_struct = None
         instance.source = source
+        instance.metrics = value.get("metrics", {})
         return instance
 
     def _serialize_to_dict(self) -> Dict[str, Any]:
@@ -662,7 +663,8 @@ class Structure:
         return {
             "structure": self.structure,
             "structure_format": self.structure_format,
-            "b_factor_type": self.b_factor_type.name,
+            "b_factor_type": self.b_factor_type.value,
+            "metrics": self.metrics,
             "source": self.source,
         }
 

@@ -18,8 +18,6 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-PROTO_DEFAULT_CONCURRENCY = 16
-
 
 def _run_nvidia_smi_query(*args: str) -> str | None:
     """Run nvidia-smi query, returning stdout or None on failure."""
@@ -38,16 +36,14 @@ class DeviceSpec:
     """Structured result from :func:`parse_device_string`.
 
     Attributes:
-        kind: ``"cpu"``, ``"cuda"``, or ``"proto"``.
+        kind: ``"cpu"`` or ``"cuda"``.
         devices: Explicit device IDs when provided (e.g. ``["cuda:0"]``),
-            ``None`` for auto-allocate CUDA, or ``None`` for proto.
-        count: Number of CUDA devices requested (always 1 for cpu/proto).
-        concurrency: Parallel-request cap for proto devices, 0 otherwise.
+            ``None`` for auto-allocate CUDA.
+        count: Number of CUDA devices requested (always 1 for cpu).
     """
     kind: str
     devices: list[str] | None
     count: int
-    concurrency: int = 0
 
 
 def number_of_physical_gpus() -> int:
@@ -197,8 +193,8 @@ def get_gpu_memory_used_physical(physical_device_id: int) -> int:
 def _parse_count_suffix(device: str, prefix: str) -> int:
     """Extract and validate a positive integer count after *prefix*.
 
-    *prefix* must include the separator character (e.g. ``"cudax"``,
-    ``"proto:"``, ``"protox"``), so the remainder is purely numeric.
+    *prefix* must include the separator character (e.g. ``"cudax"``),
+    so the remainder is purely numeric.
 
     Raises:
         ValueError: If the suffix is missing, non-numeric, zero, or negative.
@@ -218,7 +214,7 @@ def _parse_count_suffix(device: str, prefix: str) -> int:
 def parse_device_string(device: str) -> DeviceSpec:
     """Parse a device string into a structured :class:`DeviceSpec`.
 
-    Supports CPU, CUDA (single/multi, auto/explicit), and proto device strings.
+    Supports CPU and CUDA (single/multi, auto/explicit) device strings.
 
     Args:
         device: Device string to parse.
@@ -228,21 +224,15 @@ def parse_device_string(device: str) -> DeviceSpec:
 
     Examples:
         >>> parse_device_string("cpu")
-        DeviceSpec(kind='cpu', devices=['cpu'], count=1, concurrency=0)
+        DeviceSpec(kind='cpu', devices=['cpu'], count=1)
         >>> parse_device_string("cuda")
-        DeviceSpec(kind='cuda', devices=None, count=1, concurrency=0)
+        DeviceSpec(kind='cuda', devices=None, count=1)
         >>> parse_device_string("cudax2")
-        DeviceSpec(kind='cuda', devices=None, count=2, concurrency=0)
+        DeviceSpec(kind='cuda', devices=None, count=2)
         >>> parse_device_string("cuda:0")
-        DeviceSpec(kind='cuda', devices=['cuda:0'], count=1, concurrency=0)
+        DeviceSpec(kind='cuda', devices=['cuda:0'], count=1)
         >>> parse_device_string("cuda:0,1")
-        DeviceSpec(kind='cuda', devices=['cuda:0', 'cuda:1'], count=2, concurrency=0)
-        >>> parse_device_string("proto")
-        DeviceSpec(kind='proto', devices=None, count=1, concurrency=16)
-        >>> parse_device_string("proto:64")
-        DeviceSpec(kind='proto', devices=None, count=1, concurrency=64)
-        >>> parse_device_string("protox64")
-        DeviceSpec(kind='proto', devices=None, count=1, concurrency=64)
+        DeviceSpec(kind='cuda', devices=['cuda:0', 'cuda:1'], count=2)
 
     Raises:
         ValueError: If device string format is invalid.
@@ -252,16 +242,6 @@ def parse_device_string(device: str) -> DeviceSpec:
     # CPU
     if device == "cpu":
         return DeviceSpec(kind="cpu", devices=["cpu"], count=1)
-
-    # Proto: "proto", "proto:64", "protox64"
-    if device == "proto":
-        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=PROTO_DEFAULT_CONCURRENCY)
-    if device.startswith("protox"):
-        concurrency = _parse_count_suffix(device, "protox")
-        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=concurrency)
-    if device.startswith("proto:"):
-        concurrency = _parse_count_suffix(device, "proto:")
-        return DeviceSpec(kind="proto", devices=None, count=1, concurrency=concurrency)
 
     # Auto-allocate N GPUs: "cudax2", "cudax3", etc.
     if device.startswith("cudax"):
@@ -379,11 +359,11 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
 
     When given a list, collects all CUDA indices across entries, validates them
     in a single pass (one nvidia-smi call), and returns the deduplicated physical
-    indices. Non-CUDA entries (cpu, proto) are skipped.
+    indices. Non-CUDA entries (cpu) are skipped.
 
     Args:
         device: Device specification — int, single device string, or list of
-            ints/strings (e.g. ``["cuda:0", "cuda:1", "proto"]``).
+            ints/strings (e.g. ``["cuda:0", "cuda:1"]``).
 
     Returns:
         CUDA_VISIBLE_DEVICES value (comma-separated device indices)
@@ -399,7 +379,7 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
         "0,1"
         >>> determine_visible_devices("cuda:0,cuda:1")
         "0,1"
-        >>> determine_visible_devices(["cuda:0", "cuda:1", "proto"])
+        >>> determine_visible_devices(["cuda:0", "cuda:1"])
         "0,1"
 
         With parent CUDA_VISIBLE_DEVICES=3,5,7:
