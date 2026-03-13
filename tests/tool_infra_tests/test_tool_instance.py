@@ -1066,7 +1066,7 @@ def test_first_config_gets_warmup_timeout():
     params = {"model_name": "protenix_mini_esm_v0.5.0"}
 
     result = inst._apply_warmup_timeout(1200, params)
-    assert result == 2400  # warmup timeout (40 min)
+    assert result == 3600  # warmup timeout (60 min)
 
 
 def test_seen_config_gets_normal_timeout():
@@ -1093,7 +1093,7 @@ def test_different_configs_independent():
     # Config A should get normal timeout
     assert inst._apply_warmup_timeout(1200, params_a) == 1200
     # Config B should still get warmup timeout
-    assert inst._apply_warmup_timeout(1200, params_b) == 2400
+    assert inst._apply_warmup_timeout(1200, params_b) == 3600
 
 
 def test_empty_params_warmup():
@@ -1101,7 +1101,7 @@ def test_empty_params_warmup():
     inst = _make_fake_instance(needs_warmup=True)
 
     # First run with empty params should get warmup
-    assert inst._apply_warmup_timeout(600, {}) == 2400
+    assert inst._apply_warmup_timeout(600, {}) == 3600
 
     # After marking complete, should get normal timeout
     inst._mark_warmup_complete({})
@@ -1124,7 +1124,7 @@ def test_warmup_with_none_timeout():
     params = {"model_name": "some_model"}
 
     result = inst._apply_warmup_timeout(None, params)
-    assert result == 2400
+    assert result == 3600
 
 
 def test_no_params_defaults_to_empty():
@@ -1133,7 +1133,7 @@ def test_no_params_defaults_to_empty():
 
     # No reload_params arg -> uses {} -> first run
     result = inst._apply_warmup_timeout(600)
-    assert result == 2400
+    assert result == 3600
 
 
 def test_marker_deterministic():
@@ -1177,9 +1177,9 @@ def test_persistent_warmup_on_config_change():
             reload_on={"model_checkpoint"},
         )
 
-        # New config should have used warmup timeout (2400)
+        # New config should have used warmup timeout (3600)
         call_args = new_worker.send.call_args
-        assert call_args.kwargs.get("timeout") == 2400 or call_args[1].get("timeout") == 2400
+        assert call_args.kwargs.get("timeout") == 3600 or call_args[1].get("timeout") == 3600
 
 
 # ── Thread safety tests ───────────────────────────────────────────────────

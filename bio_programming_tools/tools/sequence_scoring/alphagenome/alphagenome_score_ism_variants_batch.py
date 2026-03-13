@@ -10,6 +10,7 @@ from typing import Any, Iterator, List, Optional, Union
 from pydantic import Field, field_validator, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.helpers import require_hf_token
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
@@ -210,6 +211,8 @@ def run_alphagenome_score_ism_variants_batch(
     instance=None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run batched in-silico mutagenesis using AlphaGenome variant scorers."""
+    require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
+
     serialized_requests = []
     for req in inputs.requests:
         request: dict[str, Any] = {

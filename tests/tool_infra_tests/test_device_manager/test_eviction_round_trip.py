@@ -75,6 +75,8 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
             managed_devices=managed_devices,
             offload_strategy=OffloadStrategy.CPU,
         )
+        # DeviceManager auto-escalates CPU -> RESTART under Exclusive_Process
+        active_strategy = dm._offload_strategy
 
         try:
             # Extract the tool's registry key to derive a safe instance name
@@ -128,13 +130,20 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
                     # Verify eviction happened
                     status = dm.get_device_status()
                     alloc = status["allocations"].get(instance_name)
-                    assert alloc is not None, (
-                        f"{tool_key} allocation disappeared after eviction"
-                    )
-                    assert alloc["device_id"] == "cpu", (
-                        f"{tool_key} should be evicted to CPU, "
-                        f"got {alloc['device_id']}"
-                    )
+                    if active_strategy == OffloadStrategy.CPU:
+                        assert alloc is not None, (
+                            f"{tool_key} allocation disappeared after eviction"
+                        )
+                        assert alloc["device_id"] == "cpu", (
+                            f"{tool_key} should be evicted to CPU, "
+                            f"got {alloc['device_id']}"
+                        )
+                    else:
+                        # RESTART strategy removes the allocation entirely
+                        assert alloc is None, (
+                            f"{tool_key} allocation should be removed under "
+                            f"RESTART strategy, but found {alloc}"
+                        )
 
                     time.sleep(0.01)
 

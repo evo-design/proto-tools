@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from bio_programming_tools import (
     AlphaGenomePredictSequencesConfig,
     AlphaGenomePredictSequencesInput,
@@ -13,6 +15,12 @@ from bio_programming_tools.utils.tool_instance import ToolInstance
 
 _SEQ_16K_A = "ACGT" * (16_384 // 4)
 _SEQ_16K_B = "TGCA" * (16_384 // 4)
+
+
+@pytest.fixture(autouse=True)
+def _fake_hf_token(monkeypatch):
+    """Bypass require_hf_token() for dispatch-path tests (no real HF access needed)."""
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_for_unit_tests")
 
 
 # ── Dispatch path ────────────────────────────────────────────────────────────

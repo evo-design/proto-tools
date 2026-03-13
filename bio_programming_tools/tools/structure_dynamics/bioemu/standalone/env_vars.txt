@@ -1,0 +1,19 @@
+# Environment variables for BioEmu (conformational dynamics sampling)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Hugging Face tokens for downloading model weights
+HF_TOKEN
+HUGGING_FACE_HUB_TOKEN
+
+[set]
+# CUDA libs for ColabFold's JAX (installed via micromamba in setup.sh)
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+# CUDA_ROOT tells JAX where to find ptxas/nvcc — bypasses a JAX 0.4.35 bug where
+# nvidia.cuda_nvcc.__file__ is None (namespace package) causing Path(None) crash
+CUDA_ROOT=${VENV_PATH}/cuda_env
+# Keep ColabFold venv inside the tool env instead of ~/.bioemu_colabfold
+BIOEMU_COLABFOLD_DIR=${VENV_PATH}/colabfold_env

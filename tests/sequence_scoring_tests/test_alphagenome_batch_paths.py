@@ -38,6 +38,12 @@ _ORGANISM = "human"
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _fake_hf_token(monkeypatch):
+    """Bypass require_hf_token() for dispatch-path tests (no real HF access needed)."""
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_for_unit_tests")
+
+
 @pytest.fixture
 def mock_dispatch_factory(monkeypatch):
     """Return a factory that installs a mock ToolInstance.dispatch and records calls."""

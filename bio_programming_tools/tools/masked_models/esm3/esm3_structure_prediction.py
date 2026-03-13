@@ -13,6 +13,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils.helpers import require_hf_token
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 
@@ -217,6 +218,8 @@ def run_esm3_structure_prediction(
         - Use smaller batch sizes (1-4) for structure prediction vs embeddings
         - Very long sequences (>1000 residues) may fail or produce low-quality structures
     """
+
+    require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution
     logger.debug(f"Using local for ESM3 structure prediction: {config.model_checkpoint}")

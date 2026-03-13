@@ -9,6 +9,7 @@ from typing import Any, Iterator, List, Union
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils.helpers import require_hf_token
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
@@ -129,6 +130,8 @@ def run_alphagenome_predict_intervals(
     instance=None,
 ) -> AlphaGenomePredictIntervalsOutput:
     """Predict genomic features for batched intervals using AlphaGenome."""
+    require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
+
     dispatch_result = ToolInstance.dispatch(
         "alphagenome",
         {
