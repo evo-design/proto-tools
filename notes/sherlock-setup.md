@@ -71,6 +71,8 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 exit
 ```
 
+> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and auto-activation (Section 4), `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each bio-programming-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
+
 ---
 
 ## 2. Redirect Cache Directories
