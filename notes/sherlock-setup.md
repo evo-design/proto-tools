@@ -6,21 +6,45 @@ Setup instructions for running bio-programming-tools on Stanford's [Sherlock clu
 
 ---
 
+## 0. Get the Code
+
+Clone the repository onto Sherlock before starting:
+
+```bash
+git clone https://github.com/evo-design/bio-programming-tools.git
+```
+
+Or if you're using it as part of [bio-programming](https://github.com/evo-design/bio-programming):
+
+```bash
+git clone --recursive https://github.com/evo-design/bio-programming.git
+```
+
+---
+
 ## 1. Container Setup
 
 Sherlock's host OS is CentOS 7, which ships with glibc 2.17 (released 2012). Nearly every modern ML library — PyTorch, JAX, TensorFlow, and their dependencies — requires glibc 2.28+ and will fail to import on the bare host. The solution is to run inside an [Apptainer](https://apptainer.org/) (formerly Singularity) container that provides a modern Linux userland while still using the host's kernel, drivers, and filesystems.
 
-Build the container from the official PyTorch Docker image. This must be done on a compute node — login nodes don't have enough memory for the build:
+Build the container from the official PyTorch Docker image. This must be done on a compute node — login nodes don't have enough memory for the build.
+
+The container and conda environments (Section 3) both go on `$GROUP_HOME`. Check that your group has enough free space first (~10–15 GB needed):
+
+```bash
+df -h $GROUP_HOME
+```
+
+If `$GROUP_HOME` is nearly full, free up space or ask your PI about expanding the allocation before proceeding.
 
 ```bash
 # Get on a compute node
 srun -p normal --cpus-per-task 4 --mem 16G -t 1:00:00 --pty bash
 
 # Build the .sif image (~3.5 GB)
-apptainer build $GROUP_HOME/$USER/pytorch_latest.sif docker://pytorch/pytorch:latest
+apptainer build $GROUP_HOME/$USER/pytorch_latest.sif docker://pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
 ```
 
-This produces a read-only `.sif` file containing Ubuntu 22.04 (glibc 2.35), Python 3.10, PyTorch with CUDA support, and conda. We store it on `$GROUP_HOME` because it's fast and persistent — you'll be loading this file every time you start a session.
+This produces a read-only `.sif` file containing Ubuntu 22.04 (glibc 2.35), Python 3.11, PyTorch 2.6.0 with CUDA support, and conda. We store it on `$GROUP_HOME` because it's fast and persistent — you'll be loading this file every time you start a session.
 
 ### Set up the shell alias
 
@@ -67,16 +91,18 @@ Model weights are a good fit for Oak: they're large, read sequentially once at l
 
 Follow the instructions in **[model-weights-cache.md](model-weights-cache.md)** to symlink cache directories from `$HOME` to either `$GROUP_HOME` or `$OAK`. That guide documents every directory that tools write to and provides copy-paste symlink commands.
 
-On Sherlock, use `$OAK` as the storage target for model weights and caches:
+On Sherlock, use `$OAK` as the storage target for model weights and caches. The path below may not exist yet — `mkdir -p` will create it:
 
 ```bash
-STORAGE=/oak/stanford/groups/<PI>/projects/$USER
+STORAGE=$OAK/$USER
+mkdir -p $STORAGE
 ```
 
 Or use `$GROUP_HOME` if your lab doesn't have Oak allocation:
 
 ```bash
-STORAGE=/home/groups/<PI>/$USER
+STORAGE=$GROUP_HOME/$USER
+mkdir -p $STORAGE
 ```
 
 The simplest approach is to redirect all of `~/.cache` at once (covers HuggingFace, torch hub, pip, and tool environments):
@@ -86,6 +112,8 @@ mv ~/.cache ~/.cache.bak
 mkdir -p $STORAGE/.cache
 ln -sfn $STORAGE/.cache ~/.cache
 cp -a ~/.cache.bak/* ~/.cache/ 2>/dev/null || true
+# Verify the copy before deleting the backup
+du -sh ~/.cache ~/.cache.bak
 rm -rf ~/.cache.bak
 ```
 
@@ -112,6 +140,21 @@ Conda environments contain thousands of small files that are read frequently dur
 conda create -p /home/groups/<PI>/$USER/envs/bio-tools python=3.11
 
 # Bad: Oak (slow for conda), Home (too small), Scratch (auto-deletes)
+```
+
+### Install bio-programming-tools
+
+Package installation **must** be done inside the container. The CentOS 7 host has glibc 2.17, which is too old for pre-built wheels of numpy, scipy, pandas, and other dependencies — they'll fail trying to build from source. Inside the container (Ubuntu 22.04, glibc 2.35), pre-built wheels install instantly.
+
+```bash
+# Enter the container first
+ptshell
+
+# Activate the env and install
+conda activate /home/groups/<PI>/$USER/envs/bio-tools
+cd /path/to/bio-programming-tools
+pip install -e ".[dev]"
+pre-commit install
 ```
 
 To auto-activate inside the container, see the `~/.bashrc` block in [section 4 (Claude Code)](#4-claude-code-in-the-container) — it handles both conda activation and Claude Code setup.
@@ -168,9 +211,8 @@ Most bio-programming-tools require a GPU. On Sherlock, you need to request GPU r
 # Request a GPU node (adjust partition and time as needed)
 srun -p gpu --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -t 12:00:00 --pty bash
 
-# Enter container + activate env
+# Enter container (conda env is auto-activated by the bashrc block from Section 4)
 ptshell
-conda activate /home/groups/<PI>/$USER/envs/bio-tools
 ```
 
 If your lab has a condo partition (e.g., `brianhie`), use that for dedicated GPU access with shorter queue times:
@@ -181,7 +223,9 @@ srun -p brianhie --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -N 1 -t 12:00:00 
 
 ### Batch job
 
-For longer-running or unattended work, submit a batch job. This is useful for running tool benchmarks, generating environment reports, or processing large datasets:
+For longer-running or unattended work, submit a batch job. This is useful for running tool benchmarks, generating environment reports, or processing large datasets.
+
+Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` only works for interactive shells. In batch scripts, you must explicitly `source ~/.bashrc` to get conda activation and PATH setup:
 
 ```bash
 #!/bin/bash
@@ -193,8 +237,7 @@ For longer-running or unattended work, submit a batch job. This is useful for ru
 #SBATCH --output=logs/%j.out
 
 apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
-    source ~/.bashrc
-    conda activate /home/groups/<PI>/\$USER/envs/bio-tools
+    source ~/.bashrc  # required — sets up conda env, PATH, LD_LIBRARY_PATH
     python my_script.py
 "
 ```
@@ -210,14 +253,12 @@ Since home directory quota is tight, it's worth periodically checking what's usi
 du -sh ~
 du -sh ~/.cache ~/.local ~/.model_cache 2>/dev/null
 
-# Sherlock quota check
-lfs quota -u $USER /home
-
-# Find what's eating space
-du -h --max-depth=2 ~ | sort -rh | head -20
-
-# Check Oak usage
+# Check Group Home and Oak usage
+df -h $GROUP_HOME
 lfs quota -g <PI> $OAK
+
+# Find what's eating space in home
+du -h --max-depth=2 ~ | sort -rh | head -20
 ```
 
 ---
@@ -239,7 +280,7 @@ Then symlink the offending directory to your storage target. See [model-weights-
 pip caches wheels in `~/.cache/pip` and may install to `~/.local`. If you followed the symlink setup in step 2, both are already redirected. Otherwise:
 
 ```bash
-STORAGE=/oak/stanford/groups/<PI>/projects/$USER
+STORAGE=$OAK/$USER
 
 mkdir -p $STORAGE/.cache/pip
 ln -sfn $STORAGE/.cache/pip ~/.cache/pip
