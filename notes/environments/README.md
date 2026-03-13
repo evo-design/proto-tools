@@ -46,12 +46,17 @@ Categories should match the directory structure in `bio_programming_tools/tools/
 
 Reports are named: `{platform_id}.md`
 
-Platform ID format: `[{user}_]{cluster_or_os}_{arch}_{gpu_or_cpu}`
+Platform ID format: `[{user}_]{cluster_or_os}[_{hostname}]_{arch}_{gpu_or_cpu}`
 
-The filename uses a shortened platform ID (no date or commit hash). Examples:
+The filename uses a shortened platform ID (no date or commit hash). Known hostname
+patterns are mapped to friendly names (e.g. Sherlock `sh*` nodes → `sherlock`).
+For unrecognized Linux hosts, the sanitized hostname is appended to disambiguate.
+Named clusters (chimera, dgx_spark) and macOS already have unique OS parts. Examples:
 - `bviggiano_macosDarwin_arm64_cpu.md` (Mac M-series, no GPU)
 - `bob_chimera_x86_64_h100.md` (Chimera cluster with H100 GPU)
 - `alice_dgx_spark_arm64_gb10.md` (DGX Spark with GB10 GPU)
+- `viggiano_sherlock_x86_64_h100.md` (Sherlock compute node)
+- `alice_linux_myhost_x86_64_a100.md` (Unknown Linux machine, hostname included)
 
 Reports are overwritten on each run to keep the latest results per platform/user.
 

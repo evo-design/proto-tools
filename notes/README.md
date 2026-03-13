@@ -6,8 +6,9 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 
 ## Directory Structure
 
+- `model-weights-cache.md` — Cache directories and symlink instructions for model weights
+- `sherlock-setup.md` — Stanford Sherlock cluster-specific setup (temporary, for beta testers)
 - `environments/` — Machine-generated Markdown compatibility reports (see `environments/README.md`)
-- `huggingface_token.md` — HuggingFace token setup for gated models (ESM3, AlphaGenome)
 
 ## Docs Ownership
 

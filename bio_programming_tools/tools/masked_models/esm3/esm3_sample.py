@@ -12,6 +12,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.helpers import require_hf_token
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolOutput
 
@@ -261,6 +262,8 @@ def run_esm3_sample(
     Note:
         - For protein design workflows, start with low temperatures and few mutations
     """
+
+    require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution
     logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")

@@ -472,6 +472,40 @@ def _get_slurm_cluster_name() -> str | None:
     return None
 
 
+# Hostname regex -> friendly name. Checked in order; first match wins.
+# Add new clusters here as (compiled_pattern, friendly_name) tuples.
+_HOSTNAME_ALIASES: list[tuple[re.Pattern[str], str]] = [
+    # Sherlock (Stanford): login nodes "sh03-lnNN", compute nodes "sh04-NNnNN"
+    (re.compile(r"^sh\d+-", re.IGNORECASE), "sherlock"),
+]
+
+
+def _resolve_hostname_alias(hostname: str) -> str | None:
+    """Return a friendly name if the hostname matches a known pattern."""
+    for pattern, alias in _HOSTNAME_ALIASES:
+        if pattern.search(hostname):
+            return alias
+    return None
+
+
+def _sanitize_hostname(hostname: str) -> str:
+    """Make a hostname safe for use in filenames.
+
+    - Strips the DNS domain suffix (everything after the first dot)
+    - Keeps only alphanumeric characters and hyphens
+    - Collapses consecutive separators and strips leading/trailing ones
+    - Truncates to 40 characters
+    """
+    # Strip domain suffix: "sh04-15n01.int" -> "sh04-15n01"
+    hostname = hostname.split(".")[0]
+    # Keep only filename-safe characters
+    hostname = re.sub(r"[^a-zA-Z0-9\-]", "-", hostname)
+    # Collapse consecutive hyphens and strip edges
+    hostname = re.sub(r"-+", "-", hostname).strip("-")
+    # Truncate
+    return hostname[:40]
+
+
 def get_platform_id(
     *,
     include_user: bool = True,
@@ -480,13 +514,20 @@ def get_platform_id(
 ) -> str:
     """Generate a unique platform identifier string.
 
-    Format: `[{user}_]{cluster_or_os}_{arch}_{gpu_or_cpu}[_{YYYYMMDD}][_{commit}]`
+    Format: `[{user}_]{cluster_or_os}[_{hostname}]_{arch}_{gpu_or_cpu}[_{YYYYMMDD}][_{commit}]`
+
+    The hostname is included for generic OS names (e.g. ``linux``) to
+    disambiguate machines that would otherwise produce the same ID.
+    Named clusters (chimera, dgx_spark) and macOS already have unique
+    OS parts, so the hostname is omitted for brevity.
 
     Examples
     --------
     - Mac: `alice_macosDarwin_arm64_cpu_20260216_bcf5907`
     - Chimera: `bob_chimera_x86_64_h100_20260216_bcf5907`
     - DGX Spark: `alice_dgx_spark_arm64_gb10_20260216_bcf5907`
+    - Sherlock: `viggiano_sherlock_x86_64_h100_20260216_bcf5907`
+    - Unknown Linux: `alice_linux_myhost_x86_64_a100_20260216_bcf5907`
 
     Parameters
     ----------
@@ -514,15 +555,24 @@ def get_platform_id(
             parts.append(username)
 
     # Determine cluster/OS prefix
+    # Named clusters and macOS are already unique; generic OS names
+    # (e.g. "linux") get the hostname appended to disambiguate machines.
+    # Known hostname patterns (see _HOSTNAME_ALIASES) are resolved to
+    # friendly names and treated as named clusters (no raw hostname).
+    include_hostname = False
     cluster_name = _get_slurm_cluster_name()
+    hostname_alias = _resolve_hostname_alias(platform_info.hostname)
     if cluster_name == "arc-slurm":
         os_part = "chimera"
     elif "dgx" in platform_info.hostname.lower() or "spark" in platform_info.hostname.lower():
         os_part = "dgx_spark"
+    elif hostname_alias:
+        os_part = hostname_alias
     elif platform_info.os.lower() == "darwin":
         os_part = "macosDarwin"
     else:
         os_part = platform_info.os.lower()
+        include_hostname = True
 
     # Normalize architecture
     arch = platform_info.architecture
@@ -548,7 +598,12 @@ def get_platform_id(
     else:
         gpu_part = "cpu"
 
-    parts.extend([os_part, arch, gpu_part])
+    parts.append(os_part)
+    if include_hostname:
+        hostname = _sanitize_hostname(platform_info.hostname)
+        if hostname:
+            parts.append(hostname)
+    parts.extend([arch, gpu_part])
 
     if include_date:
         parts.append(datetime.now().strftime("%Y%m%d"))

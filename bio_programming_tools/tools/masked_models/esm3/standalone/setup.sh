@@ -13,6 +13,9 @@ HF_TOKEN="${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN:-}}"
 if [ -z "$HF_TOKEN" ] && [ -f "$HOME/.cache/huggingface/token" ]; then
     HF_TOKEN="$(cat "$HOME/.cache/huggingface/token")"
 fi
+if [ -z "$HF_TOKEN" ] && [ -f "$HOME/.git-credentials" ]; then
+    HF_TOKEN="$(grep -oP 'https?://[^:]+:\Khf_[^@]+(?=@huggingface\.co)' "$HOME/.git-credentials" | head -1)"
+fi
 
 if [ -n "$HF_TOKEN" ]; then
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \

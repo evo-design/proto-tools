@@ -77,7 +77,7 @@ from enum import Enum
 from typing import Any, Callable, Generator
 from uuid import uuid4
 
-from .device import number_of_visible_gpus
+from .device import is_exclusive_process_mode, number_of_visible_gpus
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +238,24 @@ class DeviceManager:
                 self._allow_multiple_per_device,
             )
 
+        # Auto-escalate CPU -> RESTART under Exclusive_Process GPU mode
+        self._escalate_for_exclusive_process()
+
+    def _escalate_for_exclusive_process(self) -> None:
+        """Switch CPU offload to RESTART if any GPU is in Exclusive_Process mode.
+
+        Under Exclusive_Process, an evicted subprocess retains its CUDA context
+        and blocks other processes from using the GPU even after offloading to CPU.
+        """
+        if self._offload_strategy == OffloadStrategy.CPU:
+            if is_exclusive_process_mode():
+                logger.warning(
+                    "GPU compute mode is Exclusive_Process — CPU offload strategy "
+                    "is incompatible (evicted subprocess retains CUDA context). "
+                    "Auto-switching to RESTART strategy."
+                )
+                self._offload_strategy = OffloadStrategy.RESTART
+
     def configure(
         self,
         *,
@@ -303,6 +321,9 @@ class DeviceManager:
                 if isinstance(offload_strategy, str):
                     offload_strategy = OffloadStrategy(offload_strategy.lower())
                 self._offload_strategy = offload_strategy
+
+            # Auto-escalate CPU -> RESTART under Exclusive_Process GPU mode
+            self._escalate_for_exclusive_process()
 
             logger.info(
                 "DeviceManager configured: managed_devices=%s, "

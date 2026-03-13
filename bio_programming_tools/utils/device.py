@@ -46,6 +46,24 @@ class DeviceSpec:
     count: int
 
 
+def get_gpu_compute_modes() -> list[str]:
+    """Return the compute mode for each GPU via nvidia-smi.
+
+    Returns:
+        List of mode strings per GPU (e.g. ``["Exclusive_Process", "Default"]``).
+        Empty list if nvidia-smi is unavailable.
+    """
+    out = _run_nvidia_smi_query("--query-gpu=compute_mode", "--format=csv,noheader")
+    if out is None:
+        return []
+    return [line.strip() for line in out.strip().splitlines() if line.strip()]
+
+
+def is_exclusive_process_mode() -> bool:
+    """Return True if any GPU reports ``Exclusive_Process`` compute mode."""
+    return any(m == "Exclusive_Process" for m in get_gpu_compute_modes())
+
+
 def number_of_physical_gpus() -> int:
     """Returns the number of physical NVIDIA GPUs via nvidia-smi.
 

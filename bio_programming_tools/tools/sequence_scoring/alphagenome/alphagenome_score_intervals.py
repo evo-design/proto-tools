@@ -11,6 +11,7 @@ from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils.helpers import require_hf_token
 from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
@@ -174,6 +175,8 @@ def run_alphagenome_score_intervals(
     instance=None,
 ) -> AlphaGenomeScoreIntervalsOutput:
     """Score genomic intervals in batch using AlphaGenome interval scorers."""
+    require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
+
     dispatch_result = ToolInstance.dispatch(
         "alphagenome",
         {

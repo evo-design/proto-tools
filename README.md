@@ -1,61 +1,48 @@
 <img src="https://evodesign.org/images/logo.svg" alt="Evo Design Logo" width="120" align="left" style="margin-right: 15px;">
 
-# Tools Hub for Biological AI Models and Computational Biology
+# 🧬 Biological Programming Language Project - Tools Layer 🛠️
 [![Lint Check](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml)
 [![Run Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
 [![Run Integration Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml)
 [![docs_autogen](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml)
 
-## Related Repositories
+Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **60+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
-### Backend
-* [`bio-programming`](https://github.com/evo-design/bio-programming) – The primary backend repository (includes this repo as a submodule).
+Every tool runs in its own automatically managed isolated environment, so you never have to fight dependency conflicts or build complex conda setups. Just install, call, and get results. Run tools locally on your own hardware, or dispatch to remote compute.
 
-### Client
-* [`bio-programming-tools-ui`](https://github.com/evo-design/bio-programming-tools-ui) – Mock UI specifically designed for demonstrating and testing these tools.
-* [`bio-programming-lang`](https://github.com/evo-design/bio-programming-lang) – The dedicated client interface for the biological programming language.
+You can use it as a standalone Python library or as part of the broader [bio-programming](https://github.com/evo-design/bio-programming) system.
 
-## Installation
+## Setup 🚧
 
-### Recommended: Conda environment file
+> [!NOTE]
+> **On Stanford Sherlock?** The cluster's old glibc requires a container-based setup. See the [Sherlock HPC Setup Guide](notes/sherlock-setup.md) for step-by-step instructions.
 
-Using the provided `environment.yml` installs Python, compilers, build tools, and system
-libraries that tool environments need when compiling from source. This is the most stable
-setup, especially on HPC and GPU nodes.
+### Step 1: Install the package 🐍
+
+We recommend using the provided `environment.yml`, which sets up Python, compilers, build tools, and system libraries that some tool environments need when compiling from source:
 
 ```bash
 conda env create -f environment.yml
 conda activate bio-tools
-
-# For development
-pip install -e ".[dev]"
-pre-commit install
+pip install -e "."
 ```
 
-### Minimal setup
+Most newer systems will already have compilers and build tools available at a system level, which should allow you to just `pip install -e "."` in any Python 3.10+ environment.
 
-If you already have compilers and system libraries available (e.g., via modules), a
-plain conda or venv environment works too:
+For development (tests, linting, pre-commit hooks):
 
 ```bash
-# Using conda
-conda create -n bio-tools python=3.12 -y
-conda activate bio-tools
-pip install -e "."
-
-# Or using venv
-python -m venv .venv
-source .venv/bin/activate
-pip install -e "."
-
-# For development
 pip install -e ".[dev]"
 pre-commit install
 ```
 
-## HuggingFace Authentication
+### Step 2: Redirect cache directories (optional) 🗂️
 
-Some models are hosted in gated HuggingFace repositories that require both authentication and accepting the model's license/terms. The following models require this:
+Many tools download multi-GB model weights to `$HOME` subdirectories on first run. If your home directory has limited space (common on HPC clusters), you may want to redirect these to larger storage before running tools! See [notes/model-weights-cache.md](notes/model-weights-cache.md) for the full list of directories and per-tool details.
+
+### Step 3: HuggingFace authentication (optional) 🔑
+
+Some tools use gated models that require a HuggingFace account and accepting the model's license/terms:
 
 | Model | HuggingFace Repo | Notes |
 |-------|-----------------|-------|
@@ -66,21 +53,74 @@ To use these models:
 
 1. Create a [HuggingFace](https://huggingface.co) account
 2. Visit each model page above and **accept the license/terms**
-3. Create an [access token](https://huggingface.co/settings/tokens)
-4. Install [HuggingFace CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli)
+3. Install the [HuggingFace CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli) and log in:
    ```bash
    curl -LsSf https://hf.co/cli/install.sh | bash
+   hf auth login
    ```
-
-5. Set the token in your environment:
+   Or set the token directly in your environment:
    ```bash
    export HF_TOKEN=hf_...
-   # Or log in with: hf auth login
    ```
 
-The setup scripts for gated models will check for access and provide a clear error if authentication is missing.
+## Available Tools 🔬
+
+<pre>
+<a href="bio_programming_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence generation
+├── <a href="bio_programming_tools/tools/causal_models/evo1/">evo1/</a>
+├── <a href="bio_programming_tools/tools/causal_models/evo2/">evo2/</a>
+└── <a href="bio_programming_tools/tools/causal_models/progen2/">progen2/</a>
+<a href="bio_programming_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
+├── <a href="bio_programming_tools/tools/database_retrieval/ncbi/">ncbi/</a>
+├── <a href="bio_programming_tools/tools/database_retrieval/pdb/">pdb/</a>
+├── <a href="bio_programming_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
+└── <a href="bio_programming_tools/tools/database_retrieval/uniprot/">uniprot/</a>
+<a href="bio_programming_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation and homology search
+├── <a href="bio_programming_tools/tools/gene_annotation/blast/">blast/</a>
+├── <a href="bio_programming_tools/tools/gene_annotation/crispr_tracr/">crispr_tracr/</a>
+├── <a href="bio_programming_tools/tools/gene_annotation/minced/">minced/</a>
+├── <a href="bio_programming_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
+└── <a href="bio_programming_tools/tools/gene_annotation/pyhmmer/">pyhmmer/</a>
+<a href="bio_programming_tools/tools/inverse_folding/">inverse_folding/</a>                # Sequence design from structures
+├── <a href="bio_programming_tools/tools/inverse_folding/ligandmpnn/">ligandmpnn/</a>
+└── <a href="bio_programming_tools/tools/inverse_folding/proteinmpnn/">proteinmpnn/</a>
+<a href="bio_programming_tools/tools/masked_models/">masked_models/</a>                  # Masked language models
+├── <a href="bio_programming_tools/tools/masked_models/esm2/">esm2/</a>
+└── <a href="bio_programming_tools/tools/masked_models/esm3/">esm3/</a>
+<a href="bio_programming_tools/tools/orf_prediction/">orf_prediction/</a>                 # Open reading frame detection
+├── <a href="bio_programming_tools/tools/orf_prediction/orfipy/">orfipy/</a>
+└── <a href="bio_programming_tools/tools/orf_prediction/prodigal/">prodigal/</a>
+<a href="bio_programming_tools/tools/rna_splicing/">rna_splicing/</a>                   # RNA splice site prediction
+└── <a href="bio_programming_tools/tools/rna_splicing/splice_transformer/">splice_transformer/</a>
+<a href="bio_programming_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Multiple sequence alignment
+├── <a href="bio_programming_tools/tools/sequence_alignment/colabfold_search/">colabfold_search/</a>
+└── <a href="bio_programming_tools/tools/sequence_alignment/mafft/">mafft/</a>
+<a href="bio_programming_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
+├── <a href="bio_programming_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
+├── <a href="bio_programming_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
+├── <a href="bio_programming_tools/tools/sequence_scoring/enformer/">enformer/</a>
+└── <a href="bio_programming_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
+<a href="bio_programming_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
+├── <a href="bio_programming_tools/tools/structure_alignment/tmalign/">tmalign/</a>
+└── <a href="bio_programming_tools/tools/structure_alignment/usalign/">usalign/</a>
+<a href="bio_programming_tools/tools/structure_design/">structure_design/</a>               # De novo structure generation
+└── <a href="bio_programming_tools/tools/structure_design/rfdiffusion3/">rfdiffusion3/</a>
+<a href="bio_programming_tools/tools/structure_dynamics/">structure_dynamics/</a>             # Conformational dynamics
+└── <a href="bio_programming_tools/tools/structure_dynamics/bioemu/">bioemu/</a>
+<a href="bio_programming_tools/tools/structure_prediction/">structure_prediction/</a>           # 3D structure prediction
+├── <a href="bio_programming_tools/tools/structure_prediction/alphafold2/">alphafold2/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/alphafold3/">alphafold3/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/boltz2/">boltz2/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/chai1/">chai1/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/esmfold/">esmfold/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/protenix/">protenix/</a>
+├── <a href="bio_programming_tools/tools/structure_prediction/structure_metrics/">structure_metrics/</a>
+└── <a href="bio_programming_tools/tools/structure_prediction/viennarna/">viennarna/</a>
+</pre>
 
 ## Usage
+
+Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. Config is always optional — omit it to use defaults.
 
 ```python
 from bio_programming_tools.tools.gene_annotation.blast import (
@@ -115,7 +155,7 @@ See `notes/tool_instance_example.ipynb` for a full walkthrough with timing compa
 
 ## Using with Claude Code
 
-This repo includes [Claude Code](https://docs.anthropic.com/en/docs/claude-code) integration for both users running tools and developers extending the library. Launch `claude` from the repo root:
+Run tools interactively through natural language using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Launch `claude` from the repo root:
 
 ```bash
 claude
@@ -131,25 +171,21 @@ Ask Claude things like:
 
 It will write runnable scripts to `analyses/` or execute directly depending on context. See `CLAUDE.md` for the full workflow guide.
 
-### For developers (extending the tool library)
+## Development & Contributing
 
-Commands (invoked with `/command-name`):
+Contributing new tools, running tests, and developer workflows. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide, including PR format, code style, and testing conventions.
 
+### Claude Code features for developers
+
+Slash commands for common development tasks (invoked with `/command-name`):
 - **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
 - **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.
 
-## Development
-
-To run tests, linting, and other code quality tools, install with the dev extras:
-
-```bash
-pip install -e ".[dev]"
-pre-commit install
-```
-
 ### Testing
+
+Tests are split by resource requirements. GPU and integration tests are skipped by default.
 
 ```bash
 pytest                          # CPU unit tests (skips GPU, slow, integration)

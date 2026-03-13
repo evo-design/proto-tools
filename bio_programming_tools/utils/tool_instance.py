@@ -779,7 +779,7 @@ class ToolInstance:
 
         On the first use of a reload_on_change config combination, tools
         may need to download large checkpoint files. Use an extended
-        timeout (40 minutes or the configured timeout, whichever is
+        timeout (60 minutes or the configured timeout, whichever is
         larger) to allow time for downloads.
 
         Parameters
@@ -795,7 +795,7 @@ class ToolInstance:
         int | None
             The effective timeout to use (extended on first run).
         """
-        WARMUP_TIMEOUT = 2400  # 40 minutes
+        WARMUP_TIMEOUT = 3600  # 60 minutes
         params = reload_params or {}
         if self._needs_warmup(params):
             if timeout is None:
