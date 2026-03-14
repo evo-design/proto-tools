@@ -1,6 +1,14 @@
 # Base classes and registry
 
 # Causal model tools
+# Tool cache and I/O
+from bio_programming_tools.utils.tool_cache import (
+    clear_cache,
+    clear_tool_cache,
+    get_cache_info,
+)
+from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+
 from .causal_models import (  # Evo1; Evo2; ProGen2
     EVO1_MODEL_CHECKPOINTS,
     Evo1SampleConfig,
@@ -29,27 +37,59 @@ from .causal_models import (  # Evo1; Evo2; ProGen2
     run_progen2_score,
 )
 
-# Tool cache and I/O
-from bio_programming_tools.utils.tool_cache import (
-    clear_cache,
-    clear_tool_cache,
-    get_cache_info,
+# Database retrieval tools
+from .database_retrieval import (
+    FetchedSequence,
+    FetchedStructure,
+    NCBIEfetchConfig,
+    NCBIEfetchInput,
+    NCBIEfetchOutput,
+    NCBIEsearchConfig,
+    NCBIEsearchInput,
+    NCBIEsearchOutput,
+    NCBIEsummaryConfig,
+    NCBIEsummaryInput,
+    NCBIEsummaryOutput,
+    NCBIFastaRecord,
+    NCBIFetchConfig,
+    PdbChain,
+    PdbFetchConfig,
+    PdbFetchEntryConfig,
+    PdbFetchEntryInput,
+    PdbFetchEntryOutput,
+    PdbFetchFastaConfig,
+    PdbFetchFastaInput,
+    PdbFetchFastaOutput,
+    SequenceFetchConfig,
+    SequenceFetchInput,
+    SequenceFetchOutput,
+    SequenceFetchRequest,
+    SequenceFetchResult,
+    UniProtFetchConfig,
+    UniProtFetchInput,
+    UniProtFetchOutput,
+    run_ncbi_efetch,
+    run_ncbi_esearch,
+    run_ncbi_esummary,
+    run_pdb_fetch_entry,
+    run_pdb_fetch_fasta,
+    run_sequence_fetch,
+    run_uniprot_fetch,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 # Gene annotation tools
 from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCED
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
+    CreateBlastDbConfig,
+    CreateBlastDbInput,
+    CreateBlastDbOutput,
     CrisprArray,
     CrisprRepeatSpacer,
     CrisprTracrConfig,
     CrisprTracrInput,
     CrisprTracrOutput,
-    CreateBlastDbConfig,
-    CreateBlastDbInput,
-    CreateBlastDbOutput,
     MincedConfig,
     MincedInput,
     MincedOutput,
@@ -99,34 +139,18 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
 )
 
 # Inverse folding tools
-from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN; FAMPNN
-    InverseFoldingConfig,
-    InverseFoldingInput,
-    InverseFoldingStructureInput,
-    LigandMPNNSampleConfig,
-    LigandMPNNSampleInput,
-    LigandMPNNSampleOutput,
-    LigandMPNNScoringConfig,
-    LigandMPNNScoringInput,
-    LigandMPNNScoringOutput,
-    LigandMPNNSequences,
-    ProteinMPNNSampleConfig,
-    ProteinMPNNSampleInput,
-    ProteinMPNNSampleOutput,
-    ProteinMPNNScoringConfig,
-    ProteinMPNNScoringInput,
-    ProteinMPNNScoringOutput,
-    ProteinMPNNSequences,
-    SequenceScores,
-    SequenceStructurePair,
-    run_ligandmpnn_sample,
-    run_ligandmpnn_score,
-    run_proteinmpnn_sample,
-    run_proteinmpnn_score,
+from .inverse_folding import (  # Shared Data Models; ESM-IF; ProteinMPNN; LigandMPNN; FAMPNN
     AllMutationsScoreResult,
+    ESMIFSampleConfig,
+    ESMIFSampleInput,
+    ESMIFSampleOutput,
+    ESMIFScoringConfig,
+    ESMIFScoringInput,
+    ESMIFScoringOutput,
+    ESMIFSequences,
     FAMPNNPackConfig,
-    FAMPNNPackInput,
     FAMPNNPackingResult,
+    FAMPNNPackInput,
     FAMPNNSampleConfig,
     FAMPNNSampleInput,
     FAMPNNSampleOutput,
@@ -138,12 +162,70 @@ from .inverse_folding import (  # Shared Data Models; ProteinMPNN; LigandMPNN; F
     FAMPNNScoreOutput,
     FAMPNNSequences,
     FAMPNNStructureInput,
+    InverseFoldingConfig,
+    InverseFoldingInput,
+    InverseFoldingStructureInput,
+    LigandMPNNSampleConfig,
+    LigandMPNNSampleInput,
+    LigandMPNNSampleOutput,
+    LigandMPNNScoringConfig,
+    LigandMPNNScoringInput,
+    LigandMPNNScoringOutput,
+    LigandMPNNSequences,
     MutationInput,
     MutationScoreResult,
+    ProteinMPNNSampleConfig,
+    ProteinMPNNSampleInput,
+    ProteinMPNNSampleOutput,
+    ProteinMPNNScoringConfig,
+    ProteinMPNNScoringInput,
+    ProteinMPNNScoringOutput,
+    ProteinMPNNSequences,
+    SequenceScores,
+    SequenceStructurePair,
+    run_esmif_sample,
+    run_esmif_score,
     run_fampnn_pack,
     run_fampnn_sample,
     run_fampnn_score,
     run_fampnn_score_all_mutations,
+    run_ligandmpnn_sample,
+    run_ligandmpnn_score,
+    run_proteinmpnn_sample,
+    run_proteinmpnn_score,
+)
+
+# Masked model tools
+from .masked_models import (  # ESM2; ESM3
+    ESM2EmbeddingsConfig,
+    ESM2EmbeddingsInput,
+    ESM2EmbeddingsOutput,
+    ESM2SampleConfig,
+    ESM2SampleInput,
+    ESM2SampleOutput,
+    ESM2ScoringConfig,
+    ESM2ScoringInput,
+    ESM2ScoringOutput,
+    ESM3EmbeddingsConfig,
+    ESM3EmbeddingsInput,
+    ESM3EmbeddingsOutput,
+    ESM3SampleConfig,
+    ESM3SampleInput,
+    ESM3SampleOutput,
+    ESM3ScoringConfig,
+    ESM3ScoringInput,
+    ESM3ScoringOutput,
+    ESM3StructurePredictionConfig,
+    ESM3StructurePredictionInput,
+    ESM3StructurePredictionOutput,
+    SequenceEmbedding,
+    run_esm2_embeddings,
+    run_esm2_sample,
+    run_esm2_score,
+    run_esm3_embeddings,
+    run_esm3_sample,
+    run_esm3_score,
+    run_esm3_structure_prediction,
 )
 
 # ORF prediction tools
@@ -157,6 +239,19 @@ from .orf_prediction import (
     ProdigalOutput,
     run_orfipy_prediction,
     run_prodigal_prediction,
+)
+
+# RNA splicing tools
+from .rna_splicing import (
+    CONTEXT_LENGTH,
+    SPLICE_TISSUE_CHANNEL_INDEX,
+    TARGET_LENGTH,
+    SpliceTransformerConfig,
+    SpliceTransformerInput,
+    SpliceTransformerOutput,
+    SpliceTransformerTissue,
+    SpliceTransformerType,
+    run_splice_transformer,
 )
 
 # Sequence alignment tools
@@ -179,8 +274,8 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
-    AlphaGenomeISM,
     AlphaGenomeInterval,
+    AlphaGenomeISM,
     AlphaGenomePredictConfig,
     AlphaGenomePredictIntervalsConfig,
     AlphaGenomePredictIntervalsInput,
@@ -226,90 +321,16 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
     run_segmasker,
 )
 
-# Database retrieval tools
-from .database_retrieval import (
-    FetchedSequence,
-    FetchedStructure,
-    NCBIEfetchConfig,
-    NCBIEfetchInput,
-    NCBIEfetchOutput,
-    NCBIEsearchConfig,
-    NCBIEsearchInput,
-    NCBIEsearchOutput,
-    NCBIEsummaryConfig,
-    NCBIEsummaryInput,
-    NCBIEsummaryOutput,
-    NCBIFastaRecord,
-    NCBIFetchConfig,
-    PdbChain,
-    PdbFetchConfig,
-    PdbFetchEntryConfig,
-    PdbFetchEntryInput,
-    PdbFetchEntryOutput,
-    PdbFetchFastaConfig,
-    PdbFetchFastaInput,
-    PdbFetchFastaOutput,
-    SequenceFetchConfig,
-    SequenceFetchInput,
-    SequenceFetchOutput,
-    SequenceFetchRequest,
-    SequenceFetchResult,
-    UniProtFetchConfig,
-    UniProtFetchInput,
-    UniProtFetchOutput,
-    run_ncbi_efetch,
-    run_ncbi_esearch,
-    run_ncbi_esummary,
-    run_pdb_fetch_entry,
-    run_pdb_fetch_fasta,
-    run_sequence_fetch,
-    run_uniprot_fetch,
-)
-
-# Masked model tools
-from .masked_models import (  # ESM2; ESM3
-    ESM2EmbeddingsConfig,
-    ESM2EmbeddingsInput,
-    ESM2EmbeddingsOutput,
-    ESM2SampleConfig,
-    ESM2SampleInput,
-    ESM2SampleOutput,
-    ESM2ScoringConfig,
-    ESM2ScoringInput,
-    ESM2ScoringOutput,
-    ESM3EmbeddingsConfig,
-    ESM3EmbeddingsInput,
-    ESM3EmbeddingsOutput,
-    ESM3SampleConfig,
-    ESM3SampleInput,
-    ESM3SampleOutput,
-    ESM3ScoringConfig,
-    ESM3ScoringInput,
-    ESM3ScoringOutput,
-    ESM3StructurePredictionConfig,
-    ESM3StructurePredictionInput,
-    ESM3StructurePredictionOutput,
-    SequenceEmbedding,
-    run_esm2_embeddings,
-    run_esm2_sample,
-    run_esm2_score,
-    run_esm3_embeddings,
-    run_esm3_sample,
-    run_esm3_score,
-    run_esm3_structure_prediction,
-)
-
-# RNA splicing tools
-from .rna_splicing import (
-    CONTEXT_LENGTH,
-    SPLICE_TISSUE_CHANNEL_INDEX,
-    TARGET_LENGTH,
-    SpliceTransformerConfig,
-    SpliceTransformerInput,
-    SpliceTransformerOutput,
-    SpliceTransformerTissue,
-    SpliceTransformerType,
-    run_splice_transformer,
+# Structure alignment tools
+from .structure_alignment import (
+    TMalignConfig,
+    TMalignInput,
+    TMalignOutput,
+    USalignConfig,
+    USalignInput,
+    USalignOutput,
+    run_tmalign,
+    run_usalign,
 )
 
 # Structure design tools
@@ -324,18 +345,6 @@ from .structure_design import (
 
 # Structure dynamics tools
 from .structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
-
-# Structure alignment tools
-from .structure_alignment import (
-    TMalignConfig,
-    TMalignInput,
-    TMalignOutput,
-    USalignConfig,
-    USalignInput,
-    USalignOutput,
-    run_tmalign,
-    run_usalign,
-)
 
 # Structure prediction tools
 from .structure_prediction import (  # AlphaFold2; AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
@@ -493,6 +502,16 @@ __all__ = [
     "ProdigalConfig",
     "ProdigalOutput",
     "run_prodigal_prediction",
+    # Inverse folding - ESM-IF / ProteinDPO
+    "ESMIFSampleConfig",
+    "ESMIFSampleInput",
+    "ESMIFSampleOutput",
+    "ESMIFScoringConfig",
+    "ESMIFScoringInput",
+    "ESMIFScoringOutput",
+    "ESMIFSequences",
+    "run_esmif_sample",
+    "run_esmif_score",
     # Inverse folding - ProteinMPNN
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",
