@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from pathlib import Path
+from typing import List, Literal
 
 import numpy as np
 from pydantic import Field
 from tqdm import tqdm
-
-from pathlib import Path
 
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -18,6 +17,7 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils import ConfigField
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,24 @@ logger = logging.getLogger(__name__)
 ProteinMPNNSampleInput = InverseFoldingInput
 # Output:
 ProteinMPNNSampleOutput = InverseFoldingOutput
+
+
 # Config:
-ProteinMPNNSampleConfig = InverseFoldingConfig
+class ProteinMPNNSampleConfig(InverseFoldingConfig):
+    """Configuration for ProteinMPNN sampling.
+
+    Attributes:
+        model_choice: Model weights to use. ``"proteinmpnn"`` for the general-purpose
+            ProteinMPNN model, ``"abmpnn"`` for antibody-optimized weights.
+    """
+
+    model_choice: Literal["proteinmpnn", "abmpnn"] = ConfigField(
+        title="Model Choice",
+        default="proteinmpnn",
+        description="Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)",
+        reload_on_change=True,
+        examples=["proteinmpnn", "abmpnn"],
+    )
 
 class ProteinMPNNSequences(DesignedSequences):
     """Represents a designed sequence from the ProteinMPNN model.
@@ -117,6 +133,7 @@ def run_proteinmpnn_sample(
                 "excluded_amino_acids": config.excluded_amino_acids,
                 "seed": config.seed + chunk_idx,
                 "device": config.device,
+                "model_choice": getattr(config, "model_choice", "proteinmpnn"),
                 "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(

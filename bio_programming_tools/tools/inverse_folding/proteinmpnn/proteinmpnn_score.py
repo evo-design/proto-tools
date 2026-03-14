@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from tqdm import tqdm
 
@@ -96,6 +96,14 @@ class ProteinMPNNScoringConfig(BaseConfig):
         advanced=True,
     )
 
+    model_choice: Literal["proteinmpnn", "abmpnn"] = ConfigField(
+        title="Model Choice",
+        default="proteinmpnn",
+        description="Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)",
+        reload_on_change=True,
+        examples=["proteinmpnn", "abmpnn"],
+    )
+
 
 # ============================================================================
 # Tool Implementation
@@ -103,6 +111,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
 def example_input():
     """Minimal valid input for testing and examples."""
     from pathlib import Path
+
     from bio_programming_tools.entities.structures import Structure
     _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
     return ProteinMPNNScoringInput(
@@ -189,6 +198,7 @@ def run_proteinmpnn_score(
             "seed": config.seed,
             "fixed_positions": config.fixed_positions,
             "device": config.device,
+            "model_choice": getattr(config, "model_choice", "proteinmpnn"),
             "return_logits": config.return_logits,
             "verbose": config.verbose,
         }
