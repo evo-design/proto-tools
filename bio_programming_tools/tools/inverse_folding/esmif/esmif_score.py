@@ -52,10 +52,7 @@ class ESMIFScoringConfig(BaseConfig):
     weights_variant: Literal["esmif", "protein_dpo"] = ConfigField(
         title="Weights Variant",
         default="protein_dpo",
-        description=(
-            "Model weights to use: 'esmif' for vanilla ESM-IF1, "
-            "'protein_dpo' for DPO-aligned weights optimized for stability"
-        ),
+        description="'esmif' for vanilla ESM-IF1, 'protein_dpo' for DPO-aligned weights",
         reload_on_change=True,
         examples=["esmif", "protein_dpo"],
     )

@@ -11,7 +11,7 @@ import sys
 import tempfile
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -158,7 +158,6 @@ class ESMIFModel:
             self.model, self.alphabet, all_coords, target_chain, sequence,
         )
 
-        seq_len = len(sequence)
         metrics = {
             "avg_log_likelihood": float(avg_ll),
             "perplexity": float(math.exp(-avg_ll)) if avg_ll <= 0 else float("inf"),
