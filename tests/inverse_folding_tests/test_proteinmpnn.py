@@ -8,6 +8,7 @@ import pytest
 
 from bio_programming_tools.entities.structures.structure import Structure
 from bio_programming_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_sample,
@@ -481,3 +482,40 @@ def test_proteinmpnn_score_logits_serialization(pdb_structure: Structure):
     else:
         assert score.logits.ndim == 2
         assert score.logits.shape[1] == len(ALPHAFOLD_VOCAB)
+
+
+# ============================================================================
+# AbMPNN (antibody-optimized weights) tests
+# ============================================================================
+@pytest.mark.uses_gpu
+def test_abmpnn_sample(pdb_structure: Structure):
+    """AbMPNN weights load and produce valid samples."""
+    inp = InverseFoldingInput(
+        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
+    )
+    config = ProteinMPNNSampleConfig(
+        num_sequences_per_structure=2,
+        temperature=0.1,
+        seed=42,
+        model_choice="abmpnn",
+    )
+    output = run_proteinmpnn_sample(inp, config)
+    assert output.success, f"AbMPNN sampling failed: {output}"
+    assert len(output.designed_sequences[0].sequences) == 2
+    assert all(isinstance(s, str) for s in output.designed_sequences[0].sequences)
+
+
+@pytest.mark.uses_gpu
+def test_abmpnn_score(pdb_structure: Structure):
+    """AbMPNN weights load and produce valid scores."""
+    sequence = pdb_structure.get_chain_sequence("A")
+    inp = ProteinMPNNScoringInput(
+        sequence_structure_pairs=[
+            SequenceStructurePair(sequence=sequence, structure=pdb_structure),
+        ]
+    )
+    config = ProteinMPNNScoringConfig(seed=42, model_choice="abmpnn")
+    output = run_proteinmpnn_score(inp, config)
+    assert output.success, f"AbMPNN scoring failed: {output}"
+    assert output.scores[0].perplexity >= 1.0
+    assert "avg_log_likelihood" in output.scores[0].metrics

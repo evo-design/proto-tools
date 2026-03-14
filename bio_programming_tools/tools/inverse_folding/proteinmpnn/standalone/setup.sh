@@ -16,10 +16,14 @@ echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
-    "cudnn"; then
+    "cudnn" \
+    "git"; then
     echo "ERROR: Failed to install CUDA toolkit via micromamba"
     exit 1
 fi
+
+# Ensure git (from cuda_env) is on PATH for uv pip install of git+ deps
+export PATH="$VENV_PATH/cuda_env/bin:$PATH"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
@@ -34,5 +38,21 @@ echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
 echo "Installing JAX: ${JAX_SPEC}"
 
 uv pip install "${JAX_SPEC}"
+
+# ============================================================================
+# Download AbMPNN weights (antibody-optimized ProteinMPNN) into ColabDesign's
+# weights directory so mk_mpnn_model(model_name="abmpnn") finds them.
+# ============================================================================
+COLABDESIGN_WEIGHTS_DIR=$(python -c "from colabdesign.mpnn.weights import __file__ as f; import os; print(os.path.dirname(f))")
+ABMPNN_PKL="${COLABDESIGN_WEIGHTS_DIR}/abmpnn.pkl"
+
+if [ ! -f "$ABMPNN_PKL" ]; then
+    echo "Downloading AbMPNN weights..."
+    curl -fsSL -o "$ABMPNN_PKL" \
+        "https://github.com/SantiagoMille/germinal/raw/main/colabdesign/colabdesign/mpnn/weights_abmpnn/abmpnn.pkl"
+    echo "AbMPNN weights installed to ${ABMPNN_PKL}"
+else
+    echo "AbMPNN weights already present at ${ABMPNN_PKL}"
+fi
 
 echo "ProteinMPNN setup complete!"

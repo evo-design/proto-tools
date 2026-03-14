@@ -24,11 +24,19 @@ DEFAULT_SEED = 42
 # Alphabet ordering for logits interpretation
 ALPHAFOLD_VOCAB: List[str] = list("ARNDCQEGHILKMFPSTWYVX")  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
 
+# Maps model_choice to ColabDesign's model_name parameter
+_MODEL_NAME_MAP = {
+    "proteinmpnn": "v_48_020",
+    "abmpnn": "abmpnn",
+}
+
+
 class ProteinMPNNModel:
     """ProteinMPNN model for structure-conditioned protein sequence design."""
 
     def __init__(self):
         self._loaded = False
+        self._model_choice = None
         self.device = None
         self.params = None
         self.model = None
@@ -44,6 +52,7 @@ class ProteinMPNNModel:
         excluded_amino_acids: Optional[List[str]] = None,
         seed: Optional[int] = DEFAULT_SEED,
         device: str = "cuda",
+        model_choice: str = "proteinmpnn",
         verbose: bool = False,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
@@ -59,15 +68,16 @@ class ProteinMPNNModel:
             excluded_amino_acids: List of amino acids to exclude
             seed: Random seed
             device: Device to run on ('cuda' or 'cpu')
+            model_choice: Model weights ('proteinmpnn' or 'abmpnn')
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
 
         Returns:
             Dictionary with keys: seq, score, seqid, and optionally logits
         """
-        # Lazy load the model
-        if not self._loaded:
-            self.load(device, verbose)
+        # Lazy load the model (reload if model_choice changed)
+        if not self._loaded or self._model_choice != model_choice:
+            self.load(device, model_choice, verbose)
         elif self.device != device:
             self.to_device(device)
 
@@ -112,6 +122,7 @@ class ProteinMPNNModel:
         fixed_positions: Optional[Dict[str, List[int]]] = None,
         seed: int = DEFAULT_SEED,
         device: str = "cuda",
+        model_choice: str = "proteinmpnn",
         verbose: bool = False,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
@@ -125,6 +136,7 @@ class ProteinMPNNModel:
             fixed_positions: Dict mapping chain IDs to fixed positions
             seed: Random seed
             device: Device to run on
+            model_choice: Model weights ('proteinmpnn' or 'abmpnn')
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
 
@@ -132,9 +144,9 @@ class ProteinMPNNModel:
             Dictionary with keys: metrics (log_likelihood, avg_log_likelihood, perplexity),
             and optionally logits.
         """
-        # Lazy load the model
-        if not self._loaded:
-            self.load(device, verbose)
+        # Lazy load the model (reload if model_choice changed)
+        if not self._loaded or self._model_choice != model_choice:
+            self.load(device, model_choice, verbose)
         elif self.device != device:
             self.to_device(device)
 
@@ -175,12 +187,19 @@ class ProteinMPNNModel:
             "vocab": ALPHAFOLD_VOCAB,
         }
 
-    def load(self, device: str, verbose: bool = False):
-        """Load ProteinMPNN model to device."""
+    def load(self, device: str, model_choice: str = "proteinmpnn", verbose: bool = False):
+        """Load ProteinMPNN model to device.
+
+        Args:
+            device: Device to load the model on.
+            model_choice: Model weights ('proteinmpnn' or 'abmpnn').
+            verbose: Whether to print status messages.
+        """
         self.verbose = verbose
+        model_name = _MODEL_NAME_MAP.get(model_choice, "v_48_020")
 
         if self.verbose:
-            logger.info(f"Loading ProteinMPNN model on {device}")
+            logger.info(f"Loading {model_choice} (model_name={model_name}) on {device}")
 
         import jax
         self.jax = jax
@@ -189,16 +208,17 @@ class ProteinMPNNModel:
         from colabdesign.mpnn import mk_mpnn_model
 
         # Load the Flax module (params land on CPU by default)
-        self.model = mk_mpnn_model()
+        self.model = mk_mpnn_model(model_name=model_name)
         self.params = self.model._model.params
         self.device = "cpu"
+        self._model_choice = model_choice
 
         # Move the model parameters to the selected device
         self.to_device(device)
         self._loaded = True
 
         if self.verbose:
-            logger.info("ProteinMPNN model loaded successfully")
+            logger.info(f"{model_choice} model loaded successfully")
 
     def to_device(self, device: str):
         """Move the model params to the selected device via move_model_to_device."""
@@ -272,6 +292,7 @@ def dispatch(input_dict: dict) -> dict:
             pdb_structure = str(pdb_path)
 
         operation = input_dict.get("operation", "sample")
+        model_choice = input_dict.get("model_choice", "proteinmpnn")
         if operation == "sample":
             return _model.sample(
                 pdb_structure=pdb_structure,
@@ -282,6 +303,7 @@ def dispatch(input_dict: dict) -> dict:
                 excluded_amino_acids=input_dict.get("excluded_amino_acids"),
                 seed=input_dict.get("seed", DEFAULT_SEED),
                 device=input_dict.get("device", "cuda"),
+                model_choice=model_choice,
                 verbose=input_dict.get("verbose", False),
                 return_logits=input_dict.get("return_logits", False),
             )
@@ -293,6 +315,7 @@ def dispatch(input_dict: dict) -> dict:
                 fixed_positions=input_dict.get("fixed_positions"),
                 seed=input_dict.get("seed", DEFAULT_SEED),
                 device=input_dict.get("device", "cuda"),
+                model_choice=model_choice,
                 verbose=input_dict.get("verbose", False),
                 return_logits=input_dict.get("return_logits", False),
             )
