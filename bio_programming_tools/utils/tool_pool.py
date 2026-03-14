@@ -29,6 +29,10 @@ from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 
+# Default max concurrent cloud workers — shared with cloud_dispatch.py.
+# Modal limits: 1,000 concurrent inputs per .map(), 25,000 total.
+_MAX_CLOUD_WORKERS = 100
+
 # ============================================================================
 # ContextVars for pool state
 # ============================================================================
@@ -213,6 +217,7 @@ class ToolPool:
         self,
         devices: list[str] | str | None = None,
         remote: bool | Literal["cloud"] = False,
+        max_cloud_workers: int = _MAX_CLOUD_WORKERS,
     ):
         """
         Args:
@@ -224,6 +229,10 @@ class ToolPool:
                 - ``False`` (default): local only.
                 - ``True``: hybrid — local GPUs + cloud overflow.
                 - ``"cloud"``: cloud only, skip local GPUs.
+            max_cloud_workers: Maximum concurrent cloud workers. Limits
+                both the fan-out ThreadPoolExecutor and batch ``.starmap()``
+                chunk size. Controls cost by capping concurrent Modal
+                containers. Default: 100.
         """
         if isinstance(devices, str):
             devices = [devices]
@@ -232,9 +241,14 @@ class ToolPool:
             raise ValueError(
                 f"remote must be False, True, or 'cloud', got {remote!r}"
             )
+        if max_cloud_workers < 1:
+            raise ValueError(
+                f"max_cloud_workers must be >= 1, got {max_cloud_workers}"
+            )
 
         self._devices_arg = devices
         self._remote = remote
+        self._max_cloud_workers = max_cloud_workers
         self._persist_ctx = None
         self._token = None
 
@@ -467,6 +481,7 @@ class ToolPool:
                     backend, tool_key, cloud_work_items,
                     inputs, config,
                     iterable_input_field, iterable_output_field,
+                    max_cloud_workers=self._max_cloud_workers,
                 )
             )
             all_indexed.extend(cloud_indexed)

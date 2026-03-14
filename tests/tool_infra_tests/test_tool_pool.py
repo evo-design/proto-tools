@@ -1091,6 +1091,54 @@ def test_devices_per_instance_override():
     assert MultiGPU(model_name="large").devices_per_instance == 2
 
 
+# ── max_cloud_workers tests ────────────────────────────────────────────────
+
+def _make_cloud_pool(clean_registry, *, max_cloud_workers=100, use_batch=True):
+    """Wire up a cloud-only ToolPool with mock backends."""
+    func, _ = _register_mock_tool(clean_registry)
+    mock_backend, _ = _make_mock_backend()
+    clean_registry._execution_backend = mock_backend
+    if use_batch:
+        mock_batch, batch_log = _make_mock_batch_backend()
+        clean_registry._execution_backend_batch = mock_batch
+    else:
+        batch_log = None
+        clean_registry._execution_backend_batch = None
+    pool = ToolPool(remote="cloud", max_cloud_workers=max_cloud_workers)
+    pool._devices = []
+    return pool, func, batch_log
+
+
+def test_batch_dispatch_chunks_by_max_cloud_workers(clean_registry):
+    """Batch path should chunk inputs into groups of max_cloud_workers."""
+    pool, func, batch_log = _make_cloud_pool(
+        clean_registry, max_cloud_workers=3,
+    )
+    inputs = MockInput(items=["a", "b", "c", "d", "e", "f", "g"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    assert [c["n_inputs"] for c in batch_log] == [3, 3, 1]
+    assert len(result.results) == 7
+
+
+def test_fan_out_respects_max_cloud_workers(clean_registry):
+    """Fan-out path should cap ThreadPoolExecutor at max_cloud_workers."""
+    pool, func, _ = _make_cloud_pool(
+        clean_registry, max_cloud_workers=2, use_batch=False,
+    )
+    inputs = MockInput(items=["a", "b", "c", "d", "e"])
+    config = MockConfig(device="cuda")
+
+    with patch("bio_programming_tools.utils.cloud_dispatch.ThreadPoolExecutor") as mock_tpe:
+        from concurrent.futures import ThreadPoolExecutor as RealTPE
+        mock_tpe.side_effect = lambda max_workers: RealTPE(max_workers=max_workers)
+        pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    mock_tpe.assert_called_once_with(max_workers=2)
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (require GPU)
 # ---------------------------------------------------------------------------

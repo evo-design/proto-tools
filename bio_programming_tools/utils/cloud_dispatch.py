@@ -12,17 +12,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
-from bio_programming_tools.utils.tool_pool import WorkItem
+from bio_programming_tools.utils.tool_pool import WorkItem, _MAX_CLOUD_WORKERS
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Cloud dispatch config
 # ============================================================================
-
-# Max concurrent cloud workers (one backend() call per worker).
-# Modal limits: 1,000 concurrent inputs per .map(), 25,000 total.
-_MAX_CLOUD_WORKERS = 100
 
 # Retry config for transient cloud failures
 _CLOUD_MAX_RETRIES = 3
@@ -85,13 +81,14 @@ def _fan_out_single_calls(
     item_inputs: list[Any],
     config: Any,
     work_items: list[WorkItem],
+    max_cloud_workers: int = _MAX_CLOUD_WORKERS,
 ) -> list[Any]:
     """Fan out single-item backend calls via ThreadPoolExecutor.
 
     Fallback for when no batch backend is registered. Each call is
     individually retried on transient failures.
     """
-    n_workers = min(len(work_items), _MAX_CLOUD_WORKERS)
+    n_workers = min(len(work_items), max_cloud_workers)
     results: list[Any] = [None] * len(work_items)
 
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
@@ -128,11 +125,16 @@ def dispatch_cloud_items(
     config: Any,
     iterable_input_field: str,
     iterable_output_field: str,
+    max_cloud_workers: int = _MAX_CLOUD_WORKERS,
 ) -> tuple[list[tuple[int, Any]], list[str], list[str], Any]:
     """Fan out work items to the cloud backend.
 
     Uses batch backend (single ``.map()`` call) when available,
     falling back to N × single backend calls via ThreadPoolExecutor.
+
+    Args:
+        max_cloud_workers: Cap on concurrent cloud workers. Limits both
+            the fan-out ThreadPoolExecutor and batch chunk size.
 
     Returns:
         (indexed_results, warnings, errors, last_result)
@@ -148,26 +150,34 @@ def dispatch_cloud_items(
     batch_backend = ToolRegistry._execution_backend_batch
 
     if batch_backend is not None:
-        # Batch dispatch — single .map() call, Modal handles per-item retries
+        # Batch dispatch — chunk into groups of max_cloud_workers to cap
+        # concurrent Modal containers (without chunking, Modal's autoscaler
+        # ignores any concurrency limit the user set).
         logger.info(
-            "Cloud batch dispatch: %d items for %s via .map()",
-            len(work_items), tool_key,
+            "Cloud batch dispatch: %d items for %s via .map() "
+            "(max_cloud_workers=%d)",
+            len(work_items), tool_key, max_cloud_workers,
         )
-        results = batch_backend(tool_key, item_inputs, config)
-        if len(results) != len(work_items):
-            raise RuntimeError(
-                f"Batch backend returned {len(results)} results "
-                f"but expected {len(work_items)} for tool '{tool_key}'"
-            )
+        results = []
+        for chunk_start in range(0, len(item_inputs), max_cloud_workers):
+            chunk = item_inputs[chunk_start:chunk_start + max_cloud_workers]
+            chunk_results = batch_backend(tool_key, chunk, config)
+            if len(chunk_results) != len(chunk):
+                raise RuntimeError(
+                    f"Batch backend returned {len(chunk_results)} results "
+                    f"but expected {len(chunk)} for tool '{tool_key}'"
+                )
+            results.extend(chunk_results)
     else:
         # Fallback: N × single backend calls with client-side retry
         logger.info(
             "Cloud fan-out dispatch: %d items for %s via %d workers",
             len(work_items), tool_key,
-            min(len(work_items), _MAX_CLOUD_WORKERS),
+            min(len(work_items), max_cloud_workers),
         )
         results = _fan_out_single_calls(
             backend, tool_key, item_inputs, config, work_items,
+            max_cloud_workers=max_cloud_workers,
         )
 
     # Collect indexed results from all responses
