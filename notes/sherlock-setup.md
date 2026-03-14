@@ -128,6 +128,16 @@ conda create -p /home/groups/<PI>/$USER/envs/bio-tools python=3.11
 # Bad: Oak (slow for conda), Home (too small), Scratch (auto-deletes)
 ```
 
+### Register an environment directory
+
+By default, conda only knows about environments in its default `envs/` directory, so activating a `-p` environment requires the full path every time. Register your Group Home envs directory so you can activate by name:
+
+```bash
+conda config --append envs_dirs /home/groups/<PI>/$USER/envs
+```
+
+Now `conda activate bio-tools` works from anywhere instead of typing the full path.
+
 ### Install bio-programming-tools
 
 Package installation **must** be done inside the container. The CentOS 7 host has glibc 2.17, which is too old for pre-built wheels of numpy, scipy, pandas, and other dependencies — they'll fail trying to build from source. Inside the container (Ubuntu 22.04, glibc 2.35), pre-built wheels install instantly.
@@ -137,7 +147,7 @@ Package installation **must** be done inside the container. The CentOS 7 host ha
 ptshell
 
 # Activate the env and install
-conda activate /home/groups/<PI>/$USER/envs/bio-tools
+conda activate bio-tools
 cd /path/to/bio-programming-tools
 pip install -e ".[dev]"
 pre-commit install
@@ -197,7 +207,7 @@ srun -p gpu --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -t 12:00:00 --pty bash
 
 # Enter container and activate the conda env
 ptshell
-conda activate /home/groups/<PI>/$USER/envs/bio-tools
+conda activate bio-tools
 ```
 
 If your lab has a condo partition (e.g., `brianhie`), use that for dedicated GPU access with shorter queue times:
@@ -223,7 +233,7 @@ Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` 
 
 apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
     source ~/.bashrc  # required — sets up PATH, LD_LIBRARY_PATH
-    conda activate /home/groups/<PI>/$USER/envs/bio-tools
+    conda activate bio-tools
     python my_script.py
 "
 ```
