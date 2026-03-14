@@ -84,12 +84,20 @@ class ESMIFModel:
 
         torch.manual_seed(seed)
         for _ in range(batch_size):
-            sampled_seq, avg_ll = (
+            sampled_seq = (
                 esm.inverse_folding.multichain_util.sample_sequence_in_complex(
                     self.model, all_coords, target_chain, temperature=temperature,
                 )
             )
             sequences.append(sampled_seq)
+
+            # Score sampled sequence to get log-likelihood
+            avg_ll, _ = (
+                esm.inverse_folding.multichain_util.score_sequence_in_complex(
+                    self.model, self.alphabet, all_coords,
+                    target_chain, sampled_seq,
+                )
+            )
             log_likelihoods.append(float(avg_ll))
 
         self.unload()
@@ -170,25 +178,40 @@ class ESMIFModel:
             logger.info(f"Loading ESM-IF ({weights_variant}) on {device}")
 
         import esm
+        import esm.pretrained
 
         # Load base ESM-IF1 model from pre-downloaded weights
         weights_dir = os.environ.get(
             "ESMIF_WEIGHTS_DIR",
-            os.path.join(os.environ.get("VENV_PATH", "."), "weights"),
+            os.path.join(
+                os.environ.get(
+                    "TOOL_VENV_PATH", os.environ.get("VENV_PATH", ".")
+                ),
+                "weights",
+            ),
         )
         base_weights_path = os.path.join(
             weights_dir, "esm_if1_gvp4_t16_142M_UR50.pt"
         )
 
+        # Load with weights_only=False for PyTorch 2.6+ compatibility
+        # (ESM-IF checkpoint contains argparse.Namespace objects)
+        model_data = torch.load(
+            base_weights_path, map_location="cpu", weights_only=False
+        )
         self.model, self.alphabet = (
-            esm.pretrained.load_model_and_alphabet_local(base_weights_path)
+            esm.pretrained.load_model_and_alphabet_core(
+                "esm_if1_gvp4_t16_142M_UR50", model_data
+            )
         )
 
         # Apply ProteinDPO weights if requested
         if weights_variant == "protein_dpo":
             dpo_weights_path = os.path.join(weights_dir, "paired_weights.pt")
             if os.path.exists(dpo_weights_path):
-                state_dict = torch.load(dpo_weights_path, map_location="cpu")
+                state_dict = torch.load(
+                    dpo_weights_path, map_location="cpu", weights_only=False
+                )
                 self.model.load_state_dict(state_dict, strict=True)
                 if verbose:
                     logger.info(
