@@ -10,17 +10,25 @@ Setup instructions for running bio-programming-tools on Stanford's [Sherlock clu
 
 Sherlock's host OS is CentOS 7, which ships with glibc 2.17 (released 2012). Nearly every modern ML library — PyTorch, JAX, TensorFlow, and their dependencies — requires glibc 2.28+ and will fail to import on the bare host. The solution is to run inside an [Apptainer](https://apptainer.org/) (formerly Singularity) container that provides a modern Linux userland while still using the host's kernel, drivers, and filesystems.
 
-Build the container from the official PyTorch Docker image. This must be done on a compute node — login nodes don't have enough memory for the build:
+Build the container from the official PyTorch Docker image. This must be done on a compute node — login nodes don't have enough memory for the build.
+
+The container and conda environments (Section 3) both go on `$GROUP_HOME`. Check that your group has enough free space first (~10–15 GB needed):
+
+```bash
+df -h $GROUP_HOME
+```
+
+If `$GROUP_HOME` is nearly full, free up space or ask your PI about expanding the allocation before proceeding.
 
 ```bash
 # Get on a compute node
 srun -p normal --cpus-per-task 4 --mem 16G -t 1:00:00 --pty bash
 
 # Build the .sif image (~3.5 GB)
-apptainer build $GROUP_HOME/$USER/pytorch_latest.sif docker://pytorch/pytorch:latest
+apptainer build $GROUP_HOME/$USER/pytorch_latest.sif docker://pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
 ```
 
-This produces a read-only `.sif` file containing Ubuntu 22.04 (glibc 2.35), Python 3.10, PyTorch with CUDA support, and conda. We store it on `$GROUP_HOME` because it's fast and persistent — you'll be loading this file every time you start a session.
+This produces a read-only `.sif` file containing Ubuntu 22.04 (glibc 2.35), Python 3.11, PyTorch 2.6.0 with CUDA support, and conda. We store it on `$GROUP_HOME` because it's fast and persistent — you'll be loading this file every time you start a session.
 
 ### Set up the shell alias
 
@@ -47,6 +55,8 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 exit
 ```
 
+> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and activate it, `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each bio-programming-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
+
 ---
 
 ## 2. Redirect Cache Directories
@@ -67,16 +77,18 @@ Model weights are a good fit for Oak: they're large, read sequentially once at l
 
 Follow the instructions in **[model-weights-cache.md](model-weights-cache.md)** to symlink cache directories from `$HOME` to either `$GROUP_HOME` or `$OAK`. That guide documents every directory that tools write to and provides copy-paste symlink commands.
 
-On Sherlock, use `$OAK` as the storage target for model weights and caches:
+On Sherlock, use `$OAK` as the storage target for model weights and caches. The path below may not exist yet — `mkdir -p` will create it:
 
 ```bash
 STORAGE=/oak/stanford/groups/<PI>/projects/$USER
+mkdir -p $STORAGE
 ```
 
 Or use `$GROUP_HOME` if your lab doesn't have Oak allocation:
 
 ```bash
 STORAGE=/home/groups/<PI>/$USER
+mkdir -p $STORAGE
 ```
 
 The simplest approach is to redirect all of `~/.cache` at once (covers HuggingFace, torch hub, pip, and tool environments):
@@ -86,6 +98,8 @@ mv ~/.cache ~/.cache.bak
 mkdir -p $STORAGE/.cache
 ln -sfn $STORAGE/.cache ~/.cache
 cp -a ~/.cache.bak/* ~/.cache/ 2>/dev/null || true
+# Verify the copy before deleting the backup
+du -sh ~/.cache ~/.cache.bak
 rm -rf ~/.cache.bak
 ```
 
@@ -114,7 +128,32 @@ conda create -p /home/groups/<PI>/$USER/envs/bio-tools python=3.11
 # Bad: Oak (slow for conda), Home (too small), Scratch (auto-deletes)
 ```
 
-To auto-activate inside the container, see the `~/.bashrc` block in [section 4 (Claude Code)](#4-claude-code-in-the-container) — it handles both conda activation and Claude Code setup.
+### Register an environment directory
+
+By default, conda only knows about environments in its default `envs/` directory, so activating a `-p` environment requires the full path every time. Register your Group Home envs directory so you can activate by name:
+
+```bash
+conda config --append envs_dirs /home/groups/<PI>/$USER/envs
+```
+
+Now `conda activate bio-tools` works from anywhere instead of typing the full path.
+
+### Install bio-programming-tools
+
+Package installation **must** be done inside the container. The CentOS 7 host has glibc 2.17, which is too old for pre-built wheels of numpy, scipy, pandas, and other dependencies — they'll fail trying to build from source. Inside the container (Ubuntu 22.04, glibc 2.35), pre-built wheels install instantly.
+
+```bash
+# Enter the container first
+ptshell
+
+# Activate the env and install
+conda activate bio-tools
+cd /path/to/bio-programming-tools
+pip install -e ".[dev]"
+pre-commit install
+```
+
+To set up Claude Code inside the container, see [section 4](#4-claude-code-in-the-container).
 
 ---
 
@@ -124,12 +163,10 @@ To auto-activate inside the container, see the `~/.bashrc` block in [section 4 (
 
 The `ptshell` alias already bind-mounts `/share/software/user/open` (where Sherlock installs shared software like Node.js, Claude Code, and GCC) into the container. The binaries are on the filesystem — you just need to add them to your `PATH` and `LD_LIBRARY_PATH` manually since `module load` can't do it for you.
 
-Add this container-detection block to your `~/.bashrc`. It runs only inside the container and handles both conda activation and Claude Code setup:
+Add this container-detection block to your `~/.bashrc`. It runs only inside the container and sets up Claude Code:
 
 ```bash
 if [ -n "$APPTAINER_NAME" ] || [ -n "$SINGULARITY_NAME" ]; then
-    conda activate /home/groups/<PI>/$USER/envs/bio-tools
-
     # Claude Code + Node.js (module system unavailable inside container)
     # These globs find the latest installed version of each package
     CLAUDE_BIN=$(ls -d /share/software/user/open/claude-code/*/bin 2>/dev/null | sort -V | tail -1)
@@ -168,9 +205,9 @@ Most bio-programming-tools require a GPU. On Sherlock, you need to request GPU r
 # Request a GPU node (adjust partition and time as needed)
 srun -p gpu --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -t 12:00:00 --pty bash
 
-# Enter container + activate env
+# Enter container and activate the conda env
 ptshell
-conda activate /home/groups/<PI>/$USER/envs/bio-tools
+conda activate bio-tools
 ```
 
 If your lab has a condo partition (e.g., `brianhie`), use that for dedicated GPU access with shorter queue times:
@@ -181,7 +218,9 @@ srun -p brianhie --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -N 1 -t 12:00:00 
 
 ### Batch job
 
-For longer-running or unattended work, submit a batch job. This is useful for running tool benchmarks, generating environment reports, or processing large datasets:
+For longer-running or unattended work, submit a batch job. This is useful for running tool benchmarks, generating environment reports, or processing large datasets.
+
+Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` only works for interactive shells. In batch scripts, you must explicitly `source ~/.bashrc` for PATH setup and activate the conda env:
 
 ```bash
 #!/bin/bash
@@ -193,8 +232,8 @@ For longer-running or unattended work, submit a batch job. This is useful for ru
 #SBATCH --output=logs/%j.out
 
 apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
-    source ~/.bashrc
-    conda activate /home/groups/<PI>/\$USER/envs/bio-tools
+    source ~/.bashrc  # required — sets up PATH, LD_LIBRARY_PATH
+    conda activate bio-tools
     python my_script.py
 "
 ```
@@ -210,14 +249,12 @@ Since home directory quota is tight, it's worth periodically checking what's usi
 du -sh ~
 du -sh ~/.cache ~/.local ~/.model_cache 2>/dev/null
 
-# Sherlock quota check
-lfs quota -u $USER /home
-
-# Find what's eating space
-du -h --max-depth=2 ~ | sort -rh | head -20
-
-# Check Oak usage
+# Check Group Home and Oak usage
+df -h $GROUP_HOME
 lfs quota -g <PI> $OAK
+
+# Find what's eating space in home
+du -h --max-depth=2 ~ | sort -rh | head -20
 ```
 
 ---

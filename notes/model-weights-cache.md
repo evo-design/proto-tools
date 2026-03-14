@@ -37,12 +37,16 @@ ln -sfn $STORAGE/sampling_so3_cache ~/sampling_so3_cache
 # 6. ~/checkpoint — Protenix default checkpoint location
 mkdir -p $STORAGE/protenix_checkpoint
 ln -sfn $STORAGE/protenix_checkpoint ~/checkpoint
+
+# 7. ~/.boltz — Boltz2 checkpoints and CCD data (~9 GB)
+mkdir -p $STORAGE/.boltz
+ln -sfn $STORAGE/.boltz ~/.boltz
 ```
 
 ### Verify
 
 ```bash
-ls -la ~/.cache ~/.local ~/.model_cache ~/.foundry ~/sampling_so3_cache ~/checkpoint 2>/dev/null
+ls -la ~/.cache ~/.local ~/.model_cache ~/.foundry ~/sampling_so3_cache ~/checkpoint ~/.boltz 2>/dev/null
 ```
 
 ---
@@ -79,9 +83,21 @@ export PROTENIX_ROOT_DIR=/path/to/large/disk/protenix
 | SpliceTransformer | brianhie/SpTransformer | ~0.5 GB |
 | BioEmu | bioemu-v1.0, bioemu-v1.1 | ~2 GB |
 
-### `~/.model_cache/` — Boltz2
+### `~/.boltz/` — Boltz2
 
-Falls back here when `HF_HOME` is not set. If `HF_HOME` is set, Boltz2 uses `$HF_HOME/boltz/` instead.
+Boltz2 stores checkpoints and CCD data here (~9 GB total):
+
+| File | Size |
+|------|------|
+| `boltz2_aff.ckpt` | ~2.1 GB |
+| `boltz2_conf.ckpt` | ~2.3 GB |
+| `ccd.pkl` | ~346 MB |
+| `mols/` | ~2.7 GB |
+| `mols.tar` | ~1.9 GB |
+
+### `~/.model_cache/` — Boltz2 (legacy fallback)
+
+Older versions of Boltz2 fall back here when `HF_HOME` is not set. Current versions use `~/.boltz/` instead.
 
 ### `~/.foundry/` — RFdiffusion3, LigandMPNN
 
