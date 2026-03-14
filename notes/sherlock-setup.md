@@ -6,22 +6,6 @@ Setup instructions for running bio-programming-tools on Stanford's [Sherlock clu
 
 ---
 
-## 0. Get the Code
-
-Clone the repository onto Sherlock before starting:
-
-```bash
-git clone https://github.com/evo-design/bio-programming-tools.git
-```
-
-Or if you're using it as part of [bio-programming](https://github.com/evo-design/bio-programming):
-
-```bash
-git clone --recursive https://github.com/evo-design/bio-programming.git
-```
-
----
-
 ## 1. Container Setup
 
 Sherlock's host OS is CentOS 7, which ships with glibc 2.17 (released 2012). Nearly every modern ML library — PyTorch, JAX, TensorFlow, and their dependencies — requires glibc 2.28+ and will fail to import on the bare host. The solution is to run inside an [Apptainer](https://apptainer.org/) (formerly Singularity) container that provides a modern Linux userland while still using the host's kernel, drivers, and filesystems.
@@ -96,14 +80,14 @@ Follow the instructions in **[model-weights-cache.md](model-weights-cache.md)** 
 On Sherlock, use `$OAK` as the storage target for model weights and caches. The path below may not exist yet — `mkdir -p` will create it:
 
 ```bash
-STORAGE=$OAK/$USER
+STORAGE=/oak/stanford/groups/<PI>/projects/$USER
 mkdir -p $STORAGE
 ```
 
 Or use `$GROUP_HOME` if your lab doesn't have Oak allocation:
 
 ```bash
-STORAGE=$GROUP_HOME/$USER
+STORAGE=/home/groups/<PI>/$USER
 mkdir -p $STORAGE
 ```
 
@@ -282,7 +266,7 @@ Then symlink the offending directory to your storage target. See [model-weights-
 pip caches wheels in `~/.cache/pip` and may install to `~/.local`. If you followed the symlink setup in step 2, both are already redirected. Otherwise:
 
 ```bash
-STORAGE=$OAK/$USER
+STORAGE=/oak/stanford/groups/<PI>/projects/$USER
 
 mkdir -p $STORAGE/.cache/pip
 ln -sfn $STORAGE/.cache/pip ~/.cache/pip
