@@ -55,7 +55,7 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 exit
 ```
 
-> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and auto-activation (Section 4), `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each bio-programming-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
+> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and activate it, `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each bio-programming-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
 
 ---
 
@@ -143,7 +143,7 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-To auto-activate inside the container, see the `~/.bashrc` block in [section 4 (Claude Code)](#4-claude-code-in-the-container) — it handles both conda activation and Claude Code setup.
+To set up Claude Code inside the container, see [section 4](#4-claude-code-in-the-container).
 
 ---
 
@@ -153,12 +153,10 @@ To auto-activate inside the container, see the `~/.bashrc` block in [section 4 (
 
 The `ptshell` alias already bind-mounts `/share/software/user/open` (where Sherlock installs shared software like Node.js, Claude Code, and GCC) into the container. The binaries are on the filesystem — you just need to add them to your `PATH` and `LD_LIBRARY_PATH` manually since `module load` can't do it for you.
 
-Add this container-detection block to your `~/.bashrc`. It runs only inside the container and handles both conda activation and Claude Code setup:
+Add this container-detection block to your `~/.bashrc`. It runs only inside the container and sets up Claude Code:
 
 ```bash
 if [ -n "$APPTAINER_NAME" ] || [ -n "$SINGULARITY_NAME" ]; then
-    conda activate /home/groups/<PI>/$USER/envs/bio-tools
-
     # Claude Code + Node.js (module system unavailable inside container)
     # These globs find the latest installed version of each package
     CLAUDE_BIN=$(ls -d /share/software/user/open/claude-code/*/bin 2>/dev/null | sort -V | tail -1)
@@ -197,8 +195,9 @@ Most bio-programming-tools require a GPU. On Sherlock, you need to request GPU r
 # Request a GPU node (adjust partition and time as needed)
 srun -p gpu --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -t 12:00:00 --pty bash
 
-# Enter container (conda env is auto-activated by the bashrc block from Section 4)
+# Enter container and activate the conda env
 ptshell
+conda activate /home/groups/<PI>/$USER/envs/bio-tools
 ```
 
 If your lab has a condo partition (e.g., `brianhie`), use that for dedicated GPU access with shorter queue times:
@@ -211,7 +210,7 @@ srun -p brianhie --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -N 1 -t 12:00:00 
 
 For longer-running or unattended work, submit a batch job. This is useful for running tool benchmarks, generating environment reports, or processing large datasets.
 
-Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` only works for interactive shells. In batch scripts, you must explicitly `source ~/.bashrc` to get conda activation and PATH setup:
+Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` only works for interactive shells. In batch scripts, you must explicitly `source ~/.bashrc` for PATH setup and activate the conda env:
 
 ```bash
 #!/bin/bash
@@ -223,7 +222,8 @@ Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` 
 #SBATCH --output=logs/%j.out
 
 apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
-    source ~/.bashrc  # required — sets up conda env, PATH, LD_LIBRARY_PATH
+    source ~/.bashrc  # required — sets up PATH, LD_LIBRARY_PATH
+    conda activate /home/groups/<PI>/$USER/envs/bio-tools
     python my_script.py
 "
 ```
