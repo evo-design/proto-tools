@@ -59,6 +59,10 @@ class ProteinMPNNScoringConfig(BaseConfig):
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
 
+        model_choice (Literal["proteinmpnn", "abmpnn"]): Model weights to use.
+            ``"proteinmpnn"`` for the general-purpose model, ``"abmpnn"`` for
+            antibody-optimized weights. Default: ``"proteinmpnn"``.
+
     Note:
         - ProteinMPNN uses AlphaFold alphabet ordering (21 tokens including X)
         - Vocab order: ARNDCQEGHILKMFPSTWYVX
