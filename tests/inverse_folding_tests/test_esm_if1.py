@@ -1,4 +1,4 @@
-"""Tests for ESM-IF/ProteinDPO sampling and scoring."""
+"""Tests for ESM-IF1/ProteinDPO sampling and scoring."""
 
 from pathlib import Path
 
@@ -6,12 +6,12 @@ import numpy as np
 import pytest
 
 from bio_programming_tools.entities.structures.structure import Structure
-from bio_programming_tools.tools.inverse_folding.esmif import (
-    ESMIFSampleConfig,
-    ESMIFScoringConfig,
-    ESMIFScoringInput,
-    run_esmif_sample,
-    run_esmif_score,
+from bio_programming_tools.tools.inverse_folding.esm_if1 import (
+    ESMIF1SampleConfig,
+    ESMIF1ScoringConfig,
+    ESMIF1ScoringInput,
+    run_esm_if1_sample,
+    run_esm_if1_score,
 )
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -24,7 +24,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
-_persistent_tool = make_persistent_fixture("esmif")
+_persistent_tool = make_persistent_fixture("esm_if1")
 
 
 @pytest.fixture(scope="module")
@@ -37,19 +37,19 @@ def pdb_structure():
 # ============================================================================
 @pytest.mark.include_in_env_report(category="inverse_folding")
 @pytest.mark.uses_gpu
-def test_esmif_sample_simple(pdb_structure: Structure):
+def test_esm_if1_sample_simple(pdb_structure: Structure):
     """Basic sampling with default ProteinDPO config."""
     inp = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
     )
-    config = ESMIFSampleConfig(
+    config = ESMIF1SampleConfig(
         num_sequences_per_structure=1, temperature=0.1, seed=42,
     )
-    output = run_esmif_sample(inp, config)
+    output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
 
     validate_output(output)
-    assert output.tool_id == "esmif-sample"
+    assert output.tool_id == "esm-if1-sample"
 
     designed = output.designed_sequences[0]
     assert len(designed.sequences) == 1
@@ -61,15 +61,15 @@ def test_esmif_sample_simple(pdb_structure: Structure):
 
 
 @pytest.mark.uses_gpu
-def test_esmif_sample_multiple(pdb_structure: Structure):
+def test_esm_if1_sample_multiple(pdb_structure: Structure):
     """Sampling multiple sequences per structure."""
     inp = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
     )
-    config = ESMIFSampleConfig(
+    config = ESMIF1SampleConfig(
         num_sequences_per_structure=3, temperature=0.1, seed=42,
     )
-    output = run_esmif_sample(inp, config)
+    output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
 
     designed = output.designed_sequences[0]
@@ -82,18 +82,18 @@ def test_esmif_sample_multiple(pdb_structure: Structure):
 
 
 @pytest.mark.uses_gpu
-def test_esmif_sample_chunked_batching(pdb_structure: Structure):
+def test_esm_if1_sample_chunked_batching(pdb_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
     inp = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
     )
-    config = ESMIFSampleConfig(
+    config = ESMIF1SampleConfig(
         num_sequences_per_structure=4,
         batch_size=2,
         temperature=0.1,
         seed=42,
     )
-    output = run_esmif_sample(inp, config)
+    output = run_esm_if1_sample(inp, config)
     assert output.success, f"Chunked batching failed: {output}"
 
     designed = output.designed_sequences[0]
@@ -104,18 +104,18 @@ def test_esmif_sample_chunked_batching(pdb_structure: Structure):
 
 
 @pytest.mark.uses_gpu
-def test_esmif_sample_dpo_weights(pdb_structure: Structure):
+def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
     """Sampling with explicit ProteinDPO weights."""
     inp = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
     )
-    config = ESMIFSampleConfig(
+    config = ESMIF1SampleConfig(
         num_sequences_per_structure=1,
         temperature=0.1,
         weights_variant="protein_dpo",
         seed=42,
     )
-    output = run_esmif_sample(inp, config)
+    output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample with DPO weights: {output}"
 
     designed = output.designed_sequences[0]
@@ -128,41 +128,41 @@ def test_esmif_sample_dpo_weights(pdb_structure: Structure):
 # Scoring Tests
 # ============================================================================
 @pytest.mark.uses_gpu
-def test_esmif_score(pdb_structure: Structure):
+def test_esm_if1_score(pdb_structure: Structure):
     """Score a sequence against a structure."""
     original_sequence = pdb_structure.get_chain_sequence("A")
 
-    inp = ESMIFScoringInput(
+    inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
             SequenceStructurePair(
                 sequence=original_sequence, structure=pdb_structure
             ),
         ]
     )
-    config = ESMIFScoringConfig(seed=42)
-    output = run_esmif_score(inp, config)
+    config = ESMIF1ScoringConfig(seed=42)
+    output = run_esm_if1_score(inp, config)
     assert output.success, f"Failed to score: {output}"
 
     validate_output(output)
-    assert output.tool_id == "esmif-score"
+    assert output.tool_id == "esm-if1-score"
     assert len(output.scores) == 1
     assert isinstance(output.scores[0], SequenceScores)
 
 
 @pytest.mark.uses_gpu
-def test_esmif_score_fields(pdb_structure: Structure):
+def test_esm_if1_score_fields(pdb_structure: Structure):
     """Scoring fields and mathematical relationships are correct."""
     original_sequence = pdb_structure.get_chain_sequence("A")
 
-    inp = ESMIFScoringInput(
+    inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
             SequenceStructurePair(
                 sequence=original_sequence, structure=pdb_structure
             ),
         ]
     )
-    config = ESMIFScoringConfig(seed=42)
-    output = run_esmif_score(inp, config)
+    config = ESMIF1ScoringConfig(seed=42)
+    output = run_esm_if1_score(inp, config)
     assert output.success
 
     score = output.scores[0]
@@ -184,21 +184,21 @@ def test_esmif_score_fields(pdb_structure: Structure):
 
 
 @pytest.mark.uses_gpu
-def test_esmif_score_cache(pdb_structure: Structure):
+def test_esm_if1_score_cache(pdb_structure: Structure):
     """Caching returns consistent results."""
     original_sequence = pdb_structure.get_chain_sequence("A")
 
-    inp = ESMIFScoringInput(
+    inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
             SequenceStructurePair(
                 sequence=original_sequence, structure=pdb_structure
             ),
         ]
     )
-    config = ESMIFScoringConfig(seed=42)
+    config = ESMIF1ScoringConfig(seed=42)
 
-    output1 = run_esmif_score(inp, config)
-    output2 = run_esmif_score(inp, config)
+    output1 = run_esm_if1_score(inp, config)
+    output2 = run_esm_if1_score(inp, config)
 
     assert output1.success and output2.success
     assert np.isclose(

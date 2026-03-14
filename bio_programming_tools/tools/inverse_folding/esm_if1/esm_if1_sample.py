@@ -1,4 +1,4 @@
-"""ESM-IF/ProteinDPO sampling tool."""
+"""ESM-IF1/ProteinDPO sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Data Models
 # ============================================================================
-ESMIFSampleInput = InverseFoldingInput
-ESMIFSampleOutput = InverseFoldingOutput
+ESMIF1SampleInput = InverseFoldingInput
+ESMIF1SampleOutput = InverseFoldingOutput
 
 
-class ESMIFSampleConfig(InverseFoldingConfig):
-    """Configuration for ESM-IF/ProteinDPO sequence sampling.
+class ESMIF1SampleConfig(InverseFoldingConfig):
+    """Configuration for ESM-IF1/ProteinDPO sequence sampling.
 
     Attributes:
         weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
@@ -46,8 +46,8 @@ class ESMIFSampleConfig(InverseFoldingConfig):
     )
 
 
-class ESMIFSequences(DesignedSequences):
-    """Designed sequences from ESM-IF/ProteinDPO.
+class ESMIF1Sequences(DesignedSequences):
+    """Designed sequences from ESM-IF1/ProteinDPO.
 
     Attributes:
         sequences: Designed amino acid sequences.
@@ -65,7 +65,7 @@ class ESMIFSequences(DesignedSequences):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
-    return ESMIFSampleInput(
+    return ESMIF1SampleInput(
         inputs=[
             InverseFoldingStructureInput(
                 structure=str(
@@ -80,12 +80,12 @@ def example_input():
 
 
 @tool(
-    key="esmif-sample",
-    label="ESM-IF Sampling",
+    key="esm-if1-sample",
+    label="ESM-IF1 Sampling",
     category="inverse_folding",
-    input_class=ESMIFSampleInput,
-    config_class=ESMIFSampleConfig,
-    output_class=ESMIFSampleOutput,
+    input_class=ESMIF1SampleInput,
+    config_class=ESMIF1SampleConfig,
+    output_class=ESMIF1SampleOutput,
     description=(
         "Sample protein sequences conditioned on backbone structure using "
         "ESM-IF1 or ProteinDPO (DPO-aligned for stability). Supports "
@@ -97,23 +97,23 @@ def example_input():
     iterable_output_field="designed_sequences",
     cacheable=True,
 )
-def run_esmif_sample(
-    inputs: ESMIFSampleInput,
-    config: ESMIFSampleConfig | None = None,
+def run_esm_if1_sample(
+    inputs: ESMIF1SampleInput,
+    config: ESMIF1SampleConfig | None = None,
     instance=None,
-) -> ESMIFSampleOutput:
-    """Sample protein sequences using ESM-IF/ProteinDPO.
+) -> ESMIF1SampleOutput:
+    """Sample protein sequences using ESM-IF1/ProteinDPO.
 
     Args:
         inputs: Structure inputs with optional chain/fixed position constraints.
         config: Configuration including weights variant, temperature, etc.
 
     Returns:
-        ESMIFSampleOutput with designed sequences for each input structure.
+        ESMIF1SampleOutput with designed sequences for each input structure.
     """
     if config.excluded_amino_acids:
         raise ValueError(
-            "ESM-IF does not support excluded_amino_acids. "
+            "ESM-IF1 does not support excluded_amino_acids. "
             "This feature may be added in a future update."
         )
 
@@ -121,7 +121,7 @@ def run_esmif_sample(
 
     for inp in tqdm(
         inputs.inputs,
-        desc="ESM-IF sampling",
+        desc="ESM-IF1 sampling",
         unit="structure",
         total=len(inputs.inputs),
     ):
@@ -142,7 +142,7 @@ def run_esmif_sample(
                 "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(
-                "esmif",
+                "esm_if1",
                 input_dict,
                 instance=instance,
                 config=config,
@@ -152,10 +152,10 @@ def run_esmif_sample(
             chunk_idx += 1
             remaining -= chunk
         designed_sequences.append(
-            ESMIFSequences(
+            ESMIF1Sequences(
                 sequences=all_seqs,
                 log_likelihoods=all_lls,
             )
         )
 
-    return ESMIFSampleOutput(designed_sequences=designed_sequences)
+    return ESMIF1SampleOutput(designed_sequences=designed_sequences)
