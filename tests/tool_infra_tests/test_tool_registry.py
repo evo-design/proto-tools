@@ -223,8 +223,8 @@ def test_tool_registry_list_all(clean_registry):
     assert tool2_spec.description == "Tool 2"
 
 
-def test_tool_registry_get_schema(clean_registry):
-    """Test getting JSON schema for a tool"""
+def test_tool_registry_schema_methods(clean_registry):
+    """All schema query methods (input, config, output, combined) return valid JSON schemas."""
 
     @clean_registry.register(
         key="schema-tool",
@@ -243,97 +243,31 @@ def test_tool_registry_get_schema(clean_registry):
             result=f"ok: {inputs.input_data}",
         )
 
-    schema = clean_registry.get_config_schema("schema-tool")
+    # get_config_schema
+    config_schema = clean_registry.get_config_schema("schema-tool")
+    assert "properties" in config_schema
+    assert config_schema["properties"]["param1"]["type"] == "string"
+    assert config_schema["properties"]["param2"]["type"] == "integer"
+    assert config_schema["properties"]["param2"]["default"] == 10
+    assert config_schema["properties"]["param2"]["minimum"] == 0
 
-    # Check schema structure
-    assert "properties" in schema
-    assert "param1" in schema["properties"]
-    assert "param2" in schema["properties"]
+    # get_input_schema
+    input_schema = clean_registry.get_input_schema("schema-tool")
+    assert "properties" in input_schema
+    assert input_schema["properties"]["input_data"]["type"] == "string"
 
-    # Check param1 details
-    assert schema["properties"]["param1"]["type"] == "string"
-    assert "description" in schema["properties"]["param1"]
-
-    # Check param2 details (has default and constraints)
-    assert schema["properties"]["param2"]["type"] == "integer"
-    assert schema["properties"]["param2"]["default"] == 10
-    assert schema["properties"]["param2"]["minimum"] == 0
+    # get_schemas (combined)
+    schemas = clean_registry.get_schemas("schema-tool")
+    assert set(schemas.keys()) == {"inputs", "config", "output"}
+    assert "properties" in schemas["inputs"]
+    assert "properties" in schemas["config"]
+    assert "properties" in schemas["output"]
 
 
 def test_tool_registry_get_unknown_tool(clean_registry):
     """Test that getting unknown tool raises error"""
     with pytest.raises(ValueError, match="non-existent-tool"):
         clean_registry.get("non-existent-tool")
-
-
-def test_tool_registry_get_input_schema(clean_registry):
-    """Test getting JSON schema for tool inputs"""
-
-    @clean_registry.register(
-        key="input-schema-tool",
-        label="Input Schema Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Input schema tool",
-    )
-    def input_schema_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
-        return MockToolOutput(
-            tool_id="input-schema-tool",
-            execution_time=0.1,
-            success=True,
-            result=f"ok: {inputs.input_data}"
-        )
-
-    input_schema = clean_registry.get_input_schema("input-schema-tool")
-
-    # Check input schema structure
-    assert "properties" in input_schema
-    assert "input_data" in input_schema["properties"]
-
-    # Check input_data details
-    assert input_schema["properties"]["input_data"]["type"] == "string"
-    assert "description" in input_schema["properties"]["input_data"]
-
-
-def test_tool_registry_get_schemas(clean_registry):
-    """Test getting both input and config schemas"""
-
-    @clean_registry.register(
-        key="both-schemas-tool",
-        label="Both Schemas Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Both schemas tool",
-    )
-    def both_schemas_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
-        return MockToolOutput(
-            tool_id="both-schemas-tool",
-            execution_time=0.1,
-            success=True,
-            result=f"ok: {inputs.input_data}"
-        )
-
-    schemas = clean_registry.get_schemas("both-schemas-tool")
-
-    # Check structure
-    assert "inputs" in schemas
-    assert "config" in schemas
-    assert "output" in schemas
-
-    # Check input schema
-    input_schema = schemas["inputs"]
-    assert "properties" in input_schema
-    assert "input_data" in input_schema["properties"]
-
-    # Check config schema
-    config_schema = schemas["config"]
-    assert "properties" in config_schema
-    assert "param1" in config_schema["properties"]
-    assert "param2" in config_schema["properties"]
 
 
 def test_tool_registry_decorator_populates_metadata(clean_registry):
@@ -886,90 +820,36 @@ def _register_cacheable_iterable(registry, key, func):
     return registry.get(key)
 
 
-def test_tool_wrapper_deduplicates_iterable_items(clean_registry):
-    """@tool should dedup iterable items and expand results back."""
+@pytest.mark.parametrize(
+    "items, expected_dispatched, expected_results",
+    [
+        # Mixed duplicates: dedup to 3 unique, expand back to 5
+        (["a", "b", "a", "c", "b"], ["a", "b", "c"], ["out_a", "out_b", "out_a", "out_c", "out_b"]),
+        # All unique: pass through unchanged
+        (["a", "b", "c"], ["a", "b", "c"], ["out_a", "out_b", "out_c"]),
+        # Single item: skip dedup entirely
+        (["only"], ["only"], ["out_only"]),
+        # All duplicates: reduce to 1, expand back to 4
+        (["x", "x", "x", "x"], ["x"], ["out_x", "out_x", "out_x", "out_x"]),
+    ],
+    ids=["mixed-dupes", "all-unique", "single-item", "all-dupes"],
+)
+def test_tool_wrapper_dedup_iterable_items(clean_registry, items, expected_dispatched, expected_results):
+    """@tool should dedup cacheable iterable items and expand results back."""
     received_items = []
 
-    def run_dedup_test(inputs, config=None, instance=None):
+    def run_tool(inputs, config=None, instance=None):
         received_items.extend(inputs.items)
-        return MockIterableOutput(
-            results=[f"out_{x}" for x in inputs.items],
-        )
+        return MockIterableOutput(results=[f"out_{x}" for x in inputs.items])
 
-    spec = _register_cacheable_iterable(clean_registry, "dedup-test", run_dedup_test)
-    inputs = MockIterableInput(items=["a", "b", "a", "c", "b"])
-    config = MockToolConfig(param1="v")
+    # Each parametrize case needs a unique key to avoid duplicate registration
+    key = f"dedup-{'-'.join(items[:2])}-{len(items)}"
+    spec = _register_cacheable_iterable(clean_registry, key, run_tool)
+    result = spec.function(MockIterableInput(items=items), MockToolConfig(param1="v"))
 
-    result = spec.function(inputs, config)
-
-    # Function should only receive 3 unique items
-    assert len(received_items) == 3
-    assert received_items == ["a", "b", "c"]
-
-    # Output should be expanded to match original 5 positions
-    assert result.results == ["out_a", "out_b", "out_a", "out_c", "out_b"]
+    assert received_items == expected_dispatched
+    assert result.results == expected_results
     assert result.success is True
-
-
-def test_tool_wrapper_no_dedup_for_unique_items(clean_registry):
-    """@tool should pass through when all items are already unique."""
-    received_items = []
-
-    def run_no_dedup(inputs, config=None, instance=None):
-        received_items.extend(inputs.items)
-        return MockIterableOutput(
-            results=[f"out_{x}" for x in inputs.items],
-        )
-
-    spec = _register_cacheable_iterable(clean_registry, "no-dedup-test", run_no_dedup)
-    inputs = MockIterableInput(items=["a", "b", "c"])
-    config = MockToolConfig(param1="v")
-
-    result = spec.function(inputs, config)
-
-    assert received_items == ["a", "b", "c"]
-    assert result.results == ["out_a", "out_b", "out_c"]
-
-
-def test_tool_wrapper_dedup_single_item_skipped(clean_registry):
-    """@tool should skip dedup for single-item inputs."""
-    received_items = []
-
-    def run_single(inputs, config=None, instance=None):
-        received_items.extend(inputs.items)
-        return MockIterableOutput(
-            results=[f"out_{x}" for x in inputs.items],
-        )
-
-    spec = _register_cacheable_iterable(clean_registry, "single-item-test", run_single)
-    inputs = MockIterableInput(items=["only"])
-    config = MockToolConfig(param1="v")
-
-    result = spec.function(inputs, config)
-
-    assert received_items == ["only"]
-    assert result.results == ["out_only"]
-
-
-def test_tool_wrapper_dedup_all_duplicates(clean_registry):
-    """@tool should reduce all-duplicate input to a single item."""
-    received_items = []
-
-    def run_all_dupes(inputs, config=None, instance=None):
-        received_items.extend(inputs.items)
-        return MockIterableOutput(
-            results=[f"out_{x}" for x in inputs.items],
-        )
-
-    spec = _register_cacheable_iterable(clean_registry, "all-dupes-test", run_all_dupes)
-    inputs = MockIterableInput(items=["x", "x", "x", "x"])
-    config = MockToolConfig(param1="v")
-
-    result = spec.function(inputs, config)
-
-    assert len(received_items) == 1
-    assert received_items == ["x"]
-    assert result.results == ["out_x", "out_x", "out_x", "out_x"]
 
 
 def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
