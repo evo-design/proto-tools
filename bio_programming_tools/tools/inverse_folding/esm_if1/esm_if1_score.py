@@ -1,4 +1,4 @@
-"""ESM-IF/ProteinDPO scoring tool."""
+"""ESM-IF1/ProteinDPO scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Data Models
 # ============================================================================
-class ESMIFScoringInput(BaseToolInput):
-    """Input for ESM-IF/ProteinDPO scoring.
+class ESMIF1ScoringInput(BaseToolInput):
+    """Input for ESM-IF1/ProteinDPO scoring.
 
     Attributes:
         sequence_structure_pairs: List of sequence-structure pairs to score.
@@ -36,11 +36,11 @@ class ESMIFScoringInput(BaseToolInput):
     )
 
 
-ESMIFScoringOutput = InverseFoldingScoringOutput
+ESMIF1ScoringOutput = InverseFoldingScoringOutput
 
 
-class ESMIFScoringConfig(BaseConfig):
-    """Configuration for ESM-IF/ProteinDPO scoring.
+class ESMIF1ScoringConfig(BaseConfig):
+    """Configuration for ESM-IF1/ProteinDPO scoring.
 
     Attributes:
         weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
@@ -86,7 +86,7 @@ def example_input():
         / "dummy_data"
         / "test_structure_similarity.pdb"
     )
-    return ESMIFScoringInput(
+    return ESMIF1ScoringInput(
         sequence_structure_pairs=[
             SequenceStructurePair(
                 sequence="A",
@@ -97,12 +97,12 @@ def example_input():
 
 
 @tool(
-    key="esmif-score",
-    label="ESM-IF Scoring",
+    key="esm-if1-score",
+    label="ESM-IF1 Scoring",
     category="inverse_folding",
-    input_class=ESMIFScoringInput,
-    config_class=ESMIFScoringConfig,
-    output_class=ESMIFScoringOutput,
+    input_class=ESMIF1ScoringInput,
+    config_class=ESMIF1ScoringConfig,
+    output_class=ESMIF1ScoringOutput,
     description=(
         "Score protein sequences against backbone structures using "
         "ESM-IF1 or ProteinDPO. Computes average log-likelihood and "
@@ -114,12 +114,12 @@ def example_input():
     iterable_output_field="scores",
     cacheable=True,
 )
-def run_esmif_score(
-    inputs: ESMIFScoringInput,
-    config: ESMIFScoringConfig | None = None,
+def run_esm_if1_score(
+    inputs: ESMIF1ScoringInput,
+    config: ESMIF1ScoringConfig | None = None,
     instance=None,
-) -> ESMIFScoringOutput:
-    """Score protein sequences using ESM-IF/ProteinDPO.
+) -> ESMIF1ScoringOutput:
+    """Score protein sequences using ESM-IF1/ProteinDPO.
 
     Scores each sequence against its paired structure using the full complex
     structural context (score_sequence_in_complex). Returns average
@@ -130,13 +130,13 @@ def run_esmif_score(
         config: Configuration including weights variant.
 
     Returns:
-        ESMIFScoringOutput with scores for each input pair.
+        ESMIF1ScoringOutput with scores for each input pair.
     """
     scores = []
 
     for pair in tqdm(
         inputs.sequence_structure_pairs,
-        desc="ESM-IF scoring",
+        desc="ESM-IF1 scoring",
         unit="pair",
         total=len(inputs.sequence_structure_pairs),
     ):
@@ -150,7 +150,7 @@ def run_esmif_score(
             "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
-            "esmif",
+            "esm_if1",
             input_dict,
             instance=instance,
             config=config,
@@ -161,4 +161,4 @@ def run_esmif_score(
             )
         )
 
-    return ESMIFScoringOutput(scores=scores)
+    return ESMIF1ScoringOutput(scores=scores)

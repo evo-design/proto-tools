@@ -22,7 +22,7 @@ DEFAULT_TEMPERATURE = 0.1
 DEFAULT_SEED = 42
 
 
-class ESMIFModel:
+class ESMIF1Model:
     """ESM-IF1/ProteinDPO model for structure-conditioned inverse folding."""
 
     def __init__(self):
@@ -273,14 +273,14 @@ def _serialize_output(value: Any) -> Any:
 # ============================================================================
 # Dispatch
 # ============================================================================
-_model: ESMIFModel | None = None
+_model: ESMIF1Model | None = None
 
 
 def dispatch(input_dict: dict) -> dict:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
-        _model = ESMIFModel()
+        _model = ESMIF1Model()
 
     # Handle pdb_contents -> temp file
     pdb_contents = input_dict.get("pdb_contents")
