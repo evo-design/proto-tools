@@ -7,6 +7,8 @@ import pytest
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
+from .helpers import field_description_is_valid, find_missing_fields_in_docstring
+
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
 
 
@@ -61,7 +63,7 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
 
     # Iterate through input fields and ensure they are defined consistently
     for field_name, field_info in tool_input.model_fields.items():
-        description_error = _field_description_is_valid(field_info.description)
+        description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"Tool input {tool_input.__name__} has field {field_name} {description_error}. "
             "Ensure: Field(..., description='Brief explanation for tooltip')"
@@ -69,19 +71,19 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
 
     # Iterate through output fields and ensure they are defined consistently
     for field_name, field_info in tool_output.model_fields.items():
-        description_error = _field_description_is_valid(field_info.description)
+        description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"Tool output {tool_output.__name__} has field {field_name} {description_error}. "
             "Ensure: Field(..., description='Brief explanation for tooltip')"
         )
 
     # DOCUMENTATION CHECK: Ensure that all fields are mentioned in the docstring
-    missing_fields = _find_missing_fields_in_docstring(input_docstring, tool_input.model_fields.keys())
+    missing_fields = find_missing_fields_in_docstring(input_docstring, tool_input.model_fields.keys())
     assert len(missing_fields) == 0, (
         f"Tool input {tool_input.__name__} is missing the following fields in the docstring: {missing_fields}. "
         "Ensure: Field(..., description='Brief explanation for tooltip')"
     )
-    missing_fields = _find_missing_fields_in_docstring(output_docstring, tool_output.model_fields.keys())
+    missing_fields = find_missing_fields_in_docstring(output_docstring, tool_output.model_fields.keys())
     # Remove standardized output fields
     standard_tool_output_fields = (
         "tool_id",
@@ -106,25 +108,3 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
     )
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
-
-def _field_description_is_valid(description):
-    """Check if the description is under _MAX_FIELD_DESCRIPTION_LENGTH characters."""
-    if description is None:
-        return "is None"
-    if len(description) > _MAX_FIELD_DESCRIPTION_LENGTH:
-        return f"is too long (currently {len(description)} characters, must be under {_MAX_FIELD_DESCRIPTION_LENGTH} characters)"
-    if not description.strip():
-        return "description is empty or just whitespace"
-    if "\n" in description:
-        return "description contains newline characters. Please use single line descriptions."
-    return ""
-
-
-def _find_missing_fields_in_docstring(docstring, field_names):
-    """Find missing fields in the docstring."""
-    missing_fields = []
-    for field_name in field_names:
-        if field_name not in docstring:
-            missing_fields.append(field_name)
-    return missing_fields

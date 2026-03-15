@@ -8,8 +8,11 @@ from pydantic.fields import PydanticUndefined
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils import BaseConfig as ToolsBaseConfig
 
+from .helpers import field_description_is_valid, find_missing_fields_in_docstring
+
 _MAX_FIELD_TITLE_LENGTH = 31
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
+_BASE_CONFIG_FIELDS = frozenset(ToolsBaseConfig.model_fields.keys())
 
 
 def _list_of_all_tool_config_models():
@@ -47,7 +50,7 @@ def test_tool_config_consistency(config_model):
         ), f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {_MAX_FIELD_TITLE_LENGTH} characters). "
 
         # DESCRIPTION: Must exist and be concise (~15 words / ~90 chars for tooltip)
-        description_error = _field_description_is_valid(field_info.description)
+        description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
         assert description_error == "", (
             f"{config_model.__name__}.{field_name} {description_error}. "
             "Ensure: Field(..., description='Brief explanation for tooltip')"
@@ -89,14 +92,16 @@ def test_tool_config_consistency(config_model):
                 "Remove the 'hidden' flag."
             )
 
-    # DOCUMENTATION CHECK: Every field must appear in at least one docstring
-    # in the MRO (the class itself or a superclass). This mirrors how
-    # documentation generation would collect field descriptions.
-    missing_fields = _find_undocumented_fields(config_model)
+    # Every field must appear in the config's own docstring (excluding
+    # BaseConfig fields, which are documented once at the base level).
+    missing_fields = find_missing_fields_in_docstring(
+        docstring, config_model.model_fields.keys()
+    )
+    missing_fields = [f for f in missing_fields if f not in _BASE_CONFIG_FIELDS]
     assert len(missing_fields) == 0, (
-        f"{config_model.__name__} is missing the following fields in the docstring "
-        f"(not found in any superclass docstring either): {missing_fields}. "
-        "Add: Field(..., description='Brief explanation for tooltip')"
+        f"{config_model.__name__} is missing the following fields in its docstring: "
+        f"{missing_fields}. Every non-BaseConfig field must be documented in the "
+        "class's own docstring, even if inherited from a parent config."
     )
 
 
@@ -133,31 +138,3 @@ def test_tool_config_accepts_none(config_model):
     assert isinstance(default_config, config_model)
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
-
-def _field_description_is_valid(description):
-    """Check if the description is under _MAX_FIELD_DESCRIPTION_LENGTH characters."""
-    if description is None:
-        return "is None"
-    if len(description) > _MAX_FIELD_DESCRIPTION_LENGTH:
-        return f"is too long (currently {len(description)} characters, must be under {_MAX_FIELD_DESCRIPTION_LENGTH} characters)"
-    if not description.strip():
-        return "description is empty or just whitespace"
-    if "\n" in description:
-        return "description contains newline characters. Please use single line descriptions."
-    return ""
-
-
-def _find_undocumented_fields(config_model):
-    """Return field names that don't appear in any docstring across the MRO."""
-    # Collect all docstrings from the class and its superclasses
-    all_docs = ""
-    for cls in config_model.__mro__:
-        if cls.__doc__:
-            all_docs += cls.__doc__
-
-    missing = []
-    for field_name in config_model.model_fields:
-        if field_name not in all_docs:
-            missing.append(field_name)
-    return missing
