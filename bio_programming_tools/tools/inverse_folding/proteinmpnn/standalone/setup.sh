@@ -16,14 +16,10 @@ echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
-    "cudnn" \
-    "git"; then
+    "cudnn"; then
     echo "ERROR: Failed to install CUDA toolkit via micromamba"
     exit 1
 fi
-
-# Ensure git (from cuda_env) is on PATH for uv pip install of git+ deps
-export PATH="$VENV_PATH/cuda_env/bin:$PATH"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt

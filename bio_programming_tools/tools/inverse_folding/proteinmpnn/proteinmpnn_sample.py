@@ -29,8 +29,6 @@ logger = logging.getLogger(__name__)
 ProteinMPNNSampleInput = InverseFoldingInput
 # Output:
 ProteinMPNNSampleOutput = InverseFoldingOutput
-
-
 # Config:
 class ProteinMPNNSampleConfig(InverseFoldingConfig):
     """Configuration for ProteinMPNN sampling.
@@ -133,7 +131,7 @@ def run_proteinmpnn_sample(
                 "excluded_amino_acids": config.excluded_amino_acids,
                 "seed": config.seed + chunk_idx,
                 "device": config.device,
-                "model_choice": getattr(config, "model_choice", "proteinmpnn"),
+                "model_choice": config.model_choice,
                 "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(

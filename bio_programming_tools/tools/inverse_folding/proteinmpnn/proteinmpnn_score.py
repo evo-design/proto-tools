@@ -202,7 +202,7 @@ def run_proteinmpnn_score(
             "seed": config.seed,
             "fixed_positions": config.fixed_positions,
             "device": config.device,
-            "model_choice": getattr(config, "model_choice", "proteinmpnn"),
+            "model_choice": config.model_choice,
             "return_logits": config.return_logits,
             "verbose": config.verbose,
         }
