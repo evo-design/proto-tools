@@ -229,7 +229,7 @@ class ESMIF1Model:
 
         metrics = {
             "avg_log_likelihood": float(avg_ll),
-            "perplexity": float(math.exp(-avg_ll)) if avg_ll <= 0 else float("inf"),
+            "perplexity": float(math.exp(-avg_ll)),
         }
 
         return {"metrics": metrics}
