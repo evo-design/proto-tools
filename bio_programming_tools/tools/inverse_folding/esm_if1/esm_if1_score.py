@@ -45,7 +45,6 @@ class ESMIF1ScoringConfig(BaseConfig):
     Attributes:
         weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
-        seed: Random seed.
         device: Device to run the model on.
     """
 
@@ -55,13 +54,6 @@ class ESMIF1ScoringConfig(BaseConfig):
         description="'esmif' for vanilla ESM-IF1, 'protein_dpo' for DPO-aligned weights",
         reload_on_change=True,
         examples=["esmif", "protein_dpo"],
-    )
-
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed",
-        hidden=True,
     )
 
     device: str = ConfigField(

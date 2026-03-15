@@ -140,6 +140,7 @@ def run_esm_if1_sample(
                 "device": config.device,
                 "weights_variant": config.weights_variant,
                 "verbose": config.verbose,
+                "fixed_positions": inp.fixed_positions,
             }
             result = ToolInstance.dispatch(
                 "esm_if1",

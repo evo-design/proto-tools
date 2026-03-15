@@ -32,6 +32,87 @@ class ESMIF1Model:
         self.alphabet = None
         self._weights_variant = None
 
+    def _load_structure(
+        self,
+        pdb_structure: str,
+        chain_ids: List[str],
+    ):
+        """Load structure and extract coords for the complex.
+
+        Returns:
+            Tuple of (all_coords, all_native_seqs, target_chain).
+        """
+        import biotite.structure
+        import esm.inverse_folding.multichain_util
+        import esm.inverse_folding.util
+
+        structure = esm.inverse_folding.util.load_structure(pdb_structure)
+        structure = biotite.structure.array(
+            [atom for atom in structure if not atom.hetero]
+        )
+        all_coords, all_native_seqs = (
+            esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
+        )
+        target_chain = chain_ids[0] if chain_ids else list(all_coords.keys())[0]
+        return all_coords, all_native_seqs, target_chain
+
+    def _sample_with_fixed_positions(
+        self,
+        all_coords: Dict,
+        all_native_seqs: Dict,
+        target_chain: str,
+        fixed_pos: List[int],
+        temperature: float,
+    ) -> str:
+        """Sample a sequence with certain positions fixed to native residues.
+
+        Uses the model's partial_seq support: positions pre-filled with amino
+        acid tokens are kept fixed during autoregressive decoding.
+
+        Args:
+            all_coords: Coords dict from extract_coords_from_complex.
+            all_native_seqs: Native sequences dict.
+            target_chain: Chain to design.
+            fixed_pos: 1-indexed positions to keep fixed.
+            temperature: Sampling temperature.
+
+        Returns:
+            Sampled sequence string.
+        """
+        import esm.inverse_folding.multichain_util
+
+        native_seq = all_native_seqs[target_chain]
+        # Convert 1-indexed to 0-indexed
+        fixed_indices = {p - 1 for p in fixed_pos}
+
+        # Build partial_seq following multichain_util convention:
+        # target chain positions get '<mask>' (sampled) or native residue (fixed),
+        # other chain positions get '<pad>' (context only)
+        all_chain_ids = list(all_coords.keys())
+        partial_seq = []
+        for chain_id in all_chain_ids:
+            chain_seq = all_native_seqs[chain_id]
+            if chain_id == target_chain:
+                for i, res in enumerate(chain_seq):
+                    if i in fixed_indices:
+                        partial_seq.append(res)
+                    else:
+                        partial_seq.append('<mask>')
+            else:
+                partial_seq.extend(['<pad>'] * len(chain_seq))
+
+        # Build coords tensor matching multichain_util._concatenate_coords
+        all_coords_concat = esm.inverse_folding.multichain_util._concatenate_coords(
+            all_coords, target_chain
+        )
+
+        sampled_seq = self.model.sample(
+            all_coords_concat, partial_seq=partial_seq, temperature=temperature,
+        )
+        # Extract only target chain portion
+        target_len = len(native_seq)
+        return sampled_seq[:target_len]
+
     def sample(
         self,
         pdb_structure: str,
@@ -42,6 +123,7 @@ class ESMIF1Model:
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
+        fixed_positions: Dict[str, List[int]] | None = None,
     ) -> Dict[str, Any]:
         """Sample sequences using ESM-IF autoregressive decoder.
 
@@ -54,6 +136,8 @@ class ESMIF1Model:
             device: Device to run on ('cuda' or 'cpu').
             weights_variant: 'esmif' for vanilla or 'protein_dpo' for DPO weights.
             verbose: Whether to print status messages.
+            fixed_positions: Optional dict mapping chain IDs to lists of
+                1-indexed positions to keep fixed at native residue identity.
 
         Returns:
             Dictionary with keys: sequences, log_likelihoods
@@ -63,32 +147,28 @@ class ESMIF1Model:
         elif self.device != device:
             self.to_device(device)
 
-        import biotite.structure
         import esm.inverse_folding.multichain_util
-        import esm.inverse_folding.util
 
-        # Load structure and extract coords for the complex
-        structure = esm.inverse_folding.util.load_structure(pdb_structure)
-        structure = biotite.structure.array(
-            [atom for atom in structure if not atom.hetero]
+        all_coords, all_native_seqs, target_chain = self._load_structure(
+            pdb_structure, chain_ids
         )
-        all_coords, all_native_seqs = (
-            esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
-        )
-
-        # Determine target chain
-        target_chain = chain_ids[0] if chain_ids else list(all_coords.keys())[0]
 
         sequences = []
         log_likelihoods = []
 
         torch.manual_seed(seed)
         for _ in range(batch_size):
-            sampled_seq = (
-                esm.inverse_folding.multichain_util.sample_sequence_in_complex(
-                    self.model, all_coords, target_chain, temperature=temperature,
+            if fixed_positions and target_chain in fixed_positions:
+                sampled_seq = self._sample_with_fixed_positions(
+                    all_coords, all_native_seqs, target_chain,
+                    fixed_positions[target_chain], temperature,
                 )
-            )
+            else:
+                sampled_seq = (
+                    esm.inverse_folding.multichain_util.sample_sequence_in_complex(
+                        self.model, all_coords, target_chain, temperature=temperature,
+                    )
+                )
             sequences.append(sampled_seq)
 
             # Score sampled sequence to get log-likelihood
@@ -100,7 +180,6 @@ class ESMIF1Model:
             )
             log_likelihoods.append(float(avg_ll))
 
-        self.unload()
         return {
             "sequences": sequences,
             "log_likelihoods": log_likelihoods,
@@ -137,21 +216,11 @@ class ESMIF1Model:
         elif self.device != device:
             self.to_device(device)
 
-        import biotite.structure
         import esm.inverse_folding.multichain_util
-        import esm.inverse_folding.util
 
-        # Load structure and extract coords for the complex
-        structure = esm.inverse_folding.util.load_structure(pdb_structure)
-        structure = biotite.structure.array(
-            [atom for atom in structure if not atom.hetero]
+        all_coords, all_native_seqs, target_chain = self._load_structure(
+            pdb_structure, chain_ids
         )
-        all_coords, all_native_seqs = (
-            esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
-        )
-
-        # Determine target chain
-        target_chain = chain_ids[0] if chain_ids else list(all_coords.keys())[0]
 
         # Score the sequence in the complex context
         avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
@@ -163,7 +232,6 @@ class ESMIF1Model:
             "perplexity": float(math.exp(-avg_ll)) if avg_ll <= 0 else float("inf"),
         }
 
-        self.unload()
         return {"metrics": metrics}
 
     def load(
@@ -303,6 +371,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 weights_variant=input_dict.get("weights_variant", "protein_dpo"),
                 verbose=input_dict.get("verbose", False),
+                fixed_positions=input_dict.get("fixed_positions"),
             )
         elif operation == "score":
             return _model.score(
