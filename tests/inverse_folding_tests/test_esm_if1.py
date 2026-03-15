@@ -104,6 +104,40 @@ def test_esm_if1_sample_chunked_batching(pdb_structure: Structure):
 
 
 @pytest.mark.uses_gpu
+def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
+    """Fixed positions in sampled sequences match the native residues."""
+    native_seq = pdb_structure.get_chain_sequence("A")
+    # Fix positions 1, 5, 10 (1-indexed) to native residues
+    fixed_pos = [1, 5, 10]
+
+    inp = InverseFoldingInput(
+        inputs=[
+            InverseFoldingStructureInput(
+                structure=pdb_structure,
+                chain_ids=["A"],
+                fixed_positions={"A": fixed_pos},
+            )
+        ]
+    )
+    config = ESMIF1SampleConfig(
+        num_sequences_per_structure=2,
+        temperature=0.5,  # higher temp to ensure non-fixed positions vary
+        seed=42,
+    )
+    output = run_esm_if1_sample(inp, config)
+    assert output.success, f"Fixed positions sampling failed: {output}"
+
+    designed = output.designed_sequences[0]
+    assert len(designed.sequences) == 2
+    for seq in designed.sequences:
+        for pos in fixed_pos:
+            assert seq[pos - 1] == native_seq[pos - 1], (
+                f"Position {pos}: expected '{native_seq[pos - 1]}', "
+                f"got '{seq[pos - 1]}'"
+            )
+
+
+@pytest.mark.uses_gpu
 def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
     """Sampling with explicit ProteinDPO weights."""
     inp = InverseFoldingInput(
@@ -139,7 +173,7 @@ def test_esm_if1_score(pdb_structure: Structure):
             ),
         ]
     )
-    config = ESMIF1ScoringConfig(seed=42)
+    config = ESMIF1ScoringConfig()
     output = run_esm_if1_score(inp, config)
     assert output.success, f"Failed to score: {output}"
 
@@ -161,7 +195,7 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
             ),
         ]
     )
-    config = ESMIF1ScoringConfig(seed=42)
+    config = ESMIF1ScoringConfig()
     output = run_esm_if1_score(inp, config)
     assert output.success
 
@@ -195,7 +229,7 @@ def test_esm_if1_score_cache(pdb_structure: Structure):
             ),
         ]
     )
-    config = ESMIF1ScoringConfig(seed=42)
+    config = ESMIF1ScoringConfig()
 
     output1 = run_esm_if1_score(inp, config)
     output2 = run_esm_if1_score(inp, config)

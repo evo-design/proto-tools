@@ -93,9 +93,14 @@ if os.path.exists(gvp_path):
         '    ):\n        # Move tensors to model device (patched for GPU support)\n        device = next(self.parameters()).device\n        coords = coords.to(device)\n        padding_mask = padding_mask.to(device)\n        confidence = confidence.to(device)\n        prev_output_tokens = prev_output_tokens.to(device)\n        encoder_out = self.encoder(coords, padding_mask, confidence,\n            return_all_hiddens=return_all_hiddens)'
     )
     # Patch sample() to move inputs to device
+    # Insert device detection + tensor moves right after batch_converter, before torch.full
     content = content.replace(
-        'batch_coords, confidence, _, _, padding_mask = (\n            batch_converter([(coords, confidence, None)])\n        )\n        \n        # Start with prepend token\n        mask_idx = self.decoder.dictionary.get_idx(\\\"<mask>\\\")\n        sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int)',
-        'batch_coords, confidence, _, _, padding_mask = (\n            batch_converter([(coords, confidence, None)])\n        )\n\n        # Move tensors to model device (patched for GPU support)\n        device = next(self.parameters()).device\n        batch_coords = batch_coords.to(device)\n        confidence = confidence.to(device)\n        padding_mask = padding_mask.to(device)\n\n        # Start with prepend token\n        mask_idx = self.decoder.dictionary.get_idx(\\\"<mask>\\\")\n        sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int, device=device)'
+        '            batch_converter([(coords, confidence, None)])\n        )\n',
+        '            batch_converter([(coords, confidence, None)])\n        )\n\n        # Move tensors to model device (patched for GPU support)\n        device = next(self.parameters()).device\n        batch_coords = batch_coords.to(device)\n        confidence = confidence.to(device)\n        padding_mask = padding_mask.to(device)\n',
+    )
+    content = content.replace(
+        'sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int)',
+        'sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int, device=device)',
     )
     with open(gvp_path, 'w') as f:
         f.write(content)
@@ -127,8 +132,7 @@ if [ ! -f "$PROTEINDPO_WEIGHTS_FILE" ]; then
         echo "WARNING: Failed to download ProteinDPO weights."
     }
     if [ -f "${WEIGHTS_DIR}/paired_weights.pt.zip" ]; then
-        cd "$WEIGHTS_DIR" && unzip -o paired_weights.pt.zip && rm -f paired_weights.pt.zip
-        cd -
+        (cd "$WEIGHTS_DIR" && unzip -o paired_weights.pt.zip && rm -f paired_weights.pt.zip)
     fi
 else
     echo "ProteinDPO weights already present."
