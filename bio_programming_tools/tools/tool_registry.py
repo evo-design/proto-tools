@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field, field_serializer
+from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,24 @@ class ToolSpec(BaseModel):
     def serialize_config_model(self, config_model: Type[BaseModel]) -> Dict[str, Any]:
         """Serialize config_model as standard JSON Schema."""
         return config_model.model_json_schema()
+
+
+class _LenientSchemaGenerator(GenerateJsonSchema):
+    """Schema generator that replaces non-serializable types with a fallback.
+
+    Some tool output models contain pandas DataFrames, which Pydantic can't
+    serialize to JSON Schema. Instead of crashing, this replaces them with a
+    generic {"type": "object"} placeholder so the rest of the schema remains
+    usable (e.g. by MCP clients).
+
+    TODO: Remove once DataFrames are refactored out of output models.
+    """
+
+    def handle_invalid_for_json_schema(
+        self, schema, error_info: str
+    ) -> JsonSchemaValue:
+        # Return a placeholder instead of raising
+        return {"type": "object", "description": f"Non-serializable type: {error_info}"}
 
 
 class ToolRegistry:
@@ -513,9 +532,20 @@ class ToolRegistry:
 
     @classmethod
     def get_output_schema(cls, key: str) -> Dict[str, Any]:
-        """Get JSON schema for tool output."""
+        """Get JSON schema for tool output.
+
+        Uses a lenient schema generator that replaces non-serializable types
+        (e.g. pandas DataFrame) with a generic object schema instead of raising.
+
+        TODO: Remove this workaround once DataFrame fields are refactored out of
+        output models into .to_dataframe() methods. The underlying data should be
+        structured Pydantic models; DataFrames are a presentation convenience.
+        See: https://github.com/evo-design/bio-programming-tools/issues/215
+        """
         spec = cls.get(key)
-        return spec.output_model.model_json_schema()
+        return spec.output_model.model_json_schema(
+            schema_generator=_LenientSchemaGenerator
+        )
 
     @classmethod
     def get_schemas(cls, key: str) -> Dict[str, Dict[str, Any]]:

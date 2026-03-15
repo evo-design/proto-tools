@@ -191,6 +191,22 @@ Flat functions only (no test classes). See `docs/testing.md` for full convention
 
 ## Using bio_tools with Claude Code
 
+### MCP Server
+
+An MCP server (`bio_tools_mcp/`) exposes the ToolRegistry over the Model Context Protocol. Claude Code auto-discovers it via `.mcp.json`. Use MCP tools to discover available tools, search by keyword, inspect schemas, and read citations without importing Python.
+
+```bash
+# Manual launch (stdio)
+python -m bio_tools_mcp
+
+# HTTP transport
+python -m bio_tools_mcp --transport http --port 9200
+```
+
+Requires `pip install -e ".[mcp]"` (adds `fastmcp>=2.0.0`).
+
+### Running Tools Directly
+
 When a user asks to run a bioinformatics tool:
 1. **Find the tool**: Browse `bio_programming_tools/tools/` or use `ToolRegistry.list_all()`
 2. **Read README + notebook**: `tools/{category}/{tool}/README.md` and `examples/example.ipynb`

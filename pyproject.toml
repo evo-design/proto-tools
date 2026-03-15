@@ -52,6 +52,11 @@ dependencies = [
 
 [project.optional-dependencies]
 
+# MCP server
+mcp = [
+    "fastmcp>=2.0.0",
+]
+
 # Development dependencies
 dev = [
     # Testing

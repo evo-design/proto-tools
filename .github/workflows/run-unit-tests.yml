@@ -43,7 +43,7 @@ jobs:
     - name: Install package with dev dependencies
       run: |
         pip install uv
-        uv pip install --system ".[dev]"
+        uv pip install --system ".[dev,mcp]"
 
     - name: Run unit tests
       run: |

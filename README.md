@@ -153,6 +153,48 @@ with ToolInstance.persist():
 
 See `notes/tool_instance_example.ipynb` for a full walkthrough with timing comparisons.
 
+## MCP Servers
+
+Two MCP servers expose the bio-programming ecosystem to AI agents. Both support stdio (Claude Desktop / Claude Code) and HTTP transports.
+
+### bio-programming-tools (this repo) — tool discovery & schemas
+
+Wraps the ToolRegistry so agents can discover tools, inspect schemas, search by keyword, and read citations.
+
+```bash
+# stdio (auto-discovered by Claude Code via .mcp.json)
+python -m bio_tools_mcp
+
+# HTTP
+python -m bio_tools_mcp --transport http --port 9200
+```
+
+Install: `pip install -e ".[mcp]"`
+
+**Example — find structure prediction tools and inspect one:**
+```
+> list_tools(category="structure_prediction")
+> get_tool_schema(key="esmfold-prediction")
+> search_tools(query="inverse folding")
+```
+
+### bio-programming (parent repo) — DSL, constraints, generators
+
+Lives in [`bio-programming/bio_mcp/`](https://github.com/evo-design/bio-programming). Exposes the language layer: constraints, generators, optimizers, program validation, and doc search.
+
+```bash
+# From the bio-programming repo root
+python -m bio_mcp
+```
+
+**Example — explore the DSL and validate a program:**
+```
+> list_constraints(category="sequence")
+> list_generators()
+> get_component_schema(component_type="constraint", key="gc-content")
+> validate_program(program_json='{"constructs": [...]}')
+```
+
 ## Using with Claude Code
 
 Run tools interactively through natural language using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Launch `claude` from the repo root:

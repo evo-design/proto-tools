@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bio-programming-tools": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "bio_tools_mcp"]
+    }
+  }
+}
