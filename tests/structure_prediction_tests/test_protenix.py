@@ -102,7 +102,7 @@ def test_protenix_input_accepts_chain_objects():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.uses_gpu
-@pytest.mark.include_in_env_report(category="structure_prediction")
+@pytest.mark.slow
 @pytest.mark.parametrize("model_name", _PROTENIX_MODEL_VARIANTS)
 def test_protenix_model_variants(model_name):
     """Each Protenix model variant folds a simple protein and returns valid metrics."""
