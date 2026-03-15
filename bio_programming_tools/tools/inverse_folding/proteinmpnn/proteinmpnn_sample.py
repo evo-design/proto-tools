@@ -34,6 +34,13 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
     """Configuration for ProteinMPNN sampling.
 
     Attributes:
+        num_sequences_per_structure: Total number of sequences to generate per
+            input structure.
+        batch_size: Number of sequences to process simultaneously on GPU.
+            Defaults to num_sequences_per_structure.
+        temperature: Controls randomness in sampling from logits.
+        excluded_amino_acids: List of amino acids not allowed in the sequence.
+        seed: Random seed to use for sampling.
         model_choice: Model weights to use. ``"proteinmpnn"`` for the general-purpose
             ProteinMPNN model, ``"abmpnn"`` for antibody-optimized weights.
     """
