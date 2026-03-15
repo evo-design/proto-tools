@@ -305,6 +305,12 @@ for pos in range(len(probs)):
 
 ### Configuration
 
+<ParamField path="model_choice" type="enum" default="proteinmpnn">
+  Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)
+
+  Options: `proteinmpnn`, `abmpnn`
+</ParamField>
+
 <ParamField path="num_sequences_per_structure" type="integer" default="1">
   Total number of sequences to generate per input structure.
 </ParamField>
@@ -346,6 +352,12 @@ for pos in range(len(probs)):
 
 <ParamField path="return_logits" type="boolean" default="False">
   Whether to include per-position logits in the output. Disable to save memory.
+</ParamField>
+
+<ParamField path="model_choice" type="enum" default="proteinmpnn">
+  Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)
+
+  Options: `proteinmpnn`, `abmpnn`
 </ParamField>
 
 ### Output
