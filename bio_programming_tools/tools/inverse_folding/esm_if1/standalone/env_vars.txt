@@ -1,0 +1,2 @@
+[passthrough]
+ESMIF_WEIGHTS_DIR
