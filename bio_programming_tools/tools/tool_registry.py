@@ -276,7 +276,9 @@ class ToolRegistry:
                 # Validate device allocation against tool requirements
                 if hasattr(config, 'device'):
                     device_str = str(config.device)
-                    if device_str != "cpu" and not uses_gpu:
+                    if device_str == "cloud":
+                        pass  # Cloud dispatch — skip local device validation
+                    elif device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
                             "the tool will run on CPU regardless",
@@ -360,6 +362,36 @@ class ToolRegistry:
                         )
                         return result
 
+                # --- Cloud dispatch (device="cloud") ---
+                if getattr(config, 'device', None) == "cloud":
+                    if cls._execution_backend is None:
+                        raise RuntimeError(
+                            f"device='cloud' requested for '{key}' but no cloud backend "
+                            f"is registered. Call ToolRegistry.set_execution_backend() first."
+                        )
+                    try:
+                        backend_result = cls._execution_backend(key, inputs, config)
+                    except Exception as e:
+                        logger.error(f"Tool {key}: cloud dispatch failed with {type(e).__name__}: {e}")
+                        return _make_error_output(
+                            output_class, key, start_time, e, traceback.format_exc(),
+                        )
+                    if backend_result is None:
+                        raise RuntimeError(
+                            f"device='cloud' requested for '{key}' but the cloud backend "
+                            f"does not support this tool."
+                        )
+                    backend_result.tool_id = key
+                    backend_result.success = True
+                    backend_result.execution_time = time.time() - start_time
+                    if backend_result.timestamp is None:
+                        backend_result.timestamp = datetime.now()
+                    result = _post_dispatch_cache_and_expand(
+                        key, spec, cacheable, backend_result, strip, deduped,
+                        original_items, whole_cache_key,
+                    )
+                    return result
+
                 for attempt in range(1 + MAX_RETRIES):
                     try:
                         # Check external backend first (e.g., remote dispatch)
@@ -436,35 +468,21 @@ class ToolRegistry:
                         captured_warnings = [str(w.message) for w in filtered_warnings]
                         _re_emit_warnings(filtered_warnings)
 
-                        full_traceback = traceback.format_exc()
                         logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
-
-                        error_output = output_class.model_construct(
-                            tool_id=key,
-                            execution_time=time.time() - start_time,
-                            success=False,
-                            timestamp=datetime.now(),
-                            warnings=captured_warnings,
-                            errors=[str(e)] + [full_traceback],
+                        return _make_error_output(
+                            output_class, key, start_time, e,
+                            traceback.format_exc(), captured_warnings,
                         )
-                        return error_output
 
                 # All retries exhausted for a retryable exception
-                full_traceback = last_traceback
                 logger.error(
                     f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
                     f"{type(last_exception).__name__}: {last_exception}"
                 )
-
-                error_output = output_class.model_construct(
-                    tool_id=key,
-                    execution_time=time.time() - start_time,
-                    success=False,
-                    timestamp=datetime.now(),
-                    warnings=[],
-                    errors=[str(last_exception)] + [full_traceback],
+                return _make_error_output(
+                    output_class, key, start_time,
+                    last_exception, last_traceback,
                 )
-                return error_output
 
             # Register the tool spec with the captured source file
             cls._registry[key] = ToolSpec(
@@ -659,6 +677,25 @@ class ToolRegistry:
             else:
                 error_msg += f"\nExisting tool: {existing_label}"
             raise ValueError(error_msg)
+
+
+def _make_error_output(
+    output_class: Type[BaseToolOutput],
+    key: str,
+    start_time: float,
+    exception: Exception,
+    traceback_str: str,
+    warning_strings: list[str] | None = None,
+) -> BaseToolOutput:
+    """Construct a structured error output for a failed tool execution."""
+    return output_class.model_construct(
+        tool_id=key,
+        execution_time=time.time() - start_time,
+        success=False,
+        timestamp=datetime.now(),
+        warnings=warning_strings or [],
+        errors=[str(exception), traceback_str],
+    )
 
 
 def _post_dispatch_cache_and_expand(

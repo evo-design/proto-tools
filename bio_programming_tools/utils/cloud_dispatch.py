@@ -3,7 +3,7 @@ cloud_dispatch.py — Pluggable cloud backend for ToolPool.
 
 Contains retry logic, fan-out, and batch dispatch for cloud execution.
 Imported by tool_pool.py when remote= is truthy. Can be replaced entirely
-to swap cloud providers (e.g., Modal → RunPod).
+to swap cloud providers.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
-from bio_programming_tools.utils.tool_pool import WorkItem, _MAX_CLOUD_WORKERS
+from bio_programming_tools.utils.tool_pool import PartialFailureError, WorkItem, _MAX_CLOUD_WORKERS
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Retry config for transient cloud failures
-_CLOUD_MAX_RETRIES = 3
+_CLOUD_MAX_RETRIES = 4
 _CLOUD_RETRY_BASE_DELAY = 2.0  # seconds (exponential backoff: 2s, 4s, 8s)
 _CLOUD_RETRYABLE_EXCEPTIONS = (ConnectionError, TimeoutError)
 
@@ -91,6 +91,8 @@ def _fan_out_single_calls(
     n_workers = min(len(work_items), max_cloud_workers)
     results: list[Any] = [None] * len(work_items)
 
+    failed: list[dict] = []
+
     with ThreadPoolExecutor(max_workers=n_workers) as executor:
         future_to_idx = {}
         for i, (item_input, wi) in enumerate(zip(item_inputs, work_items)):
@@ -105,10 +107,29 @@ def _fan_out_single_calls(
             try:
                 results[idx] = future.result()
             except Exception as e:
-                raise RuntimeError(
-                    f"Cloud dispatch failed for item index "
-                    f"{work_items[idx].original_index} of tool '{tool_key}'"
-                ) from e
+                logger.error(
+                    "Cloud dispatch failed for item index %d of tool '%s': %s",
+                    work_items[idx].original_index, tool_key, e,
+                )
+                failed.append({
+                    "device_id": "cloud",
+                    "indices": [work_items[idx].original_index],
+                    "exception": e,
+                })
+
+    if failed:
+        succeeded: list[tuple[int, object]] = []
+        for i, r in enumerate(results):
+            if r is not None:
+                succeeded.append((work_items[i].original_index, r))
+        n_failed = sum(len(f["indices"]) for f in failed)
+        raise PartialFailureError(
+            f"Cloud fan-out: {len(failed)} item(s) failed "
+            f"({n_failed} items lost, {len(succeeded)} succeeded) "
+            f"for tool '{tool_key}'",
+            succeeded=succeeded,
+            failed=failed,
+        )
 
     return results
 
@@ -129,7 +150,7 @@ def dispatch_cloud_items(
 ) -> tuple[list[tuple[int, Any]], list[str], list[str], Any]:
     """Fan out work items to the cloud backend.
 
-    Uses batch backend (single ``.map()`` call) when available,
+    Uses batch backend when available,
     falling back to N × single backend calls via ThreadPoolExecutor.
 
     Args:
@@ -151,10 +172,9 @@ def dispatch_cloud_items(
 
     if batch_backend is not None:
         # Batch dispatch — chunk into groups of max_cloud_workers to cap
-        # concurrent Modal containers (without chunking, Modal's autoscaler
-        # ignores any concurrency limit the user set).
+        # concurrent cloud workers.
         logger.info(
-            "Cloud batch dispatch: %d items for %s via .map() "
+            "Cloud batch dispatch: %d items for %s via batch backend "
             "(max_cloud_workers=%d)",
             len(work_items), tool_key, max_cloud_workers,
         )

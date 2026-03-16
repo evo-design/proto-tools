@@ -14,6 +14,7 @@ from bio_programming_tools.utils.tool_io import BaseToolInput
 from bio_programming_tools.utils.cloud_dispatch import _cloud_dispatch_with_retry
 from bio_programming_tools.utils.tool_pool import (
     DeviceCapability,
+    PartialFailureError,
     ToolPool,
     WorkItem,
     _active_pool,
@@ -1137,6 +1138,168 @@ def test_fan_out_respects_max_cloud_workers(clean_registry):
         pool._parallel_dispatch("mock-process", func, inputs, config)
 
     mock_tpe.assert_called_once_with(max_workers=2)
+
+
+
+# ── Error propagation tests ─────────────────────────────────────────────────
+
+def test_local_partition_failure_preserves_other_results(clean_registry):
+    """When one device fails, succeeded results and failure info are on the exception."""
+    call_count = 0
+
+    @clean_registry.register(
+        key="fail-tool",
+        label="Fail Tool",
+        category="testing",
+        input_class=MockInput,
+        config_class=MockConfig,
+        output_class=MockOutput,
+        description="Tool that fails on second device",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_fail_tool(inputs, config=None, instance=None):
+        nonlocal call_count
+        call_count += 1
+        # Fail on cuda:1
+        if config and "cuda_1" in (instance or ""):
+            raise RuntimeError("OOM on cuda:1")
+        return MockOutput(
+            results=[f"ok_{item}" for item in inputs.items],
+            tool_id="fail-tool",
+            execution_time=0.01,
+            success=True,
+        )
+
+    pool = ToolPool(devices=["cuda:0", "cuda:1"])
+    pool._devices = ["cuda:0", "cuda:1"]
+
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = MockConfig(device="cuda")
+
+    with pytest.raises(PartialFailureError, match="1 partition.*failed") as exc_info:
+        pool._parallel_dispatch("fail-tool", run_fail_tool, inputs, config)
+
+    err = exc_info.value
+    # Some items succeeded
+    assert len(err.succeeded) > 0
+    # One partition failed
+    assert len(err.failed) == 1
+    assert err.failed[0]["device_id"] == "cuda:1"
+    assert isinstance(err.failed[0]["exception"], Exception)
+
+
+def test_all_partitions_fail(clean_registry):
+    """When all partitions fail, succeeded is empty and all failures are captured."""
+
+    @clean_registry.register(
+        key="all-fail-tool",
+        label="All Fail Tool",
+        category="testing",
+        input_class=MockInput,
+        config_class=MockConfig,
+        output_class=MockOutput,
+        description="Tool that always fails",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_all_fail(inputs, config=None, instance=None):
+        raise RuntimeError("everything is broken")
+
+    pool = ToolPool(devices=["cuda:0", "cuda:1"])
+    pool._devices = ["cuda:0", "cuda:1"]
+
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = MockConfig(device="cuda")
+
+    with pytest.raises(PartialFailureError, match="2 partition.*failed") as exc_info:
+        pool._parallel_dispatch("all-fail-tool", run_all_fail, inputs, config)
+
+    err = exc_info.value
+    assert err.succeeded == []
+    assert len(err.failed) == 2
+    failed_devices = {f["device_id"] for f in err.failed}
+    assert failed_devices == {"cuda:0", "cuda:1"}
+
+
+def test_cloud_fan_out_partial_failure(clean_registry):
+    """Cloud fan-out preserves succeeded items when some fail."""
+    call_idx = 0
+
+    def failing_backend(key, inputs, config):
+        nonlocal call_idx
+        call_idx += 1
+        items = inputs.items
+        if items[0] == "bad":
+            raise RuntimeError("cloud worker died")
+        return MockOutput(
+            results=[f"cloud_{item}" for item in items],
+            tool_id=key,
+            execution_time=0.01,
+            success=True,
+        )
+
+    clean_registry._execution_backend = failing_backend
+    clean_registry._execution_backend_batch = None
+
+    @clean_registry.register(
+        key="cloud-fail-tool",
+        label="Cloud Fail Tool",
+        category="testing",
+        input_class=MockInput,
+        config_class=MockConfig,
+        output_class=MockOutput,
+        description="Tool for cloud failure test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_cloud_fail(inputs, config=None, instance=None):
+        pass  # Won't be called — cloud dispatch only
+
+    from bio_programming_tools.utils.cloud_dispatch import _fan_out_single_calls
+
+    work_items = [
+        WorkItem(0, "good1", 1.0),
+        WorkItem(1, "bad", 1.0),
+        WorkItem(2, "good2", 1.0),
+    ]
+    item_inputs = [
+        MockInput(items=["good1"]),
+        MockInput(items=["bad"]),
+        MockInput(items=["good2"]),
+    ]
+    config = MockConfig(device="cuda")
+
+    with pytest.raises(PartialFailureError, match="1 item.*failed") as exc_info:
+        _fan_out_single_calls(
+            failing_backend, "cloud-fail-tool",
+            item_inputs, config, work_items,
+        )
+
+    err = exc_info.value
+    # 2 succeeded, 1 failed
+    assert len(err.succeeded) == 2
+    assert len(err.failed) == 1
+    succeeded_indices = {idx for idx, _ in err.succeeded}
+    assert succeeded_indices == {0, 2}
+
+
+def test_all_succeed_unchanged(clean_registry):
+    """Regression: happy path is unaffected by error propagation changes."""
+    func, call_log = _register_mock_tool(clean_registry)
+
+    pool = ToolPool(devices=["cuda:0", "cuda:1"])
+    pool._devices = ["cuda:0", "cuda:1"]
+
+    inputs = MockInput(items=["a", "b", "c", "d"])
+    config = MockConfig(device="cuda")
+
+    result = pool._parallel_dispatch("mock-process", func, inputs, config)
+
+    assert result.results == [
+        "processed_a", "processed_b", "processed_c", "processed_d"
+    ]
+    assert len(call_log) == 2  # Two partitions
 
 
 # ---------------------------------------------------------------------------

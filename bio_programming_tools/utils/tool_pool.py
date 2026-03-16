@@ -34,6 +34,31 @@ logger = logging.getLogger(__name__)
 _MAX_CLOUD_WORKERS = 100
 
 # ============================================================================
+# Error types
+# ============================================================================
+
+class PartialFailureError(RuntimeError):
+    """Some worker partitions failed; successful results are preserved.
+
+    Attributes:
+        succeeded: List of ``(original_index, output_item)`` tuples from
+            partitions that completed successfully.
+        failed: List of dicts describing each failure, with keys
+            ``device_id``, ``indices`` (list of original item indices),
+            and ``exception`` (the original exception object).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        succeeded: list[tuple[int, Any]],
+        failed: list[dict],
+    ):
+        super().__init__(message)
+        self.succeeded = succeeded
+        self.failed = failed
+
+# ============================================================================
 # ContextVars for pool state
 # ============================================================================
 
@@ -445,6 +470,8 @@ class ToolPool:
                 finally:
                     _pool_executing.reset(token)
 
+            failed: list[dict] = []
+
             with ThreadPoolExecutor(max_workers=len(active_assignments)) as executor:
                 contexts = [contextvars.copy_context() for _ in active_assignments]
                 futures = [
@@ -455,16 +482,33 @@ class ToolPool:
                     try:
                         indexed, result = future.result()
                     except Exception as e:
-                        raise RuntimeError(
-                            f"ToolPool partition failed on device "
-                            f"{assignment.device.device_id} "
-                            f"({len(assignment.items)} items, indices "
-                            f"{[wi.original_index for wi in assignment.items]})"
-                        ) from e
+                        indices = [wi.original_index for wi in assignment.items]
+                        logger.error(
+                            "ToolPool partition failed on device %s "
+                            "(%d items, indices %s): %s",
+                            assignment.device.device_id,
+                            len(assignment.items), indices, e,
+                        )
+                        failed.append({
+                            "device_id": assignment.device.device_id,
+                            "indices": indices,
+                            "exception": e,
+                        })
+                        continue
                     all_indexed.extend(indexed)
                     all_warnings.extend(getattr(result, "warnings", []))
                     all_errors.extend(getattr(result, "errors", []))
                     last_result = result
+
+            if failed:
+                n_failed = sum(len(f["indices"]) for f in failed)
+                n_ok = len(all_indexed)
+                raise PartialFailureError(
+                    f"ToolPool: {len(failed)} partition(s) failed "
+                    f"({n_failed} items lost, {n_ok} succeeded)",
+                    succeeded=list(all_indexed),
+                    failed=failed,
+                )
 
         # Execute cloud items via fan-out (no LPT — cloud backend autoscales)
         if cloud_work_items:

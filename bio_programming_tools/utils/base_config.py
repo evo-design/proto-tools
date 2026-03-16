@@ -128,7 +128,7 @@ class BaseConfig(BaseModel):
     device: str = ConfigField(
         title="Device",
         default="cpu",
-        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0')",
+        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'cloud')",
         hidden=True,
         include_in_key=False,
     )

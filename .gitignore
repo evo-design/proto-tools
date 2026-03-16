@@ -53,3 +53,4 @@ analyses/*
 **/standalone/standalone_helpers.py
 
 .claude/worktrees/
+uv.lock
