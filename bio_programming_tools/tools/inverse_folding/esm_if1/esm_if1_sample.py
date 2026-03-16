@@ -35,6 +35,11 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
     Attributes:
         weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
+        num_sequences_per_structure: Total number of sequences to generate per structure.
+        batch_size: Number of sequences to process simultaneously on GPU.
+        temperature: Controls randomness in sampling from logits.
+        excluded_amino_acids: Amino acids disallowed in the designed sequence.
+        seed: Random seed for sampling reproducibility.
     """
 
     weights_variant: Literal["esmif", "protein_dpo"] = ConfigField(
