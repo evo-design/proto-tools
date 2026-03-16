@@ -1,8 +1,19 @@
+from bio_programming_tools.tools.inverse_folding.esm_if1 import (
+    ESMIF1SampleConfig,
+    ESMIF1SampleInput,
+    ESMIF1SampleOutput,
+    ESMIF1ScoringConfig,
+    ESMIF1ScoringInput,
+    ESMIF1ScoringOutput,
+    ESMIF1Sequences,
+    run_esm_if1_sample,
+    run_esm_if1_score,
+)
 from bio_programming_tools.tools.inverse_folding.fampnn import (
     AllMutationsScoreResult,
     FAMPNNPackConfig,
-    FAMPNNPackInput,
     FAMPNNPackingResult,
+    FAMPNNPackInput,
     FAMPNNSampleConfig,
     FAMPNNSampleInput,
     FAMPNNSampleOutput,
@@ -61,6 +72,16 @@ __all__ = [
     "InverseFoldingStructureInput",
     "InverseFoldingConfig",
     "InverseFoldingInput",
+    # ESM-IF1 / ProteinDPO
+    "ESMIF1SampleConfig",
+    "ESMIF1SampleInput",
+    "ESMIF1SampleOutput",
+    "ESMIF1ScoringConfig",
+    "ESMIF1ScoringInput",
+    "ESMIF1ScoringOutput",
+    "ESMIF1Sequences",
+    "run_esm_if1_sample",
+    "run_esm_if1_score",
     # ProteinMPNN
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",
