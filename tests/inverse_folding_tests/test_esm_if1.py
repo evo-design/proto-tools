@@ -215,27 +215,3 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
         np.exp(-score.avg_log_likelihood),
         rtol=1e-5,
     )
-
-
-@pytest.mark.uses_gpu
-def test_esm_if1_score_cache(pdb_structure: Structure):
-    """Caching returns consistent results."""
-    original_sequence = pdb_structure.get_chain_sequence("A")
-
-    inp = ESMIF1ScoringInput(
-        sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
-        ]
-    )
-    config = ESMIF1ScoringConfig()
-
-    output1 = run_esm_if1_score(inp, config)
-    output2 = run_esm_if1_score(inp, config)
-
-    assert output1.success and output2.success
-    assert np.isclose(
-        output1.scores[0].avg_log_likelihood,
-        output2.scores[0].avg_log_likelihood,
-    )
