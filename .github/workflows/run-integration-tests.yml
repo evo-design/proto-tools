@@ -3,24 +3,27 @@ name: Run Integration Tests
 on:
   push:
     branches: [main]
+  issue_comment:
+    types: [created]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   run-integration-tests:
-    name: Run Integration Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.issue.pull_request &&
+       github.event.comment.body == '/run-integration')
+    name: Run Integration Tests
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout PR branch
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) || '' }}
 
     - name: Set up Python
       uses: actions/setup-python@v5

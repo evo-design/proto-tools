@@ -22,6 +22,7 @@ SAMPLE_PROTEIN_SEQ = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_remote_colabfold_search_no_metagenomic_db(tmp_path):
     """Test remote search with use_metagenomic_db=False."""
@@ -54,6 +55,7 @@ def test_remote_colabfold_search_no_metagenomic_db(tmp_path):
 
 
 @pytest.mark.skip(reason="Metagenomic DB hit count varies between API updates; needs range-based assertion")
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_remote_colabfold_search_with_metagenomic_db(tmp_path):
     """Test remote search with use_metagenomic_db=True."""
@@ -77,6 +79,7 @@ def test_remote_colabfold_search_with_metagenomic_db(tmp_path):
     assert msa.alignment_length == 40
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_remote_colabfold_search_custom_output_dir(tmp_path):
     """Test remote search with custom output_dir."""

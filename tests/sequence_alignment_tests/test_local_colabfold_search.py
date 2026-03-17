@@ -255,6 +255,7 @@ def setup_mini_database():
     not _TEST_DB_SETUP_SCRIPT.exists(),
     reason="Test database setup script not found.",
 )
+@pytest.mark.skip_ci
 @pytest.mark.integration
 @pytest.mark.include_in_env_report(category="sequence_alignment")
 def test_finding_self_in_database(setup_mini_database, tmp_path):
@@ -305,6 +306,7 @@ def test_finding_self_in_database(setup_mini_database, tmp_path):
     not _TEST_DB_SETUP_SCRIPT.exists(),
     reason="Test database setup script not found.",
 )
+@pytest.mark.skip_ci
 @pytest.mark.slow
 @pytest.mark.integration
 def test_finding_homologs(setup_mini_database, tmp_path):
@@ -343,6 +345,7 @@ def test_finding_homologs(setup_mini_database, tmp_path):
     not _TEST_DB_SETUP_SCRIPT.exists(),
     reason="Test database setup script not found.",
 )
+@pytest.mark.skip_ci
 @pytest.mark.slow
 @pytest.mark.integration
 def test_multiple_sequences_search(setup_mini_database, tmp_path):
@@ -397,6 +400,7 @@ def test_multiple_sequences_search(setup_mini_database, tmp_path):
     not _TEST_DB_SETUP_SCRIPT.exists(),
     reason="Test database setup script not found.",
 )
+@pytest.mark.skip_ci
 @pytest.mark.slow
 @pytest.mark.integration
 def test_with_sensitivity(setup_mini_database, tmp_path):
@@ -444,6 +448,7 @@ def test_with_sensitivity(setup_mini_database, tmp_path):
     not Path(CHIMERA_COLABFOLD_DB_LOCATION).exists(),
     reason="Full database not found. Skipping",
 )
+@pytest.mark.skip_ci
 @pytest.mark.only_chimera
 @pytest.mark.integration
 @pytest.mark.slow
