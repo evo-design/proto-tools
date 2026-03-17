@@ -3,12 +3,16 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceStructurePair,
 )
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    ConfigField,
+    InputField,
+)
 
 
 # ============================================================================

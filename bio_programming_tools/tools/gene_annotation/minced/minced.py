@@ -20,6 +20,7 @@ from bio_programming_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    ToolInstance,
     resolve_sequence_ids,
 )
 
@@ -231,7 +232,6 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 

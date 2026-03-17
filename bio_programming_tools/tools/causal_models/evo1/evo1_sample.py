@@ -22,8 +22,8 @@ from bio_programming_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    ToolInstance,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
 

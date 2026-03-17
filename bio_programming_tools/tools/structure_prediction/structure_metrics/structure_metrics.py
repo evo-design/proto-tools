@@ -19,6 +19,7 @@ from bio_programming_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     InputField,
+    ToolInstance,
 )
 
 
@@ -147,7 +148,6 @@ def run_structure_metrics(
         >>> print(result.metrics[0].longest_alpha_helix)
         >>> print(result.metrics[0].gyration_radius)
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "pdb_paths": inputs.pdb_paths,

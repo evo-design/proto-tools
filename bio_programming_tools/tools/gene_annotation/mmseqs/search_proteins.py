@@ -13,8 +13,15 @@ import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    resolve_sequence_ids,
+)
 
 # ============================================================================
 # Constants
@@ -304,7 +311,6 @@ def run_mmseqs_search_proteins(
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequences = inputs.query_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)

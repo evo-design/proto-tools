@@ -22,7 +22,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, return_invalid_protein_chars
+from bio_programming_tools.utils import ConfigField, ToolInstance, return_invalid_protein_chars
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,6 @@ def run_alphafold2(
         >>> result = run_alphafold2(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     prepared_complexes = inputs.prepare_complexes()
 

@@ -18,8 +18,14 @@ from pydantic import BaseModel, Field, field_validator
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 
 # ============================================================================
@@ -237,7 +243,6 @@ def run_viennarna(
     """
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
 
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Prepare input data for inference script
     input_data = {

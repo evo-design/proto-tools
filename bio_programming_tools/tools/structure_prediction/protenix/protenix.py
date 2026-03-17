@@ -26,7 +26,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField, ToolInstance
 
 logger = getLogger(__name__)
 
@@ -349,7 +349,6 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")

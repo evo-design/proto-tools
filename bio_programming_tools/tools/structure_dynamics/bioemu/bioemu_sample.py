@@ -19,11 +19,11 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
 )
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
+    BaseToolOutput,
     ConfigField,
+    ToolInstance,
     return_invalid_protein_chars,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 

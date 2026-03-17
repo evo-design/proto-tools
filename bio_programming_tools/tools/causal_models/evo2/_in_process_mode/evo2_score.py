@@ -11,8 +11,12 @@ from bio_programming_tools.tools.causal_models.shared_data_models import (
     SequenceScores,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    ConfigField,
+    InputField,
+)
 
 from .evo2_cache import get_cached_evo2_model
 

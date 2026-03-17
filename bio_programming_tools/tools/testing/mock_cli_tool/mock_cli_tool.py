@@ -11,8 +11,14 @@ from pathlib import Path
 from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 
 # ============================================================================
@@ -139,7 +145,6 @@ def run_mock_cli_tool(
     instance=None,
 ) -> MockCLIToolOutput:
     """Run mock CLI tool (subprocess-based for testing device routing)."""
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     result = ToolInstance.dispatch(
         "mock_cli_tool",

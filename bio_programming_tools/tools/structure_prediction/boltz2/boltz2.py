@@ -13,22 +13,25 @@ Example:
 from __future__ import annotations
 
 import os
-import string
 import tempfile
 import warnings
 from logging import getLogger
 
-import yaml
 from tqdm import tqdm
 
 from bio_programming_tools.entities.structures import BFactorType, Structure
+from bio_programming_tools.tools.structure_prediction.boltz2.helpers import (
+    CHAIN_IDS,
+    complex_to_yaml,
+    write_msa_csv,
+)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 
 logger = getLogger(__name__)
 
@@ -60,42 +63,6 @@ class Boltz2Input(StructurePredictionInput):
     # Boltz2 supports all standard entity types except glycan
     SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = False
-
-    _CHAIN_IDS = list(string.ascii_uppercase)
-
-    def to_yaml(self, complex_idx: int, single_sequence_mode: bool = False) -> str:
-        """Convert a complex to Boltz2 YAML input format.
-
-        Args:
-            complex_idx: Index of the complex to convert
-            single_sequence_mode: Whether to run without MSA (sets msa="empty")
-
-        Returns:
-            YAML formatted string for Boltz2 input
-        """
-        comp = self.complexes[complex_idx]
-        yaml_entries = []
-
-        for i, chain in enumerate(comp.chains):
-            entry = {"id": self._CHAIN_IDS[i]}
-            e_type = chain.entity_type
-            seq = chain.sequence
-
-            if e_type in ["protein", "dna", "rna"]:
-                entry["sequence"] = seq
-            elif e_type == "ligand":
-                entry["smiles"] = seq
-
-            if single_sequence_mode:
-                entry["msa"] = "empty"
-
-            yaml_entries.append({e_type: entry})
-
-        return yaml.dump(
-            {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}},
-            sort_keys=False,
-            default_flow_style=False,
-        )
 
 # Output:
 Boltz2Output = StructurePredictionOutput
@@ -292,72 +259,20 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     """
     results = []
 
-    for i in tqdm(range(len(inputs.complexes)), desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)):
-        # Determine single_sequence_mode based on use_msa
-        single_sequence_mode = not config.use_msa
-        yaml_content = inputs.to_yaml(i, single_sequence_mode=single_sequence_mode)
+    for comp in tqdm(inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)):
         results.append(
             run_boltz2_on_complex(
-                yaml_content=yaml_content, config=config, sp_complex=inputs.complexes[i],
+                config=config, sp_complex=comp,
                 msas=inputs.msas, instance=instance,
             )
         )
     return Boltz2Output(structures=results)
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+
 def _msa_to_csv_file(msa, csv_path: str, query_index: int = 0) -> None:
-    """Writes an MSA to Boltz's CSV format with pairing keys.
-
-    The CSV format contains two columns: 'sequence' and 'key'.
-    The 'key' is the row index, which serves as a simple pairing identifier.
-    Sequences at the same row index across different MSAs are considered paired.
-
-    Args:
-        msa: MSA object to export
-        csv_path: Path where the CSV file will be written.
-        query_index: Index of the sequence to use as the query (default: 0).
-            The query sequence is always placed first with key=0.
-
-    Raises:
-        IndexError: If query_index is out of range.
-        ImportError: If pandas is not available.
-
-    Note:
-        This uses row-index based pairing. For more sophisticated taxonomy-based
-        pairing, additional metadata would need to be extracted from A3M headers.
-    """
-    if query_index < 0 or query_index >= msa.num_sequences:
-        raise IndexError(f"Query index {query_index} out of range [0, {msa.num_sequences})")
-
-    try:
-        import pandas as pd
-    except ImportError:
-        raise ImportError(
-            "pandas is required for msa_to_csv_file(). Install with: pip install pandas"
-        )
-
-    # Build records with row index as pairing key
-    records = []
-    for idx, (seq_id, seq) in enumerate(msa.iter_with_ids()):
-        record = {
-            "sequence": seq,
-            "key": idx,
-        }
-        records.append(record)
-
-    # Ensure query is first row (required by Boltz)
-    if query_index != 0:
-        # Swap query to first position
-        records[0], records[query_index] = records[query_index], records[0]
-        # Reset keys so query always has key=0
-        for idx, record in enumerate(records):
-            record["key"] = idx
-
-    # Create DataFrame and save as CSV
-    df = pd.DataFrame(records)
-    df.to_csv(csv_path, index=False)
+    """Write an MSA object to Boltz's CSV format with pairing keys."""
+    sequences, _ids = extract_msa_sequences(msa, query_index)
+    write_msa_csv(sequences, csv_path)
 
 
 def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], list[str]]:
@@ -369,7 +284,7 @@ def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], lis
     Returns:
         Tuple of (protein_seqs, protein_chain_ids) where chain IDs are uppercase letters
     """
-    all_chain_ids = list(string.ascii_uppercase)
+    all_chain_ids = CHAIN_IDS
     protein_seqs = []
     protein_chain_ids = []
     for i, chain in enumerate(sp_complex.chains):
@@ -379,25 +294,7 @@ def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], lis
     return protein_seqs, protein_chain_ids
 
 
-def _serialize_csv_files(msa_paths: dict[str, str]) -> dict[str, bytes]:
-    """Read CSV files and serialize them as bytes.
-
-    Args:
-        msa_paths: Dictionary mapping chain_id -> csv_path
-
-    Returns:
-        Dictionary mapping filename -> file contents as bytes
-    """
-    msa_csv_files = {}
-    for chain_id, csv_path in msa_paths.items():
-        with open(csv_path, "rb") as f:
-            filename = os.path.basename(csv_path)
-            msa_csv_files[filename] = f.read()
-    return msa_csv_files
-
-
 def run_boltz2_on_complex(
-    yaml_content: str,
     config: Boltz2Config,
     sp_complex,
     msas: dict | None = None,
@@ -408,22 +305,22 @@ def run_boltz2_on_complex(
     by ``run_boltz2`` to sequentially predict all complexes in the input.
 
     Args:
-        yaml_content: YAML formatted string for Boltz2 input
         config: Boltz2 configuration
         sp_complex: StructurePredictionComplex instance containing chain information
+        msas: Pre-computed MSAs keyed by protein sequence
+        instance: Optional ToolInstance for persistent execution
     """
     if config.verbose:
         logger.info("Using local GPU for Boltz2 structure prediction...")
-
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "boltz2_output")
         os.makedirs(output_dir)
 
-        # Write pre-computed MSAs to CSV files and update YAML
-        msa_paths: dict[str, str] = {}
+        # Build chain_msa_paths for complex_to_yaml
+        chain_msa_paths: dict[str, str] | None = None
         if config.use_msa:
+            chain_msa_paths = {}
             protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(sp_complex)
             if protein_seqs and msas:
                 msa_dir = os.path.join(temp_dir, "msas")
@@ -432,34 +329,28 @@ def run_boltz2_on_complex(
                     if seq in msas:
                         csv_path = os.path.join(msa_dir, f"{chain_id}.csv")
                         _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
-                        msa_paths[chain_id] = csv_path
+                        chain_msa_paths[chain_id] = csv_path
                         if config.verbose:
                             logger.info(
                                 f"Assigned MSA to chain {chain_id} "
                                 f"({len(msas[seq])} sequences)"
                             )
 
-            # Update YAML: set MSA paths or "empty" for all protein chains
-            if protein_seqs:
-                yaml_dict = yaml.safe_load(yaml_content)
-                for seq_entry in yaml_dict["sequences"]:
-                    for entity_type in seq_entry:
-                        chain_id = seq_entry[entity_type]["id"]
-                        if isinstance(chain_id, list):
-                            chain_id = chain_id[0] if chain_id else None
-                        if entity_type == "protein" and chain_id:
-                            if chain_id in msa_paths:
-                                seq_entry[entity_type]["msa"] = msa_paths[chain_id]
-                            else:
-                                seq_entry[entity_type]["msa"] = "empty"
-                                warnings.warn(
-                                    f"No homologs found for chain {chain_id} - setting msa='empty'.",
-                                    UserWarning,
-                                    stacklevel=2,
-                                )
-                yaml_content = yaml.dump(
-                    yaml_dict, sort_keys=False, default_flow_style=False
-                )
+            # Warn for protein chains without MSAs
+            for chain_id in protein_chain_ids:
+                if chain_id not in chain_msa_paths:
+                    warnings.warn(
+                        f"No homologs found for chain {chain_id} - setting msa='empty'.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+
+        # Generate YAML directly with MSA paths baked in
+        chain_dicts = [
+            {"entity_type": chain.entity_type, "sequence": chain.sequence}
+            for chain in sp_complex.chains
+        ]
+        yaml_content = complex_to_yaml(chain_dicts, chain_msa_paths=chain_msa_paths)
 
         input_yaml_path = os.path.join(temp_dir, "boltz2_input.yaml")
         with open(input_yaml_path, "w") as f:
@@ -521,23 +412,3 @@ def run_boltz2_on_complex(
         metrics=metrics,
         source="boltz2-prediction",
     )
-
-
-def _format_output(value) -> any:
-    """
-    Prepare Boltz output dictionaries by unpacking them into lists.
-
-    Boltz outputs nested dicts with string keys "0", "1", "2", etc.
-    This function recursively converts them to lists.
-
-    Example:
-        {"0": 1.5, "1": 2.0, "2": 3.5} -> [1.5, 2.0, 3.5]
-        {"0": {"0": 1, "1": 2}, "1": {"0": 3, "1": 4}} -> [[1, 2], [3, 4]]
-    """
-    if isinstance(value, dict):
-        list_value = []
-        for k in range(len(value)):
-            list_value.append(_format_output(value[str(k)]))
-        return list_value
-    else:
-        return value

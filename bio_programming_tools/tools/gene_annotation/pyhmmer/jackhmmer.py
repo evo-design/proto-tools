@@ -6,8 +6,7 @@ from typing import List
 from pydantic import field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_io import InputField
+from bio_programming_tools.utils import ConfigField, InputField, ToolInstance
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -113,7 +112,6 @@ def run_pyhmmer_jackhmmer(
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     output_data = ToolInstance.dispatch(
         "pyhmmer",

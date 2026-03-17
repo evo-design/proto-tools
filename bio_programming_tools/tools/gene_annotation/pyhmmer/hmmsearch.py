@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_io import InputField
+from bio_programming_tools.utils import InputField, ToolInstance
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -125,7 +125,6 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
         ...         result.domain_hits_df['domain_score'] > 50
         ...     ]
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     output_data = ToolInstance.dispatch(
         "pyhmmer",

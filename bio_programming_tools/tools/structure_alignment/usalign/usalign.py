@@ -15,8 +15,13 @@ from typing import List, Union
 from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    InputField,
+    ToolInstance,
+)
 
 logger = getLogger(__name__)
 
@@ -112,7 +117,6 @@ def run_usalign(
     inputs: USalignInput, config: USalignConfig | None = None, instance=None
 ) -> USalignOutput:
     """Run USalign on two PDB structures."""
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,

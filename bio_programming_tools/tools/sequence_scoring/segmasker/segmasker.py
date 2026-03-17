@@ -12,8 +12,14 @@ import pandas as pd
 from pydantic import ConfigDict, Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 
 class SegmaskerInput(BaseToolInput):
@@ -235,7 +241,6 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     input_data = {
         "sequences": inputs.sequences,

@@ -6,7 +6,7 @@ from typing import List
 from pydantic import field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.tool_io import InputField
+from bio_programming_tools.utils import InputField, ToolInstance
 
 from .shared_data_models import (
     PyHmmerConfig,
@@ -91,7 +91,6 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
     Returns:
         PyNhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     output_data = ToolInstance.dispatch(
         "pyhmmer",

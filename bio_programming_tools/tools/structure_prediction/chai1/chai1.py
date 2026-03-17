@@ -6,7 +6,6 @@ Protein structure prediction using Chai1.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import tempfile
@@ -18,6 +17,11 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
+from bio_programming_tools.tools.structure_prediction.chai1.helpers import (
+    complex_to_fasta,
+    hash_sequence as _hash_sequence,
+    write_msa_pqt,
+)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
@@ -25,7 +29,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
+from bio_programming_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
@@ -276,121 +280,22 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
         structures=results,
     )
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
-def _hash_sequence(seq: str) -> str:
-    """Compute SHA-256 hash of a sequence.
-
-    This matches the implementation in chai_lab.data.parsing.msas.aligned_pqt.hash_sequence,
-    which is used to generate MSA filenames that Chai1's run_inference expects.
-
-    Args:
-        seq: Protein sequence string
-
-    Returns:
-        Hexadecimal SHA-256 hash string
-    """
-    hash_object = hashlib.sha256(seq.encode())
-    return hash_object.hexdigest()
-
 
 def _msa_to_pqt_file(
     msa, pqt_path: str, query_index: int = 0, source_database: str = "uniref90"
 ) -> None:
-    """Writes an MSA to Chai1's .aligned.pqt (Parquet) format.
-
-    The .aligned.pqt format is a Parquet file containing a DataFrame with
-    four columns: sequence, source_database, pairing_key, and comment.
-    This function streams sequences one at a time to avoid loading large MSAs
-    into memory.
-
-    Args:
-        msa: MSA object to export
-        pqt_path: Path where the .pqt file will be written (should end in .aligned.pqt).
-        query_index: Index of the sequence to use as the query (default: 0).
-        source_database: Name of the source database for non-query sequences
-            (default: "uniref90"). Valid values: "query", "uniref90", "uniprot",
-            "bfd_uniclust", "mgnify".
-
-    Raises:
-        IndexError: If query_index is out of range.
-        ImportError: If pandas is not available.
-    """
-    if query_index < 0 or query_index >= msa.num_sequences:
-        raise IndexError(
-            f"Query index {query_index} out of range [0, {msa.num_sequences})"
-        )
-
-    try:
-        import pandas as pd
-    except ImportError:
-        raise ImportError(
-            "pandas is required for msa_to_pqt_file(). Install with: pip install pandas"
-        )
-
-    # Build records one sequence at a time to avoid loading entire MSA
-    records = []
-    for idx, (seq_id, seq) in enumerate(msa.iter_with_ids()):
-        # First sequence (query) gets special treatment
-        if idx == query_index:
-            source = "query"
-        else:
-            source = source_database
-
-        record = {
-            "sequence": seq,
-            "source_database": source,
-            "pairing_key": "",  # Empty pairing key (not critical for prediction)
-            "comment": seq_id,
-        }
-        records.append(record)
-
-    # Ensure query is first row (required by Chai1)
-    if query_index != 0:
-        # Swap query to first position
-        records[0], records[query_index] = records[query_index], records[0]
-
-    # Create DataFrame and save as Parquet
-    df = pd.DataFrame(records)
-    df.to_parquet(pqt_path, engine="pyarrow", index=False)
+    """Write an MSA object to Chai1's .aligned.pqt Parquet format."""
+    sequences, seq_ids = extract_msa_sequences(msa, query_index)
+    write_msa_pqt(sequences, pqt_path, source_database=source_database, comments=seq_ids)
 
 
 def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
-    """Generate FASTA content from a complex in the format expected by Chai1.
-
-    Args:
-        comp: Complex containing chains and entity types
-
-    Returns:
-        FASTA-formatted string
-    """
-    fasta_content = ""
-    for i, chain in enumerate(comp.chains):
-        e_type = chain.entity_type
-        seq = chain.sequence
-        fasta_content += f">{e_type}|name={e_type}_{i+1}\n"
-        fasta_content += f"{seq.upper()}\n"
-    return fasta_content
-
-
-def _serialize_pqt_files(pqt_dir: str) -> dict[str, bytes]:
-    """Read .pqt files from directory and serialize them as bytes.
-
-    Args:
-        pqt_dir: Directory containing .aligned.pqt files
-
-    Returns:
-        Dictionary mapping filenames to file contents as bytes
-    """
-    import glob
-
-    msa_pqt_files = {}
-    for pqt_file in glob.glob(os.path.join(pqt_dir, "*.aligned.pqt")):
-        with open(pqt_file, "rb") as f:
-            filename = os.path.basename(pqt_file)
-            msa_pqt_files[filename] = f.read()
-    return msa_pqt_files
+    """Generate FASTA content from a typed StructurePredictionComplex."""
+    chain_dicts = [
+        {"entity_type": chain.entity_type, "sequence": chain.sequence}
+        for chain in comp.chains
+    ]
+    return complex_to_fasta(chain_dicts)
 
 
 def run_chai1_on_complex(
@@ -405,8 +310,6 @@ def run_chai1_on_complex(
     """
     # Local GPU execution via venv subprocess
     logger.debug("Using local GPU for Chai1 structure prediction...")
-
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Create temporary directory for inputs and outputs
     with tempfile.TemporaryDirectory() as temp_dir:

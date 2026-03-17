@@ -11,8 +11,12 @@ from typing import List, Optional
 from pydantic import Field
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseToolInput,
+    BaseToolOutput,
+    InputField,
+    build_http_session,
+)
 
 from .shared_data_models import (
     PdbChain,

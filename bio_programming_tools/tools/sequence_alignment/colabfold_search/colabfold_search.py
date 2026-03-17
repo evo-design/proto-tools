@@ -19,8 +19,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    has_cached_entries,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -519,7 +526,6 @@ def _cleanup_default_output_dir_if_cache_empty(
     if config._user_specified_output_dir:
         return
 
-    from bio_programming_tools.utils.tool_cache import has_cached_entries
 
     # Only cleanup if cache is empty (no entries to preserve)
     if has_cached_entries("colabfold-search"):
@@ -635,7 +641,6 @@ def _local_search(
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
 
     # Use ToolInstance to run colabfold_search in isolated environment
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Get the standalone script path
     standalone_script = Path(__file__).parent / "standalone" / "local_msa_search.py"
@@ -728,7 +733,6 @@ def _remote_search(
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")
 
     # Use ToolInstance to run remote search in isolated environment
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Get the standalone script path
     standalone_script = Path(__file__).parent / "standalone" / "remote_msa_search.py"

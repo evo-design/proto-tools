@@ -13,8 +13,15 @@ from pydantic import ConfigDict, Field, field_validator
 
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    resolve_sequence_ids,
+)
 
 
 # ============================================================================
@@ -174,7 +181,6 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.sequence_ids[i]}: {seq}")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)

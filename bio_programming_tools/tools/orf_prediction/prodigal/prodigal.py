@@ -20,10 +20,13 @@ from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
     BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
     ConfigField,
+    InputField,
+    ToolInstance,
     return_invalid_dna_chars,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 
 # ============================================================================
@@ -345,7 +348,6 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     output_data = ToolInstance.dispatch(
         "prodigal",
