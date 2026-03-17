@@ -387,6 +387,7 @@ def test_mmseqs_clustering_all_identical():
     assert len(result.representative_indices) == 1
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_mmseqs_search_genomes_execution():
     query_seqs = [

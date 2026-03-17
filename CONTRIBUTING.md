@@ -104,7 +104,11 @@ pytest --all --cpu              # Slow + integration, but skip GPU
 - `@pytest.mark.uses_gpu` — requires GPU (auto-skipped without one)
 - `@pytest.mark.integration` — tests external APIs or dispatches to real environments (skipped by default)
 - `@pytest.mark.slow` — long-running tests
-- `@pytest.mark.skip_ci` — skip in CI
+- `@pytest.mark.skip_ci` — skip in CI (e.g., tests that exceed CI runner memory limits)
+
+### CI Integration Tests
+
+Integration tests do not run on every push. To run them on a PR, add the `run-integration` label. Once the label is present, integration tests will re-run automatically on each subsequent push. Remove the label to stop running them.
 
 See [docs/testing.md](docs/testing.md) for full conventions including naming, assertions, and file structure.
 
