@@ -19,10 +19,12 @@ from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_s
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from bio_programming_tools.utils import (
     BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
     ConfigField,
+    InputField,
     detect_sequence_type,
 )
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 logger = logging.getLogger(__name__)
 

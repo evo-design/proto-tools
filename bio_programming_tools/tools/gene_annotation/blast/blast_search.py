@@ -11,8 +11,14 @@ import pandas as pd
 from pydantic import ConfigDict, Field, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -766,7 +772,6 @@ def _local_search(
     """Run BLAST+ locally against a local database."""
     import tempfile
 
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # If query is a raw sequence, write it to a temp FASTA file
     if inputs.query_type == "sequence":

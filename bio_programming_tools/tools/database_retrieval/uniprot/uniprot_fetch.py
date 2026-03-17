@@ -14,9 +14,14 @@ import requests
 from pydantic import Field, model_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.http_session import build_http_session
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    build_http_session,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -28,8 +28,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils import ConfigField, ToolInstance
 
 # Type alias for AlphaFold3 JSON format
 AlphaFold3JSON = Dict[str, Any]

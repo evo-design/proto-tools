@@ -10,10 +10,15 @@ from typing import Any, Iterator, List, Literal, Optional, Union
 from pydantic import Field, field_validator
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.helpers import require_hf_token
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    require_hf_token,
+)
 
 from .shared_data_models import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,

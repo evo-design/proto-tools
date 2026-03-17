@@ -9,18 +9,19 @@ using ESMFold from Meta AI.
 
 from __future__ import annotations
 
-import io
 import logging
-import string
 from typing import Any, Dict, List
 
-from Bio import PDB
 from pydantic import field_validator
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
+from bio_programming_tools.tools.structure_prediction.esmfold.helpers import (
+    relabel_chains as _relabel_chains,
+    split_into_safe_batches as _split_into_safe_batches,
+)
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
@@ -28,10 +29,7 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import (
-    ConfigField,
-    return_invalid_protein_chars,
-)
+from bio_programming_tools.utils import ConfigField, ToolInstance, return_invalid_protein_chars
 
 
 # ============================================================================
@@ -271,7 +269,7 @@ def run_esmfold(
 
     # Split into memory-safe sub-batches
     sub_batches = _split_into_safe_batches(
-        complexes_to_batch=prepared_complexes, max_residues=config.max_batch_residues
+        prepared_complexes, max_residues=config.max_batch_residues
     )
 
     logger.debug(
@@ -283,8 +281,6 @@ def run_esmfold(
 
     # Local GPU execution via venv subprocess
     logger.debug("Using local GPU for ESMFold structure prediction...")
-
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Process each sub-batch through standalone script
     # Use tqdm to show progress over individual structures, not batches
@@ -348,95 +344,3 @@ def run_esmfold(
             "total_chains": sum(s.num_chains for s in structure_outputs),
         },
     )
-
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-def _split_into_safe_batches(
-    complexes_to_batch: List[Dict[str, Any]], max_residues: int
-) -> List[List[Dict[str, Any]]]:
-    """
-    Split complexes into sub-batches with <= max_residues per sub-batch.
-
-    Single large complexes (>max_residues) get their own sub-batch.
-    """
-    safe_batches = []
-    current_batch = []
-    current_residues = 0
-
-    for item in complexes_to_batch:
-        item_residues = item["total_residues"]
-
-        # Large complex: put in its own batch
-        if item_residues > max_residues:
-            # Flush current batch first
-            if current_batch:
-                safe_batches.append(current_batch)
-                current_batch = []
-                current_residues = 0
-
-            # Add large complex alone
-            safe_batches.append([item])
-            continue
-
-        # Would exceed limit: start new batch
-        if current_residues + item_residues > max_residues:
-            safe_batches.append(current_batch)
-            current_batch = []
-            current_residues = 0
-
-        # Add to current batch
-        current_batch.append(item)
-        current_residues += item_residues
-
-    # Don't forget last batch
-    if current_batch:
-        safe_batches.append(current_batch)
-
-    return safe_batches
-
-
-def _relabel_chains(pdb_str: str, chain_lengths: List[int]) -> str:
-    """
-    Relabel chains in PDB from single chain to A, B, C, ... based on lengths.
-
-    Args:
-        pdb_str: PDB file content (assumed single chain)
-        chain_lengths: Number of residues per desired chain
-
-    Returns:
-        PDB content with chains relabeled
-    """
-    parser = PDB.PDBParser(QUIET=True)
-    structure = parser.get_structure("structure", io.StringIO(pdb_str))
-    model = structure[0]
-
-    # Get original single chain and all residues
-    original_chain = list(model.get_chains())[0]
-    all_residues = list(original_chain.get_residues())
-
-    # Split residues into new chains
-    chain_ids = list(string.ascii_uppercase)
-    new_chains = []
-    start = 0
-
-    for idx, length in enumerate(chain_lengths):
-        new_chain = PDB.Chain.Chain(chain_ids[idx])
-        for residue in all_residues[start : start + length]:
-            new_chain.add(residue)
-        new_chains.append(new_chain)
-        start += length
-
-    # Replace original chain with new chains
-    model.detach_child(original_chain.id)
-    for chain in new_chains:
-        model.add(chain)
-
-    # Write back to PDB string
-    output = io.StringIO()
-    pdb_io = PDB.PDBIO()
-    pdb_io.set_structure(structure)
-    pdb_io.save(output)
-
-    return output.getvalue()

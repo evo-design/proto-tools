@@ -21,6 +21,7 @@ from bio_programming_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    ToolInstance,
     resolve_sequence_ids,
 )
 
@@ -197,7 +198,6 @@ def run_crispr_tracr(
         >>> result = run_crispr_tracr(inputs, config)
         >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 

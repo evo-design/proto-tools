@@ -22,8 +22,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bio_programming_tools.entities.structures import Structure
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -564,7 +570,6 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
 
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)

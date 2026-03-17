@@ -131,6 +131,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    |   +-- README.md
    |   +-- examples/
    |   |   +-- example.ipynb   # Working example notebook (required)
+   |   +-- helpers.py            # [optional] Plain-type helpers shared with deployment service
    |   +-- standalone/
    |   |   +-- setup.sh
    |   |   +-- run.py OR inference.py  # run.py for CPU tools, inference.py for AI models
@@ -243,6 +244,8 @@ Structure:
   - Routes by `input_dict["operation"]` to model methods
   - Returns JSON-serializable dict
 - `if __name__ == "__main__":` block reading/writing JSON files
+
+**If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `bio_programming_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. The deployment service mounts them via `add_local_file()`. This ensures a single source of truth across tool and service layers. See esmfold, chai1, boltz2 for examples.
 
 CRITICAL RULES:
 - Heavy imports (torch, model libraries) ONLY inside methods, never at module level

@@ -9,8 +9,7 @@ from pydantic import ConfigDict, Field, model_validator
 from tqdm import tqdm
 
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolOutput
+from bio_programming_tools.utils import BaseConfig, BaseToolOutput, ConfigField
 
 from .borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
 

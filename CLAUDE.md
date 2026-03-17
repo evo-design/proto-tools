@@ -146,7 +146,10 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
-| `utils/helpers.py` | `resolve_sequence_ids()` and shared utilities |
+| `utils/sequence.py` | Sequence validation, detection, `resolve_sequence_ids()` |
+| `utils/auth.py` | `require_hf_token()` — HuggingFace gated model auth |
+| `utils/chemistry.py` | `validate_smiles()` — SMILES string validation |
+| `utils/msa.py` | `extract_msa_sequences()` — MSA extraction utilities |
 | `tools/__init__.py` | Master export — all tools re-exported here |
 
 ## Naming Conventions

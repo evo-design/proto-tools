@@ -32,7 +32,10 @@ from .system_info import (
 )
 from .tool_instance import ToolInstance
 from .tool_pool import ToolPool
-from .helpers import (
+from .auth import require_hf_token
+from .chemistry import validate_smiles
+from .msa import extract_msa_sequences
+from .sequence import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
     RNA_NUCLEOTIDES,
@@ -43,7 +46,6 @@ from .helpers import (
     return_invalid_nucleotide_chars,
     return_invalid_protein_chars,
     return_invalid_rna_chars,
-    validate_smiles,
 )
 from .logging_config import get_logger, setup_logging
 from .tool_cache import (
@@ -51,6 +53,7 @@ from .tool_cache import (
     clear_cache,
     clear_tool_cache,
     get_cache_info,
+    has_cached_entries,
 )
 from .tool_io import BaseToolInput, BaseToolOutput, InputField, ToolExecutionError
 
@@ -71,6 +74,7 @@ __all__ = [
     "get_captured_env",
     "clear_captured_env",
     # Helpers & sequence validation
+    "require_hf_token",
     "resolve_sequence_ids",
     "calculate_gc_content",
     "detect_sequence_type",
@@ -82,6 +86,8 @@ __all__ = [
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",
+    # MSA
+    "extract_msa_sequences",
     # I/O
     "BaseToolInput",
     "BaseToolOutput",
@@ -92,6 +98,7 @@ __all__ = [
     "clear_tool_cache",
     "get_cache_info",
     "ToolCache",
+    "has_cached_entries",
     # Tool instance management
     "ToolInstance",
     # Tool pool (parallel execution)

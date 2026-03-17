@@ -15,9 +15,12 @@ from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_instance import ToolInstance
-from bio_programming_tools.utils.tool_io import BaseToolInput, InputField
+from bio_programming_tools.utils import (
+    BaseToolInput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
 
 
 class FAMPNNStructureInput(InverseFoldingStructureInput):

@@ -8,8 +8,13 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+)
 
 # ============================================================================
 # Constants

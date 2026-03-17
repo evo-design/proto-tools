@@ -11,8 +11,7 @@ from bio_programming_tools.tools.masked_models.shared_data_models import (
     SequenceEmbedding,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from bio_programming_tools.utils import ConfigField, ToolInstance
 
 logger = logging.getLogger(__name__)
 

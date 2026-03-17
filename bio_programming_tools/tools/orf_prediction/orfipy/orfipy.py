@@ -15,8 +15,15 @@ from pydantic import ConfigDict, Field, computed_field, field_validator
 
 from bio_programming_tools.tools.orf_prediction.orf import ORF
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField, resolve_sequence_ids
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    resolve_sequence_ids,
+)
 
 
 # ============================================================================
@@ -345,7 +352,6 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
