@@ -364,7 +364,7 @@ class ToolPool:
         n_items = len(items)
 
         # Single-item optimization: skip pool overhead (local only)
-        if n_items <= 1 and self._remote != "cloud":
+        if n_items <= 1 and not self._remote:
             token = _pool_executing.set(True)
             try:
                 return func(inputs, config)
