@@ -36,6 +36,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-uv-
 
+    - name: Cache micromamba binary
+      uses: actions/cache@v4
+      with:
+        path: .micromamba
+        key: ${{ runner.os }}-micromamba
+
     - name: Install package with dev dependencies
       run: |
         pip install uv

@@ -1114,27 +1114,34 @@ class ToolInstance:
                 f"Unsupported operating system: {system} (arch: {arch})"
             )
 
-        url = f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest"
-        try:
-            result = subprocess.run(
-                ["curl", "-Ls", url],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
-                input=result.stdout,
-                check=True,
-                capture_output=True,
-            )
-            mamba_bin.chmod(0o755)
-            logger.info("Micromamba installed successfully")
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Failed to download/extract micromamba from {url}: {e}"
-            )
-
-        return mamba_bin
+        urls = [
+            f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest",
+            f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-1.5.12-0.tar.bz2",
+        ]
+        last_err: Exception | None = None
+        for url in urls:
+            try:
+                result = subprocess.run(
+                    ["curl", "-Ls", "--retry", "2", "--retry-delay", "3", url],
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
+                    input=result.stdout,
+                    check=True,
+                    capture_output=True,
+                )
+                mamba_bin.chmod(0o755)
+                logger.info("Micromamba installed successfully from %s", url)
+                return mamba_bin
+            except subprocess.CalledProcessError as e:
+                last_err = e
+                logger.warning("Failed to download micromamba from %s: %s", url, e)
+                continue
+        raise RuntimeError(
+            f"Failed to download/extract micromamba from all sources: {last_err}"
+        )
 
     def _get_python_version(self) -> str:
         """Get Python version for this tool from python_version.txt.
