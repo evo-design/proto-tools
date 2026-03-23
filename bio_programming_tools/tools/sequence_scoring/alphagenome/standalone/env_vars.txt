@@ -1,18 +1,12 @@
 # Environment variables for AlphaGenome (genomic sequence scoring)
 #
-# Lines starting with # are comments and will be ignored.
-# Variables listed under [passthrough] are inherited from the parent environment.
-# Variables under [set] are set to specific values in the subprocess.
-#
 # Note: Compute dependency variables (RECOMMENDED_JAX_SPEC, RECOMMENDED_JAX_VARIANT,
 # DETECTED_CUDA_VERSION, etc.) are automatically injected by the centralized detection
 # system and don't need to be listed here. Users can still override by setting
 # ALPHAGENOME_JAX_SPEC, ALPHAGENOME_USE_LOCAL_CUDA_ENV, etc. in their environment.
-
-[passthrough]
-# Optional: path to custom AlphaGenome model checkpoint
-# If not set, downloads the default pretrained model
-ALPHAGENOME_CHECKPOINT_PATH
+#
+# AlphaGenome checkpoint paths are now managed by BPT_MODEL_CACHE
+# (passed through automatically by persistent_worker.py)
 
 [set]
 LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib

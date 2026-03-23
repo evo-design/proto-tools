@@ -10,6 +10,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -150,6 +151,13 @@ class RFdiffusion3Model:
     def load(self, verbose: bool = False):
         """Load RFdiffusion3 model components."""
         logger.debug("Initializing RFdiffusion3")
+
+        # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
+        from standalone_helpers import resolve_weights_dir
+
+        bpt_dir = resolve_weights_dir("rfdiffusion3")
+        if bpt_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = bpt_dir
 
         # Try venv bin directory first, then PATH
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"

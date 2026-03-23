@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gc
 import json
+import os
 import sys
 import tempfile
 from logging import getLogger
@@ -156,6 +157,13 @@ class LigandMPNNModel:
         """Load the LigandMPNN model via Foundry."""
         if verbose:
             logger.info(f"Loading LigandMPNN model on {device}")
+
+        # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
+        from standalone_helpers import resolve_weights_dir
+
+        bpt_dir = resolve_weights_dir("ligandmpnn")
+        if bpt_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = bpt_dir
 
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 

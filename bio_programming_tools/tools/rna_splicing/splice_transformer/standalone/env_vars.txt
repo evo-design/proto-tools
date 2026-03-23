@@ -1,14 +1,8 @@
 # Environment variables for SpliceTransformer (RNA splicing prediction)
 #
-# Lines starting with # are comments and will be ignored.
-# Variables listed under [passthrough] are inherited from the parent environment.
-# Variables under [set] are set to specific values in the subprocess.
-#
 # Note: Compute dependency variables (RECOMMENDED_TORCH_SPEC, DETECTED_COMPUTE_PLATFORM, etc.)
 # are automatically injected by the centralized detection system and don't need to be listed here.
 # Users can still override by setting SPLICE_TRANSFORMER_TORCH_SPEC in their environment.
-
-[passthrough]
-# Optional: path to custom SpliceTransformer model checkpoint
-# If not set, downloads the default pretrained model
-SPLICE_TRANSFORMER_CHECKPOINT
+#
+# SpliceTransformer checkpoint paths are now managed by BPT_MODEL_CACHE
+# (passed through automatically by persistent_worker.py)

@@ -59,59 +59,48 @@ exit
 
 ---
 
-## 2. Redirect Cache Directories
+## 2. Redirect Model Weights & Caches
 
-Sherlock limits `$HOME` (`/home/users/$USER`) to **15 GB**. Many ML tools download multi-GB model weights to subdirectories of `$HOME` on first run — a single large model (e.g., Evo2-7B at ~14 GB) can fill your entire home directory. You **must** redirect these caches to larger storage before running any tools, or you will hit "Disk quota exceeded" errors.
+Sherlock limits `$HOME` (`/home/users/$USER`) to **15 GB**, so model weights and caches need to live elsewhere. By default, weights are stored in `model_cache/` at the repo root — make sure your repo is not in `$HOME`.
 
-Sherlock provides several filesystems with different speed/size tradeoffs:
+Sherlock has three storage tiers available to most users:
 
-| Filesystem | Path | Speed | Quota | Use for |
-|------------|------|-------|-------|---------|
-| **Group Home** (`$GROUP_HOME`) | `/home/groups/<PI>/` | Fast (NFS) | 1 TB shared | Conda envs, tool venvs, container .sif |
-| **Oak** (`$OAK`) | `/oak/stanford/groups/<PI>/` | Slow (lustre) | Large | Model weights, checkpoints, caches |
-| **Scratch** (`$SCRATCH`) | `/scratch/users/$USER/` | Fast (lustre) | Large | Temp work (**90-day auto-purge**) |
+| Filesystem | Path | Speed | Quota |
+|------------|------|-------|-------|
+| **Group Home** (`$GROUP_HOME`) | `/home/groups/<PI>/` | Fast (NFS) | 1 TB shared |
+| **Scratch** (`$SCRATCH`) | `/scratch/users/$USER/` | Fast (lustre) | Large |
+| **Oak** (`$OAK`) | `/oak/stanford/groups/<PI>/` | Slow (lustre) | Large |
 
-Model weights are a good fit for Oak: they're large, read sequentially once at load time, and the slow filesystem doesn't matter after the initial read (the OS page cache keeps them in memory for subsequent loads). Conda environments need fast random reads across many small files, so they belong on Group Home.
+**Group Home and Scratch are recommended for model weights.** Both are fast filesystems suitable for the random read patterns that model loading requires. Oak is optimized for archival storage and can be extremely slow for model loading. Oak works as a fallback but is not recommended.
 
-### Set up symlinks
+Scratch auto-purges files after 90 days of **no access** — files that are read regularly are never purged. This makes it a good fit for model weights during active development, since tools re-download automatically if weights are missing.
 
-Follow the instructions in **[model-weights-cache.md](model-weights-cache.md)** to symlink cache directories from `$HOME` to either `$GROUP_HOME` or `$OAK`. That guide documents every directory that tools write to and provides copy-paste symlink commands.
+### Model Caching Options
 
-On Sherlock, use `$OAK` as the storage target for model weights and caches. The path below may not exist yet — `mkdir -p` will create it:
+Create a `.bpt.env` file in the repo root (see `.bpt.env.example`) to redirect model weights:
 
-```bash
-STORAGE=/oak/stanford/groups/<PI>/projects/$USER
-mkdir -p $STORAGE
-```
-
-Or use `$GROUP_HOME` if your lab doesn't have Oak allocation:
+**Option 1 — Shared directory (recommended).** Point all tools at a single directory on Group Home or Scratch. Group Home is preferred because it's shared across lab members — weights only need to be downloaded once. Check with your lab if there's already a shared weights directory:
 
 ```bash
-STORAGE=/home/groups/<PI>/$USER
-mkdir -p $STORAGE
+BPT_MODEL_CACHE=$GROUP_HOME/model_cache
 ```
 
-The simplest approach is to redirect all of `~/.cache` at once (covers HuggingFace, torch hub, pip, and tool environments):
+If Group Home is tight on space, use `$SCRATCH/model_weights/bio-programming-tools` instead (per-user, not shared).
+
+**Option 2 — In-environment.** Store weights inside each tool's isolated venv. Weights are co-located with the tool environment but aren't shared — each tool downloads its own copy:
 
 ```bash
-mv ~/.cache ~/.cache.bak
-mkdir -p $STORAGE/.cache
-ln -sfn $STORAGE/.cache ~/.cache
-cp -a ~/.cache.bak/* ~/.cache/ 2>/dev/null || true
-# Verify the copy before deleting the backup
-du -sh ~/.cache ~/.cache.bak
-rm -rf ~/.cache.bak
+BPT_MODEL_CACHE=IN_ENV
 ```
 
-Then redirect the remaining directories that live outside `~/.cache` — see [model-weights-cache.md](model-weights-cache.md) for the full list.
+Optionally, symlink `~/.cache` off of `$HOME` to avoid filling your 15 GB quota with pip wheel caches: `ln -sfn $SCRATCH/.cache ~/.cache`
 
-### Verify symlinks
+### Verify
 
 ```bash
-ls -la ~/.cache ~/.local ~/.model_cache ~/.foundry 2>/dev/null
+cat .bpt.env
+ls -la ~/.cache 2>/dev/null
 ```
-
-Each should show `->` pointing to your storage target, not be a real directory.
 
 ---
 
@@ -247,7 +236,7 @@ Since home directory quota is tight, it's worth periodically checking what's usi
 ```bash
 # Check home directory usage
 du -sh ~
-du -sh ~/.cache ~/.local ~/.model_cache 2>/dev/null
+du -sh ~/.cache ~/.local 2>/dev/null
 
 # Check Group Home and Oak usage
 df -h $GROUP_HOME
@@ -269,7 +258,7 @@ A model is downloading weights to `$HOME` instead of following a symlink. Check 
 du -h --max-depth=1 ~ | sort -rh | head -10
 ```
 
-Then symlink the offending directory to your storage target. See [model-weights-cache.md](model-weights-cache.md) for the full list of directories tools write to.
+Check your `BPT_MODEL_CACHE` setting in `.bpt.env` — if unset, weights go to `model_cache/` at the repo root. See [docs/tool-environments.md](../docs/tool-environments.md) for all options.
 
 ### "Disk quota exceeded" during `pip install`
 
@@ -285,10 +274,6 @@ mkdir -p $STORAGE/.local
 ln -sfn $STORAGE/.local ~/.local
 ```
 
-### Model loads slowly from Oak
+### Model loads slowly
 
-First load from Oak is slow; subsequent loads use the OS page cache and are fast. This is expected. For frequently-loaded models where even the first load matters, consider copying weights to `$SCRATCH` (fast lustre, but remember the 90-day auto-purge):
-
-```bash
-cp -r ~/.cache/huggingface/hub/models--facebook--esmfold_v1 $SCRATCH/.cache/huggingface/hub/
-```
+If model loading is very slow, your weights are likely on Oak. Move them to Group Home or Scratch — see [Section 2](#2-redirect-model-weights--caches). Update `BPT_MODEL_CACHE` in `.bpt.env` and delete the old weights directory; tools will re-download to the new location on next run.

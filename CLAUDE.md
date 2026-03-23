@@ -146,6 +146,8 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
+| `utils/standalone_helpers_source/standalone_helpers.py` | `resolve_weights_dir()`, `get_subprocess_device_env()`, `move_model_to_device()` |
+| `utils/standalone_helpers_source/standalone_helpers.sh` | `bpt_install_pytorch()`, `bpt_install_jax()`, `bpt_resolve_weights_dir()`, `bpt_check_gated_hf_repo()` |
 | `utils/sequence.py` | Sequence validation, detection, `resolve_sequence_ids()` |
 | `utils/auth.py` | `require_hf_token()` — HuggingFace gated model auth |
 | `utils/chemistry.py` | `validate_smiles()` — SMILES string validation |
@@ -190,7 +192,8 @@ Flat functions only (no test classes). See `docs/testing.md` for full convention
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default** — run with `pytest --integration` or `pytest --all`
 - Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
-- Test logs saved to `logs/` — check these instead of re-running tests
+- Test logs saved to `logs/` — every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
+- **`BPT_MODEL_CACHE`** controls where all tools store model weights: unset (default, repo-local `model_cache/`), `/absolute/path` (shared directory), `IN_ENV` (legacy, per-venv), `NONE` (pass through). Per-tool override: `BPT_{TOOL}_WEIGHTS_DIR`. Configurable via `.bpt.env`. See `docs/tool-environments.md`.
 
 ## Using bio_tools with Claude Code
 

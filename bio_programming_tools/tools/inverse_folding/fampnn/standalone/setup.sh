@@ -1,33 +1,15 @@
 #!/bin/bash
 # Setup script for FAMPNN standalone environment
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Setting up FAMPNN standalone environment..."
 
 echo "Installing uv package manager..."
 pip install uv
 
-# ============================================================================
-# Install CUDA toolkit via micromamba (PyTorch needs CUDA libs)
-# ============================================================================
-DETECTED_CUDA_MAJOR="${DETECTED_CUDA_VERSION:-12}"
-CUDA_TOOLKIT_VERSION="${DETECTED_CUDA_MAJOR}.*"
-echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
-if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-    "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \
-    "cudnn"; then
-    echo "ERROR: Failed to install CUDA toolkit via micromamba"
-    exit 1
-fi
-
-# ============================================================================
-# Install PyTorch with appropriate CUDA variant
-# ============================================================================
-echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch}"
-
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
+bpt_install_cuda_toolkit
+bpt_install_pytorch "" torchvision
 
 # Install torch-geometric (needed by FAMPNN)
 uv pip install torch-geometric
@@ -73,8 +55,7 @@ pip install -e "$FAMPNN_REPO_DIR" --no-deps
 # ============================================================================
 # Download model weights if not already present
 # ============================================================================
-WEIGHTS_DIR="${FAMPNN_WEIGHTS_DIR:-${VENV_PATH}/weights}"
-mkdir -p "$WEIGHTS_DIR"
+bpt_resolve_weights_dir fampnn
 
 REPO_BASE="https://github.com/richardshuai/fampnn/raw/main/weights"
 

@@ -39,59 +39,50 @@ _FILE_FALLBACK_THRESHOLD = 100_000_000
 
 
 def _copy_standalone_helpers(script_path: str) -> None:
-    """Copy standalone_helpers.py to the tool's standalone directory.
+    """Copy standalone helpers (Python and shell) to the tool's standalone directory.
 
     Checks if 'standalone' appears in the script's absolute path. If found,
-    places standalone_helpers.py in that standalone directory so it's importable by all
-    scripts in that tree.
-
-    If the script is not in a standalone directory, logs a warning and skips the copy.
-    This allows tools without standalone directories to still function.
+    copies standalone_helpers.py and standalone_helpers.sh from
+    utils/standalone_helpers_source/ into that standalone directory.
 
     Args:
         script_path: Path to the standalone inference.py or run.py script
     """
     script = Path(script_path).resolve()
 
-    # Check if 'standalone' is in the path
     if "standalone" not in script.parts:
         sys.stderr.write(
             f"[worker] Warning: Script {script_path} is not in a 'standalone' directory. "
-            f"Skipping standalone_helpers.py copy.\n"
+            f"Skipping standalone helpers copy.\n"
         )
         return
 
-    # Find the standalone directory in the path
     standalone_idx = script.parts.index("standalone")
     standalone_dir = Path(*script.parts[:standalone_idx + 1])
 
-    # Determine target path for standalone_helpers.py
-    target_helpers = standalone_dir / "standalone_helpers.py"
+    # Source directory: utils/standalone_helpers_source/
+    helpers_dir = Path(__file__).parent / "standalone_helpers_source"
 
-    # Find the canonical source (in utils/)
-    utils_dir = Path(__file__).parent
-    source_helpers = utils_dir / "standalone_helpers.py"
-
-    if not source_helpers.exists():
-        # This should never happen in a proper install, but handle gracefully
-        sys.stderr.write(
-            f"[worker] Warning: Could not find {source_helpers} to copy helpers\n"
-        )
-        return
-
-    # Always copy to ensure it's up to date
-    try:
-        shutil.copy2(source_helpers, target_helpers)
-    except Exception as exc:
-        # Don't fail worker startup if helpers copy fails - tool may not need it
-        sys.stderr.write(
-            f"[worker] Warning: Failed to copy standalone_helpers.py: {exc}\n"
-        )
+    for filename in ("standalone_helpers.py", "standalone_helpers.sh"):
+        source = helpers_dir / filename
+        target = standalone_dir / filename
+        if not source.exists():
+            continue
+        try:
+            shutil.copy2(source, target)
+        except Exception as exc:
+            sys.stderr.write(
+                f"[worker] Warning: Failed to copy {filename}: {exc}\n"
+            )
 
 
 def _load_module(script_path: str) -> Any:
     """Import a standalone script as a Python module."""
     path = Path(script_path).resolve()
+    # Add standalone dir to sys.path so `from standalone_helpers import ...` works
+    standalone_dir = str(path.parent)
+    if standalone_dir not in sys.path:
+        sys.path.insert(0, standalone_dir)
     spec = importlib.util.spec_from_file_location("_standalone_module", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module from {path}")

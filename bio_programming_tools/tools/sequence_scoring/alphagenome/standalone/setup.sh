@@ -1,113 +1,24 @@
 #!/bin/bash
 # Setup script for AlphaGenome standalone environment
 set -euo pipefail
+source standalone_helpers.sh
 
-# ── Gated repo access check ──────────────────────────────────────────────────
-# AlphaGenome weights are hosted in a gated HuggingFace repo that requires
-# authentication.  Catch this early so the user gets a clear message
-# instead of a cryptic 401 buried in a Python traceback.
-REPO_ID="google/alphagenome-all-folds"
-REPO_URL="https://huggingface.co/${REPO_ID}"
-
-HF_TOKEN="${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN:-}}"
-if [ -z "$HF_TOKEN" ] && [ -f "$HOME/.cache/huggingface/token" ]; then
-    HF_TOKEN="$(cat "$HOME/.cache/huggingface/token")"
-fi
-if [ -z "$HF_TOKEN" ] && [ -f "$HOME/.git-credentials" ]; then
-    HF_TOKEN="$(grep -oP 'https?://[^:]+:\Khf_[^@]+(?=@huggingface\.co)' "$HOME/.git-credentials" | head -1)"
-fi
-
-if [ -n "$HF_TOKEN" ]; then
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-        -H "Authorization: Bearer ${HF_TOKEN}" \
-        "https://huggingface.co/${REPO_ID}/resolve/main/README.md")
-else
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-        "https://huggingface.co/${REPO_ID}/resolve/main/README.md")
-fi
-
-if [ "$HTTP_CODE" != "200" ]; then
-    echo ""
-    echo "============================================================"
-    echo "ERROR: Cannot access HuggingFace repo '${REPO_ID}'"
-    echo "============================================================"
-    echo ""
-    if [ -z "$HF_TOKEN" ]; then
-        echo "No HuggingFace token found. This is a gated model that"
-        echo "requires authentication."
-        echo ""
-        echo "To fix this:"
-        echo "  1. Create a HuggingFace account at https://huggingface.co"
-        echo "  2. Accept the model license at:"
-        echo "     ${REPO_URL}"
-        echo "  3. Create an access token at:"
-        echo "     https://huggingface.co/settings/tokens"
-        echo "  4. Set the token in your environment:"
-        echo "     export HF_TOKEN=hf_..."
-        echo "     Or log in with: huggingface-cli login"
-    else
-        echo "A HuggingFace token was found but access was denied (HTTP ${HTTP_CODE})."
-        echo ""
-        echo "To fix this:"
-        echo "  1. Visit: ${REPO_URL}"
-        echo "  2. Accept the license/terms for this model"
-        echo "  3. Re-run the setup"
-    fi
-    echo ""
-    echo "============================================================"
-    exit 1
-fi
-# ─────────────────────────────────────────────────────────────────────────────
+bpt_check_gated_hf_repo "google/alphagenome-all-folds" "https://huggingface.co/google/alphagenome-all-folds" "README.md"
 
 echo "Setting up AlphaGenome standalone environment..."
 
 echo "Installing uv package manager..."
 pip install uv
 
-# Use hardware-aware JAX spec from centralized detection
-# (injected by bio_programming_tools.utils.compute_deps)
-# Override with ALPHAGENOME_JAX_VARIANT/JAX_SPEC env vars if needed
-JAX_VARIANT="${ALPHAGENOME_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
-JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
-
-# Validate JAX variant if user override is provided
-if [ "${ALPHAGENOME_JAX_VARIANT:-}" != "" ] && [ "$JAX_VARIANT" != "cuda12" ] && [ "$JAX_VARIANT" != "cuda13" ]; then
-    echo "ERROR: ALPHAGENOME_JAX_VARIANT must be one of: cuda12, cuda13"
-    exit 1
-fi
-
-# ============================================================================
-# Install CUDA toolkit via micromamba (JAX needs CUDA libs on LD_LIBRARY_PATH)
-# ============================================================================
-CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-}"
-if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ] && [ -n "${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}" ]; then
-    # Backward compatibility with prior exact-version override.
-    CUDA_TOOLKIT_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_VERSION}"
-fi
-if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
-    if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
-        CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
-    else
-        CUDA_TOOLKIT_CONSTRAINT="12.*"
-    fi
-fi
-echo "Installing CUDA toolkit ${CUDA_TOOLKIT_CONSTRAINT} locally via micromamba..."
-if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-    "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
-    "cudnn"; then
-    echo "ERROR: Failed to install CUDA toolkit via micromamba"
-    exit 1
-fi
-
-echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
-echo "Detected driver: ${DETECTED_DRIVER_VERSION:-unknown}, CUDA: ${DETECTED_CUDA_VERSION:-unknown}"
-echo "Installing JAX: ${JAX_SPEC}"
+# Resolve CUDA constraint (backward compat with ALPHAGENOME_CUDA_TOOLKIT_VERSION)
+CUDA_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}}"
+bpt_install_cuda_toolkit "$CUDA_CONSTRAINT"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
-uv pip install "${JAX_SPEC}"
+JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
+bpt_install_jax ALPHAGENOME
 
 REPO_DIR="${VENV_PATH}/src/alphagenome_research"
 if [ -d "$REPO_DIR" ]; then

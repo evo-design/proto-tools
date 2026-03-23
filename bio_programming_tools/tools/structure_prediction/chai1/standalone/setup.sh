@@ -1,6 +1,7 @@
 #!/bin/bash
 # Setup script for Chai1 standalone environment
 set -euo pipefail
+source standalone_helpers.sh
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then
@@ -15,9 +16,7 @@ echo "Setting up Chai1 standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-# Install hardware-aware PyTorch version (from centralized detection)
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
+bpt_install_pytorch
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

@@ -32,20 +32,26 @@ _params_dir: str | None = None
 def _resolve_params_dir() -> str:
     """Locate the AlphaFold2 parameters directory.
 
-    Parameters are stored inside the tool's venv (downloaded by setup.sh)
-    at ``$TOOL_VENV_PATH/data/params/``.
+    Checks BPT_MODEL_CACHE first, then falls back to the venv-local
+    location at ``$TOOL_VENV_PATH/data/params/``.
     """
     global _params_dir
     if _params_dir is not None:
         return _params_dir
 
-    venv_path = os.environ.get("TOOL_VENV_PATH")
-    if not venv_path:
-        raise RuntimeError(
-            "TOOL_VENV_PATH not set. AlphaFold2 must be run via ToolInstance."
-        )
+    from standalone_helpers import resolve_weights_dir
 
-    params_dir = Path(venv_path) / "data" / "params"
+    bpt_dir = resolve_weights_dir("alphafold2")
+    if bpt_dir:
+        params_dir = Path(bpt_dir) / "params"
+    else:
+        # NONE mode or no venv: use venv-local default
+        venv_path = os.environ.get("TOOL_VENV_PATH")
+        if not venv_path:
+            raise RuntimeError(
+                "TOOL_VENV_PATH not set. AlphaFold2 must be run via ToolInstance."
+            )
+        params_dir = Path(venv_path) / "data" / "params"
 
     if not params_dir.exists() or not any(params_dir.glob("*.npz")):
         raise RuntimeError(

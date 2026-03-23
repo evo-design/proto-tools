@@ -35,13 +35,19 @@ class Boltz2Model:
     def __init__(self):
         """Initialize Boltz2 model wrapper."""
         self._loaded = False
-        # Use HF_HOME if set, otherwise use home directory
-        hf_home = os.environ.get("HF_HOME")
-        self.cache_dir = (
-            Path(hf_home) / "boltz"
-            if hf_home
-            else Path.home() / ".model_cache" / "checkpoints" / "boltz"
-        )
+        from standalone_helpers import resolve_weights_dir
+
+        bpt_dir = resolve_weights_dir("boltz2")
+        if bpt_dir:
+            self.cache_dir = Path(bpt_dir)
+        else:
+            # NONE mode fallback: HF_HOME or home directory
+            hf_home = os.environ.get("HF_HOME")
+            self.cache_dir = (
+                Path(hf_home) / "boltz"
+                if hf_home
+                else Path.home() / ".model_cache" / "checkpoints" / "boltz"
+            )
         self.boltz_executable = None
 
     def __call__(

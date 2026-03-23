@@ -6,7 +6,7 @@ that standalone scripts need but cannot import from the main package
 
 DO NOT MODIFY THIS FILE INSIDE STANDALONE FOLDERS. CHANGES WILL BE OVERWRITTEN
 If you need to make changes to this file, modify the source file which is located
-at bio-programming-tools/bio_programming_tools/utils/standalone_helpers.py
+at bio-programming-tools/bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py
 
 Inside of tool standalone directories, the functions in this file can be invoked
 via: from standalone_helpers import get_subprocess_device_env
@@ -457,3 +457,82 @@ def get_jax_memory_stats(device_index: int = 0) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"available": False, "framework": "jax", "reason": str(e)}
+
+
+# ============================================================================
+# Weights Directory Resolution
+# ============================================================================
+
+
+def resolve_weights_dir(tool_name: str) -> Optional[str]:
+    """Resolve the weights directory for a tool based on BPT_MODEL_CACHE.
+
+    Precedence:
+        1. BPT_{TOOL}_WEIGHTS_DIR (per-tool override, always wins)
+        2. BPT_MODEL_CACHE:
+           - (default): {PACKAGE_ROOT}/model_cache/{tool_name}/ (survives env rebuilds)
+           - "/absolute/path": /absolute/path/{tool_name}/  (shared directory)
+           - "IN_ENV": {TOOL_VENV_PATH}/model_weight_cache/ (legacy, per-venv)
+           - "NONE": {VENV_PATH}/weights/ (pass-through, matches shell helper)
+
+    Args:
+        tool_name: The tool's directory name (e.g., "fampnn", "protenix").
+
+    Returns:
+        Absolute path string to the weights directory, or None (NONE mode
+        with no per-tool override). Creates the directory if it doesn't exist.
+    """
+    # 1. Per-tool override always wins
+    override_var = f"BPT_{tool_name.upper()}_WEIGHTS_DIR"
+    override = os.environ.get(override_var)
+    if override:
+        os.makedirs(override, exist_ok=True)
+        return override
+
+    # 2. BPT_MODEL_CACHE
+    mode = os.environ.get("BPT_MODEL_CACHE", "")
+
+    if mode == "NONE":
+        # Pass-through: no managed cache, but match the shell helper's fallback
+        # (setup.sh downloads to ${VENV_PATH}/weights in NONE mode)
+        venv_path = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+        if venv_path:
+            path = os.path.join(venv_path, "weights")
+            os.makedirs(path, exist_ok=True)
+            return path
+        return None
+
+    if mode == "IN_ENV":
+        # Legacy: weights inside the tool's venv
+        venv_path = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+        if venv_path:
+            path = os.path.join(venv_path, "model_weight_cache")
+            os.makedirs(path, exist_ok=True)
+            return path
+        logger.warning(
+            "BPT_MODEL_CACHE=IN_ENV but no TOOL_VENV_PATH or VENV_PATH set. "
+            "Returning None — tool will use its own default."
+        )
+        return None
+
+    if mode:
+        # Explicit path (absolute or relative)
+        cache_dir = mode
+    else:
+        # Default: repo-local model_cache/ directory
+        package_root = os.environ.get("PACKAGE_ROOT", "")
+        if package_root:
+            cache_dir = os.path.join(package_root, "model_cache")
+        else:
+            # Fallback to IN_ENV behavior if PACKAGE_ROOT not available
+            venv_path = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+            if venv_path:
+                path = os.path.join(venv_path, "model_weight_cache")
+                os.makedirs(path, exist_ok=True)
+                return path
+            return None
+
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, tool_name)
+    os.makedirs(path, exist_ok=True)
+    return path

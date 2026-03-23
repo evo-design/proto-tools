@@ -1,15 +1,14 @@
 #!/bin/bash
 # Setup script for ESM-IF/ProteinDPO standalone environment
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Setting up ESM-IF standalone environment..."
 
 echo "Installing uv package manager..."
 pip install uv
 
-# Install hardware-aware PyTorch version (from centralized detection)
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
+bpt_install_pytorch
 
 echo "Installing torch-geometric (required by ESM-IF GVP modules)..."
 uv pip install torch-geometric
@@ -108,8 +107,7 @@ if os.path.exists(gvp_path):
 echo "Applied ESM compatibility patches."
 
 # Download model weights
-WEIGHTS_DIR="${ESMIF_WEIGHTS_DIR:-${VENV_PATH}/weights}"
-mkdir -p "$WEIGHTS_DIR"
+bpt_resolve_weights_dir esm_if1
 
 # Download ESM-IF1 vanilla weights
 ESMIF_WEIGHTS_FILE="${WEIGHTS_DIR}/esm_if1_gvp4_t16_142M_UR50.pt"

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Installing uv package manager..."
 pip install uv
@@ -8,8 +9,6 @@ pip install uv
 echo "Clearing package caches for ABI-sensitive dependencies..."
 uv cache clean torch 2>/dev/null || true
 
-# Install hardware-aware PyTorch version (from centralized detection)
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
+bpt_install_pytorch
 
 echo "Mock PyTorch tool setup complete"

@@ -74,7 +74,10 @@ The user provides EITHER:
    - Installation instructions (pip packages, dependencies)
    - Python API or CLI interface
    - Input/output formats
-   - Model weights location (HuggingFace, GitHub releases, etc.)
+   - Model weights location (HuggingFace, GitHub releases, etc.) — determines which weight management pattern to use:
+     - **HuggingFace `from_pretrained`** → no weight code needed (HF_HOME set automatically). Example: `tools/masked_models/esm2/`
+     - **Direct download in setup.sh** → must implement `BPT_MODEL_CACHE` pattern. Example: `tools/inverse_folding/fampnn/standalone/setup.sh`
+     - **Foundry install** → must implement `BPT_MODEL_CACHE` pattern. Example: `tools/inverse_folding/ligandmpnn/standalone/setup.sh`
 
 2. **Read key source files** — Find and read the research repo's inference/prediction scripts to understand:
    - How the model is loaded
@@ -320,13 +323,50 @@ def get_memory_stats() -> dict:
 - Import `standalone_helpers` (auto-copied by worker bootstrap) — do NOT import from `bio_programming_tools`
 
 ### 2. setup.sh
+
+All setup.sh scripts source `standalone_helpers.sh` (auto-copied alongside `standalone_helpers.py`) for shared infrastructure functions. Reference: `tools/inverse_folding/fampnn/standalone/setup.sh`.
+
 ```bash
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
+
 pip install uv
-# For PyTorch tools: use ${RECOMMENDED_TORCH_SPEC:-torch} --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
-# For JAX tools: use ${RECOMMENDED_JAX_SPEC:-jax[cuda12]}
+
+# PyTorch tools (add extras like torchvision if needed):
+bpt_install_pytorch
+# bpt_install_pytorch "" torchvision  # torch + version-matched torchvision
+
+# JAX tools (with optional tool-specific override prefix):
+# bpt_install_jax MYTOOL
+
+# If CUDA toolkit needed (for JIT compilation):
+# bpt_install_cuda_toolkit
+
 uv pip install -r requirements.txt
+
+# Non-HF tools that download weights:
+bpt_resolve_weights_dir my_tool
+if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
+    wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+fi
+
+# Gated HF models (validates access before pip install):
+# bpt_check_gated_hf_repo "org/model-name" "https://huggingface.co/org/model-name"
+```
+
+**Available functions** (see `utils/standalone_helpers_source/standalone_helpers.sh`):
+- `bpt_install_pytorch [spec] [extras...]` — install PyTorch via RECOMMENDED_TORCH_SPEC, with optional version-matched extras (e.g., `torchvision`)
+- `bpt_install_jax [TOOL_PREFIX]` — install JAX with tool-specific overrides
+- `bpt_install_cuda_toolkit [constraint] [extras...]` — micromamba CUDA toolkit
+- `bpt_resolve_weights_dir <tool_name>` — set `$WEIGHTS_DIR` via BPT_MODEL_CACHE
+- `bpt_check_gated_hf_repo <repo_id> <license_url> [probe_file]` — validate HF access
+
+**For the standalone inference.py**, non-HF tools must call `resolve_weights_dir()` to find weights at runtime:
+```python
+from standalone_helpers import resolve_weights_dir
+weights_dir = resolve_weights_dir("my_tool")
+model_path = os.path.join(weights_dir, "model.pt")
 ```
 
 ### 3. requirements.txt
@@ -628,6 +668,10 @@ CRITICAL RULES:
    - [ ] Standalone script implements `to_device(device: str) -> dict` at module level
    - [ ] Standalone script implements `get_memory_stats() -> dict` at module level
    - [ ] Biological coordinates are 1-indexed, inclusive (if applicable)
+   - [ ] **Weight management**: If the tool downloads model weights:
+     - [ ] HF tools: no weight code needed (HF_HOME set automatically)
+     - [ ] Non-HF tools: `setup.sh` implements `BPT_MODEL_CACHE` pattern (see `fampnn/standalone/setup.sh`)
+     - [ ] Non-HF tools: `inference.py` calls `resolve_weights_dir()` from `standalone_helpers` (see `fampnn/standalone/inference.py`)
 
 ---
 

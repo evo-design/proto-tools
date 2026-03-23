@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import threading
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,30 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+
+@lru_cache(maxsize=1)
+def _load_bpt_env() -> dict[str, str]:
+    """Load defaults from ``.bpt.env`` at the project root.
+
+    Simple ``KEY=VALUE`` format (no shell expansion).  Surrounding quotes
+    on values are stripped so ``BPT_MODEL_CACHE="/path"`` works like
+    ``BPT_MODEL_CACHE=/path``.  Lines starting with ``#`` and blank lines
+    are ignored.  Missing file returns ``{}``.
+    """
+    env_file = Path(__file__).parent.parent.parent / ".bpt.env"
+    if not env_file.is_file():
+        return {}
+    result: dict[str, str] = {}
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        result[key.strip()] = value.strip().strip('"').strip("'")
+    return result
 
 
 def _normalize_progress_line(line: str) -> str:
@@ -105,11 +130,12 @@ _BASE_PASSTHROUGH = {
     # XDG dirs — model caches (HF, torch) respect these for default locations
     "XDG_CACHE_HOME",
     "XDG_DATA_HOME",
-    # HuggingFace — model download paths; evo2 crashes if HF_HUB_CACHE is None
+    # HuggingFace — model download paths
     "HF_HOME",
-    "HF_HUB_CACHE",
     "HF_TOKEN",
     "HUGGING_FACE_HUB_TOKEN",
+    # Model weights management
+    "BPT_MODEL_CACHE",
     # Network proxy — tools download model weights and need proxy config
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -208,6 +234,26 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
+    # Apply .bpt.env defaults (env vars from parent always take precedence)
+    for key, value in _load_bpt_env().items():
+        env.setdefault(key, value)
+
+    # Ensure HF_TOKEN is explicitly set even if the token was stored
+    # in a file (~/.cache/huggingface/token or ~/.git-credentials).
+    # Subprocesses may have a different HF_HOME, so file-based tokens
+    # wouldn't be found at the redirected path.
+    if "HF_TOKEN" not in env:
+        from .auth import resolve_hf_token
+
+        token = resolve_hf_token()
+        if token:
+            env["HF_TOKEN"] = token
+
+    # Pass through per-tool weight directory overrides
+    for var, val in os.environ.items():
+        if var.startswith("BPT_") and var.endswith("_WEIGHTS_DIR"):
+            env[var] = val
+
     # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
     path_parts: list[str] = []
     if tool_env_path:
@@ -227,13 +273,31 @@ def _build_subprocess_env(
     if parent_cvd is not None:
         env["CUDA_VISIBLE_DEVICES"] = parent_cvd
 
+    # Generous timeouts for pip/uv — NFS extraction can exceed the defaults
+    env.setdefault("UV_HTTP_TIMEOUT", "300")
+    env.setdefault("PIP_DEFAULT_TIMEOUT", "300")
+
     # Prevent JAX from preallocating GPU memory at import time (harmless for PyTorch)
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     env["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # Per-venv torch cache isolation
-    if tool_env_path:
-        env["TORCH_HOME"] = str(Path(tool_env_path) / "cache" / "torch")
+    # Set HF_HOME and TORCH_HOME based on BPT_MODEL_CACHE
+    # Default: repo-local model_cache/ directory (survives env rebuilds)
+    _default_cache = str(Path(__file__).parent.parent.parent / "model_cache")
+    cache_mode = env.get("BPT_MODEL_CACHE", _default_cache)
+    if cache_mode == "IN_ENV":
+        # Each tool stores weights in its own venv
+        if tool_env_path:
+            env["HF_HOME"] = str(Path(tool_env_path) / "cache" / "huggingface")
+            env["TORCH_HOME"] = str(Path(tool_env_path) / "cache" / "torch")
+    elif cache_mode == "NONE":
+        pass  # HF_HOME already copied from parent via _BASE_PASSTHROUGH
+    else:
+        # Absolute or relative path → shared directory
+        cache_path = Path(cache_mode)
+        env["HF_HOME"] = str(cache_path / "huggingface")
+        if tool_env_path:
+            env["TORCH_HOME"] = str(cache_path / "torch")
 
     # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from .compute_deps import detect_compute_environment

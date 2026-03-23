@@ -223,9 +223,26 @@ class Evo1Model:
         if verbose:
             logger.info(f"Loading Evo1: {self.model_name} on {device}")
 
+        # The evo library's load_checkpoint() calls snapshot_download() without
+        # any file filters, which downloads ALL formats in the HF repo: safetensors
+        # shards (~14 GB), pytorch .bin shards (~10 GB), and a monolithic
+        # pytorch_model.pt (~16 GB) — totaling ~40 GB for a 7B model. Only the
+        # safetensors files are actually used (load_checkpoint reads them via
+        # safetensors.torch.load_file). The redundant .bin/.pt files waste disk
+        # space and, on slow filesystems like Oak/Lustre, can cause warm-up
+        # timeouts during the download phase. We monkey-patch snapshot_download
+        # to ignore these formats.
+        import huggingface_hub
+        _orig_snapshot_download = huggingface_hub.snapshot_download
+        def _filtered_snapshot_download(*args, **kwargs):
+            kwargs.setdefault("ignore_patterns", ["*.bin", "*.pt"])
+            return _orig_snapshot_download(*args, **kwargs)
+        huggingface_hub.snapshot_download = _filtered_snapshot_download
+
         from evo import Evo
 
         evo_obj = Evo(self.model_name)
+        huggingface_hub.snapshot_download = _orig_snapshot_download
         self.model = evo_obj.model
         self.tokenizer = evo_obj.tokenizer
 

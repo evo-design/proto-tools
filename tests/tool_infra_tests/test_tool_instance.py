@@ -1564,8 +1564,8 @@ def test_run_oneshot_reads_output(tmp_path: Path):
 def test_init_loads_env_vars():
     """ToolInstance should parse env_vars.txt from the standalone dir."""
     inst = ToolInstance("alphagenome")
-    # alphagenome has an env_vars.txt with [passthrough] ALPHAGENOME_CHECKPOINT_PATH
-    assert "ALPHAGENOME_CHECKPOINT_PATH" in inst._tool_env_vars["passthrough"]
+    # alphagenome has an env_vars.txt with [set] LD_LIBRARY_PATH
+    assert any("LD_LIBRARY_PATH" in entry for entry in inst._tool_env_vars["set"])
 
 
 def test_init_empty_env_vars_for_tool_without_file():

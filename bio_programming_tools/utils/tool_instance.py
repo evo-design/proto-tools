@@ -1345,6 +1345,10 @@ class ToolInstance:
             self.tool_name,
             python_version
         )
+        # Set MAMBA_ROOT_PREFIX to the .micromamba dir (same filesystem as
+        # tool_envs/) so the package cache lives alongside the envs and
+        # micromamba can hardlink instead of copying.
+        mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_bin.parent.parent)}
         subprocess.run(
             [
                 str(mamba_bin), "create", "-y", "-p", str(self.env_path),
@@ -1354,6 +1358,7 @@ class ToolInstance:
             ],
             check=True,
             capture_output=True,
+            env=mamba_env,
         )
 
         # Run setup.sh directly (not via micromamba run, which overwrites PATH
@@ -1369,6 +1374,15 @@ class ToolInstance:
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
         env["PACKAGE_ROOT"] = str(Path(__file__).parent.parent.parent.absolute())
+
+        # Copy standalone_helpers.sh so setup.sh can source it
+        sh_source = Path(__file__).parent / "standalone_helpers_source" / "standalone_helpers.sh"
+        sh_target = self.setup_script.parent / "standalone_helpers.sh"
+        if sh_source.exists():
+            try:
+                shutil.copy2(sh_source, sh_target)
+            except Exception:
+                pass  # Non-critical — only needed by setup.sh that source it
 
         proc = subprocess.Popen(
             ["bash", str(self.setup_script)],

@@ -1,6 +1,6 @@
 # Chimera Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-100%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-37-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-0-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-97%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-38-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-1-lightgrey)
 
 ## Platform
 
@@ -17,8 +17,8 @@
 
 ## Git
 
-- **Commit**: `6f99f46b969d`
-- **Branch**: `main`
+- **Commit**: `ccb2a62f10bc`
+- **Branch**: `bv/checkpoint_locations`
 - **Dirty**: No
 
 ## Environment Variables
@@ -34,6 +34,8 @@ BUILD=x86_64-conda-linux-gnu
 CC=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-cc
 CC_FOR_BUILD=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-cc
 CFLAGS=-march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -ffunction-sections -pipe -isystem /home/bviggiano/miniforge3/envs/bio-tools/include  -I/home/bviggiano/minifo...
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
 CMAKE_ARGS=-DCMAKE_AR=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-ar -DCMAKE_CXX_COMPILER_AR=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-gcc-ar -DCMAKE_C_COMPILE...
 CMAKE_PREFIX_PATH=/home/bviggiano/miniforge3/envs/bio-tools:/home/bviggiano/miniforge3/envs/bio-tools/x86_64-conda-linux-gnu/sysroot/usr
 CONDA_BUILD_CROSS_COMPILATION=
@@ -47,6 +49,7 @@ CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
 CONDA_SHLVL=2
 CONDA_TOOLCHAIN_BUILD=x86_64-conda-linux-gnu
 CONDA_TOOLCHAIN_HOST=x86_64-conda-linux-gnu
+COREPACK_ENABLE_AUTO_PIN=0
 CPP=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-cpp
 CPPFLAGS=-DNDEBUG -D_FORTIFY_SOURCE=2 -O2 -isystem /home/bviggiano/miniforge3/envs/bio-tools/include  -I/home/bviggiano/miniforge3/envs/bio-tools/targets/x86_64-linux/include
 CPP_FOR_BUILD=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-cpp
@@ -65,6 +68,7 @@ GCC=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-gcc
 GCC_AR=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-gcc-ar
 GCC_NM=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-gcc-nm
 GCC_RANLIB=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-gcc-ranlib
+GIT_EDITOR=true
 GPROF=x86_64-conda-linux-gnu-gprof
 GPU_DEVICE_ORDINAL=0
 GXX=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-g++
@@ -88,10 +92,12 @@ MESON_ARGS=-Dbuildtype=release
 MOTD_SHOWN=pam
 NM=x86_64-conda-linux-gnu-nm
 NVCC_PREPEND_FLAGS= -ccbin=/home/bviggiano/miniforge3/envs/bio-tools/bin/x86_64-conda-linux-gnu-c++
+NoDefaultCurrentDirectoryInExePath=1
 OBJCOPY=x86_64-conda-linux-gnu-objcopy
 OBJDUMP=x86_64-conda-linux-gnu-objdump
-OLDPWD=/home/bviggiano/main/codebases/bio-programming
+OLDPWD=/home/bviggiano/main
 OMPI_MCA_plm_slurm_args=--external-launcher
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/bio-tools/bin:/home/bviggiano/miniforge3/condabin:/usr/local/sbin:/usr/loc...
 PRTE_MCA_plm_slurm_args=--external-launcher
 PWD=/home/bviggiano/main/codebases/bio-programming/bio-programming-tools
@@ -102,7 +108,7 @@ RDBASE=/home/bviggiano/miniforge3/envs/bio-tools/lib/python3.12/site-packages/rd
 READELF=x86_64-conda-linux-gnu-readelf
 ROCR_VISIBLE_DEVICES=0
 SHELL=/bin/bash
-SHLVL=5
+SHLVL=6
 SIZE=x86_64-conda-linux-gnu-size
 SLURMD_DEBUG=2
 SLURMD_NODENAME=GPUC960
@@ -112,19 +118,19 @@ SLURM_CPUS_ON_NODE=8
 SLURM_GPUS=1
 SLURM_GPUS_ON_NODE=1
 SLURM_GTIDS=0
-SLURM_JOBID=1808417
+SLURM_JOBID=1884900
 SLURM_JOB_ACCOUNT=hielab
 SLURM_JOB_CPUS_PER_NODE=8
-SLURM_JOB_END_TIME=1773423629
+SLURM_JOB_END_TIME=1774317568
 SLURM_JOB_GID=10004
-SLURM_JOB_GPUS=1
-SLURM_JOB_ID=1808417
+SLURM_JOB_GPUS=0
+SLURM_JOB_ID=1884900
 SLURM_JOB_NAME=1_sh_gpu
 SLURM_JOB_NODELIST=GPUC960
 SLURM_JOB_NUM_NODES=1
 SLURM_JOB_PARTITION=evo_gpu_priority
 SLURM_JOB_QOS=normal
-SLURM_JOB_START_TIME=1773380429
+SLURM_JOB_START_TIME=1774274368
 SLURM_JOB_UID=10249
 SLURM_JOB_USER=bviggiano
 SLURM_LAUNCH_NODE_IPADDR=172.18.140.10
@@ -134,18 +140,18 @@ SLURM_NNODES=1
 SLURM_NODEID=0
 SLURM_NODELIST=GPUC960
 SLURM_OOM_KILL_STEP=0
-SLURM_PMIXP_ABORT_AGENT_PORT=39243
+SLURM_PMIXP_ABORT_AGENT_PORT=45581
 SLURM_PMIX_MAPPING_SERV=(vector,(0,1,1))
 SLURM_PRIO_PROCESS=0
 SLURM_PROCID=0
-SLURM_PTY_PORT=34889
-SLURM_PTY_WIN_COL=236
-SLURM_PTY_WIN_ROW=64
+SLURM_PTY_PORT=34811
+SLURM_PTY_WIN_COL=212
+SLURM_PTY_WIN_ROW=54
 SLURM_SRUN_COMM_HOST=172.18.140.10
-SLURM_SRUN_COMM_PORT=41771
+SLURM_SRUN_COMM_PORT=40119
 SLURM_STEPID=4294967290
 SLURM_STEP_ID=4294967290
-SLURM_STEP_LAUNCHER_PORT=41771
+SLURM_STEP_LAUNCHER_PORT=40119
 SLURM_STEP_NODELIST=GPUC960
 SLURM_STEP_NUM_NODES=1
 SLURM_STEP_NUM_TASKS=1
@@ -153,7 +159,7 @@ SLURM_STEP_TASKS_PER_NODE=1
 SLURM_SUBMIT_DIR=/home/bviggiano
 SLURM_SUBMIT_HOST=arc-slurm
 SLURM_TASKS_PER_NODE=8
-SLURM_TASK_PID=1446865
+SLURM_TASK_PID=3031605
 SLURM_TOPOLOGY_ADDR=GPUC960
 SLURM_TOPOLOGY_ADDR_PATTERN=node
 SRUN_DEBUG=3
@@ -163,7 +169,7 @@ TERM=xterm-256color
 TERM_PROGRAM=tmux
 TERM_PROGRAM_VERSION=3.2a
 TMPDIR=/tmp
-TMUX=/tmp/tmux-10249/default,1291449,0
+TMUX=/tmp/tmux-10249/default,1505081,0
 TMUX_PANE=%0
 USER=bviggiano
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -173,7 +179,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog fi...
 ZES_ENABLE_SYSMAN=1
 ZE_AFFINITY_MASK=0
-_=/home/bviggiano/miniforge3/envs/bio-tools/bin/pytest
+_=/home/bviggiano/miniforge3/envs/bio-tools/bin/python3
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -185,132 +191,139 @@ host_alias=x86_64-conda-linux-gnu
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/viennarna_env
+BPT_MODEL_CACHE=/home/bviggiano/main/models
+CONDA_PREFIX=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
+HF_HOME=/home/bviggiano/main/models/huggingface
 HOME=/home/bviggiano
 LANG=en_US.UTF-8
 LD_LIBRARY_PATH=/home/bviggiano/miniforge3/envs/bio-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/viennarna_env/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/bio-tools/bin...
+PATH=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/m...
+PIP_DEFAULT_TIMEOUT=300
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
-RECOMMENDED_TORCH_SPEC=torch>=2.4,<2.7
+RECOMMENDED_TORCH_INDEX=https://download.pytorch.org/whl/cu126
+RECOMMENDED_TORCH_SPEC=torch>=2.4,<3
 SHELL=/bin/bash
 TMPDIR=/tmp
 TORCH_CUDA_ARCH_LIST=9.0
-TORCH_HOME=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/viennarna_env/cache/torch
+TORCH_HOME=/home/bviggiano/main/models/torch
 USER=bviggiano
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/viennarna_env
+UV_HTTP_TIMEOUT=300
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
 
-### Causal Models (4/4)
+### Causal Models (3/3)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `evo1` | yes | ✅ | 739.8s | ✅ Pass |
-| `evo2` | yes | ✅ | 524.0s | ✅ Pass |
-| `evo2` | yes | ✅ | 118.7s | ✅ Pass |
-| `progen2` | yes | ✅ | 221.4s | ✅ Pass |
+| `evo1` | yes | ✅ | 299.7s | ✅ Pass |
+| `evo2` | yes | ✅ | 334.2s | ✅ Pass |
+| `progen2` | yes | ✅ | 207.7s | ✅ Pass |
 
-### Gene Annotation (4/4)
-
-| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
-|------|--------------|----------------------|----------|--------|
-| `blast` | no | ✅ | 57.2s | ✅ Pass |
-| `minced` | no | ✅ | 27.0s | ✅ Pass |
-| `mmseqs` | no | ✅ | 33.9s | ✅ Pass |
-| `pyhmmer` | no | ✅ | 31.1s | ✅ Pass |
-
-### Inverse Folding (3/3)
+### Gene Annotation (5/5)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `fampnn` | yes | ✅ | 300.6s | ✅ Pass |
-| `ligandmpnn` | yes | ✅ | 161.4s | ✅ Pass |
-| `proteinmpnn` | yes | ✅ | 118.0s | ✅ Pass |
+| `blast` | no | ✅ | 50.3s | ✅ Pass |
+| `crispr_tracr` | no | ✅ | 151.5s | ✅ Pass |
+| `minced` | no | ✅ | 20.4s | ✅ Pass |
+| `mmseqs` | no | ✅ | 25.9s | ✅ Pass |
+| `pyhmmer` | no | ✅ | 24.1s | ✅ Pass |
+
+### Inverse Folding (4/4)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
+|------|--------------|----------------------|----------|--------|
+| `esm_if1` | yes | ✅ | 128.4s | ✅ Pass |
+| `fampnn` | yes | ✅ | 254.1s | ✅ Pass |
+| `ligandmpnn` | yes | ✅ | 209.7s | ✅ Pass |
+| `proteinmpnn` | yes | ✅ | 95.0s | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `esm2` | yes | ✅ | 131.0s | ✅ Pass |
-| `esm3` | yes | ✅ | 232.7s | ✅ Pass |
+| `esm2` | yes | ✅ | 122.9s | ✅ Pass |
+| `esm3` | yes | ✅ | 171.0s | ✅ Pass |
+
+### Mock (1/2)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
+|------|--------------|----------------------|----------|--------|
+| `mock_tools_env_report` | yes | — | 213.4s | ✅ Pass |
+| `mock_tools_env_report` | yes | — | — | ⏭️ Skip |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `orfipy` | no | ✅ | 32.4s | ✅ Pass |
-| `prodigal` | no | ✅ | 21.7s | ✅ Pass |
+| `orfipy` | no | ✅ | 25.0s | ✅ Pass |
+| `prodigal` | no | ✅ | 15.6s | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `splice_transformer` | yes | ✅ | 115.7s | ✅ Pass |
+| `splice_transformer` | yes | ✅ | 93.6s | ✅ Pass |
 
-### Sequence Alignment (1/1)
-
-| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
-|------|--------------|----------------------|----------|--------|
-| `mafft` | no | ✅ | 32.5s | ✅ Pass |
-
-### Sequence Scoring (3/3)
+### Sequence Alignment (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `borzoi` | yes | ✅ | 151.9s | ✅ Pass |
-| `enformer` | yes | ✅ | 127.3s | ✅ Pass |
-| `segmasker` | no | ✅ | 48.8s | ✅ Pass |
+| `local_colabfold_search` | no | — | 141.8s | ✅ Pass |
+| `mafft` | no | ✅ | 25.2s | ✅ Pass |
+
+### Sequence Scoring (4/4)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
+|------|--------------|----------------------|----------|--------|
+| `alphagenome` | yes | ✅ | 297.7s | ✅ Pass |
+| `borzoi` | yes | ✅ | 114.6s | ✅ Pass |
+| `enformer` | yes | ✅ | 99.5s | ✅ Pass |
+| `segmasker` | no | ✅ | 33.6s | ✅ Pass |
 
 ### Structure Alignment (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `tmalign` | no | ✅ | 30.1s | ✅ Pass |
+| `tmalign` | no | ✅ | 24.2s | ✅ Pass |
 | `tmalign` | no | ✅ | 0.1s | ✅ Pass |
-| `usalign` | no | ✅ | 39.1s | ✅ Pass |
+| `usalign` | no | ✅ | 32.6s | ✅ Pass |
 | `usalign` | no | ✅ | 0.1s | ✅ Pass |
 
 ### Structure Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `rfdiffusion3` | yes | ✅ | 167.2s | ✅ Pass |
+| `rfdiffusion3` | yes | ✅ | 218.4s | ✅ Pass |
 
 ### Structure Dynamics (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `bioemu` | yes | ✅ | 305.5s | ✅ Pass |
+| `bioemu` | yes | ✅ | 250.7s | ✅ Pass |
 
-### Structure Prediction (7/7)
-
-| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
-|------|--------------|----------------------|----------|--------|
-| `alphafold2` | yes | ✅ | 171.8s | ✅ Pass |
-| `alphafold3` | yes | ✅ | 93.0s | ✅ Pass |
-| `boltz2` | yes | ✅ | 214.9s | ✅ Pass |
-| `chai1` | yes | ✅ | 300.9s | ✅ Pass |
-| `esmfold` | yes | ✅ | 144.8s | ✅ Pass |
-| `protenix` | yes | ✅ | 649.5s | ✅ Pass |
-| `viennarna` | no | ✅ | 21.0s | ✅ Pass |
-
-### Unknown (4/4)
+### Structure Prediction (8/8)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Status |
 |------|--------------|----------------------|----------|--------|
-| `alphagenome` | yes | ✅ | 365.7s | ✅ Pass |
-| `crispr_tracr` | no | ✅ | 165.5s | ✅ Pass |
-| `local_colabfold_search` | no | — | 163.6s | ✅ Pass |
-| `structure_metrics` | no | ✅ | 45.0s | ✅ Pass |
+| `alphafold2` | yes | ✅ | 111.2s | ✅ Pass |
+| `alphafold3` | yes | ✅ | 82.5s | ✅ Pass |
+| `boltz2` | yes | ✅ | 196.7s | ✅ Pass |
+| `chai1` | yes | ✅ | 482.1s | ✅ Pass |
+| `esmfold` | yes | ✅ | 119.8s | ✅ Pass |
+| `protenix` | yes | ✅ | 438.4s | ✅ Pass |
+| `structure_metrics` | no | ✅ | 25.1s | ✅ Pass |
+| `viennarna` | no | ✅ | 17.5s | ✅ Pass |
 
 ---
-*Generated at 2026-03-13 02:36:54 by `pytest --env-report`*
+*Generated at 2026-03-23 11:57:03 by `pytest --env-report`*

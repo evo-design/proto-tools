@@ -346,10 +346,17 @@ def dispatch(input_dict: dict) -> dict:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    # Store checkpoints in the tool env directory so they're cleaned up with the env
-    env_path = os.environ.get("TOOL_VENV_PATH")
-    if env_path:
-        os.environ["PROTENIX_ROOT_DIR"] = env_path
+    # Resolve checkpoint directory via BPT_MODEL_CACHE
+    from standalone_helpers import resolve_weights_dir
+
+    bpt_dir = resolve_weights_dir("protenix")
+    if bpt_dir:
+        os.environ["PROTENIX_ROOT_DIR"] = bpt_dir
+    elif not os.environ.get("PROTENIX_ROOT_DIR"):
+        # Fallback: store checkpoints in the tool env directory
+        env_path = os.environ.get("TOOL_VENV_PATH")
+        if env_path:
+            os.environ["PROTENIX_ROOT_DIR"] = env_path
 
     if _model is None:
         _model = ProtenixModel()

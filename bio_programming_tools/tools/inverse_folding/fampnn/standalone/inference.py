@@ -31,7 +31,6 @@ class FAMPNNModel:
         self._model_variant = None
         self.device = None
         self.model = None
-        self.weights_dir = None
 
     def sample(
         self,
@@ -535,14 +534,16 @@ class FAMPNNModel:
         weights_filename = variant_map[model_variant]
 
         # Search for weights in multiple locations
+        from standalone_helpers import resolve_weights_dir
+
+        bpt_dir = resolve_weights_dir("fampnn")
         search_paths = []
-        if self.weights_dir:
-            search_paths.append(Path(self.weights_dir))
-        if os.environ.get("FAMPNN_WEIGHTS_DIR"):
-            search_paths.append(Path(os.environ["FAMPNN_WEIGHTS_DIR"]))
-        if os.environ.get("VENV_PATH"):
-            search_paths.append(Path(os.environ["VENV_PATH"]) / "weights")
-        # Check if installed via pip - weights may be in the package
+        if bpt_dir:
+            search_paths.append(Path(bpt_dir))
+        # Fallback locations for NONE mode or missing venv
+        venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+        if venv:
+            search_paths.append(Path(venv) / "weights")
         try:
             import fampnn as fampnn_pkg
             pkg_dir = Path(fampnn_pkg.__file__).parent.parent
@@ -560,7 +561,7 @@ class FAMPNNModel:
         if checkpoint_path is None:
             raise FileNotFoundError(
                 f"Could not find {weights_filename} in any of: {[str(p) for p in search_paths]}. "
-                f"Set FAMPNN_WEIGHTS_DIR or run setup.sh to download weights."
+                f"Set BPT_FAMPNN_WEIGHTS_DIR or run setup.sh to download weights."
             )
 
         if verbose:

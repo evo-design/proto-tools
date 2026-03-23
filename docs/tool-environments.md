@@ -86,6 +86,59 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
 
+## Model Weights Management
+
+Tools download model weights on first use. `BPT_MODEL_CACHE` controls where all tools store their weights. Set it via environment variable or `.bpt.env` at the repo root (env vars take precedence).
+
+### Modes
+
+| Mode | HF_HOME | Non-HF weights | TORCH_HOME |
+|------|---------|----------------|------------|
+| *(unset, default)* | `{repo}/model_cache/huggingface/` | `{repo}/model_cache/{tool_name}/` | `{repo}/model_cache/torch/` |
+| `/absolute/path` | `/absolute/path/huggingface/` | `/absolute/path/{tool_name}/` | `/absolute/path/torch/` |
+| `IN_ENV` | `{venv}/cache/huggingface/` | `{venv}/model_weight_cache/` | `{venv}/cache/torch/` |
+| `NONE` | Parent `HF_HOME` passthrough | `{venv}/weights/` | Parent `TORCH_HOME` passthrough |
+
+The default (`model_cache/` at repo root) keeps weights outside tool envs so they survive env rebuilds. For labs sharing weights across users, set an absolute path in `.bpt.env`.
+
+### Per-tool override
+
+`BPT_{TOOL_NAME}_WEIGHTS_DIR` always wins, regardless of mode:
+
+```bash
+export BPT_FAMPNN_WEIGHTS_DIR=/custom/path/fampnn
+export BPT_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
+```
+
+### For tool authors
+
+Non-HF tools call `resolve_weights_dir(tool_name)` from `standalone_helpers.py`:
+
+```python
+from standalone_helpers import resolve_weights_dir
+
+weights_dir = resolve_weights_dir("my_tool")
+if weights_dir:
+    # Use weights_dir for model files
+    ...
+```
+
+HF-based tools need no code changes — `persistent_worker.py` sets `HF_HOME` automatically.
+
+For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (auto-copied):
+
+```bash
+source standalone_helpers.sh
+bpt_resolve_weights_dir my_tool
+# $WEIGHTS_DIR is now set and the directory created
+wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+```
+
+### Exceptions
+
+- **ProteinMPNN**: Weights (~150 MB) live inside pip-installed ColabDesign. Inherently venv-local.
+- **AlphaFold3**: User-provided paths (`model_dir`, `db_dir`, `sif_path`). Not managed by `BPT_MODEL_CACHE`.
+
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports two sections:
@@ -195,7 +248,7 @@ For tools that spawn CLI subprocesses (Boltz2, RFDiffusion3, Protenix, AlphaFold
 
 **The problem:** When DeviceManager allocates a logical device (e.g., `cuda:2`), CLI subprocesses need the physical GPU index mapped from the logical index.
 
-**The solution:** `utils/standalone_helpers.py` provides `get_subprocess_device_env(device: str) -> Dict[str, str]`:
+**The solution:** `utils/standalone_helpers_source/standalone_helpers.py` provides `get_subprocess_device_env(device: str) -> Dict[str, str]`:
 
 ```python
 from standalone_helpers import get_subprocess_device_env
@@ -205,7 +258,7 @@ subprocess.run(cmd, env=env)
 ```
 
 **Auto-copy mechanism:**
-- Source: `bio_programming_tools/utils/standalone_helpers.py` (tracked in git)
+- Source: `bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py` (tracked in git)
 - Destination: `{tool}/standalone/standalone_helpers.py` (not tracked, auto-generated at runtime by `_worker_bootstrap.py`)
 - Exception: AlphaFold3's `standalone_helpers.py` is manually copied and tracked
 

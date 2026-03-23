@@ -1,37 +1,15 @@
 #!/bin/bash
 # Setup script for BioEmu standalone environment
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Setting up BioEmu standalone environment..."
 
 echo "Installing uv package manager..."
 pip install uv
 
-# ============================================================================
-# Install CUDA toolkit via micromamba (ColabFold's JAX is more stable with CUDA libs)
-# ============================================================================
-CUDA_TOOLKIT_CONSTRAINT="${BIOEMU_CUDA_TOOLKIT_CONSTRAINT:-}"
-if [ -z "$CUDA_TOOLKIT_CONSTRAINT" ]; then
-    if [ -n "${DETECTED_CUDA_VERSION:-}" ]; then
-        CUDA_TOOLKIT_CONSTRAINT="${DETECTED_CUDA_VERSION}.*"
-    else
-        CUDA_TOOLKIT_CONSTRAINT="12.*"
-    fi
-fi
-echo "Installing CUDA toolkit ${CUDA_TOOLKIT_CONSTRAINT} locally via micromamba..."
-if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
-    "cuda-toolkit=${CUDA_TOOLKIT_CONSTRAINT}" \
-    "cuda-cudart-dev=${CUDA_TOOLKIT_CONSTRAINT}" \
-    "cudnn"; then
-    echo "ERROR: Failed to install CUDA toolkit via micromamba"
-    exit 1
-fi
-
-# Install hardware-aware PyTorch version (from centralized detection)
-echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
-echo "Detected driver: ${DETECTED_DRIVER_VERSION:-unknown}, CUDA: ${DETECTED_CUDA_VERSION:-unknown}"
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
+bpt_install_cuda_toolkit "${BIOEMU_CUDA_TOOLKIT_CONSTRAINT:-}"
+bpt_install_pytorch
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

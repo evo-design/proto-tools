@@ -621,8 +621,9 @@ def test_ld_library_path_via_set_directive(
     [(True, True), (False, False)],
     ids=["with_venv", "without_venv"],
 )
-def test_torch_home(tmp_path: Path, has_venv, expect_torch_home):
-    """TORCH_HOME = {venv}/cache/torch when venv provided, absent otherwise."""
+def test_torch_home(monkeypatch, tmp_path: Path, has_venv, expect_torch_home):
+    """TORCH_HOME = {venv}/cache/torch when venv provided (IN_ENV mode)."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
     tool_env_path = tmp_path if has_venv else None
     env = _build_subprocess_env(device="cpu", tool_env_path=tool_env_path)
 
@@ -670,6 +671,12 @@ def test_passthrough_vars(monkeypatch, parent_has_var):
         monkeypatch.setenv("HF_TOKEN", "secret-token")
     else:
         monkeypatch.delenv("HF_TOKEN", raising=False)
+        monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+        # Prevent resolve_hf_token() from finding file-based tokens
+        monkeypatch.setattr(
+            "bio_programming_tools.utils.auth.os.path.expanduser",
+            lambda p: "/nonexistent" + p,
+        )
 
     tool_env_vars = {"passthrough": ["HF_TOKEN"], "set": []}
     env = _build_subprocess_env(device="cpu", tool_env_vars=tool_env_vars)
@@ -1006,3 +1013,133 @@ def test_file_fallback_end_to_end(tmp_path: Path):
         assert result["data"] == "x" * 2000
     finally:
         worker.stop()
+
+
+# ── BPT_MODEL_CACHE and HF_HOME ─────────────────────────────────────────────
+
+
+def test_default_sets_hf_home_to_model_cache(monkeypatch, tmp_path: Path):
+    """Default mode sets HF_HOME to {repo}/model_cache/huggingface/."""
+    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
+    # Mock _load_bpt_env to return empty (no .bpt.env influence)
+    monkeypatch.setattr(
+        "bio_programming_tools.utils.persistent_worker._load_bpt_env",
+        lambda: {},
+    )
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_HOME"].endswith("model_cache/huggingface")
+
+
+def test_in_env_sets_hf_home(monkeypatch, tmp_path: Path):
+    """IN_ENV mode sets HF_HOME to {venv}/cache/huggingface/."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_HOME"] == str(tmp_path / "cache" / "huggingface")
+
+
+def test_shared_path_sets_hf_home(monkeypatch, tmp_path: Path):
+    """Absolute path mode sets HF_HOME to /path/huggingface/."""
+    shared = str(tmp_path / "shared")
+    monkeypatch.setenv("BPT_MODEL_CACHE", shared)
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_HOME"] == str(Path(shared) / "huggingface")
+
+
+def test_shared_path_overrides_torch_home(monkeypatch, tmp_path: Path):
+    """Absolute path mode overrides TORCH_HOME to /path/torch/."""
+    shared = str(tmp_path / "shared")
+    monkeypatch.setenv("BPT_MODEL_CACHE", shared)
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["TORCH_HOME"] == str(Path(shared) / "torch")
+
+
+def test_none_mode_passes_through_hf_home(monkeypatch, tmp_path: Path):
+    """NONE mode passes through parent's HF_HOME."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("HF_HOME", "/custom/hf/cache")
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_HOME"] == "/custom/hf/cache"
+
+
+def test_none_mode_no_hf_home_override(monkeypatch, tmp_path: Path):
+    """NONE mode without parent HF_HOME does not set it."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.delenv("HF_HOME", raising=False)
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert "HF_HOME" not in env
+
+
+def test_bpt_weights_dir_passthrough(monkeypatch):
+    """BPT_*_WEIGHTS_DIR vars are passed through to subprocess."""
+    monkeypatch.setenv("BPT_FAMPNN_WEIGHTS_DIR", "/custom/fampnn")
+    monkeypatch.setenv("BPT_ESM_IF1_WEIGHTS_DIR", "/custom/esmif")
+
+    env = _build_subprocess_env(device="cpu")
+
+    assert env["BPT_FAMPNN_WEIGHTS_DIR"] == "/custom/fampnn"
+    assert env["BPT_ESM_IF1_WEIGHTS_DIR"] == "/custom/esmif"
+
+
+def test_bpt_weights_mode_passthrough(monkeypatch, tmp_path: Path):
+    """BPT_MODEL_CACHE is passed through to subprocess."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "/shared/weights")
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["BPT_MODEL_CACHE"] == "/shared/weights"
+
+
+def test_hf_hub_cache_not_in_env(monkeypatch):
+    """HF_HUB_CACHE should NOT be passed through (removed from passthrough list)."""
+    monkeypatch.setenv("HF_HUB_CACHE", "/old/cache")
+    env = _build_subprocess_env(device="cpu")
+    assert "HF_HUB_CACHE" not in env
+
+
+def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
+    """HF_TOKEN is set in subprocess env when token exists only as a file."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+    token_file = tmp_path / "token"
+    token_file.write_text("hf_test_token_from_file")
+    monkeypatch.setattr(
+        "bio_programming_tools.utils.auth.os.path.expanduser",
+        lambda p: str(token_file) if "huggingface/token" in p else p,
+    )
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_TOKEN"] == "hf_test_token_from_file"
+
+
+def test_hf_token_resolved_from_git_credentials(monkeypatch, tmp_path: Path):
+    """HF_TOKEN is set in subprocess env when token exists only in git-credentials."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+    git_creds = tmp_path / "git-credentials"
+    git_creds.write_text("https://user:hf_git_cred_token@huggingface.co\n")
+    monkeypatch.setattr(
+        "bio_programming_tools.utils.auth.os.path.expanduser",
+        lambda p: str(git_creds)
+        if "git-credentials" in p
+        else str(tmp_path / "nonexistent")
+        if "huggingface/token" in p
+        else p,
+    )
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_TOKEN"] == "hf_git_cred_token"
+
+
+def test_hf_token_env_var_takes_precedence(monkeypatch, tmp_path: Path):
+    """HF_TOKEN env var is passed through without file resolution."""
+    monkeypatch.setenv("HF_TOKEN", "hf_from_env")
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert env["HF_TOKEN"] == "hf_from_env"
+
+
+def test_hf_token_not_set_when_absent(monkeypatch, tmp_path: Path):
+    """HF_TOKEN is not set when no token exists anywhere."""
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "bio_programming_tools.utils.auth.os.path.expanduser",
+        lambda p: str(tmp_path / "nonexistent"),
+    )
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+    assert "HF_TOKEN" not in env

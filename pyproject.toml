@@ -134,7 +134,7 @@ per-file-ignores = [
     # Auto-copied by _worker_bootstrap.py at runtime; jax import is in a try/except
     "**/standalone/standalone_helpers.py:F401",
     # Source standalone_helpers has same pattern
-    "bio_programming_tools/utils/standalone_helpers.py:F401",
+    "bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py:F401",
 ]
 
 [tool.mypy]

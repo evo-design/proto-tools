@@ -36,9 +36,19 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-### Step 2: Redirect cache directories (optional) 🗂️
+### Step 2: Model weights cache (optional) 🗂️
 
-Many tools download multi-GB model weights to `$HOME` subdirectories on first run. If your home directory has limited space (common on HPC clusters), you may want to redirect these to larger storage before running tools! See [notes/model-weights-cache.md](notes/model-weights-cache.md) for the full list of directories and per-tool details.
+Model weights are stored in `model_cache/` at the repo root by default (gitignored). This keeps weights outside tool environments so they survive env rebuilds.
+
+To share weights across a lab or redirect to larger storage, create a `.bpt.env` file (see `.bpt.env.example`):
+
+```bash
+cp .bpt.env.example .bpt.env
+# Edit .bpt.env:
+BPT_MODEL_CACHE=/path/to/shared/weights
+```
+
+Or set the environment variable directly: `export BPT_MODEL_CACHE=/path/to/shared/weights`. See [docs/tool-environments.md](docs/tool-environments.md) for all options.
 
 ### Step 3: HuggingFace authentication (optional) 🔑
 

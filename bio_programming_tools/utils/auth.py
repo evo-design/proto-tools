@@ -5,6 +5,49 @@ import os
 import re
 
 
+def resolve_hf_token() -> str | None:
+    """Resolve a HuggingFace token from all known sources.
+
+    Checks (in order):
+      1. ``HF_TOKEN`` environment variable
+      2. ``HUGGING_FACE_HUB_TOKEN`` environment variable
+      3. ``~/.cache/huggingface/token`` file (written by ``hf auth login``)
+      4. ``~/.git-credentials`` file (written by ``hf auth login --add-to-git-credential``)
+
+    Returns the token string, or ``None`` if no token is found.
+    """
+    token = os.environ.get("HF_TOKEN", "") or os.environ.get(
+        "HUGGING_FACE_HUB_TOKEN", ""
+    )
+    if token:
+        return token
+
+    token_file = os.path.expanduser("~/.cache/huggingface/token")
+    if os.path.isfile(token_file):
+        try:
+            with open(token_file) as f:
+                token = f.read().strip()
+        except Exception:
+            pass
+    if token:
+        return token
+
+    git_creds = os.path.expanduser("~/.git-credentials")
+    if os.path.isfile(git_creds):
+        try:
+            with open(git_creds) as f:
+                for line in f:
+                    m = re.search(
+                        r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line
+                    )
+                    if m:
+                        return m.group(1)
+        except Exception:
+            pass
+
+    return None
+
+
 def require_hf_token(tool_name: str, repo_url: str = "") -> None:
     """Check that a HuggingFace token is available, raising a clear error if not.
 
@@ -19,29 +62,7 @@ def require_hf_token(tool_name: str, repo_url: str = "") -> None:
     Raises:
         EnvironmentError: If no HuggingFace token is found.
     """
-    token = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
-    if not token:
-        token_file = os.path.expanduser("~/.cache/huggingface/token")
-        if os.path.isfile(token_file):
-            try:
-                with open(token_file) as f:
-                    token = f.read().strip()
-            except Exception:
-                pass
-    if not token:
-        # huggingface-cli login with git credential storage writes to ~/.git-credentials
-        git_creds = os.path.expanduser("~/.git-credentials")
-        if os.path.isfile(git_creds):
-            try:
-                with open(git_creds) as f:
-                    for line in f:
-                        m = re.search(r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line)
-                        if m:
-                            token = m.group(1)
-                            break
-            except Exception:
-                pass
-    if token:
+    if resolve_hf_token():
         return
 
     msg = (

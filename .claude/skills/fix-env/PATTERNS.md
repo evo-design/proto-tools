@@ -448,14 +448,14 @@ Failures related to the DeviceManager infrastructure — specifically environmen
 ls bio_programming_tools/tools/{category}/{tool}/standalone/standalone_helpers.py
 
 # Check source exists
-ls bio_programming_tools/utils/standalone_helpers.py
+ls bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py
 
 # Manual copy to test
-cp bio_programming_tools/utils/standalone_helpers.py \
+cp bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py \
    bio_programming_tools/tools/{category}/{tool}/standalone/
 ```
 
-**Solution:** Bootstrap copy failed — check `_worker_bootstrap.py` stderr. If source missing, reinstall with `pip install -e ".[dev]"`. Race conditions resolve on retry. See `utils/_worker_bootstrap.py` (`_copy_standalone_helpers`), `utils/standalone_helpers.py`.
+**Solution:** Bootstrap copy failed — check `_worker_bootstrap.py` stderr. If source missing, reinstall with `pip install -e ".[dev]"`. Race conditions resolve on retry. See `utils/_worker_bootstrap.py` (`_copy_standalone_helpers`), `utils/standalone_helpers_source/`.
 
 ---
 

@@ -90,13 +90,34 @@ if __name__ == "__main__":
         json.dump(output_data, f)
 ```
 
-**standalone/setup.sh** (Subagent 1):
+**standalone/setup.sh** (Subagent 1) — sources `standalone_helpers.sh` (auto-copied) for shared functions:
 ```bash
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
 
 pip install uv
 uv pip install -r requirements.txt
+
+echo "Setup complete!"
+```
+
+**standalone/setup.sh with weight download** (Subagent 1) — for tools that download model weights. See `tools/inverse_folding/fampnn/standalone/setup.sh`:
+```bash
+#!/bin/bash
+set -euo pipefail
+source standalone_helpers.sh
+
+pip install uv
+uv pip install -r requirements.txt
+
+# Resolve weight directory based on BPT_MODEL_CACHE
+bpt_resolve_weights_dir my_tool
+
+if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
+    echo "Downloading model weights..."
+    wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+fi
 
 echo "Setup complete!"
 ```
@@ -155,6 +176,10 @@ class {ToolName}Model:
     def load(self, device: str, verbose: bool = False):
         """Load model weights to device."""
         import torch  # Heavy imports ONLY inside methods
+        # For non-HF tools, resolve weight path:
+        # from standalone_helpers import resolve_weights_dir
+        # weights_dir = resolve_weights_dir("my_tool")
+        # model_path = os.path.join(weights_dir, "model.pt")
         # Load model...
         self._loaded = True
         self.device = device
@@ -236,16 +261,20 @@ if __name__ == "__main__":
 ```bash
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Installing uv package manager..."
 pip install uv
 
-# Install hardware-aware PyTorch (from centralized detection)
-echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
+bpt_install_pytorch
+# If torchvision/torchaudio needed: bpt_install_pytorch "" torchvision
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
+
+# Non-HF tools that download weights:
+# bpt_resolve_weights_dir my_tool
+# wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
 
 echo "{ToolName} setup complete!"
 ```
@@ -284,16 +313,12 @@ fi
 ```bash
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
 
 echo "Installing uv package manager..."
 pip install uv
 
-JAX_VARIANT="${TOOL_JAX_VARIANT:-${RECOMMENDED_JAX_VARIANT:-cuda12}}"
-JAX_SPEC="${TOOL_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.4.20,<1}}"
-
-echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
-echo "Installing JAX: ${JAX_SPEC}"
-uv pip install "${JAX_SPEC}"
+bpt_install_jax MYTOOL
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

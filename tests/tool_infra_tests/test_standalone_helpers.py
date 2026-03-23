@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from bio_programming_tools.utils.standalone_helpers import get_subprocess_device_env
+from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import get_subprocess_device_env
 from bio_programming_tools.utils.device import determine_visible_devices
 
 
@@ -259,3 +259,133 @@ def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
 
     assert env["CUDA_VISIBLE_DEVICES"] == ""
     assert env["JAX_PLATFORMS"] == "cpu"
+
+
+# ── resolve_weights_dir ──────────────────────────────────────────────────────
+
+from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
+
+
+def test_resolve_weights_dir_in_env_mode(monkeypatch, tmp_path):
+    """IN_ENV mode returns {venv}/model_weight_cache/."""
+    monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path))
+    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result == str(tmp_path / "model_weight_cache")
+    assert os.path.isdir(result)
+
+
+def test_resolve_weights_dir_in_env_explicit(monkeypatch, tmp_path):
+    """Explicit BPT_MODEL_CACHE=IN_ENV stores weights in the tool venv."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path))
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result == str(tmp_path / "model_weight_cache")
+
+
+def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
+    """Absolute path mode returns /path/{tool_name}/."""
+    shared = tmp_path / "shared_weights"
+    shared.mkdir()
+    monkeypatch.setenv("BPT_MODEL_CACHE", str(shared))
+    monkeypatch.delenv("BPT_PROTENIX_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("protenix")
+
+    assert result == str(shared / "protenix")
+    assert os.path.isdir(result)
+
+
+def test_resolve_weights_dir_none_mode(monkeypatch, tmp_path):
+    """NONE mode falls back to {venv}/weights/ (matching shell helper)."""
+    venv = tmp_path / "tool_env"
+    venv.mkdir()
+    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("VENV_PATH", str(venv))
+    monkeypatch.delenv("BPT_BOLTZ2_WEIGHTS_DIR", raising=False)
+    monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
+
+    result = resolve_weights_dir("boltz2")
+
+    assert result == str(venv / "weights")
+    assert os.path.isdir(result)
+
+
+def test_resolve_weights_dir_per_tool_override_beats_mode(monkeypatch, tmp_path):
+    """BPT_{TOOL}_WEIGHTS_DIR overrides BPT_MODEL_CACHE."""
+    override_dir = tmp_path / "my_custom_dir"
+    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("BPT_FAMPNN_WEIGHTS_DIR", str(override_dir))
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result == str(override_dir)
+    assert os.path.isdir(result)
+
+
+def test_resolve_weights_dir_per_tool_override_beats_in_env(monkeypatch, tmp_path):
+    """BPT_{TOOL}_WEIGHTS_DIR overrides IN_ENV mode too."""
+    override_dir = tmp_path / "override"
+    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path / "venv"))
+    monkeypatch.setenv("BPT_ESM_IF1_WEIGHTS_DIR", str(override_dir))
+
+    result = resolve_weights_dir("esm_if1")
+
+    assert result == str(override_dir)
+
+
+def test_resolve_weights_dir_creates_leaf_directory(monkeypatch, tmp_path):
+    """resolve_weights_dir creates the leaf directory and tool subdirectory."""
+    parent = tmp_path / "existing"
+    parent.mkdir()
+    shared = parent / "weights"
+    monkeypatch.setenv("BPT_MODEL_CACHE", str(shared))
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert os.path.isdir(result)
+    assert result == str(shared / "fampnn")
+
+
+def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
+    """resolve_weights_dir creates the directory when given an explicit path."""
+    cache_path = tmp_path / "custom_cache"
+    monkeypatch.setenv("BPT_MODEL_CACHE", str(cache_path))
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result == str(cache_path / "fampnn")
+    assert os.path.isdir(result)
+
+
+def test_resolve_weights_dir_in_env_no_venv(monkeypatch):
+    """IN_ENV with no TOOL_VENV_PATH/VENV_PATH returns None."""
+    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
+    monkeypatch.delenv("VENV_PATH", raising=False)
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result is None
+
+
+def test_resolve_weights_dir_venv_path_fallback(monkeypatch, tmp_path):
+    """IN_ENV uses VENV_PATH when TOOL_VENV_PATH is not set."""
+    monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
+    monkeypatch.setenv("VENV_PATH", str(tmp_path))
+    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
+    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+
+    result = resolve_weights_dir("fampnn")
+
+    assert result == str(tmp_path / "model_weight_cache")

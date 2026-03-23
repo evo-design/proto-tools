@@ -2,6 +2,7 @@
 .vscode
 .env
 .env.local
+.bpt.env
 .env.development.local
 .env.test.local
 .env.production.local
@@ -12,6 +13,7 @@ __pycache__/
 .ipynb_checkpoints/
 data/
 tool_envs
+model_cache
 .micromamba
 *.hmm
 *mini_mmseqs_db
@@ -49,8 +51,9 @@ file_store/
 analyses/*
 !analyses/examples/
 
-# Auto-generated helpers in standalone directories (source is in utils/)
+# Auto-generated helpers in standalone directories (source is in utils/standalone_helpers_source/)
 **/standalone/standalone_helpers.py
+**/standalone/standalone_helpers.sh
 
 .claude/worktrees/
 uv.lock
