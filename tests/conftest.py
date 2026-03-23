@@ -137,7 +137,9 @@ class EnvReportCollector:
             if not category:
                 category = self._get_category_for_tool(tool_name)
         else:
-            parsed_tool, category = self._parse_tool_from_nodeid(nodeid)
+            parsed_tool, parsed_category = self._parse_tool_from_nodeid(nodeid)
+            if not category:
+                category = parsed_category
 
         if not parsed_tool:
             return  # Not a recognizable tool test

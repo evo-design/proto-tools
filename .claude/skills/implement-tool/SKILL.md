@@ -324,7 +324,7 @@ def get_memory_stats() -> dict:
 #!/bin/bash
 set -euo pipefail
 pip install uv
-# For PyTorch tools: use ${RECOMMENDED_TORCH_SPEC:-torch} --torch-backend=auto
+# For PyTorch tools: use ${RECOMMENDED_TORCH_SPEC:-torch} --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 # For JAX tools: use ${RECOMMENDED_JAX_SPEC:-jax[cuda12]}
 uv pip install -r requirements.txt
 ```

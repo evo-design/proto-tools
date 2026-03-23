@@ -351,7 +351,7 @@ def test_create_db_input_rejects_missing_file():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report
+@pytest.mark.include_in_env_report(category="gene_annotation")
 def test_local_blastn_exact_match(nucl_blast_db):
     """Exact subsequence from the database → 100% identity hit."""
     query = (

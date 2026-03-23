@@ -18,7 +18,6 @@ from bio_programming_tools.tools.inverse_folding.proteinmpnn.standalone.inferenc
     ALPHAFOLD_VOCAB,
 )
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
-    InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingStructureInput,
     SequenceScores,
@@ -48,7 +47,7 @@ def test_proteinmpnn_sample_simple(pdb_structure: Structure):
             InverseFoldingStructureInput(structure=pdb_structure),
         ]
     )
-    config = InverseFoldingConfig(
+    config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=10, temperature=1.0, seed=42,
     )
     output = run_proteinmpnn_sample(inp, config)
@@ -78,7 +77,7 @@ def test_proteinmpnn_sample_chunked_batching(pdb_structure: Structure):
     inp = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
     )
-    config = InverseFoldingConfig(
+    config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=6,
         batch_size=2,
         temperature=0.1,
@@ -120,7 +119,7 @@ def test_proteinmpnn_sample_advanced_args(pdb_structure: Structure):
             ),
         ]
     )
-    config = InverseFoldingConfig(
+    config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=10,
         temperature=1.0,
         seed=42,

@@ -9,12 +9,20 @@ from bio_programming_tools.utils.device_manager import DeviceManager
 
 @pytest.fixture
 def mock_2_gpus():
-    """Mock number_of_visible_gpus to return 2 for test duration."""
+    """Mock number_of_visible_gpus to return 2 for test duration.
+
+    Also mocks is_exclusive_process_mode to False so tests can exercise both
+    CPU and RESTART offload strategies independently (Sherlock GPUs run in
+    Exclusive_Process mode which would silently override CPU → RESTART).
+    """
     with patch(
         "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
         return_value=2,
-    ) as mock:
-        yield mock
+    ), patch(
+        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        return_value=False,
+    ):
+        yield
 
 
 @pytest.fixture
@@ -51,8 +59,11 @@ def mock_1_gpu():
     with patch(
         "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
         return_value=1,
-    ) as mock:
-        yield mock
+    ), patch(
+        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        return_value=False,
+    ):
+        yield
 
 
 @pytest.fixture

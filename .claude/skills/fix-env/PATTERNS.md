@@ -164,7 +164,7 @@ uv cache clean flash-attn 2>/dev/null || true
 uv cache clean transformer-engine 2>/dev/null || true
 
 # Install with --refresh
-uv pip install torch==X.Y.Z --torch-backend=auto --refresh
+uv pip install torch==X.Y.Z --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 uv pip install --no-build-isolation flash-attn==A.B.C --refresh
 
 # Validate deep imports
@@ -222,7 +222,7 @@ fi
 
 **Solution:** Install triton AFTER all other packages — let torch's dependency resolver pick the right version:
 ```bash
-uv pip install torch==2.6.0 --torch-backend=auto --refresh
+uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 uv pip install -r requirements.txt
 # triton resolved by torch's dependency — don't pin separately
 ```

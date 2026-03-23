@@ -9,7 +9,7 @@ pip install uv
 
 # Install hardware-aware PyTorch version (from centralized detection)
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 echo "Installing torch-geometric (required by ESM-IF GVP modules)..."
 uv pip install torch-geometric
@@ -115,10 +115,8 @@ mkdir -p "$WEIGHTS_DIR"
 ESMIF_WEIGHTS_FILE="${WEIGHTS_DIR}/esm_if1_gvp4_t16_142M_UR50.pt"
 if [ ! -f "$ESMIF_WEIGHTS_FILE" ]; then
     echo "Downloading ESM-IF1 vanilla weights..."
-    wget -q -O "$ESMIF_WEIGHTS_FILE" \
-        "https://dl.fbaipublicfiles.com/fair-esm/models/esm_if1_gvp4_t16_142M_UR50.pt" || {
-        echo "WARNING: Failed to download ESM-IF1 weights."
-    }
+    curl -fsSL -o "$ESMIF_WEIGHTS_FILE" \
+        "https://dl.fbaipublicfiles.com/fair-esm/models/esm_if1_gvp4_t16_142M_UR50.pt"
 else
     echo "ESM-IF1 weights already present."
 fi
@@ -127,13 +125,10 @@ fi
 PROTEINDPO_WEIGHTS_FILE="${WEIGHTS_DIR}/paired_weights.pt"
 if [ ! -f "$PROTEINDPO_WEIGHTS_FILE" ]; then
     echo "Downloading ProteinDPO weights from Zenodo..."
-    wget -q -O "${WEIGHTS_DIR}/paired_weights.pt.zip" \
-        "https://zenodo.org/records/11218181/files/paired_weights.pt.zip" || {
-        echo "WARNING: Failed to download ProteinDPO weights."
-    }
-    if [ -f "${WEIGHTS_DIR}/paired_weights.pt.zip" ]; then
-        (cd "$WEIGHTS_DIR" && unzip -o paired_weights.pt.zip && rm -f paired_weights.pt.zip)
-    fi
+    curl -fsSL -o "${WEIGHTS_DIR}/paired_weights.pt.zip" \
+        "https://zenodo.org/records/11218181/files/paired_weights.pt.zip"
+    python -c "import zipfile; zipfile.ZipFile('${WEIGHTS_DIR}/paired_weights.pt.zip').extractall('${WEIGHTS_DIR}')"
+    rm -f "${WEIGHTS_DIR}/paired_weights.pt.zip"
 else
     echo "ProteinDPO weights already present."
 fi

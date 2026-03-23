@@ -115,7 +115,7 @@ def test_protenix_model_variants(model_name):
         num_diffusion_samples=1,
         num_diffusion_steps=50,
         seeds=[42],
-        verbose=False,
+        verbose=True,
     )
 
     output = run_protenix(inputs, config)
@@ -150,7 +150,7 @@ def test_protenix_mini_models_with_msa(model_name):
         num_diffusion_samples=1,
         num_diffusion_steps=50,
         seeds=[42],
-        verbose=False,
+        verbose=True,
     )
 
     output = run_protenix(inputs, config)

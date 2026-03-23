@@ -8,7 +8,7 @@ echo "Installing uv package manager..."
 pip install uv
 
 echo "Installing PyTorch and borzoi-pytorch..."
-uv pip install torch==2.7.1 borzoi-pytorch --torch-backend=auto
+uv pip install torch==2.7.1 borzoi-pytorch --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 ARCH=$(uname -m)
 if [ "$ARCH" = "aarch64" ]; then

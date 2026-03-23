@@ -219,7 +219,11 @@ def test_get_memory_stats_via_worker(tool_spec):
 
             from bio_programming_tools.utils.base_config import BaseConfig
 
-            cfg = BaseConfig(verbose=False, timeout=100)
+            # Use a generous timeout: get_memory_stats itself is fast, but the
+            # worker startup imports torch/jax which can take minutes on slow
+            # filesystems (Oak). Stale warmup markers from prior runs can cause
+            # the warmup timeout extension to be skipped.
+            cfg = BaseConfig(verbose=False, timeout=600)
             result = ToolInstance.dispatch(
                 tool_name,
                 command,
@@ -229,7 +233,7 @@ def test_get_memory_stats_via_worker(tool_spec):
             )
         except Exception:
             if instance._worker is not None:
-                result = instance._worker.send(command, timeout=100)
+                result = instance._worker.send(command, timeout=600)
             else:
                 raise
 

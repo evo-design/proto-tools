@@ -31,7 +31,7 @@ fi
 echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
 echo "Detected driver: ${DETECTED_DRIVER_VERSION:-unknown}, CUDA: ${DETECTED_CUDA_VERSION:-unknown}"
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

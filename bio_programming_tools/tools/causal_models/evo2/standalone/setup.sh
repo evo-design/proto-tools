@@ -94,7 +94,7 @@ echo "CC: $(which gcc) ($(gcc --version | head -1))"
 # Install Python packages
 # ============================================================================
 echo "Installing torch..."
-uv pip install torch==2.6.0 --torch-backend=auto --refresh
+uv pip install torch==2.6.0 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 
 echo "Installing build dependencies..."
 uv pip install psutil ninja packaging setuptools wheel numpy

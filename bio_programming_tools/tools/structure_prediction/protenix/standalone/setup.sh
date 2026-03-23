@@ -89,10 +89,19 @@ echo "Added CUDA libraries from: $CUDA_LIB_PATH"
 echo "NVCC location: $(which nvcc)"
 echo "CC: $(which gcc) ($(gcc --version | head -1))"
 
-# Install protenix + torch in a single resolve (like main).
-# --torch-backend=auto selects the right CUDA torch.
-echo "Installing protenix..."
-uv pip install "protenix" --torch-backend=auto
+# Install protenix with CUDA-aware PyTorch wheels. unsafe-best-match is required
+# because uv's default index strategy treats the PyTorch index as authoritative for
+# common packages like tqdm that exist on both indices, causing resolution failures.
+# The version floor (>=1.0.0) prevents silent fallback to the empty 0.0.1 placeholder.
+echo "Installing protenix (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})..."
+uv pip install -r requirements.txt \
+    --extra-index-url "${RECOMMENDED_TORCH_INDEX}" \
+    --index-strategy unsafe-best-match
+
+echo "Upgrading triton..."
+# conda-forge Python ships triton 3.2.0 which causes "libcuda.so not found" runtime
+# failures. Upgrade AFTER all other installs to prevent uv from downgrading it back.
+uv pip install --upgrade triton
 
 # Locate site-packages for patching and sitecustomize.py
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")

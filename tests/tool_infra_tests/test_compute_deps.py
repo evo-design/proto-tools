@@ -19,13 +19,15 @@ def test_torch_compatibility_entries_valid():
     """All PyTorch compatibility entries should be valid tuples."""
     from bio_programming_tools.utils.compute_deps import _TORCH_COMPATIBILITY
 
-    for driver_ver, (min_ver, max_ver) in _TORCH_COMPATIBILITY.items():
+    for driver_ver, (min_ver, max_ver, variant) in _TORCH_COMPATIBILITY.items():
         assert isinstance(driver_ver, int)
         assert isinstance(min_ver, str)
         assert isinstance(max_ver, str)
+        assert isinstance(variant, str)
         spec = f"torch>={min_ver},<{max_ver}"
         assert "torch>=" in spec
         assert ",<" in spec
+        assert variant.startswith("cu"), f"variant {variant!r} should start with 'cu'"
 
 
 def test_jax_compatibility_entries_valid():
@@ -104,6 +106,7 @@ def test_cpu_only():
 
     assert env["DETECTED_COMPUTE_PLATFORM"] == "cpu"
     assert env["RECOMMENDED_TORCH_SPEC"] == "torch"
+    assert env["RECOMMENDED_TORCH_INDEX"] == "https://download.pytorch.org/whl/cpu"
     assert env["RECOMMENDED_JAX_SPEC"] == "jax"
     assert "DETECTED_DRIVER_VERSION" not in env
     assert "DETECTED_CUDA_VERSION" not in env
@@ -137,6 +140,7 @@ def test_h100_driver_570():
     assert env["DETECTED_DRIVER_VERSION"] == "570"
     assert env["DETECTED_CUDA_VERSION"] == "13"
     assert env["RECOMMENDED_TORCH_SPEC"] == "torch>=2.8,<3"
+    assert env["RECOMMENDED_TORCH_INDEX"] == "https://download.pytorch.org/whl/cu128"
     assert env["RECOMMENDED_JAX_SPEC"] == "jax[cuda12]>=0.4.20,<1"
     assert env["RECOMMENDED_JAX_VARIANT"] == "cuda12"
 
@@ -168,6 +172,7 @@ def test_a100_driver_550():
     assert env["DETECTED_DRIVER_VERSION"] == "550"
     assert env["DETECTED_CUDA_VERSION"] == "12"
     assert env["RECOMMENDED_TORCH_SPEC"] == "torch>=2.5,<3"
+    assert env["RECOMMENDED_TORCH_INDEX"] == "https://download.pytorch.org/whl/cu126"
     assert env["RECOMMENDED_JAX_SPEC"] == "jax[cuda12]>=0.4.20,<1"
     assert env["RECOMMENDED_JAX_VARIANT"] == "cuda12"
 
@@ -199,6 +204,7 @@ def test_old_gpu_driver_535():
     assert env["DETECTED_DRIVER_VERSION"] == "535"
     assert env["DETECTED_CUDA_VERSION"] == "12"
     assert env["RECOMMENDED_TORCH_SPEC"] == "torch>=2.4,<2.7"
+    assert env["RECOMMENDED_TORCH_INDEX"] == "https://download.pytorch.org/whl/cu121"
     assert env["RECOMMENDED_JAX_SPEC"] == "jax[cuda12]>=0.4.20,<1"
     assert env["RECOMMENDED_JAX_VARIANT"] == "cuda12"
 

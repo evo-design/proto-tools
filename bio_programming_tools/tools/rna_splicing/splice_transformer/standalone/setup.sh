@@ -13,7 +13,7 @@ TORCH_SPEC="${SPLICE_TRANSFORMER_TORCH_SPEC:-${TORCH_SPEC:-${RECOMMENDED_TORCH_S
 
 echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
 echo "Installing PyTorch: ${TORCH_SPEC}"
-uv pip install --torch-backend=auto "${TORCH_SPEC}"
+uv pip install --extra-index-url "${RECOMMENDED_TORCH_INDEX}" "${TORCH_SPEC}"
 
 echo "Installing remaining Python dependencies..."
 uv pip install -r requirements.txt

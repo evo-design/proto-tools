@@ -242,12 +242,42 @@ pip install uv
 
 # Install hardware-aware PyTorch (from centralized detection)
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
 echo "{ToolName} setup complete!"
+```
+
+### Downloading model weights in setup.sh
+
+When a tool needs to download model weights or archives during setup:
+
+- Use `curl -fsSL` (not `wget` — `wget` is not available in micromamba environments)
+- Use `python -c "import zipfile; ..."` (not `unzip` — `unzip` is not available in micromamba environments)
+- `set -euo pipefail` at the top ensures `curl` failures are fatal — no need for explicit error checks
+- For prebuilt binaries, use `utils/install_binary.py` instead (see `docs/tool-environments.md`)
+
+```bash
+# Download model weights
+WEIGHTS_DIR="${VENV_PATH}/weights"
+mkdir -p "$WEIGHTS_DIR"
+
+WEIGHTS_FILE="${WEIGHTS_DIR}/model.pt"
+if [ ! -f "$WEIGHTS_FILE" ]; then
+    echo "Downloading model weights..."
+    curl -fsSL -o "$WEIGHTS_FILE" "https://example.com/model.pt"
+fi
+
+# Download and extract a zip archive
+ARCHIVE="${WEIGHTS_DIR}/data.zip"
+if [ ! -f "${WEIGHTS_DIR}/data.bin" ]; then
+    echo "Downloading data archive..."
+    curl -fsSL -o "$ARCHIVE" "https://example.com/data.zip"
+    python -c "import zipfile; zipfile.ZipFile('${ARCHIVE}').extractall('${WEIGHTS_DIR}')"
+    rm -f "$ARCHIVE"
+fi
 ```
 
 **standalone/setup.sh for JAX tools** (Subagent 1):

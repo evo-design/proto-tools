@@ -27,7 +27,7 @@ fi
 echo "Detected platform: ${DETECTED_COMPUTE_PLATFORM:-unknown}"
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch}"
 
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 # Install torch-geometric (needed by FAMPNN)
 uv pip install torch-geometric
@@ -81,9 +81,7 @@ REPO_BASE="https://github.com/richardshuai/fampnn/raw/main/weights"
 for WEIGHT_FILE in fampnn_0_0.pt fampnn_0_3.pt fampnn_0_3_cath.pt; do
     if [ ! -f "${WEIGHTS_DIR}/${WEIGHT_FILE}" ]; then
         echo "Downloading ${WEIGHT_FILE}..."
-        curl -L -o "${WEIGHTS_DIR}/${WEIGHT_FILE}" "${REPO_BASE}/${WEIGHT_FILE}" || {
-            echo "WARNING: Failed to download ${WEIGHT_FILE}. You may need to download it manually."
-        }
+        curl -fsSL -o "${WEIGHTS_DIR}/${WEIGHT_FILE}" "${REPO_BASE}/${WEIGHT_FILE}"
     else
         echo "${WEIGHT_FILE} already present."
     fi

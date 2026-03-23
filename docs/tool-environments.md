@@ -38,7 +38,7 @@ pip install uv
 
 # Install hardware-aware PyTorch version (from centralized detection)
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
-uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto
+uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --extra-index-url "${RECOMMENDED_TORCH_INDEX}"
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
@@ -137,7 +137,7 @@ uv cache clean transformer-engine 2>/dev/null || true  # if used
 
 # Install with --refresh flag as defense-in-depth
 echo "Installing torch..."
-uv pip install torch==X.Y.Z --torch-backend=auto --refresh
+uv pip install torch==X.Y.Z --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 
 echo "Installing flash-attn..."
 uv pip install --no-build-isolation flash-attn==A.B.C --refresh

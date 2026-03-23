@@ -96,12 +96,12 @@ echo "CC: $(which gcc) ($(gcc --version | head -1))"
 echo "Installing torch..."
 # Pin torch to 2.7.1: flash-attn pre-built wheels are ABI-sensitive and only
 # work with the exact torch version they were compiled against.
-uv pip install torch==2.7.1 --torch-backend=auto --refresh
+uv pip install torch==2.7.1 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 
 echo "Installing dependencies from requirements.txt..."
 # Use --no-build-isolation-package for flash-attn to ensure it uses the installed torch
 # and doesn't download a different version during build
-uv pip install -r requirements.txt --torch-backend=auto --no-build-isolation-package flash-attn --refresh
+uv pip install -r requirements.txt --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --no-build-isolation-package flash-attn --refresh
 
 # Validate flash-attn ABI compatibility — check the C++ extension actually loads
 if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then

@@ -1,10 +1,21 @@
 """Tests for DeviceManager integration with real tool instances."""
 
 import time
+from unittest.mock import patch
 
 import pytest
 
 from bio_programming_tools.utils.device_manager import OffloadStrategy
+
+
+@pytest.fixture(autouse=True)
+def _mock_exclusive_process():
+    """Disable Exclusive_Process auto-escalation so tests control the strategy."""
+    with patch(
+        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        return_value=False,
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------

@@ -214,7 +214,7 @@ DNA_WITH_GAP_SHORT = "ATGCGATCGTGAAA"  # 14 bp
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report
+@pytest.mark.include_in_env_report(category="sequence_alignment")
 def test_mafft_protein_alignment_with_internal_gap():
     """Test alignment producing internal gaps (PAD deletion)."""
     inputs = MafftInput(sequences=[PROTEIN_WITH_GAP_LONG, PROTEIN_WITH_GAP_SHORT])

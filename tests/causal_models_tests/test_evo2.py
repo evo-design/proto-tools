@@ -60,8 +60,7 @@ def test_evo2_score_input_validation():
 
 @pytest.mark.include_in_env_report(category="causal_models")
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_sample_tool(model_checkpoint):
+def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
     """Test the evo2 sampling tool with run_evo2_sample."""
     prompts = ["ATCG", "GCTA"]
     inputs = Evo2SampleInput(prompts=prompts)

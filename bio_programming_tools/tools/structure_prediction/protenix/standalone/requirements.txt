@@ -1,4 +1,2 @@
-protenix
+protenix>=1.0.0
 ninja
-nvidia-cuda-nvcc-cu12
-nvidia-cuda-runtime-cu12

@@ -9,6 +9,16 @@ import pytest
 from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
 
 
+@pytest.fixture(autouse=True)
+def _mock_exclusive_process():
+    """Disable Exclusive_Process auto-escalation so tests control the strategy."""
+    with patch(
+        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        return_value=False,
+    ):
+        yield
+
+
 # ── Auto allocation ─────────────────────────────────────────────────────
 
 def test_allocate_2_gpus_auto(device_manager, mock_callback):
