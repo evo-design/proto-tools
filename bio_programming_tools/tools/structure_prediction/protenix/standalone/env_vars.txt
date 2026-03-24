@@ -1,4 +1,0 @@
-# Environment variables for Protenix (protein structure prediction)
-#
-# Protenix checkpoint paths are now managed by BPT_MODEL_CACHE
-# (passed through automatically by persistent_worker.py)
