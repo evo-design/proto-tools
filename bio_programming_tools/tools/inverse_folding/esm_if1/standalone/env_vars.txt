@@ -1,2 +1,0 @@
-# ESM-IF weight paths are now managed by BPT_MODEL_CACHE
-# (passed through automatically by persistent_worker.py)

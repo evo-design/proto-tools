@@ -52,7 +52,6 @@ The filename uses a shortened platform ID (no date or commit hash). Known hostna
 patterns are mapped to friendly names (e.g. Sherlock `sh*` nodes → `sherlock`).
 For unrecognized Linux hosts, the sanitized hostname is appended to disambiguate.
 Named clusters (chimera, dgx_spark) and macOS already have unique OS parts. Examples:
-- `bviggiano_macosDarwin_arm64_cpu.md` (Mac M-series, no GPU)
 - `bob_chimera_x86_64_h100.md` (Chimera cluster with H100 GPU)
 - `alice_dgx_spark_arm64_gb10.md` (DGX Spark with GB10 GPU)
 - `viggiano_sherlock_x86_64_h100.md` (Sherlock compute node)
