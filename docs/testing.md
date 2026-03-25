@@ -16,7 +16,8 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 ## Assertions
 
 - **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")` — never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`
-- **No trivial tests**: Don't test that Pydantic stores default values. Test computed properties, validators, normalization, and error cases
+- **No trivial tests**: Don't test that Pydantic stores default values or that field assignment works. Test computed properties, validators, normalization, and error cases
+- **Test behavior where it lives**: If logic is in a shared helper, test the helper once — don't duplicate the same assertions across every tool that calls it. Tool-specific tests should only cover tool-specific behavior
 - **`tmp_path` over `tempfile`**: Use pytest's built-in `tmp_path` fixture
 
 ## Markers

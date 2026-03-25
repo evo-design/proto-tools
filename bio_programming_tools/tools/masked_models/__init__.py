@@ -1,3 +1,7 @@
+from .masking import (
+    MaskingMethod,
+    MaskingStrategy,
+)
 from .shared_data_models import SequenceEmbedding
 from .esm2 import (
     ESM2EmbeddingsConfig,
@@ -33,6 +37,9 @@ from .esm3 import (
 )
 
 __all__ = [
+    # Masking strategies
+    "MaskingStrategy",
+    "MaskingMethod",
     # Shared data models
     "SequenceEmbedding",
     # ESM2 - Embeddings

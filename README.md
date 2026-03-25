@@ -76,7 +76,7 @@ To use these models:
 ## Available Tools 🔬
 
 <pre>
-<a href="bio_programming_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence generation
+<a href="bio_programming_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence models
 ├── <a href="bio_programming_tools/tools/causal_models/evo1/">evo1/</a>
 ├── <a href="bio_programming_tools/tools/causal_models/evo2/">evo2/</a>
 └── <a href="bio_programming_tools/tools/causal_models/progen2/">progen2/</a>
@@ -97,6 +97,9 @@ To use these models:
 <a href="bio_programming_tools/tools/masked_models/">masked_models/</a>                  # Masked language models
 ├── <a href="bio_programming_tools/tools/masked_models/esm2/">esm2/</a>
 └── <a href="bio_programming_tools/tools/masked_models/esm3/">esm3/</a>
+<a href="bio_programming_tools/tools/mutagenesis/">mutagenesis/</a>                    # Random sequence mutagenesis
+├── <a href="bio_programming_tools/tools/mutagenesis/random_nucleotide/">random_nucleotide/</a>
+└── <a href="bio_programming_tools/tools/mutagenesis/random_protein/">random_protein/</a>
 <a href="bio_programming_tools/tools/orf_prediction/">orf_prediction/</a>                 # Open reading frame detection
 ├── <a href="bio_programming_tools/tools/orf_prediction/orfipy/">orfipy/</a>
 └── <a href="bio_programming_tools/tools/orf_prediction/prodigal/">prodigal/</a>

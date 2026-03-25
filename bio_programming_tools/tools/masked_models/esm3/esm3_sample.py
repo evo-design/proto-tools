@@ -7,6 +7,11 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
+from bio_programming_tools.tools.masked_models.masking import (
+    MaskingStrategy,
+    apply_masking_strategy,
+    build_position_score_fn,
+)
 from bio_programming_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
@@ -86,56 +91,21 @@ class ESM3SampleOutput(BaseToolOutput):
 
 # Config:
 class ESM3SampleConfig(BaseConfig):
-    """Configuration object for ESM3 protein sequence sampling.
-
-    This class defines configuration parameters for sampling/generating protein
-    sequences using ESM3's learned sequence distributions. Supports both de novo
-    generation and guided mutation of existing sequences.
+    """Configuration for ESM3 protein sequence sampling.
 
     Attributes:
-        model_checkpoint (str): ESM3 model checkpoint to use. Currently available:
-
-            - ``"esm3_sm_open_v1"``: Small open-source ESM3 model (default)
-
-            Default: ``"esm3_sm_open_v1"``.
-
-        temperature (float): Sampling temperature controlling randomness in amino
-            acid selection:
-
-            - ``< 1.0``: More conservative, higher probability choices (deterministic)
-            - ``1.0``: Standard sampling from the model distribution (default)
-            - ``> 1.0``: More diverse, explores lower probability choices (creative)
-
-            Lower temperatures produce sequences closer to natural proteins, while
-            higher temperatures increase diversity. Default: 1.0.
-
-        decoding_method (str): Method for selecting which positions to mutate:
-
-            - ``"entropy"``: Mutate positions with highest prediction uncertainty (default)
-            - ``"max_logit"``: Mutate positions with lowest confidence predictions
-            - ``"random"``: Randomly select positions to mutate
-
-            ``"entropy"`` typically produces the most natural-looking sequences.
-            Default: ``"entropy"``.
-
-        num_mutations (int): Number of positions to mutate per sequence in each
-            iteration. Higher values produce more divergent sequences but may reduce
-            biological plausibility. Default: 1.
-
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-
-        device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
-            Default: ``"cuda"``.
-
-        verbose (bool): Whether to print progress messages during sampling.
-            Default: ``False``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
+        model_checkpoint: ESM3 model checkpoint. Default: ``"esm3_sm_open_v1"``.
+        temperature: Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
+        masking_strategy: Controls which positions to mask for sampling. Default: random 30%.
+        batch_size: Sequences per GPU forward pass. Default: 1.
+        device: Device to run on. Default: ``"cuda"``.
+        return_logits: Whether to include per-position logits. Default: ``False``.
     """
+    masking_strategy: MaskingStrategy = ConfigField(
+        title="Masking Strategy",
+        default_factory=MaskingStrategy,
+        description="Controls which positions to mask for sampling. Default: random 30%.",
+    )
     model_checkpoint: Literal[ESM3_MODEL_CHECKPOINTS] = ConfigField(
         title="Model Checkpoint",
         default="esm3_sm_open_v1",
@@ -146,19 +116,6 @@ class ESM3SampleConfig(BaseConfig):
         title="Sampling Temperature",
         default=1.0,
         description="Sampling temperature for amino acid selection",
-        advanced=True,
-    )
-    decoding_method: Literal["entropy", "max_logit", "random"] = ConfigField(
-        title="Decoding Method",
-        default="entropy",
-        description="Specifies the method used to determine which positions to mutate",
-        advanced=True,
-    )
-    num_mutations: int = ConfigField(
-        title="Number of Mutations",
-        default=1,
-        description="Number of positions to mutate per sequence",
-        ge=1,
         advanced=True,
     )
     batch_size: int = ConfigField(
@@ -181,6 +138,11 @@ class ESM3SampleConfig(BaseConfig):
         description="Whether to include per-position logits in the output. Disable to save memory.",
         advanced=True,
     )
+
+    def preprocess(self, inputs):
+        """Apply masking strategy unless sequences are already pre-masked."""
+        position_score_fn = build_position_score_fn("esm3", self.masking_strategy, self.device)
+        return apply_masking_strategy(self, inputs, position_score_fn=position_score_fn)
 
 
 # ============================================================================
@@ -208,67 +170,21 @@ def run_esm3_sample(
     inputs: ESM3SampleInput, config: ESM3SampleConfig | None = None,
     instance=None,
 ) -> ESM3SampleOutput:
-    """Sample or mutate protein sequences using ESM3 language model.
+    """Sample protein sequences using ESM3 language model.
 
-    Uses ESM3's learned sequence distributions to generate new protein sequences
-    or intelligently mutate existing ones. Supports multiple decoding strategies
-    for controlling the sampling process and can execute on local or distributed GPUs.
+    The ``preprocess`` hook on :class:`ESM3SampleConfig` applies the masking
+    strategy before this function runs, so ``inputs.sequences`` already
+    contain ``_`` at positions to sample.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing:
-            - Empty list or placeholder sequences for de novo generation
-            - Existing protein sequences for guided mutation
-        config (ESM3SampleConfig): Validated ESM3 sampling configuration specifying
-            model variant, sequence length, temperature, and mutation parameters.
+        inputs: Protein sequences with ``_`` at designable positions.
+        config: Sampling configuration.
 
     Returns:
-        ESM3SampleOutput: Structured output containing:
-            - ``sequences``: List of sampled/mutated protein sequences
-            - Metadata about sampling parameters and execution mode
-
-    Examples:
-        >>> # Mutate existing sequences
-        >>> inputs = MaskedModelInput(
-        ...     sequences=["MVLSPADKTNVKAAW"]
-        ... )
-        >>> config = ESM3SampleConfig(
-        ...     temperature=1.0,
-        ...     decoding_method="entropy",
-        ...     num_mutations=3,
-        ...     verbose=True
-        ... )
-        >>> result = run_esm3_sample(inputs, config)
-        >>> print(f"Original: {inputs.sequences[0]}")
-        >>> print(f"Mutated:  {result.sequences[0]}")
-        >>>
-        >>> # Generate diverse variants with higher temperature
-        >>> config = ESM3SampleConfig(
-        ...     temperature=1.5,  # More diverse
-        ...     num_mutations=5
-        ... )
-        >>> result = run_esm3_sample(inputs, config)
-        >>>
-        >>> # Conservative mutations with entropy-based selection
-        >>> config = ESM3SampleConfig(
-        ...     temperature=0.7,  # More conservative
-        ...     decoding_method="entropy",
-        ...     num_mutations=1  # Single mutation
-        ... )
-        >>> result = run_esm3_sample(inputs, config)
-        >>>
-        >>> # Iterative refinement with multiple mutations
-        >>> for iteration in range(5):
-        ...     result = run_esm3_sample(inputs, config)
-        ...     inputs = MaskedModelInput(sequences=result.sequences)
-        ...     print(f"Iteration {iteration}: {result.sequences[0]}")
-
-    Note:
-        - For protein design workflows, start with low temperatures and few mutations
+        ESM3SampleOutput with sampled sequences and optional logits.
     """
-
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
-    # Local execution
     logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm3",
@@ -276,8 +192,6 @@ def run_esm3_sample(
             "operation": "sample",
             "sequences": inputs.sequences,
             "temperature": config.temperature,
-            "decoding_method": config.decoding_method,
-            "num_mutations": config.num_mutations,
             "batch_size": config.batch_size,
             "model_checkpoint": config.model_checkpoint,
             "device": config.device,
@@ -293,8 +207,6 @@ def run_esm3_sample(
             "model_checkpoint": config.model_checkpoint,
             "num_sequences": len(inputs.sequences),
             "temperature": config.temperature,
-            "decoding_method": config.decoding_method,
-            "num_mutations": config.num_mutations,
         },
         sequences=result["sequences"],
         logits=result["logits"],

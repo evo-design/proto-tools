@@ -159,120 +159,110 @@ class ESM2Model:
             "attention_masks": all_attention_masks,
         }
 
-    def _select_positions(
-        self,
-        aa_logits: torch.Tensor,
-        attention_mask: torch.Tensor,
-        decoding_method: str,
-        num_mutations: int,
-        device: str,
-    ) -> torch.Tensor:
-        """Select positions for mutation (padding excluded)."""
-        device_obj = torch.device(device)
-        if decoding_method == "entropy":
-            probs = torch.softmax(aa_logits, dim=-1)
-            log_probs = torch.log_softmax(aa_logits, dim=-1)
-            scores = -torch.sum(probs * log_probs, dim=-1)
-        elif decoding_method == "max_logit":
-            scores = -torch.max(aa_logits, dim=-1)[0]
-        elif decoding_method == "random":
-            scores = torch.rand(aa_logits.shape[:-1], device=device_obj)
-        else:
-            raise ValueError(f"Unknown decoding_method: {decoding_method}")
-        scores = scores.masked_fill(~attention_mask.bool(), float("-inf"))
-
-        # Validate that num_mutations does not exceed the number of valid (non-padding) positions
-        valid_lengths = attention_mask.sum(dim=1)
-        min_valid = int(valid_lengths.min().item()) if valid_lengths.numel() > 0 else 0
-        if num_mutations > min_valid:
-            raise ValueError(f"num_mutations ({num_mutations}) cannot exceed the shortest sequence length ({min_valid}).")
-
-        position_probs = torch.softmax(scores, dim=1)
-        return torch.multinomial(position_probs, num_mutations, replacement=False)
-
     def sample(
         self,
         sequences: List[str],
         temperature: float,
-        decoding_method: str,
-        num_mutations: int,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Sample or mutate protein sequences using ESM2.
+        """Sample amino acids at masked positions ('_') in protein sequences.
+
+        Receives sequences with '_' at positions to be sampled, injects
+        ``[MASK]`` tokens at those positions, runs a forward pass, and samples
+        replacement amino acids from the model's predictions.
 
         Args:
-            sequences: List of protein sequences to mutate
-            temperature: Sampling temperature for amino acid selection
-            decoding_method: Method for selecting positions ("entropy", "max_logit", "random")
-            num_mutations: Number of positions to mutate per sequence
-            batch_size: Number of sequences per GPU forward pass. Larger batches
-                are faster but use more memory.
-            device: Device to run on
-            verbose: Whether to print progress
-            return_logits: Whether to return logits used for sampling
+            sequences: Protein sequences with '_' at positions to sample.
+            temperature: Sampling temperature for amino acid selection.
+            batch_size: Sequences per GPU forward pass.
+            device: Device to run on.
+            verbose: Whether to print progress.
+            return_logits: Whether to return per-position AA logits.
 
         Returns:
-            Dictionary with "sequences" (List[str]) and optionally "logits" (Tensor)
+            Dictionary with "sequences" and optionally "logits".
         """
         device_obj = torch.device(device)
 
-        # Lazy load on first call or device change
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
 
-        # Helper: Sample amino acids from logits
-        def sample_amino_acids(
-            seqs: List[str],
-            aa_logits: torch.Tensor,
-            target_positions: torch.Tensor,
-        ) -> List[str]:
-            batch_size, num_positions = target_positions.shape
-            batch_idx = torch.arange(batch_size, device=device_obj).unsqueeze(1)
+        # Record mask positions, replace '_' with the model's mask token
+        mask_token = self.tokenizer.mask_token
+        mask_positions: List[List[int]] = []
+        tokenizer_sequences: List[str] = []
+        for seq in sequences:
+            positions = [i for i, c in enumerate(seq) if c == "_"]
+            mask_positions.append(positions)
+            tokenizer_sequences.append(seq.replace("_", mask_token))
 
-            target_logits = aa_logits[batch_idx, target_positions]
-            scaled_logits = target_logits / max(temperature, 1e-8)
-            token_probs = torch.softmax(scaled_logits, dim=2)
+        # Batch the forward passes
+        batch_ranges = [
+            (i, min(i + batch_size, len(sequences)))
+            for i in range(0, len(sequences), batch_size)
+        ]
 
-            flat_probs = token_probs.view(-1, aa_logits.shape[-1])
-            sampled_aa_idx = torch.multinomial(flat_probs, 1).squeeze(1)
-            sampled_aa_idx = sampled_aa_idx.view(batch_size, num_positions)
+        all_sampled: List[str] = []
+        all_logits: List[torch.Tensor] = []
 
-            selected_positions_list = target_positions.tolist()
-            sampled_aa_idx_list = sampled_aa_idx.tolist()
+        for start, end in tqdm(
+            batch_ranges, desc="ESM2 sampling", unit="batch",
+            disable=not verbose,
+        ):
+            batch_tok_seqs = tokenizer_sequences[start:end]
+            batch_masks = mask_positions[start:end]
+            batch_originals = sequences[start:end]
 
-            result = []
-            for orig_seq, pos_list, aa_idx_list in zip(seqs, selected_positions_list, sampled_aa_idx_list):
-                new_aas = [AMINO_ACIDS_LIST[idx] for idx in aa_idx_list]
-                mutated = orig_seq
-                for pos, new_aa in zip(pos_list, new_aas):
-                    mutated = mutated[:pos] + new_aa + mutated[pos + 1:]
-                result.append(mutated)
-            return result
+            # Tokenize (mask tokens are handled natively by the tokenizer)
+            batch_inputs = self.tokenizer(
+                batch_tok_seqs,
+                add_special_tokens=True,
+                padding=True,
+                truncation=False,
+                return_tensors="pt",
+            )
+            input_ids = batch_inputs["input_ids"].to(device_obj)
+            attention_mask = batch_inputs["attention_mask"].to(device_obj)
 
-        # Run inference on sequences
-        outputs = self(
-            sequences=sequences,
-            batch_size=batch_size,
-            device=device,
-            verbose=verbose,
-            return_logits=True,  # Always need logits for sampling
-        )
-        seq_logits = outputs["logits"].to(device_obj)
-        attention_masks = outputs["attention_masks"].to(device_obj)
-        target_positions = self._select_positions(
-            seq_logits, attention_masks, decoding_method, num_mutations, device
-        )
-        sampled_sequences = sample_amino_acids(sequences, seq_logits, target_positions)
+            # Forward pass
+            with torch.inference_mode():
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                )
+                # AA logits: remove BOS/EOS, keep only standard amino acids
+                aa_logits = outputs["logits"][:, 1:-1, :][:, :, self.amino_acid_token_ids]
+
+            # Sample at mask positions for each sequence
+            for seq_idx, (orig_seq, positions) in enumerate(
+                zip(batch_originals, batch_masks)
+            ):
+                if not positions:
+                    all_sampled.append(orig_seq)
+                else:
+                    pos_t = torch.tensor(positions, device=device_obj)
+                    pos_logits = aa_logits[seq_idx, pos_t]
+                    scaled = pos_logits / max(temperature, 1e-8)
+                    probs = torch.softmax(scaled, dim=-1)
+                    sampled_idx = torch.multinomial(probs, 1).squeeze(-1)
+
+                    chars = list(orig_seq)
+                    for pos, aa_idx in zip(positions, sampled_idx.tolist()):
+                        chars[pos] = AMINO_ACIDS_LIST[aa_idx]
+                    all_sampled.append("".join(chars))
+
+            if return_logits:
+                for seq_idx, orig_seq in enumerate(batch_originals):
+                    all_logits.append(aa_logits[seq_idx, :len(orig_seq)])
 
         return {
-            "sequences": sampled_sequences,
-            "logits": seq_logits.float() if return_logits else None,
+            "sequences": all_sampled,
+            "logits": all_logits if return_logits else None,
         }
 
     def score(
@@ -510,9 +500,7 @@ def dispatch(input_dict: dict) -> dict:
         return _model.sample(
             sequences=input_dict.get("sequences", []),
             temperature=input_dict.get("temperature", 1.0),
-            decoding_method=input_dict.get("decoding_method", "entropy"),
-            num_mutations=input_dict.get("num_mutations", 1),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),

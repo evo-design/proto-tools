@@ -352,13 +352,14 @@ class ColabfoldSearchConfig(BaseConfig):
         description="Number of CPU threads (None for auto-detect)",
         hidden=True,
     )
-    # TODO: Local GPU search is not currently supported
-    # use_gpu: bool = ConfigField(
-    #     title="Use GPU Acceleration",
-    #     default=False,
-    #     description="Enable GPU-accelerated search using MMseqs2-GPU (requires GPU databases to be set up with GPU=1)",
-    #     hidden=True,
-    # )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=3600,
+        ge=1,
+        description="Maximum execution time in seconds. Full database searches can take >10 minutes.",
+        hidden=True,
+        include_in_key=False,
+    )
     # Private field to track if user specified custom db_dir
     _user_specified_db_dir: bool = False
     # Private field to track if user specified custom output_dir

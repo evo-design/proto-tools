@@ -196,7 +196,7 @@ from .inverse_folding import (  # Shared Data Models; ESM-IF; ProteinMPNN; Ligan
 )
 
 # Masked model tools
-from .masked_models import (  # ESM2; ESM3
+from .masked_models import (  # ESM2; ESM3; Masking
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
@@ -218,6 +218,7 @@ from .masked_models import (  # ESM2; ESM3
     ESM3StructurePredictionConfig,
     ESM3StructurePredictionInput,
     ESM3StructurePredictionOutput,
+    MaskingStrategy,
     SequenceEmbedding,
     run_esm2_embeddings,
     run_esm2_sample,
@@ -226,6 +227,18 @@ from .masked_models import (  # ESM2; ESM3
     run_esm3_sample,
     run_esm3_score,
     run_esm3_structure_prediction,
+)
+
+# Mutagenesis tools
+from .mutagenesis import (  # Random protein; Random nucleotide
+    RandomNucleotideSampleConfig,
+    RandomNucleotideSampleInput,
+    RandomNucleotideSampleOutput,
+    RandomProteinSampleConfig,
+    RandomProteinSampleInput,
+    RandomProteinSampleOutput,
+    run_random_nucleotide_sample,
+    run_random_protein_sample,
 )
 
 # ORF prediction tools
@@ -737,6 +750,7 @@ __all__ = [
     "RFdiffusion3DesignSpec",
     "RFdiffusion3Structure",
     # Masked models - shared
+    "MaskingStrategy",
     "SequenceEmbedding",
     # Masked models - ESM2 Embeddings
     "run_esm2_embeddings",
@@ -783,4 +797,14 @@ __all__ = [
     "CONTEXT_LENGTH",
     "SPLICE_TISSUE_CHANNEL_INDEX",
     "TARGET_LENGTH",
+    # Mutagenesis - Random Protein Sampling
+    "run_random_protein_sample",
+    "RandomProteinSampleInput",
+    "RandomProteinSampleConfig",
+    "RandomProteinSampleOutput",
+    # Mutagenesis - Random Nucleotide Sampling
+    "run_random_nucleotide_sample",
+    "RandomNucleotideSampleInput",
+    "RandomNucleotideSampleConfig",
+    "RandomNucleotideSampleOutput",
 ]

@@ -75,7 +75,7 @@ bio_programming_tools/
 │   │   ├── {tool_name}/            # e.g., blast, esmfold
 │   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
 │   │   │   ├── tool_name.py        # Implementation
-│   │   │   ├── cite.bib            # BibTeX citation for the tool
+│   │   │   ├── cite.bib            # BibTeX citation (optional if no published paper)
 │   │   │   ├── examples/           # Example notebook
 │   │   │   │   └── example.ipynb   # Working example with imports and output
 │   │   │   └── standalone/         # [optional] Isolated tool environment
@@ -173,7 +173,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 - Use `logging.getLogger(__name__)` — never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
-- Every tool directory must include a `cite.bib` file and an `examples/example.ipynb` notebook
+- Every tool directory must include an `examples/example.ipynb` notebook. Include a `cite.bib` when wrapping a published model or tool; omit it for simple algorithmic utilities with no paper to cite
 
 **The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 
@@ -191,6 +191,7 @@ Flat functions only (no test classes). See `docs/testing.md` for full convention
 - Flake8 only checks: F401, F841
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default** — run with `pytest --integration` or `pytest --all`
+- **Generally use `--all` when running tests** to include integration and GPU tests
 - Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
 - Test logs saved to `logs/` — every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
 - **`BPT_MODEL_CACHE`** controls where all tools store model weights: unset (default, repo-local `model_cache/`), `/absolute/path` (shared directory), `IN_ENV` (legacy, per-venv), `NONE` (pass through). Per-tool override: `BPT_{TOOL}_WEIGHTS_DIR`. Configurable via `.bpt.env`. See `docs/tool-environments.md`.
