@@ -282,6 +282,10 @@ print(f"Processed {len(result.results)} sequences")
 
 ### Configuration
 
+<ParamField path="masking_strategy" type="MaskingStrategy">
+  Controls which positions to mask for sampling. Default: random 30%.
+</ParamField>
+
 <ParamField path="model_checkpoint" type="enum" default="esm2_t33_650M_UR50D">
   Name of the ESM2 model variant to use
 
@@ -290,16 +294,6 @@ print(f"Processed {len(result.results)} sequences")
 
 <ParamField path="temperature" type="number" default="1.0">
   Sampling temperature for amino acid selection
-</ParamField>
-
-<ParamField path="decoding_method" type="enum" default="entropy">
-  Method for selecting positions to mutate
-
-  Options: `entropy`, `max_logit`, `random`
-</ParamField>
-
-<ParamField path="num_mutations" type="integer" default="1">
-  Number of positions to mutate per sequence
 </ParamField>
 
 <ParamField path="batch_size" type="integer" default="1">
