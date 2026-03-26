@@ -1,4 +1,4 @@
-# AlphaFold2 Structure Prediction
+# AlphaFold2
 
 ## Overview
 

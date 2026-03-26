@@ -1,4 +1,4 @@
-# TMalign Structure Alignment
+# TMalign
 
 ## Overview
 

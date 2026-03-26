@@ -258,7 +258,7 @@ A model is downloading weights to `$HOME` instead of following a symlink. Check 
 du -h --max-depth=1 ~ | sort -rh | head -10
 ```
 
-Check your `BPT_MODEL_CACHE` setting in `.bpt.env` — if unset, weights go to `model_cache/` at the repo root. See [docs/tool-environments.md](../docs/tool-environments.md) for all options.
+Check your `BPT_MODEL_CACHE` setting in `.bpt.env` — if unset, weights go to `model_cache/` at the repo root. See [tool-environments.md](tool-environments.md) for all options.
 
 ### "Disk quota exceeded" during `pip install`
 

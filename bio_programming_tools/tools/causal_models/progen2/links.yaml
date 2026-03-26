@@ -1,0 +1,8 @@
+github: https://github.com/enijkamp/progen2
+huggingface:
+  - https://huggingface.co/hugohrban/progen2-small
+  - https://huggingface.co/hugohrban/progen2-medium
+  - https://huggingface.co/hugohrban/progen2-large
+  - https://huggingface.co/hugohrban/progen2-xlarge
+  - https://huggingface.co/hugohrban/progen2-oas
+  - https://huggingface.co/hugohrban/progen2-BFD90

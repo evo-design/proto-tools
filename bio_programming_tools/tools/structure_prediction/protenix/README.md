@@ -1,4 +1,4 @@
-# Protenix Structure Prediction
+# Protenix
 
 ## Overview
 

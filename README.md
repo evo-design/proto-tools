@@ -4,7 +4,7 @@
 [![Lint Check](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/flake8_check.yml)
 [![Run Unit Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-unit-tests.yml)
 [![Run Integration Tests](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/run-integration-tests.yml)
-[![docs_autogen](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml/badge.svg)](https://github.com/evo-design/bio-programming-tools/actions/workflows/docs_autogen.yml)
+
 
 Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **60+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
@@ -16,6 +16,16 @@ You can use it as a standalone Python library or as part of the broader [bio-pro
 
 > [!NOTE]
 > **On Stanford Sherlock?** The cluster's old glibc requires a container-based setup. See the [Sherlock HPC Setup Guide](notes/sherlock-setup.md) for step-by-step instructions.
+
+### Step 0: Clone the repository 📦
+
+```bash
+git clone https://github.com/evo-design/bio-programming-tools.git
+cd bio-programming-tools
+```
+
+> [!NOTE]
+> In the future, we plan to enable a direct PyPI install (`pip install bio-programming-tools`), but prior to the public release we will be using this local install approach.
 
 ### Step 1: Install the package 🐍
 
@@ -48,7 +58,7 @@ cp .bpt.env.example .bpt.env
 BPT_MODEL_CACHE=/path/to/shared/weights
 ```
 
-Or set the environment variable directly: `export BPT_MODEL_CACHE=/path/to/shared/weights`. See [docs/tool-environments.md](docs/tool-environments.md) for all options.
+Or set the environment variable directly: `export BPT_MODEL_CACHE=/path/to/shared/weights`. See [notes/tool-environments.md](notes/tool-environments.md) for all options.
 
 ### Step 3: HuggingFace authentication (optional) 🔑
 

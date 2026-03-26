@@ -110,7 +110,7 @@ pytest --all --cpu              # Slow + integration, but skip GPU
 
 Integration tests do not run on every push. To run them on a PR, add the `run-integration` label. Once the label is present, integration tests will re-run automatically on each subsequent push. Remove the label to stop running them.
 
-See [docs/testing.md](docs/testing.md) for full conventions including naming, assertions, and file structure.
+See [notes/testing.md](notes/testing.md) for full conventions including naming, assertions, and file structure.
 
 ## Implementing a New Tool
 
