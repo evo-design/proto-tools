@@ -1,4 +1,4 @@
-# Multi-source Sequence Fetch
+# Sequence Fetch
 
 ## Overview
 

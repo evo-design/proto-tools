@@ -1,4 +1,4 @@
-# NCBI Entrez Tools
+# NCBI Entrez
 
 ## Overview
 

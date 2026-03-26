@@ -1,4 +1,4 @@
-# BioEmu Conformational Ensemble Sampling
+# BioEmu
 
 ## Overview
 

@@ -1,4 +1,4 @@
-# Segmasker Low-Complexity Detection
+# Segmasker
 
 ## Overview
 

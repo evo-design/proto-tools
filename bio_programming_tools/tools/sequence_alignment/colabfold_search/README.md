@@ -1,4 +1,4 @@
-# ColabFold MSA Search
+# ColabFold Search
 
 ## Overview
 

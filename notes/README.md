@@ -7,16 +7,13 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 ## Directory Structure
 
 - `sherlock-setup.md` — Stanford Sherlock cluster-specific setup (temporary, for beta testers)
+- `tool-environments.md` — Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol
+- `testing.md` — Test structure, assertions, markers, naming conventions
+- `usage-guide.md` — Claude Code script patterns, batch persistence, GPU tools, citations
 - `environments/` — Machine-generated Markdown compatibility reports (see `environments/README.md`)
 
-## Docs Ownership
+## Documentation
 
-- This repository owns parsing and generation for tool docs via `docs/generate_docs.py`.
-- Generated tool pages in `docs/tools/` are treated as source artifacts for the unified outer docs site.
-- Tool docs are auto-generated on pushes to `main` when tool README/source files change.
+User-facing documentation reference pages are auto-generated from Python docstrings and field descriptions in the source code.
 
-## Docs Parsing Fallbacks
-
-- JSON schema extraction remains primary for API reference generation.
-- For arbitrary model field types (for example `pandas.DataFrame`, `numpy.ndarray`), the generator falls back to Pydantic field introspection and emits readable type aliases (`DataFrame`, `ndarray`).
-- Manual README input/config/output sections are stripped only when corresponding API sections are generated successfully, so hand-written output docs remain as a safety net when schema extraction still fails.
+Developer reference docs (`tool-environments.md`, `testing.md`, `usage-guide.md`) live here in `notes/` as the canonical source for internal development guidance.

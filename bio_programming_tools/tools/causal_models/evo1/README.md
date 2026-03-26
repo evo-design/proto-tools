@@ -1,4 +1,4 @@
-# Evo1 Sample
+# Evo1
 
 ## Overview
 Evo1 is a 7-billion parameter DNA language model built on the StripedHyena architecture, trained on 2.7 million prokaryotic and phage genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.

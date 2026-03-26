@@ -1,4 +1,4 @@
-# USalign Structure Alignment
+# USalign
 
 ## Overview
 

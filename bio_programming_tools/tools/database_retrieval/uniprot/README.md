@@ -1,4 +1,4 @@
-# UniProt Fetch
+# UniProt
 
 ## Overview
 

@@ -1,4 +1,4 @@
-# Borzoi Prediction
+# Borzoi
 
 ## Overview
 
