@@ -1,5 +1,5 @@
 """
-Evo1 DNA sequence sampling.
+bio_programming_tools/tools/causal_models/evo1/evo1_sample.py
 
 This module provides a standardized interface for sampling DNA sequences
 using the Evo1 language model, supporting multiple model checkpoints
@@ -43,7 +43,7 @@ class Evo1SampleInput(BaseToolInput):
     """Input object for Evo1 DNA sequence sampling.
 
     Attributes:
-        prompts (List[str]): Prompt sequences for DNA generation.
+        prompts (list[str]): Prompt sequences for DNA generation.
             Can be a single prompt string or a list of prompt strings.
     """
 
@@ -65,8 +65,8 @@ class Evo1SampleOutput(BaseToolOutput):
     """Output from Evo1 DNA sequence sampling.
 
     Attributes:
-        sequences (List[str]): Generated DNA sequences.
-        scores (Optional[List[float]]): Mean log-probability scores per sequence.
+        sequences (list[str]): Generated DNA sequences.
+        scores (list[float] | None): Mean log-probability scores per sequence.
     """
 
     sequences: List[str] = Field(description="Generated DNA sequences")
@@ -105,16 +105,16 @@ class Evo1SampleConfig(BaseConfig):
     """Configuration for Evo1 DNA sequence sampling.
 
     Attributes:
-        model_name: Evo1 model checkpoint to use.
-        top_k: Top-k sampling parameter.
-        temperature: Sampling temperature.
-        top_p: Top-p (nucleus) sampling parameter.
-        num_tokens: Number of tokens to generate.
-        prepend_prompt: Whether to prepend prompt to output.
-        batch_size: Number of sequences to process simultaneously on GPU.
+        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use.
+        top_k (int): Top-k sampling parameter.
+        temperature (float): Sampling temperature.
+        top_p (float): Top-p (nucleus) sampling parameter.
+        num_tokens (int): Number of tokens to generate.
+        prepend_prompt (bool): Whether to prepend prompt to output.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors.
-        device: Device to run on.
+        device (str): Device to run on.
     """
 
     model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
@@ -202,7 +202,7 @@ def run_evo1_sample(
 
     Args:
         inputs (Evo1SampleInput): Validated input containing prompt sequences.
-        config (Evo1SampleConfig): Sampling configuration including model
+        config (Evo1SampleConfig | None): Sampling configuration including model
             checkpoint, temperature, and top-k parameters.
 
     Returns:

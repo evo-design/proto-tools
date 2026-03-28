@@ -1,8 +1,7 @@
-"""Shared data models for masked language model tools (ESM2, ESM3).
+"""bio_programming_tools/tools/masked_models/shared_data_models.py
 
 Contains base schemas for embeddings, scoring, and sampling operations
-shared across all masked/bidirectional protein language models.
-"""
+shared across all masked/bidirectional protein language models."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,7 +28,7 @@ class MaskedModelInput(BaseToolInput):
     sequences used across all masked protein language model tools (ESM2, ESM3).
 
     Attributes:
-        sequences (List[str]): Protein sequence(s) to process. Can be
+        sequences (list[str]): Protein sequence(s) to process. Can be
             provided as:
 
             - A single protein sequence string (e.g., ``"MVLSPADKTN"``)
@@ -78,6 +77,11 @@ class MaskedModelConfig(BaseConfig):
     Provides common configuration parameters shared across all masked protein
     language model tools, including batch processing, device management, and
     execution settings.
+
+    Attributes:
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory.
+        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
     """
 
     batch_size: int = ConfigField(
@@ -105,9 +109,9 @@ class SequenceEmbedding(BaseModel):
     Follows the same pattern as ``SequenceScores`` for scoring tools.
 
     Attributes:
-        mean_embedding: Mean-pooled embedding vector for one sequence.
-        attention_mask: Binary mask indicating valid positions (1) vs padding (0).
-        logits: Optional per-position amino acid logits for one sequence.
+        mean_embedding (list[float]): Mean-pooled embedding vector for one sequence.
+        attention_mask (list[int]): Binary mask indicating valid positions (1) vs padding (0).
+        logits (list[list[float]] | None): Optional per-position amino acid logits for one sequence.
     """
 
     mean_embedding: List[float] = Field(
@@ -127,6 +131,10 @@ class MaskedModelOutput(BaseToolOutput):
 
     Contains per-sequence embedding results bundled as ``SequenceEmbedding``
     objects.
+
+    Attributes:
+        results (list[SequenceEmbedding]): Per-sequence embedding results, each containing
+            a mean-pooled embedding vector, attention mask, and optional logits.
     """
 
     results: List[SequenceEmbedding] = Field(
@@ -185,7 +193,7 @@ class MaskedModelScoringInput(BaseToolInput):
     """Input for masked model sequence scoring tools.
 
     Attributes:
-        sequences: Protein sequences to score. Can be provided as a single
+        sequences (list[str]): Protein sequences to score. Can be provided as a single
             string or a list of strings.
     """
 
@@ -209,11 +217,11 @@ class MaskedModelScoringConfig(BaseConfig):
     """Base configuration for masked model sequence scoring.
 
     Attributes:
-        batch_size: Number of sequences to process simultaneously on GPU.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors.
-        device: Device to run the model on.
-        verbose: Whether to print status messages.
+        device (str): Device to run the model on.
+        verbose (bool): Whether to print status messages.
     """
 
     batch_size: int = ConfigField(
@@ -238,9 +246,9 @@ class SequenceScores(BaseModel):
     via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
 
     Attributes:
-        metrics: Dictionary of scalar scoring metrics.
-        logits: Optional per-position logits array.
-        vocab: Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
+        logits (list[list[float]] | None): Optional per-position logits array.
+        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
     metrics: Dict[str, float] = Field(
@@ -283,7 +291,7 @@ class MaskedModelScoringOutput(BaseToolOutput):
     """Standardized output for masked model sequence scoring tools.
 
     Attributes:
-        scores (List[SequenceScores]): List of scoring outputs, one per input
+        scores (list[SequenceScores]): List of scoring outputs, one per input
             sequence. Each entry contains metrics (log_likelihood,
             avg_log_likelihood, perplexity) and optional per-position logits.
     """

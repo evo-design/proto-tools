@@ -1,5 +1,5 @@
 """
-tool_registry.py
+bio_programming_tools/tools/tool_registry.py
 
 Tool registry for managing tool discovery and schema generation.
 
@@ -61,6 +61,29 @@ class ToolSpec(BaseModel):
 
     Stores tool metadata in the registry and is automatically serialized
     by FastAPI to JSON for API/frontend integration.
+
+    Attributes:
+        key (str): Internal identifier (e.g., ``"blast-search"``).
+        label (str): External UI display name (e.g., ``"BLAST Search"``).
+        category (str): Tool category (e.g., ``"gene_annotation"``).
+        description (str): Detailed description of tool functionality.
+        uses_gpu (bool): Whether this tool requires a GPU.
+        device_count (str): Expected device count requirement
+            (e.g., ``"1"``, ``"1-2"``, ``">=1"``).
+        config_model (type[BaseModel]): Pydantic model for configuration validation
+            and schema generation.
+        input_model (type[BaseToolInput]): Pydantic model class for primary input validation.
+        output_model (type[BaseToolOutput]): Pydantic model class for tool output validation.
+        function (Callable): The wrapped tool function.
+        source_file (Path): Path to the source file where the tool function is defined.
+        example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal
+            valid input for testing.
+        iterable_input_field (str | None): Input field name containing the iterable list
+            of items (for ToolPool fan-out).
+        iterable_output_field (str | None): Output field name containing the iterable list
+            of results (for ToolPool fan-out).
+        cacheable (bool): Whether this tool's results should be cached in the
+            program-scoped cache.
     """
 
     # Public fields - exposed in API
@@ -144,7 +167,7 @@ class ToolRegistry:
     - count(): Get number of registered tools
 
     Examples:
-        Registration (in tool files):
+        Registration:
         >>> @tool(
         ...     key="blast-search",
         ...     label="BLAST Search",
@@ -179,10 +202,10 @@ class ToolRegistry:
         """Register external execution backend(s).
 
         Args:
-            backend: Single-item dispatch.
+            backend (Callable): Single-item dispatch.
                 Called with ``(tool_key, inputs, config) -> Optional[BaseToolOutput]``.
                 Return output to handle the call, or None to fall through to local.
-            batch_backend: Batch dispatch (optional, used by ToolPool).
+            batch_backend (Callable | None): Batch dispatch (optional, used by ToolPool).
                 Called with ``(tool_key, list[inputs], config) -> list[BaseToolOutput]``.
                 When available, ToolPool uses this for a single ``.map()`` call
                 instead of N × single dispatches.
@@ -223,16 +246,24 @@ class ToolRegistry:
         5. Validates device allocation against tool requirements
 
         Args:
-            key: Unique identifier (e.g., "blast-search", "esm3-embedding")
-            label: Readable display name (e.g., "BLAST Search", "ESM3 Embedding")
-            category: Tool category matching directory name (e.g., "gene_annotation")
-            input_class: Pydantic model class for primary input validation
-            config_class: Pydantic model class for tool configuration validation
-            output_class: Pydantic model class for tool output validation
-            description: Readable description
-            uses_gpu: Whether this tool requires a GPU for execution
-            device_count: Expected device count (e.g., "1", "1-2", ">=1", "<=2").
+            key (str): Unique identifier (e.g., "blast-search", "esm3-embedding")
+            label (str): Readable display name (e.g., "BLAST Search", "ESM3 Embedding")
+            category (str): Tool category matching directory name (e.g., "gene_annotation")
+            input_class (type[BaseToolInput]): Pydantic model class for primary input validation
+            config_class (type[BaseConfig]): Pydantic model class for tool configuration validation
+            output_class (type[BaseToolOutput]): Pydantic model class for tool output validation
+            description (str): Readable description
+            uses_gpu (bool): Whether this tool requires a GPU for execution
+            device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
+            example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
+                input for testing and examples.
+            iterable_input_field (str | None): Input field name containing the iterable list of
+                items for ToolPool fan-out and per-item caching.
+            iterable_output_field (str | None): Output field name containing the iterable list of
+                results for ToolPool fan-out and per-item caching.
+            cacheable (bool): Whether this tool's results should be cached in the
+                program-scoped cache.
 
         Returns:
             Decorator that wraps the function with metadata tracking
@@ -513,7 +544,7 @@ class ToolRegistry:
         Returns list of ToolSpec models that FastAPI automatically serializes to JSON.
 
         Returns:
-            List of ToolSpec Pydantic models
+            list[ToolSpec]: List of ToolSpec Pydantic models
         """
         return list(cls._registry.values())
 
@@ -523,10 +554,10 @@ class ToolRegistry:
         Get tool spec by key.
 
         Args:
-            key: Tool identifier
+            key (str): Tool identifier
 
         Returns:
-            Tool specification object
+            ToolSpec: Tool specification object
 
         Raises:
             ValueError: If key not found in registry
@@ -554,6 +585,9 @@ class ToolRegistry:
 
         Uses a lenient schema generator that replaces non-serializable types
         (e.g. pandas DataFrame) with a generic object schema instead of raising.
+
+        Args:
+            key (str): Tool identifier.
 
         TODO: Remove this workaround once DataFrame fields are refactored out of
         output models into .to_dataframe() methods. The underlying data should be
@@ -606,7 +640,7 @@ class ToolRegistry:
         and maps to category. Handles multi-word tool names like 'colabfold_search'.
 
         Returns:
-            Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
+            dict[str, str]: Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
         """
         tool_categories: Dict[str, str] = {}
         for spec in cls._registry.values():
@@ -627,10 +661,10 @@ class ToolRegistry:
         Get BibTeX citation for a tool by key.
 
         Args:
-            key: Tool identifier (e.g., 'evo2-sample', 'blast-search')
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
 
         Returns:
-            BibTeX citation string, or None if no citation file exists
+            str | None: BibTeX citation string, or None if no citation file exists
 
         Raises:
             ValueError: If tool key is not found in registry
@@ -651,8 +685,8 @@ class ToolRegistry:
         Get all available citations as {tool_key: bibtex_string}.
 
         Returns:
-            Dictionary mapping tool keys to their BibTeX citations.
-            Only includes tools that have cite.bib files.
+            dict[str, str]: Dictionary mapping tool keys to their BibTeX citations.
+                Only includes tools that have cite.bib files.
         """
         citations = {}
         for key in cls._registry:
@@ -665,6 +699,10 @@ class ToolRegistry:
     def _check_duplicate(cls, key: str, attempted_name: str = None) -> None:
         """
         Check for duplicate registration.
+
+        Args:
+            key (str): Tool registry key to check.
+            attempted_name (str): Name of the function attempting registration.
 
         Raises:
             ValueError: If key already exists in registry
@@ -712,6 +750,16 @@ def _post_dispatch_cache_and_expand(
 
     Called after both pool and local dispatch paths to avoid duplicating
     cache-store / stitch / dedup-expand logic.
+
+    Args:
+        key (str): Tool registry key.
+        spec (ToolSpec | None): Tool specification from the registry.
+        is_cacheable (bool): Whether the tool supports caching.
+        result (BaseToolOutput): Tool output to post-process.
+        strip (CacheStripResult | None): Cache strip result with cached/uncached item info.
+        deduped (Any | None): Deduplication result mapping original to unique indices.
+        original_items (list | None): Original input items before dedup/strip.
+        whole_cache_key (str | None): Cache key for whole-output caching path.
     """
     if is_cacheable and spec and spec.iterable_input_field:
         # Iterable cache store + stitch
@@ -756,10 +804,10 @@ def _find_citation_file(tool_key: str) -> Path | None:
     Handles underscore/hyphen normalization.
 
     Args:
-        tool_key: Tool registry key (e.g., 'evo2-sample', 'blast-search')
+        tool_key (str): Tool registry key (e.g., 'evo2-sample', 'blast-search')
 
     Returns:
-        Path to cite.bib file, or None if not found
+        Path | None: Path to cite.bib file, or None if not found
     """
     # Normalize key: replace hyphens with underscores for directory matching
     # Tool keys are kebab-case but directories are snake_case

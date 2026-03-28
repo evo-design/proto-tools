@@ -1,8 +1,7 @@
-"""NCBI Entrez efetch tool — retrieve records by ID.
+"""bio_programming_tools/tools/database_retrieval/ncbi/efetch.py
 
 Wraps the NCBI E-utilities efetch endpoint for fetching sequences and
-records from protein, nuccore, and gene databases.
-"""
+records from protein, nuccore, and gene databases."""
 
 from __future__ import annotations
 
@@ -34,16 +33,16 @@ class NCBIEfetchInput(BaseToolInput):
     """Input for NCBI efetch.
 
     Attributes:
-        db: NCBI database to query: 'protein', 'nuccore' (nucleotide core),
+        db (Literal['protein', 'nuccore', 'gene']): NCBI database to query: 'protein', 'nuccore' (nucleotide core),
             or 'gene'.
-        identifier: Accession or NCBI ID to fetch (e.g. 'NP_000537.3').
-        return_format: NCBI rettype: 'fasta' for sequences or
+        identifier (str): Accession or NCBI ID to fetch (e.g. 'NP_000537.3').
+        return_format (Literal['fasta', 'fasta_cds_na']): NCBI rettype: 'fasta' for sequences or
             'fasta_cds_na' for coding DNA sequences.
-        seq_start: Start position for subsequence extraction (1-indexed,
+        seq_start (int | None): Start position for subsequence extraction (1-indexed,
             inclusive).
-        seq_stop: Stop position for subsequence extraction (1-indexed,
+        seq_stop (int | None): Stop position for subsequence extraction (1-indexed,
             inclusive).
-        strand: Strand for nucleotide retrieval (+ or -).
+        strand (Literal['+', '-'] | None): Strand for nucleotide retrieval (+ or -).
     """
 
     db: Literal["protein", "nuccore", "gene"] = InputField(
@@ -76,8 +75,8 @@ class NCBIEfetchOutput(BaseToolOutput):
     """Output from NCBI efetch.
 
     Attributes:
-        fasta_records: Parsed FASTA records from efetch.
-        source_url: Sanitized URL used for the request.
+        fasta_records (list[NCBIFastaRecord]): Parsed FASTA records from efetch.
+        source_url (str): Sanitized URL used for the request.
     """
 
     fasta_records: List[NCBIFastaRecord] = Field(
@@ -140,12 +139,12 @@ def run_ncbi_efetch(
     extraction.
 
     Args:
-        inputs: Database, identifier, format, and optional coordinate
+        inputs (NCBIEfetchInput): Database, identifier, format, and optional coordinate
             parameters.
-        config: HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
 
     Returns:
-        NCBIEfetchOutput containing parsed FASTA records.
+        NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.
     """
     del instance
 

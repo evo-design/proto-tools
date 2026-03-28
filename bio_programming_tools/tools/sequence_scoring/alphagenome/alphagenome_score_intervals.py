@@ -1,4 +1,6 @@
-"""AlphaGenome batched interval scoring tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_score_intervals.py
+
+AlphaGenome batched interval scoring tool."""
 from __future__ import annotations
 
 import csv
@@ -40,7 +42,7 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
     """Input for batched AlphaGenome interval scoring.
 
     Attributes:
-        intervals (List[AlphaGenomeInterval]): Genomic intervals to score.
+        intervals (list[AlphaGenomeInterval]): Genomic intervals to score.
             A single interval is auto-wrapped into a list.
     """
 
@@ -64,7 +66,7 @@ class AlphaGenomeScoreIntervalsOutput(BaseToolOutput):
     """Output from batched AlphaGenome interval scoring.
 
     Attributes:
-        results (List[AlphaGenomeScoreOutput]): Per-interval score outputs.
+        results (list[AlphaGenomeScoreOutput]): Per-interval score outputs.
     """
 
     results: List[AlphaGenomeScoreOutput] = Field(
@@ -117,9 +119,9 @@ class AlphaGenomeScoreIntervalsConfig(BaseConfig):
 
     Attributes:
         model_version (str): AlphaGenome Hugging Face model version.
-        interval_scorers (Optional[List[str]]): Scorer names from the library's
+        interval_scorers (list[IntervalScorerName] | None): Scorer names from the library's
             ``RECOMMENDED_INTERVAL_SCORERS``. ``None`` uses all recommended.
-        organism (Literal["human", "mouse"]): Organism for predictions.
+        organism (Literal['human', 'mouse']): Organism for predictions.
         device (str): Device to run inference on.
     """
 

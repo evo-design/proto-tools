@@ -1,4 +1,6 @@
-"""Tests for Prodigal ORF prediction tool."""
+"""tests/orf_prediction_tests/test_prodigal.py
+
+Tests for Prodigal ORF prediction tool."""
 
 from unittest.mock import patch
 

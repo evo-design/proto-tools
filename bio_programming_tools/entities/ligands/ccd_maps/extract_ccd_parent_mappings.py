@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Extract parent residue/base mappings from wwPDB Chemical Component Dictionary.
+bio_programming_tools/entities/ligands/ccd_maps/extract_ccd_parent_mappings.py
 
 This script reads the components.cif file and extracts mappings from modified
 residues and bases (CCD codes) to their parent (canonical) amino acids or nucleotides.
@@ -33,8 +33,8 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
     """Extract parent residue mappings from CCD file.
 
     Args:
-        cif_path: Path to components.cif or components.cif.gz
-        output_path: Path to output CSV file
+        cif_path (Path): Path to components.cif or components.cif.gz
+        output_path (Path): Path to output CSV file
     """
     # Open file (handle both gzipped and uncompressed)
     if cif_path.suffix == '.gz':

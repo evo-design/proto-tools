@@ -1,4 +1,6 @@
-"""Random protein sampling with codon scheme-biased amino acid selection."""
+"""bio_programming_tools/tools/mutagenesis/random_protein/random_protein_sample.py
+
+Random protein sampling with codon scheme-biased amino acid selection."""
 from __future__ import annotations
 
 import logging
@@ -36,7 +38,7 @@ class RandomProteinSampleOutput(BaseToolOutput):
     """Output from random protein sampling.
 
     Attributes:
-        sequences: Sampled protein sequences with masked positions filled
+        sequences (list[str]): Sampled protein sequences with masked positions filled
             by random amino acids drawn from the configured codon scheme.
     """
 
@@ -76,13 +78,13 @@ class RandomProteinSampleConfig(BaseConfig):
     """Configuration for random protein sampling.
 
     Attributes:
-        masking_strategy: Controls which positions to mask for sampling.
+        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling.
             Default: random 30%.
-        codon_scheme: Codon scheme controlling amino acid sampling
+        codon_scheme (CodonScheme): Codon scheme controlling amino acid sampling
             probabilities. ``"UNIFORM"`` gives equal weight to all 20
             amino acids; other schemes (NNK, NNS, NDT, etc.) weight
             amino acids by the number of codons encoding them.
-        seed: Random seed for reproducibility. Default: ``None``.
+        seed (int | None): Random seed for reproducibility. Default: ``None``.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -143,11 +145,11 @@ def run_random_protein_sample(
     ``inputs.sequences`` already contain ``_`` at positions to sample.
 
     Args:
-        inputs: Protein sequences with ``_`` at designable positions.
-        config: Sampling configuration.
+        inputs (RandomProteinSampleInput): Protein sequences with ``_`` at designable positions.
+        config (RandomProteinSampleConfig | None): Sampling configuration.
 
     Returns:
-        RandomProteinSampleOutput with sampled sequences.
+        RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
     rng = random.Random(config.seed) if config.seed is not None else None
     scheme = config.codon_scheme

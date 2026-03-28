@@ -1,4 +1,6 @@
-"""Tests for AlphaFold3."""
+"""tests/structure_prediction_tests/test_af3.py
+
+Tests for AlphaFold3."""
 
 from __future__ import annotations
 

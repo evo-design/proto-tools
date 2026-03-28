@@ -1,4 +1,6 @@
-"""FAMPNN sidechain packing tool."""
+"""bio_programming_tools/tools/inverse_folding/fampnn/fampnn_pack.py
+
+FAMPNN sidechain packing tool."""
 from __future__ import annotations
 
 import logging
@@ -26,7 +28,7 @@ class FAMPNNPackInput(BaseToolInput):
     """Input for FAMPNN sidechain packing.
 
     Attributes:
-        inputs: List of structure inputs for sidechain packing.
+        inputs (list[FAMPNNStructureInput]): List of structure inputs for sidechain packing.
     """
 
     inputs: List[FAMPNNStructureInput] = InputField(
@@ -38,13 +40,13 @@ class FAMPNNPackConfig(BaseConfig):
     """Configuration for FAMPNN sidechain packing.
 
     Attributes:
-        model_variant: Checkpoint variant. '0.0' recommended for best packing accuracy.
-        num_samples_per_structure: Number of packing samples per input structure.
-        batch_size: Number of samples to process simultaneously on GPU.
-        scn_diffusion_steps: Number of sidechain diffusion denoising steps.
-        scn_step_scale: Step scale for sidechain diffusion.
-        seed: Random seed.
-        device: Device to run on.
+        model_variant (str): Checkpoint variant. '0.0' recommended for best packing accuracy.
+        num_samples_per_structure (int): Number of packing samples per input structure.
+        batch_size (int): Number of samples to process simultaneously on GPU.
+        scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
+        scn_step_scale (float): Step scale for sidechain diffusion.
+        seed (int): Random seed.
+        device (str): Device to run on.
     """
 
     model_variant: str = ConfigField(
@@ -98,10 +100,10 @@ class FAMPNNPackingResult(BaseToolOutput):
     """Output for FAMPNN sidechain packing.
 
     Attributes:
-        packed_structures: List of lists of PDB strings with packed sidechain
+        packed_structures (list[list[str]]): List of lists of PDB strings with packed sidechain
             coordinates. Outer list corresponds to input structures, inner list
             to packing samples. B-factor column contains per-atom pSCE.
-        psce: Per-residue predicted sidechain error (Angstroms) for each sample.
+        psce (list[list[list[float]]]): Per-residue predicted sidechain error (Angstroms) for each sample.
     """
 
     packed_structures: List[List[str]] = Field(
@@ -175,12 +177,12 @@ def run_fampnn_pack(
     sidechain error (pSCE) in the B-factor column.
 
     Args:
-        inputs: FAMPNNPackInput containing structure inputs.
-        config: Configuration for packing.
+        inputs (FAMPNNPackInput): FAMPNNPackInput containing structure inputs.
+        config (FAMPNNPackConfig | None): Configuration for packing.
         instance: Optional ToolInstance for persistent execution.
 
     Returns:
-        FAMPNNPackingResult with packed PDB structures and pSCE values.
+        FAMPNNPackingResult: FAMPNNPackingResult with packed PDB structures and pSCE values.
     """
     all_packed = []
     all_psce = []

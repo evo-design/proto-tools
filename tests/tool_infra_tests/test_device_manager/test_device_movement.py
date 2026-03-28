@@ -1,4 +1,6 @@
-"""Tests for moving tool instances between devices."""
+"""tests/tool_infra_tests/test_device_manager/test_device_movement.py
+
+Tests for moving tool instances between devices."""
 
 import time
 from unittest.mock import MagicMock, patch

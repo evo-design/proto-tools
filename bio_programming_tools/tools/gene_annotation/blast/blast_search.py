@@ -1,4 +1,6 @@
-"""Unified BLAST search tool supporting both online (NCBI) and local modes."""
+"""bio_programming_tools/tools/gene_annotation/blast/blast_search.py
+
+Unified BLAST search tool supporting both online (NCBI) and local modes."""
 from __future__ import annotations
 
 import io
@@ -81,7 +83,7 @@ class BlastSearchInput(BaseToolInput):
     Attributes:
         query (str): A raw nucleotide/protein sequence (e.g. ``"ATGCGTAAA"``)
             or a path to a FASTA file.
-        query_type (str): Automatically set to ``"sequence"`` or ``"fasta_path"``
+        query_type (Literal['sequence', 'fasta_path']): Automatically set to ``"sequence"`` or ``"fasta_path"``
             during validation. Read-only — do not set manually.
     """
 
@@ -125,7 +127,7 @@ class BlastSearchOutput(BaseToolOutput):
     """Output from BLAST search.
 
     Attributes:
-        results_df (Optional[pd.DataFrame]): Standard BLAST tabular results
+        results_df (pd.DataFrame | None): Standard BLAST tabular results
             with columns: qseqid, sseqid, pident, length, mismatch, gapopen,
             qstart, qend, sstart, send, evalue, bitscore.
         num_hits (int): Total number of alignment hits found.
@@ -181,46 +183,46 @@ class BlastSearchConfig(BaseConfig):
     the other mode.
 
     Attributes:
-        search_mode: ``"online"`` routes to NCBI QBLAST; ``"local"`` runs
+        search_mode (Literal['online', 'local']): ``"online"`` routes to NCBI QBLAST; ``"local"`` runs
             BLAST+ CLI against a local database.
-        program: BLAST algorithm (blastn, blastp, blastx, tblastn, tblastx).
-        database: NCBI database to search (online mode only).
-        local_db: Path to a local BLAST database (local mode only, required).
-        num_threads: CPU threads for local search.
-        evalue: E-value threshold.
-        max_target_seqs: Max aligned sequences to keep.
-        max_hsps: Max HSPs per query-subject pair.
-        word_size: Word size for initial matches.
-        gapopen: Cost to open a gap.
-        gapextend: Cost to extend a gap.
-        matrix: Scoring matrix for protein searches.
-        reward: Nucleotide match reward (blastn only).
-        penalty: Nucleotide mismatch penalty (blastn only).
-        task: BLAST task for optimized defaults.
-        perc_identity: Minimum percent identity filter.
-        qcov_hsp_perc: Minimum query coverage per HSP.
-        threshold: Min word score for lookup table (protein only).
-        comp_based_stats: Composition-based statistics mode (protein only).
-        soft_masking: Use soft masking for initial matches.
-        lcase_masking: Treat lowercase in FASTA as masked.
-        dust: Low-complexity filter for nucleotide queries (blastn only).
-        seg: Low-complexity filter for protein queries.
-        ungapped: Perform ungapped alignment only.
-        strand: Query strand(s) to search (nucleotide queries only).
-        query_gencode: Genetic code for translating query (blastx/tblastx).
-        db_gencode: Genetic code for translating DB (tblastn/tblastx).
-        window_size: Multiple-hits window size.
-        xdrop_ungap: X-dropoff for ungapped extensions.
-        xdrop_gap: X-dropoff for preliminary gapped extensions.
-        xdrop_gap_final: X-dropoff for final gapped alignment.
-        use_sw_tback: Compute Smith-Waterman alignments (protein only).
-        culling_limit: Delete hits enveloped by better hits.
-        best_hit_overhang: Best-hit algorithm overhang value.
-        best_hit_score_edge: Best-hit algorithm score edge value.
-        subject_besthit: Only report best hit per subject.
-        entrez_query: Restrict online search with an Entrez query.
-        hitlist_size: Number of hits to return (online mode only).
-        megablast: Use MegaBLAST algorithm (online mode, blastn only).
+        program (BLAST_PROGRAMS): BLAST algorithm (blastn, blastp, blastx, tblastn, tblastx).
+        database (BLAST_DATABASES): NCBI database to search (online mode only).
+        local_db (str | None): Path to a local BLAST database (local mode only, required).
+        num_threads (int): CPU threads for local search.
+        evalue (float | None): E-value threshold.
+        max_target_seqs (int | None): Max aligned sequences to keep.
+        max_hsps (int | None): Max HSPs per query-subject pair.
+        word_size (int | None): Word size for initial matches.
+        gapopen (int | None): Cost to open a gap.
+        gapextend (int | None): Cost to extend a gap.
+        matrix (SCORING_MATRICES | None): Scoring matrix for protein searches.
+        reward (int | None): Nucleotide match reward (blastn only).
+        penalty (int | None): Nucleotide mismatch penalty (blastn only).
+        task (BLAST_TASKS | None): BLAST task for optimized defaults.
+        perc_identity (float | None): Minimum percent identity filter.
+        qcov_hsp_perc (float | None): Minimum query coverage per HSP.
+        threshold (int | None): Min word score for lookup table (protein only).
+        comp_based_stats (Literal[0, 1, 2, 3] | None): Composition-based statistics mode (protein only).
+        soft_masking (bool | None): Use soft masking for initial matches.
+        lcase_masking (bool | None): Treat lowercase in FASTA as masked.
+        dust (str | None): Low-complexity filter for nucleotide queries (blastn only).
+        seg (str | None): Low-complexity filter for protein queries.
+        ungapped (bool | None): Perform ungapped alignment only.
+        strand (Literal['both', 'plus', 'minus'] | None): Query strand(s) to search (nucleotide queries only).
+        query_gencode (int | None): Genetic code for translating query (blastx/tblastx).
+        db_gencode (int | None): Genetic code for translating DB (tblastn/tblastx).
+        window_size (int | None): Multiple-hits window size.
+        xdrop_ungap (float | None): X-dropoff for ungapped extensions.
+        xdrop_gap (float | None): X-dropoff for preliminary gapped extensions.
+        xdrop_gap_final (float | None): X-dropoff for final gapped alignment.
+        use_sw_tback (bool | None): Compute Smith-Waterman alignments (protein only).
+        culling_limit (int | None): Delete hits enveloped by better hits.
+        best_hit_overhang (float | None): Best-hit algorithm overhang value.
+        best_hit_score_edge (float | None): Best-hit algorithm score edge value.
+        subject_besthit (bool | None): Only report best hit per subject.
+        entrez_query (str | None): Restrict online search with an Entrez query.
+        hitlist_size (int | None): Number of hits to return (online mode only).
+        megablast (bool | None): Use MegaBLAST algorithm (online mode, blastn only).
     """
 
     # TODO: Add conditional rendering for the frontend so that online-only
@@ -668,11 +670,11 @@ def run_blast_search(
     based on ``config.search_mode``.
 
     Args:
-        inputs: Validated BLAST search input.
-        config: Validated BLAST search configuration.
+        inputs (BlastSearchInput): Validated BLAST search input.
+        config (BlastSearchConfig | None): Validated BLAST search configuration.
 
     Returns:
-        Structured output with BLAST results DataFrame.
+        BlastSearchOutput: Structured output with BLAST results DataFrame.
 
     Raises:
         RuntimeError: If the BLAST search fails.
@@ -878,7 +880,7 @@ def _blast_results_to_df(blast_records) -> pd.DataFrame:
         blast_records: List of Bio.Blast.Record objects from NCBIXML.parse.
 
     Returns:
-        DataFrame with standard BLAST tabular columns.
+        pd.DataFrame: DataFrame with standard BLAST tabular columns.
     """
     hits = []
     for record in blast_records:

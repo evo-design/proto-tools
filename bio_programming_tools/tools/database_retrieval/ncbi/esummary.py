@@ -1,8 +1,7 @@
-"""NCBI Entrez esummary tool — retrieve record summaries by ID.
+"""bio_programming_tools/tools/database_retrieval/ncbi/esummary.py
 
 Wraps the NCBI E-utilities esummary endpoint for fetching metadata
-about protein, nuccore, and gene records.
-"""
+about protein, nuccore, and gene records."""
 
 from __future__ import annotations
 
@@ -29,9 +28,9 @@ class NCBIEsummaryInput(BaseToolInput):
     """Input for NCBI esummary.
 
     Attributes:
-        db: NCBI database to query: 'protein', 'nuccore' (nucleotide core),
+        db (Literal['protein', 'nuccore', 'gene']): NCBI database to query: 'protein', 'nuccore' (nucleotide core),
             or 'gene'.
-        identifier: Accession or NCBI ID to summarize (e.g. 'NP_000537.3',
+        identifier (str): Accession or NCBI ID to summarize (e.g. 'NP_000537.3',
             '7157').
     """
 
@@ -47,8 +46,8 @@ class NCBIEsummaryOutput(BaseToolOutput):
     """Output from NCBI esummary.
 
     Attributes:
-        summary: Record summary data returned by esummary.
-        source_url: Sanitized URL used for the request.
+        summary (dict[str, Any]): Record summary data returned by esummary.
+        source_url (str): Sanitized URL used for the request.
     """
 
     summary: Dict[str, Any] = Field(
@@ -108,11 +107,11 @@ def run_ncbi_esummary(
     """Retrieve record summary metadata from NCBI Entrez.
 
     Args:
-        inputs: Database and identifier to summarize.
-        config: HTTP timeout, retry, and authentication settings.
+        inputs (NCBIEsummaryInput): Database and identifier to summarize.
+        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
 
     Returns:
-        NCBIEsummaryOutput containing the record summary.
+        NCBIEsummaryOutput: NCBIEsummaryOutput containing the record summary.
     """
     del instance
 

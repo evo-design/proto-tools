@@ -1,4 +1,6 @@
-"""Enformer sequence scoring tool."""
+"""bio_programming_tools/tools/sequence_scoring/enformer/enformer_prediction.py
+
+Enformer sequence scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -65,9 +67,9 @@ class EnformerOutput(BaseToolOutput):
     Attributes:
         sequence (str): Input DNA sequence that was scored.
         sequence_length (int): Length of the input sequence (always 196,608).
-        prediction (List[List[float]]): Predicted signal matrix with shape
+        prediction (list[list[float]]): Predicted signal matrix with shape
             ``[896, num_tracks]``.
-        output_tracks (List[int]): Track indices that were extracted.
+        output_tracks (list[int]): Track indices that were extracted.
         species (str): Species used for prediction (``"human"`` or ``"mouse"``).
     """
 
@@ -118,8 +120,8 @@ class EnformerConfig(BaseConfig):
     """Configuration for Enformer inference.
 
     Attributes:
-        output_tracks (List[int]): Track indices to extract from the Enformer output.
-        species (Literal["human", "mouse"]): Species track head to use.
+        output_tracks (list[int]): Track indices to extract from the Enformer output.
+        species (Literal['human', 'mouse']): Species track head to use.
         device (str): Device used for inference.
     """
 
@@ -168,7 +170,7 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
 
     Args:
         inputs (EnformerInput): Validated sequence input.
-        config (EnformerConfig): Validated runtime and model configuration.
+        config (EnformerConfig | None): Validated runtime and model configuration.
 
     Returns:
         EnformerOutput: Prediction object with sequence, tracks, and metadata.

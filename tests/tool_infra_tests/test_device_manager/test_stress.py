@@ -1,4 +1,6 @@
-"""Tests for device movement stress with real tool instances."""
+"""tests/tool_infra_tests/test_device_manager/test_stress.py
+
+Tests for device movement stress with real tool instances."""
 
 import time
 from unittest.mock import patch

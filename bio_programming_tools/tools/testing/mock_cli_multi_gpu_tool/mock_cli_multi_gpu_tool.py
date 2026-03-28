@@ -1,9 +1,8 @@
-"""Mock CLI multi-GPU subprocess tool for testing multi-device subprocess routing.
+"""bio_programming_tools/tools/testing/mock_cli_multi_gpu_tool/mock_cli_multi_gpu_tool.py
 
 This is a minimal 2-GPU CLI-pattern tool that spawns subprocesses for inference,
 matching tools like Boltz2 with multi-GPU support. It uses
-get_subprocess_device_env() for device routing with comma-separated device strings.
-"""
+get_subprocess_device_env() for device routing with comma-separated device strings."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +28,8 @@ from bio_programming_tools.utils import (
 class MockCLIMultiGPUToolInput(BaseToolInput):
     """Input for mock CLI multi-GPU tool.
 
-    Fields:
-        data: Input data to pass through the CLI subprocess.
+    Attributes:
+        data (list[float]): Input data to pass through the CLI subprocess.
     """
 
     data: list[float] = InputField(
@@ -42,9 +41,9 @@ class MockCLIMultiGPUToolInput(BaseToolInput):
 class MockCLIMultiGPUToolConfig(BaseConfig):
     """Config for mock CLI multi-GPU tool.
 
-    Fields:
-        device: Device specification for 2 GPUs.
-        scale_factor: Scale factor applied to input data.
+    Attributes:
+        device (str): Device specification for 2 GPUs.
+        scale_factor (float): Scale factor applied to input data.
     """
 
     device: str = ConfigField(
@@ -65,10 +64,10 @@ class MockCLIMultiGPUToolConfig(BaseConfig):
 class MockCLIMultiGPUToolOutput(BaseToolOutput):
     """Output from mock CLI multi-GPU tool.
 
-    Fields:
-        result: Output from the CLI subprocess.
-        device_used: Device string passed to subprocess.
-        cuda_visible_devices: CUDA_VISIBLE_DEVICES passed to subprocess.
+    Attributes:
+        result (list[float]): Output from the CLI subprocess.
+        device_used (str): Device string passed to subprocess.
+        cuda_visible_devices (str): CUDA_VISIBLE_DEVICES passed to subprocess.
     """
 
     result: list[float] = Field(

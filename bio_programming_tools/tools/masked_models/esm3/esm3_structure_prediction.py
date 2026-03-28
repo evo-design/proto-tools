@@ -1,4 +1,6 @@
-"""ESM3 structure prediction tool."""
+"""bio_programming_tools/tools/masked_models/esm3/esm3_structure_prediction.py
+
+ESM3 structure prediction tool."""
 from __future__ import annotations
 
 import logging
@@ -41,7 +43,7 @@ class ESM3StructurePredictionOutput(BaseToolOutput):
     predicted 3D structures with confidence metrics for each input sequence.
 
     Attributes:
-        structures (List[Dict[str, Any]]): Predicted structures for each input
+        structures (list[dict[str, Any]]): Predicted structures for each input
             sequence. Each structure is a dictionary containing:
 
             - ``"sequence"``: The input protein sequence
@@ -123,10 +125,10 @@ class ESM3StructurePredictionConfig(MaskedModelConfig):
             like ``"cuda:0"``. Structure prediction requires significant compute,
             so GPU is strongly recommended. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during structure prediction,
+        verbose: Whether to print status messages during structure prediction,
             including progress updates and timing information. Default: ``False``.
 
-        model_checkpoint (str): ESM3 model checkpoint to use. Currently available:
+        model_checkpoint (Literal[ESM3_MODEL_CHECKPOINTS]): ESM3 model checkpoint to use. Currently available:
 
             - ``"esm3_sm_open_v1"``: Small open-source ESM3 model (default)
 
@@ -178,9 +180,9 @@ def run_esm3_structure_prediction(
     structure predictions with confidence metrics.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing one or more protein
+        inputs (ESM3StructurePredictionInput): Validated input containing one or more protein
             sequences (amino acid sequences) for structure prediction.
-        config (ESM3StructurePredictionConfig): Validated ESM3 structure prediction
+        config (ESM3StructurePredictionConfig | None): Validated ESM3 structure prediction
             configuration specifying model variant, batch size, and device settings.
 
     Returns:

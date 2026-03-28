@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for MMseqs2 mini debug database.
+tests/dummy_data/create_mini_mmseqs_db.py
 
 This script downloads and sets up a mini MMseqs2 database for testing purposes.
 It uses ToolInstance to access mmseqs from the isolated tool environment.

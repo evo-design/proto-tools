@@ -1,8 +1,7 @@
-"""MMseqs2 protein sequence search tool.
+"""bio_programming_tools/tools/gene_annotation/mmseqs/search_proteins.py
 
 Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
-constants, and helper functions used by all MMseqs2 search tools.
-"""
+constants, and helper functions used by all MMseqs2 search tools."""
 from __future__ import annotations
 
 import io
@@ -67,7 +66,7 @@ class MmseqsSequenceSearchResult(BaseModel):
     Attributes:
         query_id (str): Identifier of the query sequence.
         query_sequence (str): The input query sequence.
-        hits (List[MmseqsHit]): All hits found for this query, sorted by pident descending.
+        hits (list[MmseqsHit]): All hits found for this query, sorted by pident descending.
     """
     query_id: str = Field(description="Query sequence identifier")
     query_sequence: str = Field(description="The input query sequence")
@@ -97,9 +96,9 @@ class MmseqsSearchProteinsInput(BaseToolInput):
     searches.
 
     Attributes:
-        query_sequences (List[str]): List of protein sequence strings (amino acid
+        query_sequences (list[str]): List of protein sequence strings (amino acid
             sequences) to search.
-        sequence_ids (Optional[List[str]]): Optional list of sequence identifiers.
+        sequence_ids (list[str] | None): Optional list of sequence identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
         mmseqs_db (str): Path to the target database for searching. Can be:
             - Path to a FASTA file (MMseqs2 will create a temporary database)
@@ -145,7 +144,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
     Contains per-sequence search results matching the input order.
 
     Attributes:
-        results (List[MmseqsSequenceSearchResult]): List of search results, one per
+        results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input sequence. The order matches the input sequences order.
     """
     results: List[MmseqsSequenceSearchResult] = Field(
@@ -291,7 +290,7 @@ def run_mmseqs_search_proteins(
     Args:
         inputs (MmseqsSearchProteinsInput): Validated input containing query
             sequences and target database path.
-        config (MmseqsSearchProteinsConfig): Configuration with search parameters.
+        config (MmseqsSearchProteinsConfig | None): Configuration with search parameters.
 
     Returns:
         MmseqsSearchProteinsOutput: Per-sequence search results in input order.
@@ -363,10 +362,10 @@ def _parse_m8_output(raw_output: str) -> pd.DataFrame:
     """Parse raw m8 tabular output string into a pandas DataFrame.
 
     Args:
-        raw_output: Raw tab-separated m8 output text from MMseqs2.
+        raw_output (str): Raw tab-separated m8 output text from MMseqs2.
 
     Returns:
-        pandas.DataFrame with columns: query, target, pident, evalue.
+        pd.DataFrame: pandas.DataFrame with columns: query, target, pident, evalue.
     """
     col_names = ["query", "target", "pident", "evalue"]
 
@@ -387,10 +386,10 @@ def _filter_top_hits(df: pd.DataFrame) -> pd.DataFrame:
     """Filter DataFrame to keep only the best hit per query sequence.
 
     Args:
-        df: DataFrame containing search results with 'query' and 'pident' columns.
+        df (pd.DataFrame): DataFrame containing search results with 'query' and 'pident' columns.
 
     Returns:
-        DataFrame with one row per unique query sequence (best pident).
+        pd.DataFrame: DataFrame with one row per unique query sequence (best pident).
     """
     if df.empty:
         return df
@@ -403,12 +402,12 @@ def _build_sequence_search_results(
     """Build per-sequence search results from DataFrame.
 
     Args:
-        sequences: List of input sequences.
-        sequence_ids: List of sequence identifiers corresponding to sequences.
-        df: DataFrame with MMseqs2 search results.
+        sequences (list[str]): List of input sequences.
+        sequence_ids (list[str]): List of sequence identifiers corresponding to sequences.
+        df (pd.DataFrame): DataFrame with MMseqs2 search results.
 
     Returns:
-        List of MmseqsSequenceSearchResult objects, one per input sequence.
+        list[MmseqsSequenceSearchResult]: List of MmseqsSequenceSearchResult objects, one per input sequence.
     """
     results = []
     for seq, seq_id in zip(sequences, sequence_ids):

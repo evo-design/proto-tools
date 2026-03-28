@@ -1,4 +1,6 @@
-"""Tests for DeviceManager configuration and device pool discovery."""
+"""tests/tool_infra_tests/test_device_manager/test_configuration.py
+
+Tests for DeviceManager configuration and device pool discovery."""
 
 import os
 from unittest.mock import patch

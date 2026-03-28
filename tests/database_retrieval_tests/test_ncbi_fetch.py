@@ -1,4 +1,6 @@
-"""Tests for the NCBI Entrez tools (esearch, esummary, efetch)."""
+"""tests/database_retrieval_tests/test_ncbi_fetch.py
+
+Tests for the NCBI Entrez tools (esearch, esummary, efetch)."""
 
 from __future__ import annotations
 

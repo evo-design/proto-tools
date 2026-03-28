@@ -1,4 +1,6 @@
-"""Tests for structure prediction tools."""
+"""tests/structure_prediction_tests/test_structure_prediction.py
+
+Tests for structure prediction tools."""
 from __future__ import annotations
 
 from pathlib import Path

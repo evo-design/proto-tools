@@ -1,5 +1,5 @@
 """
-alphafold3.py
+bio_programming_tools/tools/structure_prediction/alphafold3/alphafold3.py
 
 Protein structure prediction using AlphaFold3.
 
@@ -47,7 +47,7 @@ class AlphaFold3Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more sequences of proteins, DNA, RNA, or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -73,12 +73,12 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
     Attributes:
         name (str): Name of the folding job. Default: ``"af3_job"``.
 
-        seeds (List[int]): Seeds to use for AlphaFold3. Default: ``[0]``.
+        seeds (list[int]): Seeds to use for AlphaFold3. Default: ``[0]``.
             Note: AlphaFold3 will do five diffusion samples per seed, so this often can be
             set to a single seed. More seeds are required for complex docking tasks,
             such as antibody-antigen docking.
 
-        output_dir (Optional[str]): Path prefix for the AlphaFold3 output directory.
+        output_dir (str | None): Path prefix for the AlphaFold3 output directory.
             Appends ``_af3_results`` to the provided string. If ``None`` (default),
             uses a temporary directory that is automatically cleaned up after inference.
             If specified, creates a persistent directory at the given path that will
@@ -99,14 +99,14 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
 
-        device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
+        device: Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution. Inherited
+        verbose: Whether to print status messages during execution. Inherited
             from ``StructurePredictionConfig``. Default: ``False``.
 
     """
@@ -274,13 +274,13 @@ def _assign_msas_to_input_json(
     """Write pre-computed MSAs to A3M files and assign paths to input JSON.
 
     Args:
-        input_json_data: AlphaFold3 input JSON dictionary to update with MSA paths.
-        msas: Pre-computed MSAs keyed by sequence string.
-        input_dir: Directory for MSA output files.
-        verbose: Whether to print progress messages.
+        input_json_data (AlphaFold3JSON): AlphaFold3 input JSON dictionary to update with MSA paths.
+        msas (dict[str, object]): Pre-computed MSAs keyed by sequence string.
+        input_dir (str): Directory for MSA output files.
+        verbose (bool): Whether to print progress messages.
 
     Returns:
-        Updated input_json_data with MSA paths populated.
+        AlphaFold3JSON: Updated input_json_data with MSA paths populated.
     """
     msa_dir = os.path.join(input_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)
@@ -326,12 +326,12 @@ def _create_input_json_from_complex(
     https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi
 
     Args:
-        sp_complex: Complex to predict.
-        name: Name identifier for this prediction job.
-        seed: Random seed(s) for structure prediction.
+        sp_complex (StructurePredictionComplex): Complex to predict.
+        name (str): Name identifier for this prediction job.
+        seed (int | list[int]): Random seed(s) for structure prediction.
 
     Returns:
-        Dictionary formatted for AlphaFold3 input JSON.
+        AlphaFold3JSON: Dictionary formatted for AlphaFold3 input JSON.
     """
     if isinstance(seed, int):
         seed = [seed]

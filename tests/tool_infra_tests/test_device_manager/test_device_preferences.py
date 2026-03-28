@@ -1,4 +1,6 @@
-"""Tests for preferred device allocation, re-allocation, and multi-model per device."""
+"""tests/tool_infra_tests/test_device_manager/test_device_preferences.py
+
+Tests for preferred device allocation, re-allocation, and multi-model per device."""
 
 from unittest.mock import patch
 

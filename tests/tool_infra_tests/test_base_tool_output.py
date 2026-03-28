@@ -1,4 +1,6 @@
-"""Tests for BaseToolOutput."""
+"""tests/tool_infra_tests/test_base_tool_output.py
+
+Tests for BaseToolOutput."""
 
 from datetime import datetime
 

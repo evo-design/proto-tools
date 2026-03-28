@@ -1,4 +1,6 @@
-"""Tests for ToolPool parallel fan-out across devices."""
+"""tests/tool_infra_tests/test_tool_pool.py
+
+Tests for ToolPool parallel fan-out across devices."""
 from __future__ import annotations
 
 import threading

@@ -1,4 +1,6 @@
-"""Shared HTTP session builder with retry logic."""
+"""bio_programming_tools/utils/http_session.py
+
+Shared HTTP session builder with retry logic."""
 
 from __future__ import annotations
 

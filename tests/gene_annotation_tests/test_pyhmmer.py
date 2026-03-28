@@ -1,4 +1,6 @@
-"""Tests for the PyHMMER tools."""
+"""tests/gene_annotation_tests/test_pyhmmer.py
+
+Tests for the PyHMMER tools."""
 
 from pathlib import Path
 

@@ -1,4 +1,6 @@
-"""Tests for inverse folding shared data models."""
+"""tests/inverse_folding_tests/test_if_schemas.py
+
+Tests for inverse folding shared data models."""
 
 from pathlib import Path
 from typing import List

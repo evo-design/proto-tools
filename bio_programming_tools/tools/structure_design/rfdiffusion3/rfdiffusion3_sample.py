@@ -1,5 +1,5 @@
 """
-RFdiffusion3 structure design tool.
+bio_programming_tools/tools/structure_design/rfdiffusion3/rfdiffusion3_sample.py
 
 Example:
     >>> from bio_programming_tools.tools.structure_design.rfdiffusion3 import run_rfdiffusion3, RFdiffusion3Input, RFdiffusion3Config, RFdiffusion3DesignSpec
@@ -49,31 +49,31 @@ class RFdiffusion3DesignSpec(BaseModel):
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
     Attributes:
-        input_structure (Optional[str]): Path to input PDB/CIF file or PDB content string.
+        input_structure (str | None): Path to input PDB/CIF file or PDB content string.
             Required for motif scaffolding, binder design, or any task that needs
             structural context. Can be omitted for unconditional de novo design.
 
-        contig (Optional[str]): Contig string specifying the design topology.
+        contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``\\0``.
             Examples:
                 - ``"50-80"`` - design 50-80 residue monomer
                 - ``"A1-100,50,A150-200"`` - scaffold around residues A1-100 and A150-200
                 - ``"50,\\0,B1-50"`` - design 50 residues, chain break, then keep B1-50
 
-        length (Optional[str]): Total design length constraint. Can be an integer
+        length (str | None): Total design length constraint. Can be an integer
             (exact length) or range ``"min-max"``. Used for unconditional design
             when no contig is specified.
 
-        ligand (Optional[str]): Ligand selection by residue name from input structure.
+        ligand (str | None): Ligand selection by residue name from input structure.
             Comma-separated list of 3-letter codes (e.g., ``"HAX,OAA"``).
 
-        unindex (Optional[Union[str, Dict[str, str]]]): Unindexed motif components whose
+        unindex (str | dict[str, str] | None): Unindexed motif components whose
             sequence position is unknown to the model. Useful for active site scaffolding
             where catalytic residues should be placed but their position in the final
             sequence is flexible. Components must not overlap with ``contig``.
             Example: ``"A244,A274,A320"`` lists multiple unindexed components.
 
-        select_fixed_atoms (Optional[Union[bool, str, Dict[str, str]]]): Atoms to fix
+        select_fixed_atoms (bool | str | dict[str, str] | None): Atoms to fix
             in 3D space during diffusion. Accepts InputSelection format:
             - ``True``: Fix all atoms from input (default when input provided)
             - ``False``: Unfix all atoms
@@ -82,25 +82,27 @@ class RFdiffusion3DesignSpec(BaseModel):
               ``"TIP"`` (tip atom), ``"ALL"`` (all atoms), or explicit atom names
               (e.g., ``{"A1": "N,CA,C,O,CB", "A2-10": "BKBN"}``)
 
-        select_unfixed_sequence (Optional[Union[bool, str, Dict[str, str]]]): Residues
+        select_unfixed_sequence (bool | str | dict[str, str] | None): Residues
             whose sequence can change during design. Accepts InputSelection format:
             - ``True``: All input regions have fixed sequences (default)
             - ``False``: All atoms have unfixed/diffused sequences
             - Contig string: Components to unfix sequence for (e.g., ``"A5-10,B1-3"``)
             Note: Ligands and DNA always have fixed sequences.
 
-        select_hotspots (Optional[Union[str, Dict[str, str]]]): Atom-level or residue-level
+        select_hotspots (str | dict[str, str] | None): Atom-level or residue-level
             hotspots for protein-protein interaction design. Hotspots will typically be
             at most 4.5 Angstroms to any heavy atom in the designed structure. Typically
             used for designing binders.
 
-        partial_t (Optional[float]): Noise level (in Angstroms) for partial diffusion.
+        partial_t (float | None): Noise level (in Angstroms) for partial diffusion.
             Lower values preserve more of the input structure. Recommended values
             are 5.0-15.0 Angstroms. Useful for refinement or local redesign tasks.
 
-        **kwargs: Additional RFdiffusion3 InputSpecification fields are passed through directly.
-            Examples: ``symmetry``, ``select_buried``, ``select_hbond_donor``.
-            See https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
+    Note:
+        Additional RFdiffusion3 InputSpecification fields can be passed as
+        ``**kwargs``. Examples: ``symmetry``, ``select_buried``,
+        ``select_hbond_donor``. See
+        https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
 
     model_config = ConfigDict(extra="allow")
@@ -202,11 +204,11 @@ class RFdiffusion3Input(BaseToolInput):
     use cases and raw JSON passthrough for advanced users.
 
     Attributes:
-        design_specs (List[RFdiffusion3DesignSpec]): List of design specifications. Each
+        design_specs (list[RFdiffusion3DesignSpec]): List of design specifications. Each
             spec represents an independent design task with its own constraints.
             Multiple specs will be processed in a single run.
 
-        raw_json (Optional[str]): Raw JSON string for advanced users who need
+        raw_json (str | None): Raw JSON string for advanced users who need
             full RFdiffusion3 flexibility. If provided, ``design_specs`` will be ignored
             and this JSON will be passed directly to RFdiffusion3.
 
@@ -296,17 +298,19 @@ class RFdiffusion3Config(BaseConfig):
         ckpt_path (str): String containing the path and file name of the checkpoint
             path you want to use (default: rfd3).
 
-        input_dir (Optional[str]): Optional directory containing input files for
+        input_dir (str | None): Optional directory containing input files for
             local execution. If not set, input files are written to a temporary directory.
 
-        output_dir (Optional[str]): Optional directory to write local output files.
+        output_dir (str | None): Optional directory to write local output files.
             If not set, local execution uses a temporary directory.
 
-        **kwargs: Additional CLI arguments passed directly to RFdiffusion3.
-            See RFdiffusion3 documentation for available options:
-            https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
+        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
+            Default: ``"cuda"``.
 
     Note:
+        Additional CLI ``**kwargs`` are passed directly to RFdiffusion3. See
+        https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
+
         Total number of designs = n_batches * diffusion_batch_size * num_specs.
         Memory usage scales with diffusion_batch_size and protein length.
     """
@@ -406,7 +410,7 @@ class RFdiffusion3Structure(BaseModel):
         design_index (int): Index of this design within its batch.
             Combined with spec_key uniquely identifies the design.
 
-        metadata (Dict[str, Any]): Additional metadata from RFdiffusion3 output,
+        metadata (dict[str, Any]): Additional metadata from RFdiffusion3 output,
             including sampled contig, chain info, and any logged metrics.
     """
 
@@ -429,7 +433,7 @@ class RFdiffusion3Output(BaseToolOutput):
     one or more designed structures with their sequences and metadata.
 
     Attributes:
-        output_structures (List[RFdiffusion3Structure]): List of designed
+        output_structures (list[RFdiffusion3Structure]): List of designed
             structures. Each structure includes 3D coordinates, sequence,
             and metadata. The number of structures depends on the configuration
             (n_batches * diffusion_batch_size * num_specs).
@@ -532,7 +536,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
     Args:
         inputs (RFdiffusion3Input): Validated input containing one or more design
             specifications. Each spec defines constraints for a design task.
-        config (RFdiffusion3Config): Validated configuration specifying diffusion
+        config (RFdiffusion3Config | None): Validated configuration specifying diffusion
             parameters and execution options.
 
     Returns:

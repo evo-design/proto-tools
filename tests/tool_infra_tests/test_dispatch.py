@@ -1,4 +1,6 @@
-"""Tests for standalone inference dispatch() contracts."""
+"""tests/tool_infra_tests/test_dispatch.py
+
+Tests for standalone inference dispatch() contracts."""
 
 import ast
 from pathlib import Path

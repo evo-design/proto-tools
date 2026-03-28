@@ -1,4 +1,6 @@
-"""FAMPNN mutation scoring tool."""
+"""bio_programming_tools/tools/inverse_folding/fampnn/fampnn_score.py
+
+FAMPNN mutation scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -29,8 +31,8 @@ class MutationInput(BaseModel):
     """A single mutation specification.
 
     Attributes:
-        structure: Protein structure to evaluate mutations against.
-        mutations: List of mutation strings. Each mutation uses the format
+        structure (Structure): Protein structure to evaluate mutations against.
+        mutations (list[str]): List of mutation strings. Each mutation uses the format
             '<WT><1-indexed_position><MUT>' with single-letter amino acid codes.
             Multiple simultaneous mutations are joined with colons: 'N1P:N2R'.
     """
@@ -49,7 +51,7 @@ class FAMPNNScoreInput(BaseToolInput):
     """Input for FAMPNN mutation scoring.
 
     Attributes:
-        inputs: List of MutationInput objects, each containing a structure
+        inputs (list[MutationInput]): List of MutationInput objects, each containing a structure
             and mutations to score.
     """
 
@@ -62,13 +64,13 @@ class FAMPNNScoreConfig(BaseConfig):
     """Configuration for FAMPNN mutation scoring.
 
     Attributes:
-        model_variant: Checkpoint variant. '0.3_cath' recommended for scoring.
-        batch_size: Number of mutations to score simultaneously on GPU.
-        seq_only: If True, score without sidechain context (backbone-only).
-        scn_diffusion_steps: Number of sidechain diffusion denoising steps.
-        scn_step_scale: Step scale for sidechain diffusion.
-        seed: Random seed.
-        device: Device to run on.
+        model_variant (str): Checkpoint variant. '0.3_cath' recommended for scoring.
+        batch_size (int): Number of mutations to score simultaneously on GPU.
+        seq_only (bool): If True, score without sidechain context (backbone-only).
+        scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
+        scn_step_scale (float): Step scale for sidechain diffusion.
+        seed (int): Random seed.
+        device (str): Device to run on.
     """
 
     model_variant: str = ConfigField(
@@ -121,8 +123,8 @@ class MutationScoreResult(BaseModel):
     """Mutation score for a single structure.
 
     Attributes:
-        mutations: Mutation strings that were scored.
-        scores: Log-likelihood ratio scores for each mutation.
+        mutations (list[str]): Mutation strings that were scored.
+        scores (list[float]): Log-likelihood ratio scores for each mutation.
             Positive = mutation is more likely than wild-type.
     """
 
@@ -140,7 +142,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
     """Output for FAMPNN mutation scoring.
 
     Attributes:
-        results: List of MutationScoreResult objects, one per input structure.
+        results (list[MutationScoreResult]): List of MutationScoreResult objects, one per input structure.
     """
 
     results: List[MutationScoreResult] = Field(
@@ -221,12 +223,12 @@ def run_fampnn_score(
     structure of surrounding residues.
 
     Args:
-        inputs: FAMPNNScoreInput containing structures and mutations to score.
-        config: Configuration for scoring.
+        inputs (FAMPNNScoreInput): FAMPNNScoreInput containing structures and mutations to score.
+        config (FAMPNNScoreConfig | None): Configuration for scoring.
         instance: Optional ToolInstance for persistent execution.
 
     Returns:
-        FAMPNNScoreOutput with log-likelihood ratio scores for each mutation.
+        FAMPNNScoreOutput: FAMPNNScoreOutput with log-likelihood ratio scores for each mutation.
     """
     results = []
 

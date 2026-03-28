@@ -1,4 +1,6 @@
-"""Tests for TMalign structure alignment tool."""
+"""tests/structure_alignment_tests/test_tmalign.py
+
+Tests for TMalign structure alignment tool."""
 from __future__ import annotations
 
 from pathlib import Path

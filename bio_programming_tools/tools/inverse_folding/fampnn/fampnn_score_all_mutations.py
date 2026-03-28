@@ -1,4 +1,6 @@
-"""FAMPNN exhaustive single-mutation scoring tool."""
+"""bio_programming_tools/tools/inverse_folding/fampnn/fampnn_score_all_mutations.py
+
+FAMPNN exhaustive single-mutation scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -29,7 +31,7 @@ class FAMPNNScoreAllMutationsInput(BaseToolInput):
     """Input for scoring all possible single mutations.
 
     Attributes:
-        inputs: List of structures to score all mutations for.
+        inputs (list[Structure]): List of structures to score all mutations for.
     """
 
     inputs: List[Structure] = InputField(
@@ -41,10 +43,10 @@ class FAMPNNScoreAllMutationsConfig(BaseConfig):
     """Configuration for exhaustive FAMPNN mutation scoring.
 
     Attributes:
-        model_variant: Checkpoint variant. '0.3_cath' recommended for scoring.
-        batch_size: Number of positions to score simultaneously on GPU.
-        seed: Random seed.
-        device: Device to run on.
+        model_variant (str): Checkpoint variant. '0.3_cath' recommended for scoring.
+        batch_size (int): Number of positions to score simultaneously on GPU.
+        seed (int): Random seed.
+        device (str): Device to run on.
     """
 
     model_variant: str = ConfigField(
@@ -78,7 +80,7 @@ class AllMutationsScoreResult(BaseModel):
     """All single-mutation scores for a structure.
 
     Attributes:
-        scores: Dictionary mapping position labels (e.g., '1A' for position 1,
+        scores (dict[str, dict[str, float]]): Dictionary mapping position labels (e.g., '1A' for position 1,
             wild-type Ala) to dictionaries of {mutant_residue: score}. Scores
             are log-likelihood ratios (positive = favored over wild-type).
     """
@@ -94,7 +96,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
     """Output for exhaustive FAMPNN mutation scoring.
 
     Attributes:
-        results: List of AllMutationsScoreResult objects, one per input structure.
+        results (list[AllMutationsScoreResult]): List of AllMutationsScoreResult objects, one per input structure.
     """
 
     results: List[AllMutationsScoreResult] = Field(
@@ -177,12 +179,12 @@ def run_fampnn_score_all_mutations(
     residue. Useful for generating comprehensive mutational landscapes.
 
     Args:
-        inputs: FAMPNNScoreAllMutationsInput containing structures.
-        config: Configuration for scoring.
+        inputs (FAMPNNScoreAllMutationsInput): FAMPNNScoreAllMutationsInput containing structures.
+        config (FAMPNNScoreAllMutationsConfig | None): Configuration for scoring.
         instance: Optional ToolInstance for persistent execution.
 
     Returns:
-        FAMPNNScoreAllMutationsOutput with per-position mutation scores.
+        FAMPNNScoreAllMutationsOutput: FAMPNNScoreAllMutationsOutput with per-position mutation scores.
     """
     results = []
 

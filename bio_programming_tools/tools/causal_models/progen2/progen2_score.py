@@ -1,4 +1,6 @@
-"""ProGen2 scoring tool."""
+"""bio_programming_tools/tools/causal_models/progen2/progen2_score.py
+
+ProGen2 scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -38,7 +40,7 @@ class ProGen2ScoringInput(BaseToolInput):
     """Input for ProGen2 protein sequence scoring.
 
     Attributes:
-        sequences: Protein sequences to score. The start token '1' will be
+        sequences (list[str]): Protein sequences to score. The start token '1' will be
             automatically prepended if not present.
     """
 
@@ -64,13 +66,13 @@ class ProGen2ScoringConfig(BaseConfig):
     position and summing the log probabilities. Uses batched processing.
 
     Attributes:
-        model_checkpoint (str): ProGen2 model checkpoint to use. Options include
+        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 model checkpoint to use. Options include
             ``"progen2-small"`` (151M), ``"progen2-medium"`` (754M),
             ``"progen2-oas"`` (754M, antibody-specific), ``"progen2-large"`` (2B),
             ``"progen2-BFD90"`` (2B), ``"progen2-xlarge"`` (6B).
             Default: ``"progen2-large"``.
 
-        local_path (Optional[str]): Optional path to local model weights directory.
+        local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading
             from HuggingFace. Default: ``None``.
 
@@ -162,7 +164,7 @@ def run_progen2_score(
     Args:
         inputs (ProGen2ScoringInput): Validated input containing protein sequences
             to score.
-        config (ProGen2ScoringConfig): Scoring configuration specifying model,
+        config (ProGen2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
     Returns:

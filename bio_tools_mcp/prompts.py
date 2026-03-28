@@ -1,4 +1,6 @@
-"""MCP prompts — reusable workflow templates for agents."""
+"""bio_tools_mcp/prompts.py
+
+MCP prompts — reusable workflow templates for agents."""
 
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ def find_tool(task: str) -> str:
     """Help an agent find the right tool for a biological task.
 
     Args:
-        task: What the user wants to do (e.g. "predict protein structure",
+        task (str): What the user wants to do (e.g. "predict protein structure",
               "score a DNA sequence", "find homologs").
     """
     return f"""\
@@ -42,7 +44,7 @@ def tool_walkthrough(tool_key: str) -> str:
     """Pull together everything an agent needs to use a specific tool.
 
     Args:
-        tool_key: Tool registry key (e.g. 'esmfold-prediction', 'blast-search').
+        tool_key (str): Tool registry key (e.g. 'esmfold-prediction', 'blast-search').
     """
     return f"""\
 Give me a complete walkthrough of the tool "{tool_key}".

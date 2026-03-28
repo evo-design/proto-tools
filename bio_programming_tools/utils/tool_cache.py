@@ -1,5 +1,5 @@
 """
-tool_cache.py
+bio_programming_tools/utils/tool_cache.py
 
 Tool cache utilities for caching expensive tool operations.
 
@@ -92,11 +92,11 @@ class ToolCache:
         Get cached result for a tool and cache key.
 
         Args:
-            tool_name: Name of the tool
-            cache_key: Cache key for the specific invocation
+            tool_name (str): Name of the tool
+            cache_key (str): Cache key for the specific invocation
 
         Returns:
-            Cached result if available, None otherwise
+            Any | None: Cached result if available, None otherwise
         """
         tool_cache = self._cache.get(tool_name)
         if tool_cache is None:
@@ -119,9 +119,9 @@ class ToolCache:
         Store result in cache for a tool and cache key.
 
         Args:
-            tool_name: Name of the tool
-            cache_key: Cache key for the specific invocation
-            result: Result to cache
+            tool_name (str): Name of the tool
+            cache_key (str): Cache key for the specific invocation
+            result (Any): Result to cache
         """
         # If the tool exists, move it to the end of the cache (mark as recently used).
         if tool_name in self._cache:
@@ -145,11 +145,11 @@ class ToolCache:
         Clear cache entries.
 
         Args:
-            tool_name: If provided, clear only this tool's cache.
+            tool_name (str | None): If provided, clear only this tool's cache.
                        If None, clear all cache entries.
 
         Returns:
-            Number of entries cleared
+            int: Number of entries cleared
         """
         if tool_name:
             count = len(self._cache.get(tool_name, {}))
@@ -170,7 +170,7 @@ class ToolCache:
         Uses LRU eviction strategy (prioritizes least recently used entries).
 
         Args:
-            target_size: The desired cache size in bytes.
+            target_size (int): The desired cache size in bytes.
         """
         if self._current_size_bytes <= target_size:
             return
@@ -205,7 +205,7 @@ class ToolCache:
         Get cache statistics.
 
         Returns:
-            Dictionary with cache statistics including total entries and estimated size
+            dict[str, Any]: Dictionary with cache statistics including total entries and estimated size
         """
         total_entries = sum(len(cache_dict) for cache_dict in self._cache.values())
         return {
@@ -220,6 +220,9 @@ def _serialize_for_cache_key(obj: Any) -> str:
 
     Handles Pydantic models, basic types, lists, dicts, etc.
     Fields marked with ``include_in_key=False`` on their ConfigField are excluded.
+
+    Args:
+        obj (Any): Object to serialize into a deterministic string.
     """
     if hasattr(obj, "cache_key"):
         return obj.cache_key()
@@ -239,12 +242,12 @@ def _generate_cache_key(tool_name: str, *args, **kwargs) -> str:
     Generate a deterministic cache key for tool operations.
 
     Args:
-        tool_name: Name of the tool
-        *args: Positional arguments to the tool
-        **kwargs: Keyword arguments to the tool
+        tool_name (str): Name of the tool.
+        args: Positional arguments to the tool (via ``*args``).
+        kwargs: Keyword arguments to the tool (via ``**kwargs``).
 
     Returns:
-        A deterministic hash key for the cache
+        str: A deterministic hash key for the cache
     """
     # Create a list of all parameters in a deterministic order
     key_parts = [tool_name]
@@ -267,9 +270,9 @@ class DeduplicatedItems:
     """Result of deduplicating a list of items by cache key.
 
     Attributes:
-        unique_items: Deduplicated items in first-occurrence order.
-        unique_keys: Cache keys for each unique item (1:1 with unique_items).
-        index_map: Maps every original position to its unique index.
+        unique_items (list[Any]): Deduplicated items in first-occurrence order.
+        unique_keys (list[str]): Cache keys for each unique item (1:1 with unique_items).
+        index_map (list[tuple[int, int]]): Maps every original position to its unique index.
             ``index_map[i]`` is ``(i, unique_idx)`` where ``unique_idx``
             indexes into ``unique_items``.
     """
@@ -285,12 +288,12 @@ def deduplicate_items(
     """Deduplicate items by a serialization key function.
 
     Args:
-        items: List of items to deduplicate.
-        key_fn: Callable that produces a deterministic string key for each item.
+        items (list[Any]): List of items to deduplicate.
+        key_fn (Callable[[Any], str]): Callable that produces a deterministic string key for each item.
 
     Returns:
-        A ``DeduplicatedItems`` with unique items, their keys, and a full
-        index map from original positions to unique positions.
+        DeduplicatedItems: A ``DeduplicatedItems`` with unique items, their keys, and a full
+            index map from original positions to unique positions.
     """
     unique_items: list[Any] = []
     unique_keys: list[str] = []
@@ -324,10 +327,10 @@ class CacheStripResult:
     """Result of stripping cached items from an iterable input.
 
     Attributes:
-        uncached_items: Items that were not found in cache.
-        uncached_indices: Original indices of uncached items (1:1 with uncached_items).
-        cached_results: Mapping from original index to cached result item.
-        cache_keys: Cache keys for uncached items (1:1 with uncached_items).
+        uncached_items (list[Any]): Items that were not found in cache.
+        uncached_indices (list[int]): Original indices of uncached items (1:1 with uncached_items).
+        cached_results (dict[int, Any]): Mapping from original index to cached result item.
+        cache_keys (list[str]): Cache keys for uncached items (1:1 with uncached_items).
     """
     uncached_items: list[Any] = field(default_factory=list)
     uncached_indices: list[int] = field(default_factory=list)
@@ -348,12 +351,12 @@ def cache_strip_items(
     """Look up each item in the active cache, returning cached vs uncached split.
 
     Args:
-        tool_name: Registry key of the tool.
-        items: List of input items (already deduped).
-        config: Tool config (included in per-item cache key).
+        tool_name (str): Registry key of the tool.
+        items (list[Any]): List of input items (already deduped).
+        config (Any): Tool config (included in per-item cache key).
 
     Returns:
-        A ``CacheStripResult``, or ``None`` if no active cache exists.
+        CacheStripResult | None: A ``CacheStripResult``, or ``None`` if no active cache exists.
     """
     cache = _program_tool_cache.get()
     if cache is None:
@@ -391,9 +394,9 @@ def cache_store_items(
     """Write newly computed items into the active cache.
 
     Args:
-        tool_name: Registry key of the tool.
-        cache_keys: Cache keys (1:1 with result_items).
-        result_items: Computed result items to store.
+        tool_name (str): Registry key of the tool.
+        cache_keys (list[str]): Cache keys (1:1 with result_items).
+        result_items (list[Any]): Computed result items to store.
     """
     cache = _program_tool_cache.get()
     if cache is None:
@@ -411,12 +414,12 @@ def cache_stitch_items(
     """Merge cached and freshly computed items back into original order.
 
     Args:
-        strip: The ``CacheStripResult`` from ``cache_strip_items``.
-        computed_items: Newly computed items (1:1 with ``strip.uncached_indices``).
-        total_count: Total number of items in the original (pre-strip) input.
+        strip (CacheStripResult): The ``CacheStripResult`` from ``cache_strip_items``.
+        computed_items (list[Any]): Newly computed items (1:1 with ``strip.uncached_indices``).
+        total_count (int): Total number of items in the original (pre-strip) input.
 
     Returns:
-        Merged list of length ``total_count`` with items in original order.
+        list[Any]: Merged list of length ``total_count`` with items in original order.
     """
     result_map = dict(strip.cached_results)
     for orig_idx, item in zip(strip.uncached_indices, computed_items):
@@ -444,10 +447,10 @@ def clear_tool_cache(tool_name: str) -> int:
     Clear cache entries for a specific tool.
 
     Args:
-        tool_name: Name of the tool to clear cache for
+        tool_name (str): Name of the tool to clear cache for
 
     Returns:
-        Number of entries cleared
+        int: Number of entries cleared
     """
     cache = _program_tool_cache.get()
     if cache:
@@ -460,7 +463,7 @@ def get_cache_info() -> dict[str, Any]:
     Get information about the cache.
 
     Returns:
-        Dictionary with cache statistics
+        dict[str, Any]: Dictionary with cache statistics
     """
     cache = _program_tool_cache.get()
     if cache:
@@ -473,10 +476,10 @@ def has_cached_entries(tool_name: str) -> bool:
     Check if a specific tool has any cached entries.
 
     Args:
-        tool_name: Name of the tool to check
+        tool_name (str): Name of the tool to check
 
     Returns:
-        True if the tool has cached entries, False otherwise
+        bool: True if the tool has cached entries, False otherwise
     """
     cache = _program_tool_cache.get()
     if cache is None:

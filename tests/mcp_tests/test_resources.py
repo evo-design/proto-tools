@@ -1,4 +1,6 @@
-"""Tests for MCP resources."""
+"""tests/mcp_tests/test_resources.py
+
+Tests for MCP resources."""
 
 from __future__ import annotations
 

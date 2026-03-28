@@ -1,4 +1,6 @@
-"""FAMPNN sequence sampling tool with full-atom sidechain co-generation."""
+"""bio_programming_tools/tools/inverse_folding/fampnn/fampnn_sample.py
+
+FAMPNN sequence sampling tool with full-atom sidechain co-generation."""
 from __future__ import annotations
 
 import logging
@@ -30,7 +32,7 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
     conditioning on known sidechain conformations during design/packing.
 
     FAMPNN introduces fixed_sidechain_positions as a separate constraint from
-    fixed_positions (inherited from InverseFoldingStructureInput):
+    fixed_positions (dict[str, list[int]] | None):
     - fixed_positions: Residue positions whose amino acid identity is kept fixed
       during sequence design (the model will not redesign these positions).
     - fixed_sidechain_positions: Residue positions whose sidechain atom
@@ -38,7 +40,7 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
       3D geometry).
 
     Attributes:
-        fixed_sidechain_positions: Optional dictionary mapping chain IDs to
+        fixed_sidechain_positions (dict[str, list[int]] | None): Optional dictionary mapping chain IDs to
             residue positions whose sidechain coordinates should be used as
             context during sampling/packing. Positions are 1-indexed.
     """
@@ -55,7 +57,7 @@ class FAMPNNSampleInput(BaseToolInput):
     """Input for FAMPNN sequence sampling.
 
     Attributes:
-        inputs: List of FAMPNN structure inputs, each containing a structure
+        inputs (list[FAMPNNStructureInput]): List of FAMPNN structure inputs, each containing a structure
             and optional chain_ids/fixed_positions/fixed_sidechain_positions.
     """
 
@@ -71,26 +73,26 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
     iterative masked language modeling and sidechain diffusion.
 
     Attributes:
-        num_sequences_per_structure: Total number of sequences to generate per
+        num_sequences_per_structure (int): Total number of sequences to generate per
             input structure.
-        batch_size: Number of sequences to process simultaneously on GPU.
+        batch_size (int | None): Number of sequences to process simultaneously on GPU.
             Defaults to num_sequences_per_structure.
-        temperature: Controls randomness in sampling from logits.
-        excluded_amino_acids: List of amino acids not allowed in the sequence.
+        temperature (float): Controls randomness in sampling from logits.
+        excluded_amino_acids (list[str] | None): List of amino acids not allowed in the sequence.
             Not supported by FAMPNN (raises ValueError if set).
-        seed: Random seed to use for sampling.
-        model_variant: FAMPNN checkpoint variant. '0.3' for sequence design
+        seed (int): Random seed to use for sampling.
+        model_variant (str): FAMPNN checkpoint variant. '0.3' for sequence design
             (PDB-trained, 0.3A noise), '0.0' for sidechain packing (PDB-trained,
             0.0A noise), '0.3_cath' for mutation scoring (CATH-trained).
-        num_steps: Number of iterative unmasking steps for sequence design.
+        num_steps (int): Number of iterative unmasking steps for sequence design.
             More steps yield higher quality but slower inference. 10 steps is
             sufficient for high self-consistency; 100 for best quality.
-        seq_only: If True, skip sidechain generation during sampling.
-        repack_last: If True, repack sidechains after final sequence is determined.
-        psce_threshold: Only condition on sidechains with predicted sidechain
+        seq_only (bool): If True, skip sidechain generation during sampling.
+        repack_last (bool): If True, repack sidechains after final sequence is determined.
+        psce_threshold (float): Only condition on sidechains with predicted sidechain
             error below this threshold during iterative sampling.
-        scn_diffusion_steps: Number of sidechain diffusion denoising steps.
-        scn_step_scale: Step scale for sidechain diffusion (eta parameter).
+        scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
+        scn_step_scale (float): Step scale for sidechain diffusion (eta parameter).
     """
 
     model_variant: str = ConfigField(
@@ -150,10 +152,10 @@ class FAMPNNSequences(DesignedSequences):
     """Designed sequences from FAMPNN with full-atom sidechain outputs.
 
     Attributes:
-        sequences: Designed amino acid sequences.
-        output_pdb_strings: PDB-format strings with designed sequence and
+        sequences (list[str]): Designed amino acid sequences.
+        output_pdb_strings (list[str]): PDB-format strings with designed sequence and
             packed sidechain coordinates. B-factor column contains per-atom pSCE.
-        psce: Per-residue predicted sidechain error (mean over atoms) in Angstroms.
+        psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
     """
 
     output_pdb_strings: List[str] = Field(
@@ -205,13 +207,13 @@ def run_fampnn_sample(
     confidence scores (pSCE).
 
     Args:
-        inputs: FAMPNNSampleInput containing structure inputs with optional
+        inputs (FAMPNNSampleInput): FAMPNNSampleInput containing structure inputs with optional
             chain_ids, fixed_positions, and fixed_sidechain_positions.
-        config: Configuration for sampling (temperature, num_steps, etc.).
+        config (FAMPNNSampleConfig | None): Configuration for sampling (temperature, num_steps, etc.).
         instance: Optional ToolInstance for persistent execution.
 
     Returns:
-        FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
+        FAMPNNSampleOutput: FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
     """
     designed_sequences = []
 

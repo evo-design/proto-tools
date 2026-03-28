@@ -1,4 +1,6 @@
-"""Tests for StructureEnsemble."""
+"""tests/structure_tests/test_structure_ensemble.py
+
+Tests for StructureEnsemble."""
 
 from unittest.mock import Mock
 

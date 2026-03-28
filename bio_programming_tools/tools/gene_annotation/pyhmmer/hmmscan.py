@@ -1,4 +1,6 @@
-"""PyHMMER hmmscan tool — search protein sequences against an HMM database."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/hmmscan.py
+
+PyHMMER hmmscan tool — search protein sequences against an HMM database."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,7 +29,7 @@ class PyHmmscanInput(PyHmmerInput):
     an HMM database to identify domains and protein families within the sequences.
 
     Attributes:
-        sequences (List[str]): Query protein sequences to search.
+        sequences (list[str]): Query protein sequences to search.
             Inherited from ``PyHmmerInput``. Can be a single sequence string or
             a list of sequence strings.
 
@@ -91,7 +93,7 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
     Args:
         inputs (PyHmmscanInput): Validated PyHMMER hmmscan input containing
             the HMM database path and query sequences.
-        config (PyHmmscanConfig): Validated PyHMMER configuration with search
+        config (PyHmmscanConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
     Returns:

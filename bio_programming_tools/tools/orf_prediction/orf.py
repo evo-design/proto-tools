@@ -1,3 +1,4 @@
+"""bio_programming_tools/tools/orf_prediction/orf.py"""
 from __future__ import annotations
 
 from typing import Any, Dict, Literal, Optional
@@ -15,18 +16,18 @@ class ORF:
     extended by specific ORF prediction tools (e.g., Orfipy, Prodigal).
 
     Attributes:
-        parent_id (str): Identifier of the parent/input sequence (e.g., "seq_0").
-        orf_id (str): Unique ORF identifier within the parent sequence (e.g., "gene_1").
-        strand (Literal["+", "-"]): Strand direction. "+" for forward, "-" for reverse.
-        frame (int): Reading frame (1, 2, or 3).
-        amino_acid_sequence (str): Translated protein sequence.
-        nucleotide_sequence (str): DNA sequence of the ORF.
-        amino_acid_length (int): Length of protein in amino acids.
-        nucleotide_length (int): Length of ORF in nucleotides.
-        nucleotide_start (int): Start position in parent sequence (1-indexed, inclusive).
-        nucleotide_end (int): End position in parent sequence (1-indexed, inclusive).
-        metrics (Dict[str, Any]): Dictionary of tool-specific metrics or metadata.
-        id (str): Combined identifier (computed): parent_id + "_" + orf_id (e.g., "seq_0_gene_1").
+        parent_id: Identifier of the parent/input sequence (e.g., "seq_0").
+        orf_id: Unique ORF identifier within the parent sequence (e.g., "gene_1").
+        strand: Strand direction. "+" for forward, "-" for reverse.
+        frame: Reading frame (1, 2, or 3).
+        amino_acid_sequence: Translated protein sequence.
+        nucleotide_sequence: DNA sequence of the ORF.
+        amino_acid_length: Length of protein in amino acids.
+        nucleotide_length: Length of ORF in nucleotides.
+        nucleotide_start: Start position in parent sequence (1-indexed, inclusive).
+        nucleotide_end: End position in parent sequence (1-indexed, inclusive).
+        metrics: Dictionary of tool-specific metrics or metadata.
+        id: Combined identifier (computed): parent_id + "_" + orf_id (e.g., "seq_0_gene_1").
 
     Note:
         All ORF coordinates use 1-indexed, inclusive intervals (biology convention).

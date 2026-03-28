@@ -1,4 +1,6 @@
-"""Tests for multi-GPU allocation."""
+"""tests/tool_infra_tests/test_device_manager/test_multi_gpu.py
+
+Tests for multi-GPU allocation."""
 
 import os
 import time

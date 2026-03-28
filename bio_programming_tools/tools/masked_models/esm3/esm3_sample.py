@@ -1,4 +1,6 @@
-"""ESM3 sampling tool."""
+"""bio_programming_tools/tools/masked_models/esm3/esm3_sample.py
+
+ESM3 sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -44,12 +46,12 @@ class ESM3SampleOutput(BaseToolOutput):
     providing the sampled protein sequences and optionally the logits.
 
     Attributes:
-        sequences (List[str]): Sampled or mutated protein sequences. Each sequence
+        sequences (list[str]): Sampled or mutated protein sequences. Each sequence
             is a string of amino acid characters. For de novo generation, these are
             completely new sequences. For mutation, these are modified versions of
             the input sequences with specified positions changed to model-predicted
             alternatives.
-        logits (Optional[List[List[List[float]]]]): Per-position logits for each
+        logits (list[list[list[float]]] | None): Per-position logits for each
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
             if return_logits=True in config.
     """
@@ -94,12 +96,12 @@ class ESM3SampleConfig(BaseConfig):
     """Configuration for ESM3 protein sequence sampling.
 
     Attributes:
-        model_checkpoint: ESM3 model checkpoint. Default: ``"esm3_sm_open_v1"``.
-        temperature: Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
-        masking_strategy: Controls which positions to mask for sampling. Default: random 30%.
-        batch_size: Sequences per GPU forward pass. Default: 1.
-        device: Device to run on. Default: ``"cuda"``.
-        return_logits: Whether to include per-position logits. Default: ``False``.
+        model_checkpoint (Literal[ESM3_MODEL_CHECKPOINTS]): ESM3 model checkpoint. Default: ``"esm3_sm_open_v1"``.
+        temperature (float): Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
+        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling. Default: random 30%.
+        batch_size (int): Sequences per GPU forward pass. Default: 1.
+        device (str): Device to run on. Default: ``"cuda"``.
+        return_logits (bool): Whether to include per-position logits. Default: ``False``.
     """
     masking_strategy: MaskingStrategy = ConfigField(
         title="Masking Strategy",
@@ -177,11 +179,11 @@ def run_esm3_sample(
     contain ``_`` at positions to sample.
 
     Args:
-        inputs: Protein sequences with ``_`` at designable positions.
-        config: Sampling configuration.
+        inputs (ESM3SampleInput): Protein sequences with ``_`` at designable positions.
+        config (ESM3SampleConfig | None): Sampling configuration.
 
     Returns:
-        ESM3SampleOutput with sampled sequences and optional logits.
+        ESM3SampleOutput: ESM3SampleOutput with sampled sequences and optional logits.
     """
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 

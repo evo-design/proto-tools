@@ -1,4 +1,6 @@
-"""Tests for ToolInstance."""
+"""tests/tool_infra_tests/test_tool_instance.py
+
+Tests for ToolInstance."""
 
 import hashlib
 import logging

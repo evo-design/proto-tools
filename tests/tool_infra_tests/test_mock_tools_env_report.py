@@ -1,4 +1,6 @@
-"""Environment report smoke tests for mock PyTorch tools."""
+"""tests/tool_infra_tests/test_mock_tools_env_report.py
+
+Environment report smoke tests for mock PyTorch tools."""
 import pytest
 
 from bio_programming_tools.tools.testing.mock_pytorch_tool import (

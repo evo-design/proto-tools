@@ -1,5 +1,5 @@
 """
-Infrastructure utilities for bio_programming_tools.tools.
+bio_programming_tools/utils/device.py
 
 GPU detection and device visibility.
 
@@ -36,10 +36,10 @@ class DeviceSpec:
     """Structured result from :func:`parse_device_string`.
 
     Attributes:
-        kind: ``"cpu"`` or ``"cuda"``.
-        devices: Explicit device IDs when provided (e.g. ``["cuda:0"]``),
+        kind (str): ``"cpu"`` or ``"cuda"``.
+        devices (list[str] | None): Explicit device IDs when provided (e.g. ``["cuda:0"]``),
             ``None`` for auto-allocate CUDA.
-        count: Number of CUDA devices requested (always 1 for cpu).
+        count (int): Number of CUDA devices requested (always 1 for cpu).
     """
     kind: str
     devices: list[str] | None
@@ -50,8 +50,8 @@ def get_gpu_compute_modes() -> list[str]:
     """Return the compute mode for each GPU via nvidia-smi.
 
     Returns:
-        List of mode strings per GPU (e.g. ``["Exclusive_Process", "Default"]``).
-        Empty list if nvidia-smi is unavailable.
+        list[str]: List of mode strings per GPU (e.g. ``["Exclusive_Process", "Default"]``).
+            Empty list if nvidia-smi is unavailable.
     """
     out = _run_nvidia_smi_query("--query-gpu=compute_mode", "--format=csv,noheader")
     if out is None:
@@ -177,7 +177,7 @@ def get_gpu_memory_used_physical(physical_device_id: int) -> int:
     method get_gpu_memory_used() which handles the mapping.
 
     Args:
-        physical_device_id: Physical GPU index (0-based hardware index)
+        physical_device_id (int): Physical GPU index (0-based hardware index)
 
     Returns:
         int: Memory used in bytes, or 0 if query fails
@@ -214,6 +214,10 @@ def _parse_count_suffix(device: str, prefix: str) -> int:
     *prefix* must include the separator character (e.g. ``"cudax"``),
     so the remainder is purely numeric.
 
+    Args:
+        device (str): Full device string (e.g., ``"cudax2"``).
+        prefix (str): Prefix including separator (e.g., ``"cudax"``).
+
     Raises:
         ValueError: If the suffix is missing, non-numeric, zero, or negative.
     """
@@ -235,10 +239,10 @@ def parse_device_string(device: str) -> DeviceSpec:
     Supports CPU and CUDA (single/multi, auto/explicit) device strings.
 
     Args:
-        device: Device string to parse.
+        device (str): Device string to parse.
 
     Returns:
-        A :class:`DeviceSpec` describing the parsed device.
+        DeviceSpec: class:`DeviceSpec` describing the parsed device.
 
     Examples:
         >>> parse_device_string("cpu")
@@ -325,11 +329,11 @@ def _validate_and_map_cuda_indices(
     """Validate CUDA indices against available GPUs and map to physical indices.
 
     Args:
-        cuda_indices: Logical CUDA device indices to validate.
-        parent_device_list: Parsed CUDA_VISIBLE_DEVICES, or None.
+        cuda_indices (list[int]): Logical CUDA device indices to validate.
+        parent_device_list (list[str] | None): Parsed CUDA_VISIBLE_DEVICES, or None.
 
     Returns:
-        Physical device index strings, deduplicated and in input order.
+        list[str]: Physical device index strings, deduplicated and in input order.
 
     Raises:
         ValueError: If no GPUs available or an index exceeds visible GPUs.
@@ -380,11 +384,11 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
     indices. Non-CUDA entries (cpu) are skipped.
 
     Args:
-        device: Device specification — int, single device string, or list of
+        device (int | str | list[int | str]): Device specification — int, single device string, or list of
             ints/strings (e.g. ``["cuda:0", "cuda:1"]``).
 
     Returns:
-        CUDA_VISIBLE_DEVICES value (comma-separated device indices)
+        str: CUDA_VISIBLE_DEVICES value (comma-separated device indices)
 
     Examples:
         >>> determine_visible_devices("cpu")
@@ -473,10 +477,10 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
     """Parse device count requirement into min/max range.
 
     Args:
-        spec: Device count specification string
+        spec (str): Device count specification string
 
     Returns:
-        Dict with "min" and "max" keys (None means unbounded)
+        dict[str, int | None]: Dict with "min" and "max" keys (None means unbounded)
 
     Examples:
         >>> parse_device_count_requirement("1")
@@ -590,9 +594,9 @@ def validate_device_allocation(
     """Validate requested device count against requirement.
 
     Args:
-        requested_count: Number of devices being allocated
-        requirement: Device count requirement string (e.g., "1", "1-2", ">=1")
-        tool_key: Tool identifier for error messages
+        requested_count (int): Number of devices being allocated
+        requirement (str): Device count requirement string (e.g., "1", "1-2", ">=1")
+        tool_key (str): Tool identifier for error messages
 
     Behavior:
         - requested < min: Raise ValueError (tool won't work)
@@ -641,13 +645,13 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
     with other memory utilities.
 
     Returns:
-        List of dicts with keys:
+        list[dict[str, int | str]]: List of dicts with keys:
             - index: GPU index (int)
             - name: GPU name (str)
             - total_bytes: Total memory capacity in bytes (int)
             - used_bytes: Used memory in bytes (int)
             - free_bytes: Free memory in bytes (int)
-        Empty list if nvidia-smi is not available or fails
+            Empty list if nvidia-smi is not available or fails.
 
     Example:
         >>> mem_info = get_gpu_memory_info()
@@ -690,12 +694,13 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
     occupying GPU memory.
 
     Returns:
-        List of dicts with keys:
+        list[dict[str, int | str]]: List of dicts with keys:
             - gpu_index: GPU index (int) - extracted from PCI bus ID
             - pid: Process ID (int)
             - process_name: Process name (str)
             - used_bytes: Memory used by this process in bytes (int)
-        Empty list if nvidia-smi is not available, fails, or no processes are using GPUs
+            Empty list if nvidia-smi is not available, fails, or no processes
+            are using GPUs.
 
     Example:
         >>> processes = get_gpu_process_memory()
@@ -743,8 +748,8 @@ def _get_pci_bus_to_index_mapping() -> dict[str, int]:
     """Build a mapping from PCI bus ID to GPU index.
 
     Returns:
-        Dict mapping PCI bus ID (str) to GPU index (int)
-        Empty dict if query fails
+        dict[str, int]: Dict mapping PCI bus ID (str) to GPU index (int).
+            Empty dict if query fails.
     """
     out = _run_nvidia_smi_query(
         "--query-gpu=index,pci.bus_id",
@@ -779,12 +784,12 @@ def display_gpu_memory_usage(
     Gracefully handles systems without GPUs by returning silently.
 
     Args:
-        bar_width: Width of the progress bar in characters (default: 40)
-        name_width: Maximum width for GPU name (default: 30, will be truncated)
-        show_processes: Show individual processes using each GPU (default: False)
-        verbose: If True, show full details (name, percentage). If False, show
+        bar_width (int): Width of the progress bar in characters (default: 40)
+        name_width (int): Maximum width for GPU name (default: 30, will be truncated)
+        show_processes (bool): Show individual processes using each GPU (default: False)
+        verbose (bool): If True, show full details (name, percentage). If False, show
             a compact one-line-per-GPU view. (default: False)
-        devices: List of GPU indices to display (default: None, show all).
+        devices (list[int] | None): List of GPU indices to display (default: None, show all).
             Example: ``[0, 1]`` shows only GPU 0 and GPU 1.
 
     Example output (verbose=True, show_processes=False):

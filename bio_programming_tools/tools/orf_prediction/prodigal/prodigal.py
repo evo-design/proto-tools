@@ -1,5 +1,5 @@
 """
-prodigal.py
+bio_programming_tools/tools/orf_prediction/prodigal/prodigal.py
 
 Utility functions for programmatic ORF calling with Prodigal.
 
@@ -39,7 +39,7 @@ class ProdigalInput(BaseToolInput):
     DNA sequences using Prodigal, a fast and reliable gene prediction tool.
 
     Attributes:
-        input_sequences (List[str]): DNA sequence(s) to analyze for
+        input_sequences (list[str]): DNA sequence(s) to analyze for
             genes and open reading frames. Can be provided as:
 
             - A single DNA sequence string (e.g., ``"ATGCGTAAATAA"``)
@@ -172,14 +172,14 @@ class ProdigalOutput(BaseToolOutput):
     and quality metrics.
 
     Attributes:
-        predicted_orfs (List[List[ORF]]): List of ORF results per input
+        predicted_orfs (list[list[ORF]]): List of ORF results per input
             sequence. Each inner list contains the ORF objects found in a
             single input sequence. The outer list order matches the input sequences.
 
-        num_orfs (int): Total number of ORFs predicted across all input sequences.
+        num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
 
-        results_df (pd.DataFrame): All ORF results as a pandas DataFrame with columns:
+        results_df: All ORF results as a pandas DataFrame with columns:
 
             - ``parent_id``: ID of the parent sequence
             - ``orf_id``: Unique ORF identifier within the parent
@@ -319,7 +319,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None
     Args:
         inputs (ProdigalInput): Validated input containing one or more prokaryotic
             DNA sequences for gene prediction.
-        config (ProdigalConfig): Validated Prodigal configuration specifying
+        config (ProdigalConfig | None): Validated Prodigal configuration specifying
             prediction mode (meta vs. single-genome), genetic code, and threading.
 
     Returns:

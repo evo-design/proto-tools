@@ -1,5 +1,6 @@
 """
-protenix.py
+bio_programming_tools/tools/structure_prediction/protenix/protenix.py
+
 Protein structure prediction using Protenix.
 
 Example:
@@ -7,7 +8,6 @@ Example:
     >>> config = ProtenixConfig()
     >>> result = run_protenix(ProtenixInput(complexes=["MVLSPADKTNVKAAW"]), config)
     >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
-
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class ProtenixInput(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -77,11 +77,11 @@ class ProtenixInput(StructurePredictionInput):
         """Convert a complex to Protenix JSON input format.
 
         Args:
-            complex_idx: Index of the complex to convert
-            name: Name identifier for the prediction job
+            complex_idx (int): Index of the complex to convert
+            name (str): Name identifier for the prediction job
 
         Returns:
-            List containing a single dict in Protenix JSON format
+            list[dict]: List containing a single dict in Protenix JSON format
         """
         comp = self.complexes[complex_idx]
         sequences = []
@@ -145,7 +145,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
     Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
-        model_name (str): Protenix model variant to use. Available models:
+        model_name (ProtenixModelName): Protenix model variant to use. Available models:
 
             **Base models** (full-parameter, highest accuracy, 10 recycle iterations,
             200 diffusion steps):
@@ -176,7 +176,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
 
             Default: ``"protenix_base_default_v1.0.0"``.
 
-        seeds (List[int]): Random seeds for structure sampling. Each seed produces
+        seeds (list[int]): Random seeds for structure sampling. Each seed produces
             ``num_diffusion_samples`` independent structure samples. Multiple seeds
             increase diversity of the sampled conformations. A single seed is
             sufficient for most use cases; more seeds may help for challenging
@@ -200,16 +200,19 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
 
-        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``). Inherited
+        device: Device to run the model on (e.g., ``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution including
+        verbose: Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
+
+        timeout (int): Maximum execution time in seconds. Base models need
+            ~10-15 minutes on slower GPUs. Default: 1200.
 
     """
 
@@ -301,7 +304,7 @@ def run_protenix(
     Args:
         inputs (ProtenixInput): Validated input containing one or more complexes to
             predict structures for.
-        config (ProtenixConfig): Validated Protenix configuration specifying model
+        config (ProtenixConfig | None): Validated Protenix configuration specifying model
             variant, MSA settings, diffusion parameters, and execution options.
 
     Returns:
@@ -309,29 +312,29 @@ def run_protenix(
             - ``structures``: List of ``Structure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
 
-                confidence_score (float): Ranking score used to select the best sample.
+                confidence_score: Ranking score used to select the best sample.
                     Weighted combination of confidence metrics. Range: 0.0-1.0.
 
-                ptm (float): Predicted Template Modeling score measuring overall structural
+                ptm: Predicted Template Modeling score measuring overall structural
                     accuracy. Range: 0.0-1.0.
 
-                iptm (float): Interface PTM score measuring confidence in inter-chain
+                iptm: Interface PTM score measuring confidence in inter-chain
                     interfaces. Range: 0.0-1.0.
 
-                avg_plddt (float): Average per-residue confidence (pLDDT), normalized to
+                avg_plddt: Average per-residue confidence (pLDDT), normalized to
                     0.0-1.0. Higher values indicate more confident predictions.
 
-                gpde (float): Global Predicted Distance Error in Angstroms. Lower values
+                gpde: Global Predicted Distance Error in Angstroms. Lower values
                     indicate more confident relative positioning.
 
-                chain_ptm (List[float]): Per-chain PTM scores.
+                chain_ptm: Per-chain PTM scores.
 
-                chain_plddt (List[float]): Per-chain pLDDT scores.
+                chain_plddt: Per-chain pLDDT scores.
 
-                chain_pair_iptm (List[List[float]]): Pairwise interface PTM scores
+                chain_pair_iptm: Pairwise interface PTM scores
                     between all chain pairs.
 
-                has_clash (bool): Whether the predicted structure has steric clashes.
+                has_clash: Whether the predicted structure has steric clashes.
 
     See Also:
         - Protenix GitHub: https://github.com/bytedance/Protenix
@@ -434,7 +437,7 @@ def _extract_protein_sequences_and_chain_ids(
         sp_complex: StructurePredictionComplex instance
 
     Returns:
-        Tuple of (protein_seqs, protein_chain_ids)
+        tuple[list[str], list[str]]: Tuple of (protein_seqs, protein_chain_ids)
     """
     all_chain_ids = list(string.ascii_uppercase)
     protein_seqs = []
@@ -455,10 +458,10 @@ def _write_msas_to_batch_json(
     """Write pre-computed MSAs to A3M files and inject paths into batch JSON.
 
     Args:
-        batch_json: List of Protenix job dicts (modified in place).
-        inputs: ProtenixInput with the original complexes and pre-computed MSAs.
-        config: ProtenixConfig with verbose setting.
-        temp_dir: Directory for writing A3M files.
+        batch_json (list[dict]): List of Protenix job dicts (modified in place).
+        inputs (ProtenixInput): ProtenixInput with the original complexes and pre-computed MSAs.
+        config (ProtenixConfig): ProtenixConfig with verbose setting.
+        temp_dir (str): Directory for writing A3M files.
     """
     msa_dir = os.path.join(temp_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)

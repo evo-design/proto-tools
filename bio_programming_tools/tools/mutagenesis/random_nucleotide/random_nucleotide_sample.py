@@ -1,4 +1,6 @@
-"""Random nucleotide sampling with IUPAC degenerate base support."""
+"""bio_programming_tools/tools/mutagenesis/random_nucleotide/random_nucleotide_sample.py
+
+Random nucleotide sampling with IUPAC degenerate base support."""
 from __future__ import annotations
 
 import logging
@@ -38,7 +40,7 @@ class RandomNucleotideSampleInput(BaseToolInput):
     """Input for random nucleotide sampling.
 
     Attributes:
-        sequences: DNA or RNA sequences, possibly containing ``_`` at
+        sequences (list[str]): DNA or RNA sequences, possibly containing ``_`` at
             positions to mutate. Accepts a single string or a list.
     """
 
@@ -63,7 +65,7 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
     """Output from random nucleotide sampling.
 
     Attributes:
-        sequences: Nucleotide sequences with masked positions filled
+        sequences (list[str]): Nucleotide sequences with masked positions filled
             by random bases drawn from the configured substitution scheme.
     """
 
@@ -103,15 +105,15 @@ class RandomNucleotideSampleConfig(BaseConfig):
     """Configuration for random nucleotide sampling.
 
     Attributes:
-        masking_strategy: Controls which positions to mask for sampling.
+        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling.
             Default: random 30%.
-        substitution_scheme: IUPAC ambiguity code defining the nucleotide
+        substitution_scheme (SubstitutionScheme): IUPAC ambiguity code defining the nucleotide
             pool for substitutions. ``"N"`` = any base (ACGT);
             ``"R"`` = purines (AG); ``"Y"`` = pyrimidines (CT); etc.
-        sequence_type: How to interpret input sequences. ``"auto"``
+        sequence_type (Literal['auto', 'dna', 'rna']): How to interpret input sequences. ``"auto"``
             detects DNA vs RNA by presence of U; ``"dna"`` or ``"rna"``
             forces the type.
-        seed: Random seed for reproducibility. Default: ``None``.
+        seed (int | None): Random seed for reproducibility. Default: ``None``.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -149,6 +151,9 @@ class RandomNucleotideSampleConfig(BaseConfig):
 
 def _detect_sequence_type(sequences: list[str]) -> str:
     """Detect whether sequences are DNA or RNA.
+
+    Args:
+        sequences (list[str]): Nucleotide sequences to classify.
 
     Returns ``"rna"`` if any sequence contains U/u (ignoring mask tokens),
     otherwise ``"dna"``.
@@ -197,11 +202,11 @@ def run_random_nucleotide_sample(
     For RNA sequences, sampled T bases are converted to U.
 
     Args:
-        inputs: Nucleotide sequences with ``_`` at designable positions.
-        config: Sampling configuration.
+        inputs (RandomNucleotideSampleInput): Nucleotide sequences with ``_`` at designable positions.
+        config (RandomNucleotideSampleConfig | None): Sampling configuration.
 
     Returns:
-        RandomNucleotideSampleOutput with sampled sequences.
+        RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
     rng = random.Random(config.seed) if config.seed is not None else None
     scheme = config.substitution_scheme

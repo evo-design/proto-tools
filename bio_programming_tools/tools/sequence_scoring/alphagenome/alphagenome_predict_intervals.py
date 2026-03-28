@@ -1,4 +1,6 @@
-"""AlphaGenome batched interval prediction tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py
+
+AlphaGenome batched interval prediction tool."""
 from __future__ import annotations
 
 import json
@@ -35,7 +37,7 @@ class AlphaGenomePredictIntervalsInput(BaseToolInput):
     """Input for batched AlphaGenome interval prediction.
 
     Attributes:
-        intervals (List[AlphaGenomeInterval]): Genomic intervals to predict.
+        intervals (list[AlphaGenomeInterval]): Genomic intervals to predict.
             A single interval is auto-wrapped into a list.
     """
 
@@ -59,7 +61,7 @@ class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
     """Output from batched AlphaGenome interval prediction.
 
     Attributes:
-        results (List[AlphaGenomePredictOutput]): Per-interval prediction outputs.
+        results (list[AlphaGenomePredictOutput]): Per-interval prediction outputs.
     """
 
     results: List[AlphaGenomePredictOutput] = Field(

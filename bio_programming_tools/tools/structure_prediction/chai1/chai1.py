@@ -1,5 +1,5 @@
 """
-chai1.py
+bio_programming_tools/tools/structure_prediction/chai1/chai1.py
 
 Protein structure prediction using Chai1.
 """
@@ -46,7 +46,7 @@ class Chai1Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, ligands, and/or glycans. Total
             length across all chains in a complex must not exceed 2,048 residues.
@@ -114,7 +114,7 @@ class Chai1Config(MSAStructurePredictionConfig):
             diffusion sample. Increases diversity in structure generation. Must be
             at least 1. Default: 1.
 
-        seed (Optional[int]): Random seed for reproducible results. Set to a fixed
+        seed (int | None): Random seed for reproducible results. Set to a fixed
             value for deterministic predictions or ``None`` for random behavior.
             Default: 42.
 
@@ -122,14 +122,14 @@ class Chai1Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
 
-        device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
+        device: Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution. Inherited
+        verbose: Whether to print status messages during execution. Inherited
             from ``StructurePredictionConfig``. Default: ``False``.
 
     Note:
@@ -213,14 +213,14 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
     Args:
         inputs (Chai1Input): Validated input containing one or more complexes to
             predict structures for. Each complex must be ≤ 2,048 residues total.
-        config (Chai1Config): Validated Chai1 configuration specifying ESM embeddings,
+        config (Chai1Config | None): Validated Chai1 configuration specifying ESM embeddings,
             MSA settings, refinement parameters, and execution options.
 
     Returns:
         Chai1Output: Structured output containing:
             - ``structures``: List of ``ChaiStructure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
-                avg_plddt (float): Average per-residue confidence (pLDDT) across all residues.
+                avg_plddt: Average per-residue confidence (pLDDT) across all residues.
                     Range: 0-1. Interpretation:
 
                     - ``> 0.9``: Very high confidence
@@ -230,16 +230,16 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
 
                     This is the primary quality metric for Chai1 predictions.
 
-                ptm (Optional[float]): Predicted Template Modeling score measuring overall
+                ptm: Predicted Template Modeling score measuring overall
                     structural accuracy. Range: 0.0-1.0. Higher values indicate better
                     predicted structures. May be ``None`` for some predictions.
 
-                iptm (Optional[float]): Interface PTM score measuring confidence in inter-chain
+                iptm: Interface PTM score measuring confidence in inter-chain
                     interfaces. Range: 0.0-1.0. Higher values indicate more confident
                     predictions of chain-chain interactions. Only meaningful for multi-chain
                     complexes. May be ``None`` for single-chain predictions.
 
-                confidence_score (Optional[float]): Overall confidence score combining
+                confidence_score: Overall confidence score combining
                     multiple quality metrics. Higher values indicate more reliable predictions.
                     May be ``None`` if not computed.
 

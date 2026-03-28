@@ -1,5 +1,5 @@
 """
-MAFFT (Multiple Alignment using Fast Fourier Transform) implementation.
+bio_programming_tools/tools/sequence_alignment/mafft/mafft.py
 
 This module provides a standardized interface for MAFFT multiple sequence alignment.
 """
@@ -34,9 +34,9 @@ class MafftInput(BaseToolInput):
     This class defines the input parameters for running MAFFT alignment.
 
     Attributes:
-        sequences (List[str]): List of sequence strings (protein or nucleotide)
+        sequences (list[str]): List of sequence strings (protein or nucleotide)
             to align. At least 2 sequences are required for alignment.
-        sequence_ids (Optional[List[str]]): Optional list of sequence identifiers.
+        sequence_ids (list[str] | None): Optional list of sequence identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
@@ -102,7 +102,7 @@ class MafftConfig(BaseConfig):
     """Configuration object for MAFFT alignment.
 
     Attributes:
-        align_method (str): Alignment method to use:
+        align_method (Literal['auto', 'localpair', 'globalpair', 'genafpair']): Alignment method to use:
             - "auto": Automatically select based on input (default)
             - "localpair": L-INS-i method (accurate, for <200 sequences)
             - "globalpair": G-INS-i method (for similar-length sequences)
@@ -162,7 +162,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
 
     Args:
         inputs (MafftInput): Validated input containing sequences to align.
-        config (MafftConfig): Configuration with alignment parameters.
+        config (MafftConfig | None): Configuration with alignment parameters.
 
     Returns:
         MafftOutput: MSA result with alignment metadata.

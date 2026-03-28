@@ -1,4 +1,6 @@
-"""Tests for LigandMPNN sampling."""
+"""tests/inverse_folding_tests/test_ligandmpnn.py
+
+Tests for LigandMPNN sampling."""
 from pathlib import Path
 
 import pytest

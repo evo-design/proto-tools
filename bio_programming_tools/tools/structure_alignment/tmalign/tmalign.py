@@ -1,5 +1,5 @@
 """
-TMalign -- pairwise protein structure alignment by TM-score.
+bio_programming_tools/tools/structure_alignment/tmalign/tmalign.py
 
 Wraps the TMalign binary (Zhang & Skolnick, 2005) as a ToolInstance-dispatched
 tool.  Accepts two PDB text blobs, writes them to temp files, calls the binary,
@@ -33,8 +33,8 @@ class TMalignInput(BaseToolInput):
     """Input for TMalign pairwise structure alignment.
 
     Attributes:
-        pdb_text_1: Raw PDB content of the first structure (query / candidate).
-        pdb_text_2: Raw PDB content of the second structure (reference / target).
+        pdb_text_1 (str): Raw PDB content of the first structure (query / candidate).
+        pdb_text_2 (str): Raw PDB content of the second structure (reference / target).
     """
 
     pdb_text_1: str = InputField(description="PDB content of structure 1 (query)")
@@ -52,8 +52,8 @@ class TMalignOutput(BaseToolOutput):
     """Output from TMalign pairwise structure alignment.
 
     Attributes:
-        tm_score_chain_1: TM-score normalized by the length of Chain 1 (query).
-        tm_score_chain_2: TM-score normalized by the length of Chain 2 (reference).
+        tm_score_chain_1 (float): TM-score normalized by the length of Chain 1 (query).
+        tm_score_chain_2 (float): TM-score normalized by the length of Chain 2 (reference).
     """
 
     tm_score_chain_1: float = Field(

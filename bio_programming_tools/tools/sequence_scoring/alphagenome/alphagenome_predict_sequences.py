@@ -1,4 +1,6 @@
-"""AlphaGenome batched raw-sequence prediction tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_sequences.py
+
+AlphaGenome batched raw-sequence prediction tool."""
 from __future__ import annotations
 
 import json
@@ -49,7 +51,7 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
     """Input for batched AlphaGenome raw-sequence prediction.
 
     Attributes:
-        sequences (List[str]): Raw DNA sequences (A/C/G/T/N characters).
+        sequences (list[str]): Raw DNA sequences (A/C/G/T/N characters).
             A single string is auto-wrapped into a list. Each sequence
             must match a supported context length.
     """
@@ -77,7 +79,7 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
     """Output from batched AlphaGenome sequence prediction.
 
     Attributes:
-        results (List[AlphaGenomePredictOutput]): Per-sequence prediction outputs.
+        results (list[AlphaGenomePredictOutput]): Per-sequence prediction outputs.
     """
 
     results: List[AlphaGenomePredictOutput] = Field(

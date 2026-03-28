@@ -1,4 +1,6 @@
-"""Tests for centralized compute dependency detection."""
+"""tests/tool_infra_tests/test_compute_deps.py
+
+Tests for centralized compute dependency detection."""
 
 from unittest.mock import patch
 

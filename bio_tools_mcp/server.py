@@ -1,5 +1,5 @@
 """
-Bio-programming-tools MCP server.
+bio_tools_mcp/server.py
 
 Exposes the tool registry (discovery, schemas, citations, search)
 to any MCP-compatible AI client via the FastMCP SDK.

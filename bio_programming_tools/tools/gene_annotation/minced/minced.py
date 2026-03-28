@@ -1,5 +1,5 @@
 """
-CRISPR array detection using MinCED.
+bio_programming_tools/tools/gene_annotation/minced/minced.py
 
 This module provides a standardized interface for detecting CRISPR arrays
 in nucleotide sequences using MinCED (Mining CRISPRs in Environmental Datasets),
@@ -91,8 +91,8 @@ class MincedInput(BaseToolInput):
     """Input for MinCED CRISPR array detection.
 
     Attributes:
-        sequences (List[str]): Nucleotide sequence(s) to search for CRISPR arrays.
-        sequence_ids (Optional[List[str]]): Optional sequence identifiers.
+        sequences (list[str]): Nucleotide sequence(s) to search for CRISPR arrays.
+        sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
     sequences: List[str] = InputField(
@@ -117,7 +117,7 @@ class MincedOutput(BaseToolOutput):
     """Output from MinCED CRISPR array detection.
 
     Attributes:
-        results (List[MincedSequenceResult]): Per-sequence CRISPR detection results.
+        results (list[MincedSequenceResult]): Per-sequence CRISPR detection results.
     """
 
     results: List[MincedSequenceResult] = Field(
@@ -220,7 +220,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     Args:
         inputs (MincedInput): Validated input containing nucleotide sequences.
-        config (MincedConfig): MinCED configuration with minimum repeat count
+        config (MincedConfig | None): MinCED configuration with minimum repeat count
             and length thresholds.
 
     Returns:

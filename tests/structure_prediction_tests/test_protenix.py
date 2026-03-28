@@ -1,4 +1,6 @@
-"""Tests for Protenix."""
+"""tests/structure_prediction_tests/test_protenix.py
+
+Tests for Protenix."""
 
 from __future__ import annotations
 

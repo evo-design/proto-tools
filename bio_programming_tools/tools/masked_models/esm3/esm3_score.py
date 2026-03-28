@@ -1,4 +1,6 @@
-"""ESM3 scoring tool."""
+"""bio_programming_tools/tools/masked_models/esm3/esm3_score.py
+
+ESM3 scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -39,7 +41,7 @@ class ESM3ScoringConfig(BaseConfig):
     computing P(x_i | x_{-i}). Uses batched processing for efficiency.
 
     Attributes:
-        model_checkpoint (str): ESM3 model checkpoint to use. Currently available:
+        model_checkpoint (Literal[ESM3_MODEL_CHECKPOINTS]): ESM3 model checkpoint to use. Currently available:
             ``"esm3_sm_open_v1"`` (small open-source model).
             Default: ``"esm3_sm_open_v1"``.
 
@@ -131,13 +133,13 @@ def run_esm3_score(
     and perplexity metrics.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing protein sequences
+        inputs (ESM3ScoringInput): Validated input containing protein sequences
             to score.
-        config (ESM3ScoringConfig): Scoring configuration specifying model,
+        config (ESM3ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
     Returns:
-        MaskedModelScoringOutput: Contains SequenceScores for each input sequence with:
+        ESM3ScoringOutput: Contains SequenceScores for each input sequence with:
 
             - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
               ``perplexity``

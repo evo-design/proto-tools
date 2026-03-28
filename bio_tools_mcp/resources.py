@@ -1,4 +1,6 @@
-"""MCP resources — tool documentation, schemas, and citations as URI templates."""
+"""bio_tools_mcp/resources.py
+
+MCP resources — tool documentation, schemas, and citations as URI templates."""
 
 from __future__ import annotations
 
@@ -127,6 +129,9 @@ def tool_citation(key: str) -> str:
 )
 def tool_example(key: str) -> str:
     """Get example notebook content for a tool.
+
+    Args:
+        key (str): Tool registry key (e.g., ``"esmfold-prediction"``).
 
     Returns the notebook path and extracted code/markdown cells.
     """

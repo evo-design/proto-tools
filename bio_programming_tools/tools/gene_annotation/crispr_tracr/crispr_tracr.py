@@ -1,5 +1,5 @@
 """
-tracrRNA prediction using CRISPRtracrRNA.
+bio_programming_tools/tools/gene_annotation/crispr_tracr/crispr_tracr.py
 
 This module provides a standardized interface for predicting tracrRNA sequences
 from nucleotide CRISPR loci using the CRISPRtracrRNA tool from the Backofen Lab
@@ -66,9 +66,9 @@ class CrisprTracrInput(BaseToolInput):
     """Input for CRISPRtracrRNA prediction.
 
     Attributes:
-        sequences (List[str]): Nucleotide sequence(s) to predict tracrRNA from.
+        sequences (list[str]): Nucleotide sequence(s) to predict tracrRNA from.
             Each sequence should contain a CRISPR locus.
-        sequence_ids (Optional[List[str]]): Optional sequence identifiers.
+        sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
     sequences: List[str] = InputField(
@@ -93,7 +93,7 @@ class CrisprTracrOutput(BaseToolOutput):
     """Output from CRISPRtracrRNA prediction.
 
     Attributes:
-        predictions (List[TracrPrediction]): Per-sequence tracrRNA predictions.
+        predictions (list[TracrPrediction]): Per-sequence tracrRNA predictions.
     """
 
     predictions: List[TracrPrediction] = Field(
@@ -132,9 +132,9 @@ class CrisprTracrConfig(BaseConfig):
     """Configuration for CRISPRtracrRNA prediction.
 
     Attributes:
-        model_type: Type of CRISPR model to use.
-        run_type: Pipeline mode (complete_run or model_only).
-        num_workers: Number of parallel workers.
+        model_type (Literal['II', 'all']): Type of CRISPR model to use.
+        run_type (Literal['complete_run', 'model_only']): Pipeline mode (complete_run or model_only).
+        num_workers (int | None): Number of parallel workers.
     """
 
     model_type: Literal["II", "all"] = ConfigField(
@@ -187,7 +187,7 @@ def run_crispr_tracr(
 
     Args:
         inputs (CrisprTracrInput): Validated input containing nucleotide sequences.
-        config (CrisprTracrConfig): CRISPRtracrRNA configuration including model type.
+        config (CrisprTracrConfig | None): CRISPRtracrRNA configuration including model type.
 
     Returns:
         CrisprTracrOutput: Per-sequence tracrRNA predictions.

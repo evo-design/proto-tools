@@ -1,4 +1,6 @@
-"""Tests for the UniProt fetch tool."""
+"""tests/database_retrieval_tests/test_uniprot_fetch.py
+
+Tests for the UniProt fetch tool."""
 
 from __future__ import annotations
 

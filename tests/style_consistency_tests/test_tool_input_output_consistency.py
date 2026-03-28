@@ -1,4 +1,6 @@
-"""Tests for tool input and output consistency."""
+"""tests/style_consistency_tests/test_tool_input_output_consistency.py
+
+Tests for tool input and output consistency."""
 
 import inspect
 

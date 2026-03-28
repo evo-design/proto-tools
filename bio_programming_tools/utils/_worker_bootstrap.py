@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-Worker bootstrap — runs inside the tool's venv as a long-running process.
+bio_programming_tools/utils/_worker_bootstrap.py
 
-Usage (invoked by PersistentWorker, not directly):
+Usage:
     python _worker_bootstrap.py <standalone_script_path>
 
-Protocol (stdin → stdout, one JSON object per line):
+Protocol:
 
     Request:  {"id": "abc123", "input": { ... }}
     Response: {"id": "abc123", "result": { ... }}
@@ -46,7 +46,7 @@ def _copy_standalone_helpers(script_path: str) -> None:
     utils/standalone_helpers_source/ into that standalone directory.
 
     Args:
-        script_path: Path to the standalone inference.py or run.py script
+        script_path (str): Path to the standalone inference.py or run.py script
     """
     script = Path(script_path).resolve()
 
@@ -105,6 +105,9 @@ def _build_legacy_dispatch(module: Any) -> Any:
 
     When there is exactly one ``run_*`` function and no ``operation`` key,
     we auto-route to it as a convenience for simple single-operation scripts.
+
+    Args:
+        module (Any): The imported standalone script module containing ``run_*`` functions.
     """
     # Pre-scan for run_* functions so we can auto-route single-function modules.
     run_funcs = {
@@ -167,6 +170,10 @@ def _send_response(json_out: Any, response_json: str) -> None:
     serialized JSON exceeds ``_FILE_FALLBACK_THRESHOLD`` bytes, the payload is
     written to a temporary file and a ``PROTO_FILE:<path>`` header is sent instead.
     This avoids pipe deadlocks on large responses.
+
+    Args:
+        json_out (Any): Writable file object for the JSON protocol pipe (stdout).
+        response_json (str): Serialized JSON string to send.
     """
     if len(response_json) > _FILE_FALLBACK_THRESHOLD:
         fd, path = tempfile.mkstemp(suffix=".json", prefix="bpt_worker_")

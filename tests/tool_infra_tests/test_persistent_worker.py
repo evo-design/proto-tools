@@ -1,4 +1,6 @@
-"""Tests for PersistentWorker and _worker_bootstrap."""
+"""tests/tool_infra_tests/test_persistent_worker.py
+
+Tests for PersistentWorker and _worker_bootstrap."""
 
 import json
 import logging

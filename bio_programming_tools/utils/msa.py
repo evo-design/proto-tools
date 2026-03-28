@@ -1,4 +1,6 @@
-"""Shared MSA utilities for structure prediction tools."""
+"""bio_programming_tools/utils/msa.py
+
+Shared MSA utilities for structure prediction tools."""
 from __future__ import annotations
 
 
@@ -7,10 +9,10 @@ def extract_msa_sequences(msa, query_index: int = 0) -> tuple[list[str], list[st
 
     Args:
         msa: MSA object with ``num_sequences`` and ``iter_with_ids()``
-        query_index: Index of the sequence to place first (default: 0)
+        query_index (int): Index of the sequence to place first (default: 0)
 
     Returns:
-        Tuple of (sequences, seq_ids), both with query at index 0
+        tuple[list[str], list[str]]: Tuple of (sequences, seq_ids), both with query at index 0
     """
     if query_index < 0 or query_index >= msa.num_sequences:
         raise IndexError(

@@ -1,5 +1,5 @@
 """
-Shared helper functions for ESMFold service layer and tool layer.
+bio_programming_tools/tools/structure_prediction/esmfold/helpers.py
 
 These helpers are used by both the tool layer (esmfold.py) and the service layer
 (esmfold_service.py in bio-programming deployment). They provide utilities for
@@ -21,11 +21,11 @@ def split_into_safe_batches(
     Split complexes into sub-batches respecting GPU memory limits.
 
     Args:
-        complexes: List of complex dicts, each with a "total_residues" key
-        max_residues: Maximum total residues allowed per sub-batch
+        complexes (list[dict[str, Any]]): List of complex dicts, each with a "total_residues" key
+        max_residues (int): Maximum total residues allowed per sub-batch
 
     Returns:
-        List of sub-batches, where each sub-batch is a list of complexes
+        list[list[dict[str, Any]]]: List of sub-batches, where each sub-batch is a list of complexes
     """
     batches = []
     current_batch = []
@@ -65,12 +65,12 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     chains with standard alphabetic labels (A, B, C, etc.).
 
     Args:
-        pdb_str: PDB file content as a string (assumed to be a single chain)
-        chain_lengths: List of residue counts for each desired chain.
+        pdb_str (str): PDB file content as a string (assumed to be a single chain)
+        chain_lengths (list[int]): List of residue counts for each desired chain.
                       Total must match the number of residues in pdb_str.
 
     Returns:
-        PDB content with chains relabeled and written back to string format
+        str: PDB content with chains relabeled and written back to string format
     """
     import io
 

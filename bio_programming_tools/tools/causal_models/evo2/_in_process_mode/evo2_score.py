@@ -1,4 +1,6 @@
-"""Evo2 scoring tool."""
+"""bio_programming_tools/tools/causal_models/evo2/_in_process_mode/evo2_score.py
+
+Evo2 scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -41,7 +43,7 @@ class Evo2ScoringInput(BaseToolInput):
     """Input for Evo2 DNA sequence scoring.
 
     Attributes:
-        sequences: DNA sequences to score.
+        sequences (list[str]): DNA sequences to score.
     """
 
     sequences: List[str] = InputField(description="DNA sequences to score")
@@ -66,11 +68,11 @@ class Evo2ScoringConfig(BaseConfig):
     position and summing the log probabilities. Uses batched processing.
 
     Attributes:
-        model_checkpoint (str): Evo2 model checkpoint to use. Currently available:
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use. Currently available:
             ``"evo2_7b"`` (7B parameters), ``"evo2_40b"`` (40B parameters),
             and base/specialized variants. Default: ``"evo2_7b"``.
 
-        local_path (Optional[str]): Optional path to local model weights directory.
+        local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading.
             Default: ``None``.
 
@@ -161,7 +163,7 @@ def run_evo2_score(
     Args:
         inputs (Evo2ScoringInput): Validated input containing DNA sequences
             to score.
-        config (Evo2ScoringConfig): Scoring configuration specifying model,
+        config (Evo2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
     Returns:

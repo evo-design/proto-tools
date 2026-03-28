@@ -1,5 +1,5 @@
 """
-alphafold2.py
+bio_programming_tools/tools/structure_prediction/alphafold2/alphafold2.py
 
 Protein structure prediction using AlphaFold2 via ColabDesign.
 
@@ -40,7 +40,7 @@ class AlphaFold2Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -61,6 +61,9 @@ class AlphaFold2Input(StructurePredictionInput):
         cls, complexes: List[StructurePredictionComplex]
     ) -> List[StructurePredictionComplex]:
         """Validate that complexes contain valid protein sequences.
+
+        Args:
+            complexes (list[StructurePredictionComplex]): Complexes to validate.
 
         Checks:
         - Valid protein characters (including 'X' for unknown)
@@ -86,7 +89,7 @@ class AlphaFold2Input(StructurePredictionInput):
         """Prepare complexes for AlphaFold2 inference.
 
         Returns:
-            List of dicts with keys: chains, seq_lengths, num_chains, total_residues
+            list[dict[str, Any]]: List of dicts with keys: chains, seq_lengths, num_chains, total_residues
         """
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
@@ -133,21 +136,21 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
             ``model_num`` — when ensembling, models are selected from the full pool
             (models 1 through N). Range: 1-5. Default: 1.
 
-        seed (Optional[int]): Random seed for reproducibility. If ``None``, uses
+        seed (int | None): Random seed for reproducibility. If ``None``, uses
             non-deterministic initialization. Default: ``None``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
 
-        device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
+        device: Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution. Inherited
+        verbose: Whether to print status messages during execution. Inherited
             from ``BaseConfig``. Default: ``False``.
     """
 
@@ -230,7 +233,7 @@ def run_alphafold2(
     Args:
         inputs (AlphaFold2Input): Validated input containing one or more protein
             complexes to predict structures for.
-        config (AlphaFold2Config): Validated AlphaFold2 configuration specifying
+        config (AlphaFold2Config | None): Validated AlphaFold2 configuration specifying
             MSA settings, recycling, and model parameters.
         instance: Optional tool instance name for persistent workers.
 
@@ -238,16 +241,16 @@ def run_alphafold2(
         AlphaFold2Output: Structured output containing:
             - ``structures``: List of ``Structure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
-                    avg_plddt (float): Average per-residue confidence (pLDDT).
+                    avg_plddt: Average per-residue confidence (pLDDT).
                         Range: 0.0-1.0. This is the primary quality metric.
 
-                    ptm (float): Predicted Template Modeling score measuring overall
+                    ptm: Predicted Template Modeling score measuring overall
                         structural accuracy. Range: 0.0-1.0.
 
-                    iptm (Optional[float]): Interface PTM score for multi-chain
+                    iptm: Interface PTM score for multi-chain
                         complexes. Range: 0.0-1.0. None for single-chain predictions.
 
-                    avg_pae (Optional[float]): Average Predicted Aligned Error.
+                    avg_pae: Average Predicted Aligned Error.
                         Lower values indicate more confident relative positioning.
 
     See Also:

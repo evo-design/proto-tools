@@ -1,4 +1,6 @@
-"""Tests for ESM2."""
+"""tests/masked_models_tests/test_esm2.py
+
+Tests for ESM2."""
 import numpy as np
 import pytest
 

@@ -1,4 +1,6 @@
-"""MMseqs2 genome-to-genome nucleotide search tool."""
+"""bio_programming_tools/tools/gene_annotation/mmseqs/search_genomes.py
+
+MMseqs2 genome-to-genome nucleotide search tool."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,13 +39,13 @@ class MmseqsSearchGenomesInput(BaseToolInput):
     """Input object for MMseqs2 genome search.
 
     Attributes:
-        query_genomes (List[str]): List of nucleotide sequence strings (DNA/RNA)
+        query_genomes (list[str]): List of nucleotide sequence strings (DNA/RNA)
             to use as queries.
-        query_ids (Optional[List[str]]): Optional list of query identifiers.
+        query_ids (list[str] | None): Optional list of query identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
-        target_genomes (List[str]): List of nucleotide sequence strings to search
+        target_genomes (list[str]): List of nucleotide sequence strings to search
             against.
-        target_ids (Optional[List[str]]): Optional list of target identifiers.
+        target_ids (list[str] | None): Optional list of target identifiers.
             If not provided, sequences are assigned sequential IDs (target_0, target_1, ...).
     """
 
@@ -94,7 +96,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
     Contains per-sequence search results matching the input query order.
 
     Attributes:
-        results (List[MmseqsSequenceSearchResult]): List of search results, one per
+        results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input query genome. The order matches the input query genomes order.
     """
     results: List[MmseqsSequenceSearchResult] = Field(
@@ -224,7 +226,7 @@ def run_mmseqs_search_genomes(
     Args:
         inputs (MmseqsSearchGenomesInput): Validated input containing query
             and target genome sequences.
-        config (MmseqsSearchGenomesConfig): Configuration with search parameters.
+        config (MmseqsSearchGenomesConfig | None): Configuration with search parameters.
 
     Returns:
         MmseqsSearchGenomesOutput: Per-sequence search results in query order.

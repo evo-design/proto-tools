@@ -1,5 +1,5 @@
 """
-ligands/utils.py
+bio_programming_tools/entities/ligands/utils.py
 
 Utility functions for working with ligands.
 """
@@ -55,10 +55,10 @@ def fetch_pubchem_txt(url: str) -> str | None:
     Fetch a PubChem TXT response from the given URL, with retries and timeout.
 
     Args:
-        url: The PubChem REST URL
+        url (str): The PubChem REST URL
 
     Returns:
-        The response text if successful, else None
+        str | None: The response text if successful, else None
     """
     for attempt in range(MAX_RETRIES):
         try:
@@ -78,13 +78,13 @@ def get_smiles_from_name(name: str) -> str:
     Retrieve the canonical SMILES for a molecule given its name using PubChem.
 
     Args:
-        name: Name of the molecule (e.g., "Aspirin")
+        name (str): Name of the molecule (e.g., "Aspirin")
 
     Returns:
-        Canonical SMILES string
+        str: Canonical SMILES string
 
     Raises:
-        ValueError if the molecule is not found
+        ValueError: If the molecule is not found.
     """
     encoded_name = quote(name, safe='')
     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{encoded_name}/property/CanonicalSMILES/TXT"
@@ -100,10 +100,10 @@ def get_name_from_smiles(smiles: str) -> str:
     the molecule is not found, returns "Unknown".
 
     Args:
-        smiles: Canonical SMILES string
+        smiles (str): Canonical SMILES string
 
     Returns:
-        Name of the compound (string)
+        str: Name of the compound (string)
     """
     if not smiles:
         return "Unknown"

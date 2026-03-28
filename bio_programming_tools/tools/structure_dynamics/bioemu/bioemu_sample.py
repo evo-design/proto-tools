@@ -1,4 +1,6 @@
-"""BioEmu conformational ensemble sampling tool."""
+"""bio_programming_tools/tools/structure_dynamics/bioemu/bioemu_sample.py
+
+BioEmu conformational ensemble sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -36,7 +38,7 @@ class BioEmuInput(StructurePredictionInput):
     """Input object for BioEmu conformational ensemble sampling.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): Protein complexes to sample.
+        complexes (list[StructurePredictionComplex]): Protein complexes to sample.
             BioEmu supports monomer-only inputs, so each complex must contain one
             protein chain.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -82,7 +84,7 @@ class BioEmuOutput(BaseToolOutput):
     """Output object for BioEmu conformational ensemble sampling.
 
     Attributes:
-        ensembles (List[StructureEnsemble]): Generated ensembles, one per
+        ensembles (list[StructureEnsemble]): Generated ensembles, one per
             input complex.
     """
 
@@ -144,12 +146,12 @@ class BioEmuConfig(StructurePredictionConfig):
 
     Attributes:
         num_samples (int): Number of conformations to sample per input sequence.
-        model_name (Literal["bioemu-v1.0", "bioemu-v1.1"]): BioEmu model variant.
+        model_name (Literal['bioemu-v1.0', 'bioemu-v1.1']): BioEmu model variant.
         filter_samples (bool): Whether to filter lower-quality generated samples.
         batch_size (int): Batch size control for BioEmu internal sampling.
-        output_dir (Optional[str]): Optional directory for raw BioEmu outputs.
+        output_dir (str | None): Optional directory for raw BioEmu outputs.
         device (str): Inference device (inherited).
-        verbose (bool): Verbose logging toggle (inherited).
+        verbose: Verbose logging toggle (inherited).
     """
 
     num_samples: int = ConfigField(

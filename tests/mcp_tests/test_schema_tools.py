@@ -1,4 +1,6 @@
-"""Tests for MCP schema and example tools."""
+"""tests/mcp_tests/test_schema_tools.py
+
+Tests for MCP schema and example tools."""
 
 from __future__ import annotations
 

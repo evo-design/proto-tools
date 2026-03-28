@@ -1,4 +1,6 @@
-"""Tests for FAMPNN sampling, packing, and scoring."""
+"""tests/inverse_folding_tests/test_fampnn.py
+
+Tests for FAMPNN sampling, packing, and scoring."""
 
 from pathlib import Path
 

@@ -1,9 +1,8 @@
-"""Mock PyTorch tool for testing DeviceManager and ToolPool functionality.
+"""bio_programming_tools/tools/testing/mock_pytorch_tool/mock_pytorch_tool.py
 
 This is a minimal PyTorch tool designed for fast testing of device management,
 memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
-in <1 second while still exercising all DeviceManager and ToolPool code paths.
-"""
+in <1 second while still exercising all DeviceManager and ToolPool code paths."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +28,8 @@ from bio_programming_tools.utils import (
 class MockPyTorchToolInput(BaseToolInput):
     """Input for mock PyTorch tool.
 
-    Fields:
-        data_items: List of data vectors to process through the model.
+    Attributes:
+        data_items (list[list[float]]): List of data vectors to process through the model.
     """
 
     data_items: list[list[float]] = InputField(
@@ -42,10 +41,10 @@ class MockPyTorchToolInput(BaseToolInput):
 class MockPyTorchToolConfig(BaseConfig):
     """Config for mock PyTorch tool.
 
-    Fields:
-        device: Device to run on.
-        hidden_size: Hidden layer size.
-        memory_mb: GPU memory to allocate via buffer.
+    Attributes:
+        device (str): Device to run on.
+        hidden_size (int): Hidden layer size.
+        memory_mb (int): GPU memory to allocate via buffer.
     """
 
     device: str = ConfigField(
@@ -81,8 +80,8 @@ class MockPyTorchToolResult(BaseModel):
 class MockPyTorchToolOutput(BaseToolOutput):
     """Output from mock PyTorch tool.
 
-    Fields:
-        results: List of results, one per input data item.
+    Attributes:
+        results (list[MockPyTorchToolResult]): List of results, one per input data item.
     """
 
     results: list[MockPyTorchToolResult] = Field(

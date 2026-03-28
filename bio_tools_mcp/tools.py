@@ -1,4 +1,6 @@
-"""MCP tools — discovery, search, schemas, and citations."""
+"""bio_tools_mcp/tools.py
+
+MCP tools — discovery, search, schemas, and citations."""
 
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ def list_tools(category: str | None = None) -> list[dict[str, Any]]:
     """List available tools. Optionally filter by category.
 
     Args:
-        category: Filter by category (e.g. 'gene_annotation', 'structure_prediction').
+        category (str | None): Filter by category (e.g. 'gene_annotation', 'structure_prediction').
     """
 
     specs = ToolRegistry.list_all()
@@ -93,7 +95,7 @@ def get_tool_schema(key: str) -> dict[str, Any]:
     """Get input, config, and output JSON schemas for a tool.
 
     Args:
-        key: Tool registry key (e.g. 'blast-search', 'esmfold-prediction').
+        key (str): Tool registry key (e.g. 'blast-search', 'esmfold-prediction').
     """
 
     return ToolRegistry.get_schemas(key)
@@ -107,7 +109,7 @@ def get_tool_example(key: str) -> dict[str, Any] | None:
     """Get an example input instance for a tool.
 
     Args:
-        key: Tool registry key (e.g. 'blast-search').
+        key (str): Tool registry key (e.g. 'blast-search').
     """
 
     example = ToolRegistry.get_example_input(key)
@@ -129,7 +131,7 @@ def get_tool_citation(key: str) -> str | None:
     """Get BibTeX citation for a tool.
 
     Args:
-        key: Tool registry key (e.g. 'evo2-sample').
+        key (str): Tool registry key (e.g. 'evo2-sample').
     """
 
     return ToolRegistry.get_citation(key)
@@ -164,8 +166,8 @@ def search_tools(
     """Search tools by keyword.
 
     Args:
-        query: Search query (keywords, tool name, or category).
-        max_results: Maximum results to return.
+        query (str): Search query (keywords, tool name, or category).
+        max_results (int): Maximum results to return.
     """
 
     query_lower = query.lower()

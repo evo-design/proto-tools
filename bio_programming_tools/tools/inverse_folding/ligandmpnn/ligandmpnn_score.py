@@ -1,4 +1,6 @@
-"""LigandMPNN scoring tool."""
+"""bio_programming_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_score.py
+
+LigandMPNN scoring tool."""
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -23,7 +25,7 @@ class LigandMPNNScoringInput(BaseToolInput):
     """Input for LigandMPNN scoring.
 
     Attributes:
-        sequence_structure_pairs: List of sequence-structure pairs to score.
+        sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
@@ -40,13 +42,13 @@ class LigandMPNNScoringConfig(BaseConfig):
     """Configuration for LigandMPNN scoring.
 
     Attributes:
-        fixed_positions: Dictionary mapping chain IDs to fixed positions in the sequence.
+        fixed_positions (dict[str, list[int]] | None): Dictionary mapping chain IDs to fixed positions in the sequence.
             If None, no positions will be fixed. In scoring, fixed positions will not
             be utilized in perplexity calculation.
 
-        seed: Random seed to use for scoring.
+        seed (int): Random seed to use for scoring.
 
-        device: Device to run the model on.
+        device (str): Device to run the model on.
 
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
@@ -97,11 +99,11 @@ def run_ligandmpnn_score(
     presence of ligands.
 
     Args:
-        inputs: LigandMPNNScoringInput containing sequence-structure pairs to score.
-        config: Configuration for scoring (fixed_positions, device, etc.).
+        inputs (LigandMPNNScoringInput): LigandMPNNScoringInput containing sequence-structure pairs to score.
+        config (LigandMPNNScoringConfig): Configuration for scoring (fixed_positions, device, etc.).
 
     Returns:
-        LigandMPNNScoringOutput with scores for each input sequence.
+        LigandMPNNScoringOutput: LigandMPNNScoringOutput with scores for each input sequence.
 
     Examples:
         >>> from bio_programming_tools.entities.structures import Structure

@@ -1,5 +1,5 @@
 """
-msas.py
+bio_programming_tools/tools/sequence_alignment/msas.py
 
 Contains class for representing multiple sequence alignments (MSAs).
 """
@@ -42,9 +42,9 @@ class MSA:
         WARNING: Validation of the MSA is only perfomed automatically when the MSA is in-memory.
 
         Args:
-            msa_filepath_or_aligned_sequences: List of aligned sequences with '-'
-                characters indicating gaps or a path to the MSA file.
-            sequence_ids: Optional list of sequence identifiers (only used when providing sequences directly).
+            aligned_sequences_or_filepath (list[str] | str): List of aligned sequences
+                with '-' characters indicating gaps, or a path to an A3M/FASTA file.
+            sequence_ids (list[str] | None): Optional list of sequence identifiers (only used when providing sequences directly).
         """
 
         self._in_memory = False
@@ -355,10 +355,10 @@ class MSA:
         to_a3m_file() instead.
 
         Args:
-            query_index: Index of the sequence to use as the query (default: 0).
+            query_index (int): Index of the sequence to use as the query (default: 0).
 
         Returns:
-            A3M formatted string.
+            str: A3M formatted string.
 
         Raises:
             IndexError: If query_index is out of range.
@@ -400,8 +400,8 @@ class MSA:
         in the other sequences (insertions relative to the query).
 
         Args:
-            a3m_path: Path where the A3M file will be written.
-            query_index: Index of the sequence to use as the query (default: 0).
+            a3m_path (str): Path where the A3M file will be written.
+            query_index (int): Index of the sequence to use as the query (default: 0).
 
         Raises:
             IndexError: If query_index is out of range.
@@ -529,8 +529,8 @@ def convert_a3m_to_fasta(
     Convert an A3M file to a rectangular FASTA MSA with '-' for gaps.
 
     Args:
-        a3m_path: Path to input A3M.
-        fasta_path: Path to output FASTA.
+        a3m_path (str): Path to input A3M.
+        fasta_path (str): Path to output FASTA.
 
     Raises:
         FileNotFoundError: If the A3M file does not exist.

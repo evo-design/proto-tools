@@ -1,5 +1,5 @@
 """
-ColabFold MSA Search implementation.
+bio_programming_tools/tools/sequence_alignment/colabfold_search/colabfold_search.py
 
 This module provides a standardized interface for generating Multiple Sequence
 Alignments (MSAs) using ColabFold's local database search with MMSeqs2.
@@ -59,7 +59,7 @@ class ColabfoldSearchQuery(BaseModel):
     Attributes:
         sequence (str): Protein sequence to search for homologs. Must be a
             non-empty string containing amino acid characters.
-        sequence_id (Optional[str]): Optional identifier for this sequence.
+        sequence_id (str | None): Optional identifier for this sequence.
             Used for output file naming and result tracking. If not provided,
             will be auto-generated as seq_0, seq_1, etc.
     """
@@ -94,7 +94,7 @@ class ColabfoldSearchInput(BaseToolInput):
     - List of tuples or single tuple of the form (sequence, sequence_id)
 
     Attributes:
-        queries (List[ColabfoldSearchQuery]): List of search queries. Each query
+        queries (list[ColabfoldSearchQuery]): List of search queries. Each query
             contains a protein sequence and optional identifier. After validation,
             always a list of ColabfoldSearchQuery instances regardless of input format.
 
@@ -184,7 +184,7 @@ class ColabfoldSearchResult(BaseModel):
     """Result from searching a single protein sequence.
 
     Attributes:
-        msa (Optional[MSA]): The Multiple Sequence Alignment object containing the homologous sequences.
+        msa (MSA | None): The Multiple Sequence Alignment object containing the homologous sequences.
             None if no homologs were found (only the query sequence would be present).
         sequence_id (str): Identifier for the sequence that was searched.
     """
@@ -213,7 +213,7 @@ class ColabfoldSearchOutput(BaseToolOutput):
     input sequences.
 
     Attributes:
-        results (List[ColabfoldSearchResult]): List of search results, one per
+        results (list[ColabfoldSearchResult]): List of search results, one per
             input query. Each result contains the path to the generated A3M file
             and metadata. The order matches the input queries order.
     """
@@ -268,7 +268,7 @@ class ColabfoldSearchConfig(BaseConfig):
     online ColabFold API.
 
     Attributes:
-        search_mode (Literal["local", "remote"]): Mode to use for MSA search.
+        search_mode (Literal['local', 'remote']): Mode to use for MSA search.
             Options: "local" (uses local MMSeqs2 database search) or "remote" (uses
             the ColabFold online API). Default: "remote".
 
@@ -277,18 +277,18 @@ class ColabfoldSearchConfig(BaseConfig):
             some sequences but increase search time. Supported in both local and remote modes.
             Default: False.
 
-        output_dir (Optional[str]): Directory where output MSA files will be saved.
+        output_dir (str | None): Directory where output MSA files will be saved.
             A subdirectory named 'msas' will be created to store A3M format
             alignment files. Each sequence will get its own A3M file named
             by its sequence ID. If None, uses the default cache directory
             (~/.cache/bio-programming/colabfold_search). Default: None.
 
-        sensitivity (Optional[float]): Only used if search_mode is "local". MMseqs2 sensitivity
+        sensitivity (float | None): Only used if search_mode is "local". MMseqs2 sensitivity
             parameter (1.0-9.0). Higher values increase sensitivity and may find more remote homologs,
             but significantly slow down the search. Lower values are faster but
             may miss distant homologs. If None, uses the default sensitivity (~8). Default: None.
 
-        msa_db_dir (Optional[str]): Only used if search_mode is "local". Path to the local ColabFold/MMSeqs2 database directory.
+        msa_db_dir (str): Only used if search_mode is "local". Path to the local ColabFold/MMSeqs2 database directory.
             This directory should contain the database files downloaded using the
             setup_databases.sh script. To download databases, run: ./setup_databases.sh
             Default: None (uses built-in databases directory).
@@ -297,14 +297,17 @@ class ColabfoldSearchConfig(BaseConfig):
             If not provided, the tool will automatically detect the available databases and use one.
             Default: "uniref30_2302_db".
 
-        num_threads (Optional[int]): Only used if search_mode is "local". Number of CPU threads to use for parallel
+        num_threads (int | None): Only used if search_mode is "local". Number of CPU threads to use for parallel
             processing. If None, automatically detects and uses all available
             CPU cores. Must be at least 1 if specified. Default: None (auto-detect).
 
-        use_gpu (bool): Only used if search_mode is "local". Whether to enable GPU-accelerated search using MMseqs2-GPU.
+        use_gpu: Only used if search_mode is "local". Whether to enable GPU-accelerated search using MMseqs2-GPU.
             Requires GPU databases to be set up using 'GPU=1 ./setup_databases.sh'.
             When enabled, uses all available GPUs for search. Default: False.
             TODO: This is currently not working due to issue with GPU flag in local_msa_search.py
+
+        timeout (int): Maximum execution time in seconds. Full database searches
+            can take more than 10 minutes. Default: 3600.
 
     """
 
@@ -454,7 +457,7 @@ def run_colabfold_search(
 
     Args:
         inputs (ColabfoldSearchInput): Validated input containing sequences to search.
-        config (ColabfoldSearchConfig): Configuration with database path and search parameters.
+        config (ColabfoldSearchConfig | None): Configuration with database path and search parameters.
 
     Returns:
         ColabfoldSearchOutput: List of results containing MSA objects.
@@ -516,7 +519,7 @@ def _cleanup_default_output_dir_if_cache_empty(
     the accumulation of unused alignment files in the default cache directory.
 
     Args:
-        config: ColabFold search configuration
+        config (ColabfoldSearchConfig): ColabFold search configuration
 
     Notes:
         - Only cleans up if output_dir was not user-specified (using default cache directory ~/.cache/bio-programming/colabfold_search)
@@ -545,10 +548,10 @@ def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
     """Count the number of sequences in an A3M file.
 
     Args:
-        a3m_path: Path to the A3M file
+        a3m_path (str | Path): Path to the A3M file
 
     Returns:
-        Number of sequences in the file
+        int: Number of sequences in the file
     """
     count = 0
     with open(a3m_path, "r") as f:
@@ -563,6 +566,10 @@ def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
 
     Since we use numeric indices in the query FASTA for predictable output
     filenames, this restores the original sequence ID in the A3M content.
+
+    Args:
+        a3m_path (str | Path): Path to the A3M file to modify.
+        seq_id (str): Sequence identifier to set as the query header.
     """
     with open(a3m_path, "r") as f:
         lines = f.readlines()
@@ -582,11 +589,11 @@ def detect_available_local_databases(
     and returns a list of the available databases names.
 
     Args:
-        msa_db_dir: Path to the ColabFold/MMSeqs2 database directory
-        verbose: Whether to print detection information
+        msa_db_dir (str | Path): Path to the ColabFold/MMSeqs2 database directory
+        verbose (bool): Whether to print detection information
 
     Returns:
-        List of database names (without .dbtype extension) found in the directory.
+        list[str]: List of database names (without .dbtype extension) found in the directory.
     """
     msa_db_dir = Path(msa_db_dir)
 

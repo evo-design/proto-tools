@@ -1,5 +1,5 @@
 """
-esmfold.py
+bio_programming_tools/tools/structure_prediction/esmfold/esmfold.py
 
 Protein structure prediction using ESMFold.
 
@@ -45,7 +45,7 @@ class ESMFoldInput(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain one or more protein chains. Total length across all chains
             in a complex must not exceed 2,400 residues.
@@ -70,6 +70,9 @@ class ESMFoldInput(StructurePredictionInput):
     ) -> List[StructurePredictionComplex]:
         """
         Ensures that complexes are valid inputs for ESMFold.
+
+        Args:
+            complexes (list[StructurePredictionComplex]): Complexes to validate.
 
         Checks:
         - Valid protein characters (including 'X' for unknown)
@@ -152,7 +155,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during execution. Inherited
+        verbose: Whether to print status messages during execution. Inherited
             from ``StructurePredictionConfig``. Default: ``False``.
 
     Note:
@@ -218,14 +221,14 @@ def run_esmfold(
     Args:
         inputs (ESMFoldInput): Validated input containing one or more protein complexes
             to predict structures for. Each complex must be ≤ 2,400 residues total.
-        config (ESMFoldConfig): Validated ESMFold configuration specifying chain linking,
+        config (ESMFoldConfig | None): Validated ESMFold configuration specifying chain linking,
             batching, and execution options.
 
     Returns:
         ESMFoldOutput: Structured output containing:
             - ``structures``: List of ``Structure`` instances, one per input complex
             - Each structure includes coordinates and the following confidence metrics:
-                    avg_plddt (float): Average per-residue confidence (pLDDT) across all residues.
+                    avg_plddt: Average per-residue confidence (pLDDT) across all residues.
                         Range: 0.0-1.0 (normalized scale, unlike AlphaFold's 0-100). Interpretation:
 
                         - ``> 0.9``: Very high confidence
@@ -235,7 +238,7 @@ def run_esmfold(
 
                         This is the primary quality metric for ESMFold predictions.
 
-                    ptm (Optional[float]): Predicted Template Modeling score measuring overall
+                    ptm: Predicted Template Modeling score measuring overall
                         structural accuracy. Range: 0.0-1.0. Higher values indicate better
                         predicted structures. May be ``None`` for some predictions.
 

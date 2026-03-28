@@ -1,4 +1,6 @@
-"""Shared data models, constants, and helpers for PyHMMER tools."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/shared_data_models.py
+
+Shared data models, constants, and helpers for PyHMMER tools."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -115,7 +117,7 @@ class PyHmmerInput(BaseToolInput):
     used across all PyHMMER search tools (hmmsearch, hmmscan, phmmer).
 
     Attributes:
-        sequences (List[str]): Input protein sequences for searching.
+        sequences (list[str]): Input protein sequences for searching.
             Can be provided as:
 
             - A single protein sequence string (amino acid sequence)
@@ -171,7 +173,7 @@ class PyHmmerOutput(BaseToolOutput):
     format matches traditional HMMER tools.
 
     Attributes:
-        sequence_hits_df (Optional[pd.DataFrame]): DataFrame containing
+        sequence_hits_df (pd.DataFrame | None): DataFrame containing
             sequence-level hits with the following columns:
 
             - ``query_name``: Name of the query HMM or sequence
@@ -192,7 +194,7 @@ class PyHmmerOutput(BaseToolOutput):
 
             Returns ``None`` if no sequence hits are found.
 
-        domain_hits_df (Optional[pd.DataFrame]): DataFrame containing domain-level
+        domain_hits_df (pd.DataFrame | None): DataFrame containing domain-level
             hits with the following columns:
 
             - ``query_name``: Name of the query HMM or sequence
@@ -223,8 +225,8 @@ class PyHmmerOutput(BaseToolOutput):
             Returns ``None`` if no domain hits are found.
 
     Properties:
-        num_sequence_hits (int): Total number of sequence-level hits found.
-        num_domain_hits (int): Total number of domain-level hits found.
+        num_sequence_hits: Total number of sequence-level hits found.
+        num_domain_hits: Total number of domain-level hits found.
     """
     sequence_hits_df: Optional[pd.DataFrame] = Field(
         default=None, description="DataFrame with per-sequence hits"
@@ -308,7 +310,7 @@ class PyHmmerConfig(BaseConfig):
 
             Must be greater than 0. Default: 10.0.
 
-        score_threshold (Optional[float]): Score reporting threshold for
+        score_threshold (float | None): Score reporting threshold for
             sequence-level hits. If specified, this overrides the E-value threshold.
             Sequences with bit scores at or above this value are reported.
             Default: ``None`` (use E-value threshold).
@@ -317,7 +319,7 @@ class PyHmmerConfig(BaseConfig):
             domain-level hits within sequences. Domains with E-values at or below
             this threshold are reported. Must be greater than 0. Default: 10.0.
 
-        domain_score_threshold (Optional[float]): Score reporting threshold for
+        domain_score_threshold (float | None): Score reporting threshold for
             domain-level hits. If specified, this overrides the domain E-value
             threshold. Domains with bit scores at or above this value are reported.
             Default: ``None`` (use domain E-value threshold).
@@ -371,11 +373,11 @@ def _build_dataframes(
     """Build DataFrames from lists of hit dicts returned by the standalone script.
 
     Args:
-        sequence_hits: List of dicts with sequence-level hit data.
-        domain_hits: List of dicts with domain-level hit data.
+        sequence_hits (list[dict]): List of dicts with sequence-level hit data.
+        domain_hits (list[dict]): List of dicts with domain-level hit data.
 
     Returns:
-        Tuple of (sequence_hits_df, domain_hits_df). Either may be None if empty.
+        tuple[pd.DataFrame | None, pd.DataFrame | None]: Tuple of (sequence_hits_df, domain_hits_df). Either may be None if empty.
     """
     sequence_df = (
         pd.DataFrame(sequence_hits, columns=list(SEQUENCE_HIT_COLUMNS.keys()))

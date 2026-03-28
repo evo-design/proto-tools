@@ -1,4 +1,6 @@
-"""LigandMPNN sampling tool."""
+"""bio_programming_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_sample.py
+
+LigandMPNN sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -35,7 +37,9 @@ LigandMPNNSampleConfig = InverseFoldingConfig
 class LigandMPNNSequences(DesignedSequences):
     """Represents designed sequences from LigandMPNN.
 
-    `ligandmpnn_metrics` contains per-sequence metrics returned by LigandMPNN.
+    Attributes:
+        ligandmpnn_metrics (list[dict[str, Any]]): Per-sequence metrics returned by
+            LigandMPNN, such as sequence recovery and log-likelihood scores.
     """
 
     ligandmpnn_metrics: List[Dict[str, Any]] = Field(
@@ -79,12 +83,12 @@ def run_ligandmpnn_sample(
     """Sample protein sequences using LigandMPNN.
 
     Args:
-        inputs: LigandMPNNSampleInput containing a list of structure inputs,
+        inputs (LigandMPNNSampleInput): LigandMPNNSampleInput containing a list of structure inputs,
             and optional chain_ids/fixed_positions constraints.
-        config: Configuration for sampling (temperature, batch_size, etc.).
+        config (LigandMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
 
     Returns:
-        LigandMPNNSampleOutput with designed sequences for each input structure.
+        LigandMPNNSampleOutput: LigandMPNNSampleOutput with designed sequences for each input structure.
     """
     designed_sequences = []
 

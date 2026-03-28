@@ -1,8 +1,7 @@
-"""PDB fetch FASTA tool — retrieve chain sequences from RCSB PDB.
+"""bio_programming_tools/tools/database_retrieval/pdb/fetch_fasta.py
 
 Wraps the RCSB PDB FASTA endpoint for fetching chain sequences with
-automatic protein/nucleic acid classification.
-"""
+automatic protein/nucleic acid classification."""
 
 from __future__ import annotations
 
@@ -36,7 +35,7 @@ class PdbFetchFastaInput(BaseToolInput):
     """Input for PDB FASTA chain fetch.
 
     Attributes:
-        pdb_id: PDB accession (e.g. '1LBG').
+        pdb_id (str): PDB accession (e.g. '1LBG').
     """
 
     pdb_id: str = InputField(description="PDB accession (e.g. '1LBG')")
@@ -46,8 +45,8 @@ class PdbFetchFastaOutput(BaseToolOutput):
     """Output from PDB FASTA chain fetch.
 
     Attributes:
-        chains: Parsed chain sequences with protein/nucleotide classification.
-        source_url: URL used for the request.
+        chains (list[PdbChain]): Parsed chain sequences with protein/nucleotide classification.
+        source_url (str | None): URL used for the request.
     """
 
     chains: List[PdbChain] = Field(default_factory=list, description="Parsed chain sequences")
@@ -108,11 +107,11 @@ def run_pdb_fetch_fasta(
     classification based on amino acid composition.
 
     Args:
-        inputs: PDB accession to look up.
-        config: HTTP timeout and retry settings.
+        inputs (PdbFetchFastaInput): PDB accession to look up.
+        config (PdbFetchConfig | None): HTTP timeout and retry settings.
 
     Returns:
-        PdbFetchFastaOutput with chain sequences.
+        PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.
     """
     del instance
 

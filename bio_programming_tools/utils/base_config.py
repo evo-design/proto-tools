@@ -1,4 +1,6 @@
 """
+bio_programming_tools/utils/base_config.py
+
 Base configuration class for all pydantic configs.
 """
 
@@ -28,15 +30,17 @@ def ConfigField(
     Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
 
     Args:
-        advanced: If True, field appears in "Advanced" section of UI
-        hidden: If True, field is hidden from UI completely
-        reload_on_change: If True, changing this field between persistent
+        default (Any): Default value for the field. Use ``...`` for required fields.
+        title (str): Human-readable title for UI display.
+        description (str): Description of the field for documentation and UI tooltips.
+        advanced (bool): If True, field appears in "Advanced" section of UI.
+        hidden (bool): If True, field is hidden from UI completely.
+        reload_on_change (bool): If True, changing this field between persistent
             worker calls triggers a subprocess restart.
-        include_in_key: If False, field is excluded from tool cache key
+        include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
-
-        **kwargs: All other standard Pydantic Field arguments
+        kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
 
     Usage:
         param: int = Field(default=42, title="Param", description="...", advanced=True)
@@ -59,9 +63,9 @@ class BaseConfig(BaseModel):
     Base configuration class for consistent behavior across all configs (tools, constraints, and generators).
 
     Attributes:
-        verbose: Whether to print status messages.
-        device: Device to run the tool on.
-        timeout: Maximum execution time in seconds.
+        verbose (bool): Whether to print status messages.
+        device (str): Device to run the tool on.
+        timeout (int): Maximum execution time in seconds.
 
     Properties:
         devices_per_instance: Number of GPUs each worker needs (default 1).

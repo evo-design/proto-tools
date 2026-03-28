@@ -1,4 +1,6 @@
-"""PyHMMER nhmmer tool — search nucleotide sequences against nucleotide sequences."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/nhmmer.py
+
+PyHMMER nhmmer tool — search nucleotide sequences against nucleotide sequences."""
 from __future__ import annotations
 
 from typing import List
@@ -24,11 +26,11 @@ class PyNhmmerInput(PyHmmerInput):
     """Input object for PyHMMER nhmmer (nucleotide sequences vs nucleotide sequences).
 
     Attributes:
-        sequences (List[str]): Query nucleotide sequences.
+        sequences (list[str]): Query nucleotide sequences.
             Inherited from ``PyHmmerInput``. Can be a single sequence string or
             a list of sequence strings.
 
-        target_sequences (List[str]): Target nucleotide sequences to
+        target_sequences (list[str]): Target nucleotide sequences to
             search against. Can be a single sequence string or a list of sequence
             strings.
     """
@@ -85,7 +87,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
     Args:
         inputs (PyNhmmerInput): Validated PyHMMER nhmmer input containing both
             query and target nucleotide sequences.
-        config (PyNhmmerConfig): Validated PyHMMER configuration with search
+        config (PyNhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
     Returns:

@@ -1,5 +1,5 @@
 """
-Persistent subprocess worker for long-running tool processes.
+bio_programming_tools/utils/persistent_worker.py
 
 Manages a subprocess that stays alive between calls, communicating via
 stdin/stdout JSON-line protocol. This avoids reloading models on every call.
@@ -63,6 +63,9 @@ def _normalize_progress_line(line: str) -> str:
     - Time estimates: [00:00<00:04], 1:23 elapsed
     - Rates: 980.92it/s, 1.2MB/s, 45.3%
     - Additional trailing info after common separators
+
+    Args:
+        line (str): Raw stderr line from a tool subprocess.
 
     Returns the normalized line template for similarity comparison.
     """
@@ -168,6 +171,9 @@ def _parse_env_vars_file(
     mapping to a list of variable names (passthrough) or ``KEY=VALUE``
     strings (set).  Missing or empty files return empty lists.
 
+    Args:
+        path (Path | None): Path to the ``env_vars.txt`` file, or None.
+
     File format::
 
         [passthrough]
@@ -215,14 +221,10 @@ def _build_subprocess_env(
     This prevents conda, jupyter, mamba, and other host-specific vars
     from leaking into isolated tool venvs.
 
-    Parameters
-    ----------
-    device
-        Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
-    tool_env_path
-        Path to the tool's isolated venv.  Used to reconstruct PATH.
-    tool_env_vars
-        Parsed env_vars.txt contents (from :func:`_parse_env_vars_file`).
+    Args:
+        device (str): Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
+        tool_env_path (Path | str | None): Path to the tool's isolated venv.
+        tool_env_vars (dict[str, list[str]] | None): Parsed env_vars.txt contents.
     """
     from .system_info import capture_subprocess_env
 
@@ -479,26 +481,17 @@ class PersistentWorker:
 
         Thread-safe — only one request at a time.
 
-        Parameters
-        ----------
-        input_dict : dict
-            JSON-serializable input for the standalone script.
-        timeout : int | None
-            Maximum seconds to wait for a response.  *None* means block
-            indefinitely.  On timeout the worker is killed (its state is
-            unknown) and :class:`TimeoutError` is raised.
+        Args:
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            timeout (int | None): Maximum seconds to wait for a response. None means
+                block indefinitely. On timeout the worker is killed and TimeoutError is raised.
 
-        Returns
-        -------
-        dict
-            The script's JSON output.
+        Returns:
+            dict[str, Any]: The script's JSON output.
 
-        Raises
-        ------
-        RuntimeError
-            If the worker crashes or returns an error.
-        TimeoutError
-            If the worker does not respond within *timeout* seconds.
+        Raises:
+            RuntimeError: If the worker crashes or returns an error.
+            TimeoutError: If the worker does not respond within *timeout* seconds.
         """
         with self._lock:
             if not self.alive:

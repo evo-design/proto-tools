@@ -1,4 +1,6 @@
-"""Tests for AlphaFold2."""
+"""tests/structure_prediction_tests/test_alphafold2.py
+
+Tests for AlphaFold2."""
 
 from __future__ import annotations
 

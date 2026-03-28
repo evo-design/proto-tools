@@ -1,9 +1,8 @@
-"""Mock JAX tool for testing JAX-style device management.
+"""bio_programming_tools/tools/testing/mock_jax_tool/mock_jax_tool.py
 
 This is a minimal JAX-pattern tool designed for testing device management with
 JAX semantics: no in-place .to(), model reload on device change, and
-get_jax_memory_stats() reporting.
-"""
+get_jax_memory_stats() reporting."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +28,8 @@ from bio_programming_tools.utils import (
 class MockJAXToolInput(BaseToolInput):
     """Input for mock JAX tool.
 
-    Fields:
-        data: Input data to pass through the model.
+    Attributes:
+        data (list[float]): Input data to pass through the model.
     """
 
     data: list[float] = InputField(
@@ -42,10 +41,10 @@ class MockJAXToolInput(BaseToolInput):
 class MockJAXToolConfig(BaseConfig):
     """Config for mock JAX tool.
 
-    Fields:
-        device: Device to run on.
-        hidden_size: Hidden layer size.
-        memory_mb: GPU memory to allocate via buffer.
+    Attributes:
+        device (str): Device to run on.
+        hidden_size (int): Hidden layer size.
+        memory_mb (int): GPU memory to allocate via buffer.
     """
 
     device: str = ConfigField(
@@ -74,9 +73,9 @@ class MockJAXToolConfig(BaseConfig):
 class MockJAXToolOutput(BaseToolOutput):
     """Output from mock JAX tool.
 
-    Fields:
-        result: Output from the model.
-        device_used: Device the model ran on.
+    Attributes:
+        result (list[float]): Output from the model.
+        device_used (str): Device the model ran on.
     """
 
     result: list[float] = Field(

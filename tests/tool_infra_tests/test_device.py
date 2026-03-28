@@ -1,4 +1,6 @@
-"""Tests for device string parsing and CUDA_VISIBLE_DEVICES generation."""
+"""tests/tool_infra_tests/test_device.py
+
+Tests for device string parsing and CUDA_VISIBLE_DEVICES generation."""
 
 import os
 

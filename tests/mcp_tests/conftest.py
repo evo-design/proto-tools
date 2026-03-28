@@ -1,4 +1,6 @@
-"""Shared fixtures for MCP server tests."""
+"""tests/mcp_tests/conftest.py
+
+Shared fixtures for MCP server tests."""
 
 from __future__ import annotations
 

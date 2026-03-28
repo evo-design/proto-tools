@@ -1,4 +1,6 @@
-"""Tests for random nucleotide sampling tool."""
+"""tests/mutagenesis_tests/test_random_nucleotide_sample.py
+
+Tests for random nucleotide sampling tool."""
 import pytest
 
 from bio_programming_tools.tools.mutagenesis.codons import IUPAC_DNA

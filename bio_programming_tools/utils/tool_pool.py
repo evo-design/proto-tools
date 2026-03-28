@@ -1,5 +1,5 @@
 """
-tool_pool.py
+bio_programming_tools/utils/tool_pool.py
 
 Parallel fan-out across multiple devices for list-input tools.
 
@@ -85,15 +85,15 @@ class DeviceCapability:
     """Describes a device (or device group) available for scheduling.
 
     Attributes:
-        device_id: Device string, e.g. ``"cuda:0"`` or ``"cuda:0,cuda:1"``
+        device_id (str): Device string, e.g. ``"cuda:0"`` or ``"cuda:0,cuda:1"``
             for multi-GPU worker slots.
-        throughput_weight: Relative speed of this device compared to others.
+        throughput_weight (float): Relative speed of this device compared to others.
             The scheduler divides a device's accumulated cost by its weight
             to estimate finish time, so a weight of 2.0 means "twice as fast"
             and the device will be assigned roughly twice the work. **Currently
             unused** — all devices default to 1.0 (uniform). Reserved for
             future heterogeneous GPU support (e.g., mixed H100/A100 pools).
-        max_item_cost: Maximum item cost this device can handle, or None for
+        max_item_cost (float | None): Maximum item cost this device can handle, or None for
             no limit. Items whose ``item_cost()`` exceeds this cap are routed
             to other devices that can handle them (falls back to least-loaded
             if no device qualifies). **Currently unused** — all devices
@@ -141,14 +141,14 @@ def lpt_schedule(
     for tools that don't override ``BaseToolInput.item_cost()``).
 
     Args:
-        items: Work items with cost estimates (from ``item_cost()``).
-        devices: Available devices. ``throughput_weight`` and ``max_item_cost``
+        items (list[WorkItem]): Work items with cost estimates (from ``item_cost()``).
+        devices (list[DeviceCapability]): Available devices. ``throughput_weight`` and ``max_item_cost``
             are supported by the algorithm but currently unused (all devices
             get weight 1.0 and no cap).
 
     Returns:
-        List of WorkerAssignments, one per device (devices with no items
-        are included but have empty item lists).
+        list[WorkerAssignment]: List of WorkerAssignments, one per device (devices with no items
+            are included but have empty item lists).
     """
     assignments = [WorkerAssignment(device=d) for d in devices]
 
@@ -351,6 +351,12 @@ class ToolPool:
         Called by the @tool wrapper when a pool is active. ``func`` is the
         raw tool function (caching is handled by the @tool wrapper, not
         within each partition).
+
+        Args:
+            tool_key (str): Tool registry key.
+            func (Callable): The raw tool function to execute.
+            inputs (Any): Tool input model containing the iterable field.
+            config (Any): Tool configuration.
         """
         from bio_programming_tools.tools.tool_registry import ToolRegistry
 

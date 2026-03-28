@@ -1,4 +1,6 @@
-"""Tests for the CRISPRtracrRNA prediction tool."""
+"""tests/gene_annotation_tests/test_crispr_tracr.py
+
+Tests for the CRISPRtracrRNA prediction tool."""
 
 from __future__ import annotations
 

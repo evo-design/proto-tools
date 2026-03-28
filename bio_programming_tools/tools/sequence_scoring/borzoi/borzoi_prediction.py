@@ -1,4 +1,6 @@
-"""Borzoi single-replicate sequence scoring tool."""
+"""bio_programming_tools/tools/sequence_scoring/borzoi/borzoi_prediction.py
+
+Borzoi single-replicate sequence scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -64,9 +66,9 @@ class BorzoiOutput(BaseToolOutput):
     Attributes:
         sequence (str): Input DNA sequence that was scored.
         sequence_length (int): Length of the input sequence (always 524,288).
-        prediction (List[List[float]]): Prediction matrix with shape
+        prediction (list[list[float]]): Prediction matrix with shape
             ``[num_tracks, 6144]``.
-        output_tracks (List[int]): Track indices used for prediction.
+        output_tracks (list[int]): Track indices used for prediction.
         species (str): Species used for prediction (``"human"`` or ``"mouse"``).
         replicate (str): Borzoi replicate used (``"0"`` through ``"3"``).
         avg_output_tracks (bool): Whether requested tracks were averaged.
@@ -121,9 +123,9 @@ class BorzoiConfig(BaseConfig):
     """Configuration for Borzoi single-replicate prediction.
 
     Attributes:
-        output_tracks (List[int]): Track indices to extract from model output.
-        species (Literal["human", "mouse"]): Species model to use.
-        replicate (Literal["0", "1", "2", "3"]): Replicate ID to run.
+        output_tracks (list[int]): Track indices to extract from model output.
+        species (Literal['human', 'mouse']): Species model to use.
+        replicate (Literal['0', '1', '2', '3']): Replicate ID to run.
         avg_output_tracks (bool): Whether to average selected tracks.
         use_flash_attn (bool): Whether to run FlashAttention-backed models.
         device (str): Device used for inference (inherited).
@@ -202,7 +204,7 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance
 
     Args:
         inputs (BorzoiInput): Validated sequence input.
-        config (BorzoiConfig): Validated runtime and model configuration.
+        config (BorzoiConfig | None): Validated runtime and model configuration.
 
     Returns:
         BorzoiOutput: Prediction object for one Borzoi replicate.

@@ -1,4 +1,6 @@
-"""Tests for the multi-source sequence fetch tool."""
+"""tests/database_retrieval_tests/test_sequence_fetch.py
+
+Tests for the multi-source sequence fetch tool."""
 
 from __future__ import annotations
 

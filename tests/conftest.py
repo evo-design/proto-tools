@@ -1,5 +1,5 @@
 """
-Test configuration for bio_programming_tools test suite.
+tests/conftest.py
 
 Supports the same CLI options and markers as the main bio-programming tests:
   --cpu        Run only CPU tests

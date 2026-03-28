@@ -1,5 +1,5 @@
 """
-ccd_utils.py
+bio_programming_tools/entities/ligands/ccd_utils.py
 
 Utilities for working with the wwPDB Chemical Component Dictionary (CCD).
 
@@ -39,11 +39,11 @@ def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> Optio
     molecule name via PubChem and matching it against CCD descriptions.
 
     Args:
-        smiles: SMILES string representation of the molecule
-        use_name_fallback: If True, attempt name-based lookup when exact match fails
+        smiles (str): SMILES string representation of the molecule
+        use_name_fallback (bool): If True, attempt name-based lookup when exact match fails
 
     Returns:
-        CCD code if found, None otherwise
+        str | None: CCD code if found, None otherwise
 
     Examples:
         >>> map_smiles_to_ccd_code("CNC[C@@H](c1ccc(c(c1)O)O)O")
@@ -89,10 +89,10 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> Optional[str]:
     4. Logs all matches if multiple are found and returns None
 
     Args:
-        smiles: SMILES string representation of the molecule
+        smiles (str): SMILES string representation of the molecule
 
     Returns:
-        CCD code if exactly one match found, None otherwise
+        str | None: CCD code if exactly one match found, None otherwise
     """
     try:
         # Import here to avoid circular dependency and only when needed
@@ -155,10 +155,10 @@ def map_ccd_code_to_smiles(ccd_code: str) -> Optional[str]:
     corresponding SMILES representation.
 
     Args:
-        ccd_code: Three-letter CCD code (e.g., "SEP", "TPO", "ALE")
+        ccd_code (str): Three-letter CCD code (e.g., "SEP", "TPO", "ALE")
 
     Returns:
-        SMILES string if found, None otherwise
+        str | None: SMILES string if found, None otherwise
 
     Examples:
         >>> map_ccd_code_to_smiles("SEP")
@@ -190,10 +190,10 @@ def get_ccd_description(ccd_code: str) -> Optional[str]:
     """Get the description/name for a CCD code.
 
     Args:
-        ccd_code: Three-letter CCD code
+        ccd_code (str): Three-letter CCD code
 
     Returns:
-        Description string if found, None otherwise
+        str | None: Description string if found, None otherwise
 
     Examples:
         >>> get_ccd_description("SEP")
@@ -224,10 +224,10 @@ def is_valid_ccd_code(ccd_code: str) -> bool:
     The cache is populated on first access to a non-common modification code.
 
     Args:
-        ccd_code: Three-letter CCD code to validate
+        ccd_code (str): Three-letter CCD code to validate
 
     Returns:
-        True if the code exists in the CCD database, False otherwise
+        bool: True if the code exists in the CCD database, False otherwise
 
     Examples:
         >>> is_valid_ccd_code("SEP")
@@ -252,7 +252,7 @@ def get_all_ccd_codes() -> Set[str]:
     Warning: This loads all codes into memory. Use sparingly.
 
     Returns:
-        Set of all CCD codes in the database
+        set[str]: Set of all CCD codes in the database
     """
     _ensure_ccd_database()
 
@@ -278,7 +278,7 @@ def _get_ccd_code_cache() -> Set[str]:
     call and reused for all subsequent calls.
 
     Returns:
-        Set of all CCD codes in the database
+        set[str]: Set of all CCD codes in the database
     """
     global _CCD_CODE_CACHE
     if _CCD_CODE_CACHE is None:
@@ -332,7 +332,7 @@ def _get_ccd_parent_dataframe() -> pd.DataFrame:
     """Load and cache the CCD parent mapping dataframe.
 
     Returns:
-        DataFrame with columns: ccd_code, parent_3letter, parent_1letter
+        pd.DataFrame: DataFrame with columns: ccd_code, parent_3letter, parent_1letter
     """
     global _CCD_PARENT_DF_CACHE
 
@@ -363,11 +363,11 @@ def get_canonical_component(ccd_code: str) -> Optional[str]:
     - DNA modifications: 6MA→A, 8OG→G, etc.
 
     Args:
-        ccd_code: Three-letter CCD code for a modified component
+        ccd_code (str): Three-letter CCD code for a modified component
 
     Returns:
-        Single-letter code for the canonical (parent) amino acid or nucleotide,
-        or None if the CCD code is not a known modified component
+        str | None: Single-letter code for the canonical (parent) amino acid or nucleotide,
+            or None if the CCD code is not a known modified component
 
     Examples:
         >>> # Protein PTMs
@@ -412,14 +412,14 @@ def get_modifications_for_component(entity_type: str, canonical_letter: str) -> 
     nucleotide base in a given entity type (protein, DNA, or RNA).
 
     Args:
-        entity_type: Type of biological polymer - "protein", "dna", or "rna"
-        canonical_letter: Single-letter code for the canonical amino acid or base
+        entity_type (str): Type of biological polymer - "protein", "dna", or "rna"
+        canonical_letter (str): Single-letter code for the canonical amino acid or base
             - For proteins: A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y
             - For DNA: A, T, C, G
             - For RNA: A, U, C, G
 
     Returns:
-        List of CCD codes for modifications of this component. Empty list if none exist.
+        list[str]: List of CCD codes for modifications of this component. Empty list if none exist.
 
     Examples:
         >>> # Protein modifications

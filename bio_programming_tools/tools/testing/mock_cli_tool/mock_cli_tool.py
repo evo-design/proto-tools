@@ -1,9 +1,8 @@
-"""Mock CLI subprocess tool for testing subprocess-based device management.
+"""bio_programming_tools/tools/testing/mock_cli_tool/mock_cli_tool.py
 
 This is a minimal CLI-pattern tool that spawns a subprocess for inference,
 matching the pattern used by tools like Boltz2, RFDiffusion3, and Protenix.
-It uses get_subprocess_device_env() for device routing.
-"""
+It uses get_subprocess_device_env() for device routing."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +28,8 @@ from bio_programming_tools.utils import (
 class MockCLIToolInput(BaseToolInput):
     """Input for mock CLI tool.
 
-    Fields:
-        data: Input data to pass through the CLI subprocess.
+    Attributes:
+        data (list[float]): Input data to pass through the CLI subprocess.
     """
 
     data: list[float] = InputField(
@@ -42,9 +41,9 @@ class MockCLIToolInput(BaseToolInput):
 class MockCLIToolConfig(BaseConfig):
     """Config for mock CLI tool.
 
-    Fields:
-        device: Device to run on.
-        scale_factor: Scale factor applied to input data.
+    Attributes:
+        device (str): Device to run on.
+        scale_factor (float): Scale factor applied to input data.
     """
 
     device: str = ConfigField(
@@ -65,10 +64,10 @@ class MockCLIToolConfig(BaseConfig):
 class MockCLIToolOutput(BaseToolOutput):
     """Output from mock CLI tool.
 
-    Fields:
-        result: Output from the CLI subprocess.
-        device_used: Device the subprocess ran on.
-        cuda_visible_devices: CUDA_VISIBLE_DEVICES passed to subprocess.
+    Attributes:
+        result (list[float]): Output from the CLI subprocess.
+        device_used (str): Device the subprocess ran on.
+        cuda_visible_devices (str): CUDA_VISIBLE_DEVICES passed to subprocess.
     """
 
     result: list[float] = Field(

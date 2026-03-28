@@ -1,4 +1,6 @@
-"""Masking strategies for masked language model sampling."""
+"""bio_programming_tools/tools/masked_models/masking/base.py
+
+Masking strategies for masked language model sampling."""
 from __future__ import annotations
 
 import logging
@@ -27,12 +29,12 @@ def mutable_mask(seq: str, fixed: list[int] | None = None) -> list[bool]:
     """Return a boolean mask where True = designable (eligible for masking).
 
     Args:
-        seq: Protein sequence (e.g. "MKTLLIFLA").
-        fixed: 1-indexed positions to keep unchanged. Applied uniformly
+        seq (str): Protein sequence (e.g. "MKTLLIFLA").
+        fixed (list[int] | None): 1-indexed positions to keep unchanged. Applied uniformly
             to every sequence in a batch by the caller.
 
     Returns:
-        List of bools, one per character in *seq*.
+        list[bool]: List of bools, one per character in *seq*.
     """
     fixed_set = set(fixed) if fixed else set()
     return [
@@ -72,6 +74,11 @@ def _resolve_count(
 
     Priority: num_mutations (exact) > mask_fraction (proportional) > 30% (default).
     mask_fraction is applied to *designable* count, not full sequence length.
+
+    Args:
+        num_mutations (int | None): Exact number of positions to mask, or None.
+        mask_fraction (float | None): Fraction of designable positions to mask, or None.
+        n_designable (int): Number of designable (mutable) positions in the sequence.
     """
     if num_mutations is not None:
         return num_mutations
@@ -103,12 +110,12 @@ def weighted_sample(
     Uniform scores degrade to uniform random sampling.
 
     Args:
-        eligible: 0-indexed position indices to sample from.
-        scores: One score per position — higher means more likely to be picked.
-        k: How many positions to select.
+        eligible (list[int]): 0-indexed position indices to sample from.
+        scores (list[float]): One score per position — higher means more likely to be picked.
+        k (int): How many positions to select.
 
     Returns:
-        List of *k* 0-indexed positions drawn from *eligible*.
+        list[int]: List of *k* 0-indexed positions drawn from *eligible*.
     """
     if k >= len(eligible):
         return list(eligible)
@@ -189,6 +196,22 @@ class MaskingStrategy(BaseModel):
     - ``mask_fraction``: proportion of designable positions
       (e.g. ``mask_fraction=0.15`` → mask ~15%).
     - Neither: masks ~30% of designable positions (default).
+
+    Attributes:
+        method (MaskingMethod): Scoring method for position selection.
+            ``"random"``: uniform random, ``"entropy"``: highest model uncertainty,
+            ``"max-logit"``: lowest model confidence.
+        num_mutations (int | None): Exact number of positions to mask per sequence.
+        mask_fraction (float | None): Fraction of designable positions to mask
+            (e.g. 0.15 for ~15%).
+        fixed_positions (list[int] | None): 1-indexed positions that must NOT be
+            masked. Applied uniformly to all sequences.
+        temperature (float): Temperature for position selection. < 1.0 is greedy,
+            1.0 uses scores as-is, > 1.0 is more uniform.
+        model_name (Literal['esm2', 'esm3'] | None): Which masked model to use
+            for scoring. Defaults to the sampling tool's model when unset.
+        model_checkpoint (str | None): Model checkpoint override (uses tool default
+            if None).
 
     Examples::
 
@@ -305,8 +328,8 @@ class MaskingStrategy(BaseModel):
         allowing stateful maskers to accumulate information across calls.
 
         Args:
-            sequences: Protein sequences to mask.
-            position_score_fn: Callable that takes sequences and returns
+            sequences (list[str]): Protein sequences to mask.
+            position_score_fn (Callable | None): Callable that takes sequences and returns
                 per-position scores. Required for model-based methods
                 (entropy, max-logit). When called from a tool's
                 ``preprocess()``, this is built by
@@ -315,7 +338,7 @@ class MaskingStrategy(BaseModel):
                 if not provided.
 
         Returns:
-            List of masked sequences with ``_`` at selected positions.
+            list[str]: List of masked sequences with ``_`` at selected positions.
         """
         # Lazy-init the masker (persists for the lifetime of this strategy)
         if self._masker is None:
@@ -370,17 +393,17 @@ def build_position_score_fn(
     ``ToolInstance.persist()`` worker reuse automatically.
 
     Args:
-        sampling_model: The sampling tool's model name (e.g. ``"esm2"``).
+        sampling_model (str): The sampling tool's model name (e.g. ``"esm2"``).
             Used as default when ``masking_strategy.model_name`` is unset.
-        masking_strategy: The strategy object (provides ``model_name``
+        masking_strategy (MaskingStrategy): The strategy object (provides ``model_name``
             and ``model_checkpoint`` overrides).
-        device: Device string from the sampling config (e.g. ``"cuda"``,
+        device (str): Device string from the sampling config (e.g. ``"cuda"``,
             ``"cuda:1"``). Passed through to the embeddings tool.
 
     Returns:
-        A callable ``(sequences: list[str]) -> list[list[list[float]]]``
-        that returns per-position logits, or ``None`` if the masking
-        method doesn't need logits (e.g. random).
+        Callable | None: A callable ``(sequences: list[str]) -> list[list[list[float]]]``
+            that returns per-position logits, or ``None`` if the masking
+            method doesn't need logits (e.g. random).
     """
     masker_cls = MASKERS[masking_strategy.method]
     if masker_cls.supported_models is None:

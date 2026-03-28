@@ -1,5 +1,5 @@
 """
-Shared helper functions for Boltz2 service layer and tool layer.
+bio_programming_tools/tools/structure_prediction/boltz2/helpers.py
 
 These helpers are used by both the tool layer (boltz2.py) and the service layer
 (boltz2_service.py in bio-programming deployment). They provide utilities for
@@ -21,9 +21,9 @@ def write_msa_csv(aligned_sequences: list, csv_path: str) -> None:
     for cross-chain MSA pairing.
 
     Args:
-        aligned_sequences: List of aligned sequence strings. The first
+        aligned_sequences (list): List of aligned sequence strings. The first
             sequence is treated as the query.
-        csv_path: Path where the CSV file will be written.
+        csv_path (str): Path where the CSV file will be written.
     """
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -39,13 +39,13 @@ def complex_to_yaml(
     """Convert a list of chain dicts to Boltz2 YAML input format.
 
     Args:
-        chains: List of chain dicts, each with 'entity_type' and 'sequence' keys.
-        chain_msa_paths: Optional dict mapping chain IDs (A, B, C, ...) to
+        chains (list[dict]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
+        chain_msa_paths (dict | None): Optional dict mapping chain IDs (A, B, C, ...) to
             MSA CSV file paths. Protein chains without a path get msa="empty"
             (single-sequence mode). If None, all protein chains get msa="empty".
 
     Returns:
-        YAML formatted string for Boltz2 input
+        str: YAML formatted string for Boltz2 input
     """
     import yaml
 

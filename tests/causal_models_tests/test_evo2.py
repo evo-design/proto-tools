@@ -1,4 +1,6 @@
-"""Tests for Evo2."""
+"""tests/causal_models_tests/test_evo2.py
+
+Tests for Evo2."""
 
 import numpy as np
 import pytest

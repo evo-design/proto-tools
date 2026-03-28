@@ -1,4 +1,6 @@
-"""Tests for AlphaGenome."""
+"""tests/sequence_scoring_tests/test_alphagenome_input_validation.py
+
+Tests for AlphaGenome."""
 
 from __future__ import annotations
 

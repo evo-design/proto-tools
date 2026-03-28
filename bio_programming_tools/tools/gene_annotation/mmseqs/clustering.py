@@ -1,4 +1,6 @@
-"""MMseqs2 sequence clustering tool."""
+"""bio_programming_tools/tools/gene_annotation/mmseqs/clustering.py
+
+MMseqs2 sequence clustering tool."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -64,9 +66,9 @@ class MmseqsClusteringInput(BaseToolInput):
     """Input object for MMseqs2 sequence clustering.
 
     Attributes:
-        input_sequences (List[str]): List of sequence strings (protein or nucleotide)
+        input_sequences (list[str]): List of sequence strings (protein or nucleotide)
             for clustering.
-        sequence_ids (Optional[List[str]]): Optional list of sequence identifiers.
+        sequence_ids (list[str] | None): Optional list of sequence identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
@@ -98,7 +100,7 @@ class MmseqsClusteringOutput(BaseToolOutput):
     Contains per-sequence clustering results matching the input order.
 
     Attributes:
-        results (List[MmseqsClusterResult]): List of clustering results, one per
+        results (list[MmseqsClusterResult]): List of clustering results, one per
             input sequence. The order matches the input sequences order.
     """
     results: List[MmseqsClusterResult] = Field(
@@ -200,7 +202,7 @@ def run_mmseqs_clustering(
     Args:
         inputs (MmseqsClusteringInput): Validated input containing sequences
             to cluster.
-        config (MmseqsClusteringConfig): Configuration with clustering threshold.
+        config (MmseqsClusteringConfig | None): Configuration with clustering threshold.
 
     Returns:
         MmseqsClusteringOutput: Per-sequence cluster assignments in input order.

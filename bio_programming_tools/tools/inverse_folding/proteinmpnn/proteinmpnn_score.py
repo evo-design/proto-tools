@@ -1,4 +1,6 @@
-"""ProteinMPNN scoring tool."""
+"""bio_programming_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_score.py
+
+ProteinMPNN scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -30,7 +32,7 @@ class ProteinMPNNScoringInput(BaseToolInput):
     """Input for ProteinMPNN scoring.
 
     Attributes:
-        sequence_structure_pairs (List[SequenceStructurePair]): List of sequence-structure pairs to score.
+        sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
@@ -49,7 +51,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
     using ProteinMPNN's structure-conditioned language model.
 
     Attributes:
-        fixed_positions (Optional[Dict[str, List[int]]]): Dictionary mapping chain
+        fixed_positions (dict[str, list[int]] | None): Dictionary mapping chain
             IDs to fixed positions in the sequence. If None, no positions will be fixed.
             In scoring, fixed positions will not be utilized in perplexity calculation.
             NOTE: Positions should match positions in the structure (generally 1-indexed).
@@ -63,7 +65,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
 
-        model_choice (Literal["proteinmpnn", "abmpnn"]): Model weights to use.
+        model_choice (Literal['proteinmpnn', 'abmpnn']): Model weights to use.
             ``"proteinmpnn"`` for the general-purpose model, ``"abmpnn"`` for
             antibody-optimized weights. Default: ``"proteinmpnn"``.
 
@@ -155,7 +157,7 @@ def run_proteinmpnn_score(
     Args:
         inputs (ProteinMPNNScoringInput): Validated input containing sequence-structure
             pairs to score.
-        config (ProteinMPNNScoringConfig): Scoring configuration specifying fixed
+        config (ProteinMPNNScoringConfig | None): Scoring configuration specifying fixed
             positions, device settings, and whether to return logits.
 
     Returns:

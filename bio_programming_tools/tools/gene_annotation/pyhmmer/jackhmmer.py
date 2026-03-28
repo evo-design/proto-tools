@@ -1,4 +1,6 @@
-"""PyHMMER jackhmmer tool — iterative protein sequence search."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/jackhmmer.py
+
+PyHMMER jackhmmer tool — iterative protein sequence search."""
 from __future__ import annotations
 
 from typing import List
@@ -24,11 +26,11 @@ class PyJackhmmerInput(PyHmmerInput):
     """Input object for PyHMMER jackhmmer (protein sequences vs protein sequences).
 
     Attributes:
-        sequences (List[str]): Query protein sequences.
+        sequences (list[str]): Query protein sequences.
             Inherited from ``PyHmmerInput``. Can be a single sequence string or
             a list of sequence strings.
 
-        target_sequences (List[str]): Target protein sequences to
+        target_sequences (list[str]): Target protein sequences to
             search against. Can be a single sequence string or a list of sequence
             strings.
     """
@@ -53,13 +55,13 @@ class PyJackhmmerInput(PyHmmerInput):
 class PyJackhmmerConfig(PyHmmerConfig):
     """Configuration for PyHMMER jackhmmer search.
 
-    Fields:
-        num_threads: Number of CPU threads to use.
-        evalue_threshold: Sequence-level E-value reporting threshold.
-        score_threshold: Sequence-level score threshold.
-        domain_evalue_threshold: Domain-level E-value reporting threshold.
-        domain_score_threshold: Domain-level score threshold.
-        max_iterations: Maximum number of jackhmmer iterations.
+    Attributes:
+        num_threads (int): Number of CPU threads to use.
+        evalue_threshold (float): Sequence-level E-value reporting threshold.
+        score_threshold (float | None): Sequence-level score threshold.
+        domain_evalue_threshold (float): Domain-level E-value reporting threshold.
+        domain_score_threshold (float | None): Domain-level score threshold.
+        max_iterations (int): Maximum number of jackhmmer search iterations.
     """
 
     max_iterations: int = ConfigField(
@@ -106,7 +108,7 @@ def run_pyhmmer_jackhmmer(
     Args:
         inputs (PyJackhmmerInput): Validated jackhmmer input containing query and
             target protein sequences.
-        config (PyJackhmmerConfig): Validated configuration including
+        config (PyJackhmmerConfig | None): Validated configuration including
             ``max_iterations`` and threshold settings.
 
     Returns:

@@ -1,4 +1,6 @@
-"""Entry point: python -m bio_tools_mcp."""
+"""bio_tools_mcp/__main__.py
+
+Entry point: python -m bio_tools_mcp."""
 
 try:
     from bio_tools_mcp.server import main

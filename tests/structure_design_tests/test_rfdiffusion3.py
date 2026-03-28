@@ -1,4 +1,6 @@
-"""Tests for RFdiffusion3."""
+"""tests/structure_design_tests/test_rfdiffusion3.py
+
+Tests for RFdiffusion3."""
 
 import json
 

@@ -1,8 +1,7 @@
-"""PDB fetch entry tool — retrieve structure metadata from RCSB PDB.
+"""bio_programming_tools/tools/database_retrieval/pdb/fetch_entry.py
 
 Wraps the RCSB PDB REST API core entry endpoint for fetching title,
-experimental method, and resolution for a PDB accession.
-"""
+experimental method, and resolution for a PDB accession."""
 
 from __future__ import annotations
 
@@ -33,7 +32,7 @@ class PdbFetchEntryInput(BaseToolInput):
     """Input for PDB entry metadata fetch.
 
     Attributes:
-        pdb_id: PDB accession (e.g. '1LBG').
+        pdb_id (str): PDB accession (e.g. '1LBG').
     """
 
     pdb_id: str = InputField(description="PDB accession (e.g. '1LBG')")
@@ -43,10 +42,10 @@ class PdbFetchEntryOutput(BaseToolOutput):
     """Output from PDB entry metadata fetch.
 
     Attributes:
-        title: Structure title.
-        method: Experimental method.
-        resolution: Resolution in angstroms.
-        source_url: URL used for the request.
+        title (str | None): Structure title.
+        method (str | None): Experimental method.
+        resolution (float | None): Resolution in angstroms.
+        source_url (str | None): URL used for the request.
     """
 
     title: Optional[str] = Field(default=None, description="Structure title")
@@ -108,11 +107,11 @@ def run_pdb_fetch_entry(
     Returns title, experimental method, and resolution for a PDB accession.
 
     Args:
-        inputs: PDB accession to look up.
-        config: HTTP timeout and retry settings.
+        inputs (PdbFetchEntryInput): PDB accession to look up.
+        config (PdbFetchConfig | None): HTTP timeout and retry settings.
 
     Returns:
-        PdbFetchEntryOutput with structure metadata.
+        PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.
     """
     del instance
 

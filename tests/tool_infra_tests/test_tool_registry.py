@@ -1,4 +1,6 @@
-"""Tests for ToolRegistry."""
+"""tests/tool_infra_tests/test_tool_registry.py
+
+Tests for ToolRegistry."""
 
 import time
 

@@ -1,8 +1,7 @@
-"""Codon tables, IUPAC ambiguity codes, and sampling utilities.
+"""bio_programming_tools/tools/mutagenesis/codons.py
 
 Self-contained codon infrastructure for random mutagenesis tools.
-No BioPython dependency.
-"""
+No BioPython dependency."""
 from __future__ import annotations
 
 import functools
@@ -77,6 +76,10 @@ def _expand_degenerate_codon(codon: str) -> list[str]:
 @functools.lru_cache(maxsize=None)
 def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     """Expand a codon scheme name into its codons and amino acid weights.
+
+    Args:
+        name (str): Codon scheme name (e.g., ``"NNK"``, ``"NNS"``, ``"UNIFORM"``).
+            Case-insensitive. Must be a valid IUPAC degenerate codon or ``"UNIFORM"``.
 
     Returns a dict with:
         - ``"codons"``: list of concrete DNA codons in the scheme

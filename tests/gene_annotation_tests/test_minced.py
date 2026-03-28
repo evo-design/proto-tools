@@ -1,4 +1,6 @@
-"""Tests for the MinCED CRISPR array detection tool."""
+"""tests/gene_annotation_tests/test_minced.py
+
+Tests for the MinCED CRISPR array detection tool."""
 
 from __future__ import annotations
 

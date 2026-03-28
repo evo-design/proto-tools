@@ -1,4 +1,6 @@
-"""Tests for Enformer regulatory activity prediction tool."""
+"""tests/sequence_scoring_tests/test_enformer.py
+
+Tests for Enformer regulatory activity prediction tool."""
 
 import random
 

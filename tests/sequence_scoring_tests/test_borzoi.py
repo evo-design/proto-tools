@@ -1,4 +1,6 @@
-"""Tests for Borzoi regulatory activity prediction tool."""
+"""tests/sequence_scoring_tests/test_borzoi.py
+
+Tests for Borzoi regulatory activity prediction tool."""
 
 import random
 

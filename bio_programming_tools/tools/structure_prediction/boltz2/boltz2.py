@@ -1,5 +1,6 @@
 """
-boltz2.py
+bio_programming_tools/tools/structure_prediction/boltz2/boltz2.py
+
 Protein structure prediction using Boltz2.
 
 Example:
@@ -7,7 +8,6 @@ Example:
     >>> config = Boltz2Config(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
     >>> result = run_boltz2(config)
     >>> print(f"Confidence: {result.confidence_score:.2f}")
-
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ class Boltz2Input(StructurePredictionInput):
     Inherits from ``StructurePredictionInput``.
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Inherited from ``StructurePredictionInput``. Each complex
             can contain multiple chains of proteins, DNA, RNA, and/or ligands.
         msas (dict[str, MSA] | None): Pre-computed MSAs keyed by protein sequence.
@@ -99,11 +99,11 @@ class Boltz2Config(MSAStructurePredictionConfig):
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
 
-        verbose (bool): Whether to print status messages during execution including
+        verbose: Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
@@ -170,41 +170,41 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     Args:
         inputs (Boltz2Input): Validated input containing one or more complexes to
             predict structures for.
-        config (Boltz2Config): Validated Boltz2 configuration specifying MSA settings,
+        config (Boltz2Config | None): Validated Boltz2 configuration specifying MSA settings,
             refinement parameters, and execution options.
 
     Returns:
         Boltz2Output: Structured output containing:
             - ``structures``: List of ``Boltz2Structure`` instances, one per input complex
             - Each structure includes coordinates and confidence metrics:
-                    confidence_score (float): Primary ranking score used to select the best
+                    confidence_score: Primary ranking score used to select the best
                         structure from multiple samples. For multi-chain complexes, this is
                         ``iptm``; for single chains, this is ``ptm``. Range: 0.0-1.0 (higher
                         is better).
 
-                    ptm (float): Predicted Template Modeling score measuring overall structural
+                    ptm: Predicted Template Modeling score measuring overall structural
                         accuracy. Range: 0.0-1.0. Interpretation:
 
                         - ``> 0.7``: High quality structure
                         - ``0.5-0.7``: Moderate quality
                         - ``< 0.5``: Low confidence
 
-                    iptm (float): Interface PTM score measuring confidence in inter-chain
+                    iptm: Interface PTM score measuring confidence in inter-chain
                         interfaces and relative orientations. Range: 0.0-1.0. Interpretation:
 
                         - ``> 0.85``: High confidence in interface
                         - ``0.7-0.85``: Moderate confidence
                         - ``< 0.7``: Low confidence
 
-                    ligand_iptm (Optional[float]): Protein-ligand interface PTM score. Only
+                    ligand_iptm: Protein-ligand interface PTM score. Only
                         present for complexes containing ligands. Range: 0.0-1.0. Higher values
                         indicate more confident protein-ligand binding predictions.
 
-                    protein_iptm (Optional[float]): Protein-protein interface PTM score. Only
+                    protein_iptm: Protein-protein interface PTM score. Only
                         present for multi-protein complexes. Range: 0.0-1.0. Higher values
                         indicate more confident protein-protein interactions.
 
-                    complex_plddt (Optional[float]): Average per-residue confidence (pLDDT)
+                    complex_plddt: Average per-residue confidence (pLDDT)
                         across all residues in the complex. Range: 0-1. Interpretation:
 
                         - ``> 0.9``: Very high confidence
@@ -212,22 +212,22 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
                         - ``0.5-0.7``: Low confidence
                         - ``< 0.5``: Very low confidence
 
-                    complex_iplddt (Optional[float]): Average pLDDT for interface residues only.
+                    complex_iplddt: Average pLDDT for interface residues only.
                         Range: 0-1. Useful for assessing confidence specifically in the
                         interaction regions.
 
-                    complex_pde (Optional[float]): Average Predicted Aligned Error (PAE) in
+                    complex_pde: Average Predicted Aligned Error (PAE) in
                         Angstroms across all residue pairs. Lower values indicate more confident
                         relative positioning. From 0 to 31.75 Å.
 
-                    complex_ipde (Optional[float]): PAE for interface residue pairs only, in
+                    complex_ipde: PAE for interface residue pairs only, in
                         Angstroms. Lower values indicate more confident interface geometry.
 
-                    chains_ptm (Optional[List[float]]): Individual PTM scores for each chain.
+                    chains_ptm: Individual PTM scores for each chain.
                         Useful for identifying which chains are predicted with high vs. low
                         confidence.
 
-                    pair_chains_iptm (Optional[List[List[float]]]): Pairwise ipTM scores between
+                    pair_chains_iptm: Pairwise ipTM scores between
                         all chain pairs. Shape: ``(num_chains, num_chains)``. Symmetric matrix
                         with diagonal values representing self-interactions.
 
@@ -282,7 +282,7 @@ def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], lis
         sp_complex: StructurePredictionComplex instance containing chain information
 
     Returns:
-        Tuple of (protein_seqs, protein_chain_ids) where chain IDs are uppercase letters
+        tuple[list[str], list[str]]: Tuple of (protein_seqs, protein_chain_ids) where chain IDs are uppercase letters
     """
     all_chain_ids = CHAIN_IDS
     protein_seqs = []
@@ -305,9 +305,9 @@ def run_boltz2_on_complex(
     by ``run_boltz2`` to sequentially predict all complexes in the input.
 
     Args:
-        config: Boltz2 configuration
+        config (Boltz2Config): Boltz2 configuration
         sp_complex: StructurePredictionComplex instance containing chain information
-        msas: Pre-computed MSAs keyed by protein sequence
+        msas (dict | None): Pre-computed MSAs keyed by protein sequence
         instance: Optional ToolInstance for persistent execution
     """
     if config.verbose:

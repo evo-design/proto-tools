@@ -1,4 +1,6 @@
-"""Tests for ViennaRNA secondary structure prediction."""
+"""tests/structure_prediction_tests/test_viennarna_secondary_structure_prediction.py
+
+Tests for ViennaRNA secondary structure prediction."""
 
 import pytest
 

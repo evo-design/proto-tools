@@ -1,4 +1,6 @@
-"""Shared data models, constants, and Literal types for AlphaGenome tools."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/shared_data_models.py
+
+Shared data models, constants, and Literal types for AlphaGenome tools."""
 from __future__ import annotations
 
 import csv
@@ -133,9 +135,9 @@ class AlphaGenomePredictOutput(BaseToolOutput):
         chromosome (str): Chromosome identifier.
         interval_start (int): Interval start (0-based).
         interval_end (int): Interval end (0-based, exclusive).
-        requested_outputs (List[str]): Output types requested.
-        result (Dict[str, Any]): Serialized AlphaGenome prediction payload.
-        variant (Optional[Dict[str, Any]]): Variant metadata (variant predictions only).
+        requested_outputs (list[OutputTypeName]): Output types requested.
+        result (dict[str, Any]): Serialized AlphaGenome prediction payload.
+        variant (dict[str, Any] | None): Variant metadata (variant predictions only).
     """
 
     chromosome: str = Field(description="Chromosome identifier")
@@ -181,7 +183,7 @@ class AlphaGenomeScoreOutput(BaseToolOutput):
     where each record represents one scorer-track(-gene) combination.
 
     Attributes:
-        scores (List[Dict[str, Any]]): Tidy score records. Each dict contains
+        scores (list[dict[str, Any]]): Tidy score records. Each dict contains
             keys such as ``variant_id``, ``scored_interval``, ``gene_id``,
             ``gene_name``, ``output_type``, ``variant_scorer`` or
             ``interval_scorer``, ``track_name``, ``raw_score``, etc.
@@ -227,10 +229,12 @@ class AlphaGenomePredictConfig(BaseConfig):
 
     Attributes:
         model_version (str): AlphaGenome Hugging Face model version.
-        requested_outputs (List[str]): Output type names to request.
-        ontology_terms (Optional[List[str]]): Optional ontology term filters.
-        organism (Literal["human", "mouse"]): Organism for predictions.
+        requested_outputs (list[OutputTypeName]): Output type names to request.
+        ontology_terms (list[str] | None): Optional ontology term filters.
+        organism (Literal['human', 'mouse']): Organism for predictions.
         device (str): Device to run inference on.
+        timeout (int): Maximum execution time in seconds. AlphaGenome JAX
+            compilation is slow on first run.
     """
 
     model_version: str = ConfigField(

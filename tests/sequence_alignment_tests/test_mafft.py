@@ -1,4 +1,6 @@
-"""Tests for MAFFT tool in bio_programming_tools.tools.sequence_alignment.mafft"""
+"""tests/sequence_alignment_tests/test_mafft.py
+
+Tests for MAFFT tool in bio_programming_tools.tools.sequence_alignment.mafft"""
 
 import pytest
 

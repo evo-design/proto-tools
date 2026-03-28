@@ -1,4 +1,6 @@
-"""Tests for tool config consistency."""
+"""tests/style_consistency_tests/test_tool_config_consistency.py
+
+Tests for tool config consistency."""
 
 from typing import Union, get_args, get_origin
 

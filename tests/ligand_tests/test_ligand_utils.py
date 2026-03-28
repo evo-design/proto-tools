@@ -1,4 +1,6 @@
-"""Tests for ligand utility functions."""
+"""tests/ligand_tests/test_ligand_utils.py
+
+Tests for ligand utility functions."""
 
 import pytest
 from rdkit import Chem

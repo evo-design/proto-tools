@@ -1,4 +1,6 @@
-"""ESM2 embeddings tool."""
+"""bio_programming_tools/tools/masked_models/esm2/esm2_embeddings.py
+
+ESM2 embeddings tool."""
 from __future__ import annotations
 
 import logging
@@ -41,7 +43,7 @@ class ESM2EmbeddingsOutput(MaskedModelOutput):
     Inherits from ``MaskedModelOutput``.
 
     Attributes:
-        results (List[SequenceEmbedding]): Per-sequence embedding results. Each
+        results (list[SequenceEmbedding]): Per-sequence embedding results. Each
             ``SequenceEmbedding`` contains:
 
             - ``mean_embedding``: Mean-pooled embedding vector (e.g., 1280-dim for
@@ -66,7 +68,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
     Inherits from ``MaskedModelConfig``.
 
     Attributes:
-        model_checkpoint (str): Name of the ESM2 model variant to use. Options:
+        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): Name of the ESM2 model variant to use. Options:
 
             - ``"esm2_t6_8M_UR50D"``: 8M parameters, 6 layers (fastest, 320-dim embeddings)
             - ``"esm2_t12_35M_UR50D"``: 35M parameters, 12 layers (480-dim embeddings)
@@ -88,7 +90,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
             ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
             like ``"cuda:0"``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during model execution,
+        verbose: Whether to print status messages during model execution,
             including loading progress and timing information. Default: ``False``.
 
         return_logits (bool): Whether to include per-position logits in the output.
@@ -143,9 +145,9 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
     Supports local GPU execution via isolated Python environments.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing one or more protein
+        inputs (ESM2EmbeddingsInput): Validated input containing one or more protein
             sequences (amino acid sequences).
-        config (ESM2EmbeddingsConfig): Validated ESM2 configuration specifying model variant,
+        config (ESM2EmbeddingsConfig | None): Validated ESM2 configuration specifying model variant,
             batch size, and device settings.
 
     Returns:

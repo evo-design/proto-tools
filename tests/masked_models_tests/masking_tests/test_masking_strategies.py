@@ -1,4 +1,6 @@
-"""Tests for masking strategies."""
+"""tests/masked_models_tests/masking_tests/test_masking_strategies.py
+
+Tests for masking strategies."""
 import logging
 import warnings
 

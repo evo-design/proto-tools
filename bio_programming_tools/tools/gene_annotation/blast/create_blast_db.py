@@ -1,4 +1,6 @@
-"""BLAST database creation tool."""
+"""bio_programming_tools/tools/gene_annotation/blast/create_blast_db.py
+
+BLAST database creation tool."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -89,14 +91,14 @@ class CreateBlastDbConfig(BaseConfig):
     metadata, and indexing options.
 
     Attributes:
-        dbtype (str): The type of database to create:
+        dbtype (Literal['nucl', 'prot']): The type of database to create:
 
             - ``"nucl"``: Nucleotide database (for DNA/RNA sequences)
             - ``"prot"``: Protein database (for amino acid sequences)
 
             This must match the sequence type in the input FASTA file.
 
-        out_prefix (Optional[str]): Optional file path prefix for the generated
+        out_prefix (str | None): Optional file path prefix for the generated
             database files. If not specified, the database files will be created
             in the same directory as the input FASTA file, using the FASTA filename
             (without extension) as the prefix. For example, if the input is
@@ -105,12 +107,12 @@ class CreateBlastDbConfig(BaseConfig):
             database files will be created as ``"/data/mydb.nhr"``,
             ``"/data/mydb.nin"``, ``"/data/mydb.nsq"``, etc.
 
-        title (Optional[str]): Optional descriptive title for the database. This
+        title (str | None): Optional descriptive title for the database. This
             title will be displayed in BLAST search results and can help identify
             the database contents. If not specified, ``makeblastdb`` will use the
             input filename.
 
-        additional_params (Dict[str, str | int | float | bool]): Dictionary
+        additional_params (dict[str, str | int | float | bool]): Dictionary
             of additional parameters for ``makeblastdb``. Common options include:
 
             - ``"parse_seqids"``: Parse sequence IDs in the FASTA file (boolean)
@@ -186,10 +188,10 @@ def run_create_blast_db(
 
     Args:
         inputs (CreateBlastDbInput): Validated BLAST database creation input
-        config (CreateBlastDbConfig): Validated BLAST database creation configuration
+        config (CreateBlastDbConfig | None): Validated BLAST database creation configuration
 
     Returns:
-        Structured output with database path
+        CreateBlastDbOutput: Structured output with database path
 
     Raises:
         ValueError: If the BLAST database creation fails.

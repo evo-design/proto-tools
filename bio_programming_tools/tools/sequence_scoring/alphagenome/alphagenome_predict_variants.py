@@ -1,4 +1,6 @@
-"""AlphaGenome batched variant-effect prediction tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_variants.py
+
+AlphaGenome batched variant-effect prediction tool."""
 from __future__ import annotations
 
 import json
@@ -35,7 +37,7 @@ class AlphaGenomePredictVariantsInput(BaseToolInput):
     """Input for batched AlphaGenome variant-effect prediction.
 
     Attributes:
-        variants (List[AlphaGenomeVariant]): Variants to predict.
+        variants (list[AlphaGenomeVariant]): Variants to predict.
             A single variant is auto-wrapped into a list.
     """
 
@@ -59,7 +61,7 @@ class AlphaGenomePredictVariantsOutput(BaseToolOutput):
     """Output from batched AlphaGenome variant-effect prediction.
 
     Attributes:
-        results (List[AlphaGenomePredictOutput]): Per-variant prediction outputs.
+        results (list[AlphaGenomePredictOutput]): Per-variant prediction outputs.
     """
 
     results: List[AlphaGenomePredictOutput] = Field(

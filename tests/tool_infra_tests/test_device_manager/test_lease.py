@@ -1,4 +1,6 @@
-"""Tests for lease-based transient device allocations."""
+"""tests/tool_infra_tests/test_device_manager/test_lease.py
+
+Tests for lease-based transient device allocations."""
 
 import threading
 import time

@@ -1,4 +1,6 @@
-"""ESM-IF1/ProteinDPO scoring tool."""
+"""bio_programming_tools/tools/inverse_folding/esm_if1/esm_if1_score.py
+
+ESM-IF1/ProteinDPO scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -27,7 +29,7 @@ class ESMIF1ScoringInput(BaseToolInput):
     """Input for ESM-IF1/ProteinDPO scoring.
 
     Attributes:
-        sequence_structure_pairs: List of sequence-structure pairs to score.
+        sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
@@ -43,9 +45,9 @@ class ESMIF1ScoringConfig(BaseConfig):
     """Configuration for ESM-IF1/ProteinDPO scoring.
 
     Attributes:
-        weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
+        weights_variant (Literal['esmif', 'protein_dpo']): Which model weights to use. 'esmif' loads vanilla ESM-IF1,
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
-        device: Device to run the model on.
+        device (str): Device to run the model on.
     """
 
     weights_variant: Literal["esmif", "protein_dpo"] = ConfigField(
@@ -118,11 +120,11 @@ def run_esm_if1_score(
     log-likelihood and perplexity.
 
     Args:
-        inputs: Sequence-structure pairs to score.
-        config: Configuration including weights variant.
+        inputs (ESMIF1ScoringInput): Sequence-structure pairs to score.
+        config (ESMIF1ScoringConfig | None): Configuration including weights variant.
 
     Returns:
-        ESMIF1ScoringOutput with scores for each input pair.
+        ESMIF1ScoringOutput: ESMIF1ScoringOutput with scores for each input pair.
     """
     scores = []
 

@@ -1,5 +1,5 @@
 """
-structure_prediction/dispatch.py
+bio_programming_tools/tools/structure_prediction/dispatch.py
 
 Router function for structure prediction tools.
 """
@@ -66,13 +66,13 @@ def predict_structures(
     structure-related constraints and optimizers.
 
     Args:
-        complexes: List of StructurePredictionComplex objects to predict.
-        tool_name: Name of the structure prediction tool. Supported values:
+        complexes (StructurePredictionComplex | list[StructurePredictionComplex]): List of StructurePredictionComplex objects to predict.
+        tool_name (str): Name of the structure prediction tool. Supported values:
             ``"esmfold"``, ``"alphafold2"``, ``"alphafold3"``, ``"boltz2"``, ``"chai1"``, ``"protenix"``.
-        tool_config: Tool-specific configuration dictionary.
+        tool_config (ESMFoldConfig | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | dict[str, Any] | None): Tool-specific configuration dictionary.
 
     Returns:
-        StructurePredictionOutput containing predicted structures and metrics.
+        StructurePredictionOutput: StructurePredictionOutput containing predicted structures and metrics.
 
     Raises:
         ValueError: If tool_name is not recognized.

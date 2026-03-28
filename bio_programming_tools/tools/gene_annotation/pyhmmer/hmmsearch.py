@@ -1,4 +1,6 @@
-"""PyHMMER hmmsearch tool — search HMM profiles against protein sequences."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/hmmsearch.py
+
+PyHMMER hmmsearch tool — search HMM profiles against protein sequences."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,7 +29,7 @@ class PyHmmsearchInput(PyHmmerInput):
     against protein sequences to identify matching protein families or domains.
 
     Attributes:
-        sequences (List[str]): Target protein sequences to search.
+        sequences (list[str]): Target protein sequences to search.
             Inherited from ``PyHmmerInput``. Can be a single sequence string or
             a list of sequence strings.
 
@@ -91,7 +93,7 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
     Args:
         inputs (PyHmmsearchInput): Validated PyHMMER hmmsearch input containing
             the HMM file path and target sequences.
-        config (PyHmmsearchConfig): Validated PyHMMER configuration with search
+        config (PyHmmsearchConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
     Returns:

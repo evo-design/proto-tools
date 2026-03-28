@@ -1,4 +1,6 @@
-"""Chemistry utilities for small molecules and ligands."""
+"""bio_programming_tools/utils/chemistry.py
+
+Chemistry utilities for small molecules and ligands."""
 from __future__ import annotations
 
 import warnings
@@ -9,11 +11,11 @@ def validate_smiles(smiles: str, verbose: bool = True) -> bool:
     Validate SMILES string using RDKit if available.
 
     Args:
-        smiles: The SMILES string to validate.
-        verbose: Print warnings.
+        smiles (str): The SMILES string to validate.
+        verbose (bool): Print warnings.
 
     Returns:
-        True if valid SMILES, False if invalid or RDKit unavailable.
+        bool: True if valid SMILES, False if invalid or RDKit unavailable.
     """
     try:
         from rdkit import Chem

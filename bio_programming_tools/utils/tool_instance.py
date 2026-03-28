@@ -1,5 +1,5 @@
 """
-ToolInstance — isolated-venv execution for tool wrappers.
+bio_programming_tools/utils/tool_instance.py
 
 **One-shot by default**: ``dispatch()`` runs an ephemeral subprocess —
 no leaked workers, no GPU memory retained after the call.
@@ -120,14 +120,11 @@ class ToolInstance:
     ) -> ToolInstance:
         """Return (or create) a ToolInstance for *tool_name*.
 
-        Parameters
-        ----------
-        tool_name : str
-            Model-level folder name (e.g. ``"esm2"``, ``"progen2"``).
-        instance_name : str | None
-            Explicit cache key.  When *None*, the instance is cached
-            under *tool_name* so that different operations on the same
-            model share one worker.
+        Args:
+            tool_name (str): Model-level folder name (e.g. ``"esm2"``, ``"progen2"``).
+            instance_name (str | None): Explicit cache key. When None, the instance is
+                cached under *tool_name* so that different operations on the same
+                model share one worker.
         """
         key = instance_name if instance_name is not None else tool_name
         with _lock:
@@ -168,6 +165,9 @@ class ToolInstance:
         This is the escape-hatch for when you don't have the object handy.
         Prefer calling :meth:`shutdown` on the instance directly when
         possible.  No-op if *instance_name* is not in the cache.
+
+        Args:
+            instance_name (str): Cache key of the instance to shut down.
         """
         with _lock:
             inst = _active_cache().pop(instance_name, None)
@@ -192,25 +192,14 @@ class ToolInstance:
         subprocess (no leak).  When a persistent instance exists (via
         :meth:`persistent` or :meth:`get`), reuses it.
 
-        Parameters
-        ----------
-        tool_name : str
-            Model-level folder name (e.g. ``"esm2"``).
-        input_dict : dict
-            JSON-serializable input for the standalone script.
-            Should include ``"device"`` when the tool needs a
-            specific device (e.g. ``"cuda"``).
-        instance : str | ToolInstance | None
-            A :class:`ToolInstance` object to use directly, a string cache
-            key for persistent instance lookup, or *None* to use
-            *tool_name* as the cache key.
-        script_path : Path | str | None
-            Override the default standalone script.
-        config : BaseConfig | None
-            Tool configuration object. When provided, ``verbose``,
-            ``timeout``, and ``reload_on`` are derived automatically.
-            When *None*, defaults are used (verbose=False,
-            timeout=DEFAULT_TIMEOUT, reload_on=None).
+        Args:
+            tool_name (str): Model-level folder name (e.g. ``"esm2"``).
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            instance (str | ToolInstance | None): A ToolInstance object to use directly,
+                a string cache key for persistent instance lookup, or None.
+            script_path (Path | str | None): Override the default standalone script.
+            config (BaseConfig | None): Tool configuration object. When provided,
+                verbose, timeout, and reload_on are derived automatically.
         """
         # Derive execution parameters from config
         if config is not None:
@@ -284,6 +273,13 @@ class ToolInstance:
 
         For GPU devices, acquires a transient lease from DeviceManager
         to prevent concurrent one-shot calls from stomping the same GPU.
+
+        Args:
+            tool_name (str): Model-level folder name (e.g. ``"esm2"``).
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            script_path (Path | str | None): Override the default standalone script.
+            verbose (bool): Whether to print status messages.
+            timeout (int | None): Maximum execution time in seconds.
         """
         inst = cls(tool_name)
         effective_script = Path(script_path) if script_path else inst.script_path
@@ -321,22 +317,15 @@ class ToolInstance:
         Tool wrappers called inside the block will find the cached
         instance via :meth:`dispatch` and reuse it::
 
-            # Single instance — implicit dispatch works
             with ToolInstance.persist_tool("esmfold"):
                 for i in range(500):
                     output = run_esmfold(inputs, config)
 
-            # Multiple instances — first caches, second must be passed explicitly
-            with ToolInstance.persist_tool("esm2") as inst_a:
-                out_a = run_esm2_score(inputs_a, config)  # implicit dispatch
-                with ToolInstance.persist_tool("esm2") as inst_b:
-                    out_b = run_esm2_score(inputs_b, config, instance=inst_b)
-
-            # Named instance — always cached under the given name
-            with ToolInstance.persist_tool("esmfold", instance_name="fold-gpu0"):
-                output = run_esmfold(inputs, config)
-
         The worker is shut down and removed from the cache on exit.
+
+        Args:
+            tool_name (str): Model-level folder name (e.g. ``"esmfold"``).
+            instance_name (str | None): Explicit cache key. When None, uses tool_name.
         """
         if instance_name is not None:
             # Named: always cache under the given name
@@ -530,20 +519,13 @@ class ToolInstance:
     ) -> dict[str, Any]:
         """Execute *input_dict* in the tool's venv and return the result.
 
-        Parameters
-        ----------
-        input_dict : dict
-            JSON-serializable input for the standalone script.
-        script_path : Path | str | None
-            Override the default standalone script. Useful for tools with
-            multiple scripts (e.g. colabfold local vs remote).
-        verbose : bool
-            Whether to log progress.
-        timeout : int | None
-            Maximum seconds to wait.
-        reload_on : set[str] | None
-            Config field names whose value changes should trigger a
-            persistent worker restart.
+        Args:
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            script_path (Path | str | None): Override the default standalone script.
+            verbose (bool): Whether to log progress.
+            timeout (int | None): Maximum seconds to wait.
+            reload_on (set[str] | None): Config field names whose value changes should
+                trigger a persistent worker restart.
         """
         effective_script = Path(script_path) if script_path else self.script_path
         with self._instance_lock:
@@ -568,12 +550,9 @@ class ToolInstance:
     def shutdown(self, remove_from_cache: bool = True) -> None:
         """Stop the persistent worker (if any) and optionally remove from cache.
 
-        Parameters
-        ----------
-        remove_from_cache : bool
-            If True, removes the instance from the ToolInstance cache after stopping the worker.
-            If False, keeps the instance in the cache so it can be restarted on next use.
-            Default is True.
+        Args:
+            remove_from_cache (bool): If True, removes the instance from the cache.
+                If False, keeps it so it can be restarted on next use.
         """
         # Defensive: atexit may call shutdown() on a partially-initialized
         # instance if __init__ raised after the atexit handler was registered.
@@ -615,15 +594,11 @@ class ToolInstance:
         which moves the model to the specified device. Updates DeviceManager
         allocation tracking.
 
-        Parameters
-        ----------
-        device : str
-            Target device (e.g., "cpu", "cuda", "cuda:0", "cuda:1").
+        Args:
+            device (str): Target device (e.g., ``"cpu"``, ``"cuda"``, ``"cuda:0"``).
 
-        Returns
-        -------
-        ToolInstance
-            Self, for method chaining.
+        Returns:
+            ToolInstance: Self, for method chaining.
         """
         with self._instance_lock:
             # Get instance name for DeviceManager
@@ -745,6 +720,9 @@ class ToolInstance:
     def _config_marker_path(self, reload_params: dict[str, Any]) -> Path:
         """Return the marker file path for a specific reload-param combination.
 
+        Args:
+            reload_params (dict[str, Any]): Current reload_on_change field values.
+
         Each unique set of reload_on_change values (e.g., model_name) gets its
         own marker, so switching to a new checkpoint triggers the warmup timeout.
         """
@@ -756,10 +734,12 @@ class ToolInstance:
     def _needs_warmup(self, reload_params: dict[str, Any]) -> bool:
         """Check if this config combination has never completed successfully.
 
+        Args:
+            reload_params (dict[str, Any]): Current reload_on_change field values.
+
         Returns True if this specific set of reload_on_change values has
         never been run before, indicating checkpoints may need to be
-        downloaded (e.g., switching from protenix_base_default_v1.0.0 to
-        protenix_mini_esm_v0.5.0).
+        downloaded.
         """
         return not self._config_marker_path(reload_params).exists()
 
@@ -782,18 +762,12 @@ class ToolInstance:
         timeout (60 minutes or the configured timeout, whichever is
         larger) to allow time for downloads.
 
-        Parameters
-        ----------
-        timeout : int | None
-            The configured timeout in seconds, or None for no timeout.
-        reload_params : dict[str, Any] | None
-            Current reload_on_change field values. Warmup applies
-            per-config (e.g., first use of each model variant).
+        Args:
+            timeout (int | None): The configured timeout in seconds, or None for no timeout.
+            reload_params (dict[str, Any] | None): Current reload_on_change field values.
 
-        Returns
-        -------
-        int | None
-            The effective timeout to use (extended on first run).
+        Returns:
+            int | None: The effective timeout to use (extended on first run).
         """
         WARMUP_TIMEOUT = 3600  # 60 minutes
         params = reload_params or {}
@@ -838,9 +812,12 @@ class ToolInstance:
         existing worker is stopped and a new one is created.  On the very
         first call the worker is lazily created.
 
-        Standalone scripts must NOT check for config changes themselves —
-        the ToolInstance layer handles restarts via ``reload_on_change``
-        fields in the tool's Config class.
+        Args:
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            script_path (Path | None): Override the default standalone script.
+            verbose (bool): Whether to log progress.
+            timeout (int | None): Maximum seconds to wait.
+            reload_on (set[str] | None): Config field names that trigger worker restart on change.
         """
         self._ensure_env()
         sp = script_path or self.script_path
@@ -977,6 +954,12 @@ class ToolInstance:
         on *script_path* with the input/output paths as arguments, reads the
         output JSON, and converts ``subprocess.TimeoutExpired`` to
         ``TimeoutError``.
+
+        Args:
+            input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
+            script_path (Path | None): Override the default standalone script.
+            verbose (bool): Whether to log progress.
+            timeout (int | None): Maximum seconds to wait.
         """
         self._ensure_env()
         sp = script_path or self.script_path

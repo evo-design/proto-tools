@@ -1,4 +1,6 @@
-"""ESM3 embeddings tool."""
+"""bio_programming_tools/tools/masked_models/esm3/esm3_embeddings.py
+
+ESM3 embeddings tool."""
 from __future__ import annotations
 
 import logging
@@ -36,7 +38,7 @@ class ESM3EmbeddingsOutput(MaskedModelOutput):
     Inherits from ``MaskedModelOutput``.
 
     Attributes:
-        results (List[SequenceEmbedding]): Per-sequence embedding results. Each
+        results (list[SequenceEmbedding]): Per-sequence embedding results. Each
             ``SequenceEmbedding`` contains:
 
             - ``mean_embedding``: Mean-pooled embedding vector
@@ -60,7 +62,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
     Inherits from ``MaskedModelConfig``.
 
     Attributes:
-        model_checkpoint (str): ESM3 model checkpoint to use. Currently available:
+        model_checkpoint (Literal[ESM3_MODEL_CHECKPOINTS]): ESM3 model checkpoint to use. Currently available:
 
             - ``"esm3_sm_open_v1"``: Small open-source ESM3 model (default)
 
@@ -76,7 +78,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
             ``"cpu"`` (CPU execution), ``"mps"`` (Apple Metal), or specific GPU devices
             like ``"cuda:0"``. Default: ``"cuda"``.
 
-        verbose (bool): Whether to print status messages during model execution,
+        verbose: Whether to print status messages during model execution,
             including loading progress and timing information. Default: ``False``.
 
         return_logits (bool): Whether to include per-position logits in the output.
@@ -131,9 +133,9 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
     environments.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing one or more protein
+        inputs (ESM3EmbeddingsInput): Validated input containing one or more protein
             sequences (amino acid sequences).
-        config (ESM3EmbeddingsConfig): Validated ESM3 configuration specifying model variant,
+        config (ESM3EmbeddingsConfig | None): Validated ESM3 configuration specifying model variant,
             batch size, and device settings.
 
     Returns:

@@ -1,4 +1,6 @@
-"""Tests for random protein sampling tool."""
+"""tests/mutagenesis_tests/test_random_protein_sample.py
+
+Tests for random protein sampling tool."""
 import pytest
 
 from bio_programming_tools.tools.mutagenesis.codons import get_codon_scheme

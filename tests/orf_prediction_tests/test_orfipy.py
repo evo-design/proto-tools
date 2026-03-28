@@ -1,4 +1,6 @@
-"""Tests for Orfipy ORF prediction tool."""
+"""tests/orf_prediction_tests/test_orfipy.py
+
+Tests for Orfipy ORF prediction tool."""
 
 from pathlib import Path
 

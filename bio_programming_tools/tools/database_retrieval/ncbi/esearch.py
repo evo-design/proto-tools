@@ -1,8 +1,7 @@
-"""NCBI Entrez esearch tool — search databases by query term.
+"""bio_programming_tools/tools/database_retrieval/ncbi/esearch.py
 
 Wraps the NCBI E-utilities esearch endpoint for finding IDs across
-protein, nuccore, and gene databases.
-"""
+protein, nuccore, and gene databases."""
 
 from __future__ import annotations
 
@@ -29,11 +28,11 @@ class NCBIEsearchInput(BaseToolInput):
     """Input for NCBI esearch.
 
     Attributes:
-        db: NCBI database to query: 'protein', 'nuccore' (nucleotide core),
+        db (Literal['protein', 'nuccore', 'gene']): NCBI database to query: 'protein', 'nuccore' (nucleotide core),
             or 'gene'.
-        search_term: NCBI search query (e.g. 'lacI[Gene] AND Escherichia
+        search_term (str): NCBI search query (e.g. 'lacI[Gene] AND Escherichia
             coli[Organism]').
-        max_results: Maximum number of IDs to return from the search.
+        max_results (int): Maximum number of IDs to return from the search.
     """
 
     db: Literal["protein", "nuccore", "gene"] = InputField(
@@ -54,7 +53,7 @@ class NCBIEsearchOutput(BaseToolOutput):
     """Output from NCBI esearch.
 
     Attributes:
-        ids: List of NCBI IDs matching the search query.
+        ids (list[str]): List of NCBI IDs matching the search query.
     """
 
     ids: List[str] = Field(
@@ -113,12 +112,12 @@ def run_ncbi_esearch(
     """Search NCBI Entrez databases by query term.
 
     Args:
-        inputs: Search parameters including database, query term, and
+        inputs (NCBIEsearchInput): Search parameters including database, query term, and
             max results.
-        config: HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
 
     Returns:
-        NCBIEsearchOutput containing matching NCBI IDs.
+        NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.
     """
     del instance
 

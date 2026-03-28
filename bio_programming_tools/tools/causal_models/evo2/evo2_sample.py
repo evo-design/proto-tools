@@ -1,4 +1,6 @@
-"""Evo2 sampling tool."""
+"""bio_programming_tools/tools/causal_models/evo2/evo2_sample.py
+
+Evo2 sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -42,7 +44,7 @@ class Evo2SampleInput(BaseToolInput):
     generation of genomic DNA.
 
     Attributes:
-        prompts (List[str]): Prompt sequences for DNA generation.
+        prompts (list[str]): Prompt sequences for DNA generation.
             Can be provided as:
 
             - A single prompt string (e.g., ``"GA"``)
@@ -71,12 +73,12 @@ class Evo2SampleOutput(BaseToolOutput):
     providing generated sequences and optional generation metadata.
 
     Attributes:
-        sequences (List[str]): Generated DNA sequences. Each sequence is a string
+        sequences (list[str]): Generated DNA sequences. Each sequence is a string
             of nucleotides. If ``prepend_prompt=True`` in the config, sequences
             include both the input prompt and newly generated tokens. If ``False``,
             only the newly generated tokens are returned.
 
-        logits (Optional[List]): Per-token logits for each generated sequence.
+        logits (list | None): Per-token logits for each generated sequence.
             Shape: ``[num_sequences, num_generated_tokens, vocab_size]``. Higher
             logit values indicate higher model confidence for that token. Useful for:
 
@@ -86,7 +88,7 @@ class Evo2SampleOutput(BaseToolOutput):
 
             Returns ``None`` if logits were not computed or stored.
 
-        kv_caches (Optional[List[Dict]]): List of KV cache dictionaries, one per
+        kv_caches (list[dict] | None): List of KV cache dictionaries, one per
             sequence. Each cache contains the intermediate attention states from
             generation. Can be passed as ``old_kv_cache`` in a subsequent generation
             call to continue generation from the cached state. Useful for:
@@ -159,13 +161,13 @@ class Evo2SampleConfig(BaseConfig):
             the prompt and generated tokens. If ``False``, only the newly generated
             tokens are returned. Default: ``True``.
 
-        model_checkpoint (str): Evo2 model checkpoint to use. Options:
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use. Options:
 
             - ``"evo2_7b"``: 7 billion parameter Evo2 model (default)
 
             Default: ``"evo2_7b"``.
 
-        local_path (Optional[str]): Optional path to local model weights directory.
+        local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading
             from Hugging Face. Useful for offline inference or custom model versions.
             Default: ``None`` (download from Hugging Face).
@@ -201,12 +203,12 @@ class Evo2SampleConfig(BaseConfig):
             generation. KV caching stores intermediate attention states to avoid
             recomputation. Recommended for long sequences. Default: ``True``.
 
-        force_prompt_threshold (Optional[int]): Optional number of tokens to
+        force_prompt_threshold (int | None): Optional number of tokens to
             prefill in parallel before switching to autoregressive prompt forcing.
             This can speed up generation for long prompts. Default: ``None``
             (automatic determination).
 
-        max_seqlen (Optional[int]): Optional maximum sequence length to generate.
+        max_seqlen (int | None): Optional maximum sequence length to generate.
             Determines the maximum size of the KV cache. If ``None``, automatically
             calculated as ``prompt_length + num_tokens``. Useful for constraining
             memory usage. Default: ``None``.
@@ -220,7 +222,7 @@ class Evo2SampleConfig(BaseConfig):
             for sequences that naturally end. If ``False``, always generates exactly
             ``num_tokens`` tokens. Default: ``True``.
 
-        old_kv_cache (Optional[Dict]): Dictionary of inference parameters containing
+        old_kv_cache (dict | None): Dictionary of inference parameters containing
             a pre-computed KV cache from a previous generation run. Used for
             continuing generation from a cached state. Default: ``None``.
 
@@ -390,7 +392,7 @@ def run_evo2_sample(
     Args:
         inputs (Evo2SampleInput): Validated input containing one or more DNA
             prompt sequences using Evo2's special prompt format (e.g., ``"+~GA"``).
-        config (Evo2SampleConfig): Validated Evo2 sampling configuration specifying
+        config (Evo2SampleConfig | None): Validated Evo2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and caching options.
 

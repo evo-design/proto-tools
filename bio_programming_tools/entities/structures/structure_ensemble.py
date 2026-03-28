@@ -1,5 +1,5 @@
 """
-structure_ensemble.py
+bio_programming_tools/entities/structures/structure_ensemble.py
 
 Contains base class for representing a protein structure ensemble.
 """
@@ -19,7 +19,7 @@ class StructureEnsemble(BaseModel):
     input sequence, with each conformation stored as a Structure.
 
     Attributes:
-        structures (List[Structure]): List of sampled conformational
+        structures (list[Structure]): List of sampled conformational
             structures. Each Structure represents a single backbone
             conformation from the ensemble.
 

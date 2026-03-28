@@ -1,4 +1,6 @@
-"""Integration tests for sampling tools (masked models + random mutagenesis)."""
+"""tests/masked_models_tests/test_sampling.py
+
+Integration tests for sampling tools (masked models + random mutagenesis)."""
 import pytest
 
 from bio_programming_tools.tools.masked_models.esm2 import (

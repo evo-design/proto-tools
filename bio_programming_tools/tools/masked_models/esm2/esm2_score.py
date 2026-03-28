@@ -1,4 +1,6 @@
-"""ESM2 scoring tool."""
+"""bio_programming_tools/tools/masked_models/esm2/esm2_score.py
+
+ESM2 scoring tool."""
 from __future__ import annotations
 
 import logging
@@ -39,7 +41,7 @@ class ESM2ScoringConfig(BaseConfig):
     computing P(x_i | x_{-i}). Uses batched processing for efficiency.
 
     Attributes:
-        model_checkpoint (str): ESM2 model checkpoint to use. Options include
+        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): ESM2 model checkpoint to use. Options include
             ``"esm2_t6_8M_UR50D"`` through ``"esm2_t48_15B_UR50D"``.
             Default: ``"esm2_t33_650M_UR50D"``.
 
@@ -131,13 +133,13 @@ def run_esm2_score(
     and perplexity metrics.
 
     Args:
-        inputs (MaskedModelInput): Validated input containing protein sequences
+        inputs (ESM2ScoringInput): Validated input containing protein sequences
             to score.
-        config (ESM2ScoringConfig): Scoring configuration specifying model,
+        config (ESM2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
     Returns:
-        MaskedModelScoringOutput: Contains SequenceScores for each input sequence with:
+        ESM2ScoringOutput: Contains SequenceScores for each input sequence with:
 
             - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
               ``perplexity``

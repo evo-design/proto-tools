@@ -1,5 +1,6 @@
 """
-Standalone helper functions for tool worker subprocesses. This file is automatically
+bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py
+
 copied to each tool's standalone/ directory at runtime. It provides common utilities
 that standalone scripts need but cannot import from the main package
 (due to environment isolation).
@@ -40,11 +41,11 @@ def _parse_cuda_indices(device: str) -> Optional[List[int]]:
         "cuda:0,cuda:1"  → [0, 1]
 
     Args:
-        device: Device string starting with "cuda:".
+        device (str): Device string starting with "cuda:".
 
     Returns:
-        List of integer indices, or None if the device string is malformed
-        (missing "cuda:" prefix or non-integer index components).
+        list[int] | None: List of integer indices, or None if the device string is malformed
+            (missing "cuda:" prefix or non-integer index components).
     """
     if not device.startswith("cuda:"):
         return None
@@ -71,6 +72,9 @@ def _apply_jax_subprocess_env(env: Dict[str, str]) -> Dict[str, str]:
     CLI subprocesses are ephemeral (run one job and exit), so JAX preallocation
     is fine and even beneficial for performance. This undoes the preallocation
     restrictions set by persistent_worker.py for the long-lived worker process.
+
+    Args:
+        env (dict[str, str]): Environment variables dict to modify in-place.
 
     - If CUDA_VISIBLE_DEVICES grants GPU access: remove preallocation restrictions
       so JAX can fully utilize the allocated GPU(s).
@@ -99,11 +103,11 @@ def get_subprocess_device_env(device: str) -> Dict[str, str]:
     restriction set by persistent_worker.py for the long-lived worker).
 
     Args:
-        device: Logical device string (e.g., "cuda:0", "cuda:2", "cuda:0,1", "cuda:2,3")
+        device (str): Logical device string (e.g., "cuda:0", "cuda:2", "cuda:0,1", "cuda:2,3")
 
     Returns:
-        Environment dict with CUDA_VISIBLE_DEVICES set to physical GPU indices
-        and JAX environment variables configured appropriately.
+        dict[str, str]: Environment dict with CUDA_VISIBLE_DEVICES set to physical GPU indices
+            and JAX environment variables configured appropriately.
 
     Examples:
         Parent environment: CUDA_VISIBLE_DEVICES=0,1,5,7
@@ -192,10 +196,10 @@ def resolve_jax_device(device: str) -> Any:
     Handles the cuda→gpu backend conversion that JAX requires.
 
     Args:
-        device: Device string (e.g., "cpu", "cuda", "cuda:0", "cuda:1")
+        device (str): Device string (e.g., "cpu", "cuda", "cuda:0", "cuda:1")
 
     Returns:
-        jax.Device object for the specified device.
+        Any: jax.Device object for the specified device.
 
     Raises:
         ValueError: If the device index is out of range.
@@ -261,26 +265,26 @@ def move_model_to_device(
         - Pass custom_move_fn to override default behavior (e.g., full reload)
 
     Args:
-        model_or_params: PyTorch model, JAX params pytree (dict), or any object.
-        old_device: Current device string (e.g., "cuda:0", "cpu")
-        new_device: Target device string (e.g., "cuda:1", "cpu")
-        custom_move_fn: Optional custom function for specialized device movement.
+        model_or_params (Any): PyTorch model, JAX params pytree (dict), or any object.
+        old_device (str): Current device string (e.g., "cuda:0", "cpu")
+        new_device (str): Target device string (e.g., "cuda:1", "cpu")
+        custom_move_fn (Callable[[Any, str, str], Any] | None): Optional custom function for specialized device movement.
                        If provided, this function is called instead of default behavior.
                        Should have signature: (model_or_params, old_device, new_device) -> model_or_params.
                        Use for opaque models that can't be moved via .to() or device_put().
 
     Returns:
-        Model or params on the new device.
+        Any: Model or params on the new device.
 
-    Example (PyTorch):
+    Example:
         >>> self.model = move_model_to_device(self.model, self.device, device)
         >>> self.device = device
 
-    Example (JAX params pytree — ProteinMPNN, Flax, Haiku):
+    Example:
         >>> self.params = move_model_to_device(self.params, self.device, device)
         >>> self.device = device
 
-    Example (Opaque model — full reload via custom_move_fn):
+    Example:
         >>> def _reload(model, old, new):
         ...     return None  # Model will be recreated by self.load()
         >>> self.model = move_model_to_device(
@@ -370,16 +374,16 @@ def get_pytorch_memory_stats(device: int | str = 0) -> Dict[str, Any]:
     """Helper for PyTorch tools to report GPU memory stats.
 
     Args:
-        device: CUDA device index (int) or torch.device object
+        device (int | str): CUDA device index (int) or torch.device object
 
     Returns:
-        Dict with memory statistics or {"available": False} if not available.
-        Keys when available:
-        - available (bool): Whether memory stats are available
-        - framework (str): "pytorch"
-        - allocated_bytes (int): Currently allocated GPU memory in bytes
-        - reserved_bytes (int): Reserved GPU memory in bytes (PyTorch cache)
-        - max_allocated_bytes (int): Peak allocated memory since program start
+        dict[str, Any]: Dict with memory statistics or {"available": False} if not available.
+            Keys when available:
+            - available (bool): Whether memory stats are available
+            - framework (str): "pytorch"
+            - allocated_bytes (int): Currently allocated GPU memory in bytes
+            - reserved_bytes (int): Reserved GPU memory in bytes (PyTorch cache)
+            - max_allocated_bytes (int): Peak allocated memory since program start
 
     Example:
         >>> stats = get_pytorch_memory_stats(0)
@@ -407,20 +411,20 @@ def get_jax_memory_stats(device_index: int = 0) -> Dict[str, Any]:
     """Helper for JAX tools to report GPU memory stats.
 
     Args:
-        device_index: JAX device index (default 0)
+        device_index (int): JAX device index (default 0)
 
     Returns:
-        Dict with memory statistics or {"available": False} if not available.
-        Keys when available (standardized across frameworks):
-        - available (bool): Whether memory stats are available
-        - framework (str): "jax"
-        - allocated_bytes (int): Currently allocated memory (standardized key)
-        - max_allocated_bytes (int): Peak memory usage (standardized key)
-        - device_kind (str): Device type (e.g., "gpu", "cpu")
+        dict[str, Any]: Dict with memory statistics or {"available": False} if not available.
+            Keys when available (standardized across frameworks):
+            - available (bool): Whether memory stats are available
+            - framework (str): "jax"
+            - allocated_bytes (int): Currently allocated memory (standardized key)
+            - max_allocated_bytes (int): Peak memory usage (standardized key)
+            - device_kind (str): Device type (e.g., "gpu", "cpu")
 
-        Legacy JAX-specific keys (for backwards compatibility):
-        - bytes_in_use (int): Same as allocated_bytes
-        - peak_bytes_in_use (int): Same as max_allocated_bytes
+            Legacy JAX-specific keys (for backwards compatibility):
+            - bytes_in_use (int): Same as allocated_bytes
+            - peak_bytes_in_use (int): Same as max_allocated_bytes
 
     Example:
         >>> stats = get_jax_memory_stats(0)
@@ -476,11 +480,11 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
            - "NONE": {VENV_PATH}/weights/ (pass-through, matches shell helper)
 
     Args:
-        tool_name: The tool's directory name (e.g., "fampnn", "protenix").
+        tool_name (str): The tool's directory name (e.g., "fampnn", "protenix").
 
     Returns:
-        Absolute path string to the weights directory, or None (NONE mode
-        with no per-tool override). Creates the directory if it doesn't exist.
+        str | None: Absolute path string to the weights directory, or None (NONE mode
+            with no per-tool override). Creates the directory if it doesn't exist.
     """
     # 1. Per-tool override always wins
     override_var = f"BPT_{tool_name.upper()}_WEIGHTS_DIR"

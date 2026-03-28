@@ -1,5 +1,5 @@
 """
-Centralized device management for persistent tool instances.
+bio_programming_tools/utils/device_manager.py
 
 Automatically tracks and manages GPU allocation across persistent workers,
 with LRU eviction, CPU offloading, and configurable strategies.
@@ -181,10 +181,10 @@ class DeviceManager:
         - "cuda:0" or "cuda:1" (our format) -> "cuda:0", "cuda:1"
 
         Args:
-            device_str: Device string in either format
+            device_str (str): Device string in either format
 
         Returns:
-            Normalized device string in "cuda:N" format
+            str: Normalized device string in "cuda:N" format
         """
         device_str = device_str.strip()
 
@@ -265,28 +265,16 @@ class DeviceManager:
     ) -> None:
         """Configure DeviceManager behavior.
 
-        Parameters
-        ----------
-        managed_devices : list[str] | None
-            List of logical device IDs for DeviceManager to allocate from
-            (e.g., ``["cuda:0", "cuda:1"]``). These are the logic device IDs
-            **after** CUDA_VISIBLE_DEVICES filtering. None means auto-detect
-            all visible GPUs.
-
-            Note: This is the programmatic equivalent of the BIO_TOOLS_MANAGED_DEVICES
-            environment variable. See module docstring for the distinction between
-            CUDA_VISIBLE_DEVICES (OS-level GPU visibility) and managed_devices
-            (application-level allocation pool).
-
-        allow_multiple_per_device : bool | None
-            Whether to allow multiple tool instances on the same device.
-            Default: False (one model per GPU).
-
-        offload_strategy : OffloadStrategy | str | None
-            Strategy for handling device conflicts when all GPUs are full:
-            - "cpu": Move least-recently-used model to CPU (keeps it warm in RAM)
-            - "restart": Shut down least-recently-used worker (frees all memory)
-            Default: "cpu".
+        Args:
+            managed_devices (list[str] | None): List of logical device IDs for
+                DeviceManager to allocate from (e.g., ``["cuda:0", "cuda:1"]``).
+                These are the logical device IDs **after** CUDA_VISIBLE_DEVICES
+                filtering. None means auto-detect all visible GPUs.
+            allow_multiple_per_device (bool | None): Whether to allow multiple tool
+                instances on the same device. Default: False (one model per GPU).
+            offload_strategy (OffloadStrategy | str | None): Strategy for handling
+                device conflicts when all GPUs are full: ``"cpu"`` moves the
+                least-recently-used model to CPU, ``"restart"`` shuts down its worker.
         """
         with self._instance_lock:
             if managed_devices is not None:
@@ -431,6 +419,10 @@ class DeviceManager:
         If the allocation is incompatible, releases it and returns None
         so the caller can proceed with a fresh allocation.
 
+        Args:
+            instance_name (str): Unique instance identifier.
+            device (str): Requested device string (e.g., ``"cuda"``, ``"cuda:0"``).
+
         Compatibility rules:
 
         - ``"cpu"`` — existing must be ``cpu``.
@@ -483,6 +475,13 @@ class DeviceManager:
     ) -> str:
         """Create a DeviceAllocation record and log it.
 
+        Args:
+            tool_name (str): Name of the tool being allocated.
+            instance_name (str): Unique instance identifier.
+            device_ids (list[str]): List of device IDs to allocate (e.g., ``["cuda:0"]``).
+            eviction_callback (Callable[[str], None]): Callback invoked when evicting this allocation.
+            allocation_type (AllocationType): Type of allocation (persistent or lease).
+
         Returns the device string (comma-joined device IDs).
         """
         now = time.time()
@@ -516,25 +515,15 @@ class DeviceManager:
         single-GPU allocations (where device_ids has one element) and multi-GPU
         allocations (where device_ids has multiple elements).
 
-        Parameters
-        ----------
-        device_id : str
-            Device ID to search for (e.g., "cuda:0", "cuda:1", "cpu").
+        Args:
+            device_id (str): Device ID to search for (e.g., ``"cuda:0"``, ``"cpu"``).
 
-        Returns
-        -------
-        list[DeviceAllocation]
-            List of allocations currently using this device. Empty list if no
-            allocations use this device.
+        Returns:
+            list[DeviceAllocation]: List of allocations currently using this device.
 
-        Notes
-        -----
-        When allow_multiple_per_device=False (default), the returned list will
-        have at most one element per GPU device, but could have multiple elements
-        for multi-GPU allocations that span the same device.
-
-        When allow_multiple_per_device=True, multiple single-GPU allocations
-        can share the same device.
+        Note:
+            When allow_multiple_per_device=False (default), the returned list will
+            have at most one element per GPU device.
         """
         return [
             alloc
@@ -561,15 +550,11 @@ class DeviceManager:
         When allow_multiple_per_device=True, prefers free devices but allows
         reusing allocated devices if needed. When False, only returns unallocated devices.
 
-        Parameters
-        ----------
-        n : int
-            Number of devices needed
+        Args:
+            n (int): Number of devices needed.
 
-        Returns
-        -------
-        list[str]
-            List of free device IDs (up to N), sorted by device index
+        Returns:
+            list[str]: List of free device IDs (up to N), sorted by device index.
         """
         available = self._get_available_devices()
         all_allocated = self._get_all_allocated_devices()
@@ -608,22 +593,15 @@ class DeviceManager:
         3. Evict allocations until we have N free GPU slots
         4. Raise if impossible to free N devices
 
-        Parameters
-        ----------
-        n : int
-            Number of devices needed
-        exclude_instance : str | None
-            Instance to exclude from eviction (for moves)
+        Args:
+            n (int): Number of devices needed.
+            exclude_instance (str | None): Instance to exclude from eviction (for moves).
 
-        Returns
-        -------
-        list[str]
-            List of N device IDs (sorted)
+        Returns:
+            list[str]: List of N device IDs (sorted).
 
-        Raises
-        ------
-        RuntimeError
-            If cannot free N devices after eviction
+        Raises:
+            RuntimeError: If cannot free N devices after eviction.
         """
         freed_devices = set(self._find_n_free_devices(n))
 
@@ -666,11 +644,11 @@ class DeviceManager:
         Calls the allocation's eviction_callback to actually move the model
         or shutdown the worker, then updates bookkeeping.
 
-        Raises
-        ------
-        Exception
-            If CPU strategy callback fails (fatal - GPU remains occupied).
-            RESTART strategy logs errors but doesn't raise (removal is idempotent).
+        Args:
+            allocation (DeviceAllocation): The allocation to evict.
+
+        Raises:
+            Exception: If CPU strategy callback fails (fatal - GPU remains occupied).
         """
         device_str = self._device_str(allocation.device_ids)
         if self._offload_strategy == OffloadStrategy.CPU:
@@ -715,17 +693,12 @@ class DeviceManager:
 
         No-op when allow_multiple_per_device is True or there are no conflicts.
 
-        Parameters
-        ----------
-        requested_devices : list[str]
-            Device IDs to claim (e.g., ["cuda:0", "cuda:1"]).
-        exclude_instance : str | None
-            Instance to skip during conflict detection (used for moves).
+        Args:
+            requested_devices (list[str]): Device IDs to claim (e.g., ``["cuda:0", "cuda:1"]``).
+            exclude_instance (str | None): Instance to skip during conflict detection (for moves).
 
-        Raises
-        ------
-        RuntimeError
-            If conflicting devices are held by transient (unevictable) allocations.
+        Raises:
+            RuntimeError: If conflicting devices are held by unevictable allocations.
         """
         if self._allow_multiple_per_device:
             return
@@ -790,23 +763,16 @@ class DeviceManager:
     ) -> str:
         """Allocate N GPU devices with LRU eviction if needed.
 
-        Parameters
-        ----------
-        tool_name : str
-            Tool requesting devices
-        instance_name : str
-            Unique instance identifier
-        n : int
-            Number of devices to allocate
-        eviction_callback : Callable[[str], None]
-            Callback for eviction (receives "cpu" or "shutdown")
-        allocation_type : AllocationType
-            Type of allocation (PERSISTENT or TRANSIENT)
+        Args:
+            tool_name (str): Tool requesting devices.
+            instance_name (str): Unique instance identifier.
+            n (int): Number of devices to allocate.
+            eviction_callback (Callable[[str], None]): Callback for eviction
+                (receives ``"cpu"`` or ``"shutdown"``).
+            allocation_type (AllocationType): Type of allocation (PERSISTENT or TRANSIENT).
 
-        Returns
-        -------
-        str
-            Device string (e.g., "cuda:0,cuda:1" for 2 GPUs, "cpu" if no GPUs available)
+        Returns:
+            str: Device string (e.g., ``"cuda:0,cuda:1"``).
         """
         # Try to find N free devices
         available = self._find_n_free_devices(n)
@@ -832,28 +798,19 @@ class DeviceManager:
     ) -> str:
         """Allocate specific requested devices.
 
-        Parameters
-        ----------
-        tool_name : str
-            Tool requesting devices
-        instance_name : str
-            Unique instance identifier
-        requested_devices : list[str]
-            List of device IDs (e.g., ["cuda:0", "cuda:1"])
-        eviction_callback : Callable[[str], None]
-            Callback for eviction (receives "cpu" or "shutdown")
-        allocation_type : AllocationType
-            Type of allocation (PERSISTENT or TRANSIENT)
+        Args:
+            tool_name (str): Tool requesting devices.
+            instance_name (str): Unique instance identifier.
+            requested_devices (list[str]): List of device IDs (e.g., ``["cuda:0", "cuda:1"]``).
+            eviction_callback (Callable[[str], None]): Callback for eviction
+                (receives ``"cpu"`` or ``"shutdown"``).
+            allocation_type (AllocationType): Type of allocation (PERSISTENT or TRANSIENT).
 
-        Returns
-        -------
-        str
-            Device string (e.g., "cuda:0,cuda:1")
+        Returns:
+            str: Device string (e.g., ``"cuda:0,cuda:1"``).
 
-        Raises
-        ------
-        RuntimeError
-            If devices unavailable and multiple-per-device not allowed
+        Raises:
+            RuntimeError: If devices unavailable and multiple-per-device not allowed.
         """
         # Validate devices are in managed pool
         available = self._get_available_devices()
@@ -888,28 +845,19 @@ class DeviceManager:
         are occupied, evicts the least recently used tool (LRU) using the
         configured offload strategy.
 
-        Parameters
-        ----------
-        tool_name : str
-            Tool name (e.g., "esmfold", "boltz2").
-        instance_name : str
-            Unique instance identifier (cache key).
-        device : str
-            Device string (e.g., "cpu", "cuda", "cudax2", "cuda:0,1").
-        eviction_callback : Callable[[str], None] | None
-            Callback invoked when this allocation is evicted. Receives "cpu"
-            (move to CPU) or "shutdown" (kill worker). Required for GPU
-            allocations, optional for CPU.
+        Args:
+            tool_name (str): Tool name (e.g., ``"esmfold"``, ``"boltz2"``).
+            instance_name (str): Unique instance identifier (cache key).
+            device (str): Device string (e.g., ``"cpu"``, ``"cuda"``, ``"cudax2"``, ``"cuda:0,1"``).
+            eviction_callback (Callable[[str], None] | None): Callback invoked when this
+                allocation is evicted. Receives ``"cpu"`` or ``"shutdown"``. Required for
+                GPU allocations.
 
-        Returns
-        -------
-        str
-            Allocated device string (e.g., "cuda:0" or "cuda:0,cuda:1").
+        Returns:
+            str: Allocated device string (e.g., ``"cuda:0"``).
 
-        Raises
-        ------
-        ValueError
-            If eviction_callback is None for a GPU allocation.
+        Raises:
+            ValueError: If eviction_callback is None for a GPU allocation.
         """
         with self._instance_lock:
             existing = self._check_existing_allocation(
@@ -960,10 +908,8 @@ class DeviceManager:
     def release_device(self, instance_name: str) -> None:
         """Release device(s) allocated to a tool instance.
 
-        Parameters
-        ----------
-        instance_name : str
-            Unique instance identifier (cache key).
+        Args:
+            instance_name (str): Unique instance identifier (cache key).
         """
         with self._instance_lock:
             allocation = self._allocations.pop(instance_name, None)
@@ -999,15 +945,10 @@ class DeviceManager:
 
         Non-GPU devices (cpu, etc.) yield immediately with no tracking.
 
-        Parameters
-        ----------
-        tool_name : str
-            Tool name (for logging and allocation tracking).
-        device : str
-            Device string (e.g., "cpu", "cuda", "cuda:0"). Non-GPU devices
-            pass through with no tracking.
-        timeout : float
-            Maximum seconds to wait for a GPU to become available.
+        Args:
+            tool_name (str): Tool name (for logging and allocation tracking).
+            device (str): Device string (e.g., ``"cpu"``, ``"cuda"``, ``"cuda:0"``).
+            timeout (float): Maximum seconds to wait for a GPU to become available.
 
         Yields
         ------
@@ -1051,21 +992,14 @@ class DeviceManager:
         PERSISTENT allocations. Only waits when all remaining GPU allocations
         are TRANSIENT (non-evictable).
 
-        Parameters
-        ----------
-        tool_name : str
-            Tool name for allocation record.
-        lease_id : str
-            Unique lease identifier.
-        device : str
-            Device string (e.g., "cuda", "cuda:0").
-        timeout : float
-            Maximum seconds to wait.
+        Args:
+            tool_name (str): Tool name for allocation record.
+            lease_id (str): Unique lease identifier.
+            device (str): Device string (e.g., ``"cuda"``, ``"cuda:0"``).
+            timeout (float): Maximum seconds to wait.
 
-        Returns
-        -------
-        str
-            Resolved device string (e.g., "cuda:0").
+        Returns:
+            str: Resolved device string (e.g., ``"cuda:0"``).
         """
         from bio_programming_tools.utils.device import parse_device_string
         spec = parse_device_string(device)
@@ -1117,10 +1051,8 @@ class DeviceManager:
 
         Called on every tool dispatch to track recency for LRU eviction.
 
-        Parameters
-        ----------
-        instance_name : str
-            Unique instance identifier (cache key).
+        Args:
+            instance_name (str): Unique instance identifier (cache key).
         """
         with self._instance_lock:
             allocation = self._allocations.get(instance_name)
@@ -1190,19 +1122,14 @@ class DeviceManager:
         This method handles logical device IDs (e.g., "cuda:0") and maps them to
         physical GPU indices, respecting CUDA_VISIBLE_DEVICES settings.
 
-        Parameters
-        ----------
-        device : str
-            Logical device ID (e.g., "cuda:0", "cuda:1"). Only CUDA devices supported.
+        Args:
+            device (str): Logical device ID (e.g., ``"cuda:0"``). Only CUDA devices supported.
 
-        Returns
-        -------
-        int
-            Total memory used in bytes across all processes on this GPU, or 0 if
-            device is not a CUDA device or query fails.
+        Returns:
+            int: Total memory used in bytes across all processes on this GPU, or 0 if
+                device is not a CUDA device or query fails.
 
-        Examples
-        --------
+        Examples:
         >>> # With CUDA_VISIBLE_DEVICES="3,5,7"
         >>> dm = DeviceManager.get_instance()
         >>> mem = dm.get_gpu_memory_used("cuda:0")  # Queries physical GPU 3
@@ -1262,25 +1189,14 @@ class DeviceManager:
         **per-instance** memory usage, unlike ``get_gpu_memory_used()`` which
         reports total GPU memory across all processes.
 
-        Parameters
-        ----------
-        instance_name : str
-            Unique instance identifier (cache key). Must be a currently allocated
-            instance tracked by DeviceManager.
+        Args:
+            instance_name (str): Unique instance identifier (cache key). Must be a
+                currently allocated instance tracked by DeviceManager.
 
-        Returns
-        -------
-        dict[str, Any]
-            Memory statistics dictionary from the worker. See
-            ``ToolInstance.get_memory_stats()`` for format details.
+        Returns:
+            dict[str, Any]: Memory statistics dictionary from the worker.
 
-            Returns ``{"available": False, "error": "..."}`` if:
-            - Instance not found in allocations
-            - Instance has no worker running
-            - Tool doesn't implement get_memory_stats()
-
-        Examples
-        --------
+        Examples:
         >>> # Single instance memory
         >>> dm = DeviceManager.get_instance()
         >>> with ToolInstance.persist_tool("esm2", instance_name="esm2_1"):
@@ -1336,21 +1252,13 @@ class DeviceManager:
         by ``_evict_allocation()`` (bookkeeping) + the eviction callback
         (worker command), which avoids lock ordering issues.
 
-        Parameters
-        ----------
-        instance_name : str
-            Unique instance identifier (cache key).
-        target_device : str
-            Target device ID (e.g., "cuda:1", "cpu") or generic ("cuda").
-        worker_callback : callable | None
-            Function to call with (target_device) to actually move the worker.
-            If None, only updates the allocation record (for testing).
+        Args:
+            instance_name (str): Unique instance identifier (cache key).
+            target_device (str): Target device ID (e.g., ``"cuda:1"``, ``"cpu"``) or
+                generic (``"cuda"``).
 
-        Returns
-        -------
-        str | None
-            The resolved device string (e.g., "cuda:0" for generic "cuda"),
-            or None if the instance is not allocated.
+        Returns:
+            str | None: The resolved device string, or None if the instance is not allocated.
         """
         self._validate_device(target_device)
 

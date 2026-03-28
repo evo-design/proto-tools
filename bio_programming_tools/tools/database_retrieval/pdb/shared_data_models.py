@@ -1,8 +1,7 @@
-"""Shared data models and helpers for PDB tools.
+"""bio_programming_tools/tools/database_retrieval/pdb/shared_data_models.py
 
 Contains configuration, chain models, and private helpers used by
-fetch_entry and fetch_fasta tool modules.
-"""
+fetch_entry and fetch_fasta tool modules."""
 
 from __future__ import annotations
 
@@ -34,10 +33,10 @@ class PdbChain(BaseModel):
     """Single chain from PDB FASTA.
 
     Attributes:
-        chain_id: Chain identifier extracted from header.
-        header: Full FASTA header line.
-        sequence: Chain sequence string.
-        is_protein: True if chain is protein, False if nucleic acid.
+        chain_id (str | None): Chain identifier extracted from header.
+        header (str): Full FASTA header line.
+        sequence (str): Chain sequence string.
+        is_protein (bool): True if chain is protein, False if nucleic acid.
     """
 
     chain_id: Optional[str] = Field(
@@ -52,11 +51,11 @@ class PdbFetchConfig(BaseConfig):
     """Configuration for PDB fetch operations.
 
     Attributes:
-        request_timeout_seconds: HTTP timeout per request.
-        http_retries: Maximum HTTP retries.
-        backoff_seconds: Seconds to wait between retries (doubles after each
+        request_timeout_seconds (int): HTTP timeout per request.
+        http_retries (int): Maximum HTTP retries.
+        backoff_seconds (float): Seconds to wait between retries (doubles after each
             attempt).
-        user_agent: Identifier string sent to database APIs with each request.
+        user_agent (str): Identifier string sent to database APIs with each request.
     """
 
     request_timeout_seconds: int = ConfigField(

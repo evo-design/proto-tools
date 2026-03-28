@@ -1,5 +1,5 @@
 """
-Shared utility for downloading platform-specific bioinformatics binaries into a venv.
+bio_programming_tools/utils/install_binary.py
 
 Called from standalone/setup.sh scripts during ToolInstance venv creation.
 Each tool provides its own `binary_config.py` in its standalone/ directory with:
@@ -41,6 +41,9 @@ def _find_tool_config(tool_name: str) -> Path:
     """Find a tool's binary_config.py by scanning for standalone/ directories.
 
     Uses the same discovery pattern as ToolInstance._determine_valid_model_name().
+
+    Args:
+        tool_name (str): Name of the tool directory to search for.
     """
     tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> bio_programming_tools/ -> tools/
 
@@ -80,6 +83,10 @@ def _download_with_progress(url: str, dest: Path) -> None:
 
     Validates that the downloaded file size matches the Content-Length header
     to detect truncated downloads (e.g., from flaky CI network connections).
+
+    Args:
+        url (str): URL to download from.
+        dest (Path): Local file path to save the download to.
     """
     try:
         from tqdm import tqdm
@@ -128,6 +135,9 @@ def install_binary(tool_name: str) -> None:
     Discovers the tool's binary_config.py, reads its URLS and extract function,
     downloads the appropriate archive for the current platform, and extracts
     binaries into the venv's bin/ directory.
+
+    Args:
+        tool_name (str): Name of the tool to install binaries for.
     """
     config_path = _find_tool_config(tool_name)
     config = _load_tool_config(config_path)

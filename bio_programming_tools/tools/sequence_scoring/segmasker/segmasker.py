@@ -1,4 +1,6 @@
 """
+bio_programming_tools/tools/sequence_scoring/segmasker/segmasker.py
+
 Segmasker tool for detecting low-complexity regions in protein sequences.
 """
 
@@ -29,7 +31,7 @@ class SegmaskerInput(BaseToolInput):
     in protein sequences using NCBI's segmasker tool.
 
     Attributes:
-        sequences (List[str]): Protein sequence(s) to analyze for low-complexity
+        sequences (list[str]): Protein sequence(s) to analyze for low-complexity
             regions. Can be provided as:
 
             - A single protein sequence string (automatically converted to list)
@@ -112,7 +114,7 @@ class SegmaskerOutput(BaseToolOutput):
     low-complexity statistics for each input sequence.
 
     Attributes:
-        low_complexity_fractions (List[float]): Fraction of each sequence classified
+        low_complexity_fractions (list[float]): Fraction of each sequence classified
             as low-complexity. Range: 0.0-1.0 where:
 
             - ``0.0``: No low-complexity regions detected
@@ -121,12 +123,12 @@ class SegmaskerOutput(BaseToolOutput):
 
             Length matches the number of input sequences.
 
-        low_complexity_counts (List[int]): Number of positions classified as
+        low_complexity_counts (list[int]): Number of positions classified as
             low-complexity in each sequence. Equals ``low_complexity_fraction * length``.
 
-        sequence_lengths (List[int]): Length of each input sequence in amino acids.
+        sequence_lengths (list[int]): Length of each input sequence in amino acids.
 
-        results_df (Optional[pd.DataFrame]): Detailed results as a pandas DataFrame
+        results_df (pd.DataFrame | None): Detailed results as a pandas DataFrame
             with columns:
 
             - ``sequence_id``: Identifier (e.g., ``"seq_0"``, ``"seq_1"``)
@@ -219,7 +221,7 @@ def run_segmasker(
     Args:
         inputs (SegmaskerInput): Validated input containing one or more protein
             sequences to analyze.
-        config (SegmaskerConfig): Validated segmasker configuration specifying
+        config (SegmaskerConfig | None): Validated segmasker configuration specifying
             window size and complexity thresholds.
 
     Returns:

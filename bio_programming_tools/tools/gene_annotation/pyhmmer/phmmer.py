@@ -1,4 +1,6 @@
-"""PyHMMER phmmer tool — search protein sequences against protein sequences."""
+"""bio_programming_tools/tools/gene_annotation/pyhmmer/phmmer.py
+
+PyHMMER phmmer tool — search protein sequences against protein sequences."""
 from __future__ import annotations
 
 from typing import List
@@ -28,12 +30,12 @@ class PyPhmmerInput(PyHmmerInput):
     sequences without requiring pre-built HMM profiles.
 
     Attributes:
-        sequences (List[str]): Query protein sequences. Inherited from
+        sequences (list[str]): Query protein sequences. Inherited from
             ``PyHmmerInput``. Can be a single sequence string or a list of sequence
             strings. These sequences will be used to build temporary HMM profiles
             on-the-fly.
 
-        target_sequences (List[str]): Target protein sequences to
+        target_sequences (list[str]): Target protein sequences to
             search against. Can be a single sequence string or a list of sequence
             strings. The query sequences will be compared against these targets.
     """
@@ -90,7 +92,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
     Args:
         inputs (PyPhmmerInput): Validated PyHMMER phmmer input containing both
             query and target protein sequences.
-        config (PyPhmmerConfig): Validated PyHMMER configuration with search
+        config (PyPhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
     Returns:

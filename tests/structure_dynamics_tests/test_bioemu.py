@@ -1,4 +1,6 @@
-"""Tests for BioEmu."""
+"""tests/structure_dynamics_tests/test_bioemu.py
+
+Tests for BioEmu."""
 
 from unittest.mock import patch
 

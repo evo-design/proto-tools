@@ -1,4 +1,6 @@
-"""Tests for codon tables, IUPAC codes, and sampling utilities."""
+"""tests/mutagenesis_tests/test_codons.py
+
+Tests for codon tables, IUPAC codes, and sampling utilities."""
 import random
 
 import pytest

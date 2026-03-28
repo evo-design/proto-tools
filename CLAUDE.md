@@ -63,6 +63,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | New tool added/removed | CLAUDE.md (Package Hierarchy if structure changes), Key File Paths |
 | New skills or commands added | CLAUDE.md Skills & Commands section |
 | pytest markers, test patterns | `notes/testing.md`, CLAUDE.md Configuration |
+| Docstring conventions | CLAUDE.md (Docstring Conventions), `tests/style_consistency_tests/test_docstring_style.py` |
 
 ## Architecture
 
@@ -162,6 +163,34 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 - **Directories**: snake_case — `evo2/`, `blast/`
 - **Files**: snake_case — `evo2_sample.py`, `blast_search.py`
 - **Code section headers**: `# ============================================================================`
+
+## Docstring Conventions
+
+Google style everywhere. Enforced by `tests/style_consistency_tests/test_module_docstrings.py` and `test_docstring_style.py`.
+
+- **Module docstrings**: First line is the relative path from repo root. Blank line, then short description. More content after that is optional. `__init__.py` files are exempt.
+  ```python
+  """
+  bio_programming_tools/utils/device_manager.py
+
+  Centralized GPU allocation tracking with LRU eviction.
+  """
+  ```
+- **One-liners**: Acceptable for simple functions. No structured sections needed.
+- **Multi-line docstrings** (anything with a blank line): Google style — summary line, blank line, then sections as needed: `Args:`, `Returns:`, `Raises:`, `Attributes:`, `Example:`, `Note:`.
+- **Types required in docstrings**: Every `Args:`, `Attributes:`, and `Returns:` entry must include the type annotation matching the function signature or class annotation. Use modern Python syntax (`list[str]`, `X | None`). Consistency tests enforce that docstring types match signatures.
+  ```python
+  Args:
+      sequences (list[str]): Input protein sequences.
+      config (GCContentConfig | None): Optional configuration.
+
+  Attributes:
+      min_gc (float): Minimum acceptable GC content percentage.
+
+  Returns:
+      list[float]: Constraint scores for each sequence.
+  ```
+- **Pydantic classes**: Always include `Attributes:` section with full descriptions. These intentionally duplicate the short `Field(description=...)` / `ConfigField(description=...)` strings — field descriptions are short tooltips for the frontend UI, while docstring descriptions are longer developer-facing explanations.
 
 ## Rules When Implementing Tools
 

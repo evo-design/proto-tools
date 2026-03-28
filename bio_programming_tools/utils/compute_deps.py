@@ -1,5 +1,5 @@
 """
-Centralized compute dependency detection for PyTorch and JAX.
+bio_programming_tools/utils/compute_deps.py
 
 Detects GPU hardware (driver, CUDA version) and recommends compatible
 PyTorch/JAX version constraints. These are injected as environment variables
@@ -83,10 +83,11 @@ _JAX_COMPATIBILITY = {
 def _get_torch_entry(driver_major: int) -> tuple[str, str, str]:
     """Look up the _TORCH_COMPATIBILITY entry for a driver version.
 
-    Returns
-    -------
-    tuple[str, str, str]
-        (min_torch, max_torch_exclusive, cuda_variant).
+    Args:
+        driver_major (int): NVIDIA driver major version (e.g., 550).
+
+    Returns:
+        tuple[str, str, str]: (min_torch, max_torch_exclusive, cuda_variant).
     """
     for min_driver in sorted(_TORCH_COMPATIBILITY.keys(), reverse=True):
         if driver_major >= min_driver:
@@ -97,15 +98,11 @@ def _get_torch_entry(driver_major: int) -> tuple[str, str, str]:
 def _get_torch_spec(driver_major: int) -> str:
     """Get PyTorch version constraint for a given driver version.
 
-    Parameters
-    ----------
-    driver_major
-        NVIDIA driver major version (e.g., 550).
+    Args:
+        driver_major (int): NVIDIA driver major version (e.g., 550).
 
-    Returns
-    -------
-    str
-        PyTorch version constraint (e.g., "torch>=2.5,<3").
+    Returns:
+        str: PyTorch version constraint (e.g., ``"torch>=2.5,<3"``).
     """
     min_ver, max_ver, _ = _get_torch_entry(driver_major)
     return f"torch>={min_ver},<{max_ver}"
@@ -114,15 +111,11 @@ def _get_torch_spec(driver_major: int) -> str:
 def _get_torch_index(driver_major: int) -> str:
     """Get PyTorch wheel index URL for a given driver version.
 
-    Parameters
-    ----------
-    driver_major
-        NVIDIA driver major version (e.g., 550).
+    Args:
+        driver_major (int): NVIDIA driver major version (e.g., 550).
 
-    Returns
-    -------
-    str
-        PyTorch wheel index URL (e.g., "https://download.pytorch.org/whl/cu124").
+    Returns:
+        str: PyTorch wheel index URL (e.g., ``"https://download.pytorch.org/whl/cu124"``).
     """
     _, _, variant = _get_torch_entry(driver_major)
     return f"{_TORCH_INDEX_BASE}/{variant}"
@@ -131,17 +124,12 @@ def _get_torch_index(driver_major: int) -> str:
 def _get_jax_spec(driver_major: int, cuda_major: int) -> tuple[str, str]:
     """Get JAX version constraint and CUDA variant for given hardware.
 
-    Parameters
-    ----------
-    driver_major
-        NVIDIA driver major version (e.g., 550).
-    cuda_major
-        CUDA toolkit major version (e.g., 12).
+    Args:
+        driver_major (int): NVIDIA driver major version (e.g., 550).
+        cuda_major (int): CUDA toolkit major version (e.g., 12).
 
-    Returns
-    -------
-    tuple[str, str]
-        (jax_spec, jax_variant) - e.g., ("jax[cuda12]>=0.6,<0.9", "cuda12").
+    Returns:
+        tuple[str, str]: (jax_spec, jax_variant) - e.g., ``("jax[cuda12]>=0.6,<0.9", "cuda12")``.
     """
     # Determine JAX CUDA variant (cuda12 or cuda13)
     # JAX cuda13 requires driver >= 580, fall back to cuda12 if driver too old

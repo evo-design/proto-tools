@@ -1,5 +1,5 @@
 """
-ORF (Open Reading Frame) prediction using Orfipy.
+bio_programming_tools/tools/orf_prediction/orfipy/orfipy.py
 
 This module provides a standardized interface for ORF prediction using Orfipy,
 supporting general ORF prediction and analysis of results.
@@ -36,7 +36,7 @@ class OrfipyInput(BaseToolInput):
     in DNA sequences using Orfipy, a fast ORF prediction tool.
 
     Attributes:
-        sequences (List[str]): DNA sequence(s) to analyze for open
+        sequences (list[str]): DNA sequence(s) to analyze for open
             reading frames. Can be provided as:
 
             - A single DNA sequence string (e.g., ``"ATGTACTATTCAT...TGA"``)
@@ -44,7 +44,7 @@ class OrfipyInput(BaseToolInput):
 
             Sequences are automatically normalized to uppercase and filtered to
             contain only valid DNA nucleotides (A, T, C, G).
-        sequence_ids (Optional[List[str]]): Optional list of sequence identifiers.
+        sequence_ids (list[str] | None): Optional list of sequence identifiers.
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
             These IDs are used as ``parent_id`` in the output ORFs.
     """
@@ -96,7 +96,7 @@ class OrfipyConfig(BaseConfig):
 
             Default: ``"TAA,TAG,TGA"`` (all three standard stop codons).
 
-        strand (str): Which strand(s) to scan for ORFs. Options:
+        strand (Literal['f', 'r', 'b']): Which strand(s) to scan for ORFs. Options:
 
             - ``"f"``: Forward strand only
             - ``"r"``: Reverse strand only
@@ -123,7 +123,7 @@ class OrfipyConfig(BaseConfig):
             both the nucleotide sequence and length calculations. If ``False``,
             the stop codon is excluded. Default: ``True``.
 
-        translation_table (Optional[int]): Optional NCBI genetic code translation
+        translation_table (int | None): Optional NCBI genetic code translation
             table number (1-33). Common options:
 
             - ``None``: Use standard genetic code (defaults to ``1``)
@@ -210,14 +210,14 @@ class OrfipyOutput(BaseToolOutput):
     objects for downstream analysis.
 
     Attributes:
-        predicted_orfs (List[List[ORF]]): List of ORF results per input sequence.
+        predicted_orfs (list[list[ORF]]): List of ORF results per input sequence.
             This is the source of truth for all predicted ORFs. Each inner list
             contains the ORFs found in a single input sequence.
 
-        num_orfs (int): Total number of ORFs predicted across all input sequences.
+        num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
 
-        results_df (pd.DataFrame): Parsed results as a pandas DataFrame
+        results_df: Parsed results as a pandas DataFrame
             with the following columns:
 
             - ``parent_id``: ID of the parent sequence
@@ -325,7 +325,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
     Args:
         inputs (OrfipyInput): Validated input containing one or more DNA sequences
             for ORF prediction.
-        config (OrfipyConfig): Validated Orfipy configuration specifying start/stop
+        config (OrfipyConfig | None): Validated Orfipy configuration specifying start/stop
             codons, length filters, strand selection, and threading options.
 
     Returns:

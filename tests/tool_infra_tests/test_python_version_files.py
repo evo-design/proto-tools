@@ -1,4 +1,6 @@
-"""Tests for python_version.txt validation."""
+"""tests/tool_infra_tests/test_python_version_files.py
+
+Tests for python_version.txt validation."""
 
 import sys
 from pathlib import Path

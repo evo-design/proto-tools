@@ -1,4 +1,6 @@
-"""ESM2 sampling tool."""
+"""bio_programming_tools/tools/masked_models/esm2/esm2_sample.py
+
+ESM2 sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -48,12 +50,12 @@ class ESM2SampleOutput(BaseToolOutput):
     providing the sampled protein sequences and optionally the logits.
 
     Attributes:
-        sequences (List[str]): Sampled or mutated protein sequences. Each sequence
+        sequences (list[str]): Sampled or mutated protein sequences. Each sequence
             is a string of amino acid characters. For de novo generation, these are
             completely new sequences. For mutation, these are modified versions of
             the input sequences with specified positions changed to model-predicted
             alternatives.
-        logits (Optional[List[List[List[float]]]]): Per-position logits for each
+        logits (list[list[list[float]]] | None): Per-position logits for each
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
             if return_logits=True in config.
     """
@@ -98,12 +100,12 @@ class ESM2SampleConfig(BaseConfig):
     """Configuration for ESM2 protein sequence sampling.
 
     Attributes:
-        model_checkpoint: ESM2 model variant. Default: ``"esm2_t33_650M_UR50D"``.
-        temperature: Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
-        masking_strategy: Controls which positions to mask for sampling. Default: random 30%.
-        batch_size: Sequences per GPU forward pass. Default: 1.
-        device: Device to run on. Default: ``"cuda"``.
-        return_logits: Whether to include per-position logits. Default: ``False``.
+        model_checkpoint (Literal[ESM2_MODEL_CHECKPOINTS]): ESM2 model variant. Default: ``"esm2_t33_650M_UR50D"``.
+        temperature (float): Sampling temperature (< 1.0 conservative, > 1.0 diverse). Default: 1.0.
+        masking_strategy (MaskingStrategy): Controls which positions to mask for sampling. Default: random 30%.
+        batch_size (int): Sequences per GPU forward pass. Default: 1.
+        device (str): Device to run on. Default: ``"cuda"``.
+        return_logits (bool): Whether to include per-position logits. Default: ``False``.
     """
     masking_strategy: MaskingStrategy = ConfigField(
         title="Masking Strategy",
@@ -181,11 +183,11 @@ def run_esm2_sample(
     contain ``_`` at positions to sample.
 
     Args:
-        inputs: Protein sequences with ``_`` at designable positions.
-        config: Sampling configuration.
+        inputs (ESM2SampleInput): Protein sequences with ``_`` at designable positions.
+        config (ESM2SampleConfig | None): Sampling configuration.
 
     Returns:
-        ESM2SampleOutput with sampled sequences and optional logits.
+        ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
     logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(

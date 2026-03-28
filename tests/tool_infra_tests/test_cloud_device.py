@@ -1,4 +1,6 @@
-"""Tests for device='cloud' single-tool cloud dispatch."""
+"""tests/tool_infra_tests/test_cloud_device.py
+
+Tests for device='cloud' single-tool cloud dispatch."""
 
 from __future__ import annotations
 

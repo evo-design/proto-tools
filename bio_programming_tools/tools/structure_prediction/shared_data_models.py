@@ -1,4 +1,6 @@
-"""Shared data models (configs and outputs) for structure prediction tools."""
+"""bio_programming_tools/tools/structure_prediction/shared_data_models.py
+
+Shared data models (configs and outputs) for structure prediction tools."""
 from __future__ import annotations
 
 import logging
@@ -110,12 +112,12 @@ class Chain(BaseModel):
             - RNA: Nucleotide sequence (e.g., "AUGCAUGC")
             - Ligand: SMILES string or other model-specific format
 
-        entity_type (Optional[str]): Type of molecular entity. Valid options:
+        entity_type (str | None): Type of molecular entity. Valid options:
             ``"protein"``, ``"dna"``, ``"rna"``, ``"ligand"``. If ``None``,
             automatically inferred from sequence composition using
             ``detect_sequence_type()``.
 
-        modifications (List[Union[ChainModification, Tuple[int, str]]]): List of
+        modifications (list[ChainModification]): List of
             modifications to apply to this chain. Each modification can be either:
 
             - A ChainModification object
@@ -270,11 +272,11 @@ class Chain(BaseModel):
         """Add a modification to this chain.
 
         Args:
-            position: 1-based position in the sequence
-            modification_code: CCD code for the modification
+            position (int): 1-based position in the sequence
+            modification_code (str): CCD code for the modification
 
         Returns:
-            Self for method chaining
+            Chain: Self for method chaining
 
         Raises:
             ValueError: If position exceeds sequence length or modification is incompatible
@@ -324,7 +326,7 @@ class Chain(BaseModel):
         """Remove all modifications from this chain.
 
         Returns:
-            Self for method chaining
+            Chain: Self for method chaining
 
         Examples:
             >>> chain = Chain(sequence="MVLSPADKTN")
@@ -352,7 +354,7 @@ class StructurePredictionComplex(BaseModel):
     are modeled together.
 
     Attributes:
-        chains (List[Union[str, Chain, dict]]): Chains in the complex. Each chain can be:
+        chains (list[Chain]): Chains in the complex. Each chain can be:
 
             - A string sequence (automatically converted to Chain object)
             - A Chain object (with optional modifications)
@@ -502,7 +504,7 @@ class StructurePredictionComplex(BaseModel):
         """Get the entity types for all chains in the complex.
 
         Returns:
-            List of entity types, one for each chain.
+            list[str]: List of entity types, one for each chain.
         """
         return [chain.entity_type for chain in self.chains]
 
@@ -524,12 +526,12 @@ class StructurePredictionComplex(BaseModel):
         """Add a modification to a specific chain in the complex.
 
         Args:
-            chain_index: 0-based index of the chain to modify
-            position: 1-based position in the chain sequence
-            modification_code: CCD code for the modification
+            chain_index (int): 0-based index of the chain to modify
+            position (int): 1-based position in the chain sequence
+            modification_code (str): CCD code for the modification
 
         Returns:
-            Self for method chaining
+            StructurePredictionComplex: Self for method chaining
 
         Raises:
             IndexError: If chain_index is out of bounds
@@ -553,7 +555,7 @@ class StructurePredictionComplex(BaseModel):
         """Remove all modifications from all chains in the complex.
 
         Returns:
-            Self for method chaining
+            StructurePredictionComplex: Self for method chaining
 
         Examples:
             >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "ATCGATCG"])
@@ -599,7 +601,7 @@ class StructurePredictionInput(BaseToolInput):
     - List of lists of sequences (each sublist treated as a multi-chain complex)
 
     Attributes:
-        complexes (List[StructurePredictionComplex]): List of complexes to predict
+        complexes (list[StructurePredictionComplex]): List of complexes to predict
             structures for. Each complex contains one or more chains with their
             corresponding entity types. After validation, always a list of
             ``StructurePredictionComplex`` instances regardless of input format.
@@ -608,7 +610,7 @@ class StructurePredictionInput(BaseToolInput):
             string. Populated by ``Config.preprocess()`` via ColabFold search, or
             supplied directly to skip MSA generation. Default: ``None``.
 
-        SUPPORTED_ENTITY_TYPES (Set[str]): Set of entity types supported by this tool.
+        SUPPORTED_ENTITY_TYPES: Set of entity types supported by this tool.
             Must be defined by subclasses. Valid options: "protein", "dna", "rna",
             "ligand", "glycan".
 
@@ -795,7 +797,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
             for protein chains using ColabFold search. If ``False``, runs in single-sequence
             mode without MSAs. Default: ``True``.
 
-        colabfold_search_config (Optional[ColabfoldSearchConfig]): Configuration for
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``.
             Default: Uses ColabfoldSearchConfig defaults.
     """
@@ -830,7 +832,7 @@ class StructurePredictionOutput(BaseToolOutput):
     3D structures for one or more input complexes.
 
     Attributes:
-        structures (List[PredictedStructure]): List of predicted structures, one per
+        structures (list[Structure]): List of predicted structures, one per
             input complex. Each structure contains the 3D coordinates in CIF format
             along with model-specific confidence metrics. The order matches the input
             complexes order.
@@ -904,12 +906,12 @@ def _preprocess_structure_prediction_msas(
     sequence string. Skips ColabFold if MSAs are already supplied.
 
     Args:
-        inputs: Structure prediction input containing complexes.
-        colabfold_search_config: ColabFold search configuration.
-        verbose: Whether to log progress.
+        inputs (StructurePredictionInput): Structure prediction input containing complexes.
+        colabfold_search_config (Any): ColabFold search configuration.
+        verbose (bool): Whether to log progress.
 
     Returns:
-        Updated inputs with ``msas`` field populated.
+        StructurePredictionInput: Updated inputs with ``msas`` field populated.
     """
     if inputs.msas is not None:
         if verbose:

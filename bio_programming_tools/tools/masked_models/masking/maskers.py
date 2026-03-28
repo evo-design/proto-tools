@@ -1,4 +1,4 @@
-"""Masker classes that implement scoring logic for each masking method.
+"""bio_programming_tools/tools/masked_models/masking/maskers.py
 
 Each masker has:
 - ``supported_models``: which models it works with (None = no model needed)
@@ -6,8 +6,7 @@ Each masker has:
 - ``score(sequences, position_score_fn)``: returns per-position scores
 
 The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
-truth for valid method names.
-"""
+truth for valid method names."""
 from __future__ import annotations
 
 import logging
@@ -36,8 +35,8 @@ class Masker(ABC):
     for a batch of sequences. Higher scores mean the position is more
     likely to be masked.
 
-    Class attributes:
-        supported_models: List of model names this masker works with
+    Attributes:
+        supported_models (list[str] | None): List of model names this masker works with
             (e.g. ``["esm2", "esm3"]``), or ``None`` if no model is needed.
 
     Instance attributes:
@@ -78,14 +77,14 @@ class Masker(ABC):
         """Score all positions for all sequences.
 
         Args:
-            sequences: Protein sequences to score.
-            position_score_fn: Callable that takes a list of sequences
+            sequences (list[str]): Protein sequences to score.
+            position_score_fn (Callable | None): Callable that takes a list of sequences
                 and returns per-position scores. Required for model-based
                 maskers; ``None`` for maskers that don't use a model.
 
         Returns:
-            List of per-position scores, one list per sequence.
-            Higher = more likely to mask.
+            list[list[float]]: List of per-position scores, one list per sequence.
+                Higher = more likely to mask.
         """
 
 

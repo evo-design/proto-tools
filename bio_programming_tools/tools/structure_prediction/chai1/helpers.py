@@ -1,5 +1,5 @@
 """
-Shared helper functions for Chai1 service layer and tool layer.
+bio_programming_tools/tools/structure_prediction/chai1/helpers.py
 
 These helpers are used by both the tool layer (chai1.py) and the service layer
 (chai1_service.py in bio-programming deployment). They provide utilities for
@@ -18,10 +18,10 @@ def hash_sequence(seq: str) -> str:
     which is used to generate MSA filenames that Chai1's run_inference expects.
 
     Args:
-        seq: Protein sequence string
+        seq (str): Protein sequence string
 
     Returns:
-        Hexadecimal SHA-256 hash string
+        str: Hexadecimal SHA-256 hash string
     """
     return hashlib.sha256(seq.encode()).hexdigest()
 
@@ -38,13 +38,13 @@ def write_msa_pqt(
     Query sequence (index 0) gets source_database="query".
 
     Args:
-        aligned_sequences: List of aligned sequence strings. The first
+        aligned_sequences (list): List of aligned sequence strings. The first
             sequence is treated as the query.
-        pqt_path: Path where the .pqt file will be written.
-        source_database: Name of the source database for non-query sequences
+        pqt_path (str): Path where the .pqt file will be written.
+        source_database (str): Name of the source database for non-query sequences
             (default: "uniref90"). Valid values: "query", "uniref90", "uniprot",
             "bfd_uniclust", "mgnify".
-        comments: Optional list of comment strings (e.g., sequence IDs from
+        comments (list | None): Optional list of comment strings (e.g., sequence IDs from
             the original MSA). If None, uses synthetic ``seq_0``, ``seq_1``, etc.
     """
     import pandas as pd
@@ -67,10 +67,10 @@ def complex_to_fasta(chains: list[dict]) -> str:
     """Convert a list of chain dicts to FASTA format for Chai1.
 
     Args:
-        chains: List of chain dicts, each with 'entity_type' and 'sequence' keys.
+        chains (list[dict]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
 
     Returns:
-        FASTA-formatted string
+        str: FASTA-formatted string
     """
     fasta_content = ""
     for i, chain in enumerate(chains):

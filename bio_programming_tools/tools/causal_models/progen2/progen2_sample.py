@@ -1,4 +1,6 @@
-"""ProGen2 sampling tool."""
+"""bio_programming_tools/tools/causal_models/progen2/progen2_sample.py
+
+ProGen2 sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -39,7 +41,7 @@ class ProGen2SampleInput(BaseToolInput):
     the ProGen2 autoregressive language model.
 
     Attributes:
-        prompts (List[str]): Prompt sequences for protein generation.
+        prompts (list[str]): Prompt sequences for protein generation.
             Can be provided as:
 
             - A single prompt string (e.g., ``"MKTL"``)
@@ -71,7 +73,7 @@ class ProGen2SampleOutput(BaseToolOutput):
     providing generated sequences and optionally the logits.
 
     Attributes:
-        sequences (List[str]): Generated protein sequences. Each sequence is a string
+        sequences (list[str]): Generated protein sequences. Each sequence is a string
             of amino acids. Depending on configuration:
 
             - If ``prepend_prompt=True``: Sequences include both input prompt and
@@ -80,7 +82,7 @@ class ProGen2SampleOutput(BaseToolOutput):
             - If ``strip_special_tokens=True``: ProGen2 special tokens ('1', '2')
               are removed
             - If ``truncate_at_stop=True``: Sequences are truncated at stop tokens
-        logits (Optional[List[List[List[float]]]]): Per-position logits for each
+        logits (list[list[list[float]]] | None): Per-position logits for each
             generated sequence. Shape is (num_sequences, generated_len, vocab_size).
             Only present if return_logits=True in config.
 
@@ -139,7 +141,7 @@ class ProGen2SampleConfig(BaseConfig):
     (OAS) and broader protein families (BFD90).
 
     Attributes:
-        model_checkpoint (str): ProGen2 model checkpoint to use. Options:
+        model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 model checkpoint to use. Options:
 
             - ``"progen2-small"``: 151M parameters (fastest)
             - ``"progen2-medium"``: 754M parameters
@@ -150,7 +152,7 @@ class ProGen2SampleConfig(BaseConfig):
 
             Default: ``"progen2-large"``.
 
-        local_path (Optional[str]): Optional path to local model weights directory.
+        local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading
             from HuggingFace. Useful for offline inference or custom model versions.
             Default: ``None`` (download from HuggingFace hugohrban/).
@@ -200,6 +202,9 @@ class ProGen2SampleConfig(BaseConfig):
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
+
+        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
+            Default: ``"cuda"``.
 
     Note:
         For detailed information on ProGen2, see:
@@ -324,7 +329,7 @@ def run_progen2_sample(
         inputs (ProGen2SampleInput): Validated input containing one or more protein
             prompt sequences. Prompts can include ProGen2's special tokens or raw
             amino acid sequences (which will be automatically normalized).
-        config (ProGen2SampleConfig): Validated ProGen2 sampling configuration specifying
+        config (ProGen2SampleConfig | None): Validated ProGen2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and output processing options.
 

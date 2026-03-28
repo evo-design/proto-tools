@@ -1,9 +1,8 @@
-"""Mock multi-GPU PyTorch tool for testing multi-device management.
+"""bio_programming_tools/tools/testing/mock_pytorch_multi_gpu_tool/mock_pytorch_multi_gpu_tool.py
 
 This is a minimal 2-GPU PyTorch tool designed for testing multi-device allocation,
 movement, and eviction. It loads two tiny models (one per GPU) while exercising
-all DeviceManager multi-device code paths.
-"""
+all DeviceManager multi-device code paths."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,8 +28,8 @@ from bio_programming_tools.utils import (
 class MockPyTorchMultiGPUToolInput(BaseToolInput):
     """Input for mock multi-GPU tool.
 
-    Fields:
-        data: Input data to pass through both models.
+    Attributes:
+        data (list[float]): Input data to pass through both models.
     """
 
     data: list[float] = InputField(
@@ -42,10 +41,10 @@ class MockPyTorchMultiGPUToolInput(BaseToolInput):
 class MockPyTorchMultiGPUToolConfig(BaseConfig):
     """Config for mock multi-GPU tool.
 
-    Fields:
-        device: Device specification for 2 GPUs.
-        hidden_size: Hidden layer size per model.
-        memory_mb: GPU memory to allocate per model via buffer.
+    Attributes:
+        device (str): Device specification for 2 GPUs.
+        hidden_size (int): Hidden layer size per model.
+        memory_mb (int): GPU memory to allocate per model via buffer.
     """
 
     device: str = ConfigField(
@@ -74,10 +73,10 @@ class MockPyTorchMultiGPUToolConfig(BaseConfig):
 class MockPyTorchMultiGPUToolOutput(BaseToolOutput):
     """Output from mock multi-GPU tool.
 
-    Fields:
-        result_model_a: Output from model A (first GPU).
-        result_model_b: Output from model B (second GPU).
-        devices_used: Devices each model ran on.
+    Attributes:
+        result_model_a (list[float]): Output from model A (first GPU).
+        result_model_b (list[float]): Output from model B (second GPU).
+        devices_used (list[str]): Devices each model ran on.
     """
 
     result_model_a: list[float] = Field(

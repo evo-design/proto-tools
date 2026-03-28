@@ -1,4 +1,6 @@
-"""Tests for standalone_helpers.py."""
+"""tests/tool_infra_tests/test_standalone_helpers.py
+
+Tests for standalone_helpers.py."""
 
 import os
 

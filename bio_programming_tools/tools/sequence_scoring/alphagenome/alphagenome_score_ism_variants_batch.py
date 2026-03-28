@@ -1,4 +1,6 @@
-"""AlphaGenome batched in-silico mutagenesis (ISM) tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_score_ism_variants_batch.py
+
+AlphaGenome batched in-silico mutagenesis (ISM) tool."""
 from __future__ import annotations
 
 import csv
@@ -38,10 +40,10 @@ class AlphaGenomeISM(AlphaGenomeInterval):
         interval_end (int): Interval end (0-based, exclusive).
         ism_interval_start (int): ISM sub-interval start (0-based, inclusive).
         ism_interval_end (int): ISM sub-interval end (0-based, exclusive).
-        variant_position (Optional[int]): Optional existing variant position
+        variant_position (int | None): Optional existing variant position
             to apply before ISM (0-based).
-        reference_bases (Optional[str]): Optional existing variant ref allele.
-        alternate_bases (Optional[str]): Optional existing variant alt allele.
+        reference_bases (str | None): Optional existing variant ref allele.
+        alternate_bases (str | None): Optional existing variant alt allele.
     """
 
     ism_interval_start: int = InputField(
@@ -107,7 +109,7 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
     """Input for batched AlphaGenome in-silico mutagenesis.
 
     Attributes:
-        requests (List[AlphaGenomeISM]): ISM requests to process.
+        requests (list[AlphaGenomeISM]): ISM requests to process.
             A single request is auto-wrapped into a list.
     """
 
@@ -131,7 +133,7 @@ class AlphaGenomeScoreISMOutput(BaseToolOutput):
     """Output from batched AlphaGenome in-silico mutagenesis.
 
     Attributes:
-        results (List[AlphaGenomeScoreOutput]): Per-request score outputs.
+        results (list[AlphaGenomeScoreOutput]): Per-request score outputs.
     """
 
     results: List[AlphaGenomeScoreOutput] = Field(

@@ -1,4 +1,6 @@
-"""Tests for Ligands entity."""
+"""tests/ligand_tests/test_ligand.py
+
+Tests for Ligands entity."""
 
 import pytest
 

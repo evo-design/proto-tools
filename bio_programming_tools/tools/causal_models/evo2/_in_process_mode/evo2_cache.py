@@ -1,4 +1,6 @@
-"""Model cache helpers for Evo2."""
+"""bio_programming_tools/tools/causal_models/evo2/_in_process_mode/evo2_cache.py
+
+Model cache helpers for Evo2."""
 from __future__ import annotations
 
 from typing import Dict, Literal, Optional

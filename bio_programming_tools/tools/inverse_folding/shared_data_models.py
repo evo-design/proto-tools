@@ -1,5 +1,5 @@
 """
-inverse_folding/shared_data_models.py
+bio_programming_tools/tools/inverse_folding/shared_data_models.py
 
 Shared base schemas (configs and io) for inverse folding tools.
 """
@@ -30,8 +30,8 @@ class SequenceStructurePair(BaseModel):
     sequence with its corresponding structure for computing compatibility metrics.
 
     Attributes:
-        sequence: Protein sequence to score against the structure.
-        structure: Protein structure to score the sequence against.
+        sequence (str): Protein sequence to score against the structure.
+        structure (Structure): Protein structure to score the sequence against.
     """
 
     sequence: str = Field(description="Sequence to score against the structure")
@@ -45,11 +45,11 @@ class InverseFoldingStructureInput(BaseModel):
     positions. The structure is automatically loaded and validated on construction.
 
     Attributes:
-        structure: The protein structure. Accepts file path, PDB content string, or
+        structure (Structure): The protein structure. Accepts file path, PDB content string, or
             Structure object. Automatically converted to Structure.
-        chain_ids: Optional list of chain IDs to design. If None, all chains in the
+        chain_ids (list[str] | None): Optional list of chain IDs to design. If None, all chains in the
             structure are designed.
-        fixed_positions: Optional dictionary mapping chain IDs to residue positions
+        fixed_positions (dict[str, list[int]] | None): Optional dictionary mapping chain IDs to residue positions
             to keep fixed during design. Positions are 1-indexed.
 
     Examples:
@@ -159,7 +159,7 @@ class InverseFoldingInput(BaseToolInput):
     Wraps a list of InverseFoldingInput objects for use with the ToolRegistry.
 
     Attributes:
-        inputs: List of InverseFoldingInput objects, each containing a structure
+        inputs (list[InverseFoldingStructureInput]): List of InverseFoldingInput objects, each containing a structure
             and optional chain_ids/fixed_positions constraints.
 
     Examples:
@@ -187,14 +187,14 @@ class InverseFoldingConfig(BaseConfig):
             for each input structure. Sequences are generated in batches of
             ``batch_size``. Defaults to 1.
 
-        batch_size (Optional[int]): Number of sequences to process simultaneously
+        batch_size (int | None): Number of sequences to process simultaneously
             on GPU. Larger batches improve throughput but use more GPU memory;
             reduce if encountering out-of-memory errors. Defaults to
             ``num_sequences_per_structure``.
 
         temperature (float): Controls randomness in sampling from logits. Defaults to 0.1.
 
-        excluded_amino_acids (Optional[List[str]]): List of amino acids that are not allowed in the sequence.
+        excluded_amino_acids (list[str] | None): List of amino acids that are not allowed in the sequence.
             If None, no amino acids will be disallowed. C is commonly specified. Defaults to None.
 
         seed (int): Random seed to use for sampling. Defaults to 42.
@@ -269,10 +269,10 @@ class DesignedSequences(BaseModel, ABC):
     input structure, fields in this class should be lists of length `num_sequences_per_structure`.
 
     Attributes:
-        sequences (List[str]): Designed amino acid sequences in single-letter code.
+        sequences (list[str]): Designed amino acid sequences in single-letter code.
 
     Properties:
-        metrics (Dict[str, float]): All confidence and quality metrics as a
+        metrics: All confidence and quality metrics as a
             dictionary. Excludes the sequence itself.
 
     Note:
@@ -326,7 +326,7 @@ class InverseFoldingOutput(BaseToolOutput):
     Contains a list of DesignedSequences objects, one for each input structure.
 
     Attributes:
-        designed_sequences (List[DesignedSequences]): List of DesignedSequences objects, one for each input structure.
+        designed_sequences (list[DesignedSequences]): List of DesignedSequences objects, one for each input structure.
             The order matches the input structures order.
     """
 
@@ -400,9 +400,9 @@ class SequenceScores(BaseModel):
     via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
 
     Attributes:
-        metrics: Dictionary of scalar scoring metrics.
-        logits: Optional per-position logits array.
-        vocab: Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
+        logits (list[list[float]] | None): Optional per-position logits array.
+        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
     metrics: Dict[str, float] = Field(
@@ -442,7 +442,7 @@ class InverseFoldingScoringOutput(BaseToolOutput):
     ProteinMPNN or LigandMPNN scoring.
 
     Attributes:
-        scores (List[SequenceScores]): List of scoring outputs, one per input
+        scores (list[SequenceScores]): List of scoring outputs, one per input
             sequence-structure pair. Each entry contains metrics (log_likelihood,
             avg_log_likelihood, perplexity) and optional per-position logits.
     """

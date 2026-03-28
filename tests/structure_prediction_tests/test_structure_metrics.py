@@ -1,4 +1,6 @@
-"""Tests for structure metrics."""
+"""tests/structure_prediction_tests/test_structure_metrics.py
+
+Tests for structure metrics."""
 
 from __future__ import annotations
 

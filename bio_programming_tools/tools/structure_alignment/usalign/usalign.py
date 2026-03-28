@@ -1,5 +1,5 @@
 """
-USalign -- universal structure alignment for monomers and multimers.
+bio_programming_tools/tools/structure_alignment/usalign/usalign.py
 
 Wraps the USalign binary (Zhang et al., 2022) as a ToolInstance-dispatched tool.
 Accepts two PDB text blobs, calls the binary with ``-mm 1 -ter 1`` flags for
@@ -33,8 +33,8 @@ class USalignInput(BaseToolInput):
     """Input for USalign pairwise structure alignment.
 
     Attributes:
-        pdb_text_1: Raw PDB content of the first structure (query / candidate).
-        pdb_text_2: Raw PDB content of the second structure (reference / target).
+        pdb_text_1 (str): Raw PDB content of the first structure (query / candidate).
+        pdb_text_2 (str): Raw PDB content of the second structure (reference / target).
     """
 
     pdb_text_1: str = InputField(description="PDB content of structure 1 (query)")
@@ -52,8 +52,8 @@ class USalignOutput(BaseToolOutput):
     """Output from USalign pairwise structure alignment.
 
     Attributes:
-        tm_score_structure_1: TM-score normalized by the length of Structure 1 (query).
-        tm_score_structure_2: TM-score normalized by the length of Structure 2 (reference).
+        tm_score_structure_1 (float): TM-score normalized by the length of Structure 1 (query).
+        tm_score_structure_2 (float): TM-score normalized by the length of Structure 2 (reference).
     """
 
     tm_score_structure_1: float = Field(

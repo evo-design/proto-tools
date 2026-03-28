@@ -1,4 +1,6 @@
-"""Tests for Segmasker low-complexity region detection tool."""
+"""tests/sequence_scoring_tests/test_segmasker.py
+
+Tests for Segmasker low-complexity region detection tool."""
 from __future__ import annotations
 
 import pytest

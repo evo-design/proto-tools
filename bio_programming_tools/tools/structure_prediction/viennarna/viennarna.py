@@ -1,5 +1,5 @@
 """
-viennarna.py
+bio_programming_tools/tools/structure_prediction/viennarna/viennarna.py
 
 RNA secondary structure prediction using ViennaRNA.
 
@@ -39,7 +39,7 @@ class ViennaRNAInput(BaseToolInput):
     structures using ViennaRNA's MFE folding algorithm.
 
     Attributes:
-        sequences (List[str]): List of RNA sequences to fold. Each sequence
+        sequences (list[str]): List of RNA sequences to fold. Each sequence
             should contain only valid RNA nucleotides (A, U, G, C) or DNA
             nucleotides (A, T, G, C) which will be automatically converted
             to RNA (T -> U). Lowercase letters are also accepted.
@@ -56,6 +56,9 @@ class ViennaRNAInput(BaseToolInput):
     def validate_sequences(cls, sequences: List[str]) -> List[str]:
         """
         Validates that sequences contain only valid nucleotides.
+
+        Args:
+            sequences (list[str]): RNA/DNA sequences to validate.
 
         Checks:
         - Non-empty sequences
@@ -84,9 +87,9 @@ class ViennaRNAResult(BaseModel):
     predictors are implemented
 
     Attributes:
-        sequence: The input RNA sequence.
-        structure: Predicted secondary structure in dot-bracket notation.
-        mfe: Minimum free energy in kcal/mol.
+        sequence (str): The input RNA sequence.
+        structure (str | None): Predicted secondary structure in dot-bracket notation.
+        mfe (float | None): Minimum free energy in kcal/mol.
     """
     sequence: str
     structure: Optional[str] = None
@@ -97,10 +100,10 @@ class ViennaRNAOutput(BaseToolOutput):
     """Output object for ViennaRNA secondary structure prediction.
 
     Attributes:
-        results (List[ViennaRNAResult]): List of fold results, one per input
+        results (list[ViennaRNAResult]): List of fold results, one per input
             sequence. Each result contains the sequence, predicted structure
             in dot-bracket notation, and the minimum free energy.
-        metadata (dict): Additional information about the prediction run.
+        metadata (dict[str, Any]): Additional information about the prediction run.
     """
     results: List[ViennaRNAResult] = Field(description="List of ViennaRNA results")
 
@@ -208,19 +211,19 @@ def run_viennarna(
     input RNA sequence.
 
     Args:
-        inputs: Input containing RNA sequences to fold.
-        config: Configuration parameters for ViennaRNA.
+        inputs (ViennaRNAInput): Input containing RNA sequences to fold.
+        config (ViennaRNAConfig | None): Configuration parameters for ViennaRNA.
 
     Returns:
         ViennaRNAOutput: Contains:
-            results (List[ViennaRNAResult]): One result per input sequence with:
-                sequence (str): The input sequence (converted to RNA if needed).
-                structure (str): Predicted structure in dot-bracket notation.
+            results: One result per input sequence with:
+                sequence: The input sequence (converted to RNA if needed).
+                structure: Predicted structure in dot-bracket notation.
                     '.' = unpaired, '(' and ')' = base pair.
-                mfe (float): Minimum free energy in kcal/mol. More negative
+                mfe: Minimum free energy in kcal/mol. More negative
                     values indicate more stable structures.
 
-            metadata (dict): Run information including number of sequences
+            metadata: Run information including number of sequences
                 processed and parameters used.
 
     Raises:

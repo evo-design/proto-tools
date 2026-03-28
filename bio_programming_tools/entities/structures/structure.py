@@ -1,5 +1,5 @@
 """
-structure.py
+bio_programming_tools/entities/structures/structure.py
 
 Contains base class for representing a protein structure.
 """
@@ -39,11 +39,11 @@ def _create_bfactor_legend_html(b_factor_type: BFactorType, range_max: float) ->
     """Create an HTML legend for B-factor coloring.
 
     Args:
-        b_factor_type: The type of B-factor data
-        range_max: Maximum value of the B-factor range
+        b_factor_type (BFactorType): The type of B-factor data
+        range_max (float): Maximum value of the B-factor range
 
     Returns:
-        HTML string for the legend overlay
+        str: HTML string for the legend overlay
     """
     return f"""
     <div style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.9);
@@ -78,10 +78,10 @@ def _create_chain_legend_html(chain_color_map: Dict[str, str]) -> str:
     """Create an HTML legend for chain coloring.
 
     Args:
-        chain_color_map: Dictionary mapping chain IDs to their assigned colors
+        chain_color_map (dict[str, str]): Dictionary mapping chain IDs to their assigned colors
 
     Returns:
-        HTML string for the legend overlay
+        str: HTML string for the legend overlay
     """
     if not chain_color_map:
         return ""
@@ -144,9 +144,9 @@ class Structure:
                 structure file content (can input PDB or CIF content strings directly).
             b_factor_type (BFactorType | str): What the B-factor column contains (default is UNSPECIFIED).
                 Can be a BFactorType enum or string value.
-            metrics (Optional[Dict[str, float]]): Optional dictionary of metrics to associate with
+            metrics (dict[str, float] | None): Optional dictionary of metrics to associate with
                 the structure (e.g., scores, confidence values). Default is None.
-            source (Optional[str]): Optional source identifier for the structure. If not provided
+            source (str | None): Optional source identifier for the structure. If not provided
                 and a filepath is given, will be set to the filepath. Default is None.
         """
 
@@ -247,7 +247,7 @@ class Structure:
         Write the structure to a CIF file.
 
         Args:
-            filepath: Path where to save the CIF file
+            filepath (Path | str): Path where to save the CIF file
         """
         Path(filepath).write_text(self.structure_cif)
 
@@ -258,7 +258,7 @@ class Structure:
         WARNING: PDB format has limitations that may cause data loss.
 
         Args:
-            filepath: Path where to save the PDB file
+            filepath (Path | str): Path where to save the PDB file
         """
         Path(filepath).write_text(self.structure_pdb)
 
@@ -272,8 +272,8 @@ class Structure:
         Extract the sequence of a specific chain from the structure.
 
         Args:
-            chain_id: Chain ID to extract (e.g., 'A'). If None, returns the first chain.
-            remove_non_standard: If True, removes non-standard residues (X) and gaps (-)
+            chain_id (str | None): Chain ID to extract (e.g., 'A'). If None, returns the first chain.
+            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
                 from the sequence. Default is False to preserve all residues.
 
         Returns:
@@ -310,7 +310,7 @@ class Structure:
         Extract the sequences of all chains in the structure.
 
         Args:
-            remove_non_standard: If True, removes non-standard residues (X) and gaps (-)
+            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
                 from the sequences. Default is False to preserve all residues.
 
         Returns:
@@ -417,10 +417,10 @@ class Structure:
         Get the list of residue positions (1-indexed) for a specific chain.
 
         Args:
-            chain_id: The chain identifier (e.g., "A", "B").
+            chain_id (str): The chain identifier (e.g., "A", "B").
 
         Returns:
-            List of residue position numbers from the PDB file.
+            list[int]: List of residue position numbers from the PDB file.
 
         Raises:
             ValueError: If the chain_id is not found in the structure.
@@ -467,17 +467,17 @@ class Structure:
         - Others: 0-100 scale (default)
 
         Args:
-            style: Visualization style for polymer chains (default: "cartoon"). Must be one of:
+            style (Literal['cartoon', 'line', 'stick', 'sphere', 'licorice']): Visualization style for polymer chains (default: "cartoon"). Must be one of:
                 "cartoon", "line", "stick", "sphere", "licorice"
-            color_by: Coloring mode (default: "chain" if b_factor_type is UNSPECIFIED, otherwise "bfactor")
+            color_by (Literal['bfactor', 'chain'] | None): Coloring mode (default: "chain" if b_factor_type is UNSPECIFIED, otherwise "bfactor")
                 - "bfactor": Color by B-factor values with gradient
                 - "chain": Color each chain with a distinct color
-            show_legend: Whether to display a legend/colorbar (default: True)
+            show_legend (bool): Whether to display a legend/colorbar (default: True)
                 For "bfactor": Shows a horizontal colorbar with the B-factor scale
                 For "chain": Shows a legend listing chain IDs and their colors
-            width: Width of the viewer in pixels (default: 400)
-            height: Height of the viewer in pixels (default: 400)
-            ligand_style: Visualization style for ligand (non-polymer) chains (default: "stick").
+            width (int): Width of the viewer in pixels (default: 400)
+            height (int): Height of the viewer in pixels (default: 400)
+            ligand_style (Literal['stick', 'sphere', 'line', 'licorice']): Visualization style for ligand (non-polymer) chains (default: "stick").
                 Must be one of: "stick", "sphere", "line", "licorice"
                 Note: Ligands don't work with "cartoon" style as they lack backbone structure.
 

@@ -1,4 +1,6 @@
-"""Authentication helpers for gated model providers."""
+"""bio_programming_tools/utils/auth.py
+
+Authentication helpers for gated model providers."""
 from __future__ import annotations
 
 import os
@@ -8,7 +10,7 @@ import re
 def resolve_hf_token() -> str | None:
     """Resolve a HuggingFace token from all known sources.
 
-    Checks (in order):
+    Checks:
       1. ``HF_TOKEN`` environment variable
       2. ``HUGGING_FACE_HUB_TOKEN`` environment variable
       3. ``~/.cache/huggingface/token`` file (written by ``hf auth login``)
@@ -56,8 +58,8 @@ def require_hf_token(tool_name: str, repo_url: str = "") -> None:
     standalone subprocess.
 
     Args:
-        tool_name: Human-readable tool name for the error message (e.g., "ESM3").
-        repo_url: HuggingFace repo URL where the user can accept the license.
+        tool_name (str): Human-readable tool name for the error message (e.g., "ESM3").
+        repo_url (str): HuggingFace repo URL where the user can accept the license.
 
     Raises:
         EnvironmentError: If no HuggingFace token is found.

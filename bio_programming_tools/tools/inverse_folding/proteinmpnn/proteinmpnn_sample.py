@@ -1,4 +1,6 @@
-"""ProteinMPNN sampling tool."""
+"""bio_programming_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_sample.py
+
+ProteinMPNN sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -33,14 +35,14 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
     """Configuration for ProteinMPNN sampling.
 
     Attributes:
-        num_sequences_per_structure: Total number of sequences to generate per
+        num_sequences_per_structure (int): Total number of sequences to generate per
             input structure.
-        batch_size: Number of sequences to process simultaneously on GPU.
+        batch_size (int | None): Number of sequences to process simultaneously on GPU.
             Defaults to num_sequences_per_structure.
-        temperature: Controls randomness in sampling from logits.
-        excluded_amino_acids: List of amino acids not allowed in the sequence.
-        seed: Random seed to use for sampling.
-        model_choice: Model weights to use. ``"proteinmpnn"`` for the general-purpose
+        temperature (float): Controls randomness in sampling from logits.
+        excluded_amino_acids (list[str] | None): List of amino acids not allowed in the sequence.
+        seed (int): Random seed to use for sampling.
+        model_choice (Literal['proteinmpnn', 'abmpnn']): Model weights to use. ``"proteinmpnn"`` for the general-purpose
             ProteinMPNN model, ``"abmpnn"`` for antibody-optimized weights.
     """
 
@@ -56,9 +58,9 @@ class ProteinMPNNSequences(DesignedSequences):
     """Represents a designed sequence from the ProteinMPNN model.
 
     Attributes:
-        sequences (List[str]): Designed protein sequences.
-        perplexity (List[float]): Per-sequence perplexity values.
-        sequence_identity (List[float]): Sequence identity to the PDB prompt sequence.
+        sequences (list[str]): Designed protein sequences.
+        perplexity (list[float]): Per-sequence perplexity values.
+        sequence_identity (list[float]): Sequence identity to the PDB prompt sequence.
     """
 
     perplexity: List[float] = Field(
@@ -101,12 +103,12 @@ def run_proteinmpnn_sample(
     """Sample protein sequences using ProteinMPNN.
 
     Args:
-        inputs: ProteinMPNNSampleInput containing a list of structure inputs,
+        inputs (ProteinMPNNSampleInput): ProteinMPNNSampleInput containing a list of structure inputs,
             each with optional chain_ids/fixed_positions constraints.
-        config: Configuration for sampling (temperature, batch_size, etc.).
+        config (ProteinMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
 
     Returns:
-        ProteinMPNNSampleOutput with designed sequences for each input structure.
+        ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with designed sequences for each input structure.
 
     Note:
         Multi-chain sampling returns a "/"-delimited sequence preserving chain ID order.

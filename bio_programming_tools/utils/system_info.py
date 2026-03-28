@@ -1,5 +1,5 @@
 """
-Centralized system information collection for compatibility reports.
+bio_programming_tools/utils/system_info.py
 
 Collects platform, GPU, and environment information without torch dependency.
 """
@@ -318,17 +318,12 @@ _SENSITIVE_PATTERNS = [
 def _is_sensitive_env_var(key: str, value: str) -> bool:
     """Check if an environment variable should be redacted from reports.
 
-    Parameters
-    ----------
-    key
-        Environment variable name.
-    value
-        Environment variable value.
+    Args:
+        key (str): Environment variable name.
+        value (str): Environment variable value.
 
-    Returns
-    -------
-    bool
-        True if the variable should be excluded from reports.
+    Returns:
+        bool: True if the variable should be excluded from reports.
     """
     key_upper = key.upper()
 
@@ -349,15 +344,11 @@ def _is_sensitive_env_var(key: str, value: str) -> bool:
 def _sanitize_env_dict(env: dict[str, str] | None) -> dict[str, str] | None:
     """Remove sensitive environment variables from a dict.
 
-    Parameters
-    ----------
-    env
-        Environment variable dictionary to sanitize.
+    Args:
+        env (dict[str, str] | None): Environment variable dictionary to sanitize.
 
-    Returns
-    -------
-    dict or None
-        Sanitized copy with sensitive variables removed.
+    Returns:
+        dict[str, str] | None: Sanitized copy with sensitive variables removed.
     """
     if env is None:
         return None
@@ -392,10 +383,8 @@ def capture_subprocess_env(env: dict[str, str]) -> None:
     Call this from subprocess execution code (e.g., _build_subprocess_env or ToolInstance)
     to record what env vars are actually passed to tool subprocesses.
 
-    Parameters
-    ----------
-    env
-        The environment dict being passed to subprocess.
+    Args:
+        env (dict[str, str]): The environment dict being passed to subprocess.
     """
     global _captured_subprocess_env
     _captured_subprocess_env = dict(env)
@@ -491,6 +480,9 @@ def _resolve_hostname_alias(hostname: str) -> str | None:
 def _sanitize_hostname(hostname: str) -> str:
     """Make a hostname safe for use in filenames.
 
+    Args:
+        hostname (str): Raw hostname string to sanitize.
+
     - Strips the DNS domain suffix (everything after the first dot)
     - Keeps only alphanumeric characters and hyphens
     - Collapses consecutive separators and strips leading/trailing ones
@@ -529,19 +521,13 @@ def get_platform_id(
     - Sherlock: `viggiano_sherlock_x86_64_h100_20260216_bcf5907`
     - Unknown Linux: `alice_linux_myhost_x86_64_a100_20260216_bcf5907`
 
-    Parameters
-    ----------
-    include_user
-        Include username prefix (default True).
-    include_date
-        Include date suffix (default True).
-    include_commit
-        Include git commit hash suffix (default True).
+    Args:
+        include_user (bool): Include username prefix (default True).
+        include_date (bool): Include date suffix (default True).
+        include_commit (bool): Include git commit hash suffix (default True).
 
-    Returns
-    -------
-    str
-        Platform identifier string.
+    Returns:
+        str: Platform identifier string.
     """
     platform_info = get_platform_info()
     gpu_info = get_gpu_info()

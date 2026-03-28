@@ -1,4 +1,6 @@
-"""Tests for ToolRegistry citation retrieval."""
+"""tests/tool_infra_tests/test_citations.py
+
+Tests for ToolRegistry citation retrieval."""
 
 import pytest
 

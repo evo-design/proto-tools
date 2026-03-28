@@ -1,4 +1,6 @@
-"""Tests for MSA class."""
+"""tests/sequence_alignment_tests/test_msas.py
+
+Tests for MSA class."""
 
 import pytest
 

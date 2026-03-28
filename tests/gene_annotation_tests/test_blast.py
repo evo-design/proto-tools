@@ -1,4 +1,6 @@
-"""Tests for BLAST tools."""
+"""tests/gene_annotation_tests/test_blast.py
+
+Tests for BLAST tools."""
 from __future__ import annotations
 
 import warnings

@@ -1,5 +1,5 @@
 """
-structures/utils.py
+bio_programming_tools/entities/structures/utils.py
 
 Utility functions for working with protein structures.
 """
@@ -24,10 +24,10 @@ def load_structure_file(filepath: Path | str) -> str:
     Loads the contents of a structure file (PDB or CIF) and returns it as a string.
 
     Args:
-        filepath: Path to the structure file (PDB or CIF).
+        filepath (Path | str): Path to the structure file (PDB or CIF).
 
     Returns:
-        String of content from the structure file.
+        str: String of content from the structure file.
 
     Raises:
         FileNotFoundError: If the file does not exist
@@ -55,10 +55,10 @@ def detect_structure_format(structure_content: str) -> str:
     Detect if structure content is CIF or PDB format.
 
     Args:
-        structure_content: Structure file content as string
+        structure_content (str): Structure file content as string
 
     Returns:
-        "cif" or "pdb"
+        str: "cif" or "pdb"
     """
     # Strip leading whitespace and get first meaningful lines
     lines = [line.strip() for line in structure_content.split('\n') if line.strip()]
@@ -106,7 +106,7 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
         structure_filepath_or_content (str | Path): Path to the structure file or string of
             content (PDB or CIF).
     Returns:
-        True if the structure content string/file has valid PDB or CIF format, False otherwise
+        bool: True if the structure content string/file has valid PDB or CIF format, False otherwise
     """
     try:
         # Determine if input is a file path or content string
@@ -214,10 +214,10 @@ def convert_pdb_str_to_cif_str(pdb_content: str) -> str:
     Converts a structure from PDB format to mmCIF format using gemmi.
 
     Args:
-        pdb_content: Structure content in PDB format
+        pdb_content (str): Structure content in PDB format
 
     Returns:
-        Structure in mmCIF format (empty string if input is empty)
+        str: Structure in mmCIF format (empty string if input is empty)
     """
     if not pdb_content.strip():
         return ""
@@ -242,10 +242,10 @@ def convert_cif_str_to_pdb_str(cif_content: str) -> str:
     - Residue numbers limited to 9,999
 
     Args:
-        cif_content: Structure content in mmCIF format
+        cif_content (str): Structure content in mmCIF format
 
     Returns:
-        Structure in PDB format (empty string if input is empty)
+        str: Structure in PDB format (empty string if input is empty)
     """
     if not cif_content.strip():
         return ""

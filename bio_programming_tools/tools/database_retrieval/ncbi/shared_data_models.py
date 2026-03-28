@@ -1,8 +1,7 @@
-"""Shared data models and helpers for NCBI Entrez tools.
+"""bio_programming_tools/tools/database_retrieval/ncbi/shared_data_models.py
 
 Contains configuration, FASTA record models, and private helpers used
-by esearch, esummary, and efetch tool modules.
-"""
+by esearch, esummary, and efetch tool modules."""
 
 from __future__ import annotations
 
@@ -31,9 +30,9 @@ class NCBIFastaRecord(BaseModel):
     """A parsed FASTA record.
 
     Attributes:
-        header: FASTA header line (without >).
-        sequence: Sequence string with whitespace stripped.
-        accession: Best-effort accession extracted from header.
+        header (str): FASTA header line (without >).
+        sequence (str): Sequence string with whitespace stripped.
+        accession (str | None): Best-effort accession extracted from header.
     """
 
     header: str = Field(description="FASTA header line")
@@ -47,13 +46,13 @@ class NCBIFetchConfig(BaseConfig):
     """Configuration for NCBI Entrez operations.
 
     Attributes:
-        request_timeout_seconds: HTTP timeout per request.
-        http_retries: Number of retries for failed requests.
-        backoff_seconds: Seconds to wait between retries (doubles after each
+        request_timeout_seconds (int): HTTP timeout per request.
+        http_retries (int): Number of retries for failed requests.
+        backoff_seconds (float): Seconds to wait between retries (doubles after each
             attempt).
-        ncbi_api_key: Optional NCBI API key for higher rate limits.
-        ncbi_email: Optional contact email for NCBI requests.
-        user_agent: Identifier string sent to database APIs with each request.
+        ncbi_api_key (str | None): Optional NCBI API key for higher rate limits.
+        ncbi_email (str | None): Optional contact email for NCBI requests.
+        user_agent (str): Identifier string sent to database APIs with each request.
     """
 
     request_timeout_seconds: int = ConfigField(

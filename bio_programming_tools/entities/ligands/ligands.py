@@ -1,5 +1,5 @@
 """
-ligands.py
+bio_programming_tools/entities/ligands/ligands.py
 
 Contains base class for representing small-molecule ligands.
 """
@@ -28,8 +28,8 @@ class Fragment:
         or a Fragment object.
 
         Args:
-            molecule: SMILES string, RDKit Mol object, or Fragment object
-            name: Optional name for the small molecule
+            molecule (str | Chem.Mol | 'Fragment'): SMILES string, RDKit Mol object, or Fragment object
+            name (str | None): Optional name for the small molecule
         """
         # Initialize the primary representation of the ligand
         self.mol = None
@@ -161,9 +161,9 @@ class Ligands:
         Generate 3D conformers for all fragments in the collection.
 
         Args:
-            num_conformers: Number of conformers to generate.
-            random_seed: Random seed for reproducibility.
-            prune_rms_threshold: RMS threshold to prune similar conformers (Angstroms).
+            num_conformers (int): Number of conformers to generate.
+            random_seed (int | None): Random seed for reproducibility.
+            prune_rms_threshold (float): RMS threshold to prune similar conformers (Angstroms).
 
         Notes:
             Generated conformers are added to the underlying RDKit Mol objects,
@@ -236,11 +236,11 @@ class Ligands:
         chain ID (A, B, C, etc.).
 
         Args:
-            filepath: Optional path to write the PDB file. If None, only returns the string.
-            spacing: Additional spacing (in Angstroms) between fragment bounding boxes. Default: 5.0
+            filepath (str | Path | None): Optional path to write the PDB file. If None, only returns the string.
+            spacing (float): Additional spacing (in Angstroms) between fragment bounding boxes. Default: 5.0
 
         Returns:
-            PDB format string containing all fragments
+            str: PDB format string containing all fragments
         """
         if len(self.fragments) == 0:
             raise ValueError("Cannot generate PDB: no fragments in Ligands object")
@@ -325,9 +325,9 @@ class Ligands:
         Visualize all fragments in a Ligands object in 3D using py3Dmol.
 
         Args:
-            ligands: Ligands object
-            width, height: dimensions of the viewer
-            style: visualization style ('stick', 'sphere', etc.)
+            width (int): Width of the 3D viewer in pixels.
+            height (int): Height of the 3D viewer in pixels.
+            style (Literal['stick', 'sphere', 'line', 'cartoon', 'licorice']): Visualization style ('stick', 'sphere', etc.)
         """
         pdb = self.to_pdb()
         viewer = py3Dmol.view(width=width, height=height)

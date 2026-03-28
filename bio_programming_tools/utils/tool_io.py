@@ -1,5 +1,5 @@
 """
-tool_io.py
+bio_programming_tools/utils/tool_io.py
 
 Base input/output classes for standardized tool results with metadata tracking.
 """
@@ -32,11 +32,14 @@ def InputField(
     established by ``ConfigField`` for Config classes.
 
     Args:
-        hidden: If True, field is hidden from UI completely.
-        advanced: If True, field appears in "Advanced" section of UI.
-        include_in_key: If False, field is excluded from tool cache key
+        default (Any): Default value for the field. Use ``...`` for required fields.
+        title (str): Human-readable title for UI display.
+        description (str): Description of the field for documentation and UI tooltips.
+        hidden (bool): If True, field is hidden from UI completely.
+        advanced (bool): If True, field appears in "Advanced" section of UI.
+        include_in_key (bool): If False, field is excluded from tool cache key
             generation.
-        **kwargs: All other standard Pydantic Field arguments.
+        kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
     """
     json_schema_extra = kwargs.get("json_schema_extra", {})
     json_schema_extra["hidden"] = hidden
@@ -96,6 +99,9 @@ class BaseToolInput(BaseModel):
 
         Override in subclasses to provide cost-aware scheduling. Default is
         uniform cost (1.0), which degrades LPT to round-robin.
+
+        Args:
+            item (Any): A single item from the iterable input field.
         """
         return 1.0
 
@@ -109,6 +115,15 @@ class BaseToolOutput(BaseModel, ABC):
     NOTE: Metadata fields (tool_id, execution_time, success) are optional during
     construction within tool functions. The @tool decorator
     automatically populates these fields when wrapping tool execution.
+
+    Attributes:
+        tool_id (str | None): Unique tool identifier (e.g., ``"blast-search"``).
+        execution_time (float | None): Execution time in seconds.
+        timestamp (datetime): Execution timestamp.
+        success (bool | None): Whether execution succeeded.
+        warnings (list[str]): Non-fatal warnings generated during execution.
+        errors (list[str]): Fatal error messages generated during execution.
+        metadata (dict[str, Any]): Additional tool-specific metadata.
 
     Example:
         >>> class BLASTOutput(BaseToolOutput):
@@ -234,8 +249,8 @@ class BaseToolOutput(BaseModel, ABC):
         Must be implemented by all subclasses of BaseToolOutput.
 
         Args:
-            export_path: Path to the output directory or file location
-            file_format: Format of the file to export the output to
+            export_path (Path | str): Path to the output directory or file location
+            file_format (str): Format of the file to export the output to
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
@@ -248,10 +263,10 @@ class BaseToolOutput(BaseModel, ABC):
         """Export the tool output to a file or directory containing files.
 
         Args:
-            name: Name of the output file or directory (without extension)
-            export_path: Optional path to where the output directory/file will be saved
+            name (str): Name of the output file or directory (without extension)
+            export_path (Path | str | None): Optional path to where the output directory/file will be saved
                 If None, the output directory/file will be saved to the current working directory
-            file_format: Format files will be exported to. If None, uses
+            file_format (str | None): Format files will be exported to. If None, uses
                 default file format (default should be defined by subclass).
         """
 

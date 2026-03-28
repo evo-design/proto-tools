@@ -1,4 +1,6 @@
-"""Tests for the Structure entity."""
+"""tests/structure_tests/test_structure.py
+
+Tests for the Structure entity."""
 
 from pathlib import Path
 

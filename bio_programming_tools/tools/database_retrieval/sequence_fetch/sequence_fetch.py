@@ -1,8 +1,7 @@
-"""Sequence retrieval orchestrator across NCBI Entrez, UniProt, and PDB.
+"""bio_programming_tools/tools/database_retrieval/sequence_fetch/sequence_fetch.py
 
 Thin orchestrator that chains database-specific tools (ncbi, uniprot,
-pdb) with molecule-type routing and cross-fetcher ID resolution.
-"""
+pdb) with molecule-type routing and cross-fetcher ID resolution."""
 
 from __future__ import annotations
 
@@ -73,19 +72,19 @@ class SequenceFetchRequest(BaseModel):
     """Single fetch request.
 
     Attributes:
-        request_id (Optional[str]): Optional caller-provided request identifier.
+        request_id (str | None): Optional caller-provided request identifier.
         target_name (str): Gene, protein, or RNA name to resolve.
         organism (str): Organism name used for disambiguation.
-        sequence_types (List[str]): Requested outputs: protein, dna, rna, or structure.
-        uniprot_id (Optional[str]): UniProt accession override.
-        genbank_accession (Optional[str]): GenBank accession override.
-        refseq_accession (Optional[str]): RefSeq accession override.
-        pdb_id (Optional[str]): PDB accession override.
-        gene_id (Optional[str]): NCBI Gene ID override.
-        protein_id (Optional[str]): NCBI protein accession override.
-        transcript_id (Optional[str]): Transcript accession override.
-        genomic_coordinates (Optional[str]): Genomic interval like NC_000913.3:1-100:+.
-        additional_ids (Dict[str, str]): Extra IDs used for custom routing.
+        sequence_types (list[Literal['protein', 'dna_genomic', 'dna_cds', 'rna_transcript', 'rna_premrna', 'structure']]): Requested outputs: protein, dna, rna, or structure.
+        uniprot_id (str | None): UniProt accession override.
+        genbank_accession (str | None): GenBank accession override.
+        refseq_accession (str | None): RefSeq accession override.
+        pdb_id (str | None): PDB accession override.
+        gene_id (str | None): NCBI Gene ID override.
+        protein_id (str | None): NCBI protein accession override.
+        transcript_id (str | None): Transcript accession override.
+        genomic_coordinates (str | None): Genomic interval like NC_000913.3:1-100:+.
+        additional_ids (dict[str, str]): Extra IDs used for custom routing.
     """
 
     request_id: Optional[str] = Field(default=None, description="Optional request identifier")
@@ -139,7 +138,7 @@ class SequenceFetchInput(BaseToolInput):
     """Input for sequence retrieval.
 
     Attributes:
-        requests (List[SequenceFetchRequest]): One or more retrieval requests.
+        requests (list[SequenceFetchRequest]): One or more retrieval requests.
     """
 
     requests: List[SequenceFetchRequest] = InputField(description="One or more retrieval requests")
@@ -167,13 +166,13 @@ class FetchedSequence(BaseModel):
     """Sequence payload returned by one source.
 
     Attributes:
-        sequence_type (str): Requested type of this sequence.
-        source_database (str): Upstream source database label.
-        accession (Optional[str]): Source accession identifier.
+        sequence_type (Literal['protein', 'dna_genomic', 'dna_cds', 'rna_transcript', 'rna_premrna']): Requested type of this sequence.
+        source_database (Literal['ncbi', 'uniprot', 'pdb']): Upstream source database label.
+        accession (str | None): Source accession identifier.
         sequence (str): Retrieved sequence string.
         length (int): Sequence length.
-        checksum_sha256 (Optional[str]): SHA256 checksum of sequence.
-        source_url (Optional[str]): Source URL for provenance.
+        checksum_sha256 (str | None): SHA256 checksum of sequence.
+        source_url (str | None): Source URL for provenance.
         inferred (bool): True if sequence is inferred, not directly curated.
     """
 
@@ -200,10 +199,10 @@ class FetchedStructure(BaseModel):
 
     Attributes:
         pdb_id (str): PDB accession.
-        source_database (str): Upstream source database label.
-        title (Optional[str]): Structure title.
-        method (Optional[str]): Experimental method.
-        resolution (Optional[float]): Resolution in angstroms.
+        source_database (Literal['pdb']): Upstream source database label.
+        title (str | None): Structure title.
+        method (str | None): Experimental method.
+        resolution (float | None): Resolution in angstroms.
         source_url (str): Canonical URL for this structure.
     """
 
@@ -222,13 +221,13 @@ class SequenceFetchResult(BaseModel):
         request_id (str): Request identifier used in this result.
         target_name (str): Original target name.
         organism (str): Original organism name.
-        requested_types (List[str]): Requested output molecule types.
-        status (str): One of success, warning, or failed.
-        fetched_sequences (List[FetchedSequence]): Retrieved sequence records.
-        fetched_structures (List[FetchedStructure]): Retrieved structure records.
-        resolved_ids (Dict[str, str]): IDs resolved or used during retrieval.
-        warnings (List[str]): Non-fatal warnings.
-        errors (List[str]): Fatal or partial failure messages.
+        requested_types (list[str]): Requested output molecule types.
+        status (Literal['success', 'warning', 'failed']): One of success, warning, or failed.
+        fetched_sequences (list[FetchedSequence]): Retrieved sequence records.
+        fetched_structures (list[FetchedStructure]): Retrieved structure records.
+        resolved_ids (dict[str, str]): IDs resolved or used during retrieval.
+        warnings (list[str]): Non-fatal warnings.
+        errors (list[str]): Fatal or partial failure messages.
     """
 
     request_id: str = Field(description="Request identifier")
@@ -256,12 +255,12 @@ class SequenceFetchOutput(BaseToolOutput):
     """Output from sequence retrieval.
 
     Attributes:
-        results (List[SequenceFetchResult]): Per-request retrieval outcomes.
-        num_requests (int): Number of requests in this run.
-        num_success (int): Number of successful request results.
-        num_warning (int): Number of warning request results.
-        num_completed (int): Number of successful or warning request results.
-        num_failed (int): Number of failed request results.
+        results (list[SequenceFetchResult]): Per-request retrieval outcomes.
+        num_requests: Number of requests in this run.
+        num_success: Number of successful request results.
+        num_warning: Number of warning request results.
+        num_completed: Number of successful or warning request results.
+        num_failed: Number of failed request results.
     """
 
     results: List[SequenceFetchResult] = Field(
@@ -345,8 +344,8 @@ class SequenceFetchConfig(BaseConfig):
         fail_on_type_mismatch (bool): Treat molecule type mismatches as errors
             instead of warnings.
         include_sequence_checksums (bool): Include SHA256 checksums in outputs.
-        ncbi_api_key (Optional[str]): Optional API key for NCBI Entrez.
-        ncbi_email (Optional[str]): Optional contact email for NCBI requests.
+        ncbi_api_key (str | None): Optional API key for NCBI Entrez.
+        ncbi_email (str | None): Optional contact email for NCBI requests.
         user_agent (str): Identifier string sent to database APIs with each
             request.
     """
@@ -526,7 +525,7 @@ def run_sequence_fetch(
 
     Args:
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
-        config (SequenceFetchConfig): Timeout and validation settings.
+        config (SequenceFetchConfig | None): Timeout and validation settings.
 
     Returns:
         SequenceFetchOutput: Per-request retrieval status, sequences, and metadata.

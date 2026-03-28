@@ -1,4 +1,6 @@
-"""Evo1 scoring tool."""
+"""bio_programming_tools/tools/causal_models/evo1/evo1_score.py
+
+Evo1 scoring tool."""
 
 from __future__ import annotations
 
@@ -38,7 +40,7 @@ class Evo1ScoringInput(BaseToolInput):
     """Input for Evo1 DNA sequence scoring.
 
     Attributes:
-        sequences: DNA sequences to score.
+        sequences (list[str]): DNA sequences to score.
     """
 
     sequences: List[str] = InputField(description="DNA sequences to score")
@@ -66,7 +68,7 @@ class Evo1ScoringConfig(BaseConfig):
     position and summing the log probabilities.
 
     Attributes:
-        model_name (str): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
+        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
         batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors. Default: ``1``.
@@ -141,7 +143,7 @@ def run_evo1_score(
     Args:
         inputs (Evo1ScoringInput): Validated input containing DNA sequences
             to score.
-        config (Evo1ScoringConfig): Scoring configuration specifying model,
+        config (Evo1ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
     Returns:

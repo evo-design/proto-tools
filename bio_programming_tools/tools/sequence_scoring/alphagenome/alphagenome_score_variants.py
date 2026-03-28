@@ -1,4 +1,6 @@
-"""AlphaGenome batched variant scoring tool."""
+"""bio_programming_tools/tools/sequence_scoring/alphagenome/alphagenome_score_variants.py
+
+AlphaGenome batched variant scoring tool."""
 from __future__ import annotations
 
 import csv
@@ -39,7 +41,7 @@ class AlphaGenomeScoreVariantsInput(BaseToolInput):
     """Input for batched AlphaGenome variant scoring.
 
     Attributes:
-        variants (List[AlphaGenomeVariant]): Variants to score.
+        variants (list[AlphaGenomeVariant]): Variants to score.
             A single variant is auto-wrapped into a list.
     """
 
@@ -63,7 +65,7 @@ class AlphaGenomeScoreVariantsOutput(BaseToolOutput):
     """Output from batched AlphaGenome variant scoring.
 
     Attributes:
-        results (List[AlphaGenomeScoreOutput]): Per-variant score outputs.
+        results (list[AlphaGenomeScoreOutput]): Per-variant score outputs.
     """
 
     results: List[AlphaGenomeScoreOutput] = Field(
@@ -116,9 +118,9 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 
     Attributes:
         model_version (str): AlphaGenome Hugging Face model version.
-        variant_scorers (Optional[List[str]]): Scorer names from the library's
+        variant_scorers (list[VariantScorerName] | None): Scorer names from the library's
             ``RECOMMENDED_VARIANT_SCORERS``. ``None`` uses all recommended.
-        organism (Literal["human", "mouse"]): Organism for predictions.
+        organism (Literal['human', 'mouse']): Organism for predictions.
         device (str): Device to run inference on.
     """
 

@@ -1,9 +1,8 @@
-"""UniProt fetch tool for entry lookup, search, and cross-reference extraction.
+"""bio_programming_tools/tools/database_retrieval/uniprot/uniprot_fetch.py
 
 Provides a single-API-call interface to the UniProt REST API for retrieving
 protein entries by accession or searching by gene name and organism with
-ranked result selection.
-"""
+ranked result selection."""
 
 from __future__ import annotations
 
@@ -37,12 +36,12 @@ class UniProtFetchInput(BaseToolInput):
     """Input for UniProt fetch operations.
 
     Attributes:
-        uniprot_id: UniProt accession for direct entry lookup.
-        target_name: Gene or protein name for search-based lookup.
-        organism: Organism name for disambiguation during search.
-        prefer_pdb_crossref: When searching, prefer entries that have linked
+        uniprot_id (str | None): UniProt accession for direct entry lookup.
+        target_name (str | None): Gene or protein name for search-based lookup.
+        organism (str | None): Organism name for disambiguation during search.
+        prefer_pdb_crossref (bool): When searching, prefer entries that have linked
             PDB structures.
-        max_candidates: Maximum number of search results to evaluate when
+        max_candidates (int): Maximum number of search results to evaluate when
             ranking.
     """
 
@@ -83,15 +82,15 @@ class UniProtFetchOutput(BaseToolOutput):
     """Output from UniProt fetch tool.
 
     Attributes:
-        accession: Primary UniProt accession.
-        sequence: Protein sequence string.
-        length: Sequence length.
-        entry_type: Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for
+        accession (str): Primary UniProt accession.
+        sequence (str | None): Protein sequence string.
+        length (int | None): Sequence length.
+        entry_type (str | None): Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for
             curated entries).
-        gene_names: Extracted gene name symbols.
-        pdb_crossrefs: PDB structure IDs linked to this protein entry.
-        source_url: UniProt entry URL.
-        raw_entry: Complete UniProt JSON record for advanced programmatic
+        gene_names (list[str]): Extracted gene name symbols.
+        pdb_crossrefs (list[str]): PDB structure IDs linked to this protein entry.
+        source_url (str): UniProt entry URL.
+        raw_entry (dict[str, Any]): Complete UniProt JSON record for advanced programmatic
             access.
     """
 
@@ -136,11 +135,11 @@ class UniProtFetchConfig(BaseConfig):
     """Configuration for UniProt fetch operations.
 
     Attributes:
-        request_timeout_seconds: HTTP timeout per request.
-        http_retries: Number of retries for failed requests.
-        backoff_seconds: Seconds to wait between retries (doubles after each
+        request_timeout_seconds (int): HTTP timeout per request.
+        http_retries (int): Number of retries for failed requests.
+        backoff_seconds (float): Seconds to wait between retries (doubles after each
             attempt).
-        user_agent: Identifier string sent to database APIs with each request.
+        user_agent (str): Identifier string sent to database APIs with each request.
     """
 
     request_timeout_seconds: int = ConfigField(
@@ -205,8 +204,8 @@ def run_uniprot_fetch(
     PDB cross-reference availability.
 
     Args:
-        inputs: A UniProt fetch request with accession or name+organism.
-        config: HTTP timeout and retry settings.
+        inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
+        config (UniProtFetchConfig | None): HTTP timeout and retry settings.
 
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and

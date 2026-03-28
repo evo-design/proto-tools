@@ -1,5 +1,5 @@
 """
-Structure quality metrics from PDB files.
+bio_programming_tools/tools/structure_prediction/structure_metrics/structure_metrics.py
 
 Computes structural quality metrics including longest alpha helix length
 and gyration radius from PDB files, used to filter out disordered or
@@ -43,7 +43,7 @@ class StructureMetricsInput(BaseToolInput):
     """Input for structure quality metrics computation.
 
     Attributes:
-        pdb_paths (List[str]): List of paths to PDB files to analyze.
+        pdb_paths (list[str]): List of paths to PDB files to analyze.
     """
 
     pdb_paths: List[str] = InputField(
@@ -64,7 +64,7 @@ class StructureMetricsOutput(BaseToolOutput):
     """Output from structure metrics computation.
 
     Attributes:
-        metrics (List[StructureMetrics]): Per-structure metrics including
+        metrics (list[StructureMetrics]): Per-structure metrics including
             longest alpha helix length and gyration radius.
     """
 
@@ -136,7 +136,7 @@ def run_structure_metrics(
 
     Args:
         inputs (StructureMetricsInput): Validated input containing PDB file paths.
-        config (StructureMetricsConfig): Configuration (no parameters needed).
+        config (StructureMetricsConfig | None): Configuration (no parameters needed).
 
     Returns:
         StructureMetricsOutput: Per-structure metrics.

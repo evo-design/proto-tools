@@ -1,5 +1,5 @@
 """
-splice_transformer.py
+bio_programming_tools/tools/rna_splicing/splice_transformer/splice_transformer.py
 
 Tissue-specific splice site prediction using SpliceTransformer.
 """
@@ -89,17 +89,17 @@ class SpliceTransformerInput(BaseToolInput):
     splicing prediction.
 
     Attributes:
-        target_seqs (List[str]): RNA or DNA sequence(s) on which to make splicing
+        target_seqs (list[str]): RNA or DNA sequence(s) on which to make splicing
             predictions. These are the central sequences where splice sites will
             be predicted at single-nucleotide resolution. All sequences in the
             batch should have the same length (typically 1000bp).
 
-        left_contexts (List[str]): Sequence(s) providing left (5') context for
+        left_contexts (list[str]): Sequence(s) providing left (5') context for
             each target sequence. Must have the same number of sequences as
             ``target_seqs``. All left context sequences must have the same length
             (typically 4000bp) to provide sufficient context for accurate prediction.
 
-        right_contexts (List[str]): Sequence(s) providing right (3') context for
+        right_contexts (list[str]): Sequence(s) providing right (3') context for
             each target sequence. Must have the same number of sequences as
             ``target_seqs``. All right context sequences must have the same length
             (typically 4000bp) matching the left context.
@@ -293,7 +293,7 @@ def run_splice_transformer(
     Args:
         inputs (SpliceTransformerInput): Validated input containing target sequences
             and their left/right context sequences.
-        config (SpliceTransformerConfig): Validated SpliceTransformer configuration
+        config (SpliceTransformerConfig | None): Validated SpliceTransformer configuration
             specifying context length and device settings.
 
     Returns:

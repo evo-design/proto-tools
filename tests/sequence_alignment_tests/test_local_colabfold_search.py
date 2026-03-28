@@ -1,4 +1,6 @@
-"""Tests for local ColabFold MSA search tool."""
+"""tests/sequence_alignment_tests/test_local_colabfold_search.py
+
+Tests for local ColabFold MSA search tool."""
 
 import logging
 import subprocess

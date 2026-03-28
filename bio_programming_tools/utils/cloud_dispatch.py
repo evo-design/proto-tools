@@ -1,5 +1,5 @@
 """
-cloud_dispatch.py — Pluggable cloud backend for ToolPool.
+bio_programming_tools/utils/cloud_dispatch.py
 
 Contains retry logic, fan-out, and batch dispatch for cloud execution.
 Imported by tool_pool.py when remote= is truthy. Can be replaced entirely
@@ -40,19 +40,20 @@ def _cloud_dispatch_with_retry(
     """Dispatch a single item to the cloud backend with retry on transient failures.
 
     Args:
-        backend: The registered execution backend callable.
-        tool_key: Tool registry key.
-        item_input: Input model for this single item (or partition).
-        config: Tool config.
-        max_retries: Maximum retry attempts for transient failures.
+        backend (Callable): The registered execution backend callable.
+        tool_key (str): Tool registry key.
+        item_input (Any): Input model for this single item (or partition).
+        config (Any): Tool config.
+        max_retries (int): Maximum retry attempts for transient failures.
 
     Returns:
-        The backend result.
+        Any: The backend result.
 
     Raises:
         RuntimeError: If backend returns None (tool not available for remote execution).
-        ConnectionError/TimeoutError: After all retries exhausted.
-        Any other exception: Immediately (non-retryable).
+        ConnectionError: After all retries exhausted (transient failure).
+        TimeoutError: After all retries exhausted (transient failure).
+        Exception: Any non-retryable exception is raised immediately.
     """
     for attempt in range(max_retries):
         try:
@@ -87,6 +88,14 @@ def _fan_out_single_calls(
 
     Fallback for when no batch backend is registered. Each call is
     individually retried on transient failures.
+
+    Args:
+        backend (Callable): The registered execution backend callable.
+        tool_key (str): Tool registry key.
+        item_inputs (list[Any]): Single-item input models, one per work item.
+        config (Any): Tool config passed to each backend call.
+        work_items (list[WorkItem]): Work items with original index tracking.
+        max_cloud_workers (int): Cap on concurrent cloud workers.
     """
     n_workers = min(len(work_items), max_cloud_workers)
     results: list[Any] = [None] * len(work_items)
@@ -154,11 +163,18 @@ def dispatch_cloud_items(
     falling back to N × single backend calls via ThreadPoolExecutor.
 
     Args:
-        max_cloud_workers: Cap on concurrent cloud workers. Limits both
+        backend (Callable): The registered execution backend callable.
+        tool_key (str): Tool registry key.
+        work_items (list[WorkItem]): Work items with original index tracking.
+        inputs (Any): Original tool input model (used as template for single-item inputs).
+        config (Any): Tool config passed to each backend call.
+        iterable_input_field (str): Name of the input field containing the iterable list.
+        iterable_output_field (str): Name of the output field containing the result list.
+        max_cloud_workers (int): Cap on concurrent cloud workers. Limits both
             the fan-out ThreadPoolExecutor and batch chunk size.
 
     Returns:
-        (indexed_results, warnings, errors, last_result)
+        tuple[list[tuple[int, Any]], list[str], list[str], Any]: (indexed_results, warnings, errors, last_result)
     """
     from bio_programming_tools.tools.tool_registry import ToolRegistry
 

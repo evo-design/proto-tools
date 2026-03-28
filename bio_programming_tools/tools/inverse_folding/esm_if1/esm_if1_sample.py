@@ -1,4 +1,6 @@
-"""ESM-IF1/ProteinDPO sampling tool."""
+"""bio_programming_tools/tools/inverse_folding/esm_if1/esm_if1_sample.py
+
+ESM-IF1/ProteinDPO sampling tool."""
 from __future__ import annotations
 
 import logging
@@ -33,13 +35,13 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
     """Configuration for ESM-IF1/ProteinDPO sequence sampling.
 
     Attributes:
-        weights_variant: Which model weights to use. 'esmif' loads vanilla ESM-IF1,
+        weights_variant (Literal['esmif', 'protein_dpo']): Which model weights to use. 'esmif' loads vanilla ESM-IF1,
             'protein_dpo' loads DPO-aligned weights optimized for protein stability.
-        num_sequences_per_structure: Total number of sequences to generate per structure.
-        batch_size: Number of sequences to process simultaneously on GPU.
-        temperature: Controls randomness in sampling from logits.
-        excluded_amino_acids: Amino acids disallowed in the designed sequence.
-        seed: Random seed for sampling reproducibility.
+        num_sequences_per_structure (int): Total number of sequences to generate per structure.
+        batch_size (int | None): Number of sequences to process simultaneously on GPU.
+        temperature (float): Controls randomness in sampling from logits.
+        excluded_amino_acids (list[str] | None): Amino acids disallowed in the designed sequence.
+        seed (int): Random seed for sampling reproducibility.
     """
 
     weights_variant: Literal["esmif", "protein_dpo"] = ConfigField(
@@ -55,8 +57,8 @@ class ESMIF1Sequences(DesignedSequences):
     """Designed sequences from ESM-IF1/ProteinDPO.
 
     Attributes:
-        sequences: Designed amino acid sequences.
-        log_likelihoods: Average log likelihood of each designed sequence
+        sequences (list[str]): Designed amino acid sequences.
+        log_likelihoods (list[float]): Average log likelihood of each designed sequence
             under the model.
     """
 
@@ -110,11 +112,11 @@ def run_esm_if1_sample(
     """Sample protein sequences using ESM-IF1/ProteinDPO.
 
     Args:
-        inputs: Structure inputs with optional chain/fixed position constraints.
-        config: Configuration including weights variant, temperature, etc.
+        inputs (ESMIF1SampleInput): Structure inputs with optional chain/fixed position constraints.
+        config (ESMIF1SampleConfig | None): Configuration including weights variant, temperature, etc.
 
     Returns:
-        ESMIF1SampleOutput with designed sequences for each input structure.
+        ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
     """
     if config.excluded_amino_acids:
         raise ValueError(

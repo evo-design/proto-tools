@@ -1,8 +1,7 @@
-"""Shared data models for causal/autoregressive language model tools (Evo2, ProGen2).
+"""bio_programming_tools/tools/causal_models/shared_data_models.py
 
 Contains base schemas for scoring and sampling operations
-shared across all causal/autoregressive language models.
-"""
+shared across all causal/autoregressive language models."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,7 +25,7 @@ class CausalModelScoringInput(BaseToolInput):
     """Input for causal model sequence scoring tools.
 
     Attributes:
-        sequences: Sequences to score. Can be provided as a single string
+        sequences (list[str]): Sequences to score. Can be provided as a single string
             or a list of strings.
     """
 
@@ -50,10 +49,10 @@ class CausalModelScoringConfig(BaseConfig):
     """Base configuration for causal model sequence scoring.
 
     Attributes:
-        batch_size: Number of sequences to process simultaneously on GPU.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors.
-        device: Device to run the model on.
+        device (str): Device to run the model on.
     """
 
     batch_size: int = ConfigField(
@@ -78,9 +77,9 @@ class SequenceScores(BaseModel):
     via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
 
     Attributes:
-        metrics: Dictionary of scalar scoring metrics.
-        logits: Optional per-position logits array.
-        vocab: Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
+        logits (list[list[float]] | None): Optional per-position logits array.
+        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
     metrics: Dict[str, float] = Field(
@@ -123,7 +122,7 @@ class CausalModelScoringOutput(BaseToolOutput):
     """Standardized output for causal model sequence scoring tools.
 
     Attributes:
-        scores (List[SequenceScores]): List of scoring outputs, one per input
+        scores (list[SequenceScores]): List of scoring outputs, one per input
             sequence. Each entry contains metrics (log_likelihood,
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
@@ -198,7 +197,7 @@ class CausalModelSampleInput(BaseToolInput):
     """Input for causal model sampling/generation tools.
 
     Attributes:
-        sequences: Prompt sequences to condition generation on.
+        sequences (list[str]): Prompt sequences to condition generation on.
             Can be provided as a single string or a list of strings.
     """
 
@@ -222,7 +221,7 @@ class CausalModelSampleConfig(BaseConfig):
     """Base configuration for causal model sampling/generation.
 
     Attributes:
-        device: Device to run the model on.
+        device (str): Device to run the model on.
     """
 
     device: str = ConfigField(

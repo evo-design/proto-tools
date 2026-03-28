@@ -1,4 +1,6 @@
-"""Tests for structure prediction shared input data models."""
+"""tests/structure_prediction_tests/test_sp_inputs.py
+
+Tests for structure prediction shared input data models."""
 from __future__ import annotations
 
 import pytest
