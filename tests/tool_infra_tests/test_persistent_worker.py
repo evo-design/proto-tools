@@ -625,7 +625,7 @@ def test_ld_library_path_via_set_directive(
 )
 def test_torch_home(monkeypatch, tmp_path: Path, has_venv, expect_torch_home):
     """TORCH_HOME = {venv}/cache/torch when venv provided (IN_ENV mode)."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     tool_env_path = tmp_path if has_venv else None
     env = _build_subprocess_env(device="cpu", tool_env_path=tool_env_path)
 
@@ -1017,24 +1017,26 @@ def test_file_fallback_end_to_end(tmp_path: Path):
         worker.stop()
 
 
-# ── BPT_MODEL_CACHE and HF_HOME ─────────────────────────────────────────────
+# ── PROTO_MODEL_CACHE and HF_HOME ─────────────────────────────────────────────
 
 
-def test_default_sets_hf_home_to_model_cache(monkeypatch, tmp_path: Path):
-    """Default mode sets HF_HOME to {repo}/model_cache/huggingface/."""
-    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
-    # Mock _load_bpt_env to return empty (no .bpt.env influence)
-    monkeypatch.setattr(
-        "bio_programming_tools.utils.persistent_worker._load_bpt_env",
-        lambda: {},
-    )
-    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
-    assert env["HF_HOME"].endswith("model_cache/huggingface")
+def test_default_sets_hf_home_to_proto_model_cache(monkeypatch, tmp_path: Path):
+    """Default mode sets HF_HOME to {PROTO_HOME}/proto_model_cache/huggingface/."""
+    monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path / "proto_home"))
+    # Clear the lru_cache so monkeypatched PROTO_HOME takes effect
+    from bio_programming_tools.utils.proto_home import get_proto_home
+    get_proto_home.cache_clear()
+    try:
+        env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
+        assert env["HF_HOME"] == str(tmp_path / "proto_home" / "proto_model_cache" / "huggingface")
+    finally:
+        get_proto_home.cache_clear()
 
 
 def test_in_env_sets_hf_home(monkeypatch, tmp_path: Path):
     """IN_ENV mode sets HF_HOME to {venv}/cache/huggingface/."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["HF_HOME"] == str(tmp_path / "cache" / "huggingface")
 
@@ -1042,7 +1044,7 @@ def test_in_env_sets_hf_home(monkeypatch, tmp_path: Path):
 def test_shared_path_sets_hf_home(monkeypatch, tmp_path: Path):
     """Absolute path mode sets HF_HOME to /path/huggingface/."""
     shared = str(tmp_path / "shared")
-    monkeypatch.setenv("BPT_MODEL_CACHE", shared)
+    monkeypatch.setenv("PROTO_MODEL_CACHE", shared)
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["HF_HOME"] == str(Path(shared) / "huggingface")
 
@@ -1050,14 +1052,14 @@ def test_shared_path_sets_hf_home(monkeypatch, tmp_path: Path):
 def test_shared_path_overrides_torch_home(monkeypatch, tmp_path: Path):
     """Absolute path mode overrides TORCH_HOME to /path/torch/."""
     shared = str(tmp_path / "shared")
-    monkeypatch.setenv("BPT_MODEL_CACHE", shared)
+    monkeypatch.setenv("PROTO_MODEL_CACHE", shared)
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["TORCH_HOME"] == str(Path(shared) / "torch")
 
 
 def test_none_mode_passes_through_hf_home(monkeypatch, tmp_path: Path):
     """NONE mode passes through parent's HF_HOME."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "NONE")
     monkeypatch.setenv("HF_HOME", "/custom/hf/cache")
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["HF_HOME"] == "/custom/hf/cache"
@@ -1065,28 +1067,28 @@ def test_none_mode_passes_through_hf_home(monkeypatch, tmp_path: Path):
 
 def test_none_mode_no_hf_home_override(monkeypatch, tmp_path: Path):
     """NONE mode without parent HF_HOME does not set it."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "NONE")
     monkeypatch.delenv("HF_HOME", raising=False)
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert "HF_HOME" not in env
 
 
-def test_bpt_weights_dir_passthrough(monkeypatch):
-    """BPT_*_WEIGHTS_DIR vars are passed through to subprocess."""
-    monkeypatch.setenv("BPT_FAMPNN_WEIGHTS_DIR", "/custom/fampnn")
-    monkeypatch.setenv("BPT_ESM_IF1_WEIGHTS_DIR", "/custom/esmif")
+def test_proto_weights_dir_passthrough(monkeypatch):
+    """PROTO_*_WEIGHTS_DIR vars are passed through to subprocess."""
+    monkeypatch.setenv("PROTO_FAMPNN_WEIGHTS_DIR", "/custom/fampnn")
+    monkeypatch.setenv("PROTO_ESM_IF1_WEIGHTS_DIR", "/custom/esmif")
 
     env = _build_subprocess_env(device="cpu")
 
-    assert env["BPT_FAMPNN_WEIGHTS_DIR"] == "/custom/fampnn"
-    assert env["BPT_ESM_IF1_WEIGHTS_DIR"] == "/custom/esmif"
+    assert env["PROTO_FAMPNN_WEIGHTS_DIR"] == "/custom/fampnn"
+    assert env["PROTO_ESM_IF1_WEIGHTS_DIR"] == "/custom/esmif"
 
 
-def test_bpt_weights_mode_passthrough(monkeypatch, tmp_path: Path):
-    """BPT_MODEL_CACHE is passed through to subprocess."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "/shared/weights")
+def test_proto_weights_mode_passthrough(monkeypatch, tmp_path: Path):
+    """PROTO_MODEL_CACHE is passed through to subprocess."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "/shared/weights")
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
-    assert env["BPT_MODEL_CACHE"] == "/shared/weights"
+    assert env["PROTO_MODEL_CACHE"] == "/shared/weights"
 
 
 def test_hf_hub_cache_not_in_env(monkeypatch):

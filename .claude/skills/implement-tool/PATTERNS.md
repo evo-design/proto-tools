@@ -111,8 +111,8 @@ source standalone_helpers.sh
 pip install uv
 uv pip install -r requirements.txt
 
-# Resolve weight directory based on BPT_MODEL_CACHE
-bpt_resolve_weights_dir my_tool
+# Resolve weight directory based on PROTO_MODEL_CACHE
+proto_resolve_weights_dir my_tool
 
 if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
     echo "Downloading model weights..."
@@ -266,14 +266,14 @@ source standalone_helpers.sh
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_pytorch
-# If torchvision/torchaudio needed: bpt_install_pytorch "" torchvision
+proto_install_pytorch
+# If torchvision/torchaudio needed: proto_install_pytorch "" torchvision
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
 # Non-HF tools that download weights:
-# bpt_resolve_weights_dir my_tool
+# proto_resolve_weights_dir my_tool
 # wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
 
 echo "{ToolName} setup complete!"
@@ -318,7 +318,7 @@ source standalone_helpers.sh
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_jax MYTOOL
+proto_install_jax MYTOOL
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

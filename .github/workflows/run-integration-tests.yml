@@ -39,7 +39,7 @@ jobs:
     - name: Cache micromamba binary
       uses: actions/cache@v4
       with:
-        path: .micromamba
+        path: ~/.proto/.micromamba
         key: ${{ runner.os }}-micromamba
 
     - name: Install package with dev dependencies

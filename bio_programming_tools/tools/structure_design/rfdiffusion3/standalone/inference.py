@@ -155,9 +155,9 @@ class RFdiffusion3Model:
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import resolve_weights_dir
 
-        bpt_dir = resolve_weights_dir("rfdiffusion3")
-        if bpt_dir:
-            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = bpt_dir
+        weights_dir = resolve_weights_dir("rfdiffusion3")
+        if weights_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = weights_dir
 
         # Try venv bin directory first, then PATH
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"

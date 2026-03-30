@@ -151,4 +151,4 @@ where = ["."]
 include = ["bio_programming_tools*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif"]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib"]

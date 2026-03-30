@@ -32,7 +32,7 @@ _params_dir: str | None = None
 def _resolve_params_dir() -> str:
     """Locate the AlphaFold2 parameters directory.
 
-    Checks BPT_MODEL_CACHE first, then falls back to the venv-local
+    Checks PROTO_MODEL_CACHE first, then falls back to the venv-local
     location at ``$TOOL_VENV_PATH/data/params/``.
     """
     global _params_dir
@@ -41,9 +41,9 @@ def _resolve_params_dir() -> str:
 
     from standalone_helpers import resolve_weights_dir
 
-    bpt_dir = resolve_weights_dir("alphafold2")
-    if bpt_dir:
-        params_dir = Path(bpt_dir) / "params"
+    weights_dir = resolve_weights_dir("alphafold2")
+    if weights_dir:
+        params_dir = Path(weights_dir) / "params"
     else:
         # NONE mode or no venv: use venv-local default
         venv_path = os.environ.get("TOOL_VENV_PATH")

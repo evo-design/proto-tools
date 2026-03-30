@@ -465,6 +465,10 @@ class ToolInstance:
                 f"'{self.tool_name}' may not be compatible with your "
                 f"system. Check logs for details.{hint}"
             )
+        # Show one-time notice if using default storage locations
+        from .proto_home import show_first_run_notice
+        show_first_run_notice()
+
         if not self.env_path.exists() or not self._is_env_ok():
             # Check for a stale status from a previous session
             status_file = self.env_path / "STATUS.txt"
@@ -1023,40 +1027,25 @@ class ToolInstance:
     # ------------------------------------------------------------------
     @staticmethod
     def _get_tool_envs_root() -> Path:
-        """Determine the ``tool_envs`` root directory.
+        """Return ``PROTO_HOME/proto_tool_envs/``.
 
-        For editable installs (``pip install -e .``), finds the project root
-        by walking up from this file looking for ``pyproject.toml``, then
-        uses ``project_root/tool_envs/``.
-
-        For non-editable installs (``pip install .``), the package is copied
-        into site-packages and there's no project root.  Falls back to a
-        user-level cache directory:
-        ``$XDG_CACHE_HOME/bio_programming_tools/tool_envs/`` or
-        ``~/.cache/bio_programming_tools/tool_envs/``.
+        Always uses ``PROTO_HOME`` regardless of install mode.
+        See :func:`~.proto_home.get_proto_home`.
         """
-        for parent in Path(__file__).resolve().parents:
-            if (parent / "pyproject.toml").exists():
-                return parent / "tool_envs"
-        cache_home = Path(
-            os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
-        )
-        return cache_home / "bio_programming_tools" / "tool_envs"
+        from .proto_home import get_proto_home
+
+        return get_proto_home() / "proto_tool_envs"
 
     @staticmethod
     def _get_micromamba_root() -> Path:
-        """Determine the ``.micromamba`` directory for global micromamba install.
+        """Return ``PROTO_HOME/.micromamba/``.
 
-        Uses same logic as tool_envs: editable install → project root, otherwise
-        → user cache directory.
+        Always uses ``PROTO_HOME`` regardless of install mode.
+        See :func:`~.proto_home.get_proto_home`.
         """
-        for parent in Path(__file__).resolve().parents:
-            if (parent / "pyproject.toml").exists():
-                return parent / ".micromamba"
-        cache_home = Path(
-            os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
-        )
-        return cache_home / "bio_programming_tools" / ".micromamba"
+        from .proto_home import get_proto_home
+
+        return get_proto_home() / ".micromamba"
 
     @staticmethod
     def _ensure_micromamba() -> Path:

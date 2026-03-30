@@ -2,6 +2,7 @@
 .vscode
 .env
 .env.local
+.proto.env
 .bpt.env
 .env.development.local
 .env.test.local
@@ -13,7 +14,9 @@ __pycache__/
 .ipynb_checkpoints/
 data/
 tool_envs
+proto_tool_envs
 model_cache
+proto_model_cache
 .micromamba
 *.hmm
 *mini_mmseqs_db

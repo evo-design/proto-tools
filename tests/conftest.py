@@ -195,8 +195,9 @@ class EnvReportCollector:
 
     def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
         """Get venv path and status for a tool."""
-        project_root = Path(__file__).parent.parent
-        venvs_dir = project_root / "tool_envs"
+        from bio_programming_tools.utils.tool_instance import ToolInstance
+
+        venvs_dir = ToolInstance._get_tool_envs_root()
 
         # Look for venv with tool name
         for venv_dir in venvs_dir.glob(f"*{tool_name}*"):
@@ -523,23 +524,6 @@ def pytest_configure(config):
         # Capture parent process environment before any tools run
         capture_parent_env()
 
-        # Clean tool_envs/ directory to force fresh rebuilds
-        project_root = Path(__file__).parent.parent
-        venvs_dir = project_root / "tool_envs"
-        if venvs_dir.exists():
-            logger = logging.getLogger("bio_programming_tools.tests")
-            logger.warning(
-                f"Cleaning {venvs_dir} for fresh environment rebuilds "
-                "(this may take a while on network filesystems)..."
-            )
-            # Use subprocess instead of shutil.rmtree to avoid NFS hang issues
-            subprocess.run(
-                ["rm", "-rf", str(venvs_dir)],
-                check=False,
-                capture_output=True,
-            )
-            logger.warning(f"Finished cleaning {venvs_dir}")
-
 
 def pytest_runtest_logstart(nodeid, location):
     """Log when a test starts (DEBUG level, file only)."""
@@ -812,7 +796,7 @@ def setup_test_logging(request):
     # Use same log directory as application logs (logs/ in project root)
     project_root = Path(__file__).parent.parent
     log_dir = os.environ.get(
-        "BIO_PROGRAMMING_TOOLS_LOG_DIR", str(project_root / "logs")
+        "PROTO_LOG_DIR", str(project_root / "logs")
     )
 
     # Get options from command line
@@ -867,6 +851,27 @@ def setup_test_logging(request):
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _env_report_clean_envs(setup_test_logging):
+    """Clean tool envs when --env-report is active (after logging is configured)."""
+    if _env_report_collector is None:
+        return
+
+    venvs_dir = ToolInstance._get_tool_envs_root()
+    if venvs_dir.exists():
+        logger = logging.getLogger("bio_programming_tools.tests")
+        logger.warning(
+            f"Cleaning {venvs_dir} for fresh environment rebuilds "
+            "(this may take a while on network filesystems)..."
+        )
+        subprocess.run(
+            ["rm", "-rf", str(venvs_dir)],
+            check=False,
+            capture_output=True,
+        )
+        logger.warning(f"Finished cleaning {venvs_dir}")
 
 
 @pytest.fixture(scope="session", autouse=True)

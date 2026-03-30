@@ -36,8 +36,11 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
-# Default cache directory for MSA files
-DEFAULT_OUTPUT_DIR = Path.home() / ".cache" / "bio-programming" / "colabfold_search"
+# Default cache directory for MSA files — derived from PROTO_HOME
+def _default_output_dir() -> Path:
+    from bio_programming_tools.utils.proto_home import get_proto_home
+
+    return get_proto_home() / "colabfold_search"
 
 # Default database directory (in the same directory as this file)
 DEFAULT_DB_DIR = Path(__file__).parent / "databases"
@@ -281,7 +284,7 @@ class ColabfoldSearchConfig(BaseConfig):
             A subdirectory named 'msas' will be created to store A3M format
             alignment files. Each sequence will get its own A3M file named
             by its sequence ID. If None, uses the default cache directory
-            (~/.cache/bio-programming/colabfold_search). Default: None.
+            ($PROTO_HOME/colabfold_search). Default: None.
 
         sensitivity (float | None): Only used if search_mode is "local". MMseqs2 sensitivity
             parameter (1.0-9.0). Higher values increase sensitivity and may find more remote homologs,
@@ -326,7 +329,7 @@ class ColabfoldSearchConfig(BaseConfig):
     output_dir: Optional[str] = ConfigField(
         title="Output Directory",
         default=None,
-        description="Directory for output MSA files (default: ~/.cache/bio-programming/colabfold_search)",
+        description="Directory for output MSA files (default: $PROTO_HOME/colabfold_search)",
         hidden=True,
     )
     msa_db_dir: str = ConfigField(
@@ -410,7 +413,7 @@ class ColabfoldSearchConfig(BaseConfig):
     def set_default_output_dir(self):
         """Set default output directory if not provided and track user specification."""
         if self.output_dir is None:
-            self.output_dir = str(DEFAULT_OUTPUT_DIR)
+            self.output_dir = str(_default_output_dir())
             self._user_specified_output_dir = False
         else:
             self._user_specified_output_dir = True
@@ -522,7 +525,7 @@ def _cleanup_default_output_dir_if_cache_empty(
         config (ColabfoldSearchConfig): ColabFold search configuration
 
     Notes:
-        - Only cleans up if output_dir was not user-specified (using default cache directory ~/.cache/bio-programming/colabfold_search)
+        - Only cleans up if output_dir was not user-specified (using default cache directory $PROTO_HOME/colabfold_search)
         - Only cleans up if the tool cache is empty (no cached entries)
         - Preserves user-specified directories and cached files
     """

@@ -250,10 +250,8 @@ class ESMIF1Model:
         # Load base ESM-IF1 model from pre-downloaded weights
         from standalone_helpers import resolve_weights_dir
 
-        bpt_dir = resolve_weights_dir("esm_if1")
-        if bpt_dir:
-            weights_dir = bpt_dir
-        else:
+        weights_dir = resolve_weights_dir("esm_if1")
+        if not weights_dir:
             venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH", ".")
             weights_dir = os.path.join(venv, "weights")
         base_weights_path = os.path.join(
@@ -286,7 +284,7 @@ class ESMIF1Model:
             else:
                 raise FileNotFoundError(
                     f"ProteinDPO weights not found at {dpo_weights_path}. "
-                    f"Run setup.sh or set BPT_ESM_IF1_WEIGHTS_DIR."
+                    f"Run setup.sh or set PROTO_ESM_IF1_WEIGHTS_DIR."
                 )
 
         self.model = self.model.to(device)

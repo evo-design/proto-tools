@@ -469,12 +469,12 @@ def get_jax_memory_stats(device_index: int = 0) -> Dict[str, Any]:
 
 
 def resolve_weights_dir(tool_name: str) -> Optional[str]:
-    """Resolve the weights directory for a tool based on BPT_MODEL_CACHE.
+    """Resolve the weights directory for a tool based on PROTO_MODEL_CACHE.
 
     Precedence:
-        1. BPT_{TOOL}_WEIGHTS_DIR (per-tool override, always wins)
-        2. BPT_MODEL_CACHE:
-           - (default): {PACKAGE_ROOT}/model_cache/{tool_name}/ (survives env rebuilds)
+        1. PROTO_{TOOL}_WEIGHTS_DIR (per-tool override, always wins)
+        2. PROTO_MODEL_CACHE:
+           - (default): {PROTO_HOME}/proto_model_cache/{tool_name}/ (survives env rebuilds)
            - "/absolute/path": /absolute/path/{tool_name}/  (shared directory)
            - "IN_ENV": {TOOL_VENV_PATH}/model_weight_cache/ (legacy, per-venv)
            - "NONE": {VENV_PATH}/weights/ (pass-through, matches shell helper)
@@ -487,14 +487,14 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
             with no per-tool override). Creates the directory if it doesn't exist.
     """
     # 1. Per-tool override always wins
-    override_var = f"BPT_{tool_name.upper()}_WEIGHTS_DIR"
+    override_var = f"PROTO_{tool_name.upper()}_WEIGHTS_DIR"
     override = os.environ.get(override_var)
     if override:
         os.makedirs(override, exist_ok=True)
         return override
 
-    # 2. BPT_MODEL_CACHE
-    mode = os.environ.get("BPT_MODEL_CACHE", "")
+    # 2. PROTO_MODEL_CACHE
+    mode = os.environ.get("PROTO_MODEL_CACHE", "")
 
     if mode == "NONE":
         # Pass-through: no managed cache, but match the shell helper's fallback
@@ -514,7 +514,7 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
             os.makedirs(path, exist_ok=True)
             return path
         logger.warning(
-            "BPT_MODEL_CACHE=IN_ENV but no TOOL_VENV_PATH or VENV_PATH set. "
+            "PROTO_MODEL_CACHE=IN_ENV but no TOOL_VENV_PATH or VENV_PATH set. "
             "Returning None — tool will use its own default."
         )
         return None
@@ -523,18 +523,17 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
         # Explicit path (absolute or relative)
         cache_dir = mode
     else:
-        # Default: repo-local model_cache/ directory
-        package_root = os.environ.get("PACKAGE_ROOT", "")
-        if package_root:
-            cache_dir = os.path.join(package_root, "model_cache")
-        else:
-            # Fallback to IN_ENV behavior if PACKAGE_ROOT not available
-            venv_path = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
-            if venv_path:
-                path = os.path.join(venv_path, "model_weight_cache")
-                os.makedirs(path, exist_ok=True)
-                return path
-            return None
+        # Default: PROTO_HOME/proto_model_cache/ directory
+        proto_home = os.environ.get("PROTO_HOME", "")
+        if not proto_home:
+            # Same default as get_proto_home() — ~/.proto/
+            proto_home = os.path.join(os.path.expanduser("~"), ".proto")
+            logger.warning(
+                "PROTO_HOME not set in subprocess environment. "
+                "Falling back to %s. Set PROTO_HOME to customize.",
+                proto_home,
+            )
+        cache_dir = os.path.join(proto_home, "proto_model_cache")
 
     os.makedirs(cache_dir, exist_ok=True)
     path = os.path.join(cache_dir, tool_name)

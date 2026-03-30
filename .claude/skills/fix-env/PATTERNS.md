@@ -123,7 +123,7 @@ ls tool_envs/protenix_env/cuda_env/bin/gcc
 **Debugging:**
 ```bash
 # Check if already cached
-ls ~/.cache/bio_programming_tools/.micromamba/bin/micromamba
+ls ~/.proto/.micromamba/bin/micromamba
 
 # Test download URL
 ARCH=$(uname -m); SYSTEM=$(uname -s)
@@ -135,8 +135,8 @@ curl -Is https://micro.mamba.pm | head -5
 ```
 
 **Solution:**
-- **Network failure:** Check connectivity. If behind proxy, set `https_proxy`. If blocked, manually place binary at `~/.cache/bio_programming_tools/.micromamba/bin/micromamba`.
-- **Corrupt download:** Delete `~/.cache/bio_programming_tools/.micromamba/` and retry.
+- **Network failure:** Check connectivity. If behind proxy, set `https_proxy`. If blocked, manually place binary at `~/.proto/.micromamba/bin/micromamba`.
+- **Corrupt download:** Delete `~/.proto/.micromamba/` and retry.
 - **Unsupported platform:** Only Linux x86_64/aarch64 and Darwin x86_64/arm64 supported.
 
 See `utils/tool_instance.py` (`_ensure_micromamba`).

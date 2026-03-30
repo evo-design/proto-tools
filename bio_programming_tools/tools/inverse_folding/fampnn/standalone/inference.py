@@ -536,10 +536,10 @@ class FAMPNNModel:
         # Search for weights in multiple locations
         from standalone_helpers import resolve_weights_dir
 
-        bpt_dir = resolve_weights_dir("fampnn")
+        weights_dir = resolve_weights_dir("fampnn")
         search_paths = []
-        if bpt_dir:
-            search_paths.append(Path(bpt_dir))
+        if weights_dir:
+            search_paths.append(Path(weights_dir))
         # Fallback locations for NONE mode or missing venv
         venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
         if venv:
@@ -561,7 +561,7 @@ class FAMPNNModel:
         if checkpoint_path is None:
             raise FileNotFoundError(
                 f"Could not find {weights_filename} in any of: {[str(p) for p in search_paths]}. "
-                f"Set BPT_FAMPNN_WEIGHTS_DIR or run setup.sh to download weights."
+                f"Set PROTO_FAMPNN_WEIGHTS_DIR or run setup.sh to download weights."
             )
 
         if verbose:

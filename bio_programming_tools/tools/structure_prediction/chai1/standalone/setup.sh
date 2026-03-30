@@ -16,7 +16,7 @@ echo "Setting up Chai1 standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_pytorch
+proto_install_pytorch
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

@@ -61,7 +61,7 @@ exit
 
 ## 2. Redirect Model Weights & Caches
 
-Sherlock limits `$HOME` (`/home/users/$USER`) to **15 GB**, so model weights and caches need to live elsewhere. By default, weights are stored in `model_cache/` at the repo root — make sure your repo is not in `$HOME`.
+Sherlock limits `$HOME` (`/home/users/$USER`) to **15 GB**, so model weights and caches need to live elsewhere. By default, `PROTO_HOME` is `~/.proto/` which is under `$HOME` — you must set `PROTO_HOME` to redirect data to a larger filesystem.
 
 Sherlock has three storage tiers available to most users:
 
@@ -77,28 +77,39 @@ Scratch auto-purges files after 90 days of **no access** — files that are read
 
 ### Model Caching Options
 
-Create a `.bpt.env` file in the repo root (see `.bpt.env.example`) to redirect model weights:
-
-**Option 1 — Shared directory (recommended).** Point all tools at a single directory on Group Home or Scratch. Group Home is preferred because it's shared across lab members — weights only need to be downloaded once. Check with your lab if there's already a shared weights directory:
+`PROTO_HOME` contains tool environments and micromamba (per-user), while `PROTO_MODEL_CACHE` controls model weights (can be shared). Add both to your `~/.bashrc`:
 
 ```bash
-BPT_MODEL_CACHE=$GROUP_HOME/model_cache
+# Per-user — tool envs and micromamba (must be per-user, not shared)
+export PROTO_HOME=$GROUP_HOME/$USER/proto_home
+
+# Shared with collaborators — model weights only (safe for concurrent downloads)
+export PROTO_MODEL_CACHE=$GROUP_HOME/shared_model_weights
 ```
 
-If Group Home is tight on space, use `$SCRATCH/model_weights/bio-programming-tools` instead (per-user, not shared).
-
-**Option 2 — In-environment.** Store weights inside each tool's isolated venv. Weights are co-located with the tool environment but aren't shared — each tool downloads its own copy:
+**Option 1 — Shared weights + per-user envs (recommended).** Share model weights on Group Home so they only download once across collaborators. Tool envs stay per-user:
 
 ```bash
-BPT_MODEL_CACHE=IN_ENV
+export PROTO_HOME=$GROUP_HOME/$USER/proto_home
+export PROTO_MODEL_CACHE=$GROUP_HOME/shared_model_weights
 ```
+
+Check with your team if there's already a shared weights directory.
+
+**Option 2 — Fully per-user.** Keep everything under your own directory. Simpler but each user downloads their own copy of model weights:
+
+```bash
+export PROTO_HOME=$GROUP_HOME/$USER/proto_home
+```
+
+If Group Home is tight on space, use `$SCRATCH` instead (per-user, fast, but 90-day auto-purge).
 
 Optionally, symlink `~/.cache` off of `$HOME` to avoid filling your 15 GB quota with pip wheel caches: `ln -sfn $SCRATCH/.cache ~/.cache`
 
 ### Verify
 
 ```bash
-cat .bpt.env
+echo $PROTO_HOME
 ls -la ~/.cache 2>/dev/null
 ```
 
@@ -258,7 +269,7 @@ A model is downloading weights to `$HOME` instead of following a symlink. Check 
 du -h --max-depth=1 ~ | sort -rh | head -10
 ```
 
-Check your `BPT_MODEL_CACHE` setting in `.bpt.env` — if unset, weights go to `model_cache/` at the repo root. See [tool-environments.md](tool-environments.md) for all options.
+Check your `PROTO_HOME` setting — if unset, weights go to `~/.proto/proto_model_cache/`. See [model-weights.md](model-weights.md) for all options.
 
 ### "Disk quota exceeded" during `pip install`
 
@@ -276,4 +287,4 @@ ln -sfn $STORAGE/.local ~/.local
 
 ### Model loads slowly
 
-If model loading is very slow, your weights are likely on Oak. Move them to Group Home or Scratch — see [Section 2](#2-redirect-model-weights--caches). Update `BPT_MODEL_CACHE` in `.bpt.env` and delete the old weights directory; tools will re-download to the new location on next run.
+If model loading is very slow, your weights are likely on Oak. Move them to Group Home or Scratch — see [Section 2](#2-redirect-model-weights--caches). Update `PROTO_HOME` (or `PROTO_MODEL_CACHE`) and delete the old weights directory; tools will re-download to the new location on next run.
