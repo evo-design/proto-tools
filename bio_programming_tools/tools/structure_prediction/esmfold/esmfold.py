@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
 from bio_programming_tools.tools.structure_prediction.esmfold.helpers import (
     relabel_chains as _relabel_chains,
+)
+from bio_programming_tools.tools.structure_prediction.esmfold.helpers import (
     split_into_safe_batches as _split_into_safe_batches,
 )
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
@@ -29,7 +31,11 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, ToolInstance, return_invalid_protein_chars
+from bio_programming_tools.utils import (
+    ConfigField,
+    ToolInstance,
+    return_invalid_protein_chars,
+)
 
 
 # ============================================================================

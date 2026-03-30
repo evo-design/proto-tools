@@ -20,7 +20,6 @@ from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
 )
 
-
 # ── Input validation ─────────────────────────────────────────────────────────
 
 def test_input_single_path_normalized_to_list():

@@ -10,6 +10,26 @@ from .blast import (
     run_create_blast_db,
 )
 
+# CRISPRtracrRNA tools
+from .crispr_tracr import (
+    CrisprTracrConfig,
+    CrisprTracrInput,
+    CrisprTracrOutput,
+    TracrPrediction,
+    run_crispr_tracr,
+)
+
+# MinCED tools
+from .minced import (
+    CrisprArray,
+    CrisprRepeatSpacer,
+    MincedConfig,
+    MincedInput,
+    MincedOutput,
+    MincedSequenceResult,
+    run_minced,
+)
+
 # MMseqs2 tools
 from .mmseqs import (  # Schema classes; Protein search; Genome search; Clustering
     MmseqsClusteringConfig,
@@ -53,26 +73,6 @@ from .pyhmmer import (
     run_pyhmmer_jackhmmer,
     run_pyhmmer_nhmmer,
     run_pyhmmer_phmmer,
-)
-
-# CRISPRtracrRNA tools
-from .crispr_tracr import (
-    CrisprTracrConfig,
-    CrisprTracrInput,
-    CrisprTracrOutput,
-    TracrPrediction,
-    run_crispr_tracr,
-)
-
-# MinCED tools
-from .minced import (
-    CrisprArray,
-    CrisprRepeatSpacer,
-    MincedConfig,
-    MincedInput,
-    MincedOutput,
-    MincedSequenceResult,
-    run_minced,
 )
 
 __all__ = [

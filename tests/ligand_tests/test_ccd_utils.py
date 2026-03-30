@@ -14,7 +14,6 @@ from bio_programming_tools.entities.ligands.ccd_utils import (
     map_smiles_to_ccd_code,
 )
 
-
 # ── SMILES / CCD mapping ────────────────────────────────────────────────
 
 

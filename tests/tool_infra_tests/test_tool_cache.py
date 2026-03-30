@@ -7,6 +7,7 @@ from typing import List, Union
 import pytest
 from pydantic import BaseModel
 
+from bio_programming_tools.utils import BaseConfig
 from bio_programming_tools.utils.tool_cache import (
     CacheStripResult,
     ToolCache,
@@ -18,8 +19,6 @@ from bio_programming_tools.utils.tool_cache import (
     cache_strip_items,
     deduplicate_items,
 )
-from bio_programming_tools.utils import BaseConfig
-
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 

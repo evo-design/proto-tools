@@ -11,8 +11,6 @@ from Bio import SeqIO
 from pydantic import ValidationError
 
 from bio_programming_tools.entities.structures import is_valid_structure
-from bio_programming_tools.utils.tool_cache import ToolCache, _program_tool_cache, get_cache_info
-from bio_programming_tools.utils.tool_instance import ToolInstance
 from bio_programming_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
@@ -35,6 +33,12 @@ from bio_programming_tools.tools.structure_prediction import (
     run_esmfold,
     run_protenix,
 )
+from bio_programming_tools.utils.tool_cache import (
+    ToolCache,
+    _program_tool_cache,
+    get_cache_info,
+)
+from bio_programming_tools.utils.tool_instance import ToolInstance
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Constants ─────────────────────────────────────────────────────────────────

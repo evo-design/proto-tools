@@ -10,7 +10,9 @@ from typing import List
 from pydantic import Field
 from tqdm import tqdm
 
-from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_sample import FAMPNNStructureInput
+from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_sample import (
+    FAMPNNStructureInput,
+)
 from bio_programming_tools.tools.tool_registry import tool
 from bio_programming_tools.utils import (
     BaseConfig,

@@ -20,9 +20,9 @@ from bio_programming_tools.utils import (
 )
 
 from .shared_data_models import (
+    SUPPORTED_CONTEXT_LENGTHS,
     AlphaGenomePredictConfig,
     AlphaGenomePredictOutput,
-    SUPPORTED_CONTEXT_LENGTHS,
 )
 
 logger = logging.getLogger(__name__)

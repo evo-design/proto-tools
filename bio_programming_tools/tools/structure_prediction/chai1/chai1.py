@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 from bio_programming_tools.entities.structures.structure import BFactorType, Structure
 from bio_programming_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
-    hash_sequence as _hash_sequence,
     write_msa_pqt,
+)
+from bio_programming_tools.tools.structure_prediction.chai1.helpers import (
+    hash_sequence as _hash_sequence,
 )
 from bio_programming_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,

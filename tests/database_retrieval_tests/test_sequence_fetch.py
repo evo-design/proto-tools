@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
+import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
 from bio_programming_tools.tools.database_retrieval import (
     SequenceFetchConfig,
     SequenceFetchInput,
     run_sequence_fetch,
 )
-import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
 from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )

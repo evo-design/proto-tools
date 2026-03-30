@@ -9,7 +9,6 @@ import pytest
 
 from bio_programming_tools.utils.device_manager import AllocationType, OffloadStrategy
 
-
 # ── Lease basics ──────────────────────────────────────────────────────────
 
 def test_lease_acquires_and_releases_device(device_manager):

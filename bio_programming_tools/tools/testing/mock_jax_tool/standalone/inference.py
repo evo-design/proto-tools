@@ -20,7 +20,6 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import jax
 import jax.numpy as jnp
-
 from standalone_helpers import (
     get_jax_memory_stats,
     move_model_to_device,

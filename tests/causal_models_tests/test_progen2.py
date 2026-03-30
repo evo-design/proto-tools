@@ -17,7 +17,6 @@ from bio_programming_tools.utils import PROTEIN_AMINO_ACIDS
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-
 _persistent_tool = make_persistent_fixture("progen2")
 
 

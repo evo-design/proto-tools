@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any, List, Optional
 
-import jax
 import huggingface_hub
+import jax
 from alphagenome.data import genome
 from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib

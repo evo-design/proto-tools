@@ -18,9 +18,9 @@ from bio_programming_tools.utils import (
 )
 
 from .shared_data_models import (
+    _PDB_FASTA_BASE,
     PdbChain,
     PdbFetchConfig,
-    _PDB_FASTA_BASE,
     _chain_id_from_header,
     _fetch_pdb_fasta,
     _is_protein_sequence,

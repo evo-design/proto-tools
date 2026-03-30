@@ -12,10 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  flake8-lint:
+  ruff-lint:
     # Only run on non-draft PRs
     if: github.event.pull_request.draft == false
-    name: Run Flake8 Lint
+    name: Run Ruff Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -30,7 +30,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 Flake8-pyproject
+        pip install ruff
 
-    - name: Run Flake8
-      run: flake8 bio_programming_tools tests
+    - name: Run Ruff
+      run: ruff check bio_programming_tools tests

@@ -11,7 +11,6 @@ from bio_tools_mcp.tools import (
     list_tools,
 )
 
-
 # ── list_tools ──────────────────────────────────────────────────────────────
 
 

@@ -6,7 +6,6 @@ import pytest
 
 from bio_programming_tools.tools.tool_registry import ToolRegistry
 
-
 # ── get_citation ─────────────────────────────────────────────────────────────
 
 

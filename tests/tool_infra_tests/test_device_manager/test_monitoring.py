@@ -6,7 +6,6 @@ import pytest
 
 from bio_programming_tools.utils.device_manager import DeviceManager
 
-
 # ── Status monitoring tests ──────────────────────────────────────────────
 
 @pytest.mark.uses_gpu
@@ -14,9 +13,9 @@ from bio_programming_tools.utils.device_manager import DeviceManager
 def test_get_device_status_with_tools():
     """Test get_device_status with tool instances on actual GPUs."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.tool_instance import ToolInstance
 
@@ -106,9 +105,9 @@ def test_tool_instance_get_memory_stats_no_worker():
 def test_memory_stats():
     """Test memory stats via both ToolInstance and DeviceManager access paths."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.tool_instance import ToolInstance
 
@@ -159,9 +158,9 @@ def test_memory_stats():
 def test_instance_memory_vs_total_gpu_memory():
     """Test relationship between instance memory and total GPU memory."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.tool_instance import ToolInstance
 

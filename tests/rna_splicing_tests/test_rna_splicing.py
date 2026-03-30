@@ -12,7 +12,6 @@ from bio_programming_tools.tools.rna_splicing.splice_transformer import (
     run_splice_transformer,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _run_splice_transformer_and_check(device: str) -> None:

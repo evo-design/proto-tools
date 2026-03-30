@@ -8,13 +8,13 @@ import pytest
 from pydantic import ValidationError
 
 from bio_programming_tools import (
-    AlphaGenomeISM,
     AlphaGenomeInterval,
+    AlphaGenomeISM,
     AlphaGenomePredictIntervalsInput,
     AlphaGenomePredictSequencesInput,
     AlphaGenomePredictVariantsInput,
-    AlphaGenomeScoreISMInput,
     AlphaGenomeScoreIntervalsInput,
+    AlphaGenomeScoreISMInput,
     AlphaGenomeScoreVariantsInput,
     AlphaGenomeVariant,
 )

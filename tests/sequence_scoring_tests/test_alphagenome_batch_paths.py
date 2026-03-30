@@ -9,16 +9,16 @@ from typing import Any
 import pytest
 
 from bio_programming_tools import (
-    AlphaGenomeISM,
     AlphaGenomeInterval,
+    AlphaGenomeISM,
     AlphaGenomePredictIntervalsConfig,
     AlphaGenomePredictIntervalsInput,
     AlphaGenomePredictVariantsConfig,
     AlphaGenomePredictVariantsInput,
-    AlphaGenomeScoreISMConfig,
-    AlphaGenomeScoreISMInput,
     AlphaGenomeScoreIntervalsConfig,
     AlphaGenomeScoreIntervalsInput,
+    AlphaGenomeScoreISMConfig,
+    AlphaGenomeScoreISMInput,
     AlphaGenomeScoreVariantsConfig,
     AlphaGenomeScoreVariantsInput,
     AlphaGenomeVariant,

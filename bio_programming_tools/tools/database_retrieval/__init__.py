@@ -16,14 +16,6 @@ from .ncbi import (
     run_ncbi_esummary,
 )
 
-# UniProt fetch
-from .uniprot import (
-    UniProtFetchConfig,
-    UniProtFetchInput,
-    UniProtFetchOutput,
-    run_uniprot_fetch,
-)
-
 # PDB tools
 from .pdb import (
     PdbChain,
@@ -48,6 +40,14 @@ from .sequence_fetch import (
     SequenceFetchRequest,
     SequenceFetchResult,
     run_sequence_fetch,
+)
+
+# UniProt fetch
+from .uniprot import (
+    UniProtFetchConfig,
+    UniProtFetchInput,
+    UniProtFetchOutput,
+    run_uniprot_fetch,
 )
 
 __all__ = [

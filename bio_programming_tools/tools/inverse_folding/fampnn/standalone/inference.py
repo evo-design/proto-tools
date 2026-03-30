@@ -60,7 +60,11 @@ class FAMPNNModel:
         import torch
         from fampnn import sampling_utils
         from fampnn.data import residue_constants as rc
-        from fampnn.data.data import load_feats_from_pdb, pad_to_max_len, process_single_pdb
+        from fampnn.data.data import (
+            load_feats_from_pdb,
+            pad_to_max_len,
+            process_single_pdb,
+        )
         from fampnn.model.sd_model import SeqDenoiser
 
         sampling_utils.seed_everything(seed)
@@ -220,10 +224,14 @@ class FAMPNNModel:
         elif self.device != device:
             self.to_device(device)
 
-        import torch
         import pandas as pd
+        import torch
         from fampnn import sampling_utils
-        from fampnn.data.data import load_feats_from_pdb, pad_to_max_len, process_single_pdb
+        from fampnn.data.data import (
+            load_feats_from_pdb,
+            pad_to_max_len,
+            process_single_pdb,
+        )
         from fampnn.model.sd_model import SeqDenoiser
 
         sampling_utils.seed_everything(seed)

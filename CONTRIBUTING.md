@@ -86,9 +86,8 @@ When filing a bug, include the full traceback and your environment details (OS, 
 
 ### Formatting
 
-- **No black** — formatting is handled manually
-- **isort** — enforced (line length 88). Run `isort bio_programming_tools` before committing
-- **flake8** — checks F401 (unused imports) and F841 (unused variables) only
+- **No auto-formatting** — formatting is handled manually
+- **ruff** — enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check bio_programming_tools` before committing
 
 ### Conventions
 

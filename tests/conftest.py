@@ -27,19 +27,18 @@ from pathlib import Path
 
 import pytest
 
-from bio_programming_tools import setup_logging
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-
 # Register testing tools so consistency tests cover them.
 # These are NOT exported via tools/__init__.py and are invisible outside tests.
 import bio_programming_tools.tools.testing  # noqa: F401
+from bio_programming_tools import setup_logging
+from bio_programming_tools.tools.tool_registry import ToolRegistry
+from bio_programming_tools.utils.device import number_of_visible_gpus
 from bio_programming_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
     get_captured_env,
     get_platform_id,
 )
-from bio_programming_tools.utils.device import number_of_visible_gpus
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
 

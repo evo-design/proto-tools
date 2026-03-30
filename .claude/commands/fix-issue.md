@@ -111,7 +111,7 @@ For feature requests (not bugs), skip the failing-test step — but still plan t
 Follow the coding conventions:
 - `from __future__ import annotations` at top of every file
 - `logging.getLogger(__name__)` — never `print()`
-- Black (line length 88), isort (black-compatible profile)
+- Ruff (line length 88, import sorting)
 - Pydantic v2: `ConfigField()` for Config, `Field()` for Input/Output
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Never catch exceptions inside tool functions — `@tool` decorator handles error wrapping
@@ -140,7 +140,7 @@ pytest tests/{category}_tests/ -m "not slow"
 pytest -m "not slow"
 
 # 4. Lint
-flake8 bio_programming_tools tests
+ruff check bio_programming_tools tests
 ```
 
 If any test fails, fix it before proceeding. Don't ask — just fix regressions.
@@ -198,4 +198,4 @@ Provide a concise summary:
 - [ ] New test passes: `pytest -xvs -k "test_name"`
 - [ ] Area tests pass: `pytest tests/{category}_tests/ -m "not slow"`
 - [ ] Full fast suite passes: `pytest -m "not slow"`
-- [ ] Lint passes: `flake8 bio_programming_tools tests`
+- [ ] Lint passes: `ruff check bio_programming_tools tests`

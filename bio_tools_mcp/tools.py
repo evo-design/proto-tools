@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any
 
 from bio_programming_tools.tools.tool_registry import ToolRegistry
-
 from bio_tools_mcp.server import mcp
 
 

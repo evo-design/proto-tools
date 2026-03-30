@@ -22,7 +22,11 @@ from bio_programming_tools.tools.structure_prediction.shared_data_models import 
     StructurePredictionOutput,
 )
 from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import ConfigField, ToolInstance, return_invalid_protein_chars
+from bio_programming_tools.utils import (
+    ConfigField,
+    ToolInstance,
+    return_invalid_protein_chars,
+)
 
 logger = logging.getLogger(__name__)
 

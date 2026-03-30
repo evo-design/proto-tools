@@ -15,16 +15,6 @@ import requests
 from Bio.Seq import transcribe
 from pydantic import BaseModel, Field, computed_field, field_validator
 
-from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
-    BaseToolOutput,
-    ConfigField,
-    InputField,
-    build_http_session,
-)
-
 # Database tool imports — orchestrator calls these directly
 from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
     NCBIFastaRecord,
@@ -42,11 +32,24 @@ from bio_programming_tools.tools.database_retrieval.pdb.shared_data_models impor
     _is_protein_sequence,
 )
 from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
-    UniProtFetchConfig,
     _UNIPROT_BASE,
+    UniProtFetchConfig,
     _extract_pdb_crossrefs,
+)
+from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     _fetch_entry as _fetch_uniprot_entry,
+)
+from bio_programming_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     _search_entry as _search_uniprot_entry,
+)
+from bio_programming_tools.tools.tool_registry import tool
+from bio_programming_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    build_http_session,
 )
 
 _NON_CODING_PATTERNS = (

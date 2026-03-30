@@ -14,7 +14,6 @@ from bio_programming_tools.tools.structure_design import (
 )
 from tests.conftest import make_persistent_fixture
 
-
 _persistent_tool = make_persistent_fixture("rfdiffusion3")
 
 

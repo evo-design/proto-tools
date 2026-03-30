@@ -8,7 +8,6 @@ import pytest
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-
 _persistent_tool = make_persistent_fixture("alphagenome")
 
 

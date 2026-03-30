@@ -48,6 +48,7 @@ def test_parsing_with_test_data():
         pytest.skip("Test data files not available")
 
     from Bio import SeqIO
+
     from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
         _parse_orfipy_header,
     )

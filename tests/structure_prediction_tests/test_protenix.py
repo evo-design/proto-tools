@@ -16,7 +16,6 @@ from bio_programming_tools.tools.structure_prediction import (
 )
 from tests.conftest import make_persistent_fixture
 
-
 _persistent_tool = make_persistent_fixture("protenix")
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.

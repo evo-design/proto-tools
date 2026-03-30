@@ -19,7 +19,6 @@ from bio_programming_tools.utils import (
     ToolInstance,
 )
 
-
 # ============================================================================
 # Input / Config / Output
 # ============================================================================
@@ -91,8 +90,8 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
-        from pathlib import Path
         import json
+        from pathlib import Path
 
         path = Path(export_path).with_suffix(f".{file_format}")
 

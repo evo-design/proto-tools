@@ -1,3 +1,9 @@
+from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_pack import (
+    FAMPNNPackConfig,
+    FAMPNNPackingResult,
+    FAMPNNPackInput,
+    run_fampnn_pack,
+)
 from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_sample import (
     FAMPNNSampleConfig,
     FAMPNNSampleInput,
@@ -5,12 +11,6 @@ from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_sample import (
     FAMPNNSequences,
     FAMPNNStructureInput,
     run_fampnn_sample,
-)
-from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_pack import (
-    FAMPNNPackConfig,
-    FAMPNNPackInput,
-    FAMPNNPackingResult,
-    run_fampnn_pack,
 )
 from bio_programming_tools.tools.inverse_folding.fampnn.fampnn_score import (
     FAMPNNScoreConfig,

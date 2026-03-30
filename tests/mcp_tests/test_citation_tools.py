@@ -8,7 +8,6 @@ import pytest
 
 from bio_tools_mcp.tools import get_tool_citation, list_citations
 
-
 # ── get_tool_citation ───────────────────────────────────────────────────────
 
 

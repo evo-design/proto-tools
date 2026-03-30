@@ -1,7 +1,7 @@
 from .alphagenome import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
-    AlphaGenomeISM,
     AlphaGenomeInterval,
+    AlphaGenomeISM,
     AlphaGenomePredictConfig,
     AlphaGenomePredictIntervalsConfig,
     AlphaGenomePredictIntervalsInput,

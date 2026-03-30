@@ -42,7 +42,7 @@ pip install -e ".[dev]"
 pre-commit install
 
 # Formatting
-isort bio_programming_tools
+ruff check bio_programming_tools
 ```
 
 ## Keeping Docs in Sync
@@ -215,9 +215,8 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 ## Configuration
 
 - Python >=3.10, Pydantic >=2.0
-- Do **not** run `black` — formatting is handled manually
-- isort line length: 88
-- Flake8 only checks: F401, F841
+- Do **not** auto-format — formatting is handled manually
+- Ruff (line length 88, checks F401 + F841 + import sorting). No auto-formatting.
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default** — run with `pytest --integration` or `pytest --all`
 - **Generally use `--all` when running tests** to include integration and GPU tests

@@ -10,7 +10,6 @@ import pytest
 
 from bio_tools_mcp.resources import tool_citation, tool_doc, tool_example, tool_schemas
 
-
 # ── tool_doc ────────────────────────────────────────────────────────────────
 
 

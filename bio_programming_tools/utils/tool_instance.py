@@ -63,8 +63,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .base_config import DEFAULT_TIMEOUT, BaseConfig
 from ._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
+from .base_config import DEFAULT_TIMEOUT, BaseConfig
 from .device_manager import DeviceManager
 from .persistent_worker import (
     PersistentWorker,

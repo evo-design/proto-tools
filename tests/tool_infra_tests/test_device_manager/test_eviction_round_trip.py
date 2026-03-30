@@ -11,7 +11,6 @@ from bio_programming_tools.tools.tool_registry import ToolRegistry
 from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
-
 # Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
 # Tools requiring specific clusters get per-item markers via pytest.param.
 _CHIMERA_ONLY_KEYS = {"alphafold3-prediction"}

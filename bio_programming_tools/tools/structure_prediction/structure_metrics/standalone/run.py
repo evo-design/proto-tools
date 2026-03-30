@@ -57,8 +57,8 @@ def _compute_metrics(pdb_path: str) -> Dict[str, Any]:
     Returns:
         Dict with keys: pdb_path, longest_alpha_helix, gyration_radius.
     """
-    from biotite.structure import annotate_sse, gyration_radius
     import biotite.structure.io as strucio
+    from biotite.structure import annotate_sse, gyration_radius
 
     array = strucio.load_structure(pdb_path)
     sse = annotate_sse(array)

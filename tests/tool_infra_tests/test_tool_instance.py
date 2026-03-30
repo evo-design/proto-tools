@@ -23,7 +23,6 @@ from bio_programming_tools.utils.tool_instance import (
     _scope_override,
 )
 
-
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 def _make_fake_instance(

@@ -13,7 +13,6 @@ from bio_programming_tools.tools.sequence_scoring.segmasker import (
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-
 # ── Validation ────────────────────────────────────────────────────────────────
 
 

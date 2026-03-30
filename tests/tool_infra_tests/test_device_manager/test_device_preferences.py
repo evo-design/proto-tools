@@ -4,7 +4,6 @@ Tests for preferred device allocation, re-allocation, and multi-model per device
 
 from unittest.mock import patch
 
-
 # ── Existing allocation compatibility tests ────────────────────────────────
 
 def test_cuda_allocation_stays_on_general_cuda_request(device_manager, mock_callback):

@@ -1150,8 +1150,9 @@ class DeviceManager:
         - Uses nvidia-smi via get_gpu_memory_used_physical() from device.py
         - Automatically handles CUDA_VISIBLE_DEVICES mapping
         """
-        from bio_programming_tools.utils.device import get_gpu_memory_used_physical
         import os
+
+        from bio_programming_tools.utils.device import get_gpu_memory_used_physical
 
         # Only support CUDA devices
         if not self._is_gpu(device):

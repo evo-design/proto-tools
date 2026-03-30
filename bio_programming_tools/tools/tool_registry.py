@@ -40,7 +40,10 @@ RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
 from bio_programming_tools.utils import BaseConfig
-from bio_programming_tools.utils.device import parse_device_string, validate_device_allocation
+from bio_programming_tools.utils.device import (
+    parse_device_string,
+    validate_device_allocation,
+)
 from bio_programming_tools.utils.tool_cache import (
     CacheStripResult,
     _generate_cache_key,
@@ -372,7 +375,10 @@ class ToolRegistry:
                 # --- Dispatch (pool or local) ---
 
                 # Check for active ToolPool (transparent parallel dispatch)
-                from bio_programming_tools.utils.tool_pool import get_active_pool, is_pool_executing
+                from bio_programming_tools.utils.tool_pool import (
+                    get_active_pool,
+                    is_pool_executing,
+                )
                 pool = get_active_pool()
                 if pool is not None and not is_pool_executing():
                     if spec and spec.iterable_input_field is not None:

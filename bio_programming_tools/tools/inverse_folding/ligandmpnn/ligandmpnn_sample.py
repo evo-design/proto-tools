@@ -4,12 +4,11 @@ LigandMPNN sampling tool."""
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List
 
 from pydantic import Field
 from tqdm import tqdm
-
-from pathlib import Path
 
 from bio_programming_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,

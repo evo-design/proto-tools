@@ -6,7 +6,6 @@ import threading
 
 from bio_programming_tools.utils.device_manager import OffloadStrategy
 
-
 # ── Thread safety ───────────────────────────────────────────────────────
 
 def test_concurrent_requests(device_manager, mock_callback):

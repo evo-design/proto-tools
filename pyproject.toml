@@ -67,10 +67,7 @@ dev = [
 
 
     # Code quality
-    "black",
-    "isort",
-    "flake8",
-    "Flake8-pyproject>=1.2.0",  # pyproject.toml flake8 config support
+    "ruff",
     "mypy",
     "pre-commit",
 
@@ -111,33 +108,6 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
-[tool.black]
-line-length = 88
-target-version = ['py310']
-extend-exclude = "tool_envs"
-
-[tool.isort]
-profile = "black"
-known_first_party = ["bio_programming_tools"]
-
-[tool.flake8]
-select = ["F401", "F841"]
-exclude = [
-    "tool_envs",
-    "*/tool_envs",
-    "__pycache__",
-    ".git",
-    "build",
-    "dist",
-    "*.egg-info",
-]
-per-file-ignores = [
-    # Auto-copied by _worker_bootstrap.py at runtime; jax import is in a try/except
-    "**/standalone/standalone_helpers.py:F401",
-    # Source standalone_helpers has same pattern
-    "bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py:F401",
-]
-
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
@@ -147,6 +117,30 @@ ignore_missing_imports = true
 check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+exclude = [
+    "tool_envs",
+    "*/tool_envs",
+    "__pycache__",
+    ".git",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+select = ["F401", "F841", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/standalone/standalone_helpers.py" = ["F401"]
+"bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bio_programming_tools"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["bio_programming_tools*"]

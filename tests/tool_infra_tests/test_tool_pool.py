@@ -26,7 +26,6 @@ from bio_programming_tools.utils.tool_pool import (
 )
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -778,9 +777,9 @@ def test_all_succeed_unchanged(clean_registry):
 def test_gpu_fanout_items_land_on_different_gpus():
     """Items should be dispatched to different physical GPUs."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.device_manager import DeviceManager
     from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -818,9 +817,9 @@ def test_gpu_fanout_items_land_on_different_gpus():
 def test_gpu_fanout_results_in_original_order():
     """Results must be reassembled in original input order."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.device_manager import DeviceManager
     from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -875,9 +874,9 @@ def test_gpu_fanout_persistence_across_pool_calls():
     import time
 
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.device_manager import DeviceManager
     from bio_programming_tools.utils.tool_instance import ToolInstance
@@ -924,9 +923,9 @@ def test_gpu_fanout_persistence_across_pool_calls():
 def test_gpu_fanout_single_item_bypasses_pool():
     """A single-item input should bypass pool overhead."""
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
     from bio_programming_tools.utils.device_manager import DeviceManager
     from bio_programming_tools.utils.tool_instance import ToolInstance

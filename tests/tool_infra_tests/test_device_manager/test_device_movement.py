@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 from bio_programming_tools.utils.device_manager import OffloadStrategy
 from bio_programming_tools.utils.tool_instance import ToolInstance
 
-
 # ── Move to device tests ──────────────────────────────────────────────────
 
 def test_move_to_device(device_manager, mock_callback):

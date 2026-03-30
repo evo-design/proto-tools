@@ -37,12 +37,12 @@ def test_real_tool_eviction_cpu_strategy():
     5. GPU memory stays roughly constant with CPU strategy
     """
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
     from bio_programming_tools.utils.device_manager import DeviceManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()
@@ -118,12 +118,12 @@ def test_real_tool_eviction_restart_strategy():
     GPU memory is freed.
     """
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
     from bio_programming_tools.utils.device_manager import DeviceManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()
@@ -187,12 +187,12 @@ def test_evicted_instance_variable_still_works():
     4. New worker gets allocated correctly
     """
     from bio_programming_tools.tools.testing.mock_pytorch_tool import (
-        run_mock_pytorch_tool,
-        MockPyTorchToolInput,
         MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
     from bio_programming_tools.utils.device_manager import DeviceManager
+    from bio_programming_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()

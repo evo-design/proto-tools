@@ -1,8 +1,3 @@
-from .masking import (
-    MaskingMethod,
-    MaskingStrategy,
-)
-from .shared_data_models import SequenceEmbedding
 from .esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
@@ -35,6 +30,11 @@ from .esm3 import (
     run_esm3_score,
     run_esm3_structure_prediction,
 )
+from .masking import (
+    MaskingMethod,
+    MaskingStrategy,
+)
+from .shared_data_models import SequenceEmbedding
 
 __all__ = [
     # Masking strategies

@@ -9,7 +9,6 @@ import pytest
 from bio_programming_tools.tools import ToolRegistry
 from tests.conftest import is_on_chimera
 
-
 _all_gpu_specs = [spec for spec in ToolRegistry.list_all() if spec.uses_gpu]
 
 

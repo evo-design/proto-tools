@@ -9,7 +9,6 @@ import pytest
 
 from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
 
-
 # ── Configuration tests ────────────────────────────────────────────────────
 
 def test_env_var_overrides():

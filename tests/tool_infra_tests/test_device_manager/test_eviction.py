@@ -9,7 +9,6 @@ import pytest
 
 from bio_programming_tools.utils.device_manager import OffloadStrategy
 
-
 # ── LRU eviction tests ────────────────────────────────────────────────────
 
 def test_lru_eviction_cpu_strategy(device_manager, mock_callback):

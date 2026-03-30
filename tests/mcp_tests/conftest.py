@@ -10,10 +10,9 @@ import pytest
 @pytest.fixture(scope="module")
 def tool_registry():
     """Provide access to the populated ToolRegistry."""
-    from bio_programming_tools.tools.tool_registry import ToolRegistry
-
     # Trigger tool registration by importing all tools
     import bio_programming_tools.tools  # noqa: F401
+    from bio_programming_tools.tools.tool_registry import ToolRegistry
 
     return ToolRegistry
 

@@ -18,7 +18,9 @@ from bio_programming_tools.tools.masked_models.masking.base import (
     weighted_sample,
 )
 from bio_programming_tools.tools.masked_models.masking.maskers import MASKERS
-from bio_programming_tools.tools.masked_models.shared_data_models import MaskedModelInput
+from bio_programming_tools.tools.masked_models.shared_data_models import (
+    MaskedModelInput,
+)
 
 # CPU-testable strategy instances for shared invariant tests
 CPU_STRATEGIES = [
@@ -314,6 +316,7 @@ def test_temperature_low_is_greedy():
     With low temperature, position 0 should always be selected.
     """
     from unittest.mock import patch
+
     from bio_programming_tools.tools.masked_models.masking.maskers import Masker
 
     class GreedyTestMasker(Masker):
@@ -337,6 +340,7 @@ def test_temperature_high_is_uniform():
     near-uniform sampling.
     """
     from unittest.mock import patch
+
     from bio_programming_tools.tools.masked_models.masking.maskers import Masker
 
     class BiasedTestMasker(Masker):

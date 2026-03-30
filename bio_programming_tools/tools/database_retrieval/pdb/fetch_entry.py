@@ -18,8 +18,8 @@ from bio_programming_tools.utils import (
 )
 
 from .shared_data_models import (
-    PdbFetchConfig,
     _PDB_ENTRY_BASE,
+    PdbFetchConfig,
     _fetch_pdb_entry,
 )
 

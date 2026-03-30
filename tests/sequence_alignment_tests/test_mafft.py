@@ -13,7 +13,6 @@ from bio_programming_tools.tools.sequence_alignment.mafft import (
 from bio_programming_tools.tools.sequence_alignment.msas import MSA
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture

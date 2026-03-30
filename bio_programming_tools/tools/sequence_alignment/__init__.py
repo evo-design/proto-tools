@@ -5,7 +5,6 @@ from .colabfold_search import (
     ColabfoldSearchOutput,
     run_colabfold_search,
 )
-
 from .mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
 from .msas import MSA
 

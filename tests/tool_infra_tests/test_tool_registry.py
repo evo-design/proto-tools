@@ -16,7 +16,6 @@ from bio_programming_tools.utils import BaseConfig, ConfigField
 from bio_programming_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
-
 # ── example_input completeness ───────────────────────────────────────────────
 
 @pytest.mark.parametrize(
