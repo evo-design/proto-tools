@@ -190,33 +190,30 @@ class ToolRegistry:
     """
 
     _registry: Dict[str, ToolSpec] = {}
-    _execution_backend: Optional[Callable] = None
-    _execution_backend_batch: Optional[Callable] = None
 
     @classmethod
-    def set_execution_backend(
+    def _try_dispatch(
         cls,
-        backend: Callable,
-        batch_backend: Optional[Callable] = None,
-    ) -> None:
-        """Register external execution backend(s).
+        key: str,
+        inputs: BaseToolInput,
+        config: Optional[BaseConfig],
+    ) -> Optional[BaseToolOutput]:
+        """Extension point for external tool dispatch.
+
+        Monkeypatch this classmethod to route tool calls to external
+        services (e.g. HTTP APIs).  Return a ``BaseToolOutput`` to handle
+        the call, or ``None`` to fall through to local execution.
 
         Args:
-            backend (Callable): Single-item dispatch.
-                Called with ``(tool_key, inputs, config) -> Optional[BaseToolOutput]``.
-                Return output to handle the call, or None to fall through to local.
-            batch_backend (Callable | None): Batch dispatch (optional, used by ToolPool).
-                Called with ``(tool_key, list[inputs], config) -> list[BaseToolOutput]``.
-                When available, ToolPool uses this for a single ``.map()`` call
-                instead of N × single dispatches.
-        """
-        cls._execution_backend = backend
-        cls._execution_backend_batch = batch_backend
+            key (str): Tool registry key (e.g. ``"esm2"``).
+            inputs (BaseToolInput): Tool input payload.
+            config (BaseConfig | None): Tool configuration, if any.
 
-    @classmethod
-    def clear_execution_backend(cls) -> None:
-        cls._execution_backend = None
-        cls._execution_backend_batch = None
+        Returns:
+            BaseToolOutput | None: Tool output if handled, or ``None``
+                to fall through to local execution.
+        """
+        return None
 
     @classmethod
     def register(
@@ -307,9 +304,7 @@ class ToolRegistry:
                 # Validate device allocation against tool requirements
                 if hasattr(config, 'device'):
                     device_str = str(config.device)
-                    if device_str == "cloud":
-                        pass  # Cloud dispatch — skip local device validation
-                    elif device_str != "cpu" and not uses_gpu:
+                    if device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
                             "the tool will run on CPU regardless",
@@ -393,48 +388,28 @@ class ToolRegistry:
                         )
                         return result
 
-                # --- Cloud dispatch (device="cloud") ---
-                if getattr(config, 'device', None) == "cloud":
-                    if cls._execution_backend is None:
-                        raise RuntimeError(
-                            f"device='cloud' requested for '{key}' but no cloud backend "
-                            f"is registered. Call ToolRegistry.set_execution_backend() first."
-                        )
-                    try:
-                        backend_result = cls._execution_backend(key, inputs, config)
-                    except Exception as e:
-                        logger.error(f"Tool {key}: cloud dispatch failed with {type(e).__name__}: {e}")
-                        return _make_error_output(
-                            output_class, key, start_time, e, traceback.format_exc(),
-                        )
-                    if backend_result is None:
-                        raise RuntimeError(
-                            f"device='cloud' requested for '{key}' but the cloud backend "
-                            f"does not support this tool."
-                        )
-                    backend_result.tool_id = key
-                    backend_result.success = True
-                    backend_result.execution_time = time.time() - start_time
-                    if backend_result.timestamp is None:
-                        backend_result.timestamp = datetime.now()
+                # Extension point: try external dispatch before local execution
+                try:
+                    dispatched = cls._try_dispatch(key, inputs, config)
+                except Exception as e:
+                    logger.error("Tool %s: _try_dispatch raised %s: %s", key, type(e).__name__, e)
+                    return _make_error_output(
+                        output_class, key, start_time, e, traceback.format_exc(),
+                    )
+                if dispatched is not None:
+                    dispatched.tool_id = key
+                    dispatched.success = True
+                    dispatched.execution_time = time.time() - start_time
+                    if dispatched.timestamp is None:
+                        dispatched.timestamp = datetime.now()
                     result = _post_dispatch_cache_and_expand(
-                        key, spec, cacheable, backend_result, strip, deduped,
+                        key, spec, cacheable, dispatched, strip, deduped,
                         original_items, whole_cache_key,
                     )
                     return result
 
                 for attempt in range(1 + MAX_RETRIES):
                     try:
-                        # Check external backend first (e.g., remote dispatch)
-                        if cls._execution_backend is not None:
-                            backend_result = cls._execution_backend(key, inputs, config)
-                            if backend_result is not None:
-                                backend_result.tool_id = key
-                                if backend_result.timestamp is None:
-                                    backend_result.timestamp = datetime.now()
-                                return backend_result
-
-                        # Fall through to local execution
                         if attempt == 0:
                             logger.debug(f"Tool {key}: starting execution")
 
