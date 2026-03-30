@@ -567,27 +567,58 @@ def test_non_retryable_error_not_retried(clean_registry, fast_retry):
     assert "Bad input" in result.errors[0]
 
 
-def test_backend_path_retries(clean_registry, fast_retry):
-    backend_call_count = 0
+def test_try_dispatch_intercepts_tool_call(clean_registry):
+    """_try_dispatch intercepts tool calls before local execution."""
+    original = ToolRegistry._try_dispatch
 
-    def flaky_backend(tool_key, inputs, config):
-        nonlocal backend_call_count
-        backend_call_count += 1
-        if backend_call_count < 2:
-            raise ConnectionError("Backend connection lost")
-        return MockToolOutput(result="backend ok", success=True)
-
-    clean_registry.set_execution_backend(flaky_backend)
+    ToolRegistry._try_dispatch = classmethod(
+        lambda cls, key, inputs, config: MockToolOutput(result="dispatched", success=True)
+    )
     try:
         result = _register_and_run(
-            clean_registry, "backend-retry",
-            lambda inputs, config, instance=None: MockToolOutput(result="local fallback"),
+            clean_registry, "dispatch-test",
+            lambda inputs, config, instance=None: MockToolOutput(result="local"),
         )
         assert result.success is True
-        assert result.result == "backend ok"
-        assert backend_call_count == 2
+        assert result.result == "dispatched"
     finally:
-        clean_registry.clear_execution_backend()
+        ToolRegistry._try_dispatch = original
+
+
+def test_try_dispatch_none_falls_through(clean_registry):
+    """_try_dispatch returning None falls through to local execution."""
+    original = ToolRegistry._try_dispatch
+
+    ToolRegistry._try_dispatch = classmethod(
+        lambda cls, key, inputs, config: None
+    )
+    try:
+        result = _register_and_run(
+            clean_registry, "dispatch-fallthrough",
+            lambda inputs, config, instance=None: MockToolOutput(result="local ok"),
+        )
+        assert result.success is True
+        assert result.result == "local ok"
+    finally:
+        ToolRegistry._try_dispatch = original
+
+
+def test_try_dispatch_exception_returns_error_output(clean_registry):
+    """_try_dispatch raising returns a structured error output."""
+    original = ToolRegistry._try_dispatch
+
+    ToolRegistry._try_dispatch = classmethod(
+        lambda cls, key, inputs, config: (_ for _ in ()).throw(RuntimeError("remote down"))
+    )
+    try:
+        result = _register_and_run(
+            clean_registry, "dispatch-error",
+            lambda inputs, config, instance=None: MockToolOutput(result="local"),
+        )
+        assert result.success is False
+        assert "remote down" in result.errors[0]
+    finally:
+        ToolRegistry._try_dispatch = original
 
 
 def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
