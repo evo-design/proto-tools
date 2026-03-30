@@ -1051,7 +1051,11 @@ class ToolInstance:
     def _ensure_micromamba() -> Path:
         """Ensure micromamba is installed, download if missing.
 
-        Returns path to micromamba binary.
+        Uses a file lock to prevent concurrent downloads when multiple
+        processes (e.g. pytest-xdist workers) race to install micromamba.
+
+        Returns:
+            Path: Path to micromamba binary.
         """
         mamba_root = ToolInstance._get_micromamba_root()
         mamba_bin = mamba_root / "bin" / "micromamba"
@@ -1059,61 +1063,69 @@ class ToolInstance:
         if mamba_bin.exists():
             return mamba_bin
 
-        # Download micromamba
-        logger.info("Downloading micromamba to %s...", mamba_root)
+        # File lock prevents concurrent downloads from parallel processes
+        from filelock import FileLock
+
         mamba_root.mkdir(parents=True, exist_ok=True)
-
-        import platform
-        system = platform.system()
-        arch = platform.machine()
-
-        if system == "Linux":
-            if arch == "x86_64":
-                platform_id = "linux-64"
-            elif arch == "aarch64" or arch == "arm64":
-                platform_id = "linux-aarch64"
-            else:
-                raise RuntimeError(f"Unsupported Linux architecture: {arch}")
-        elif system == "Darwin":  # macOS
-            if arch == "x86_64":
-                platform_id = "osx-64"
-            elif arch == "arm64":
-                platform_id = "osx-arm64"
-            else:
-                raise RuntimeError(f"Unsupported macOS architecture: {arch}")
-        else:
-            raise RuntimeError(
-                f"Unsupported operating system: {system} (arch: {arch})"
-            )
-
-        urls = [
-            f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest",
-            f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-1.5.12-0.tar.bz2",
-        ]
-        last_err: Exception | None = None
-        for url in urls:
-            try:
-                result = subprocess.run(
-                    ["curl", "-Ls", "--retry", "2", "--retry-delay", "3", url],
-                    check=True,
-                    capture_output=True,
-                )
-                subprocess.run(
-                    ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
-                    input=result.stdout,
-                    check=True,
-                    capture_output=True,
-                )
-                mamba_bin.chmod(0o755)
-                logger.info("Micromamba installed successfully from %s", url)
+        lock = FileLock(mamba_root / ".install.lock", timeout=300)
+        with lock:
+            # Re-check after acquiring lock — another process may have installed it
+            if mamba_bin.exists():
                 return mamba_bin
-            except subprocess.CalledProcessError as e:
-                last_err = e
-                logger.warning("Failed to download micromamba from %s: %s", url, e)
-                continue
-        raise RuntimeError(
-            f"Failed to download/extract micromamba from all sources: {last_err}"
-        )
+
+            logger.info("Downloading micromamba to %s...", mamba_root)
+
+            import platform
+            system = platform.system()
+            arch = platform.machine()
+
+            if system == "Linux":
+                if arch == "x86_64":
+                    platform_id = "linux-64"
+                elif arch == "aarch64" or arch == "arm64":
+                    platform_id = "linux-aarch64"
+                else:
+                    raise RuntimeError(f"Unsupported Linux architecture: {arch}")
+            elif system == "Darwin":  # macOS
+                if arch == "x86_64":
+                    platform_id = "osx-64"
+                elif arch == "arm64":
+                    platform_id = "osx-arm64"
+                else:
+                    raise RuntimeError(f"Unsupported macOS architecture: {arch}")
+            else:
+                raise RuntimeError(
+                    f"Unsupported operating system: {system} (arch: {arch})"
+                )
+
+            urls = [
+                f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest",
+                f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-1.5.12-0.tar.bz2",
+            ]
+            last_err: Exception | None = None
+            for url in urls:
+                try:
+                    result = subprocess.run(
+                        ["curl", "-Ls", "--retry", "2", "--retry-delay", "3", url],
+                        check=True,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
+                        input=result.stdout,
+                        check=True,
+                        capture_output=True,
+                    )
+                    mamba_bin.chmod(0o755)
+                    logger.info("Micromamba installed successfully from %s", url)
+                    return mamba_bin
+                except subprocess.CalledProcessError as e:
+                    last_err = e
+                    logger.warning("Failed to download micromamba from %s: %s", url, e)
+                    continue
+            raise RuntimeError(
+                f"Failed to download/extract micromamba from all sources: {last_err}"
+            )
 
     def _get_python_version(self) -> str:
         """Get Python version for this tool from python_version.txt.

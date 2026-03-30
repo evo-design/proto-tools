@@ -64,6 +64,7 @@ dev = [
     "pytest-asyncio>=0.21", # asyncio_mode="auto" requires 0.21+
     "pytest-cov>=4.1.0",
     "pytest-forked",        # Required on Sherlock (exclusive GPU process mode)
+    "pytest-xdist",         # Parallel test execution (pytest -n auto)
 
     # Code quality
     "black",
