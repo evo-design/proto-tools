@@ -8,7 +8,7 @@ echo "Setting up ESM-IF standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_pytorch
+proto_install_pytorch
 
 echo "Installing torch-geometric (required by ESM-IF GVP modules)..."
 uv pip install torch-geometric
@@ -107,7 +107,7 @@ if os.path.exists(gvp_path):
 echo "Applied ESM compatibility patches."
 
 # Download model weights
-bpt_resolve_weights_dir esm_if1
+proto_resolve_weights_dir esm_if1
 
 # Download ESM-IF1 vanilla weights
 ESMIF_WEIGHTS_FILE="${WEIGHTS_DIR}/esm_if1_gvp4_t16_142M_UR50.pt"

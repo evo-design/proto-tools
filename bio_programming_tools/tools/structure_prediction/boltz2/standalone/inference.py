@@ -37,17 +37,19 @@ class Boltz2Model:
         self._loaded = False
         from standalone_helpers import resolve_weights_dir
 
-        bpt_dir = resolve_weights_dir("boltz2")
-        if bpt_dir:
-            self.cache_dir = Path(bpt_dir)
+        weights_dir = resolve_weights_dir("boltz2")
+        if weights_dir:
+            self.cache_dir = Path(weights_dir)
         else:
-            # NONE mode fallback: HF_HOME or home directory
+            # NONE mode fallback: HF_HOME for passthrough
             hf_home = os.environ.get("HF_HOME")
-            self.cache_dir = (
-                Path(hf_home) / "boltz"
-                if hf_home
-                else Path.home() / ".model_cache" / "checkpoints" / "boltz"
-            )
+            if hf_home:
+                self.cache_dir = Path(hf_home) / "boltz"
+            else:
+                raise RuntimeError(
+                    "Cannot determine Boltz2 cache directory. "
+                    "Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
+                )
         self.boltz_executable = None
 
     def __call__(

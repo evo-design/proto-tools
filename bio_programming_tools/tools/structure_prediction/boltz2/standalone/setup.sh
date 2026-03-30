@@ -8,7 +8,7 @@ echo "Setting up Boltz2 standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_pytorch
+proto_install_pytorch
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt

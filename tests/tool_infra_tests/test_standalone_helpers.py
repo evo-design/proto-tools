@@ -268,23 +268,24 @@ def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
 from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 
 
-def test_resolve_weights_dir_in_env_mode(monkeypatch, tmp_path):
-    """IN_ENV mode returns {venv}/model_weight_cache/."""
-    monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path))
-    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+def test_resolve_weights_dir_default_uses_proto_home(monkeypatch, tmp_path):
+    """Default mode (no PROTO_MODEL_CACHE) returns {PROTO_HOME}/proto_model_cache/{tool}."""
+    proto_home = tmp_path / ".proto"
+    monkeypatch.setenv("PROTO_HOME", str(proto_home))
+    monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
-    assert result == str(tmp_path / "model_weight_cache")
+    assert result == str(proto_home / "proto_model_cache" / "fampnn")
     assert os.path.isdir(result)
 
 
 def test_resolve_weights_dir_in_env_explicit(monkeypatch, tmp_path):
-    """Explicit BPT_MODEL_CACHE=IN_ENV stores weights in the tool venv."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    """Explicit PROTO_MODEL_CACHE=IN_ENV stores weights in the tool venv."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path))
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
@@ -295,8 +296,8 @@ def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
     """Absolute path mode returns /path/{tool_name}/."""
     shared = tmp_path / "shared_weights"
     shared.mkdir()
-    monkeypatch.setenv("BPT_MODEL_CACHE", str(shared))
-    monkeypatch.delenv("BPT_PROTENIX_WEIGHTS_DIR", raising=False)
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
+    monkeypatch.delenv("PROTO_PROTENIX_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("protenix")
 
@@ -308,9 +309,9 @@ def test_resolve_weights_dir_none_mode(monkeypatch, tmp_path):
     """NONE mode falls back to {venv}/weights/ (matching shell helper)."""
     venv = tmp_path / "tool_env"
     venv.mkdir()
-    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "NONE")
     monkeypatch.setenv("VENV_PATH", str(venv))
-    monkeypatch.delenv("BPT_BOLTZ2_WEIGHTS_DIR", raising=False)
+    monkeypatch.delenv("PROTO_BOLTZ2_WEIGHTS_DIR", raising=False)
     monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
 
     result = resolve_weights_dir("boltz2")
@@ -320,10 +321,10 @@ def test_resolve_weights_dir_none_mode(monkeypatch, tmp_path):
 
 
 def test_resolve_weights_dir_per_tool_override_beats_mode(monkeypatch, tmp_path):
-    """BPT_{TOOL}_WEIGHTS_DIR overrides BPT_MODEL_CACHE."""
+    """PROTO_{TOOL}_WEIGHTS_DIR overrides PROTO_MODEL_CACHE."""
     override_dir = tmp_path / "my_custom_dir"
-    monkeypatch.setenv("BPT_MODEL_CACHE", "NONE")
-    monkeypatch.setenv("BPT_FAMPNN_WEIGHTS_DIR", str(override_dir))
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "NONE")
+    monkeypatch.setenv("PROTO_FAMPNN_WEIGHTS_DIR", str(override_dir))
 
     result = resolve_weights_dir("fampnn")
 
@@ -332,11 +333,11 @@ def test_resolve_weights_dir_per_tool_override_beats_mode(monkeypatch, tmp_path)
 
 
 def test_resolve_weights_dir_per_tool_override_beats_in_env(monkeypatch, tmp_path):
-    """BPT_{TOOL}_WEIGHTS_DIR overrides IN_ENV mode too."""
+    """PROTO_{TOOL}_WEIGHTS_DIR overrides IN_ENV mode too."""
     override_dir = tmp_path / "override"
-    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     monkeypatch.setenv("TOOL_VENV_PATH", str(tmp_path / "venv"))
-    monkeypatch.setenv("BPT_ESM_IF1_WEIGHTS_DIR", str(override_dir))
+    monkeypatch.setenv("PROTO_ESM_IF1_WEIGHTS_DIR", str(override_dir))
 
     result = resolve_weights_dir("esm_if1")
 
@@ -348,8 +349,8 @@ def test_resolve_weights_dir_creates_leaf_directory(monkeypatch, tmp_path):
     parent = tmp_path / "existing"
     parent.mkdir()
     shared = parent / "weights"
-    monkeypatch.setenv("BPT_MODEL_CACHE", str(shared))
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
@@ -360,8 +361,8 @@ def test_resolve_weights_dir_creates_leaf_directory(monkeypatch, tmp_path):
 def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
     """resolve_weights_dir creates the directory when given an explicit path."""
     cache_path = tmp_path / "custom_cache"
-    monkeypatch.setenv("BPT_MODEL_CACHE", str(cache_path))
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(cache_path))
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
@@ -371,23 +372,25 @@ def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
 
 def test_resolve_weights_dir_in_env_no_venv(monkeypatch):
     """IN_ENV with no TOOL_VENV_PATH/VENV_PATH returns None."""
-    monkeypatch.setenv("BPT_MODEL_CACHE", "IN_ENV")
+    monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
     monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
     monkeypatch.delenv("VENV_PATH", raising=False)
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
     assert result is None
 
 
-def test_resolve_weights_dir_venv_path_fallback(monkeypatch, tmp_path):
-    """IN_ENV uses VENV_PATH when TOOL_VENV_PATH is not set."""
+def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tmp_path):
+    """When PROTO_HOME is also unset, falls back to ~/.proto/proto_model_cache/."""
     monkeypatch.delenv("TOOL_VENV_PATH", raising=False)
-    monkeypatch.setenv("VENV_PATH", str(tmp_path))
-    monkeypatch.delenv("BPT_MODEL_CACHE", raising=False)
-    monkeypatch.delenv("BPT_FAMPNN_WEIGHTS_DIR", raising=False)
+    monkeypatch.delenv("VENV_PATH", raising=False)
+    monkeypatch.delenv("PROTO_HOME", raising=False)
+    monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
+    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     result = resolve_weights_dir("fampnn")
 
-    assert result == str(tmp_path / "model_weight_cache")
+    home = os.path.expanduser("~")
+    assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn")

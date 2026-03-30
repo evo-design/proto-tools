@@ -5,7 +5,7 @@
 # system and don't need to be listed here. Users can still override by setting
 # ALPHAGENOME_JAX_SPEC, ALPHAGENOME_USE_LOCAL_CUDA_ENV, etc. in their environment.
 #
-# AlphaGenome checkpoint paths are now managed by BPT_MODEL_CACHE
+# AlphaGenome checkpoint paths are now managed by PROTO_MODEL_CACHE
 # (passed through automatically by persistent_worker.py)
 
 [set]

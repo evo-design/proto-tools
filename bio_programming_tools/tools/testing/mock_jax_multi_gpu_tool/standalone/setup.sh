@@ -5,7 +5,7 @@ source standalone_helpers.sh
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_cuda_toolkit
-bpt_install_jax
+proto_install_cuda_toolkit
+proto_install_jax
 
 echo "Mock JAX multi-GPU tool setup complete"

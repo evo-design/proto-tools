@@ -603,20 +603,25 @@ def get_platform_id(
 
 
 def _get_git_commit_short(length: int = 7) -> str | None:
-    """Get short git commit hash of HEAD."""
+    """Get short git commit hash of HEAD, or package version as fallback."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", f"--short={length}", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5,
-            cwd=Path(__file__).parent.parent.parent,  # repo root
+            cwd=Path(__file__).parent.parent.parent,
         )
         if result.returncode == 0:
             return result.stdout.strip()
     except Exception:
         pass
-    return None
+    # Not in a git repo (e.g., non-editable pip install) — use package version
+    try:
+        from bio_programming_tools import __version__
+        return f"v{__version__}"
+    except ImportError:
+        return None
 
 
 def get_git_info() -> dict[str, Any]:
@@ -625,7 +630,8 @@ def get_git_info() -> dict[str, Any]:
     Returns
     -------
     dict
-        commit (12-char short hash), branch name, and dirty status.
+        commit (12-char short hash), branch name, dirty status, and
+        package version (always present as fallback).
     """
     repo_root = Path(__file__).parent.parent.parent
 
@@ -633,7 +639,15 @@ def get_git_info() -> dict[str, Any]:
         "commit": None,
         "branch": None,
         "dirty": False,
+        "version": None,
     }
+
+    # Always include package version
+    try:
+        from bio_programming_tools import __version__
+        info["version"] = __version__
+    except ImportError:
+        pass
 
     try:
         # Get commit hash (12 chars)

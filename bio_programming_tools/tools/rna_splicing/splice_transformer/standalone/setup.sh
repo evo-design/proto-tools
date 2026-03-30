@@ -9,7 +9,7 @@ pip install uv
 
 # Override with SPLICE_TRANSFORMER_TORCH_SPEC or TORCH_SPEC env vars if needed
 TORCH_SPEC="${SPLICE_TRANSFORMER_TORCH_SPEC:-${TORCH_SPEC:-${RECOMMENDED_TORCH_SPEC:-torch}}}"
-bpt_install_pytorch "$TORCH_SPEC"
+proto_install_pytorch "$TORCH_SPEC"
 
 echo "Installing remaining Python dependencies..."
 uv pip install -r requirements.txt

@@ -16,7 +16,6 @@ import subprocess
 import tempfile
 import threading
 import uuid
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -28,29 +27,6 @@ logger = logging.getLogger(__name__)
 # Helper Functions
 # ============================================================================
 
-
-@lru_cache(maxsize=1)
-def _load_bpt_env() -> dict[str, str]:
-    """Load defaults from ``.bpt.env`` at the project root.
-
-    Simple ``KEY=VALUE`` format (no shell expansion).  Surrounding quotes
-    on values are stripped so ``BPT_MODEL_CACHE="/path"`` works like
-    ``BPT_MODEL_CACHE=/path``.  Lines starting with ``#`` and blank lines
-    are ignored.  Missing file returns ``{}``.
-    """
-    env_file = Path(__file__).parent.parent.parent / ".bpt.env"
-    if not env_file.is_file():
-        return {}
-    result: dict[str, str] = {}
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        result[key.strip()] = value.strip().strip('"').strip("'")
-    return result
 
 
 def _normalize_progress_line(line: str) -> str:
@@ -138,7 +114,8 @@ _BASE_PASSTHROUGH = {
     "HF_TOKEN",
     "HUGGING_FACE_HUB_TOKEN",
     # Model weights management
-    "BPT_MODEL_CACHE",
+    "PROTO_HOME",
+    "PROTO_MODEL_CACHE",
     # Network proxy — tools download model weights and need proxy config
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -236,10 +213,6 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
-    # Apply .bpt.env defaults (env vars from parent always take precedence)
-    for key, value in _load_bpt_env().items():
-        env.setdefault(key, value)
-
     # Ensure HF_TOKEN is explicitly set even if the token was stored
     # in a file (~/.cache/huggingface/token or ~/.git-credentials).
     # Subprocesses may have a different HF_HOME, so file-based tokens
@@ -253,7 +226,7 @@ def _build_subprocess_env(
 
     # Pass through per-tool weight directory overrides
     for var, val in os.environ.items():
-        if var.startswith("BPT_") and var.endswith("_WEIGHTS_DIR"):
+        if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR"):
             env[var] = val
 
     # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
@@ -283,10 +256,16 @@ def _build_subprocess_env(
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     env["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # Set HF_HOME and TORCH_HOME based on BPT_MODEL_CACHE
-    # Default: repo-local model_cache/ directory (survives env rebuilds)
-    _default_cache = str(Path(__file__).parent.parent.parent / "model_cache")
-    cache_mode = env.get("BPT_MODEL_CACHE", _default_cache)
+    # Always propagate PROTO_HOME so standalone helpers resolve the same root
+    from .proto_home import get_proto_home
+
+    if "PROTO_HOME" not in env:
+        env["PROTO_HOME"] = str(get_proto_home())
+
+    # Set HF_HOME and TORCH_HOME based on PROTO_MODEL_CACHE
+    # Default: PROTO_HOME/proto_model_cache/ directory (survives env rebuilds)
+    _default_cache = str(get_proto_home() / "proto_model_cache")
+    cache_mode = env.get("PROTO_MODEL_CACHE", _default_cache)
     if cache_mode == "IN_ENV":
         # Each tool stores weights in its own venv
         if tool_env_path:

@@ -7,6 +7,7 @@ For personal discoveries (debugging patterns, tool quirks found during a session
 ## Directory Structure
 
 - `sherlock-setup.md` — Stanford Sherlock cluster-specific setup (temporary, for beta testers)
+- `model-weights.md` — `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout
 - `tool-environments.md` — Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol
 - `testing.md` — Test structure, assertions, markers, naming conventions
 - `usage-guide.md` — Claude Code script patterns, batch persistence, GPU tools, citations

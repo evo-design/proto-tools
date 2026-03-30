@@ -34,31 +34,25 @@ We recommend using the provided `environment.yml`, which sets up Python, compile
 ```bash
 conda env create -f environment.yml
 conda activate bio-tools
-pip install -e "."
+pip install .
 ```
 
-Most newer systems will already have compilers and build tools available at a system level, which should allow you to just `pip install -e "."` in any Python 3.10+ environment.
+Most newer systems will already have compilers and build tools available at a system level, which should allow you to just `pip install .` in any Python 3.10+ environment.
 
-For development (tests, linting, pre-commit hooks):
+> **Note:** If you are developing or contributing to this project, follow the setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md) instead.
+
+### Step 2: Model weights & data storage (optional) 🗂️
+
+All persistent data (model weights, tool environments, micromamba) is stored under `PROTO_HOME` (defaults to `~/.proto/`).
+
+To customize the storage location (recommended for labs/HPC):
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
+# Add to your ~/.bashrc:
+export PROTO_HOME=/path/to/your/proto_home
 ```
 
-### Step 2: Model weights cache (optional) 🗂️
-
-Model weights are stored in `model_cache/` at the repo root by default (gitignored). This keeps weights outside tool environments so they survive env rebuilds.
-
-To share weights across a lab or redirect to larger storage, create a `.bpt.env` file (see `.bpt.env.example`):
-
-```bash
-cp .bpt.env.example .bpt.env
-# Edit .bpt.env:
-BPT_MODEL_CACHE=/path/to/shared/weights
-```
-
-Or set the environment variable directly: `export BPT_MODEL_CACHE=/path/to/shared/weights`. See [notes/tool-environments.md](notes/tool-environments.md) for all options.
+To override just model weights separately: `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/model-weights.md](notes/model-weights.md) for all options.
 
 ### Step 3: HuggingFace authentication (optional) 🔑
 
@@ -238,7 +232,7 @@ It will write runnable scripts to `analyses/` or execute directly depending on c
 
 ## Development & Contributing
 
-Contributing new tools, running tests, and developer workflows. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide, including PR format, code style, and testing conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configuration, PR format, code style, and testing conventions.
 
 ### Claude Code features for developers
 

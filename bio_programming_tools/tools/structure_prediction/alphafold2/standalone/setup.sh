@@ -8,15 +8,15 @@ echo "Setting up AlphaFold2 (ColabDesign) standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_cuda_toolkit "${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
-bpt_install_jax ALPHAFOLD2
+proto_install_cuda_toolkit "${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
+proto_install_jax ALPHAFOLD2
 
 echo "Installing ColabDesign and dependencies..."
 uv pip install "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@gamma"
 uv pip install biopython ipython
 
 # Download AF2 parameters (~3.5GB)
-bpt_resolve_weights_dir alphafold2
+proto_resolve_weights_dir alphafold2
 WEIGHTS_DIR="${WEIGHTS_DIR}/params"
 mkdir -p "$WEIGHTS_DIR"
 PARAMS_DIR="$WEIGHTS_DIR"

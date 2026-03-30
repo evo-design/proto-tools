@@ -171,7 +171,14 @@ class ProtenixModel:
             self.load()
 
         # Validate and cleanup corrupted checkpoints before running inference
-        checkpoint_dir = Path(os.environ.get("PROTENIX_ROOT_DIR", Path.home())) / "checkpoint"
+        # PROTENIX_ROOT_DIR is always set by dispatch() via resolve_weights_dir()
+        protenix_root = os.environ.get("PROTENIX_ROOT_DIR")
+        if not protenix_root:
+            raise RuntimeError(
+                "PROTENIX_ROOT_DIR not set. "
+                "Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
+            )
+        checkpoint_dir = Path(protenix_root) / "checkpoint"
         cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
         logger.debug("\n=== Protenix Prediction ===")
@@ -346,12 +353,12 @@ def dispatch(input_dict: dict) -> dict:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    # Resolve checkpoint directory via BPT_MODEL_CACHE
+    # Resolve checkpoint directory via PROTO_MODEL_CACHE
     from standalone_helpers import resolve_weights_dir
 
-    bpt_dir = resolve_weights_dir("protenix")
-    if bpt_dir:
-        os.environ["PROTENIX_ROOT_DIR"] = bpt_dir
+    weights_dir = resolve_weights_dir("protenix")
+    if weights_dir:
+        os.environ["PROTENIX_ROOT_DIR"] = weights_dir
     elif not os.environ.get("PROTENIX_ROOT_DIR"):
         # Fallback: store checkpoints in the tool env directory
         env_path = os.environ.get("TOOL_VENV_PATH")

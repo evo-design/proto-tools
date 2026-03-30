@@ -8,8 +8,8 @@ echo "Setting up BioEmu standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_cuda_toolkit "${BIOEMU_CUDA_TOOLKIT_CONSTRAINT:-}"
-bpt_install_pytorch
+proto_install_cuda_toolkit "${BIOEMU_CUDA_TOOLKIT_CONSTRAINT:-}"
+proto_install_pytorch
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt

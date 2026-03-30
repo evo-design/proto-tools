@@ -191,7 +191,7 @@ host_alias=x86_64-conda-linux-gnu
 ### Subprocess Environment (passed to tools)
 
 ```
-BPT_MODEL_CACHE=/home/bviggiano/main/models
+PROTO_MODEL_CACHE=/home/bviggiano/main/models
 CONDA_PREFIX=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda

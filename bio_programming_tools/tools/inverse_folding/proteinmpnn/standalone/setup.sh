@@ -8,12 +8,12 @@ echo "Setting up ProteinMPNN standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_cuda_toolkit
+proto_install_cuda_toolkit
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
-bpt_install_jax PROTEINMPNN
+proto_install_jax PROTEINMPNN
 
 # ============================================================================
 # Download AbMPNN weights (antibody-optimized ProteinMPNN) into ColabDesign's

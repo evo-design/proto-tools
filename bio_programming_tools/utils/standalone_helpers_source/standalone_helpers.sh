@@ -12,16 +12,16 @@
 #   source standalone_helpers.sh
 #
 # Available functions:
-#   bpt_install_pytorch [torch_spec]
-#   bpt_install_jax [TOOL_PREFIX]
-#   bpt_install_cuda_toolkit [constraint] [extra_packages...]
-#   bpt_resolve_weights_dir <tool_name>     -> sets $WEIGHTS_DIR
-#   bpt_check_gated_hf_repo <repo_id> <license_url> [probe_file]
+#   proto_install_pytorch [torch_spec]
+#   proto_install_jax [TOOL_PREFIX]
+#   proto_install_cuda_toolkit [constraint] [extra_packages...]
+#   proto_resolve_weights_dir <tool_name>     -> sets $WEIGHTS_DIR
+#   proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
 # ============================================================================
 
 
 # ---------------------------------------------------------------------------
-# bpt_install_pytorch [torch_spec] [extra_packages...]
+# proto_install_pytorch [torch_spec] [extra_packages...]
 #
 # Install PyTorch using the centralized RECOMMENDED_TORCH_SPEC from
 # compute_deps.py. Accepts an optional override for tools that pin versions.
@@ -29,13 +29,13 @@
 # same index to ensure version compatibility.
 #
 # Example:
-#   bpt_install_pytorch                          # use recommended spec
-#   bpt_install_pytorch "torch==2.6.0"           # pin specific version
-#   bpt_install_pytorch "" torchvision            # recommended torch + torchvision
+#   proto_install_pytorch                          # use recommended spec
+#   proto_install_pytorch "torch==2.6.0"           # pin specific version
+#   proto_install_pytorch "" torchvision            # recommended torch + torchvision
 #
 # Reference: tools/masked_models/esm2/standalone/setup.sh
 # ---------------------------------------------------------------------------
-bpt_install_pytorch() {
+proto_install_pytorch() {
     local torch_spec="${1:-${RECOMMENDED_TORCH_SPEC:-torch}}"
     shift 2>/dev/null || true
     echo "Installing PyTorch: ${torch_spec} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
@@ -44,18 +44,18 @@ bpt_install_pytorch() {
 
 
 # ---------------------------------------------------------------------------
-# bpt_install_jax [TOOL_PREFIX]
+# proto_install_jax [TOOL_PREFIX]
 #
 # Install JAX with the centralized recommendation. Accepts an optional tool
 # prefix for per-tool override env vars (e.g., ALPHAFOLD2_JAX_SPEC).
 #
 # Example:
-#   bpt_install_jax                    # use recommended spec
-#   bpt_install_jax ALPHAFOLD2         # check ALPHAFOLD2_JAX_SPEC first
+#   proto_install_jax                    # use recommended spec
+#   proto_install_jax ALPHAFOLD2         # check ALPHAFOLD2_JAX_SPEC first
 #
 # Reference: tools/structure_prediction/alphafold2/standalone/setup.sh
 # ---------------------------------------------------------------------------
-bpt_install_jax() {
+proto_install_jax() {
     local tool_prefix="${1:-}"
     local jax_variant jax_spec
 
@@ -76,20 +76,20 @@ bpt_install_jax() {
 
 
 # ---------------------------------------------------------------------------
-# bpt_install_cuda_toolkit [constraint] [extra_packages...]
+# proto_install_cuda_toolkit [constraint] [extra_packages...]
 #
 # Install CUDA toolkit locally via micromamba. Installs cuda-toolkit,
 # cuda-cudart-dev, and cudnn by default. Accepts optional constraint
 # override and extra packages.
 #
 # Example:
-#   bpt_install_cuda_toolkit                         # auto-detect version
-#   bpt_install_cuda_toolkit "12.4.*"                # pin CUDA version
-#   bpt_install_cuda_toolkit "" cuda-nvcc "gcc=12.*" # add extra packages
+#   proto_install_cuda_toolkit                         # auto-detect version
+#   proto_install_cuda_toolkit "12.4.*"                # pin CUDA version
+#   proto_install_cuda_toolkit "" cuda-nvcc "gcc=12.*" # add extra packages
 #
 # Reference: tools/inverse_folding/fampnn/standalone/setup.sh
 # ---------------------------------------------------------------------------
-bpt_install_cuda_toolkit() {
+proto_install_cuda_toolkit() {
     local cuda_constraint="${1:-}"
     shift 2>/dev/null || true
     local extra_packages=("$@")
@@ -119,68 +119,69 @@ bpt_install_cuda_toolkit() {
 
 
 # ---------------------------------------------------------------------------
-# bpt_resolve_weights_dir <tool_name>
+# proto_resolve_weights_dir <tool_name>
 #
-# Set the shell variable WEIGHTS_DIR based on BPT_MODEL_CACHE.
+# Set the shell variable WEIGHTS_DIR based on PROTO_MODEL_CACHE.
 # Mirrors the Python resolve_weights_dir() logic in standalone_helpers.py.
 #
 # Priority:
-#   1. BPT_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)
-#   2. BPT_MODEL_CACHE:
-#      - (default/unset): {PACKAGE_ROOT}/model_cache/{tool_name} (survives env rebuilds)
+#   1. PROTO_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)
+#   2. PROTO_MODEL_CACHE:
+#      - (default/unset): {PROTO_HOME}/proto_model_cache/{tool_name}
 #      - /absolute/path:  /absolute/path/{tool_name} (shared directory)
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
 # Example:
-#   bpt_resolve_weights_dir fampnn
+#   proto_resolve_weights_dir fampnn
 #   echo "Weights at: $WEIGHTS_DIR"
 #
 # Reference: tools/inverse_folding/fampnn/standalone/setup.sh
 # ---------------------------------------------------------------------------
-bpt_resolve_weights_dir() {
+proto_resolve_weights_dir() {
     local tool_name="$1"
     local tool_upper
     tool_upper=$(echo "$tool_name" | tr '[:lower:]' '[:upper:]')
-    local override_var="BPT_${tool_upper}_WEIGHTS_DIR"
+    local override_var="PROTO_${tool_upper}_WEIGHTS_DIR"
     local override="${!override_var:-}"
 
     if [ -n "$override" ]; then
         WEIGHTS_DIR="$override"
-    elif [ "${BPT_MODEL_CACHE:-}" = "IN_ENV" ]; then
+    elif [ "${PROTO_MODEL_CACHE:-}" = "IN_ENV" ]; then
         WEIGHTS_DIR="${VENV_PATH}/model_weight_cache"
-    elif [ "${BPT_MODEL_CACHE:-}" = "NONE" ]; then
+    elif [ "${PROTO_MODEL_CACHE:-}" = "NONE" ]; then
         WEIGHTS_DIR="${VENV_PATH}/weights"
-    elif [ -n "${BPT_MODEL_CACHE:-}" ]; then
-        WEIGHTS_DIR="${BPT_MODEL_CACHE}/${tool_name}"
+    elif [ -n "${PROTO_MODEL_CACHE:-}" ]; then
+        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${tool_name}"
     else
-        # Default: repo-local model_cache/ directory
-        WEIGHTS_DIR="${PACKAGE_ROOT}/model_cache/${tool_name}"
+        # Default: PROTO_HOME/proto_model_cache/ directory
+        local _proto_home="${PROTO_HOME:-$HOME/.proto}"
+        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${tool_name}"
     fi
     mkdir -p "$WEIGHTS_DIR"
 }
 
 
 # ---------------------------------------------------------------------------
-# bpt_check_gated_hf_repo <repo_id> <license_url> [probe_file]
+# proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
 #
 # Validate access to a gated HuggingFace repository. Discovers HF tokens
 # from env vars, token file, and git-credentials. Exits with a clear error
 # message if access is denied.
 #
 # Example:
-#   bpt_check_gated_hf_repo \
+#   proto_check_gated_hf_repo \
 #       "EvolutionaryScale/esm3-sm-open-v1" \
 #       "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1"
 #
-#   bpt_check_gated_hf_repo \
+#   proto_check_gated_hf_repo \
 #       "google/alphagenome-all-folds" \
 #       "https://huggingface.co/google/alphagenome-all-folds" \
 #       "README.md"
 #
 # Reference: tools/masked_models/esm3/standalone/setup.sh
 # ---------------------------------------------------------------------------
-bpt_check_gated_hf_repo() {
+proto_check_gated_hf_repo() {
     local repo_id="$1"
     local license_url="$2"
     local probe_file="${3:-config.json}"

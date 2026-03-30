@@ -3,7 +3,7 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-bpt_check_gated_hf_repo "google/alphagenome-all-folds" "https://huggingface.co/google/alphagenome-all-folds" "README.md"
+proto_check_gated_hf_repo "google/alphagenome-all-folds" "https://huggingface.co/google/alphagenome-all-folds" "README.md"
 
 echo "Setting up AlphaGenome standalone environment..."
 
@@ -12,13 +12,13 @@ pip install uv
 
 # Resolve CUDA constraint (backward compat with ALPHAGENOME_CUDA_TOOLKIT_VERSION)
 CUDA_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}}"
-bpt_install_cuda_toolkit "$CUDA_CONSTRAINT"
+proto_install_cuda_toolkit "$CUDA_CONSTRAINT"
 
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
 JAX_SPEC="${ALPHAGENOME_JAX_SPEC:-${RECOMMENDED_JAX_SPEC:-jax[cuda12]>=0.5,<1}}"
-bpt_install_jax ALPHAGENOME
+proto_install_jax ALPHAGENOME
 
 REPO_DIR="${VENV_PATH}/src/alphagenome_research"
 if [ -d "$REPO_DIR" ]; then

@@ -72,7 +72,7 @@ def setup_logging(
     level: Union[int, str] = logging.INFO,
     log_dir: Optional[str] = None,
     log_filename: Optional[str] = None,
-    log_to_file: bool = True,
+    log_to_file: Optional[bool] = None,
     log_to_console: bool = True,
     console_level: Optional[Union[int, str]] = None,
     file_level: Optional[Union[int, str]] = None,
@@ -86,10 +86,13 @@ def setup_logging(
         level (int | str): Default logging level for all handlers. Can be an int (e.g., logging.INFO)
             or a case-insensitive string (e.g., "INFO", "info", "Debug"). Default: INFO.
         log_dir (str | None): Directory for log files. Defaults to logs/ in project root
-            or BIO_PROGRAMMING_TOOLS_LOG_DIR environment variable.
+            or PROTO_LOG_DIR environment variable.
         log_filename (str | None): Custom filename for the log file. If None, uses timestamped filename
             like bio_programming_tools_YYYYMMDD_HHMMSS.log. If provided, uses this exact filename.
-        log_to_file (bool): Whether to enable file logging (default: True).
+        log_to_file (bool | None): Whether to enable file logging. Default: None (auto-detect).
+            When None, file logging is enabled only if a ``pyproject.toml`` is found
+            in the directory tree (i.e., running from a development repo) or
+            ``PROTO_LOG_DIR`` is set. Pass True/False to override.
         log_to_console (bool): Whether to enable console logging to stdout (default: True).
         console_level (int | str | None): Override level for console handler. Accepts int or string (default: uses `level`).
         file_level (int | str | None): Override level for file handler. Accepts int or string (default: DEBUG for full capture).
@@ -105,23 +108,31 @@ def setup_logging(
     if file_level is not None:
         file_level = _parse_log_level(file_level)
 
-    # During pytest, disable file logging unless explicitly requested with log_filename
-    # This prevents timestamped log files from being created during test imports
-    if os.environ.get("PYTEST_RUNNING") == "1" and log_filename is None:
-        log_to_file = False
+    # Resolve log_to_file auto-detect (None → check environment)
+    if log_to_file is None:
+        if os.environ.get("PYTEST_RUNNING") == "1" and log_filename is None:
+            # pytest: disable unless explicitly requested with log_filename
+            log_to_file = False
+        elif os.environ.get("PROTO_LOG_DIR"):
+            # User explicitly set a log dir — they want file logging
+            log_to_file = True
+        else:
+            # Enable file logging only in a dev repo (pyproject.toml present)
+            log_to_file = any(
+                (parent / "pyproject.toml").exists()
+                for parent in [Path.cwd()] + list(Path.cwd().parents)
+            )
+
     # Determine log directory
     if log_dir is None:
-        # Default to logs/ in project root
-        # Find project root by looking for pyproject.toml or use current directory
         current = Path.cwd()
         project_root = current
-        # Search up the directory tree for pyproject.toml
         for parent in [current] + list(current.parents):
             if (parent / "pyproject.toml").exists():
                 project_root = parent
                 break
         log_dir = os.environ.get(
-            "BIO_PROGRAMMING_TOOLS_LOG_DIR",
+            "PROTO_LOG_DIR",
             str(project_root / "logs")
         )
     log_path = Path(log_dir)

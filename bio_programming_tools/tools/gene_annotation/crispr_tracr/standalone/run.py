@@ -47,11 +47,10 @@ def _find_crispr_tracr_script() -> str:
         if script.exists():
             return str(script)
 
-    # Check common locations
+    # Check common locations (within the tool venv, not $HOME)
     candidates = [
         Path(sys.prefix) / "share" / "CRISPRtracrRNA" / "CRISPRtracrRNA.py",
         Path(sys.prefix) / "CRISPRtracrRNA" / "CRISPRtracrRNA.py",
-        Path.home() / "CRISPRtracrRNA" / "CRISPRtracrRNA.py",
     ]
 
     for candidate in candidates:

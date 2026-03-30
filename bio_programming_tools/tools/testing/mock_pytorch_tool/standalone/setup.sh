@@ -9,6 +9,6 @@ pip install uv
 echo "Clearing package caches for ABI-sensitive dependencies..."
 uv cache clean torch 2>/dev/null || true
 
-bpt_install_pytorch
+proto_install_pytorch
 
 echo "Mock PyTorch tool setup complete"

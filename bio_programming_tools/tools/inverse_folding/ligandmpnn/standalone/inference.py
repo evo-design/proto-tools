@@ -161,9 +161,9 @@ class LigandMPNNModel:
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import resolve_weights_dir
 
-        bpt_dir = resolve_weights_dir("ligandmpnn")
-        if bpt_dir:
-            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = bpt_dir
+        weights_dir = resolve_weights_dir("ligandmpnn")
+        if weights_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = weights_dir
 
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 

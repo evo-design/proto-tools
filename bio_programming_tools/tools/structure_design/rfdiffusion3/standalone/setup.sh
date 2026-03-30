@@ -8,12 +8,12 @@ echo "Setting up RFdiffusion3 standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_pytorch
+proto_install_pytorch
 
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
-bpt_resolve_weights_dir rfdiffusion3
+proto_resolve_weights_dir rfdiffusion3
 
 echo "Downloading rfdiffusion3 model weights..."
 foundry install rfd3 --checkpoint-dir "$WEIGHTS_DIR"

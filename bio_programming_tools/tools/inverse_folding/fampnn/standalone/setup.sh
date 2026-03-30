@@ -8,8 +8,8 @@ echo "Setting up FAMPNN standalone environment..."
 echo "Installing uv package manager..."
 pip install uv
 
-bpt_install_cuda_toolkit
-bpt_install_pytorch "" torchvision
+proto_install_cuda_toolkit
+proto_install_pytorch "" torchvision
 
 # Install torch-geometric (needed by FAMPNN)
 uv pip install torch-geometric
@@ -55,7 +55,7 @@ pip install -e "$FAMPNN_REPO_DIR" --no-deps
 # ============================================================================
 # Download model weights if not already present
 # ============================================================================
-bpt_resolve_weights_dir fampnn
+proto_resolve_weights_dir fampnn
 
 REPO_BASE="https://github.com/richardshuai/fampnn/raw/main/weights"
 
