@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/inverse-folding/ligandmpnn"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # LigandMPNN
 
 ## Overview
@@ -25,15 +27,15 @@ LigandMPNN is an inverse folding model that designs protein sequences conditione
 
 ## Biological Background
 
-Inverse folding solves the "reverse" protein design problem: given a desired 3D backbone structure, what amino acid sequence will fold into that structure? This is the complement of structure prediction (sequence -> structure).
+[Inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) solves the "reverse" protein design problem: given a desired 3D backbone structure, what amino acid sequence will fold into that structure? This is the complement of structure prediction (sequence -> structure).
 
-ProteinMPNN (Dauparas et al., 2022) pioneered the message-passing approach for inverse folding, achieving recovery rates (~50% native sequence identity) far exceeding previous physics-based methods. However, ProteinMPNN only considers the protein backbone and ignores non-protein molecules.
+ProteinMPNN (Dauparas et al., 2022) pioneered the [message-passing neural network](https://en.wikipedia.org/wiki/Graph_neural_network) approach for inverse folding, achieving recovery rates (~50% native sequence identity) far exceeding previous physics-based methods. However, ProteinMPNN only considers the protein backbone and ignores non-protein molecules.
 
 LigandMPNN extends this by encoding the atomic coordinates and chemical identities of:
-- **Small-molecule ligands** (drugs, metabolites, cofactors)
+- **Small-molecule ligands** (drugs, metabolites, [cofactors](https://en.wikipedia.org/wiki/Cofactor_(biochemistry)))
 - **Metal ions** (Zn, Fe, Mg, Ca, etc.)
 - **Nucleic acids** (DNA and RNA)
-- **Non-standard residues** (modified amino acids, post-translational modifications)
+- **Non-standard residues** (modified amino acids, [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification))
 
 This context is critical for designing functional enzymes, metalloprotein binding sites, and protein-nucleic acid interfaces, where the sequence must be compatible with both the protein fold and its molecular partners.
 

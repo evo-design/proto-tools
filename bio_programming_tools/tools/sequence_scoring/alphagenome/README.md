@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/alphagenome"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # AlphaGenome
 
 ## Overview
 
-AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for RNA-seq, ATAC-seq, DNase-seq, CAGE, ChIP-seq, splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
+AlphaGenome is Google DeepMind's multi-task genomic foundation model that predicts diverse regulatory signals from DNA sequence. It takes long genomic context windows (up to 1 Mb) and outputs spatial prediction tracks for [RNA-seq](https://en.wikipedia.org/wiki/RNA-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing), splice sites, and 3D contact maps. This wrapper provides six batched tools covering interval prediction, variant-effect prediction, raw sequence prediction, and three scoring modes (variant, interval, ISM).
 
 This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`ToolInstance("alphagenome")`).
 
@@ -24,16 +26,16 @@ This implementation uses **local GPU inference** with Hugging Face weights throu
 
 ## Biological Background
 
-Gene regulation is controlled by a complex interplay of cis-regulatory elements (promoters, enhancers, silencers) and chromatin state. Different experimental assays measure different aspects of this regulatory landscape:
+Gene regulation is controlled by a complex interplay of [cis-regulatory elements](https://en.wikipedia.org/wiki/Cis-regulatory_element) (promoters, enhancers, silencers) and [chromatin](https://en.wikipedia.org/wiki/Chromatin) state. Different experimental assays measure different aspects of this regulatory landscape:
 
 - **RNA-seq** measures transcript abundance, reflecting gene expression levels
 - **ATAC-seq / DNase-seq** measure chromatin accessibility, indicating active regulatory regions
 - **CAGE** captures transcription start sites at single-nucleotide resolution
 - **ChIP-seq** maps protein-DNA interactions (histone modifications, transcription factor binding)
 - **Splice site assays** quantify alternative splicing patterns
-- **Contact maps (Hi-C)** capture 3D chromatin organization
+- **Contact maps ([Hi-C](https://en.wikipedia.org/wiki/Hi-C_(genomic_analysis_technique)))** capture 3D chromatin organization
 
-AlphaGenome jointly predicts all of these signals from DNA sequence alone, leveraging long-range context (up to 1 Mb) to capture distal regulatory effects. This multi-task architecture allows it to model the relationships between regulatory layers -- for example, how a variant that disrupts a CTCF binding site might alter both chromatin accessibility and 3D contact structure.
+AlphaGenome jointly predicts all of these signals from DNA sequence alone, leveraging long-range context (up to 1 Mb) to capture distal regulatory effects. This multi-task architecture allows it to model the relationships between regulatory layers -- for example, how a variant that disrupts a [CTCF](https://en.wikipedia.org/wiki/CTCF) binding site might alter both chromatin accessibility and 3D contact structure.
 
 ## Tool Catalog
 
@@ -57,7 +59,7 @@ All tools accept either a single input item (auto-wrapped into a list) or an exp
 3. **Output formatting**: Prediction tools return the raw output matrices keyed by output type. Scoring tools apply recommended scorer functions that summarize the predictions into interpretable per-variant or per-interval scores.
 4. **Variant scoring**: For variant-effect tools, the model runs inference on both the reference and alternate sequences, and scorers compute the difference (e.g., log-fold-change in predicted signal).
 
-Coordinates use **0-based indexing with exclusive end** (BED-style).
+Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipedia.org/wiki/BED_(file_format))-style).
 
 ## Input Parameters
 

@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/inverse-folding/proteinmpnn"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ProteinMPNN
 
 ## Overview
@@ -22,7 +24,7 @@ ProteinMPNN is a deep learning model for protein sequence design given a protein
 ## Biological Background
 
 **What does this tool do?**
-ProteinMPNN solves the "inverse folding" problem: given a protein backbone structure (the 3D coordinates of N, CA, C, O atoms), predict which amino acid sequence will fold into that structure. This is the inverse of structure prediction.
+ProteinMPNN solves the "[inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding)" problem: given a protein backbone structure (the 3D coordinates of N, CA, C, O atoms), predict which amino acid sequence will fold into that structure. This is the inverse of structure prediction.
 
 **Why is this important?**
 Inverse folding enables:
@@ -32,12 +34,12 @@ Inverse folding enables:
 - Experimental validation: Generate multiple sequence candidates for a single structure to find the best experimental hits.
 
 **Scientific foundation:**
-ProteinMPNN uses a message passing neural network architecture:
+ProteinMPNN uses a [message passing neural network](https://en.wikipedia.org/wiki/Graph_neural_network) architecture:
 
 1. **Graph representation**: The protein backbone is represented as a graph where each residue is a node and edges connect spatially close residues (within ~30A).
 2. **Message passing**: Information flows between connected residues over multiple rounds, allowing the model to learn long-range dependencies.
-3. **Autoregressive decoding**: Sequences are generated one residue at a time, conditioned on previously generated residues and the full structural context.
-4. **Training**: The model was trained on ~19,000 protein structures from the PDB to maximize the probability of native sequences given their structures.
+3. **[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) decoding**: Sequences are generated one residue at a time, conditioned on previously generated residues and the full structural context.
+4. **Training**: The model was trained on ~19,000 protein structures from the [PDB](https://www.rcsb.org/) to maximize the probability of native sequences given their structures.
 
 ## Tool Catalog
 

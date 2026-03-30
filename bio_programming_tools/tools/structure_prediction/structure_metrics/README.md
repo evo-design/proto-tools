@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/structure-metrics"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Structure Metrics
 
 ## Overview
@@ -7,8 +9,8 @@ Structure Metrics computes structural quality metrics from PDB files, specifical
 
 **What does this tool measure/predict?**
 This tool computes two structural properties from PDB files:
-1. **Longest alpha helix**: The length (in residues) of the longest contiguous alpha-helical segment, as determined by secondary structure assignment.
-2. **Radius of gyration**: A measure of the overall compactness of the protein structure — the root-mean-square distance of all atoms from the structure's center of mass.
+1. **Longest alpha helix**: The length (in residues) of the longest contiguous [alpha-helical](https://en.wikipedia.org/wiki/Alpha_helix) segment, as determined by secondary structure assignment.
+2. **[Radius of gyration](https://en.wikipedia.org/wiki/Radius_of_gyration)**: A measure of the overall compactness of the protein structure — the root-mean-square distance of all atoms from the structure's center of mass.
 
 **Why is this important?**
 Structure prediction tools (ESMFold, AlphaFold2) can produce artifacts, especially for generated or unusual sequences. Two common failure modes are:
@@ -18,8 +20,8 @@ Structure prediction tools (ESMFold, AlphaFold2) can produce artifacts, especial
 These metrics provide fast, quantitative filters to catch these artifacts before more expensive downstream analyses.
 
 **Scientific foundation:**
-- **Secondary structure assignment** uses the DSSP-like algorithm implemented in Biotite, which assigns helix, sheet, and coil states based on backbone geometry and hydrogen bonding patterns.
-- **Radius of gyration** is a standard biophysical metric used in small-angle X-ray scattering (SAXS) and polymer physics. For globular proteins, it scales approximately as R_g ∝ N^(0.4) where N is the number of residues.
+- **Secondary structure assignment** uses the [DSSP](https://en.wikipedia.org/wiki/DSSP_(hydrogen_bond_estimation_algorithm))-like algorithm implemented in Biotite, which assigns helix, sheet, and coil states based on backbone geometry and hydrogen bonding patterns.
+- **Radius of gyration** is a standard biophysical metric used in [small-angle X-ray scattering](https://en.wikipedia.org/wiki/Small-angle_X-ray_scattering) (SAXS) and polymer physics. For globular proteins, it scales approximately as R_g ∝ N^(0.4) where N is the number of residues.
 
 ## When to Use This Tool
 

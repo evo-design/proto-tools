@@ -1,22 +1,24 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/viennarna"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ViennaRNA
 
 ## Overview
 
-ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to compute the minimum free energy (MFE) structure from nucleotide sequences.
+ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to compute the [minimum free energy](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics) (MFE) structure from nucleotide sequences.
 
 ## When to Use This Tool
 
 **Primary use cases:**
 - **RNA design:** Validate that RNAs have generally correct secondary structure
 - **mRNA optimization:** Predict secondary structures in UTRs and coding regions
-- **Riboswitch analysis:** Study ligand-responsive structural elements
+- **[Riboswitch](https://en.wikipedia.org/wiki/Riboswitch) analysis:** Study ligand-responsive structural elements
 - **Primer design:** Ensure primers don't form strong hairpins
 - **Antisense oligo design:** Identify accessible target regions
 - **Quick structural screening:** Fast structure prediction for many sequences
 
 **When NOT to use this tool:**
 - **3D structure prediction:** ViennaRNA only predicts 2D base pairing, not 3D coordinates. Use Boltz2 or AlphaFold3 for 3D RNA structures.
-- **Pseudoknots:** Standard MFE folding doesn't handle pseudoknots (use specialized tools)
+- **[Pseudoknots](https://en.wikipedia.org/wiki/Pseudoknot):** Standard MFE folding doesn't handle pseudoknots (use specialized tools)
 - **Protein-RNA complexes:** RNA structure can change upon protein binding. Use Boltz2 for protein-RNA complex modeling.
 - **Highly modified RNAs:** Modified nucleotides have different thermodynamics
 - **Co-transcriptional folding:** MFE assumes equilibrium, not kinetic folding
@@ -30,7 +32,7 @@ ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodyna
 ## Biological Background
 
 **What does this tool measure/predict?**
-ViennaRNA predicts the secondary structure of RNA molecules — the pattern of Watson-Crick and wobble base pairs that form within a single RNA strand. It outputs the structure in dot-bracket notation along with the minimum free energy (MFE).
+ViennaRNA predicts the secondary structure of RNA molecules — the pattern of [Watson-Crick](https://en.wikipedia.org/wiki/Watson%E2%80%93Crick_base_pair) and wobble base pairs that form within a single RNA strand. It outputs the structure in dot-bracket notation along with the minimum free energy (MFE).
 
 **Why is this important?**
 RNA secondary structure is fundamental to understanding RNA function:
@@ -41,7 +43,7 @@ RNA secondary structure is fundamental to understanding RNA function:
 - **Viral RNA:** Understanding viral RNA structures aids in understanding replication and drug targeting
 
 **Scientific foundation:**
-ViennaRNA uses a dynamic programming algorithm based on the nearest-neighbor thermodynamic model. Energy parameters (Turner 2004 for RNA, Mathews 2004 for DNA) describe the free energy contributions of:
+ViennaRNA uses a dynamic programming algorithm based on the [nearest-neighbor](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics#Nearest-neighbor_method) thermodynamic model. Energy parameters (Turner 2004 for RNA, Mathews 2004 for DNA) describe the free energy contributions of:
 - **Base pair stacking:** The stabilizing interactions between adjacent base pairs
 - **Loop energies:** Penalties for hairpin loops, internal loops, bulges, and multiloops
 - **Dangling ends:** Contributions from unpaired nucleotides adjacent to helices

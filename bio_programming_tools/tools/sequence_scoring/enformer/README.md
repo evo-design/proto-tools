@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/enformer"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Enformer
 
 ## Overview
 
-Enformer is a transformer-based deep learning model that predicts gene expression and chromatin accessibility directly from a 196,608 bp DNA sequence. It uses self-attention to capture long-range regulatory interactions up to ~100 kb away, enabling accurate prediction of how distal enhancers, silencers, and other regulatory elements influence gene expression.
+Enformer is a transformer-based deep learning model that predicts gene expression and chromatin accessibility directly from a 196,608 bp DNA sequence. It uses [self-attention](https://en.wikipedia.org/wiki/Attention_(machine_learning)) to capture long-range regulatory interactions up to ~100 kb away, enabling accurate prediction of how distal enhancers, silencers, and other regulatory elements influence gene expression.
 
 - **Tool key**: `enformer-prediction`
 - **Model context**: 196,608 bp (fixed length, ~98 kb in each direction from center)
@@ -28,13 +30,13 @@ Enformer is a transformer-based deep learning model that predicts gene expressio
 
 ## Biological Background
 
-Gene expression is controlled by a complex interplay of promoters, enhancers, silencers, insulators, and chromatin state. These regulatory elements can act over distances of tens to hundreds of kilobases. Traditional motif-based models capture local sequence features but miss long-range interactions.
+Gene expression is controlled by a complex interplay of promoters, [enhancers](https://en.wikipedia.org/wiki/Enhancer_(genetics)), [silencers](https://en.wikipedia.org/wiki/Silencer_(genetics)), [insulators](https://en.wikipedia.org/wiki/Insulator_(genetics)), and chromatin state. These regulatory elements can act over distances of tens to hundreds of kilobases. Traditional motif-based models capture local sequence features but miss long-range interactions.
 
-Enformer addresses this by processing 196,608 bp of genomic context through a transformer architecture. The model was trained on 5,313 human and 1,643 mouse experimental tracks from ENCODE and Roadmap Epigenomics, covering:
-- **Gene expression**: CAGE (promoter-level transcription initiation)
-- **Chromatin accessibility**: DNase-seq, ATAC-seq
+Enformer addresses this by processing 196,608 bp of genomic context through a transformer architecture. The model was trained on 5,313 human and 1,643 mouse experimental tracks from [ENCODE](https://en.wikipedia.org/wiki/ENCODE) and Roadmap Epigenomics, covering:
+- **Gene expression**: [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression) (promoter-level transcription initiation)
+- **Chromatin accessibility**: [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq)
 - **Histone modifications**: H3K4me3, H3K27ac, H3K36me3, H3K27me3, and others
-- **Transcription factor binding**: ChIP-seq for hundreds of TFs
+- **Transcription factor binding**: [ChIP-seq](https://en.wikipedia.org/wiki/ChIP_sequencing) for hundreds of TFs
 
 Each output track corresponds to a specific assay in a specific cell type or tissue. The 896 output bins (128 bp each) tile the central ~114 kb of the input window, providing spatial resolution of predicted regulatory activity.
 
@@ -45,8 +47,6 @@ Enformer requires GPU acceleration for inference.
 | Mode | Backend | Setup |
 |------|---------|-------|
 | **Local venv** | Local CUDA GPU | Requires NVIDIA GPU with CUDA |
-
-
 
 ## How It Works
 

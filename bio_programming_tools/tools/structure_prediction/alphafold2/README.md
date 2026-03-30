@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/alphafold2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # AlphaFold2
 
 ## Overview
 
-AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper (`alphafold2-prediction`). It supports optional multiple sequence alignment (MSA) generation via ColabFold search for improved accuracy, and can predict both monomeric and multimeric protein structures.
+AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper (`alphafold2-prediction`). It supports optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search for improved accuracy, and can predict both monomeric and multimeric protein structures.
 
 ## When to Use This Tool
 
@@ -44,7 +46,7 @@ AlphaFold2 uses a two-track architecture combining evolutionary and structural i
 3. **Recycling:** The prediction is iteratively refined by feeding outputs back through the network (configurable via `num_recycles`), progressively improving accuracy.
 4. **Ensemble averaging:** Multiple independently trained model parameter sets (1-5) can be averaged for higher confidence predictions.
 
-The model was trained on experimentally determined structures from the Protein Data Bank and achieves near-experimental accuracy for many protein families.
+The model was trained on experimentally determined structures from the [Protein Data Bank](https://www.rcsb.org/) and achieves near-experimental accuracy for many protein families.
 
 ## Execution Modes
 

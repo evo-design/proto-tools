@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/protenix"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Protenix
 
 ## Overview
 
-Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of biomolecular complexes using a diffusion-based architecture. It supports proteins, DNA, RNA, ligands, and their multi-chain complexes with optional post-translational modifications. Protenix is the first fully open-source model to match or exceed AlphaFold3 accuracy across diverse benchmarks.
+Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts 3D structures of biomolecular complexes using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It supports proteins, DNA, RNA, ligands, and their multi-chain complexes with optional post-translational modifications. Protenix is the first fully open-source model to match or exceed AlphaFold3 accuracy across diverse benchmarks.
 
 - **Tool key**: `protenix-prediction`
 - **Input**: Multi-chain complexes (protein, DNA, RNA, ligand) with optional modifications
@@ -15,7 +17,7 @@ Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts
 **Use Protenix when you need to:**
 - Predict 3D structures of protein-protein, protein-DNA, protein-RNA, or protein-ligand complexes
 - Model multi-modal complexes with mixed chain types in a single prediction
-- Predict structures with post-translational modifications (phosphorylation, methylation, etc.)
+- Predict structures with [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification) (phosphorylation, methylation, etc.)
 - Obtain high-confidence structure predictions with full open-source reproducibility
 - Screen multiple conformations by sampling with diffusion
 
@@ -32,7 +34,7 @@ Predicting the 3D structure of biomolecular complexes is fundamental to understa
 Protenix uses a diffusion-based architecture (following the AlphaFold3 approach) that:
 - **Generates full-atom coordinates** rather than inter-residue distances, enabling direct prediction of ligand binding poses and nucleic acid conformations
 - **Handles multi-modal inputs** natively: proteins, DNA, RNA, and small molecule ligands in a single prediction
-- **Supports chemical modifications** via Chemical Component Dictionary (CCD) codes, enabling prediction of structures with phosphorylation, methylation, and other PTMs
+- **Supports chemical modifications** via [Chemical Component Dictionary](https://www.wwpdb.org/data/ccd) (CCD) codes, enabling prediction of structures with phosphorylation, methylation, and other PTMs
 - **Uses MSA information** (optional) from ColabFold search to capture evolutionary conservation signals
 
 The model architecture consists of a Pairformer module (iterative refinement of pair representations), followed by a diffusion module that denoises random 3D coordinates into the predicted structure. Multiple samples are generated and ranked by a confidence head.

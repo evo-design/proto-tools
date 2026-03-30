@@ -1,15 +1,17 @@
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/minced"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # MinCED
 
 ## Overview
-MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting CRISPR arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic k-mer search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions.
+MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic [k-mer](https://en.wikipedia.org/wiki/K-mer) search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions.
 
 ## Biological Background
 
 **What does this tool measure/predict?**
-MinCED detects CRISPR (Clustered Regularly Interspaced Short Palindromic Repeats) arrays in DNA sequences. CRISPR arrays consist of short, conserved repeat sequences separated by unique spacer sequences derived from past viral infections.
+MinCED detects [CRISPR](https://en.wikipedia.org/wiki/CRISPR) (Clustered Regularly Interspaced Short Palindromic Repeats) arrays in DNA sequences. CRISPR arrays consist of short, conserved repeat sequences separated by unique [spacer sequences](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) derived from past viral infections.
 
 **Why is this important?**
-CRISPR arrays are the adaptive immune memory of prokaryotes. Each spacer records a past viral encounter, and the repeats serve as structural elements recognized by CRISPR-associated (Cas) proteins. Detecting CRISPR arrays is essential for:
+CRISPR arrays are the [adaptive immune](https://en.wikipedia.org/wiki/CRISPR#Immunity) memory of prokaryotes. Each spacer records a past viral encounter, and the repeats serve as structural elements recognized by [CRISPR-associated (Cas) proteins](https://en.wikipedia.org/wiki/Cas9). Detecting CRISPR arrays is essential for:
 - Identifying CRISPR-Cas defense systems in genomes
 - Characterizing spacer repertoires for phage-host interaction studies
 - Validating that generated DNA sequences contain functional CRISPR loci
@@ -24,7 +26,7 @@ CRISPR arrays have a characteristic structure: direct repeats of 23-47 nucleotid
 - Detecting CRISPR arrays in newly sequenced prokaryotic genomes
 - Validating that generated DNA sequences (e.g., from Evo1) contain CRISPR arrays
 - Extracting spacer sequences for downstream phage-host analysis
-- Counting and characterizing CRISPR arrays in metagenomic assemblies
+- Counting and characterizing CRISPR arrays in [metagenomic](https://en.wikipedia.org/wiki/Metagenomics) assemblies
 
 **When NOT to use this tool:**
 - For identifying Cas protein genes: use Prodigal + PyHMMER with Cas HMM profiles instead

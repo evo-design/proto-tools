@@ -1,13 +1,15 @@
+<a href="https://bio-pro.mintlify.app/tools/orf-prediction/prodigal"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Prodigal
 
 ## Overview
-Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for prokaryotic genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types.
+Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types.
 
 ## When to Use This Tool
 
 **Primary use cases:**
 - Gene prediction in bacterial/archaeal genomes
-- ORF finding in metagenomic contigs
+- ORF finding in [metagenomic](https://en.wikipedia.org/wiki/Metagenomics) contigs
 - Annotating draft genome assemblies
 - Identifying coding sequences in plasmids
 
@@ -22,7 +24,7 @@ Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reli
 **Prokaryotic gene structure:**
 Prokaryotic genes are simpler than eukaryotic genes:
 - No introns (continuous coding sequence)
-- Ribosome binding site (RBS) upstream of start codon
+- [Ribosome binding site](https://en.wikipedia.org/wiki/Ribosome-binding_site) (RBS) upstream of start codon
 - Start codons: ATG (most common), GTG, TTG
 - Stop codons: TAA, TAG, TGA
 
@@ -45,7 +47,7 @@ Prokaryotic genes are simpler than eukaryotic genes:
    - Coding potential (hexamer frequencies)
    - RBS motif strength
    - Start codon type
-3. Use dynamic programming to find optimal gene set
+3. Use [dynamic programming](https://en.wikipedia.org/wiki/Dynamic_programming) to find optimal gene set
 4. Handle overlapping genes and partial genes at edges
 
 **Parallel processing:**

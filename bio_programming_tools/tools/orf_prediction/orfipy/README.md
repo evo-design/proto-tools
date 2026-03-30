@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/orf-prediction/orfipy"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ORFipy
 
 ## Overview
@@ -20,10 +22,10 @@ ORFipy is a fast, flexible ORF (Open Reading Frame) prediction tool that identif
 ## Biological Background
 
 **What is an ORF?**
-An Open Reading Frame is a stretch of DNA between a start codon and an in-frame stop codon:
+An [Open Reading Frame](https://en.wikipedia.org/wiki/Open_reading_frame) is a stretch of DNA between a [start codon](https://en.wikipedia.org/wiki/Start_codon) and an in-frame [stop codon](https://en.wikipedia.org/wiki/Stop_codon):
 - **Start codons**: ATG (standard), GTG, TTG (alternative)
 - **Stop codons**: TAA (ochre), TAG (amber), TGA (opal)
-- **Reading frames**: 3 forward (+1, +2, +3) and 3 reverse (-1, -2, -3)
+- **[Reading frames](https://en.wikipedia.org/wiki/Reading_frame)**: 3 forward (+1, +2, +3) and 3 reverse (-1, -2, -3)
 
 **ORF vs Gene:**
 - **ORF**: Any sequence matching start/stop pattern (may include non-coding)

@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/ncbi"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # NCBI Entrez
 
 ## Overview
@@ -41,9 +43,9 @@ All are CPU-only tools that wrap the NCBI Entrez REST API.
 ## Biological Background
 
 **What do these tools access?**
-NCBI (National Center for Biotechnology Information) maintains the world's largest collection of biological sequence databases. The Entrez system provides unified search and retrieval across multiple databases:
+[NCBI](https://www.ncbi.nlm.nih.gov/) (National Center for Biotechnology Information) maintains the world's largest collection of biological sequence databases. The [Entrez](https://www.ncbi.nlm.nih.gov/search/) system provides unified search and retrieval across multiple databases:
 
-- **protein**: Protein sequences from RefSeq, GenBank, Swiss-Prot, PIR, and other sources
+- **protein**: Protein sequences from [RefSeq](https://www.ncbi.nlm.nih.gov/refseq/), [GenBank](https://www.ncbi.nlm.nih.gov/genbank/), [Swiss-Prot](https://www.uniprot.org/), [PIR](https://proteininformationresource.org/), and other sources
 - **nuccore**: Nucleotide sequences including genomic DNA, mRNA, and other nucleotide records
 - **gene**: Gene records with summaries, genomic context, and cross-references
 
@@ -52,10 +54,10 @@ NCBI (National Center for Biotechnology Information) maintains the world's large
 - Codon optimization: fetch coding sequences (CDS) to analyze natural codon usage
 - Comparative genomics: retrieve sequences from multiple organisms for alignment and analysis
 - Regulatory element design: fetch genomic regions upstream/downstream of genes
-- Literature-linked sequences: NCBI entries link to PubMed references and functional annotations
+- Literature-linked sequences: NCBI entries link to [PubMed](https://pubmed.ncbi.nlm.nih.gov/) references and functional annotations
 
 **Scientific foundation:**
-NCBI's Entrez E-utilities provide programmatic access to over 40 interconnected databases. The three tools here cover the most common workflow: search for identifiers (ESearch), get metadata (ESummary), and download sequences (EFetch). NCBI search syntax supports field-specific queries (e.g., `[Gene Name]`, `[Organism]`) and Boolean operators for precise retrieval.
+NCBI's Entrez [E-utilities](https://www.ncbi.nlm.nih.gov/books/NBK25501/) provide programmatic access to over 40 interconnected databases. The three tools here cover the most common workflow: search for identifiers (ESearch), get metadata (ESummary), and download sequences (EFetch). NCBI search syntax supports field-specific queries (e.g., `[Gene Name]`, `[Organism]`) and Boolean operators for precise retrieval.
 
 ## How It Works
 
@@ -117,7 +119,7 @@ For sequence retrieval workflows:
 1. **`return_format`**: Most impactful choice. Use `"fasta"` for full sequences, `"fasta_cds_na"` specifically for coding DNA sequences (required for codon optimization analysis).
 2. **`max_results`** (ESearch): Control breadth of search. Start with 5, increase to 20-100 for comprehensive surveys.
 
-## Configuration (shared)
+## Configuration
 
 All three tools share `NCBIFetchConfig`:
 
@@ -130,7 +132,7 @@ All three tools share `NCBIFetchConfig`:
 | `ncbi_email` | `Optional[str]` | `None` | Contact email (recommended by NCBI for tracking) |
 | `user_agent` | `str` | `"bio-programming-tools/ncbi-fetch-v1"` | Identifier string sent with each request |
 
-## Output Specifications
+## Output Specification
 
 ### `NCBIEsearchOutput`
 

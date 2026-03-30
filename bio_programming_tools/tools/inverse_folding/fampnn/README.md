@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/inverse-folding/fampnn"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # FAMPNN
 
 ## Overview
@@ -21,19 +23,19 @@ FAMPNN (Full-Atom MPNN) is a deep learning model for protein sequence design tha
 ## Biological Background
 
 **What does this tool do?**
-FAMPNN solves the full-atom inverse folding problem: given a protein backbone structure, predict both the amino acid sequence and the sidechain conformations that are most compatible with the backbone. This goes beyond traditional inverse folding by also predicting atomic-level sidechain geometry.
+FAMPNN solves the full-atom [inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) problem: given a protein backbone structure, predict both the amino acid sequence and the [sidechain](https://en.wikipedia.org/wiki/Side_chain) conformations that are most compatible with the backbone. This goes beyond traditional inverse folding by also predicting atomic-level sidechain geometry.
 
 **Why is this important?**
 Full-atom design enables:
 - More accurate protein engineering by modeling sidechain packing interactions
 - Sidechain confidence scores (pSCE) for identifying uncertain regions
 - Better mutation effect prediction using full structural context
-- Direct generation of atomic models suitable for molecular dynamics or docking
+- Direct generation of atomic models suitable for [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) or [docking](https://en.wikipedia.org/wiki/Molecular_docking)
 
 **Scientific foundation:**
 FAMPNN uses a two-component architecture:
 1. **Iterative masked language modeling**: Sequence design via progressive unmasking (similar to MaskGIT), starting fully masked and revealing tokens iteratively.
-2. **Per-token Euclidean diffusion**: Sidechain coordinates generated via variance-exploding EDM in local backbone reference frames.
+2. **Per-token Euclidean [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)**: Sidechain coordinates generated via variance-exploding EDM in local backbone reference frames.
 3. **Predicted Sidechain Error (pSCE)**: A learned confidence metric predicting per-atom sidechain packing error in Angstroms.
 
 ## Tool Catalog
@@ -52,7 +54,7 @@ FAMPNN runs on GPU (required):
 - **Model weights**: Three checkpoints (~150MB each), downloaded automatically by `setup.sh`:
   - `fampnn_0_3.pt` -- Sequence design (PDB-trained, 0.3A noise)
   - `fampnn_0_0.pt` -- Sidechain packing (PDB-trained, 0.0A noise)
-  - `fampnn_0_3_cath.pt` -- Mutation scoring (CATH-trained)
+  - `fampnn_0_3_cath.pt` -- Mutation scoring ([CATH](https://www.cathdb.info/)-trained)
 
 ## How It Works
 

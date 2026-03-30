@@ -1,15 +1,17 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/chai1"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Chai1
 
 ## Overview
 
-Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a diffusion-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy.
+Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy.
 
 ## When to Use This Tool
 
 **Primary use cases:**
 - **Protein-ligand docking:** Predict how small molecules bind to protein targets without known experimental structures
 - **Drug discovery screening:** Rapidly evaluate binding poses for compound libraries
-- **Glycoprotein modeling:** Predict structures of proteins with attached glycan modifications
+- **[Glycoprotein](https://en.wikipedia.org/wiki/Glycoprotein) modeling:** Predict structures of proteins with attached [glycan](https://en.wikipedia.org/wiki/Glycan) modifications
 - **Binding site analysis:** Understand ligand-induced conformational changes in proteins
 - **Lead optimization:** Evaluate how chemical modifications affect binding geometry
 
@@ -23,7 +25,7 @@ Chai1 is a multi-modal structure prediction model from Chai Discovery that predi
 **Comparison with alternatives:**
 - **Chai1 vs Boltz2:** Chai1 is optimized for protein-ligand-glycan systems; Boltz2 supports DNA/RNA but may be slower. Choose based on molecular types.
 - **Chai1 vs ESMFold:** ESMFold is 10-60x faster but protein-only. Use Chai1 when you need ligand binding predictions.
-- **Chai1 vs AutoDock/Glide:** Chai1 predicts binding poses without requiring a known protein structure; traditional docking requires experimental structures.
+- **Chai1 vs AutoDock/Glide:** Chai1 predicts binding poses without requiring a known protein structure; traditional [docking](https://en.wikipedia.org/wiki/Molecular_docking) requires experimental structures.
 - **Chai1 vs AlphaFold3:** Similar capabilities; Chai1 is open-source and locally deployable.
 
 ## Biological Background

@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/causal-models/evo2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Evo2
 
 ## Overview
@@ -26,9 +28,9 @@ DNA encodes the instructions for all cellular processes. Beyond protein-coding g
 Genome-scale language models like Evo2 learn these patterns by training on diverse genomic sequences across all domains of life. By predicting each nucleotide given preceding context, the model captures:
 
 - **Codon usage patterns** and open reading frame structure in coding regions
-- **Regulatory motifs** (transcription factor binding sites, promoter elements, splice signals)
-- **Compositional biases** (GC content, CpG islands, repetitive elements)
-- **Long-range dependencies** (enhancer-promoter interactions, chromatin domain boundaries)
+- **Regulatory motifs** ([transcription factor](https://en.wikipedia.org/wiki/Transcription_factor) binding sites, [promoter](https://en.wikipedia.org/wiki/Promoter_(genetics)) elements, splice signals)
+- **Compositional biases** ([GC content](https://en.wikipedia.org/wiki/GC-content), [CpG islands](https://en.wikipedia.org/wiki/CpG_island), repetitive elements)
+- **Long-range dependencies** ([enhancer](https://en.wikipedia.org/wiki/Enhancer_(genetics))-promoter interactions, chromatin domain boundaries)
 - **Cross-kingdom sequence grammar** (from viral genomes to mammalian chromosomes)
 
 Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to its ASCII value (A=65, C=67, G=71, T=84, N=78). This allows the model to handle any genomic sequence without a specialized tokenizer.
@@ -67,7 +69,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 
 **Scoring (`evo2-score`):**
 1. The full DNA sequence is passed through the model in a single forward pass (batched if `batch_size` is set).
-2. At each position t, the model computes log P(x_t | x_{<t}) -- the log probability of the actual nucleotide given the left context.
+2. At each position t, the model computes $\log P(x_t | x_{<t})$ -- the log probability of the actual nucleotide given the left context.
 3. These per-position log probabilities are summed to produce total `log_likelihood` and averaged for `avg_log_likelihood`.
 4. Perplexity is computed as exp(-avg_log_likelihood).
 
@@ -213,7 +215,7 @@ for i, seq in enumerate(result.sequences):
     print(f"Sequence {i+1}: {len(seq)} bp")
 ```
 
-**Example 3: Continue generation with KV cache **
+**Example 3: Continue generation with KV cache**
 ```python
 from bio_programming_tools.tools.causal_models.evo2 import (
     run_evo2_sample, Evo2SampleInput, Evo2SampleConfig

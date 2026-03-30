@@ -1,22 +1,24 @@
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/crispr-tracr"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # CRISPRtracrRNA
 
 ## Overview
-CRISPRtracrRNA predicts tracrRNA (trans-activating CRISPR RNA) sequences from nucleotide CRISPR loci using covariance models and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via IntaRNA.
+CRISPRtracrRNA predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activating_crRNA) (trans-activating CRISPR RNA) sequences from nucleotide [CRISPR](https://en.wikipedia.org/wiki/CRISPR) loci using [covariance models](http://eddylab.org/infernal/) and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/).
 
 ## Biological Background
 
 **What does this tool measure/predict?**
-This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for Type II CRISPR-Cas systems — it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with Cas9 to guide DNA cleavage.
+This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for [Type II CRISPR-Cas](https://en.wikipedia.org/wiki/CRISPR#Class_2) systems — it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with [Cas9](https://en.wikipedia.org/wiki/Cas9) to guide DNA cleavage.
 
 **Why is this important?**
-For a CRISPR-Cas9 system to function, three components must be present: the Cas9 protein, the crRNA (from the CRISPR array), and the tracrRNA. Detecting the tracrRNA is essential for:
+For a CRISPR-Cas9 system to function, three components must be present: the Cas9 protein, the [crRNA](https://en.wikipedia.org/wiki/CRISPR#crRNA) (from the CRISPR array), and the tracrRNA. Detecting the tracrRNA is essential for:
 - Confirming that a CRISPR locus encodes a complete, functional Type II system
-- Designing single-guide RNAs (sgRNAs) by fusing crRNA and tracrRNA sequences
+- Designing [single-guide RNAs](https://en.wikipedia.org/wiki/Guide_RNA) (sgRNAs) by fusing crRNA and tracrRNA sequences
 - Validating generated CRISPR systems (e.g., from Evo1) for functional completeness
 - Discovering novel CRISPR-Cas9 systems in metagenomic data
 
 **Scientific foundation:**
-CRISPRtracrRNA uses Infernal covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure — similar to profile HMMs but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses IntaRNA to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
+CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure — similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
 
 ## When to Use This Tool
 
@@ -154,7 +156,7 @@ The tool operates in two stages:
 
 **Additional resources:**
 - Infernal: [http://eddylab.org/infernal/](http://eddylab.org/infernal/)
-- IntaRNA: [http://rna.informatik.uni-freiburg.de/IntaRNA/](http://rna.informatik.uni-freiburg.de/IntaRNA/)
+- IntaRNA: [https://rna.informatik.uni-freiburg.de/IntaRNA/](https://rna.informatik.uni-freiburg.de/IntaRNA/)
 
 ## Quick Start Examples
 

@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/boltz2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Boltz2
 
 ## Overview
 
-Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of proteins, DNA, RNA, and ligands using a diffusion-based architecture with MSA integration. It provides the broadest molecular type support among current structure prediction tools.
+Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of proteins, DNA, RNA, and ligands using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture with MSA integration. It provides the broadest molecular type support among current structure prediction tools.
 
 ## When to Use This Tool
 
@@ -36,15 +38,15 @@ Boltz2 predicts the 3D atomic coordinates of biomolecular complexes involving pr
 The ability to model protein-nucleic acid and multi-molecular complexes is essential for:
 - Understanding gene regulation (transcription factor-DNA complexes)
 - Modeling RNA-protein interactions (ribonucleoproteins, RNA-binding proteins)
-- Drug design targeting nucleic acids (RNA therapeutics, antisense oligonucleotides)
-- CRISPR and gene editing tool development (Cas protein-guide RNA-DNA complexes)
+- Drug design targeting nucleic acids (RNA therapeutics, [antisense oligonucleotides](https://en.wikipedia.org/wiki/Antisense_therapy))
+- [CRISPR](https://en.wikipedia.org/wiki/CRISPR) and gene editing tool development (Cas protein-guide RNA-DNA complexes)
 - Studying ribosomes, spliceosomes, and other RNA-protein machines
 
 **Scientific foundation:**
 Boltz2 combines several modern deep learning advances:
-1. **MSA-based evolutionary features**: Multiple sequence alignments provide critical evolutionary co-variation signals that indicate residue contacts and structural constraints.
+1. **MSA-based evolutionary features**: [Multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) provide critical evolutionary co-variation signals that indicate residue contacts and structural constraints.
 2. **Diffusion-based generative modeling**: Starting from noise, the model iteratively refines coordinates through learned denoising steps, naturally handling the flexibility of biomolecular complexes.
-3. **Multi-modal architecture**: Specialized encoders for proteins (amino acid sequences), DNA/RNA (nucleotide sequences), and ligands (SMILES) enable unified prediction of heterogeneous complexes.
+3. **Multi-modal architecture**: Specialized encoders for proteins (amino acid sequences), DNA/RNA (nucleotide sequences), and ligands ([SMILES](https://en.wikipedia.org/wiki/Simplified_molecular-input_line-entry_system)) enable unified prediction of heterogeneous complexes.
 4. **Extensive sampling**: By default generates 25 independent structure samples and returns the best by confidence, exploring conformational diversity.
 
 Confidence metrics include:

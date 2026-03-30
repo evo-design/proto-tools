@@ -1,4 +1,5 @@
 github: https://github.com/enijkamp/progen2
+image: https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Salesforce.com_logo.svg/1280px-Salesforce.com_logo.svg.png
 huggingface:
   - https://huggingface.co/hugohrban/progen2-small
   - https://huggingface.co/hugohrban/progen2-medium

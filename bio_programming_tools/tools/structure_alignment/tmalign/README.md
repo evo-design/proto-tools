@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-alignment/tmalign"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # TMalign
 
 ## Overview
 
-TMalign performs pairwise protein structure alignment using the TM-score metric (`tmalign-alignment`). It aligns two monomeric protein structures and returns TM-scores normalized by the length of each chain, providing a length-independent measure of structural similarity. TMalign is a compiled C++ binary that runs on CPU with no external dependencies.
+TMalign performs pairwise protein structure alignment using the [TM-score](https://en.wikipedia.org/wiki/Template_modeling_score) metric (`tmalign-alignment`). It aligns two monomeric protein structures and returns TM-scores normalized by the length of each chain, providing a length-independent measure of structural similarity. TMalign is a compiled C++ binary that runs on CPU with no external dependencies.
 
 ## When to Use This Tool
 
@@ -26,7 +28,7 @@ TMalign performs pairwise protein structure alignment using the TM-score metric 
 ## Biological Background
 
 **What does this tool measure/predict?**
-TMalign computes the TM-score (Template Modeling score), which measures the topological similarity of two protein structures. It performs a structural superposition that maximizes the TM-score, then reports scores normalized by each chain's length.
+TMalign computes the TM-score (Template Modeling score), which measures the topological similarity of two protein structures. It performs a [structural superposition](https://en.wikipedia.org/wiki/Structural_alignment) that maximizes the TM-score, then reports scores normalized by each chain's length.
 
 **Why is this important?**
 - Fold classification: TM-score > 0.5 reliably indicates proteins share the same fold topology, regardless of sequence similarity
@@ -35,7 +37,7 @@ TMalign computes the TM-score (Template Modeling score), which measures the topo
 - Evolutionary analysis: detect structural homologs even when sequence similarity is low (<20% identity)
 
 **Scientific foundation:**
-TM-score uses a length-dependent distance weighting scheme that emphasizes well-aligned residues and penalizes outliers less harshly than RMSD. The score is normalized by protein length, making it comparable across proteins of different sizes. The alignment algorithm uses an iterative heuristic that directly optimizes TM-score rather than RMSD, finding the structural superposition that maximizes topological similarity. Key properties:
+TM-score uses a length-dependent distance weighting scheme that emphasizes well-aligned residues and penalizes outliers less harshly than [RMSD](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions). The score is normalized by protein length, making it comparable across proteins of different sizes. The alignment algorithm uses an iterative heuristic that directly optimizes TM-score rather than RMSD, finding the structural superposition that maximizes topological similarity. Key properties:
 - **Range:** (0, 1], where 1.0 = identical structures
 - **Length-independent:** Unlike RMSD, TM-score does not increase with protein size
 - **Fold discrimination:** TM-score > 0.5 reliably indicates the same fold (Zhang & Skolnick, 2004)
@@ -46,7 +48,7 @@ TM-score uses a length-dependent distance weighting scheme that emphasizes well-
 **Method overview:**
 1. TMalign reads two PDB structures and extracts C-alpha coordinates
 2. An initial alignment is generated using secondary structure and sequence order heuristics
-3. The alignment is iteratively refined to maximize TM-score using dynamic programming with TM-score-based distance matrices
+3. The alignment is iteratively refined to maximize TM-score using [dynamic programming](https://en.wikipedia.org/wiki/Dynamic_programming) with TM-score-based distance matrices
 4. The final structural superposition is computed and TM-scores are reported normalized by each chain's length
 
 **Key assumptions:**

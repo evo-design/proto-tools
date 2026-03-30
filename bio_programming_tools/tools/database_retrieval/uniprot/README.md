@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/uniprot"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # UniProt
 
 ## Overview
@@ -25,7 +27,7 @@
 ## Biological Background
 
 **What does this tool measure/predict?**
-UniProt (Universal Protein Resource) is the most comprehensive curated protein sequence and functional annotation database. It combines data from Swiss-Prot (manually reviewed, ~570K entries) and TrEMBL (computationally annotated, ~250M entries).
+[UniProt](https://www.uniprot.org/) (Universal Protein Resource) is the most comprehensive curated protein sequence and functional annotation database. It combines data from [Swiss-Prot](https://en.wikipedia.org/wiki/Swiss-Prot) (manually reviewed, ~570K entries) and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL) (computationally annotated, ~250M entries).
 
 **Why is this important?**
 - Protein design: retrieve reference sequences for target proteins before optimization
@@ -35,7 +37,7 @@ UniProt (Universal Protein Resource) is the most comprehensive curated protein s
 - Quality assessment: reviewed (Swiss-Prot) entries provide experimentally validated reference sequences
 
 **Scientific foundation:**
-UniProt integrates sequence data from EMBL-Bank, protein structures from PDB, and curated annotations from expert biocurators. Swiss-Prot entries undergo manual review including experimental evidence attribution, cross-referencing to literature, and standardized functional annotation. The database is updated biweekly with new sequences and annotations from the scientific community.
+UniProt integrates sequence data from [EMBL-Bank](https://www.ebi.ac.uk/ena/browser/home), protein structures from [PDB](https://www.rcsb.org/), and curated annotations from expert biocurators. Swiss-Prot entries undergo manual review including experimental evidence attribution, cross-referencing to literature, and standardized functional annotation. The database is updated biweekly with new sequences and annotations from the scientific community.
 
 ## How It Works
 
@@ -122,7 +124,7 @@ UniProtFetchOutput(
 - Use `pdb-fetch-entry` to get metadata (method, resolution) for specific PDB IDs
 
 **Interpreting edge cases:**
-- Empty `pdb_crossrefs` does not mean the protein structure is unknown — it may have been predicted by AlphaFold2 (check the AlphaFold DB)
+- Empty `pdb_crossrefs` does not mean the protein structure is unknown — it may have been predicted by AlphaFold2 (check the [AlphaFold DB](https://alphafold.ebi.ac.uk/))
 - Multiple gene names are common for well-studied proteins with historical nomenclature
 - Very long `raw_entry` records contain rich functional annotation; explore `raw_entry["comments"]` for function, subcellular location, and disease associations
 

@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/borzoi"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Borzoi
 
 ## Overview
@@ -28,14 +30,14 @@ Borzoi is a deep learning model that predicts gene expression and regulatory act
 
 ## Biological Background
 
-Gene regulation involves interactions across a wide range of genomic distances. While most promoter-proximal elements act within a few kilobases, enhancers can regulate genes from distances exceeding 100 kb, and topologically associating domains (TADs) organize chromatin contacts across megabase scales. Capturing these long-range interactions requires models with sufficient context windows.
+Gene regulation involves interactions across a wide range of genomic distances. While most promoter-proximal elements act within a few kilobases, enhancers can regulate genes from distances exceeding 100 kb, and [topologically associating domains](https://en.wikipedia.org/wiki/Topologically_associating_domain) (TADs) organize chromatin contacts across megabase scales. Capturing these long-range interactions requires models with sufficient context windows.
 
 Borzoi was trained to predict RNA-seq coverage directly from DNA sequence, rather than the processed experimental tracks used by Enformer. This training objective enables:
-- **Quantitative RNA-seq profiles**: Direct prediction of read coverage across gene bodies, capturing splicing patterns, alternative TSS usage, and transcript isoform ratios
+- **Quantitative RNA-seq profiles**: Direct prediction of read coverage across gene bodies, capturing splicing patterns, alternative [TSS](https://en.wikipedia.org/wiki/Transcription_start_site) usage, and transcript isoform ratios
 - **Broader regulatory context**: The 524 kb window captures most enhancer-promoter interactions and some TAD-level organization
 - **Higher output resolution**: 6,144 bins at 128 bp resolution (vs. 896 bins in Enformer) provide finer spatial detail
 
-The model also predicts CAGE, DNase-seq, ATAC-seq, and histone modification tracks, making it a general-purpose regulatory genomics predictor with improved long-range accuracy.
+The model also predicts [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), and [histone modification](https://en.wikipedia.org/wiki/Histone_modification) tracks, making it a general-purpose regulatory genomics predictor with improved long-range accuracy.
 
 ## Tool Catalog
 

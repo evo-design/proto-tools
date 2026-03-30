@@ -1,7 +1,9 @@
+<a href="https://bio-pro.mintlify.app/tools/rna-splicing/splice-transformer"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # SpliceTransformer
 
 ## Overview
-SpliceTransformer is a deep learning model for predicting splice sites with tissue-specific resolution. It identifies splice donors (5' splice sites) and acceptors (3' splice sites) across 15 human tissues, enabling analysis of alternative splicing patterns and tissue-specific isoform usage. The model uses transformer architecture with long-range sequence context for accurate splice site prediction.
+SpliceTransformer is a deep learning model for predicting [splice sites](https://en.wikipedia.org/wiki/RNA_splicing) with tissue-specific resolution. It identifies splice donors (5' splice sites) and acceptors (3' splice sites) across 15 human tissues, enabling analysis of [alternative splicing](https://en.wikipedia.org/wiki/Alternative_splicing) patterns and tissue-specific isoform usage. The model uses [transformer](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)) architecture with long-range sequence context for accurate splice site prediction.
 
 ## When to Use This Tool
 
@@ -21,14 +23,14 @@ SpliceTransformer is a deep learning model for predicting splice sites with tiss
 ## Biological Background
 
 **What is splicing?**
-Pre-mRNA splicing removes introns and joins exons:
+[Pre-mRNA splicing](https://en.wikipedia.org/wiki/RNA_splicing) removes [introns](https://en.wikipedia.org/wiki/Intron) and joins [exons](https://en.wikipedia.org/wiki/Exon):
 - **Donor site (5' splice site)**: End of exon, beginning of intron (GT dinucleotide)
 - **Acceptor site (3' splice site)**: End of intron, beginning of exon (AG dinucleotide)
 - **Branch point**: Internal intron sequence for lariat formation
 
 **Tissue-specific splicing:**
 Different tissues express different splice isoforms:
-- Tissue-specific splicing factors
+- Tissue-specific [splicing factors](https://en.wikipedia.org/wiki/Splicing_factor)
 - Alternative exon inclusion/exclusion
 - Alternative 5'/3' splice site usage
 
@@ -260,7 +262,7 @@ print(f"Processed {result.prediction.shape[0]} sequences")
 
 **Interpretation:**
 
-1. **GT-AG rule**: Canonical splice sites follow GT...AG pattern -- check predictions at these positions.
+1. **[GT-AG rule](https://en.wikipedia.org/wiki/RNA_splicing#Introns)**: Canonical splice sites follow GT...AG pattern -- check predictions at these positions.
 
 2. **Multi-channel analysis**: Don't just look at donor/acceptor -- check tissue channels for specificity.
 

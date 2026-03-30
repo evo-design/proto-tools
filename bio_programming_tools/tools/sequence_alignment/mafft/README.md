@@ -1,14 +1,16 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/mafft"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # MAFFT
 
 ## Overview
-MAFFT (Multiple Alignment using Fast Fourier Transform) is a widely used tool for multiple sequence alignment (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT.
+MAFFT (Multiple Alignment using [Fast Fourier Transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform)) is a widely used tool for [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT.
 
 ## When to Use This Tool
 
 **Primary use cases:**
 - Aligning protein families to identify conserved residues
-- Preparing sequences for phylogenetic tree construction
-- Creating seed alignments for profile HMM construction
+- Preparing sequences for [phylogenetic tree](https://en.wikipedia.org/wiki/Phylogenetic_tree) construction
+- Creating seed alignments for [profile HMM](https://en.wikipedia.org/wiki/Hidden_Markov_model#Profile_HMMs) construction
 - Comparing homologous sequences across species
 - Analyzing sequence conservation in protein engineering
 
@@ -16,7 +18,7 @@ MAFFT (Multiple Alignment using Fast Fourier Transform) is a widely used tool fo
 - **Single sequence**: MSA requires at least 2 sequences
 - **Very short sequences**: Alignments of sequences <10 residues may not be meaningful
 - **Structural alignment**: For structure-based alignment, use tools like TM-align or DALI
-- **Pairwise alignment only**: For simple pairwise alignment, consider Needleman-Wunsch or Smith-Waterman
+- **Pairwise alignment only**: For simple pairwise alignment, consider [Needleman-Wunsch](https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm) or [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm)
 
 ## Biological Background
 
@@ -25,9 +27,9 @@ MAFFT aligns multiple biological sequences (protein or nucleotide) by inserting 
 
 **Why is this important?**
 Multiple sequence alignment is fundamental to many bioinformatics analyses:
-- **Phylogenetics**: Inferring evolutionary relationships between sequences
+- **[Phylogenetics](https://en.wikipedia.org/wiki/Phylogenetics)**: Inferring evolutionary relationships between sequences
 - **Conservation analysis**: Identifying functionally important residues
-- **Homology modeling**: Building protein structures based on related sequences
+- **[Homology modeling](https://en.wikipedia.org/wiki/Homology_modeling)**: Building protein structures based on related sequences
 - **Motif discovery**: Finding conserved patterns across protein families
 - **Variant analysis**: Understanding the impact of mutations in context
 

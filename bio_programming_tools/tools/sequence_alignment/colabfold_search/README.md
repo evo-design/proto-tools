@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-alignment/colabfold-search"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ColabFold Search
 
 ## Overview
 
-ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein sequences by searching large sequence databases for homologs. MSAs are a foundational input for structure prediction (AlphaFold, ESMFold), co-evolutionary analysis, and conservation scoring. This tool wraps MMSeqs2 for fast local search and the ColabFold API for remote search.
+ColabFold MSA Search generates [Multiple Sequence Alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSAs) for protein sequences by searching large sequence databases for homologs. MSAs are a foundational input for structure prediction (AlphaFold, ESMFold), co-evolutionary analysis, and conservation scoring. This tool wraps [MMSeqs2](https://mmseqs.com/) for fast local search and the ColabFold API for remote search.
 
 - **Tool key**: `colabfold-search`
 - **Input**: Protein sequences (with optional identifiers)
@@ -26,11 +28,11 @@ ColabFold MSA Search generates Multiple Sequence Alignments (MSAs) for protein s
 
 ## Biological Background
 
-Multiple Sequence Alignments capture the evolutionary history of a protein family by aligning homologous sequences found across organisms. Each column in the alignment represents a structural position, and the patterns of conservation and covariation encode information about:
+Multiple Sequence Alignments capture the evolutionary history of a protein family by aligning [homologous](https://en.wikipedia.org/wiki/Homology_(biology)) sequences found across organisms. Each column in the alignment represents a structural position, and the patterns of conservation and covariation encode information about:
 
 - **Structural constraints**: Positions buried in the protein core are highly conserved
 - **Functional residues**: Active site and binding site residues show conservation
-- **Coevolution**: Residue pairs that co-vary indicate spatial contacts, which is the key signal AlphaFold2 uses for structure prediction
+- **[Coevolution](https://en.wikipedia.org/wiki/Coevolution)**: Residue pairs that co-vary indicate spatial contacts, which is the key signal AlphaFold2 uses for structure prediction
 - **Evolutionary rate**: The depth (number of homologs) of the MSA correlates with prediction confidence
 
 ColabFold uses MMSeqs2 (Many-against-Many sequence searching) for fast homology detection. MMSeqs2 is ~100x faster than BLAST with comparable sensitivity, making it practical to search databases with billions of sequences.
@@ -39,12 +41,12 @@ ColabFold uses MMSeqs2 (Many-against-Many sequence searching) for fast homology 
 
 1. **Query submission**: Protein sequences are formatted as FASTA and submitted for search
 2. **Database search**: MMSeqs2 identifies homologous sequences using a three-stage cascade: k-mer matching, ungapped alignment, and gapped alignment
-3. **MSA construction**: Homologous sequences are aligned to the query using the A3M format (a compressed alignment format where insertions relative to the query are lowercase)
+3. **MSA construction**: Homologous sequences are aligned to the query using the [A3M format](https://github.com/soedinglab/hh-suite/wiki#a3m-format) (a compressed alignment format where insertions relative to the query are lowercase)
 4. **Result packaging**: Each query gets an MSA object containing aligned sequences, which can be exported as A3M or FASTA files
 
 **Search modes:**
 - **Remote** (default): Queries the ColabFold API server. No local database required, but subject to rate limits. Best for small batches.
-- **Local**: Searches a locally installed MMSeqs2 database. Requires downloading the UniRef30 database (~70 GB). Best for large-scale or repeated searches.
+- **Local**: Searches a locally installed MMSeqs2 database. Requires downloading the [UniRef30](https://www.uniprot.org/help/uniref) database (~70 GB). Best for large-scale or repeated searches.
 
 ## Input Parameters
 

@@ -1,12 +1,14 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-design/rfdiffusion3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # RFdiffusion3
 
 ## Overview
-RFdiffusion3 is a diffusion-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints.
+RFdiffusion3 is a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints.
 
 ## When to Use This Tool
 
 **Primary use cases:**
-- **De novo protein design**: Generate novel protein folds from scratch
+- **[De novo protein design](https://en.wikipedia.org/wiki/Protein_design)**: Generate novel protein folds from scratch
 - **Motif scaffolding**: Design proteins that incorporate specific structural motifs (active sites, binding loops)
 - **Binder design**: Create proteins that bind to target proteins, DNA, RNA, or small molecules
 - **Enzyme design**: Scaffold around catalytic residues to create functional enzymes
@@ -14,7 +16,7 @@ RFdiffusion3 is a diffusion-based generative model for de novo protein structure
 
 **When NOT to use this tool:**
 - **Structure prediction**: Use Boltz2, Chai1, or ESMFold to predict structure from sequence
-- **Sequence optimization only**: Use ProteinMPNN for inverse folding (sequence from structure)
+- **Sequence optimization only**: Use ProteinMPNN for [inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) (sequence from structure)
 - **Quick screening**: RFdiffusion3 is computationally intensive; use faster methods for initial exploration
 - **Small molecule design**: RFdiffusion3 designs proteins, not small molecules
 
@@ -51,7 +53,7 @@ RFdiffusion3 uses a diffusion process that operates on atomic coordinates:
 3. **Conditioning**: Constraints are applied during denoising to guide generation
 4. **Sampling**: Multiple independent designs are generated and can be ranked
 
-The model is trained on protein structures from the PDB, learning the distribution of valid protein geometries. During inference, it generates novel structures by sampling from this learned distribution while respecting specified constraints.
+The model is trained on protein structures from the [PDB](https://www.rcsb.org/), learning the distribution of valid protein geometries. During inference, it generates novel structures by sampling from this learned distribution while respecting specified constraints.
 
 **Key assumptions:**
 - Generated structures should be physically realistic (proper bond lengths, angles)

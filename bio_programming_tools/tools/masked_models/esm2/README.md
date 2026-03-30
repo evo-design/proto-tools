@@ -1,7 +1,9 @@
+<a href="https://bio-pro.mintlify.app/tools/masked-models/esm2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ESM2
 
 ## Overview
-ESM2 (Evolutionary Scale Modeling 2) is Meta AI's protein language model trained on millions of protein sequences from UniRef. It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
+ESM2 (Evolutionary Scale Modeling 2) is Meta AI's [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) trained on millions of protein sequences from [UniRef](https://www.uniprot.org/help/uniref). It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
 
 ## When to Use This Tool
 
@@ -23,9 +25,9 @@ ESM2 (Evolutionary Scale Modeling 2) is Meta AI's protein language model trained
 **What are protein language models?**
 Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. They capture:
 - **Sequence conservation**: Which residues are essential for function
-- **Co-evolution**: Pairs of residues that evolve together (often in contact)
-- **Structural constraints**: Patterns that define secondary/tertiary structure
-- **Functional motifs**: Binding sites, active sites, post-translational modifications
+- **[Co-evolution](https://en.wikipedia.org/wiki/Coevolution)**: Pairs of residues that evolve together (often in contact)
+- **Structural constraints**: Patterns that define [secondary/tertiary structure](https://en.wikipedia.org/wiki/Protein_structure)
+- **Functional motifs**: Binding sites, active sites, [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification)
 
 **Why embeddings are useful:**
 ESM2 embeddings encode rich biological information:

@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/alphafold3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # AlphaFold3
 
 ## Overview
 
-AlphaFold3 is the latest generation structure prediction model from Google DeepMind that predicts 3D structures of biomolecular complexes including proteins, DNA, RNA, ligands, ions, and chemical modifications. It uses a diffusion-based architecture to generate joint 3D structures revealing how molecules fit together.
+AlphaFold3 is the latest generation structure prediction model from Google DeepMind that predicts 3D structures of biomolecular complexes including proteins, DNA, RNA, ligands, ions, and chemical modifications. It uses a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture to generate joint 3D structures revealing how molecules fit together.
 
 **Important**: For greater accuracy, use SMILES [defined here](https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi) when possible to allow for automatic conversion to CCD inputs, which are greatly preferred by AlphaFold3.
 
@@ -12,7 +14,7 @@ AlphaFold3 is the latest generation structure prediction model from Google DeepM
 - **Protein-ligand docking**: Predict how small molecule drugs bind to protein targets without requiring a pre-existing experimental structure
 - **Protein-DNA/RNA complexes**: Model transcription factors, chromatin readers, RNA-binding proteins
 - **Multi-protein assemblies**: Predict structures of heteromeric protein complexes
-- **Post-translational modifications**: Model phosphorylation, glycosylation, and other modifications
+- **[Post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification)**: Model phosphorylation, glycosylation, and other modifications
 - **Ion and cofactor binding**: Visualize metal binding sites and cofactor positioning
 - **Antibody-antigen interactions**: Predict binding interfaces for therapeutic antibody design
 
@@ -46,7 +48,7 @@ Understanding how biomolecules interact is fundamental to biology and drug disco
 AlphaFold3 uses a next-generation architecture combining:
 1. **Pairformer module**: An improved version of the Evoformer architecture from AlphaFold2, using triangular attention to process sequence and structural features across all molecule types.
 2. **Diffusion-based structure generation**: Starting from random atomic coordinates, a diffusion network iteratively refines positions to generate physically realistic 3D structures—similar to AI image generators but for molecular structures.
-3. **Multiple sequence alignments (MSAs)**: Evolutionary information from homologous sequences improves prediction accuracy for proteins and RNA.
+3. **[Multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSAs)**: Evolutionary information from homologous sequences improves prediction accuracy for proteins and RNA.
 
 Confidence metrics include:
 - **pLDDT** (predicted Local Distance Difference Test): Per-atom confidence score (0-100), where >90 indicates high confidence, 70-90 is moderate, and <50 suggests the region is probably wrong.

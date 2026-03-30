@@ -1,12 +1,14 @@
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/pyhmmer"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # PyHMMER
 
 ## Overview
-PyHMMER is a Python library binding to HMMER3 for biological sequence analysis using profile hidden Markov models (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search).
+PyHMMER is a Python library binding to [HMMER3](http://hmmer.org/) for biological sequence analysis using [profile hidden Markov models](https://en.wikipedia.org/wiki/Hidden_Markov_model) (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search).
 
 ## When to Use This Tool
 
 **Primary use cases:**
-- Protein domain annotation using databases like Pfam
+- Protein domain annotation using databases like [Pfam](https://www.ebi.ac.uk/interpro/)
 - Remote homology detection (<30% sequence identity)
 - Protein family classification
 - Building custom HMM profiles for novel protein families
@@ -34,12 +36,12 @@ Many protein families have diverged so much that pairwise methods fail to detect
 - Quantifying uncertainty: HMMs provide probabilistic scores that account for insertions, deletions, and substitutions.
 
 **Scientific foundation:**
-HMMER uses profile HMMs built from multiple sequence alignments:
+HMMER uses profile HMMs built from [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment):
 
 1. **Profile Construction**: A multiple alignment of related sequences is converted into an HMM, where each position has emission probabilities (which amino acids are likely) and transition probabilities (insertions/deletions).
-2. **Forward-Backward Algorithm**: Calculates the probability of a sequence given the model.
-3. **Viterbi Algorithm**: Finds the most likely alignment path through the model.
-4. **E-value Calculation**: Uses extreme value distribution theory to estimate statistical significance, accounting for database size.
+2. **[Forward-Backward Algorithm](https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm)**: Calculates the probability of a sequence given the model.
+3. **[Viterbi Algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm)**: Finds the most likely alignment path through the model.
+4. **E-value Calculation**: Uses [extreme value distribution](https://en.wikipedia.org/wiki/Generalized_extreme_value_distribution) theory to estimate statistical significance, accounting for database size.
 
 ## Tool Catalog
 

@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-dynamics/bioemu"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # BioEmu
 
 ## Overview
 
-BioEmu generates protein conformational ensembles using a diffusion generative model trained on molecular dynamics (MD) simulation data. Given a protein sequence, it produces an ensemble of 3D backbone structures representing the equilibrium distribution of conformations the protein adopts -- capturing folded states, alternative conformations, and conformational heterogeneity without running explicit MD simulations.
+BioEmu generates protein conformational ensembles using a diffusion generative model trained on [molecular dynamics](https://en.wikipedia.org/wiki/Molecular_dynamics) (MD) simulation data. Given a protein sequence, it produces an ensemble of 3D backbone structures representing the [equilibrium distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) of conformations the protein adopts -- capturing folded states, alternative conformations, and conformational heterogeneity without running explicit MD simulations.
 
 - **Tool key**: `bioemu-sample`
 - **Input**: Single-chain protein sequences (monomers only, recommended <= 500 residues)
@@ -26,14 +28,14 @@ BioEmu generates protein conformational ensembles using a diffusion generative m
 
 ## Biological Background
 
-Proteins are not static objects. In solution, a protein constantly fluctuates between conformational states, and this dynamics is essential for function: enzyme catalysis, allosteric regulation, molecular recognition, and signal transduction all depend on conformational changes.
+Proteins are not static objects. In solution, a protein constantly fluctuates between conformational states, and this dynamics is essential for function: enzyme catalysis, [allosteric regulation](https://en.wikipedia.org/wiki/Allosteric_regulation), molecular recognition, and signal transduction all depend on conformational changes.
 
 Traditional approaches to studying protein dynamics include:
 - **Molecular dynamics (MD)**: Physically rigorous but computationally expensive (microseconds of simulation can take weeks of GPU time)
-- **NMR spectroscopy**: Experimental ensemble methods, but limited to small proteins
-- **Normal mode analysis**: Fast but limited to harmonic fluctuations around a single structure
+- **[NMR spectroscopy](https://en.wikipedia.org/wiki/Nuclear_magnetic_resonance_spectroscopy_of_proteins)**: Experimental ensemble methods, but limited to small proteins
+- **[Normal mode analysis](https://en.wikipedia.org/wiki/Normal_mode)**: Fast but limited to harmonic fluctuations around a single structure
 
-BioEmu takes a fundamentally different approach: it learns the equilibrium conformational distribution directly from MD training data using a score-based diffusion model. Given only a protein sequence, it generates an ensemble of backbone conformations that approximate the Boltzmann distribution -- the thermodynamically correct distribution of states the protein visits at equilibrium.
+BioEmu takes a fundamentally different approach: it learns the equilibrium conformational distribution directly from MD training data using a score-based diffusion model. Given only a protein sequence, it generates an ensemble of backbone conformations that approximate the [Boltzmann distribution](https://en.wikipedia.org/wiki/Boltzmann_distribution) -- the thermodynamically correct distribution of states the protein visits at equilibrium.
 
 This makes BioEmu orders of magnitude faster than MD while capturing the same large-scale conformational heterogeneity (though it does not model explicit time-dependent dynamics or rare events).
 
@@ -145,7 +147,7 @@ Export formats: `pdb`, `json`
 - **Ensemble size**: The number of structures in the ensemble may be less than `num_samples` if `filter_samples=True`, since poor-quality samples are removed.
 - **Conformational clusters**: Superimpose the ensemble structures to identify clusters of similar conformations, which correspond to metastable states.
 - **RMSD distribution**: Calculate pairwise RMSD across the ensemble to quantify conformational diversity. A narrow distribution suggests a rigid protein; a broad distribution suggests flexibility.
-- **Per-residue flexibility**: Calculate per-residue RMSF (root-mean-square fluctuation) across the ensemble to identify flexible loops and rigid core regions.
+- **Per-residue flexibility**: Calculate per-residue [RMSF](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions) (root-mean-square fluctuation) across the ensemble to identify flexible loops and rigid core regions.
 - **Backbone only**: BioEmu outputs backbone atoms (N, CA, C, O). Side-chain coordinates are not included. Use a side-chain packing tool (e.g., SCWRL or Rosetta) if side-chain conformations are needed.
 
 ## Quick Start Examples

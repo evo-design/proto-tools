@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-prediction/esmfold"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ESMFold
 
 ## Overview
 
-ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a language model approach, without requiring multiple sequence alignments.
+ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a [language model](https://en.wikipedia.org/wiki/Language_model) approach, without requiring [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment).
 
 ## When to Use This Tool
 
@@ -14,7 +16,7 @@ ESMFold is a fast protein structure prediction model from Meta AI that predicts 
 - **Domain architecture validation:** Check if multi-domain proteins fold with expected domain arrangements
 
 **When NOT to use this tool:**
-- **High-accuracy structure modeling for publication:** Use AlphaFold2 or experimental methods (X-ray, cryo-EM) for final structures
+- **High-accuracy structure modeling for publication:** Use AlphaFold2 or experimental methods (X-ray, [cryo-EM](https://en.wikipedia.org/wiki/Cryogenic_electron_microscopy)) for final structures
 - **Protein-protein binding interfaces:** Use AlphaFold-Multimer or Boltz2 for heteromeric complex modeling with distinct chains
 - **Conformational dynamics:** ESMFold predicts single static structures, not conformational ensembles
 - **Very long proteins (>2,400 residues):** ESMFold has a hard limit; use AlphaFold2 or split into domains

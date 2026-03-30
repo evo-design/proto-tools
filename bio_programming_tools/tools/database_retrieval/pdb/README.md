@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/pdb"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # PDB
 
 ## Overview
@@ -37,7 +39,7 @@ Both are CPU-only tools that wrap the RCSB PDB REST API.
 ## Biological Background
 
 **What does this tool measure/predict?**
-These tools retrieve information from the RCSB Protein Data Bank, the global archive for experimentally determined 3D structures of biological macromolecules. PDB entries contain structures solved by X-ray crystallography, cryo-EM, NMR spectroscopy, and other methods.
+These tools retrieve information from the [RCSB Protein Data Bank](https://www.rcsb.org/), the global archive for experimentally determined 3D structures of biological macromolecules. PDB entries contain structures solved by [X-ray crystallography](https://en.wikipedia.org/wiki/X-ray_crystallography), [cryo-EM](https://en.wikipedia.org/wiki/Cryogenic_electron_microscopy), [NMR spectroscopy](https://en.wikipedia.org/wiki/Nuclear_magnetic_resonance_spectroscopy_of_proteins), and other methods.
 
 **Why is this important?**
 - Structure quality assessment: resolution and experimental method indicate reliability of atomic coordinates
@@ -87,7 +89,7 @@ The PDB was established in 1971 and now contains over 220,000 structures. Key me
 |-----------|------|---------|-------------|
 | `pdb_id` | `str` | *required* | PDB accession (e.g., `"1LBG"`, `"6VXX"`). Case-insensitive. |
 
-## Configuration (shared)
+## Configuration
 
 Both tools share `PdbFetchConfig`:
 
@@ -98,7 +100,7 @@ Both tools share `PdbFetchConfig`:
 | `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt) |
 | `user_agent` | `str` | `"bio-programming-tools/pdb-fetch-v1"` | Identifier string sent with each request |
 
-## Output Specifications
+## Output Specification
 
 ### `PdbFetchEntryOutput`
 

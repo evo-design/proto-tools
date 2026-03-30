@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/causal-models/progen2"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ProGen2
 
 ## Overview
@@ -22,9 +24,9 @@ ProGen2 is Salesforce's autoregressive protein language model for de novo protei
 
 ## Biological Background
 
-Proteins are linear chains of amino acids that fold into 3D structures to carry out biological functions. The amino acid sequence (primary structure) largely determines the protein's fold and function. Natural proteins occupy a tiny fraction of theoretically possible sequence space -- most random sequences do not fold or function.
+Proteins are linear chains of [amino acids](https://en.wikipedia.org/wiki/Amino_acid) that fold into 3D structures to carry out biological functions. The amino acid sequence ([primary structure](https://en.wikipedia.org/wiki/Protein_structure#Primary_structure)) largely determines the protein's fold and function. Natural proteins occupy a tiny fraction of theoretically possible sequence space -- most random sequences do not fold or function.
 
-Autoregressive protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases (UniRef, BFD, OAS). By training to predict each amino acid given the preceding context, the model implicitly captures:
+[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases ([UniRef](https://www.uniprot.org/help/uniref), BFD, [OAS](https://opig.stats.ox.ac.uk/webapps/oas/)). By training to predict each amino acid given the preceding context, the model implicitly captures:
 
 - **Local motifs**: secondary structure preferences, active site patterns
 - **Long-range dependencies**: distal residue co-evolution, domain boundaries
@@ -65,7 +67,7 @@ This learned distribution enables two key applications: **generation** (sampling
 
 **Scoring (`progen2-score`):**
 1. The full sequence is passed through the model in a single forward pass.
-2. At each position t, the model computes log P(x_t | x_{<t}) -- the log probability of the actual token given the left context.
+2. At each position t, the model computes $\log P(x_t | x_{<t})$ -- the log probability of the actual token given the left context.
 3. These per-position log probabilities are summed to produce the total log-likelihood.
 4. Perplexity is computed as exp(-avg_log_likelihood), providing an interpretable measure of sequence plausibility.
 

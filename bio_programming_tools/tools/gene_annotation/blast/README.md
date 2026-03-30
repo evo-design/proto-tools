@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/blast"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # BLAST
 
 ## Overview
@@ -15,15 +17,15 @@ BLAST (Basic Local Alignment Search Tool) finds regions of similarity between bi
 - Local BLAST (`search_mode="local"`): Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
 
 **When NOT to use this tool:**
-- Whole Genome Alignment: Use tools like MUMmer or Minimap2 for aligning entire chromosomes.
+- Whole Genome Alignment: Use tools like [MUMmer](https://mummer4.github.io/) or Minimap2 for aligning entire chromosomes.
 - Next-Gen Sequencing (NGS) Mapping: Use BWA or Bowtie2 for mapping millions of short reads to a reference.
-- Deep Homology Detection: If sequences are very distantly related (<20% identity), Hidden Markov Model tools like HMMER or HHblits are more sensitive.
-- Large-Scale Searches: For searching millions of sequences, use MMseqs2 which is 100-1000x faster.
+- Deep Homology Detection: If sequences are very distantly related (<20% identity), Hidden Markov Model tools like [HMMER](http://hmmer.org/) or HHblits are more sensitive.
+- Large-Scale Searches: For searching millions of sequences, use [MMseqs2](https://mmseqs.com/) which is 100-1000x faster.
 
 ## Biological Background
 
 **What does this tool do?**
-BLAST finds regions of local similarity between sequences by comparing nucleotide or protein sequences to sequence databases like NCBI Genbank and calculates the statistical significance of matches.
+[BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi) finds regions of local similarity between sequences by comparing nucleotide or protein sequences to sequence databases like [NCBI GenBank](https://www.ncbi.nlm.nih.gov/genbank/) and calculates the statistical significance of matches.
 
 **Why is this important?**
 Sequence alignment is the first step in almost all bioinformatics workflows. It allows researchers to:
@@ -33,11 +35,11 @@ Sequence alignment is the first step in almost all bioinformatics workflows. It 
 - Find evolutionary origins: Trace the phylogeny of a gene across species.
 
 **Scientific foundation:**
-BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). It does not perform a full Smith-Waterman alignment (which is accurate but slow). Instead, it does:
+BLAST uses a heuristic algorithm that seeks high-scoring segment pairs (HSPs). It does not perform a full [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm) alignment (which is accurate but slow). Instead, it does:
 
 1. **Seeding**: Breaks the query into short "words" (k-mers) and finds exact matches in the database.
 2. **Extension**: Extends these matches in both directions until the alignment score drops below a threshold.
-3. **Evaluation**: Calculates an E-value (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
+3. **Evaluation**: Calculates an [E-value](https://en.wikipedia.org/wiki/BLAST_(biotechnology)#Algorithm) (Expect value) based on the Karlin-Altschul statistics, representing the number of hits one can expect to see by chance.
 
 ## Tool Catalog
 
@@ -112,7 +114,7 @@ The input has strict type validation: if the value is an existing file path, it'
 | `word_size` | `int` | `None` | Word size for initial matches |
 | `gapopen` | `int` | `None` | Cost to open a gap |
 | `gapextend` | `int` | `None` | Cost to extend a gap |
-| `matrix` | `str` | `None` | Scoring matrix (BLOSUM62, PAM30, etc.) |
+| `matrix` | `str` | `None` | Scoring matrix ([BLOSUM62](https://en.wikipedia.org/wiki/BLOSUM), PAM30, etc.) |
 | `reward` | `int` | `None` | Nucleotide match reward (blastn only) |
 | `penalty` | `int` | `None` | Nucleotide mismatch penalty (blastn only) |
 

@@ -1,7 +1,9 @@
+<a href="https://bio-pro.mintlify.app/tools/causal-models/evo1"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Evo1
 
 ## Overview
-Evo1 is a 7-billion parameter DNA language model built on the StripedHyena architecture, trained on 2.7 million prokaryotic and phage genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.
+Evo1 is a 7-billion parameter DNA language model built on the [StripedHyena](https://en.wikipedia.org/wiki/State_space_model#Deep_learning) architecture, trained on 2.7 million [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) and [phage](https://en.wikipedia.org/wiki/Bacteriophage) genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.
 
 ## Biological Background
 
@@ -9,7 +11,7 @@ Evo1 is a 7-billion parameter DNA language model built on the StripedHyena archi
 Evo1 generates novel DNA sequences by learning the statistical patterns of prokaryotic and phage genomes. It can also score sequences by log-likelihood, providing a measure of how "natural" a generated sequence appears relative to the training distribution.
 
 **Why is this important?**
-Generative DNA models enable de novo design of biological sequences — genes, operons, CRISPR systems, and mobile genetic elements — without requiring template sequences. By learning the grammar of genomes at single-nucleotide resolution, Evo1 can propose functional DNA that respects codon usage, regulatory signals, and structural constraints.
+Generative DNA models enable de novo design of biological sequences — genes, [operons](https://en.wikipedia.org/wiki/Operon), [CRISPR](https://en.wikipedia.org/wiki/CRISPR) systems, and [mobile genetic elements](https://en.wikipedia.org/wiki/Transposable_element) — without requiring template sequences. By learning the grammar of genomes at single-nucleotide resolution, Evo1 can propose functional DNA that respects codon usage, regulatory signals, and structural constraints.
 
 **Scientific foundation:**
 Evo1 uses the StripedHyena architecture, a hybrid state-space/attention model that processes DNA at single-nucleotide resolution. Unlike transformer-only models, StripedHyena supports efficient long-range sequence modeling up to 131k tokens. The model is trained with a standard autoregressive (next-token prediction) objective on raw genomic DNA.

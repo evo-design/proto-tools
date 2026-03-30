@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/structure-alignment/usalign"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # USalign
 
 ## Overview
 
-USalign (Universal Structure alignment) extends TMalign to support monomers, multimers, and nucleic acid structures (`usalign-alignment`). It aligns two macromolecular structures using multimer-aware mode (`-mm 1 -ter 1`) and returns TM-scores normalized by each structure's length. USalign is a compiled C++ binary that runs on CPU with no external dependencies.
+USalign (Universal Structure alignment) extends TMalign to support monomers, multimers, and nucleic acid structures (`usalign-alignment`). It aligns two macromolecular structures using multimer-aware mode (`-mm 1 -ter 1`) and returns [TM-scores](https://en.wikipedia.org/wiki/Template_modeling_score) normalized by each structure's length. USalign is a compiled C++ binary that runs on CPU with no external dependencies.
 
 ## When to Use This Tool
 
@@ -21,7 +23,7 @@ USalign (Universal Structure alignment) extends TMalign to support monomers, mul
 
 **Comparison with alternatives:**
 - **USalign vs TMalign:** USalign handles all macromolecular types (proteins, nucleic acids, complexes). TMalign is slightly faster for simple monomer-monomer comparisons. Use USalign when any input might be multimeric or contain nucleic acids.
-- **USalign vs RMSD:** TM-score is length-independent (always 0-1), while RMSD grows with structure size. TM-score is better for comparing structures of different sizes.
+- **USalign vs RMSD:** TM-score is length-independent (always 0-1), while [RMSD](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions) grows with structure size. TM-score is better for comparing structures of different sizes.
 
 ## Biological Background
 
@@ -47,7 +49,7 @@ USalign unifies multiple structure alignment methods (TMalign, MMalign, RNAalign
 1. USalign reads two PDB structures and identifies chains and molecular types (protein, RNA, DNA)
 2. For multimers: an optimal chain-to-chain mapping is determined using iterative alignment
 3. C-alpha (protein) or phosphorus (nucleic acid) coordinates are extracted
-4. Structural alignment is iteratively refined to maximize TM-score
+4. [Structural alignment](https://en.wikipedia.org/wiki/Structural_alignment) is iteratively refined to maximize TM-score
 5. TM-scores are reported normalized by each structure's total length
 
 The tool runs with flags `-mm 1` (multimer mode) and `-ter 1` (treat each chain as a separate entity), which is the recommended mode for complex structure comparison.

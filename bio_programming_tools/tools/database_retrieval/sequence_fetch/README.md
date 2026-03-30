@@ -1,8 +1,10 @@
-# Sequence Fetch
+<a href="https://bio-pro.mintlify.app/tools/database-retrieval/sequence-fetch"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
+# Unified Sequence Fetch
 
 ## Overview
 
-`sequence-fetch` retrieves DNA, RNA, protein, and structure data for named targets across NCBI Entrez, UniProt, and PDB. It supports ID-first resolution, name+organism fallback, and strict molecular type checks.
+`sequence-fetch` retrieves DNA, RNA, protein, and structure data for named targets across [NCBI](https://www.ncbi.nlm.nih.gov/) Entrez, [UniProt](https://www.uniprot.org/), and [PDB](https://www.rcsb.org/). It supports ID-first resolution, name+organism fallback, and strict molecular type checks.
 
 ## When to Use This Tool
 
@@ -14,7 +16,7 @@
 
 **When NOT to use this tool:**
 - Large genome-wide extraction workflows: use local FASTA/GFF pipelines
-- Precision transcriptome annotation: use Ensembl/GENCODE pipelines
+- Precision transcriptome annotation: use [Ensembl](https://www.ensembl.org/)/[GENCODE](https://www.gencodegenes.org/) pipelines
 - De novo gene calling: use ORF/gene annotation tools first
 
 **Comparison with alternatives:**
@@ -132,7 +134,7 @@ Common warning/error patterns:
 - `TYPE_MISMATCH`: requested molecule type conflicts with target hints.
 - `NOT_FOUND[...]`: source lookup produced no candidate records.
 
-## Quick Start
+## Quick Start Examples
 
 ```python
 from bio_programming_tools.tools.database_retrieval import (

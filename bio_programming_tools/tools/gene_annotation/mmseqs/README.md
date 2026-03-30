@@ -1,14 +1,16 @@
+<a href="https://bio-pro.mintlify.app/tools/gene-annotation/mmseqs"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # MMseqs2
 
 ## Overview
-MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches 100x faster while maintaining similar sensitivity, making it ideal for large-scale sequence analysis. This module provides interfaces for *Protein Search*, *Genome Search*, and *Sequence Clustering* operations using MMseqs2.
+[MMseqs2](https://mmseqs.com/) (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches 100x faster while maintaining similar sensitivity, making it ideal for large-scale sequence analysis. This module provides interfaces for *Protein Search*, *Genome Search*, and *Sequence Clustering* operations using MMseqs2.
 
 ## When to Use This Tool
 
 **Primary use cases:**
 - Large-scale sequence similarity searches (millions of sequences)
 - Clustering protein families to reduce redundancy
-- Fast homology detection in metagenomics pipelines
+- Fast homology detection in [metagenomics](https://en.wikipedia.org/wiki/Metagenomics) pipelines
 - Building and searching custom sequence databases
 - All-vs-all sequence comparisons
 
@@ -19,7 +21,7 @@ MMseqs2 (Many-against-Many sequence searching) is an ultra-fast tool for searchi
 **When NOT to use this tool:**
 - Single Sequence Queries: If you're searching one sequence against NCBI, use `blast-search` instead.
 - Very Short Sequences: MMseqs2 may struggle with sequences <30 amino acids or <100 nucleotides.
-- Maximum Sensitivity Required: For detecting extremely distant homologs (<20% identity), profile-based tools like HMMER or HHblits are more appropriate.
+- Maximum Sensitivity Required: For detecting extremely distant homologs (<20% identity), profile-based tools like [HMMER](http://hmmer.org/) or HHblits are more appropriate.
 
 ## Biological Background
 
@@ -36,10 +38,10 @@ Modern sequencing generates datasets too large for traditional BLAST. MMseqs2 en
 **Scientific foundation:**
 MMseqs2 uses a prefilter-align approach:
 
-1. **K-mer Matching**: Extracts short amino acid/nucleotide words and uses a fast k-mer index to find candidate matches.
+1. **[K-mer](https://en.wikipedia.org/wiki/K-mer) Matching**: Extracts short amino acid/nucleotide words and uses a fast k-mer index to find candidate matches.
 2. **Ungapped Prefiltering**: Scores candidate matches with ungapped alignment, keeping only promising hits.
-3. **Gapped Alignment**: Performs Smith-Waterman-like local alignment on the filtered set.
-4. **Clustering**: Uses a greedy set-cover algorithm to group sequences by similarity thresholds.
+3. **Gapped Alignment**: Performs [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm)-like local alignment on the filtered set.
+4. **Clustering**: Uses a greedy [set-cover](https://en.wikipedia.org/wiki/Set_cover_problem) algorithm to group sequences by similarity thresholds.
 
 This cascade dramatically reduces the search space while preserving sensitivity comparable to BLAST.
 

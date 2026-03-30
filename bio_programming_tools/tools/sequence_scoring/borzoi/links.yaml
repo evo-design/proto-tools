@@ -1,2 +1,3 @@
 github: https://github.com/calico/borzoi
+image: https://raw.githubusercontent.com/calico/borzoi/main/borzoi_logo.png
 huggingface: https://huggingface.co/collections/johahi/borzoi-models

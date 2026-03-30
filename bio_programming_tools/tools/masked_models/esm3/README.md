@@ -1,7 +1,9 @@
+<a href="https://bio-pro.mintlify.app/tools/masked-models/esm3"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # ESM3
 
 ## Overview
-ESM3 is EvolutionaryScale's next-generation protein language model that combines sequence understanding with structure prediction and generation capabilities. Unlike ESM2, ESM3 is a generative model that can perform both embedding extraction and de novo protein structure prediction. The open model (`esm3_sm_open_v1`) provides embeddings, logits, sampling, and structure prediction in a unified framework.
+ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) that combines sequence understanding with structure prediction and generation capabilities. Unlike ESM2, ESM3 is a generative model that can perform both embedding extraction and de novo protein structure prediction. The open model (`esm3_sm_open_v1`) provides embeddings, logits, sampling, and structure prediction in a unified framework.
 
 ## When to Use This Tool
 
@@ -22,8 +24,8 @@ ESM3 is EvolutionaryScale's next-generation protein language model that combines
 **What are protein language models?**
 Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. ESM3 extends this by jointly modeling sequence and structure, capturing:
 - **Sequence conservation**: Which residues are essential for function
-- **Co-evolution**: Pairs of residues that evolve together (often in contact)
-- **Structural constraints**: Patterns that define secondary/tertiary structure
+- **[Co-evolution](https://en.wikipedia.org/wiki/Coevolution)**: Pairs of residues that evolve together (often in contact)
+- **Structural constraints**: Patterns that define [secondary/tertiary structure](https://en.wikipedia.org/wiki/Protein_structure)
 - **3D geometry**: Spatial relationships between residues
 
 **Why ESM3 over ESM2?**

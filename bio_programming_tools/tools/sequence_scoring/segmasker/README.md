@@ -1,8 +1,10 @@
+<a href="https://bio-pro.mintlify.app/tools/sequence-scoring/segmasker"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Segmasker
 
 ## Overview
 
-Segmasker detects low-complexity regions in protein sequences using NCBI's SEG algorithm. Low-complexity regions are stretches of amino acids with biased composition (e.g., polyalanine runs, proline-rich regions, or glutamine repeats) that can cause spurious hits in homology searches and may indicate disordered or non-globular regions.
+Segmasker detects [low-complexity regions](https://en.wikipedia.org/wiki/Low_complexity_regions_in_proteins) in protein sequences using NCBI's SEG algorithm. Low-complexity regions are stretches of amino acids with biased composition (e.g., polyalanine runs, proline-rich regions, or glutamine repeats) that can cause spurious hits in homology searches and may indicate disordered or non-globular regions.
 
 - **Tool key**: `segmasker-score`
 - **Input**: Protein sequences
@@ -25,11 +27,11 @@ Segmasker detects low-complexity regions in protein sequences using NCBI's SEG a
 
 ## Biological Background
 
-Low-complexity regions (LCRs) are protein segments with reduced amino acid diversity compared to typical globular proteins. The SEG algorithm (Wootton & Federhen, 1993) identifies these regions by computing local compositional complexity using Shannon entropy within sliding windows.
+Low-complexity regions (LCRs) are protein segments with reduced amino acid diversity compared to typical globular proteins. The SEG algorithm (Wootton & Federhen, 1993) identifies these regions by computing local compositional complexity using [Shannon entropy](https://en.wikipedia.org/wiki/Entropy_(information_theory)) within sliding windows.
 
 LCRs are common in eukaryotic proteomes (up to 20-25% of residues) and are associated with:
-- **Intrinsically disordered regions** that lack stable 3D structure
-- **Repeat expansions** linked to neurodegenerative diseases (e.g., polyglutamine in Huntington's)
+- **[Intrinsically disordered regions](https://en.wikipedia.org/wiki/Intrinsically_disordered_proteins)** that lack stable 3D structure
+- **Repeat expansions** linked to neurodegenerative diseases (e.g., polyglutamine in [Huntington's](https://en.wikipedia.org/wiki/Huntington%27s_disease))
 - **Compositionally biased linkers** between structured domains
 - **False positives in BLAST** -- LCRs match other LCRs regardless of evolutionary relationship
 
