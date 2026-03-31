@@ -1,7 +1,7 @@
 <img src="https://evodesign.org/images/logo.svg" alt="Evo Design Logo" width="120" align="left" style="margin-right: 15px;">
 
 # 🧬 Biological Programming Language Project - Tools Layer 🛠️
-[![Lint Check](https://github.com/proto-bio/proto-tools/actions/workflows/flake8_check.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/flake8_check.yml)
+[![Lint Check](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml)
 [![Run Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml)
 [![Run Integration Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml)
 
@@ -197,11 +197,11 @@ Install: `pip install -e ".[mcp]"`
 
 ### proto-language (parent repo) — DSL, constraints, generators
 
-Lives in [`proto-language/bio_mcp/`](https://github.com/proto-bio/proto-language). Exposes the language layer: constraints, generators, optimizers, program validation, and doc search.
+Lives in [`proto-language-api/proto_mcp/`](https://github.com/proto-bio/proto-language-api). Exposes the language layer: constraints, generators, optimizers, program validation, and doc search.
 
 ```bash
-# From the proto-language repo root
-python -m bio_mcp
+# From the proto-language-api repo root
+python -m proto_mcp
 ```
 
 **Example — explore the DSL and validate a program:**
