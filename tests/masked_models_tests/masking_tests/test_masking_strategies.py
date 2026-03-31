@@ -7,18 +7,18 @@ import warnings
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.masked_models.masking import (
+from proto_tools.tools.masked_models.masking import (
     MaskingStrategy,
     apply_masking_strategy,
 )
-from bio_programming_tools.tools.masked_models.masking.base import (
+from proto_tools.tools.masked_models.masking.base import (
     MASK_TOKEN,
     _resolve_count,
     mutable_mask,
     weighted_sample,
 )
-from bio_programming_tools.tools.masked_models.masking.maskers import MASKERS
-from bio_programming_tools.tools.masked_models.shared_data_models import (
+from proto_tools.tools.masked_models.masking.maskers import MASKERS
+from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 
@@ -317,7 +317,7 @@ def test_temperature_low_is_greedy():
     """
     from unittest.mock import patch
 
-    from bio_programming_tools.tools.masked_models.masking.maskers import Masker
+    from proto_tools.tools.masked_models.masking.maskers import Masker
 
     class GreedyTestMasker(Masker):
         supported_models = None
@@ -326,7 +326,7 @@ def test_temperature_low_is_greedy():
             return [[2.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
     strategy = MaskingStrategy(method="random", num_mutations=1, temperature=0.01)
-    with patch.dict("bio_programming_tools.tools.masked_models.masking.maskers.MASKERS",
+    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS",
                     {"random": GreedyTestMasker}):
         results = [strategy.mask(["ABCDEFGHIJ"])[0] for _ in range(20)]
     # Position 0 (A) should be masked in all runs with very low temperature
@@ -341,7 +341,7 @@ def test_temperature_high_is_uniform():
     """
     from unittest.mock import patch
 
-    from bio_programming_tools.tools.masked_models.masking.maskers import Masker
+    from proto_tools.tools.masked_models.masking.maskers import Masker
 
     class BiasedTestMasker(Masker):
         supported_models = None
@@ -350,7 +350,7 @@ def test_temperature_high_is_uniform():
             return [[100.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
     strategy = MaskingStrategy(method="random", num_mutations=1, temperature=1000.0)
-    with patch.dict("bio_programming_tools.tools.masked_models.masking.maskers.MASKERS",
+    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS",
                     {"random": BiasedTestMasker}):
         masked_positions = []
         for _ in range(100):

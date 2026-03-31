@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.gene_annotation.crispr_tracr import (
+from proto_tools.tools.gene_annotation.crispr_tracr import (
     CrisprTracrConfig,
     CrisprTracrInput,
     CrisprTracrOutput,
@@ -27,7 +27,7 @@ from tests.tool_infra_tests.test_export_functionality import (
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "crispr_tracr"
 _SETUP_SH = (
     Path(__file__).resolve().parents[2]
-    / "bio_programming_tools/tools/gene_annotation/crispr_tracr/standalone/setup.sh"
+    / "proto_tools/tools/gene_annotation/crispr_tracr/standalone/setup.sh"
 )
 
 _persistent_tool = make_persistent_fixture("crispr_tracr", gpu=False)
@@ -153,7 +153,7 @@ def test_subprocess_uses_isolated_cwd():
     """subprocess.run must receive cwd= pointing to a worker-specific directory."""
     import importlib
     run_module = importlib.import_module(
-        "bio_programming_tools.tools.gene_annotation.crispr_tracr.standalone.run"
+        "proto_tools.tools.gene_annotation.crispr_tracr.standalone.run"
     )
 
     fake_script = "/fake/install/dir/CRISPRtracrRNA.py"

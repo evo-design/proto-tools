@@ -12,7 +12,7 @@ from typing import List
 import pytest
 from pydantic import Field
 
-from bio_programming_tools.utils.tool_io import BaseToolOutput
+from proto_tools.utils.tool_io import BaseToolOutput
 
 logger = logging.getLogger(__name__)
 

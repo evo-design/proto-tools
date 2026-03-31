@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 
 # ── Configuration tests ────────────────────────────────────────────────────
 
@@ -16,7 +16,7 @@ def test_env_var_overrides():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         with patch.dict(
@@ -47,7 +47,7 @@ def test_env_var_managed_devices_number_format():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
@@ -68,7 +68,7 @@ def test_env_var_managed_devices_mixed_format():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         # Mix of number format and cuda: format
@@ -180,7 +180,7 @@ def test_cuda_visible_devices_one_visible():
     # Simulate parent process with CUDA_VISIBLE_DEVICES=5
     # This means only physical GPU 5 is visible, appearing as logical cuda:0
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=1,
     ):
         with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "5"}):

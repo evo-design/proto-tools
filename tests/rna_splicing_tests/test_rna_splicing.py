@@ -4,7 +4,7 @@ Tests for SpliceTransformer."""
 
 import pytest
 
-from bio_programming_tools.tools.rna_splicing.splice_transformer import (
+from proto_tools.tools.rna_splicing.splice_transformer import (
     CONTEXT_LENGTH,
     TARGET_LENGTH,
     SpliceTransformerConfig,

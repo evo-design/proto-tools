@@ -8,14 +8,14 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.orf_prediction import (
+from proto_tools.tools.orf_prediction import (
     ORF,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
     run_prodigal_prediction,
 )
-from bio_programming_tools.utils.tool_cache import ToolCache, _program_tool_cache
+from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Input validation ───────────────────────────────────────────────────
@@ -279,7 +279,7 @@ def test_caching_behavior():
         inp = ProdigalInput(input_sequences=sequence)
         config = ProdigalConfig()
 
-        from bio_programming_tools.utils.tool_instance import ToolInstance
+        from proto_tools.utils.tool_instance import ToolInstance
 
         real_dispatch = ToolInstance.dispatch
 

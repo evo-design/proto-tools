@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-_TOOLS_ROOT = Path(__file__).resolve().parents[2] / "bio_programming_tools" / "tools"
+_TOOLS_ROOT = Path(__file__).resolve().parents[2] / "proto_tools" / "tools"
 
 _INFERENCE_SCRIPTS = sorted(_TOOLS_ROOT.glob("**/standalone/inference.py"))
 

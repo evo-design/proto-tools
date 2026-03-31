@@ -7,13 +7,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from bio_programming_tools.tools.orf_prediction import (
+from proto_tools.tools.orf_prediction import (
     OrfipyConfig,
     OrfipyInput,
     OrfipyOutput,
     run_orfipy_prediction,
 )
-from bio_programming_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orf import ORF
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_DATA_DIR = Path("tests/dummy_data")
@@ -49,7 +49,7 @@ def test_parsing_with_test_data():
 
     from Bio import SeqIO
 
-    from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
+    from proto_tools.tools.orf_prediction.orfipy.standalone.run import (
         _parse_orfipy_header,
     )
 
@@ -98,7 +98,7 @@ def test_parsing_with_test_data():
     ],
 )
 def test_header_parsing(header, expected):
-    from bio_programming_tools.tools.orf_prediction.orfipy.standalone.run import (
+    from proto_tools.tools.orf_prediction.orfipy.standalone.run import (
         _parse_orfipy_header as parse_header,
     )
 
@@ -217,7 +217,7 @@ def test_multiple_sequences_with_custom_ids():
 
 
 def test_sequence_ids_length_mismatch_raises():
-    from bio_programming_tools.utils import resolve_sequence_ids
+    from proto_tools.utils import resolve_sequence_ids
     with pytest.raises(ValueError, match="must match"):
         resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
 

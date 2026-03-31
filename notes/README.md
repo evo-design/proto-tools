@@ -1,6 +1,6 @@
 # Notes
 
-Team-shared development docs for bio-programming-tools. These files capture platform compatibility reports, tool-specific gotchas, and architecture decisions — knowledge that **every developer** needs.
+Team-shared development docs for proto-tools. These files capture platform compatibility reports, tool-specific gotchas, and architecture decisions — knowledge that **every developer** needs.
 
 For personal discoveries (debugging patterns, tool quirks found during a session), use Claude's auto-memory instead of adding to these files. Only add to notes/ when the knowledge benefits the whole team.
 

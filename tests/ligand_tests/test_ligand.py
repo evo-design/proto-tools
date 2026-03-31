@@ -4,8 +4,8 @@ Tests for Ligands entity."""
 
 import pytest
 
-from bio_programming_tools.entities.ligands import Fragment, Ligands
-from bio_programming_tools.entities.structures.utils import is_valid_structure
+from proto_tools.entities.ligands import Fragment, Ligands
+from proto_tools.entities.structures.utils import is_valid_structure
 from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 # ── Loading ──────────────────────────────────────────────────────────────

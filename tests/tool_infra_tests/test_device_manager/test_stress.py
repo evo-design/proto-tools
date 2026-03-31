@@ -7,15 +7,15 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from proto_tools.utils.tool_instance import ToolInstance
 
 
 @pytest.fixture(autouse=True)
 def _mock_exclusive_process():
     """Disable Exclusive_Process auto-escalation so tests control the strategy."""
     with patch(
-        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        "proto_tools.utils.device_manager.is_exclusive_process_mode",
         return_value=False,
     ):
         yield
@@ -41,7 +41,7 @@ _GPU_MEMORY_TOLERANCE_MB = 3072
 # Populated lazily so imports don't fail on environments without JAX/torch.
 
 def _pytorch_tool():
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
@@ -50,7 +50,7 @@ def _pytorch_tool():
 
 
 def _jax_tool():
-    from bio_programming_tools.tools.testing.mock_jax_tool import (
+    from proto_tools.tools.testing.mock_jax_tool import (
         MockJAXToolConfig,
         MockJAXToolInput,
         run_mock_jax_tool,
@@ -59,7 +59,7 @@ def _jax_tool():
 
 
 def _cli_tool():
-    from bio_programming_tools.tools.testing.mock_cli_tool import (
+    from proto_tools.tools.testing.mock_cli_tool import (
         MockCLIToolConfig,
         MockCLIToolInput,
         run_mock_cli_tool,
@@ -68,7 +68,7 @@ def _cli_tool():
 
 
 def _pytorch_multi_gpu_tool():
-    from bio_programming_tools.tools.testing.mock_pytorch_multi_gpu_tool import (
+    from proto_tools.tools.testing.mock_pytorch_multi_gpu_tool import (
         MockPyTorchMultiGPUToolConfig,
         MockPyTorchMultiGPUToolInput,
         run_mock_pytorch_multi_gpu_tool,
@@ -77,7 +77,7 @@ def _pytorch_multi_gpu_tool():
 
 
 def _jax_multi_gpu_tool():
-    from bio_programming_tools.tools.testing.mock_jax_multi_gpu_tool import (
+    from proto_tools.tools.testing.mock_jax_multi_gpu_tool import (
         MockJAXMultiGPUToolConfig,
         MockJAXMultiGPUToolInput,
         run_mock_jax_multi_gpu_tool,

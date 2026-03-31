@@ -7,8 +7,8 @@ from typing import List, Union
 import pytest
 from pydantic import BaseModel
 
-from bio_programming_tools.utils import BaseConfig
-from bio_programming_tools.utils.tool_cache import (
+from proto_tools.utils import BaseConfig
+from proto_tools.utils.tool_cache import (
     CacheStripResult,
     ToolCache,
     _get_obj_size,

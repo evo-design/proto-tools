@@ -5,7 +5,7 @@ import random
 
 import pytest
 
-from bio_programming_tools.tools.mutagenesis.codons import (
+from proto_tools.tools.mutagenesis.codons import (
     CODON_TO_AA,
     COMMON_CODON_SCHEMES,
     IUPAC_DNA,

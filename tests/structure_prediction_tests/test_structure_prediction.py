@@ -10,8 +10,8 @@ import pytest
 from Bio import SeqIO
 from pydantic import ValidationError
 
-from bio_programming_tools.entities.structures import is_valid_structure
-from bio_programming_tools.tools.structure_prediction import (
+from proto_tools.entities.structures import is_valid_structure
+from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
     AlphaFold3Config,
@@ -33,12 +33,12 @@ from bio_programming_tools.tools.structure_prediction import (
     run_esmfold,
     run_protenix,
 )
-from bio_programming_tools.utils.tool_cache import (
+from proto_tools.utils.tool_cache import (
     ToolCache,
     _program_tool_cache,
     get_cache_info,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         config = config_class(use_msa=use_msa, verbose=True)
 
         if use_msa and msa_search_mode is not None:
-            from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+            from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
                 ColabfoldSearchConfig,
             )
 

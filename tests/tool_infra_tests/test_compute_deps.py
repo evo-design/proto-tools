@@ -6,19 +6,19 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.compute_deps import (
+from proto_tools.utils.compute_deps import (
     _get_jax_spec,
     _get_torch_spec,
     detect_compute_environment,
 )
-from bio_programming_tools.utils.system_info import GPUDevice, GPUInfo, get_gpu_info
+from proto_tools.utils.system_info import GPUDevice, GPUInfo, get_gpu_info
 
 # ── Compatibility matrix validation ──────────────────────────────────────────
 
 
 def test_torch_compatibility_entries_valid():
     """All PyTorch compatibility entries should be valid tuples."""
-    from bio_programming_tools.utils.compute_deps import _TORCH_COMPATIBILITY
+    from proto_tools.utils.compute_deps import _TORCH_COMPATIBILITY
 
     for driver_ver, (min_ver, max_ver, variant) in _TORCH_COMPATIBILITY.items():
         assert isinstance(driver_ver, int)
@@ -33,7 +33,7 @@ def test_torch_compatibility_entries_valid():
 
 def test_jax_compatibility_entries_valid():
     """All JAX compatibility entries should be valid tuples."""
-    from bio_programming_tools.utils.compute_deps import _JAX_COMPATIBILITY
+    from proto_tools.utils.compute_deps import _JAX_COMPATIBILITY
 
     for driver_ver, (min_ver, max_ver) in _JAX_COMPATIBILITY.items():
         assert isinstance(driver_ver, int)
@@ -100,7 +100,7 @@ def test_cpu_only():
     )
 
     with patch(
-        "bio_programming_tools.utils.system_info.get_gpu_info",
+        "proto_tools.utils.system_info.get_gpu_info",
         return_value=fake_gpu_info,
     ):
         env = detect_compute_environment()
@@ -132,7 +132,7 @@ def test_malformed_driver_version():
     )
 
     with patch(
-        "bio_programming_tools.utils.system_info.get_gpu_info",
+        "proto_tools.utils.system_info.get_gpu_info",
         return_value=fake_gpu_info,
     ):
         env = detect_compute_environment()
@@ -159,7 +159,7 @@ def test_malformed_cuda_version():
     )
 
     with patch(
-        "bio_programming_tools.utils.system_info.get_gpu_info",
+        "proto_tools.utils.system_info.get_gpu_info",
         return_value=fake_gpu_info,
     ):
         env = detect_compute_environment()
@@ -187,7 +187,7 @@ def test_missing_driver_version():
     )
 
     with patch(
-        "bio_programming_tools.utils.system_info.get_gpu_info",
+        "proto_tools.utils.system_info.get_gpu_info",
         return_value=fake_gpu_info,
     ):
         env = detect_compute_environment()
@@ -213,7 +213,7 @@ def test_missing_cuda_version():
     )
 
     with patch(
-        "bio_programming_tools.utils.system_info.get_gpu_info",
+        "proto_tools.utils.system_info.get_gpu_info",
         return_value=fake_gpu_info,
     ):
         env = detect_compute_environment()

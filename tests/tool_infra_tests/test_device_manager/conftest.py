@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.device_manager import DeviceManager
 
 
 @pytest.fixture
@@ -18,10 +18,10 @@ def mock_2_gpus():
     Exclusive_Process mode which would silently override CPU → RESTART).
     """
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=2,
     ), patch(
-        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        "proto_tools.utils.device_manager.is_exclusive_process_mode",
         return_value=False,
     ):
         yield
@@ -31,7 +31,7 @@ def mock_2_gpus():
 def mock_0_gpus():
     """Mock number_of_visible_gpus to return 0 for test duration."""
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=0,
     ) as mock:
         yield mock
@@ -59,10 +59,10 @@ def no_gpus_manager(mock_0_gpus):
 def mock_1_gpu():
     """Mock number_of_visible_gpus to return 1 for test duration."""
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=1,
     ), patch(
-        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        "proto_tools.utils.device_manager.is_exclusive_process_mode",
         return_value=False,
     ):
         yield

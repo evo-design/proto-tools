@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from bio_programming_tools.utils.device import determine_visible_devices
-from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import (
+from proto_tools.utils.device import determine_visible_devices
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import (
     get_subprocess_device_env,
 )
 
@@ -266,7 +266,7 @@ def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
 
 # ── resolve_weights_dir ──────────────────────────────────────────────────────
 
-from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import (
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import (
     resolve_weights_dir,
 )
 

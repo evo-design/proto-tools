@@ -18,7 +18,7 @@ from urllib.request import urlretrieve
 
 logger = logging.getLogger(__name__)
 
-# Add project root to path to import bio_programming_tools
+# Add project root to path to import proto_tools
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
@@ -27,9 +27,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 except ModuleNotFoundError:
-    logger.error("Could not import bio_programming_tools")
+    logger.error("Could not import proto_tools")
     logger.error("  Script location: %s", SCRIPT_DIR)
     logger.error("  Project root: %s", PROJECT_ROOT)
     logger.error("  sys.path: %s", sys.path)

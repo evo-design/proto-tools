@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 
-from bio_programming_tools.tools.gene_annotation.pyhmmer import (
+from proto_tools.tools.gene_annotation.pyhmmer import (
     PyHmmerOutput,
     PyHmmscanConfig,
     PyHmmscanInput,
@@ -26,7 +26,7 @@ from bio_programming_tools.tools.gene_annotation.pyhmmer import (
     run_pyhmmer_nhmmer,
     run_pyhmmer_phmmer,
 )
-from bio_programming_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     _build_dataframes,
     _convert_dtypes,
 )

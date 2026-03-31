@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import OffloadStrategy
+from proto_tools.utils.device_manager import OffloadStrategy
 
 # ── LRU eviction tests ────────────────────────────────────────────────────
 
@@ -168,7 +168,7 @@ def test_restart_eviction_callback_failure_logs_but_continues(device_manager):
     time.sleep(0.01)
     device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=lambda x: None)
 
-    with patch("bio_programming_tools.utils.device_manager.logger.warning") as mock_warning:
+    with patch("proto_tools.utils.device_manager.logger.warning") as mock_warning:
         device3 = device_manager.request_device(
             "tool3", "instance3", device="cuda", eviction_callback=lambda x: None
         )

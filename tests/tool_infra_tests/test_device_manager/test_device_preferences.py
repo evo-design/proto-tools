@@ -99,7 +99,7 @@ def test_preferred_device_busy_with_warning(device_manager, mock_callback):
 
     # Request cuda:1 again - should evict instance1 and allocate to instance2
     with patch(
-        "bio_programming_tools.utils.device_manager.logger.warning"
+        "proto_tools.utils.device_manager.logger.warning"
     ) as mock_warning:
         device = device_manager.request_device(
             "tool2",
@@ -121,7 +121,7 @@ def test_preferred_device_all_busy_no_warning(device_manager, mock_callback):
 
     # Request cuda:0 specifically - no warning since no alternatives
     with patch(
-        "bio_programming_tools.utils.device_manager.logger.warning"
+        "proto_tools.utils.device_manager.logger.warning"
     ) as mock_warning:
         device = device_manager.request_device(
             "tool3",

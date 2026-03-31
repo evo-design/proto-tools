@@ -205,7 +205,7 @@ PMIX_SYSTEM_TMPDIR=/tmp
 PMIX_VERSION=5.0.3
 PROMPT_COMMAND=RET=$?;/bin/logger -t user_audit "username=$USER pid=$$ cmd=\"$(history 1 | /bin/sed "s/^[ ]*[0-9]\+[ ]*//" )\" newpwd=$PWD ret=$RET" 2>/dev/null
 PRTE_MCA_plm_slurm_args=--external-launcher
-PWD=/home/users/viggiano/oak_main/codebases/bio-programming-tools
+PWD=/home/users/viggiano/oak_main/codebases/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 PYTHONPYCACHEPREFIX=/tmp
@@ -332,19 +332,19 @@ __LMOD_STACK_FC=false
 ### Subprocess Environment (passed to tools)
 
 ```
-PROTO_MODEL_CACHE=/scratch/users/viggiano/model_weights/bio-programming-tools
-CONDA_PREFIX=/oak/stanford/groups/euan/projects/viggiano/codebases/bio-programming-tools/tool_envs/mock_pytorch_tool_env
+PROTO_MODEL_CACHE=/scratch/users/viggiano/model_weights/proto-tools
+CONDA_PREFIX=/oak/stanford/groups/euan/projects/viggiano/codebases/proto-tools/tool_envs/mock_pytorch_tool_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=550
-HF_HOME=/scratch/users/viggiano/model_weights/bio-programming-tools/huggingface
+HF_HOME=/scratch/users/viggiano/model_weights/proto-tools/huggingface
 HOME=/home/users/viggiano
 LANG=en_US.UTF-8
 LC_CTYPE=C.UTF-8
 LD_LIBRARY_PATH=/share/software/user/open/gcc/14.2.0/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/.singularity.d/libs:/home/groups/euan/viggiano/envs/bio-tools/lib
 LOGNAME=viggiano
-PATH=/oak/stanford/groups/euan/projects/viggiano/codebases/bio-programming-tools/tool_envs/mock_pytorch_tool_env/bin:/usr/local/cuda/bin:/home/users/viggiano/.local/bin:/share/software/user/open/nodejs/25....
+PATH=/oak/stanford/groups/euan/projects/viggiano/codebases/proto-tools/tool_envs/mock_pytorch_tool_env/bin:/usr/local/cuda/bin:/home/users/viggiano/.local/bin:/share/software/user/open/nodejs/25....
 PIP_DEFAULT_TIMEOUT=300
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
@@ -353,10 +353,10 @@ RECOMMENDED_TORCH_SPEC=torch>=2.5,<3
 SHELL=/bin/bash
 TMPDIR=/tmp
 TORCH_CUDA_ARCH_LIST=9.0
-TORCH_HOME=/scratch/users/viggiano/model_weights/bio-programming-tools/torch
+TORCH_HOME=/scratch/users/viggiano/model_weights/proto-tools/torch
 USER=viggiano
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/oak/stanford/groups/euan/projects/viggiano/codebases/bio-programming-tools/tool_envs/mock_pytorch_tool_env
+VIRTUAL_ENV=/oak/stanford/groups/euan/projects/viggiano/codebases/proto-tools/tool_envs/mock_pytorch_tool_env
 XDG_CACHE_HOME=/tmp
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false

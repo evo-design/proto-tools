@@ -8,8 +8,8 @@ from typing import List
 import pytest
 from pydantic import Field
 
-from bio_programming_tools.entities.structures.structure import Structure
-from bio_programming_tools.tools.inverse_folding.shared_data_models import (
+from proto_tools.entities.structures.structure import Structure
+from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingInput,
     InverseFoldingOutput,

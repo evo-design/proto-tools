@@ -6,8 +6,8 @@ import inspect
 
 import pytest
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 from .helpers import field_description_is_valid, find_missing_fields_in_docstring
 

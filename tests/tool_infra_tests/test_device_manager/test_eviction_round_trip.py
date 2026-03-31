@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from proto_tools.utils.tool_instance import ToolInstance
 
 # Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
 # Tools requiring specific clusters get per-item markers via pytest.param.
@@ -66,7 +66,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
     managed_devices = [f"cuda:{i}" for i in range(n_gpus)]
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=n_gpus,
     ):
         DeviceManager.reset_instance()
@@ -108,7 +108,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
                 time.sleep(0.01)  # Ensure LRU ordering
 
                 # --- Step 2: Mock tool evicts the real tool ---
-                from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+                from proto_tools.tools.testing.mock_pytorch_tool import (
                     MockPyTorchToolConfig,
                     MockPyTorchToolInput,
                     run_mock_pytorch_tool,

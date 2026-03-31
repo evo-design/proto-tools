@@ -5,8 +5,8 @@ Tests for moving tool instances between devices."""
 import time
 from unittest.mock import MagicMock, patch
 
-from bio_programming_tools.utils.device_manager import OffloadStrategy
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.device_manager import OffloadStrategy
+from proto_tools.utils.tool_instance import ToolInstance
 
 # ── Move to device tests ──────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ def test_move_to_same_device(device_manager, mock_callback):
 def test_move_nonexistent_instance(device_manager, mock_callback):
     """Test moving non-existent instance (should log warning)."""
     with patch(
-        "bio_programming_tools.utils.device_manager.logger.warning"
+        "proto_tools.utils.device_manager.logger.warning"
     ) as mock_warning:
         device_manager.move_to_device("nonexistent", "cuda:1")
 

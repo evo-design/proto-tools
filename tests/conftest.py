@@ -1,7 +1,7 @@
 """
 tests/conftest.py
 
-Supports the same CLI options and markers as the main bio-programming tests:
+Supports the same CLI options and markers as the main proto-language tests:
   --cpu        Run only CPU tests
   --gpu        Run only GPU tests (skip CPU tests)
   --all        Include slow and GPU tests
@@ -29,17 +29,17 @@ import pytest
 
 # Register testing tools so consistency tests cover them.
 # These are NOT exported via tools/__init__.py and are invisible outside tests.
-import bio_programming_tools.tools.testing  # noqa: F401
-from bio_programming_tools import setup_logging
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.utils.device import number_of_visible_gpus
-from bio_programming_tools.utils.system_info import (
+import proto_tools.tools.testing  # noqa: F401
+from proto_tools import setup_logging
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils.device import number_of_visible_gpus
+from proto_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
     get_captured_env,
     get_platform_id,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 
 def is_on_chimera() -> bool:
@@ -194,7 +194,7 @@ class EnvReportCollector:
 
     def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
         """Get venv path and status for a tool."""
-        from bio_programming_tools.utils.tool_instance import ToolInstance
+        from proto_tools.utils.tool_instance import ToolInstance
 
         venvs_dir = ToolInstance._get_tool_envs_root()
 
@@ -526,7 +526,7 @@ def pytest_configure(config):
 
 def pytest_runtest_logstart(nodeid, location):
     """Log when a test starts (DEBUG level, file only)."""
-    logger = logging.getLogger("bio_programming_tools.tests")
+    logger = logging.getLogger("proto_tools.tests")
     logger.debug(f"TEST START: {nodeid}")
 
     # Record start time for env report
@@ -536,7 +536,7 @@ def pytest_runtest_logstart(nodeid, location):
 
 def pytest_runtest_logreport(report):
     """Log test results (DEBUG level to avoid console output)."""
-    logger = logging.getLogger("bio_programming_tools.tests")
+    logger = logging.getLogger("proto_tools.tests")
 
     # Only log on the call phase (not setup/teardown)
     if report.when == "call":
@@ -608,7 +608,7 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_sessionfinish(session, exitstatus):
     """Log test session summary at the end and write env report if requested."""
-    logger = logging.getLogger("bio_programming_tools.tests")
+    logger = logging.getLogger("proto_tools.tests")
 
     # Get test statistics from the session
     test_reports = session.items
@@ -803,8 +803,8 @@ def setup_test_logging(request):
     k_expression = request.config.getoption("-k", default=None)
 
     # Clear any existing handlers first to prevent duplicate log files
-    bio_programming_tools_logger = logging.getLogger("bio_programming_tools")
-    bio_programming_tools_logger.handlers.clear()
+    proto_tools_logger = logging.getLogger("proto_tools")
+    proto_tools_logger.handlers.clear()
 
     # Create header with pytest command and timestamp
     pytest_command = " ".join(sys.argv)
@@ -860,7 +860,7 @@ def _env_report_clean_envs(setup_test_logging):
 
     venvs_dir = ToolInstance._get_tool_envs_root()
     if venvs_dir.exists():
-        logger = logging.getLogger("bio_programming_tools.tests")
+        logger = logging.getLogger("proto_tools.tests")
         logger.warning(
             f"Cleaning {venvs_dir} for fresh environment rebuilds "
             "(this may take a while on network filesystems)..."

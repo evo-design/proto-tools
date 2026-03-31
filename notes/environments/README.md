@@ -16,7 +16,7 @@ pytest --env-report --collect-only
 ```
 
 The `--env-report` flag:
-1. Cleans the `.venvs/` directory to force fresh venv rebuilds
+1. Cleans the `tool_envs/` directory to force fresh venv rebuilds
 2. Runs ALL tests marked `@pytest.mark.include_in_env_report` (overrides `--cpu`, `--gpu`, `--slow`, `skip_ci`)
 3. Skips GPU tests if no GPU is available
 4. Captures parent process and subprocess environment variables
@@ -40,7 +40,7 @@ def test_my_tool_basic():
     ...
 ```
 
-Categories should match the directory structure in `bio_programming_tools/tools/` (e.g., `sequence_scoring`, `gene_annotation`, `structure_prediction`, etc.).
+Categories should match the directory structure in `proto_tools/tools/` (e.g., `sequence_scoring`, `gene_annotation`, `structure_prediction`, etc.).
 
 ## Report Naming
 

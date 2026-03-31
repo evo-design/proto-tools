@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.structure_alignment.usalign import (
+from proto_tools.tools.structure_alignment.usalign import (
     USalignConfig,
     USalignInput,
     run_usalign,

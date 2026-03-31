@@ -33,4 +33,4 @@ jobs:
         pip install ruff
 
     - name: Run Ruff
-      run: ruff check bio_programming_tools tests
+      run: ruff check proto_tools tests

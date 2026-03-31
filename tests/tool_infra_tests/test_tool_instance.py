@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bio_programming_tools.utils.tool_instance import (
+from proto_tools.utils.tool_instance import (
     ToolInstance,
     _active_cache,
     _instances,
@@ -298,7 +298,7 @@ def test_dispatch_with_tool_instance_object():
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_passes_script_path(mock_init: MagicMock):
     """dispatch() should forward script_path and config-derived args to cached instance."""
-    from bio_programming_tools.utils.base_config import BaseConfig
+    from proto_tools.utils.base_config import BaseConfig
 
     inst = ToolInstance.get("esm2")
     inst.run = MagicMock(return_value={"result": "ok"})
@@ -347,7 +347,7 @@ def test_oneshot_injects_tool_env_path():
     inst = _make_fake_instance()
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.run",
+        "proto_tools.utils.tool_instance.subprocess.run",
     ) as mock_run:
         mock_run.return_value = MagicMock()
         # Will fail on output read, but we only care about the env arg
@@ -845,7 +845,7 @@ def test_persistent_worker_restarts_on_reload_param_change():
     inst._worker = mock_worker
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        "proto_tools.utils.tool_instance.PersistentWorker"
     ) as MockPW:
         new_worker = MagicMock()
         new_worker.send.return_value = {"result": "ok"}
@@ -888,7 +888,7 @@ def test_persistent_worker_no_restart_same_reload_params():
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     """dispatch() should derive reload_on from config's reload_fields()."""
-    from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
 
     class TestConfig(BaseConfig):
         model_checkpoint: str = ConfigField(
@@ -917,14 +917,14 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
 
 def test_base_config_reload_fields_empty():
     """BaseConfig.reload_fields() should return empty set."""
-    from bio_programming_tools.utils.base_config import BaseConfig
+    from proto_tools.utils.base_config import BaseConfig
 
     assert BaseConfig.reload_fields() == set()
 
 
 def test_subclass_without_reload_fields():
     """Subclass without extra reload fields has empty reload_fields."""
-    from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
 
     class MyConfig(BaseConfig):
         param: int = ConfigField(default=1, description="test")
@@ -934,7 +934,7 @@ def test_subclass_without_reload_fields():
 
 def test_subclass_with_reload_on_change():
     """Subclass with reload_on_change=True includes those fields."""
-    from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
 
     class MyConfig(BaseConfig):
         model_checkpoint: str = ConfigField(
@@ -948,7 +948,7 @@ def test_subclass_with_reload_on_change():
 
 def test_reload_fields_excludes_non_reload():
     """Fields without reload_on_change are excluded."""
-    from bio_programming_tools.utils.base_config import BaseConfig, ConfigField
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
 
     class MyConfig(BaseConfig):
         reload_me: str = ConfigField(
@@ -970,7 +970,7 @@ def test_oneshot_timeout_raises():
     inst = _make_fake_instance()
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.run",
+        "proto_tools.utils.tool_instance.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
     ):
         with pytest.raises(TimeoutError, match="timed out after 10s"):
@@ -1001,7 +1001,7 @@ def test_dispatch_reads_timeout_from_config(
     mock_init: MagicMock, mock_oneshot: MagicMock
 ):
     """dispatch() should use timeout from config object."""
-    from bio_programming_tools.utils.base_config import BaseConfig
+    from proto_tools.utils.base_config import BaseConfig
 
     mock_oneshot.return_value = {"result": "ok"}
     cfg = BaseConfig(timeout=60)
@@ -1034,7 +1034,7 @@ def test_dispatch_defaults_timeout_to_600(
 
 def test_send_timeout_kills_worker():
     """PersistentWorker.send() should kill the worker on timeout."""
-    from bio_programming_tools.utils.persistent_worker import PersistentWorker
+    from proto_tools.utils.persistent_worker import PersistentWorker
 
     worker = PersistentWorker.__new__(PersistentWorker)
     worker.tool_name = "esm2"
@@ -1049,7 +1049,7 @@ def test_send_timeout_kills_worker():
     worker._process = mock_process
     worker._stderr_lines = []
 
-    with patch("bio_programming_tools.utils.persistent_worker.select") as mock_sel:
+    with patch("proto_tools.utils.persistent_worker.select") as mock_sel:
         mock_sel.select.return_value = ([], [], [])  # timeout — nothing ready
 
         with pytest.raises(TimeoutError, match="timed out after 5s"):
@@ -1167,7 +1167,7 @@ def test_persistent_warmup_on_config_change():
     inst._worker = mock_worker
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.PersistentWorker"
+        "proto_tools.utils.tool_instance.PersistentWorker"
     ) as MockPW:
         new_worker = MagicMock()
         new_worker.send.return_value = {"result": "ok"}
@@ -1258,10 +1258,10 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     with patch.object(
         inst, "_ensure_micromamba", return_value=Path("/fake/micromamba"),
     ), patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.run",
+        "proto_tools.utils.tool_instance.subprocess.run",
         side_effect=_create_env_dir,
     ), patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.Popen",
+        "proto_tools.utils.tool_instance.subprocess.Popen",
         return_value=mock_proc,
     ):
         with pytest.raises(RuntimeError, match="may not be compatible"):
@@ -1497,7 +1497,7 @@ def test_returns_false_when_hash_mismatches(tmp_path: Path):
     python_exe.chmod(0o755)
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.run",
+        "proto_tools.utils.tool_instance.subprocess.run",
         return_value=MagicMock(returncode=0),
     ):
         assert inst._is_env_ok() is False
@@ -1522,7 +1522,7 @@ def test_returns_true_when_hash_matches(tmp_path: Path):
     python_exe.chmod(0o755)
 
     with patch(
-        "bio_programming_tools.utils.tool_instance.subprocess.run",
+        "proto_tools.utils.tool_instance.subprocess.run",
         return_value=MagicMock(returncode=0),
     ):
         assert inst._is_env_ok() is True

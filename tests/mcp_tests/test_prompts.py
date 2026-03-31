@@ -4,7 +4,7 @@ Tests for MCP prompts."""
 
 from __future__ import annotations
 
-from bio_tools_mcp.prompts import find_tool, tool_walkthrough
+from proto_tools_mcp.prompts import find_tool, tool_walkthrough
 
 
 def test_find_tool_returns_string():

@@ -4,7 +4,7 @@ Tests for ViennaRNA secondary structure prediction."""
 
 import pytest
 
-from bio_programming_tools.tools.structure_prediction import (
+from proto_tools.tools.structure_prediction import (
     ViennaRNAConfig,
     ViennaRNAInput,
     ViennaRNAOutput,

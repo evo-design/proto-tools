@@ -11,7 +11,7 @@ import pytest
 
 _TOOLS_DIR = (
     Path(__file__).resolve().parent.parent.parent
-    / "bio_programming_tools"
+    / "proto_tools"
     / "tools"
 )
 
@@ -328,7 +328,7 @@ def test_all_links_reachable(readme: Path) -> None:
             req = urllib.request.Request(
                 url,
                 method="HEAD",
-                headers={"User-Agent": "bio-programming-tools-link-checker/1.0"},
+                headers={"User-Agent": "proto-tools-link-checker/1.0"},
             )
             urllib.request.urlopen(req, timeout=10)
         except urllib.error.HTTPError as exc:
@@ -340,7 +340,7 @@ def test_all_links_reachable(readme: Path) -> None:
                     req = urllib.request.Request(
                         url,
                         headers={
-                            "User-Agent": "bio-programming-tools-link-checker/1.0",
+                            "User-Agent": "proto-tools-link-checker/1.0",
                         },
                     )
                     urllib.request.urlopen(req, timeout=10)

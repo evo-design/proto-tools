@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.gene_annotation.minced import (
+from proto_tools.tools.gene_annotation.minced import (
     CrisprArray,
     CrisprRepeatSpacer,
     MincedConfig,

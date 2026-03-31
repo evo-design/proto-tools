@@ -7,8 +7,8 @@ from typing import Union, get_args, get_origin
 import pytest
 from pydantic.fields import PydanticUndefined
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.utils import BaseConfig as ToolsBaseConfig
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils import BaseConfig as ToolsBaseConfig
 
 from .helpers import field_description_is_valid, find_missing_fields_in_docstring
 

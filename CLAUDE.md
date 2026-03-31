@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-bio_programming_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models. It is a git submodule of [bio-programming](https://github.com/evo-design/bio-programming), mounted at `bio-programming-tools/`. It also works standalone.
+proto_tools is a modular computational biology and biological AI tool library providing Python wrappers for generative biological AI models, and biological sequence and structure analysis tools/models. It is a git submodule of [proto-language](https://github.com/proto-bio/proto-language), mounted at `proto-tools/`. It also works standalone.
 
 ## Knowledge Management
 
@@ -34,7 +34,7 @@ Documentation reference pages are auto-generated from Python docstrings and fiel
 
 ## Build & Development Setup
 
-Assume `bio_programming_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.
+Assume `proto_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.
 
 ```bash
 # First-time setup only
@@ -42,7 +42,7 @@ pip install -e ".[dev]"
 pre-commit install
 
 # Formatting
-ruff check bio_programming_tools
+ruff check proto_tools
 ```
 
 ## Keeping Docs in Sync
@@ -70,7 +70,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 ### Package Hierarchy
 
 ```
-bio_programming_tools/
+proto_tools/
 ├── tools/                          # All tool wrappers
 │   ├── {category}/                 # e.g., gene_annotation, structure_prediction
 │   │   ├── {tool_name}/            # e.g., blast, esmfold
@@ -93,7 +93,7 @@ bio_programming_tools/
 Every tool is registered via `@tool()` and discoverable through `ToolRegistry`. Tools are at `tools/{category}/{tool_name}/`.
 
 ```python
-from bio_programming_tools.tools import ToolRegistry
+from proto_tools.tools import ToolRegistry
 
 ToolRegistry.list_all()                          # All registered tools
 ToolRegistry.get_schemas("tool-key")             # Input, config, output JSON schemas
@@ -171,7 +171,7 @@ Google style everywhere. Enforced by `tests/style_consistency_tests/test_module_
 - **Module docstrings**: First line is the relative path from repo root. Blank line, then short description. More content after that is optional. `__init__.py` files are exempt.
   ```python
   """
-  bio_programming_tools/utils/device_manager.py
+  proto_tools/utils/device_manager.py
 
   Centralized GPU allocation tracking with LRU eviction.
   """
@@ -224,18 +224,18 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - Test logs saved to `logs/` — every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
 - **`PROTO_HOME`** controls where all persistent data lives — model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/model-weights.md`.
 
-## Using bio_tools with Claude Code
+## Using proto-tools with Claude Code
 
 ### MCP Server
 
-An MCP server (`bio_tools_mcp/`) exposes the ToolRegistry over the Model Context Protocol. Claude Code auto-discovers it via `.mcp.json`. Use MCP tools to discover available tools, search by keyword, inspect schemas, and read citations without importing Python.
+An MCP server (`proto_tools_mcp/`) exposes the ToolRegistry over the Model Context Protocol. Claude Code auto-discovers it via `.mcp.json`. Use MCP tools to discover available tools, search by keyword, inspect schemas, and read citations without importing Python.
 
 ```bash
 # Manual launch (stdio)
-python -m bio_tools_mcp
+python -m proto_tools_mcp
 
 # HTTP transport
-python -m bio_tools_mcp --transport http --port 9200
+python -m proto_tools_mcp --transport http --port 9200
 ```
 
 Requires `pip install -e ".[mcp]"` (adds `fastmcp>=2.0.0`).
@@ -243,13 +243,13 @@ Requires `pip install -e ".[mcp]"` (adds `fastmcp>=2.0.0`).
 ### Running Tools Directly
 
 When a user asks to run a bioinformatics tool:
-1. **Find the tool**: Browse `bio_programming_tools/tools/` or use `ToolRegistry.list_all()`
+1. **Find the tool**: Browse `proto_tools/tools/` or use `ToolRegistry.list_all()`
 2. **Read README + notebook**: `tools/{category}/{tool}/README.md` and `examples/example.ipynb`
 3. **Read API**: Tool's `Input`/`Config`/`Output` classes for the Pydantic schema
 4. **Call**: `Input` → `Config` → `run_{tool}()` → `Output`
 
 ```python
-from bio_programming_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
+from proto_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}Config
 
 result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 # result.success, result.execution_time, result.errors, plus tool-specific fields

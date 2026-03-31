@@ -7,7 +7,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.sequence_scoring.enformer import ENFORMER_CONTEXT
+from proto_tools.tools.sequence_scoring.enformer import ENFORMER_CONTEXT
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -24,7 +24,7 @@ def _random_dna(length: int, seed: int = 42) -> str:
 
 def test_enformer_input_valid():
     """Valid sequence of the required length is accepted."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     seq = _random_dna(ENFORMER_CONTEXT)
     inp = EnformerInput(sequence=seq)
@@ -37,7 +37,7 @@ def test_enformer_input_valid():
 ])
 def test_enformer_input_rejects_wrong_length(seq, label):
     """Sequences that are not exactly ENFORMER_CONTEXT bp are rejected."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
         EnformerInput(sequence=seq)
@@ -45,7 +45,7 @@ def test_enformer_input_rejects_wrong_length(seq, label):
 
 def test_enformer_input_rejects_empty():
     """Empty sequences are rejected."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     with pytest.raises((ValueError, ValidationError), match="[Ss]equence"):
         EnformerInput(sequence="")
@@ -53,7 +53,7 @@ def test_enformer_input_rejects_empty():
 
 def test_enformer_input_rejects_invalid_nucleotides():
     """Sequences containing invalid nucleotide characters are rejected."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerInput
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     bad_seq = "X" * ENFORMER_CONTEXT
     with pytest.raises((ValueError, ValidationError), match="[Ii]nvalid"):
@@ -64,7 +64,7 @@ def test_enformer_input_rejects_invalid_nucleotides():
 
 def test_enformer_config_default_species():
     """Default species is 'human'."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
+    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
 
     config = EnformerConfig(output_tracks=[0])
     assert config.species == "human"
@@ -72,7 +72,7 @@ def test_enformer_config_default_species():
 
 def test_enformer_config_rejects_invalid_species():
     """Species values other than 'human' or 'mouse' are rejected."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import EnformerConfig
+    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
 
     with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
         EnformerConfig(output_tracks=[0], species="zebrafish")
@@ -85,7 +85,7 @@ def test_enformer_config_rejects_invalid_species():
 @pytest.mark.uses_gpu
 def test_enformer_prediction_human():
     """Enformer produces a [896, num_tracks] output matrix for human sequences."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import (
+    from proto_tools.tools.sequence_scoring.enformer import (
         EnformerConfig,
         EnformerInput,
         run_enformer,
@@ -110,7 +110,7 @@ def test_enformer_prediction_human():
 @pytest.mark.uses_gpu
 def test_enformer_prediction_mouse():
     """Enformer produces a [896, num_tracks] output matrix for mouse sequences."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import (
+    from proto_tools.tools.sequence_scoring.enformer import (
         EnformerConfig,
         EnformerInput,
         run_enformer,
@@ -135,7 +135,7 @@ def test_enformer_prediction_mouse():
 @pytest.mark.uses_gpu
 def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
     """Output matrix second dimension matches the number of requested tracks."""
-    from bio_programming_tools.tools.sequence_scoring.enformer import (
+    from proto_tools.tools.sequence_scoring.enformer import (
         EnformerConfig,
         EnformerInput,
         run_enformer,

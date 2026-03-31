@@ -12,7 +12,7 @@
 | **Python** | 3.12.12 |
 | **RAM** | 16.0 GB |
 | **GPU** | None |
-| **Conda Env** | `bio-programming` |
+| **Conda Env** | `proto-language` |
 
 ## Git
 
@@ -34,9 +34,9 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 COLORTERM=truecolor
 COMMAND_MODE=unix2003
 CONDA_CHANGEPS1=false
-CONDA_DEFAULT_ENV=bio-programming
+CONDA_DEFAULT_ENV=proto-language
 CONDA_EXE=/opt/miniconda3/bin/conda
-CONDA_PREFIX=/opt/miniconda3/envs/bio-programming
+CONDA_PREFIX=/opt/miniconda3/envs/proto-language
 CONDA_PREFIX_1=/opt/miniconda3
 CONDA_PROMPT_MODIFIER=
 CONDA_PYTHON_EXE=/opt/miniconda3/bin/python
@@ -45,7 +45,7 @@ COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
 DISPLAY=/private/tmp/com.apple.launchd.4rcYEp7e88/org.xquartz:0
 GIT_EDITOR=true
-GSETTINGS_SCHEMA_DIR=/opt/miniconda3/envs/bio-programming/share/glib-2.0/schemas
+GSETTINGS_SCHEMA_DIR=/opt/miniconda3/envs/proto-language/share/glib-2.0/schemas
 GSETTINGS_SCHEMA_DIR_CONDA_BACKUP=
 HOME=/Users/danielguo
 HOMEBREW_CELLAR=/opt/homebrew/Cellar
@@ -65,17 +65,17 @@ NVM_CD_FLAGS=-q
 NVM_DIR=/Users/danielguo/.nvm
 NVM_INC=/Users/danielguo/.nvm/versions/node/v22.14.0/include/node
 NoDefaultCurrentDirectoryInExePath=1
-OLDPWD=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools
+OLDPWD=/Users/danielguo/Research/darwin/proto-language/proto-tools
 OSLogRateLimit=64
 OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 OTOOL=arm64-apple-darwin20.0.0-otool
 PAGESTUFF=arm64-apple-darwin20.0.0-pagestuff
 PATH=/Users/danielguo/.local/bin:/opt/homebrew/opt/gnu-getopt/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Users/danielguo/.local/bin:/Users/danielguo/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/opt/gnu-get...
-PWD=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools
+PWD=/Users/danielguo/Research/darwin/proto-language/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 RANLIB=arm64-apple-darwin20.0.0-ranlib
-RDBASE=/opt/miniconda3/envs/bio-programming/lib/python3.12/site-packages/rdkit
+RDBASE=/opt/miniconda3/envs/proto-language/lib/python3.12/site-packages/rdkit
 REDO_PREBINDING=arm64-apple-darwin20.0.0-redo_prebinding
 SEGEDIT=arm64-apple-darwin20.0.0-segedit
 SEG_ADDR_TABLE=arm64-apple-darwin20.0.0-seg_addr_table
@@ -93,10 +93,10 @@ USER=danielguo
 WARP_HONOR_PS1=0
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
-XML_CATALOG_FILES=file:///opt/miniconda3/envs/bio-programming/etc/xml/catalog file:///etc/xml/catalog
+XML_CATALOG_FILES=file:///opt/miniconda3/envs/proto-language/etc/xml/catalog file:///etc/xml/catalog
 XPC_FLAGS=0x0
 XPC_SERVICE_NAME=0
-_=/opt/miniconda3/envs/bio-programming/bin/python
+_=/opt/miniconda3/envs/proto-language/bin/python
 _CE_CONDA=
 _CE_M=
 __CFBundleIdentifier=dev.warp.Warp-Stable
@@ -106,22 +106,22 @@ __CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env
+CONDA_PREFIX=/Users/danielguo/Research/darwin/proto-language/proto-tools/tool_envs/viennarna_env
 CUDA_VISIBLE_DEVICES=
 DETECTED_COMPUTE_PLATFORM=cpu
 HOME=/Users/danielguo
 JAX_PLATFORMS=cpu
 LANG=en_US.UTF-8
-LD_LIBRARY_PATH=/opt/miniconda3/envs/bio-programming/lib
+LD_LIBRARY_PATH=/opt/miniconda3/envs/proto-language/lib
 LOGNAME=danielguo
-PATH=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env/bin:/Users/danielguo/.local/bin:/opt/homebrew/opt/gnu-getopt/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Us...
+PATH=/Users/danielguo/Research/darwin/proto-language/proto-tools/tool_envs/viennarna_env/bin:/Users/danielguo/.local/bin:/opt/homebrew/opt/gnu-getopt/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/Us...
 RECOMMENDED_JAX_SPEC=jax
 RECOMMENDED_TORCH_SPEC=torch
 SHELL=/bin/zsh
 TMPDIR=/var/folders/rs/6dqw0_k1125fl7f7_9h85hgh0000gn/T/
-TORCH_HOME=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env/cache/torch
+TORCH_HOME=/Users/danielguo/Research/darwin/proto-language/proto-tools/tool_envs/viennarna_env/cache/torch
 USER=danielguo
-VIRTUAL_ENV=/Users/danielguo/Research/darwin/bio-programming/bio-programming-tools/tool_envs/viennarna_env
+VIRTUAL_ENV=/Users/danielguo/Research/darwin/proto-language/proto-tools/tool_envs/viennarna_env
 ```
 
 ## Results by Category

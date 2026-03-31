@@ -4,7 +4,7 @@ Tests for StructureEnsemble."""
 
 from unittest.mock import Mock
 
-from bio_programming_tools.entities.structures import Structure, StructureEnsemble
+from proto_tools.entities.structures import Structure, StructureEnsemble
 
 _SAMPLE_SEQUENCE = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
 

@@ -7,13 +7,13 @@ import time
 import pytest
 from pydantic import Field
 
-from bio_programming_tools.tools.tool_registry import (
+from proto_tools.tools.tool_registry import (
     MAX_RETRIES,
     ToolRegistry,
     ToolSpec,
 )
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput
+from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 # ── example_input completeness ───────────────────────────────────────────────
@@ -371,7 +371,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
 
 def test_tool_output_error_access_raises_exception(clean_registry):
     """Test that accessing unset fields on failed output raises ToolExecutionError"""
-    from bio_programming_tools.utils.tool_io import ToolExecutionError
+    from proto_tools.utils.tool_io import ToolExecutionError
 
     @clean_registry.register(
         key="error-access-tool",
@@ -532,7 +532,7 @@ def _register_and_run(registry, key, func):
 @pytest.fixture
 def fast_retry(monkeypatch):
     """Zero out retry delay for tests."""
-    import bio_programming_tools.tools.tool_registry as reg_module
+    import proto_tools.tools.tool_registry as reg_module
     monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
 
 
@@ -924,7 +924,7 @@ def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
 @pytest.fixture
 def _setup_cache():
     """Set up cache in contextvar before each test, clear after."""
-    from bio_programming_tools.utils.tool_cache import ToolCache, _program_tool_cache
+    from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
     cache = ToolCache()
     _program_tool_cache.set(cache)
     yield cache

@@ -33,7 +33,7 @@ _SCORE_MID = _SCORE // 2  # 262_144 — centre of the scoring interval
 @pytest.mark.uses_gpu
 def test_interval_prediction():
     """Test interval prediction with multiple output types."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeInterval,
         AlphaGenomePredictIntervalsConfig,
         AlphaGenomePredictIntervalsInput,
@@ -72,7 +72,7 @@ def test_interval_prediction():
 @pytest.mark.uses_gpu
 def test_variant_prediction():
     """Test variant prediction returns correct metadata and predictions."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomePredictVariantsConfig,
         AlphaGenomePredictVariantsInput,
         AlphaGenomeVariant,
@@ -115,7 +115,7 @@ def test_variant_prediction():
 @pytest.mark.uses_gpu
 def test_single_sequence_prediction_via_batched_api():
     """Single-sequence prediction should run through batched API."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomePredictSequencesConfig,
         AlphaGenomePredictSequencesInput,
         run_alphagenome_predict_sequences,
@@ -146,7 +146,7 @@ def test_single_sequence_prediction_via_batched_api():
 @pytest.mark.uses_gpu
 def test_variant_scoring():
     """Test variant scoring with default scorers."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeScoreVariantsConfig,
         AlphaGenomeScoreVariantsInput,
         AlphaGenomeVariant,
@@ -185,7 +185,7 @@ def test_variant_scoring():
 @pytest.mark.uses_gpu
 def test_interval_scoring():
     """Test interval scoring with default scorers."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeInterval,
         AlphaGenomeScoreIntervalsConfig,
         AlphaGenomeScoreIntervalsInput,
@@ -220,7 +220,7 @@ def test_interval_scoring():
 @pytest.mark.uses_gpu
 def test_ism():
     """Test ISM over a small sub-interval with position-based scorers."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeISM,
         AlphaGenomeScoreISMConfig,
         AlphaGenomeScoreISMInput,
@@ -257,7 +257,7 @@ def test_ism():
 @pytest.mark.uses_gpu
 def test_ism_with_variant_context():
     """Test ISM with an existing variant applied as background context."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeISM,
         AlphaGenomeScoreISMConfig,
         AlphaGenomeScoreISMInput,
@@ -297,7 +297,7 @@ def test_ism_with_variant_context():
 @pytest.mark.uses_gpu
 def test_interval_prediction_131k_context():
     """Interval prediction at the 131,072 bp context length (third-smallest supported)."""
-    from bio_programming_tools import (
+    from proto_tools import (
         AlphaGenomeInterval,
         AlphaGenomePredictIntervalsConfig,
         AlphaGenomePredictIntervalsInput,

@@ -1,4 +1,4 @@
-# Using bio_tools with Claude Code
+# Using proto-tools with Claude Code
 
 ## Script vs Direct Execution
 
@@ -24,7 +24,7 @@ In either case, always show the equivalent Python code so the user can reproduce
 Brief description of what this analysis does.
 Generated: {date}
 """
-from bio_programming_tools.tools.{category}.{tool} import ...
+from proto_tools.tools.{category}.{tool} import ...
 
 # --- Configuration (review these) ---
 # All parameters in one place with comments explaining choices
@@ -43,7 +43,7 @@ For multi-step pipelines, use one script with `# === Step N: Description ===` se
 For batch workloads or loops calling the same tool repeatedly, use `ToolInstance.persist()` to avoid reloading the model on every call:
 
 ```python
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 with ToolInstance.persist():
     for seq in sequences:

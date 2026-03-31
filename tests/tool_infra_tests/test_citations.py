@@ -4,7 +4,7 @@ Tests for ToolRegistry citation retrieval."""
 
 import pytest
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
+from proto_tools.tools.tool_registry import ToolRegistry
 
 # ── get_citation ─────────────────────────────────────────────────────────────
 

@@ -3,16 +3,19 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bio_programming_tools"
+name = "proto_tools"
 version = "0.1.0"
-description = "Bioinformatics tools for bio-programming"
+description = "Bioinformatics tools for proto-language"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Bio Programming Team"}
+    {name = "Proto Bio Team"}
 ]
 
 requires-python = ">=3.10"
+
+[project.urls]
+Repository = "https://github.com/proto-bio/proto-tools"
 
 # Core dependencies
 dependencies = [
@@ -80,10 +83,10 @@ dev = [
     "docstring-parser",
 ]
 
-# Dependencies: Run tests from parent bio-programming context (install.sh or pip install -e ..[dev])
+# Dependencies: Run tests from parent proto-language context (install.sh or pip install -e ..[dev])
 
 [tool.pytest.ini_options]
-# Run from bio-programming-tools root directory
+# Run from proto-tools root directory
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = [
@@ -136,14 +139,14 @@ select = ["F401", "F841", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/standalone/standalone_helpers.py" = ["F401"]
-"bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py" = ["F401"]
+"proto_tools/utils/standalone_helpers_source/standalone_helpers.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bio_programming_tools"]
+known-first-party = ["proto_tools"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["bio_programming_tools*"]
+include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib"]

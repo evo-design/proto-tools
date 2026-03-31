@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     ChainModification,
     StructurePredictionComplex,

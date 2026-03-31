@@ -10,10 +10,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import Field
 
-from bio_programming_tools.tools.tool_registry import ToolRegistry
-from bio_programming_tools.utils import BaseConfig, ConfigField
-from bio_programming_tools.utils.tool_io import BaseToolInput
-from bio_programming_tools.utils.tool_pool import (
+from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.tool_io import BaseToolInput
+from proto_tools.utils.tool_pool import (
     DeviceCapability,
     PartialFailureError,
     ToolPool,
@@ -451,12 +451,12 @@ def test_dispatch_collects_warnings_and_errors(clean_registry):
 
 def test_dispatch_persistence_entered():
     """Pool still enters ToolInstance.persist()."""
-    with patch("bio_programming_tools.utils.tool_instance.ToolInstance.persist") as mock_persist:
+    with patch("proto_tools.utils.tool_instance.ToolInstance.persist") as mock_persist:
         mock_ctx = MagicMock()
         mock_persist.return_value = mock_ctx
         pool = ToolPool(devices=["cuda:0"])
         # Patch GPU validation
-        with patch("bio_programming_tools.utils.tool_pool.determine_visible_devices"):
+        with patch("proto_tools.utils.tool_pool.determine_visible_devices"):
             pool.__enter__()
         try:
             assert pool._persist_ctx is mock_ctx
@@ -776,13 +776,13 @@ def test_all_succeed_unchanged(clean_registry):
 @pytest.mark.slow
 def test_gpu_fanout_items_land_on_different_gpus():
     """Items should be dispatched to different physical GPUs."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
@@ -816,13 +816,13 @@ def test_gpu_fanout_items_land_on_different_gpus():
 @pytest.mark.slow
 def test_gpu_fanout_results_in_original_order():
     """Results must be reassembled in original input order."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
@@ -873,13 +873,13 @@ def test_gpu_fanout_persistence_across_pool_calls():
     """
     import time
 
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
@@ -922,13 +922,13 @@ def test_gpu_fanout_persistence_across_pool_calls():
 @pytest.mark.slow
 def test_gpu_fanout_single_item_bypasses_pool():
     """A single-item input should bypass pool overhead."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()

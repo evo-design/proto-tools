@@ -4,7 +4,7 @@ Tests for remote ColabFold MSA search."""
 
 import pytest
 
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     run_colabfold_search,

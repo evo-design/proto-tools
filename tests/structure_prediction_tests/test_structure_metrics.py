@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from bio_programming_tools.tools.structure_prediction.structure_metrics import (
+from proto_tools.tools.structure_prediction.structure_metrics import (
     StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,

@@ -8,7 +8,7 @@ site-packages, not the local source directory.
 
 Usage:
     export PROTO_HOME=/oak/stanford/groups/euan/projects/viggiano/.proto
-    export PROTO_MODEL_CACHE=/scratch/users/viggiano/model_weights/bio-programming-tools
+    export PROTO_MODEL_CACHE=/scratch/users/viggiano/model_weights/proto-tools
     cd demo-project/
     python test_non_editable_install.py
 """
@@ -36,9 +36,9 @@ def main():
 
     # ── Step 2: Verify we're loading from site-packages ──────────────────
     print("[2] Package location")
-    import bio_programming_tools
+    import proto_tools
 
-    pkg_file = bio_programming_tools.__file__
+    pkg_file = proto_tools.__file__
     print(f"    __file__ = {pkg_file}")
     assert "site-packages" in pkg_file, (
         f"Expected to load from site-packages but got: {pkg_file}\n"
@@ -49,7 +49,7 @@ def main():
 
     # ── Step 3: Verify PROTO_HOME resolution ─────────────────────────────
     print("[3] PROTO_HOME resolution")
-    from bio_programming_tools.utils.proto_home import get_proto_home
+    from proto_tools.utils.proto_home import get_proto_home
 
     resolved = get_proto_home()
     print(f"    get_proto_home() = {resolved}")
@@ -61,7 +61,7 @@ def main():
 
     # ── Step 4: Verify tool_envs goes to PROTO_HOME (non-editable) ──────
     print("[4] Tool envs location")
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     tool_envs = ToolInstance._get_tool_envs_root()
     micromamba = ToolInstance._get_micromamba_root()
@@ -78,7 +78,7 @@ def main():
 
     # ── Step 5: Verify model cache resolution ────────────────────────────
     print("[5] Model cache location")
-    from bio_programming_tools.utils.persistent_worker import _build_subprocess_env
+    from proto_tools.utils.persistent_worker import _build_subprocess_env
 
     env = _build_subprocess_env(device="cpu")
     hf_home = env.get("HF_HOME", "(not set)")
@@ -103,7 +103,7 @@ def main():
     if proto_model_cache:
         os.environ["PROTO_MODEL_CACHE"] = proto_model_cache
 
-    from bio_programming_tools.utils.standalone_helpers_source.standalone_helpers import (
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers import (
         resolve_weights_dir,
     )
 

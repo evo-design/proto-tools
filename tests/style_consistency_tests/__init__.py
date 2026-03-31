@@ -1,1 +1,1 @@
-"""Style and consistency tests for bio_programming_tools."""
+"""Style and consistency tests for proto_tools."""

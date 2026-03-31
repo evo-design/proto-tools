@@ -1,0 +1,204 @@
+"""proto_tools/tools/causal_models/evo1/evo1_score.py
+
+Evo1 scoring tool."""
+
+from __future__ import annotations
+
+import logging
+from typing import List, Literal
+
+from pydantic import field_validator
+
+from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelScoringOutput,
+    SequenceScores,
+)
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
+
+logger = logging.getLogger(__name__)
+
+EVO1_MODEL_CHECKPOINTS = Literal[
+    "evo-1-8k-base",
+    "evo-1-131k-base",
+    "evo-1-8k-crispr",
+    "evo-1-8k-transposon",
+]
+
+
+# ============================================================================
+# Data Models
+# ============================================================================
+# Input:
+class Evo1ScoringInput(BaseToolInput):
+    """Input for Evo1 DNA sequence scoring.
+
+    Attributes:
+        sequences (list[str]): DNA sequences to score.
+    """
+
+    sequences: List[str] = InputField(description="DNA sequences to score")
+
+    @field_validator("sequences", mode="before")
+    @classmethod
+    def normalize_sequences(cls, v):
+        """Convert single string to list of strings."""
+        if isinstance(v, str):
+            return [v]
+        if not v:
+            raise ValueError("sequences must not be empty")
+        return v
+
+
+# Output:
+Evo1ScoringOutput = CausalModelScoringOutput
+
+
+# Config:
+class Evo1ScoringConfig(BaseConfig):
+    """Configuration for Evo1 DNA sequence scoring.
+
+    Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
+    position and summing the log probabilities.
+
+    Attributes:
+        model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors. Default: ``1``.
+        device (str): Device to run the model on. Default: ``"cuda"``.
+        return_logits (bool): Whether to include per-position logits in the
+            output. Default: ``False``.
+
+    Note:
+        - Evo1 uses byte-level tokenization with vocab_size=512
+        - DNA nucleotides: 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78 (ASCII values)
+    """
+
+    model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
+        title="Model Name",
+        default="evo-1-8k-base",
+        description="Evo1 model checkpoint to use",
+        reload_on_change=True,
+    )
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=1,
+        ge=1,
+        description="Number of sequences to process simultaneously on GPU",
+        advanced=True,
+    )
+    device: str = ConfigField(
+        title="Device",
+        default="cuda",
+        description="Device to run the model on",
+        hidden=True,
+        include_in_key=False,
+    )
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Whether to include per-position logits in the output. Disable to save memory.",
+        advanced=True,
+    )
+
+
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+def example_input():
+    """Minimal valid input for testing and examples."""
+    return Evo1ScoringInput(sequences=["ATCGATCG"])
+
+
+@tool(
+    key="evo1-score",
+    label="Evo1 Scoring",
+    category="causal_models",
+    input_class=Evo1ScoringInput,
+    config_class=Evo1ScoringConfig,
+    output_class=Evo1ScoringOutput,
+    description="Score DNA sequences using Evo1 language model",
+    uses_gpu=True,
+    example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="scores",
+    cacheable=True,
+)
+def run_evo1_score(
+    inputs: Evo1ScoringInput, config: Evo1ScoringConfig | None = None, instance=None,
+) -> Evo1ScoringOutput:
+    """Score DNA sequences using Evo1 autoregressive language model.
+
+    Computes the likelihood of DNA sequences using Evo1's autoregressive
+    modeling. For each position t, computes log P(x_t | x_{<t}) and sums
+    these to get the total log-likelihood.
+
+    Args:
+        inputs (Evo1ScoringInput): Validated input containing DNA sequences
+            to score.
+        config (Evo1ScoringConfig | None): Scoring configuration specifying model,
+            batch size, and whether to return logits.
+
+    Returns:
+        Evo1ScoringOutput: Contains SequenceScores for each input sequence with:
+
+            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
+              ``perplexity``
+            - ``logits``: Per-position logits tensor (seq_len, vocab_size=512) if
+              ``return_logits=True``, otherwise ``None``
+            - ``vocab``: List of 512 byte-level tokens if ``return_logits=True``,
+              otherwise ``None``
+
+    Examples:
+        >>> inputs = Evo1ScoringInput(sequences=["ATCGATCG", "GCTAGCTA"])
+        >>> config = Evo1ScoringConfig(model_name="evo-1-8k-base")
+        >>> result = run_evo1_score(inputs, config)
+        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+
+    Note:
+        - Lower perplexity indicates higher model confidence in the sequence
+        - Set ``return_logits=False`` (default) to save memory when only metrics
+          are needed
+        - Evo1 uses byte-level tokenization; DNA bases map to their ASCII values
+    """
+    logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
+
+    result = ToolInstance.dispatch(
+        "evo1",
+        {
+            "operation": "score",
+            "sequences": inputs.sequences,
+            "model_name": config.model_name,
+            "device": config.device,
+            "verbose": config.verbose,
+            "batch_size": config.batch_size,
+            "return_logits": config.return_logits,
+        },
+        instance=instance,
+        config=config,
+    )
+
+    # Serialize tensors to nested lists at tool boundary if needed
+    logits = result["logits"]
+    if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
+        logits = [t.cpu().tolist() for t in logits]
+    elif hasattr(logits, "tolist"):
+        logits = logits.cpu().tolist()
+
+    scores = [
+        SequenceScores(
+            metrics=metrics,
+            logits=logits[i] if logits is not None else None,
+            vocab=result["vocab"],
+        )
+        for i, metrics in enumerate(result["metrics"])
+    ]
+
+    return Evo1ScoringOutput(scores=scores)

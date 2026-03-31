@@ -4,7 +4,7 @@ Tests for MCP search tool."""
 
 from __future__ import annotations
 
-from bio_tools_mcp.tools import search_tools
+from proto_tools_mcp.tools import search_tools
 
 
 def test_search_by_tool_key():

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.tools.structure_prediction import (
+from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     Chain,
@@ -56,7 +56,7 @@ def mock_af3_inference(tmp_path):
         }
 
     with patch(
-        "bio_programming_tools.tools.structure_prediction.alphafold3.alphafold3.ToolInstance"
+        "proto_tools.tools.structure_prediction.alphafold3.alphafold3.ToolInstance"
     ) as mock_ti:
         mock_ti.dispatch = mock_dispatch
         yield captured_data

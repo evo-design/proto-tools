@@ -2,7 +2,7 @@
 
 # Sherlock HPC Setup Guide
 
-Setup instructions for running bio-programming-tools on Stanford's [Sherlock cluster](https://www.sherlock.stanford.edu/docs/). Sherlock runs CentOS 7 with glibc 2.17, which is too old for most modern ML packages and a container is required. This guide walks through the full setup from scratch.
+Setup instructions for running proto-tools on Stanford's [Sherlock cluster](https://www.sherlock.stanford.edu/docs/). Sherlock runs CentOS 7 with glibc 2.17, which is too old for most modern ML packages and a container is required. This guide walks through the full setup from scratch.
 
 ---
 
@@ -55,7 +55,7 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 exit
 ```
 
-> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and activate it, `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each bio-programming-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
+> **Note:** This verification uses the container's built-in Python (with PyTorch). After you set up the conda env (Section 3) and activate it, `python` will point to the conda env's Python, which does **not** have PyTorch installed — that's expected. Each proto-language-tool installs PyTorch into its own isolated environment automatically via `ToolInstance`.
 
 ---
 
@@ -136,9 +136,9 @@ By default, conda only knows about environments in its default `envs/` directory
 conda config --append envs_dirs /home/groups/<PI>/$USER/envs
 ```
 
-Now `conda activate bio-tools` works from anywhere instead of typing the full path.
+Now `conda activate proto-tools` works from anywhere instead of typing the full path.
 
-### Install bio-programming-tools
+### Install proto-tools
 
 Package installation **must** be done inside the container. The CentOS 7 host has glibc 2.17, which is too old for pre-built wheels of numpy, scipy, pandas, and other dependencies — they'll fail trying to build from source. Inside the container (Ubuntu 22.04, glibc 2.35), pre-built wheels install instantly.
 
@@ -147,8 +147,8 @@ Package installation **must** be done inside the container. The CentOS 7 host ha
 ptshell
 
 # Activate the env and install
-conda activate bio-tools
-cd /path/to/bio-programming-tools
+conda activate proto-tools
+cd /path/to/proto-tools
 pip install -e ".[dev]"
 pre-commit install
 ```
@@ -159,7 +159,7 @@ To set up Claude Code inside the container, see [section 4](#4-claude-code-in-th
 
 ## 4. Claude Code in the Container
 
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is useful for running bio-programming-tools interactively through natural language. Getting it to work inside the Apptainer container requires some extra setup because Sherlock's `module` system (Lmod) is not available inside containers.
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is useful for running proto-tools interactively through natural language. Getting it to work inside the Apptainer container requires some extra setup because Sherlock's `module` system (Lmod) is not available inside containers.
 
 The `ptshell` alias already bind-mounts `/share/software/user/open` (where Sherlock installs shared software like Node.js, Claude Code, and GCC) into the container. The binaries are on the filesystem — you just need to add them to your `PATH` and `LD_LIBRARY_PATH` manually since `module load` can't do it for you.
 
@@ -197,7 +197,7 @@ fi
 
 ## 5. GPU Sessions
 
-Most bio-programming-tools require a GPU. On Sherlock, you need to request GPU resources through SLURM before you can use them — GPUs are not available on login nodes.
+Most proto-tools require a GPU. On Sherlock, you need to request GPU resources through SLURM before you can use them — GPUs are not available on login nodes.
 
 ### Interactive session
 
@@ -207,7 +207,7 @@ srun -p gpu --gpus 1 --cpus-per-task 8 --mem-per-cpu=30GB -t 12:00:00 --pty bash
 
 # Enter container and activate the conda env
 ptshell
-conda activate bio-tools
+conda activate proto-tools
 ```
 
 If your lab has a condo partition (e.g., `brianhie`), use that for dedicated GPU access with shorter queue times:
@@ -233,7 +233,7 @@ Note: The `ptshell` alias uses `--rcfile` to source your bashrc, but `--rcfile` 
 
 apptainer exec --nv $GROUP_HOME/$USER/pytorch_latest.sif bash -c "
     source ~/.bashrc  # required — sets up PATH, LD_LIBRARY_PATH
-    conda activate bio-tools
+    conda activate proto-tools
     python my_script.py
 "
 ```

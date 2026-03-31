@@ -158,9 +158,9 @@ fi
 **For direct URL installs** (e.g., GitHub release wheels), use pip's `--force-reinstall`.
 
 **Reference implementations:**
-- `bio_programming_tools/tools/causal_models/evo1/standalone/setup.sh`
-- `bio_programming_tools/tools/causal_models/evo2/standalone/setup.sh`
-- `bio_programming_tools/tools/sequence_scoring/borzoi/standalone/setup.sh`
+- `proto_tools/tools/causal_models/evo1/standalone/setup.sh`
+- `proto_tools/tools/causal_models/evo2/standalone/setup.sh`
+- `proto_tools/tools/sequence_scoring/borzoi/standalone/setup.sh`
 
 ## Python Version Specification
 
@@ -205,7 +205,7 @@ subprocess.run(cmd, env=env)
 ```
 
 **Auto-copy mechanism:**
-- Source: `bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py` (tracked in git)
+- Source: `proto_tools/utils/standalone_helpers_source/standalone_helpers.py` (tracked in git)
 - Destination: `{tool}/standalone/standalone_helpers.py` (not tracked, auto-generated at runtime by `_worker_bootstrap.py`)
 - Exception: AlphaFold3's `standalone_helpers.py` is manually copied and tracked
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.sequence_scoring.segmasker import (
+from proto_tools.tools.sequence_scoring.segmasker import (
     SegmaskerConfig,
     SegmaskerInput,
     run_segmasker,

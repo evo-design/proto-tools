@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from bio_programming_tools.utils.device import (
+from proto_tools.utils.device import (
     DeviceSpec,
     determine_visible_devices,
     number_of_available_gpus,
@@ -220,7 +220,7 @@ def test_determine_visible_devices_invalid_index_exceeds_gpus():
 
 def test_parse_device_count_exact():
     """Test parsing exact device count specifications."""
-    from bio_programming_tools.utils.device import parse_device_count_requirement
+    from proto_tools.utils.device import parse_device_count_requirement
 
     # Single device
     result = parse_device_count_requirement("1")
@@ -233,7 +233,7 @@ def test_parse_device_count_exact():
 
 def test_parse_device_count_range():
     """Test parsing range device count specifications."""
-    from bio_programming_tools.utils.device import parse_device_count_requirement
+    from proto_tools.utils.device import parse_device_count_requirement
 
     # 1-2 devices
     result = parse_device_count_requirement("1-2")
@@ -246,7 +246,7 @@ def test_parse_device_count_range():
 
 def test_parse_device_count_open_ended():
     """Test parsing open-ended device count specifications."""
-    from bio_programming_tools.utils.device import parse_device_count_requirement
+    from proto_tools.utils.device import parse_device_count_requirement
 
     # At least 1 device
     result = parse_device_count_requirement(">=1")
@@ -259,7 +259,7 @@ def test_parse_device_count_open_ended():
 
 def test_parse_device_count_combined():
     """Test parsing combined device count specifications."""
-    from bio_programming_tools.utils.device import parse_device_count_requirement
+    from proto_tools.utils.device import parse_device_count_requirement
 
     # 1 to 4 devices
     result = parse_device_count_requirement(">=1,<=4")
@@ -272,7 +272,7 @@ def test_parse_device_count_combined():
 
 def test_parse_device_count_invalid():
     """Test that invalid device count specifications raise ValueError."""
-    from bio_programming_tools.utils.device import parse_device_count_requirement
+    from proto_tools.utils.device import parse_device_count_requirement
 
     # Invalid format
     with pytest.raises(ValueError, match="Invalid device count"):
@@ -293,7 +293,7 @@ def test_parse_device_count_invalid():
 
 def test_validate_device_allocation_within_range():
     """Test validation passes when allocation is within range."""
-    from bio_programming_tools.utils.device import validate_device_allocation
+    from proto_tools.utils.device import validate_device_allocation
 
     # Exact match
     validate_device_allocation(1, "1", "test-tool")
@@ -310,7 +310,7 @@ def test_validate_device_allocation_over_allocation(caplog):
     """Test validation warns on over-allocation (more than max)."""
     import logging
 
-    from bio_programming_tools.utils.device import validate_device_allocation
+    from proto_tools.utils.device import validate_device_allocation
 
     with caplog.at_level(logging.WARNING):
         # Requesting 2 devices for tool that needs exactly 1
@@ -326,7 +326,7 @@ def test_validate_device_allocation_over_allocation(caplog):
 
 def test_validate_device_allocation_under_allocation():
     """Test validation raises error on under-allocation (fewer than min)."""
-    from bio_programming_tools.utils.device import validate_device_allocation
+    from proto_tools.utils.device import validate_device_allocation
 
     # Requesting 1 device for tool that needs 2
     with pytest.raises(ValueError, match="requires at least 2"):

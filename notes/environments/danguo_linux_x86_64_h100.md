@@ -13,7 +13,7 @@
 | **RAM** | 2015.1 GB |
 | **GPU** | 1× NVIDIA H100 80GB HBM3 |
 | **CUDA** | 12.4 |
-| **Conda Env** | `bio-programming` |
+| **Conda Env** | `proto-language` |
 
 ## Git
 
@@ -90,12 +90,12 @@ BASH_FUNC_sudo()=() {  $SRCC_PATH/sudo
 }
 BLIS_NUM_THREADS=8
 CC=gcc
-CONDA_DEFAULT_ENV=bio-programming
+CONDA_DEFAULT_ENV=proto-language
 CONDA_EXE=/home/users/danguo/miniforge3/bin/conda
 CONDA_PKGS_DIRS=/home/groups/brianhie/danguo/.conda/pkgs
-CONDA_PREFIX=/home/users/danguo/miniforge3/envs/bio-programming
+CONDA_PREFIX=/home/users/danguo/miniforge3/envs/proto-language
 CONDA_PREFIX_1=/home/users/danguo/miniforge3
-CONDA_PROMPT_MODIFIER=(bio-programming) 
+CONDA_PROMPT_MODIFIER=(proto-language) 
 CONDA_PYTHON_EXE=/home/users/danguo/miniforge3/bin/python
 CONDA_SHLVL=2
 CPATH=/share/software/user/open/nodejs/25.3.0/include:/share/software/user/open/gcc/14.2.0/include
@@ -167,7 +167,7 @@ OMPI_MCA_orte_precondition_transports=010bd38000000000-010bd38000000000
 OMPI_MCA_plm_slurm_args=--external-launcher
 OMP_NUM_THREADS=8
 OPENBLAS_NUM_THREADS=8
-PATH=/home/users/danguo/miniforge3/envs/bio-programming/bin:/home/users/danguo/.local/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/home/users/danguo/miniforge3/envs/proto-language/bin:/home/users/danguo/.local/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PMIX_BFROP_BUFFER_TYPE=PMIX_BFROP_BUFFER_NON_DESC
 PMIX_GDS_MODULE=shmem2,hash
 PMIX_HOSTNAME=sh04-14n01
@@ -184,14 +184,14 @@ PMIX_SYSTEM_TMPDIR=/tmp
 PMIX_VERSION=5.0.3
 PROMPT_COMMAND=RET=$?;/bin/logger -t user_audit "username=$USER pid=$$ cmd=\"$(history 1 | /bin/sed "s/^[ ]*[0-9]\+[ ]*//" )\" newpwd=$PWD ret=$RET" 2>/dev/null
 PRTE_MCA_plm_slurm_args=--external-launcher
-PS1=(bio-programming) (apptainer) \u@\h:\w$ 
-PWD=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools
+PS1=(proto-language) (apptainer) \u@\h:\w$ 
+PWD=/home/groups/brianhie/danguo/proto-language/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 PYTHONPYCACHEPREFIX=/tmp
 PYTHONUSERBASE=/home/groups/brianhie/danguo/.local
 PYTORCH_VERSION=2.2.1
-RDBASE=/home/users/danguo/miniforge3/envs/bio-programming/lib/python3.12/site-packages/rdkit
+RDBASE=/home/users/danguo/miniforge3/envs/proto-language/lib/python3.12/site-packages/rdkit
 SCRATCH=/scratch/users/danguo
 SHELL=/bin/bash
 SHERLOCK=2
@@ -284,7 +284,7 @@ XDG_RUNTIME_DIR=/tmp
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 XML_CATALOG_FILES=file:///home/users/danguo/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/users/danguo/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/users/danguo/miniforge3/etc/xml/c...
-_=/home/users/danguo/miniforge3/envs/bio-programming/bin/pytest
+_=/home/users/danguo/miniforge3/envs/proto-language/bin/pytest
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/users/danguo/miniforge3/bin/conda
@@ -315,7 +315,7 @@ __LMOD_STACK_FC=false
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
+CONDA_PREFIX=/home/groups/brianhie/danguo/proto-language/proto-tools/tool_envs/splice_transformer_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
@@ -323,18 +323,18 @@ DETECTED_DRIVER_VERSION=550
 HOME=/home/users/danguo
 LANG=en_US.UTF-8
 LC_CTYPE=C.UTF-8
-LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/.singularity.d/libs:/home/users/danguo/miniforge3/envs/bio-programming/lib
+LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/.singularity.d/libs:/home/users/danguo/miniforge3/envs/proto-language/lib
 LOGNAME=danguo
-PATH=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env/bin:/usr/local/cuda/bin:/home/users/danguo/miniforge3/envs/bio-programming/bin:/home/users/danguo/.l...
+PATH=/home/groups/brianhie/danguo/proto-language/proto-tools/tool_envs/splice_transformer_env/bin:/usr/local/cuda/bin:/home/users/danguo/miniforge3/envs/proto-language/bin:/home/users/danguo/.l...
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
 RECOMMENDED_TORCH_SPEC=torch>=2.5,<3
 SHELL=/bin/bash
 TMPDIR=/tmp
 TORCH_CUDA_ARCH_LIST=9.0
-TORCH_HOME=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env/cache/torch
+TORCH_HOME=/home/groups/brianhie/danguo/proto-language/proto-tools/tool_envs/splice_transformer_env/cache/torch
 USER=danguo
-VIRTUAL_ENV=/home/groups/brianhie/danguo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
+VIRTUAL_ENV=/home/groups/brianhie/danguo/proto-language/proto-tools/tool_envs/splice_transformer_env
 XDG_CACHE_HOME=/tmp
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false

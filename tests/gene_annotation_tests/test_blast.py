@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.gene_annotation import (
+from proto_tools.tools.gene_annotation import (
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -19,7 +19,7 @@ from bio_programming_tools.tools.gene_annotation import (
     run_blast_search,
     run_create_blast_db,
 )
-from bio_programming_tools.tools.gene_annotation.blast.blast_search import (
+from proto_tools.tools.gene_annotation.blast.blast_search import (
     _blast_results_to_df,
 )
 from tests.conftest import make_persistent_fixture
@@ -171,7 +171,7 @@ def test_config_local_with_db():
 def test_config_online_only_warns_in_local(caplog):
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="bio_programming_tools"):
+    with caplog.at_level(logging.WARNING, logger="proto_tools"):
         BlastSearchConfig(
             search_mode="local",
             local_db="/data/blast/nr",
@@ -187,7 +187,7 @@ def test_config_online_only_warns_in_local(caplog):
 def test_config_local_only_warns_in_online(caplog):
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="bio_programming_tools"):
+    with caplog.at_level(logging.WARNING, logger="proto_tools"):
         BlastSearchConfig(search_mode="online", num_threads=8)
 
     msgs = [r.message for r in caplog.records]

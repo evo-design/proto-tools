@@ -8,7 +8,7 @@ Reference file for the `implement-tool` skill. Patterns are tagged with which su
 
 **Main tool file** (Phase 2 — Contract) — calls ToolInstance with `run.py`:
 ```python
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     logger.debug("Using local venv for tool_name operation")
@@ -134,7 +134,7 @@ numpy>=1.24.0
 
 **Main tool file** (Phase 2 — Contract):
 ```python
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     logger.debug("Using local venv for tool_name operation")
@@ -286,7 +286,7 @@ When a tool needs to download model weights or archives during setup:
 - Use `curl -fsSL` (not `wget` — `wget` is not available in micromamba environments)
 - Use `python -c "import zipfile; ..."` (not `unzip` — `unzip` is not available in micromamba environments)
 - `set -euo pipefail` at the top ensures `curl` failures are fatal — no need for explicit error checks
-- For prebuilt binaries, use `utils/install_binary.py` instead (see `docs/tool-environments.md`)
+- For prebuilt binaries, use `utils/install_binary.py` instead (see `notes/tool-environments.md`)
 
 ```bash
 # Download model weights
@@ -396,7 +396,7 @@ def get_memory_stats() -> dict:
 """
 {ToolName} standalone runner for ToolInstance venv execution.
 
-CRITICAL: This script runs in an isolated environment and CANNOT import from bio_programming_tools.
+CRITICAL: This script runs in an isolated environment and CANNOT import from proto_tools.
 Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (auto-copied).
 """
 from __future__ import annotations
@@ -599,4 +599,4 @@ __all__ = [
 ```
 
 ### Level 4: Package `__init__.py`
-`bio_programming_tools/__init__.py` — this file uses `from bio_programming_tools.tools import *` so no changes needed IF the tool is properly added to `tools/__init__.py`'s `__all__`.
+`proto_tools/__init__.py` — this file uses `from proto_tools.tools import *` so no changes needed IF the tool is properly added to `tools/__init__.py`'s `__all__`.

@@ -100,7 +100,7 @@ OMPI_MCA_plm_slurm_args=--external-launcher
 OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/bio-tools/bin:/home/bviggiano/miniforge3/condabin:/usr/local/sbin:/usr/loc...
 PRTE_MCA_plm_slurm_args=--external-launcher
-PWD=/home/bviggiano/main/codebases/bio-programming/bio-programming-tools
+PWD=/home/bviggiano/main/codebases/proto-language/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
 RANLIB=x86_64-conda-linux-gnu-ranlib
@@ -192,7 +192,7 @@ host_alias=x86_64-conda-linux-gnu
 
 ```
 PROTO_MODEL_CACHE=/home/bviggiano/main/models
-CONDA_PREFIX=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/codebases/proto-language/proto-tools/tool_envs/mock_pytorch_tool_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
@@ -202,7 +202,7 @@ HOME=/home/bviggiano
 LANG=en_US.UTF-8
 LD_LIBRARY_PATH=/home/bviggiano/miniforge3/envs/bio-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/m...
+PATH=/large_storage/hielab/bviggiano/codebases/proto-language/proto-tools/tool_envs/mock_pytorch_tool_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/m...
 PIP_DEFAULT_TIMEOUT=300
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
@@ -214,7 +214,7 @@ TORCH_CUDA_ARCH_LIST=9.0
 TORCH_HOME=/home/bviggiano/main/models/torch
 USER=bviggiano
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/codebases/bio-programming/bio-programming-tools/tool_envs/mock_pytorch_tool_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/codebases/proto-language/proto-tools/tool_envs/mock_pytorch_tool_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```

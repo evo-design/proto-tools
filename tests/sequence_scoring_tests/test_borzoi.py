@@ -26,7 +26,7 @@ def _generate_random_dna_sequence(length: int, seed: int = 42) -> str:
 
 def test_borzoi_input_valid():
     """Test valid Borzoi input is accepted."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiInput
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
 
     sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT)
     inputs = BorzoiInput(sequence=sequence)
@@ -35,7 +35,7 @@ def test_borzoi_input_valid():
 
 def test_borzoi_input_rejects_wrong_length():
     """Test that sequences with invalid length are rejected."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiInput
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
 
     # Too short
     with pytest.raises(ValueError, match=f"must have length {_BORZOI_CONTEXT}"):
@@ -51,7 +51,7 @@ def test_borzoi_input_rejects_wrong_length():
 
 def test_borzoi_config_rejects_invalid_species():
     """Test that invalid species is rejected."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
 
     with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
         BorzoiConfig(output_tracks=[0], species="zebrafish")
@@ -59,7 +59,7 @@ def test_borzoi_config_rejects_invalid_species():
 
 def test_borzoi_config_rejects_invalid_replicate():
     """Test that invalid replicate is rejected."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
 
     with pytest.raises(ValidationError, match="Input should be '0', '1', '2' or '3'"):
         BorzoiConfig(output_tracks=[0], replicate="5")
@@ -67,7 +67,7 @@ def test_borzoi_config_rejects_invalid_replicate():
 
 def test_borzoi_config_rejects_mouse_with_flash_attn():
     """Test that FlashAttention cannot be used with mouse models."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
 
     with pytest.raises(ValueError, match="FlashAttention.*not available for mouse"):
         BorzoiConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
@@ -75,7 +75,7 @@ def test_borzoi_config_rejects_mouse_with_flash_attn():
 
 def test_borzoi_config_mouse_without_flash_attn():
     """Mouse config is valid when FlashAttention is disabled."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
 
     config = BorzoiConfig(output_tracks=[0], species="mouse", use_flash_attn=False)
     assert config.species == "mouse"
@@ -87,7 +87,7 @@ def test_borzoi_config_mouse_without_flash_attn():
 
 def test_borzoi_ensemble_config_rejects_mouse_with_flash_attn():
     """Test that FlashAttention cannot be used with mouse models in ensemble."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
 
     with pytest.raises(ValueError, match="FlashAttention.*not available for mouse"):
         BorzoiEnsembleConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
@@ -95,7 +95,7 @@ def test_borzoi_ensemble_config_rejects_mouse_with_flash_attn():
 
 def test_borzoi_ensemble_config_mouse_without_flash_attn():
     """Ensemble mouse config is valid when FlashAttention is disabled."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
 
     config = BorzoiEnsembleConfig(output_tracks=[0], species="mouse", use_flash_attn=False)
     assert config.species == "mouse"
@@ -109,7 +109,7 @@ def test_borzoi_ensemble_config_mouse_without_flash_attn():
 @pytest.mark.uses_gpu
 def test_borzoi_prediction_human():
     """Test Borzoi prediction for human genome."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiConfig,
         BorzoiInput,
         run_borzoi,
@@ -145,7 +145,7 @@ def test_borzoi_prediction_human():
 @pytest.mark.uses_gpu
 def test_borzoi_prediction_no_average():
     """Test Borzoi prediction without averaging tracks."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiConfig,
         BorzoiInput,
         run_borzoi,
@@ -175,7 +175,7 @@ def test_borzoi_prediction_no_average():
 @pytest.mark.uses_gpu
 def test_borzoi_prediction_different_replicates():
     """Test Borzoi prediction with all four replicates and verify they differ."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiConfig,
         BorzoiInput,
         run_borzoi,
@@ -211,7 +211,7 @@ def test_borzoi_prediction_different_replicates():
 @pytest.mark.uses_gpu
 def test_borzoi_ensemble_prediction():
     """Test Borzoi ensemble prediction with all replicates."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiEnsembleConfig,
         BorzoiInput,
         run_borzoi_ensemble,
@@ -246,7 +246,7 @@ def test_borzoi_ensemble_prediction():
 @pytest.mark.uses_gpu
 def test_borzoi_ensemble_no_average():
     """Test Borzoi ensemble prediction without averaging tracks."""
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiEnsembleConfig,
         BorzoiInput,
         run_borzoi_ensemble,
@@ -277,7 +277,7 @@ def test_borzoi_ensemble_statistics():
     """Test that ensemble replicates vary and numpy statistics are well-shaped."""
     import numpy as np
 
-    from bio_programming_tools.tools.sequence_scoring.borzoi import (
+    from proto_tools.tools.sequence_scoring.borzoi import (
         BorzoiEnsembleConfig,
         BorzoiInput,
         run_borzoi_ensemble,

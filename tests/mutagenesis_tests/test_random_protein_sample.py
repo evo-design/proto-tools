@@ -3,8 +3,8 @@
 Tests for random protein sampling tool."""
 import pytest
 
-from bio_programming_tools.tools.mutagenesis.codons import get_codon_scheme
-from bio_programming_tools.tools.mutagenesis.random_protein import (
+from proto_tools.tools.mutagenesis.codons import get_codon_scheme
+from proto_tools.tools.mutagenesis.random_protein import (
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     run_random_protein_sample,

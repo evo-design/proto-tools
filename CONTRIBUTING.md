@@ -1,4 +1,4 @@
-# Contributing to bio-programming-tools
+# Contributing to proto-tools
 
 Thank you for your interest in contributing! The codebase is in a mature state with well-established patterns, but it is very much still in active development. Our goal is to make this a hub for the open source computational biology community to collaborate: whether that's wrapping new models as they come out, improving existing tools, or building infrastructure that makes everything easier to use. Contributions of all kinds are welcome! Please try to adhere to the existing patterns and conventions as much as possible. (Coding agents are very helpful for this!)
 
@@ -10,7 +10,7 @@ We recommend using the provided `environment.yml`, which sets up Python, compile
 
 ```bash
 conda env create -f environment.yml
-conda activate bio-tools
+conda activate proto-tools
 pip install -e ".[dev]"
 pre-commit install
 ```
@@ -87,7 +87,7 @@ When filing a bug, include the full traceback and your environment details (OS, 
 ### Formatting
 
 - **No auto-formatting** — formatting is handled manually
-- **ruff** — enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check bio_programming_tools` before committing
+- **ruff** — enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check proto_tools` before committing
 
 ### Conventions
 

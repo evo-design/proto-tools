@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.database_retrieval import (
+from proto_tools.tools.database_retrieval import (
     NCBIEfetchInput,
     NCBIEsearchInput,
     NCBIEsummaryInput,
@@ -16,7 +16,7 @@ from bio_programming_tools.tools.database_retrieval import (
     run_ncbi_esearch,
     run_ncbi_esummary,
 )
-from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _accession_from_header,
     _parse_fasta_records,
 )

@@ -1,16 +1,16 @@
 """tests/sequence_alignment_tests/test_mafft.py
 
-Tests for MAFFT tool in bio_programming_tools.tools.sequence_alignment.mafft"""
+Tests for MAFFT tool in proto_tools.tools.sequence_alignment.mafft"""
 
 import pytest
 
-from bio_programming_tools.tools.sequence_alignment.mafft import (
+from proto_tools.tools.sequence_alignment.mafft import (
     MafftConfig,
     MafftInput,
     MafftOutput,
     run_mafft_align,
 )
-from bio_programming_tools.tools.sequence_alignment.msas import MSA
+from proto_tools.tools.sequence_alignment.msas import MSA
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

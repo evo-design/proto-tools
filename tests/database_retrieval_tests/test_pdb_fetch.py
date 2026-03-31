@@ -6,14 +6,14 @@ from __future__ import annotations
 
 import pytest
 
-from bio_programming_tools.tools.database_retrieval import (
+from proto_tools.tools.database_retrieval import (
     PdbFetchConfig,
     PdbFetchEntryInput,
     PdbFetchFastaInput,
     run_pdb_fetch_entry,
     run_pdb_fetch_fasta,
 )
-from bio_programming_tools.tools.database_retrieval.pdb.shared_data_models import (
+from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
     _is_protein_sequence,
 )
 

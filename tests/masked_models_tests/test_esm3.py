@@ -4,7 +4,7 @@ Tests for ESM3."""
 import numpy as np
 import pytest
 
-from bio_programming_tools.tools.masked_models.esm3 import (
+from proto_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsConfig,
     ESM3EmbeddingsInput,
     ESM3ScoringConfig,

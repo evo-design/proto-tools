@@ -1,7 +1,7 @@
 ---
 name: implement-tool
 description: >
-  Implements a new bioinformatics tool wrapper in bio-programming-tools using a
+  Implements a new bioinformatics tool wrapper in proto-tools using a
   parallelized agent pipeline. Orchestrates 6 phases: Research, Contract (core
   tool file), Fan-out (5 parallel subagents), Verify, Self-Audit, and Ship. Use
   when creating tools from GitHub issues, wrapping models, or implementing new
@@ -21,7 +21,7 @@ allowed-tools:
 
 # Implement a New Tool — Orchestrator Pipeline
 
-You are implementing a new bioinformatics tool in the bio-programming-tools codebase. This skill orchestrates the full lifecycle using parallel subagents for speed.
+You are implementing a new bioinformatics tool in the proto-tools codebase. This skill orchestrates the full lifecycle using parallel subagents for speed.
 
 **Pipeline overview:**
 ```
@@ -30,20 +30,20 @@ Phase 1: Research → Phase 2: Contract → Phase 3: Fan-out (5 parallel agents)
 
 **Key principle:** The core tool file (Input/Config/Output + `@tool()` + `run_*()`) is the **contract** everything else depends on. Write it first (sequential), then fan out to subagents (parallel).
 
-**CRITICAL: Standalone scripts run in isolated environments and MUST NOT import from `bio_programming_tools`:**
-- `from bio_programming_tools.utils import ...` — will fail at runtime
-- `from bio_programming_tools.entities import ...` — will fail at runtime
+**CRITICAL: Standalone scripts run in isolated environments and MUST NOT import from `proto_tools`:**
+- `from proto_tools.utils import ...` — will fail at runtime
+- `from proto_tools.entities import ...` — will fail at runtime
 - `from standalone_helpers import get_subprocess_device_env` — auto-copied by worker bootstrap (OK)
 - Standard library imports: `import json`, `import subprocess`, etc. (OK)
 - Dependencies from `requirements.txt`: `import torch`, `import numpy`, etc. (OK)
-- NEVER install `bio_programming_tools` in standalone environments (creates circular dependency, breaks isolation)
+- NEVER install `proto_tools` in standalone environments (creates circular dependency, breaks isolation)
 
 ---
 
 ## Phase 0: Parse Input
 
 The user provides EITHER:
-- A **GitHub issue URL/number** (e.g., `#53` or `https://github.com/evo-design/bio-programming-tools/issues/53`)
+- A **GitHub issue URL/number** (e.g., `#53` or `https://github.com/proto-bio/proto-tools/issues/53`)
 - A **tool name + source repo** (e.g., "ESM-IF from https://github.com/facebookresearch/esm")
 
 **If a GitHub issue is provided:**
@@ -87,7 +87,7 @@ The user provides EITHER:
 
 3. **Read existing tools in the same category** — Find the reference implementation:
    ```bash
-   ls bio_programming_tools/tools/{category}/
+   ls proto_tools/tools/{category}/
    ```
    Read the reference tool's:
    - Main tool file (the `@tool()` decorated function)
@@ -119,8 +119,8 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 1. Create the tool directory structure:
    ```bash
-   mkdir -p bio_programming_tools/tools/{category}/{tool_name}/standalone
-   mkdir -p bio_programming_tools/tools/{category}/{tool_name}/examples
+   mkdir -p proto_tools/tools/{category}/{tool_name}/standalone
+   mkdir -p proto_tools/tools/{category}/{tool_name}/examples
    ```
 
    Target file tree:
@@ -143,7 +143,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    +-- __init__.py
    ```
 
-2. Write the core tool file `bio_programming_tools/tools/{category}/{tool_name}/{operation}.py` with:
+2. Write the core tool file `proto_tools/tools/{category}/{tool_name}/{operation}.py` with:
    - Proper imports (including `from __future__ import annotations`)
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="ignore"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
@@ -178,7 +178,7 @@ These ensure consistent formatting across all generated tools:
    ```
 4. **ToolInstance import at top level** — Import `ToolInstance` at module level, not lazily inside the run function:
    ```python
-   from bio_programming_tools.utils.tool_instance import ToolInstance
+   from proto_tools.utils.tool_instance import ToolInstance
    ```
 5. **logger.debug() before main loop** — Add a status message before the processing loop:
    ```python
@@ -216,7 +216,7 @@ You are implementing the standalone execution environment for a bioinformatics t
 
 ## Your Task
 Create the standalone files for the {tool_name} tool in:
-  bio_programming_tools/tools/{category}/{tool_name}/standalone/
+  proto_tools/tools/{category}/{tool_name}/standalone/
 
 ## Contract (the tool file this standalone serves)
 <paste full tool file content here>
@@ -248,7 +248,7 @@ Structure:
   - Returns JSON-serializable dict
 - `if __name__ == "__main__":` block reading/writing JSON files
 
-**If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `bio_programming_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. The deployment service mounts them via `add_local_file()`. This ensures a single source of truth across tool and service layers. See esmfold, chai1, boltz2 for examples.
+**If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. The deployment service mounts them via `add_local_file()`. This ensures a single source of truth across tool and service layers. See esmfold, chai1, boltz2 for examples.
 
 CRITICAL RULES:
 - Heavy imports (torch, model libraries) ONLY inside methods, never at module level
@@ -320,7 +320,7 @@ def get_memory_stats() -> dict:
 - Both functions MUST be at module level (not inside classes)
 - `to_device()` returns `{"success": bool, "device": str}`
 - `get_memory_stats()` returns `{"available": bool, "framework": str, ...}`
-- Import `standalone_helpers` (auto-copied by worker bootstrap) — do NOT import from `bio_programming_tools`
+- Import `standalone_helpers` (auto-copied by worker bootstrap) — do NOT import from `proto_tools`
 
 ### 2. setup.sh
 
@@ -402,7 +402,7 @@ You are writing the documentation for a bioinformatics tool.
 
 ## Your Task
 Create README.md and cite.bib for the {tool_name} tool in:
-  bio_programming_tools/tools/{category}/{tool_name}/
+  proto_tools/tools/{category}/{tool_name}/
 
 ## Contract (the tool's API)
 <paste full tool file content here>
@@ -432,7 +432,7 @@ Follow this exact structure:
 14. ## References — paper citation, GitHub links
 15. ## Related Tools — tools often used together, alternatives
 
-CRITICAL: Use exact import paths from bio_programming_tools.tools.{category}.{tool_name}. Class names and function names must match the contract exactly.
+CRITICAL: Use exact import paths from proto_tools.tools.{category}.{tool_name}. Class names and function names must match the contract exactly.
 
 ## cite.bib
 Look up the paper's BibTeX citation using the DOI. Format:
@@ -458,7 +458,7 @@ You are creating an example Jupyter notebook for a bioinformatics tool.
 
 ## Your Task
 Create examples/example.ipynb for the {tool_name} tool in:
-  bio_programming_tools/tools/{category}/{tool_name}/examples/
+  proto_tools/tools/{category}/{tool_name}/examples/
 
 ## Contract (the tool's API)
 <paste full tool file content here>
@@ -467,7 +467,7 @@ Create examples/example.ipynb for the {tool_name} tool in:
 Create a Jupyter notebook (.ipynb JSON) with these cells:
 
 1. **Markdown title cell** — Tool name, brief description, paper link
-2. **Code: Imports** — Exact imports from bio_programming_tools.tools.{category}.{tool_name}
+2. **Code: Imports** — Exact imports from proto_tools.tools.{category}.{tool_name}
 3. **Markdown: Input API Reference** — Table with Field, Type, Default, Description
 4. **Markdown: Config API Reference** — Same table format
 5. **Markdown: Output API Reference** — Same table format
@@ -476,7 +476,7 @@ Create a Jupyter notebook (.ipynb JSON) with these cells:
 8. **Code: Export** — Demonstrate result.export()
 
 Notebook metadata:
-- kernel: bio-programming, Python 3.12
+- kernel: proto-language, Python 3.12
 - Use realistic biological data (real protein sequences, not placeholder text)
 - Include comments explaining each step
 - Show output inspection (printing key fields)
@@ -510,15 +510,15 @@ Here are the tests from {reference_tool} as a structural template:
 ```python
 """Tests for {ToolName} tool."""
 import pytest
-from bio_programming_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
 
 # If the tool uses structures:
-from bio_programming_tools.entities.structures.structure import Structure
+from proto_tools.entities.structures.structure import Structure
 from pathlib import Path
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 # If the category has shared data models:
-from bio_programming_tools.tools.{category}.shared_data_models import ...
+from proto_tools.tools.{category}.shared_data_models import ...
 
 # For export validation:
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -551,7 +551,7 @@ class Test{ToolName}:
 ```
 
 CRITICAL RULES:
-- Import from `bio_programming_tools.tools` (top-level), not from deep paths
+- Import from `proto_tools.tools` (top-level), not from deep paths
 - Use `@pytest.mark.uses_gpu` for any test that runs the actual tool
 - Use `validate_output()` from test_export_functionality to check metadata
 - Use realistic biological data (real sequences/structures from dummy_data/)
@@ -585,10 +585,10 @@ Update __init__.py files at 3 levels to export the new tool's classes and functi
 ## Changes Required
 
 ### Level 1: Create tool __init__.py
-File: bio_programming_tools/tools/{category}/{tool_name}/__init__.py
+File: proto_tools/tools/{category}/{tool_name}/__init__.py
 
 ```python
-from bio_programming_tools.tools.{category}.{tool_name}.{operation} import (
+from proto_tools.tools.{category}.{tool_name}.{operation} import (
     {ToolName}Config,
     {ToolName}Input,
     {ToolName}Output,
@@ -604,11 +604,11 @@ __all__ = [
 ```
 
 ### Level 2: Update category __init__.py
-File: bio_programming_tools/tools/{category}/__init__.py
+File: proto_tools/tools/{category}/__init__.py
 Add import block and __all__ entries for the new tool. Preserve all existing imports.
 
 ### Level 3: Update master tools/__init__.py
-File: bio_programming_tools/tools/__init__.py
+File: proto_tools/tools/__init__.py
 Add import block and __all__ entries. Preserve all existing imports.
 
 CRITICAL RULES:
@@ -617,7 +617,7 @@ CRITICAL RULES:
 - Do NOT remove or modify any existing imports
 - Match class names and function names EXACTLY from the contract
 - If the tool has multiple operations (e.g., sample + score), export ALL of them
-- Level 4 (bio_programming_tools/__init__.py) uses `from bio_programming_tools.tools import *` — no changes needed
+- Level 4 (proto_tools/__init__.py) uses `from proto_tools.tools import *` — no changes needed
 - Use the Edit tool to modify existing files, Write for new files
 ```
 
@@ -631,7 +631,7 @@ CRITICAL RULES:
 
 1. **Check import chain** — Verify the tool imports correctly:
    ```bash
-   python3 -c "from bio_programming_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config; print('Import OK')"
+   python3 -c "from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config; print('Import OK')"
    ```
 
 2. **Run tests** — Execute the test file:
@@ -642,7 +642,7 @@ CRITICAL RULES:
 
 3. **Validate tool registration** — Check the tool appears in the registry:
    ```bash
-   python3 -c "from bio_programming_tools.tools.tool_registry import ToolRegistry; specs = [s for s in ToolRegistry.list_all() if '{tool_name}' in s.key]; print([(s.key, s.label) for s in specs])"
+   python3 -c "from proto_tools.tools.tool_registry import ToolRegistry; specs = [s for s in ToolRegistry.list_all() if '{tool_name}' in s.key]; print([(s.key, s.label) for s in specs])"
    ```
 
 4. **Fix any failures** — If imports fail, check the export chain. If tests fail, fix the tool file or test file directly.
@@ -690,12 +690,12 @@ You are auditing a newly implemented bioinformatics tool for quality issues.
 Read all generated files for the {tool_name} tool and check for issues.
 
 ## Files to Read
-- bio_programming_tools/tools/{category}/{tool_name}/{operation}.py (core tool file)
-- bio_programming_tools/tools/{category}/{tool_name}/standalone/inference.py (or run.py)
-- bio_programming_tools/tools/{category}/{tool_name}/standalone/setup.sh
-- bio_programming_tools/tools/{category}/{tool_name}/standalone/requirements.txt
-- bio_programming_tools/tools/{category}/{tool_name}/README.md
-- bio_programming_tools/tools/{category}/{tool_name}/examples/example.ipynb
+- proto_tools/tools/{category}/{tool_name}/{operation}.py (core tool file)
+- proto_tools/tools/{category}/{tool_name}/standalone/inference.py (or run.py)
+- proto_tools/tools/{category}/{tool_name}/standalone/setup.sh
+- proto_tools/tools/{category}/{tool_name}/standalone/requirements.txt
+- proto_tools/tools/{category}/{tool_name}/README.md
+- proto_tools/tools/{category}/{tool_name}/examples/example.ipynb
 - tests/{category}_tests/test_{tool_name}.py
 
 ## Reference Tool (for comparison)
@@ -745,11 +745,11 @@ If no issues found, print: []
 
 1. **Stage all new files:**
    ```bash
-   git add bio_programming_tools/tools/{category}/{tool_name}/
+   git add proto_tools/tools/{category}/{tool_name}/
    git add tests/{category}_tests/test_{tool_name}.py
    # Also stage modified __init__.py files
-   git add bio_programming_tools/tools/{category}/__init__.py
-   git add bio_programming_tools/tools/__init__.py
+   git add proto_tools/tools/{category}/__init__.py
+   git add proto_tools/tools/__init__.py
    ```
 
 2. **Commit:**
@@ -781,7 +781,7 @@ If no issues found, print: []
    - Full export chain (__init__.py at all levels)
 
    ## Test Plan
-   - [ ] `python3 -c "from bio_programming_tools.tools import run_{tool_name}"` imports successfully
+   - [ ] `python3 -c "from proto_tools.tools import run_{tool_name}"` imports successfully
    - [ ] `pytest tests/{category}_tests/test_{tool_name}.py` passes
    - [ ] Tool appears in ToolRegistry.list_all()
    - [ ] GPU execution verified (if applicable)

@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 
 
 @pytest.fixture(autouse=True)
 def _mock_exclusive_process():
     """Disable Exclusive_Process auto-escalation so tests control the strategy."""
     with patch(
-        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        "proto_tools.utils.device_manager.is_exclusive_process_mode",
         return_value=False,
     ):
         yield
@@ -42,7 +42,7 @@ def test_allocate_3_gpus_auto(mock_callback):
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         dm = DeviceManager.get_instance()
@@ -68,7 +68,7 @@ def test_allocate_2_gpus_explicit_shorthand():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "4,5,6"}):
@@ -185,7 +185,7 @@ def test_lru_eviction_multi_gpu_request():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         dm = DeviceManager.get_instance()
@@ -262,7 +262,7 @@ def test_multi_gpu_move():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=4,
     ):
         dm = DeviceManager.get_instance()
@@ -304,7 +304,7 @@ def test_mixed_single_and_multi_gpu():
     DeviceManager.reset_instance()
 
     with patch(
-        "bio_programming_tools.utils.device_manager.number_of_visible_gpus",
+        "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
     ):
         dm = DeviceManager.get_instance()

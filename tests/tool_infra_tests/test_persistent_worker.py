@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bio_programming_tools.utils.persistent_worker import (
+from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
     _parse_env_vars_file,
@@ -22,7 +22,7 @@ from bio_programming_tools.utils.persistent_worker import (
 
 _STANDALONE_HELPERS_SOURCE = (
     Path(__file__).parent.parent.parent
-    / "bio_programming_tools" / "utils" / "standalone_standalone_helpers.py"
+    / "proto_tools" / "utils" / "standalone_standalone_helpers.py"
 )
 
 
@@ -255,7 +255,7 @@ def test_stop_signals_process_group():
     mock_process.stdin = MagicMock()
     worker._process = mock_process
 
-    with patch("bio_programming_tools.utils.persistent_worker.os.killpg") as mock_killpg:
+    with patch("proto_tools.utils.persistent_worker.os.killpg") as mock_killpg:
         worker.stop()
 
     # SIGTERM should be sent to the process group, not process.terminate()
@@ -277,7 +277,7 @@ def test_stop_escalates_to_sigkill():
     mock_process.wait.side_effect = [Exception("timed out"), None]
     worker._process = mock_process
 
-    with patch("bio_programming_tools.utils.persistent_worker.os.killpg") as mock_killpg:
+    with patch("proto_tools.utils.persistent_worker.os.killpg") as mock_killpg:
         worker.stop()
 
     calls = [c.args for c in mock_killpg.call_args_list]
@@ -676,7 +676,7 @@ def test_passthrough_vars(monkeypatch, parent_has_var):
         monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
         # Prevent resolve_hf_token() from finding file-based tokens
         monkeypatch.setattr(
-            "bio_programming_tools.utils.auth.os.path.expanduser",
+            "proto_tools.utils.auth.os.path.expanduser",
             lambda p: "/nonexistent" + p,
         )
 
@@ -728,8 +728,8 @@ def test_set_vars(tmp_path: Path, set_line, var, expected_suffix):
 @pytest.fixture
 def _clear_compute_caches():
     """Clear LRU caches before and after each test to ensure mocks work correctly."""
-    from bio_programming_tools.utils.compute_deps import detect_compute_environment
-    from bio_programming_tools.utils.system_info import get_gpu_info
+    from proto_tools.utils.compute_deps import detect_compute_environment
+    from proto_tools.utils.system_info import get_gpu_info
 
     get_gpu_info.cache_clear()
     detect_compute_environment.cache_clear()
@@ -741,7 +741,7 @@ def _clear_compute_caches():
 @pytest.mark.usefixtures("_clear_compute_caches")
 def test_compute_env_vars_present_gpu(monkeypatch):
     """On GPU systems, compute env vars should be present."""
-    from bio_programming_tools.utils.system_info import GPUDevice, GPUInfo
+    from proto_tools.utils.system_info import GPUDevice, GPUInfo
 
     fake_gpu_info = GPUInfo(
         available=True,
@@ -760,7 +760,7 @@ def test_compute_env_vars_present_gpu(monkeypatch):
 
     with monkeypatch.context() as m:
         m.setattr(
-            "bio_programming_tools.utils.system_info.get_gpu_info",
+            "proto_tools.utils.system_info.get_gpu_info",
             lambda: fake_gpu_info,
         )
         env = _build_subprocess_env(device="cuda")
@@ -783,7 +783,7 @@ def test_compute_env_vars_present_gpu(monkeypatch):
 @pytest.mark.usefixtures("_clear_compute_caches")
 def test_compute_env_vars_present_cpu(monkeypatch):
     """On CPU systems, compute env vars should be present (simplified)."""
-    from bio_programming_tools.utils.system_info import GPUInfo
+    from proto_tools.utils.system_info import GPUInfo
 
     fake_gpu_info = GPUInfo(
         available=False,
@@ -795,7 +795,7 @@ def test_compute_env_vars_present_cpu(monkeypatch):
 
     with monkeypatch.context() as m:
         m.setattr(
-            "bio_programming_tools.utils.system_info.get_gpu_info",
+            "proto_tools.utils.system_info.get_gpu_info",
             lambda: fake_gpu_info,
         )
         env = _build_subprocess_env(device="cpu")
@@ -812,7 +812,7 @@ def test_compute_env_vars_present_cpu(monkeypatch):
 @pytest.mark.usefixtures("_clear_compute_caches")
 def test_compute_env_vars_can_be_overridden_by_tool(monkeypatch, tmp_path: Path):
     """Tool-specific env vars can override compute env recommendations."""
-    from bio_programming_tools.utils.system_info import GPUDevice, GPUInfo
+    from proto_tools.utils.system_info import GPUDevice, GPUInfo
 
     fake_gpu_info = GPUInfo(
         available=True,
@@ -837,7 +837,7 @@ def test_compute_env_vars_can_be_overridden_by_tool(monkeypatch, tmp_path: Path)
 
     with monkeypatch.context() as m:
         m.setattr(
-            "bio_programming_tools.utils.system_info.get_gpu_info",
+            "proto_tools.utils.system_info.get_gpu_info",
             lambda: fake_gpu_info,
         )
         env = _build_subprocess_env(
@@ -952,7 +952,7 @@ def test_send_response_small_payload_uses_length_protocol():
     """Small payloads should use the PROTO_LENGTH: pipe protocol."""
     from io import StringIO
 
-    from bio_programming_tools.utils._worker_bootstrap import _send_response
+    from proto_tools.utils._worker_bootstrap import _send_response
 
     buf = StringIO()
     payload = '{"id":"abc","result":{"x":1}}'
@@ -969,7 +969,7 @@ def test_send_response_large_payload_uses_file_protocol(monkeypatch):
     """Payloads above the threshold should use the PROTO_FILE: protocol."""
     import io
 
-    import bio_programming_tools.utils._worker_bootstrap as _wb
+    import proto_tools.utils._worker_bootstrap as _wb
 
     # Use a tiny threshold so we don't allocate 100MB in tests
     monkeypatch.setattr(_wb, "_FILE_FALLBACK_THRESHOLD", 1000)
@@ -1000,7 +1000,7 @@ def test_file_fallback_end_to_end(tmp_path: Path):
     # The threshold is set inside the worker subprocess via the script.
     script = tmp_path / "large_script.py"
     script.write_text(textwrap.dedent("""\
-        import bio_programming_tools.utils._worker_bootstrap as _wb
+        import proto_tools.utils._worker_bootstrap as _wb
         _wb._FILE_FALLBACK_THRESHOLD = 1000
 
         def dispatch(input_dict):
@@ -1025,7 +1025,7 @@ def test_default_sets_hf_home_to_proto_model_cache(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / "proto_home"))
     # Clear the lru_cache so monkeypatched PROTO_HOME takes effect
-    from bio_programming_tools.utils.proto_home import get_proto_home
+    from proto_tools.utils.proto_home import get_proto_home
     get_proto_home.cache_clear()
     try:
         env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
@@ -1105,7 +1105,7 @@ def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
     token_file = tmp_path / "token"
     token_file.write_text("hf_test_token_from_file")
     monkeypatch.setattr(
-        "bio_programming_tools.utils.auth.os.path.expanduser",
+        "proto_tools.utils.auth.os.path.expanduser",
         lambda p: str(token_file) if "huggingface/token" in p else p,
     )
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
@@ -1119,7 +1119,7 @@ def test_hf_token_resolved_from_git_credentials(monkeypatch, tmp_path: Path):
     git_creds = tmp_path / "git-credentials"
     git_creds.write_text("https://user:hf_git_cred_token@huggingface.co\n")
     monkeypatch.setattr(
-        "bio_programming_tools.utils.auth.os.path.expanduser",
+        "proto_tools.utils.auth.os.path.expanduser",
         lambda p: str(git_creds)
         if "git-credentials" in p
         else str(tmp_path / "nonexistent")
@@ -1142,7 +1142,7 @@ def test_hf_token_not_set_when_absent(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     monkeypatch.setattr(
-        "bio_programming_tools.utils.auth.os.path.expanduser",
+        "proto_tools.utils.auth.os.path.expanduser",
         lambda p: str(tmp_path / "nonexistent"),
     )
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)

@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pytest
 
-from bio_programming_tools.tools.causal_models.evo1 import (
+from proto_tools.tools.causal_models.evo1 import (
     Evo1SampleConfig,
     Evo1SampleInput,
     Evo1SampleOutput,
@@ -17,7 +17,7 @@ from bio_programming_tools.tools.causal_models.evo1 import (
     run_evo1_sample,
     run_evo1_score,
 )
-from bio_programming_tools.tools.causal_models.shared_data_models import SequenceScores
+from proto_tools.tools.causal_models.shared_data_models import SequenceScores
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 

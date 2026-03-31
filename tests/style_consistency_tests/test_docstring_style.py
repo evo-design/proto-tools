@@ -21,10 +21,10 @@ from .helpers import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Only scan source code, not tests
-_SOURCE_DIRS = ["bio_programming_tools", "bio_tools_mcp"]
+_SOURCE_DIRS = ["proto_tools", "proto_tools_mcp"]
 
 _EXCLUDE_PATTERNS = [
-    "bio_programming_tools/tools/*/standalone/*",
+    "proto_tools/tools/*/standalone/*",
     "tool_envs/*",
 ]
 

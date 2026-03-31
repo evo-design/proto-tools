@@ -4,7 +4,7 @@ Tests for MCP discovery tools."""
 
 from __future__ import annotations
 
-from bio_tools_mcp.tools import (
+from proto_tools_mcp.tools import (
     list_categories,
     list_cpu_tools,
     list_gpu_tools,

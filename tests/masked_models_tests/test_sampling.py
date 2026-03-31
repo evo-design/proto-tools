@@ -3,28 +3,28 @@
 Integration tests for sampling tools (masked models + random mutagenesis)."""
 import pytest
 
-from bio_programming_tools.tools.masked_models.esm2 import (
+from proto_tools.tools.masked_models.esm2 import (
     ESM2SampleConfig,
     ESM2SampleInput,
     run_esm2_sample,
 )
-from bio_programming_tools.tools.masked_models.esm3 import (
+from proto_tools.tools.masked_models.esm3 import (
     ESM3SampleConfig,
     ESM3SampleInput,
     run_esm3_sample,
 )
-from bio_programming_tools.tools.masked_models.masking import MaskingStrategy
-from bio_programming_tools.tools.mutagenesis.random_nucleotide import (
+from proto_tools.tools.masked_models.masking import MaskingStrategy
+from proto_tools.tools.mutagenesis.random_nucleotide import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     run_random_nucleotide_sample,
 )
-from bio_programming_tools.tools.mutagenesis.random_protein import (
+from proto_tools.tools.mutagenesis.random_protein import (
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     run_random_protein_sample,
 )
-from bio_programming_tools.utils.sequence import (
+from proto_tools.utils.sequence import (
     return_invalid_dna_chars,
     return_invalid_protein_chars,
 )

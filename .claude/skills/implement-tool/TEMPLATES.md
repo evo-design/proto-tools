@@ -15,9 +15,9 @@ from typing import Dict, List, Literal
 
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
-from bio_programming_tools.utils.tool_io import BaseToolInput, BaseToolOutput
-from bio_programming_tools.tools.tool_registry import tool
-from bio_programming_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import BaseConfig, ConfigField
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +251,7 @@ Create `tests/{category}_tests/test_{tool_name}.py`:
 ```python
 """Tests for {ToolName} tool."""
 import pytest
-from bio_programming_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
 
 
 class Test{ToolName}:
@@ -369,7 +369,7 @@ How to interpret the output values biologically.
 
 **Example 1: Basic usage**
 \```python
-from bio_programming_tools.tools.{category}.{tool_name} import (
+from proto_tools.tools.{category}.{tool_name} import (
     run_{tool_name}, {ToolName}Input, {ToolName}Config
 )
 
@@ -424,13 +424,13 @@ Create `tools/{category}/{tool_name}/cite.bib`:
 Create `tools/{category}/{tool_name}/examples/example.ipynb` with:
 
 1. **Markdown title cell** with tool name, brief description, and link to paper
-2. **Import cell** with exact imports from `bio_programming_tools.tools.{category}.{tool_name}`
+2. **Import cell** with exact imports from `proto_tools.tools.{category}.{tool_name}`
 3. **API reference cells** with markdown tables documenting Input/Config/Output fields
 4. **Execution cells** showing realistic usage with example data
 5. **Export cell** demonstrating `result.export()`
 
 Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/examples/example.ipynb`). Key conventions:
-- Use `bio-programming` kernel with Python 3.12
+- Use `proto-language` kernel with Python 3.12
 - Include API reference tables with Field, Type, Default, Description columns
 - Use realistic biological data (real sequences, not lorem ipsum)
 - Show result inspection (printing key fields, accessing metrics)
@@ -443,7 +443,7 @@ Write and execute a short verification script:
 
 ```python
 """Verify {tool_name} implementation."""
-from bio_programming_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
 
 # Create input with realistic test data
 inputs = {ToolName}Input(sequences=["ATGCGT..."])  # Use real biological data
@@ -465,7 +465,7 @@ else:
 ```
 
 Run this script via Bash to confirm:
-1. The tool imports correctly from `bio_programming_tools.tools`
+1. The tool imports correctly from `proto_tools.tools`
 2. Input validation works (try both single string and list)
 3. The tool executes successfully
 4. Output fields are populated correctly

@@ -7,15 +7,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_programming_tools.entities.structures.structure import Structure
-from bio_programming_tools.tools.inverse_folding.esm_if1 import (
+from proto_tools.entities.structures.structure import Structure
+from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1SampleConfig,
     ESMIF1ScoringConfig,
     ESMIF1ScoringInput,
     run_esm_if1_sample,
     run_esm_if1_score,
 )
-from bio_programming_tools.tools.inverse_folding.shared_data_models import (
+from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingStructureInput,
     SequenceScores,

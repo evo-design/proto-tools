@@ -12,7 +12,7 @@ cd .claude/worktrees/issue-$ARGUMENTS
 git submodule update --init --recursive
 ```
 
-`-B` (not `-b`) ensures this works even if the branch exists from a previous attempt — it resets it to `origin/main`. The submodule init is required because worktrees don't auto-initialize submodules, and most tests import from `bio_programming_tools`.
+`-B` (not `-b`) ensures this works even if the branch exists from a previous attempt — it resets it to `origin/main`. The submodule init is required because worktrees don't auto-initialize submodules, and most tests import from `proto_tools`.
 
 Work inside this worktree for all subsequent steps. If the branch name doesn't capture the intent (e.g., it's a feature, not a fix), rename it after reading the issue with `git branch -m $USER/better-name`.
 
@@ -46,15 +46,15 @@ Parallelize exploration aggressively — launch multiple sub-agents to search di
 
 | Area | Source | Tests |
 |------|--------|-------|
-| Tool implementation | `bio_programming_tools/tools/{category}/{tool}/{tool}.py` | `tests/` (see below) |
-| Tool data models | `bio_programming_tools/tools/{category}/{tool}/__init__.py` | `tests/tool_infra_tests/` |
-| Standalone scripts | `bio_programming_tools/tools/{category}/{tool}/standalone/` | — |
-| Shared data models | `bio_programming_tools/tools/{category}/shared_data_models.py` | — |
-| Tool citations | `bio_programming_tools/tools/{category}/{tool}/cite.bib` | `tests/tool_infra_tests/test_citations.py` |
-| Tool registry | `bio_programming_tools/tools/tool_registry.py` | `tests/tool_infra_tests/` |
-| Caching | `bio_programming_tools/utils/tool_cache.py` | `tests/tool_infra_tests/` |
-| ToolInstance | `bio_programming_tools/utils/tool_instance.py` | `tests/tool_infra_tests/` |
-| Entities (Structure, Ligands) | `bio_programming_tools/entities/` | `tests/structure_tests/`, `tests/ligand_tests/` |
+| Tool implementation | `proto_tools/tools/{category}/{tool}/{tool}.py` | `tests/` (see below) |
+| Tool data models | `proto_tools/tools/{category}/{tool}/__init__.py` | `tests/tool_infra_tests/` |
+| Standalone scripts | `proto_tools/tools/{category}/{tool}/standalone/` | — |
+| Shared data models | `proto_tools/tools/{category}/shared_data_models.py` | — |
+| Tool citations | `proto_tools/tools/{category}/{tool}/cite.bib` | `tests/tool_infra_tests/test_citations.py` |
+| Tool registry | `proto_tools/tools/tool_registry.py` | `tests/tool_infra_tests/` |
+| Caching | `proto_tools/utils/tool_cache.py` | `tests/tool_infra_tests/` |
+| ToolInstance | `proto_tools/utils/tool_instance.py` | `tests/tool_infra_tests/` |
+| Entities (Structure, Ligands) | `proto_tools/entities/` | `tests/structure_tests/`, `tests/ligand_tests/` |
 
 ### Test File Locations
 
@@ -123,7 +123,7 @@ If the fix touches the tool's public API (Input/Config/Output classes), update t
 1. Tool `__init__.py` -> exports Input, Config, Output, run_*
 2. Category `__init__.py` -> re-exports from all tools
 3. `tools/__init__.py` -> master re-export
-4. `bio_programming_tools/__init__.py` -> package-level re-export
+4. `proto_tools/__init__.py` -> package-level re-export
 
 ## Step 6: Verify
 
@@ -140,7 +140,7 @@ pytest tests/{category}_tests/ -m "not slow"
 pytest -m "not slow"
 
 # 4. Lint
-ruff check bio_programming_tools tests
+ruff check proto_tools tests
 ```
 
 If any test fails, fix it before proceeding. Don't ask — just fix regressions.
@@ -181,7 +181,7 @@ Provide a concise summary:
 
 ## Tips
 
-- For issues involving standalone scripts, test the standalone `run.py` separately: `python bio_programming_tools/tools/{category}/{tool}/standalone/run.py`
+- For issues involving standalone scripts, test the standalone `run.py` separately: `python proto_tools/tools/{category}/{tool}/standalone/run.py`
 - If the issue involves GPU tools, mark new tests with `@pytest.mark.uses_gpu`
 - When fixing tool data model issues, always verify the JSON schema output: `ToolRegistry.get_schemas("tool-key")`
 - Missing exports are a common source of "tool not found" issues — check the 4-level `__init__.py` export chain
@@ -198,4 +198,4 @@ Provide a concise summary:
 - [ ] New test passes: `pytest -xvs -k "test_name"`
 - [ ] Area tests pass: `pytest tests/{category}_tests/ -m "not slow"`
 - [ ] Full fast suite passes: `pytest -m "not slow"`
-- [ ] Lint passes: `ruff check bio_programming_tools tests`
+- [ ] Lint passes: `ruff check proto_tools tests`

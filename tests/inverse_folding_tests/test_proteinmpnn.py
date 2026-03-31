@@ -8,18 +8,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from bio_programming_tools.entities.structures.structure import Structure
-from bio_programming_tools.tools.inverse_folding.proteinmpnn import (
+from proto_tools.entities.structures.structure import Structure
+from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_sample,
     run_proteinmpnn_score,
 )
-from bio_programming_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
+from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
 )
-from bio_programming_tools.tools.inverse_folding.shared_data_models import (
+from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingStructureInput,
     SequenceScores,
@@ -322,7 +322,7 @@ def test_proteinmpnn_score_batched(pdb_structure: Structure):
 @pytest.mark.uses_gpu
 def test_proteinmpnn_score_cache(pdb_structure: Structure):
     """Caching returns consistent scores across passes."""
-    from bio_programming_tools.utils.tool_cache import (
+    from proto_tools.utils.tool_cache import (
         ToolCache,
         _program_tool_cache,
         get_cache_info,

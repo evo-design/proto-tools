@@ -7,14 +7,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.entities.structures import is_valid_structure
-from bio_programming_tools.tools.structure_prediction import (
+from proto_tools.entities.structures import is_valid_structure
+from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
     StructurePredictionComplex,
     run_alphafold2,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 _HOMOOLIGOMER_SEQ = "MARFLGLYTWHK"
 

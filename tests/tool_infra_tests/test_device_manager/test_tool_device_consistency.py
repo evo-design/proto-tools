@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from bio_programming_tools.tools import ToolRegistry
+from proto_tools.tools import ToolRegistry
 from tests.conftest import is_on_chimera
 
 _all_gpu_specs = [spec for spec in ToolRegistry.list_all() if spec.uses_gpu]
@@ -205,7 +205,7 @@ def test_get_memory_stats_via_worker(tool_spec):
     2. Sends the get_memory_stats command
     3. Verifies the response has the expected format
     """
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     tool_key = tool_spec.key
 
@@ -218,7 +218,7 @@ def test_get_memory_stats_via_worker(tool_spec):
             if not script_path.exists():
                 script_path = tool_spec.source_file.parent / "standalone" / "run.py"
 
-            from bio_programming_tools.utils.base_config import BaseConfig
+            from proto_tools.utils.base_config import BaseConfig
 
             # Use a generous timeout: get_memory_stats itself is fast, but the
             # worker startup imports torch/jax which can take minutes on slow

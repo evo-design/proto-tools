@@ -4,7 +4,7 @@ Tests for ESM2."""
 import numpy as np
 import pytest
 
-from bio_programming_tools.tools.masked_models.esm2 import (
+from proto_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2ScoringConfig,

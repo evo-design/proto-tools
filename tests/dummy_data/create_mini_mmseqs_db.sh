@@ -9,7 +9,7 @@ cd "$WORKDIR"
 # Find mmseqs binary - try venv first, then system PATH
 MMSEQS=""
 
-# Try to find mmseqs in the bio-programming-tools environment
+# Try to find mmseqs in the proto-tools environment
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Go up from tests/dummy_data to project root
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
@@ -27,7 +27,7 @@ else
     echo "  Also checked system PATH"
     echo ""
     echo "To set up mmseqs, run in Python:"
-    echo "  from bio_programming_tools.utils.tool_instance import ToolInstance"
+    echo "  from proto_tools.utils.tool_instance import ToolInstance"
     echo "  ToolInstance('mmseqs')"
     exit 1
 fi

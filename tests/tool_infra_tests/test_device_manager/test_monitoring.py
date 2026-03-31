@@ -4,7 +4,7 @@ Tests for device status monitoring and memory tracking."""
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.device_manager import DeviceManager
 
 # ── Status monitoring tests ──────────────────────────────────────────────
 
@@ -12,12 +12,12 @@ from bio_programming_tools.utils.device_manager import DeviceManager
 @pytest.mark.slow
 def test_get_device_status_with_tools():
     """Test get_device_status with tool instances on actual GPUs."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
@@ -89,7 +89,7 @@ def test_get_instance_memory_stats_nonexistent_instance(device_manager):
 
 def test_tool_instance_get_memory_stats_no_worker():
     """Test ToolInstance.get_memory_stats() with no worker."""
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     tool = ToolInstance.get("mock_pytorch_tool", instance_name="test_no_worker")
     stats = tool.get_memory_stats()
@@ -104,12 +104,12 @@ def test_tool_instance_get_memory_stats_no_worker():
 @pytest.mark.slow
 def test_memory_stats():
     """Test memory stats via both ToolInstance and DeviceManager access paths."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
@@ -157,12 +157,12 @@ def test_memory_stats():
 @pytest.mark.slow
 def test_instance_memory_vs_total_gpu_memory():
     """Test relationship between instance memory and total GPU memory."""
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_instance import ToolInstance
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()

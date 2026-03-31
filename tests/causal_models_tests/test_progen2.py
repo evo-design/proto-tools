@@ -5,7 +5,7 @@ Tests for ProGen2."""
 import numpy as np
 import pytest
 
-from bio_programming_tools.tools.causal_models.progen2 import (
+from proto_tools.tools.causal_models.progen2 import (
     ProGen2SampleConfig,
     ProGen2SampleInput,
     ProGen2ScoringConfig,
@@ -13,7 +13,7 @@ from bio_programming_tools.tools.causal_models.progen2 import (
     run_progen2_sample,
     run_progen2_score,
 )
-from bio_programming_tools.utils import PROTEIN_AMINO_ACIDS
+from proto_tools.utils import PROTEIN_AMINO_ACIDS
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 

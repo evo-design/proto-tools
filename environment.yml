@@ -1,4 +1,4 @@
-name: bio-tools
+name: proto-tools
 channels:
   - conda-forge
 dependencies:

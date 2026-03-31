@@ -9,16 +9,16 @@ from pathlib import Path
 
 import pytest
 
-import bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
-from bio_programming_tools.tools.database_retrieval import (
+import proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
+from proto_tools.tools.database_retrieval import (
     SequenceFetchConfig,
     SequenceFetchInput,
     run_sequence_fetch,
 )
-from bio_programming_tools.tools.database_retrieval.ncbi.shared_data_models import (
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )
-from bio_programming_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
+from proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
     _ncbi_gene_term,
     _ncbi_term,
     _select_best_record,

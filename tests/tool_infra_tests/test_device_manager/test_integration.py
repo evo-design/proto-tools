@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import OffloadStrategy
+from proto_tools.utils.device_manager import OffloadStrategy
 
 
 @pytest.fixture(autouse=True)
 def _mock_exclusive_process():
     """Disable Exclusive_Process auto-escalation so tests control the strategy."""
     with patch(
-        "bio_programming_tools.utils.device_manager.is_exclusive_process_mode",
+        "proto_tools.utils.device_manager.is_exclusive_process_mode",
         return_value=False,
     ):
         yield
@@ -36,13 +36,13 @@ def test_real_tool_eviction_cpu_strategy():
     4. New tools can use the freed GPU
     5. GPU memory stays roughly constant with CPU strategy
     """
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()
@@ -117,13 +117,13 @@ def test_real_tool_eviction_restart_strategy():
     Verifies that evicted tools are actually shut down and removed, and that
     GPU memory is freed.
     """
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()
@@ -186,13 +186,13 @@ def test_evicted_instance_variable_still_works():
     3. User's variable reference still works - automatically restarts
     4. New worker gets allocated correctly
     """
-    from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+    from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
-    from bio_programming_tools.utils.device_manager import DeviceManager
-    from bio_programming_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
 
     # Reset state
     DeviceManager.reset_instance()

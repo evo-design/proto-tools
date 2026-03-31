@@ -4,8 +4,8 @@ Tests for MSA class."""
 
 import pytest
 
-import bio_programming_tools.tools.sequence_alignment.msas as msas_module
-from bio_programming_tools.tools.sequence_alignment.msas import (
+import proto_tools.tools.sequence_alignment.msas as msas_module
+from proto_tools.tools.sequence_alignment.msas import (
     MSA,
     convert_a3m_to_fasta,
 )

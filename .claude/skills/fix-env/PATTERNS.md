@@ -32,7 +32,7 @@ cat tool_envs/{tool}_env/STATUS.txt
 
 # Test detection directly
 python -c "
-from bio_programming_tools.utils.compute_deps import detect_compute_environment
+from proto_tools.utils.compute_deps import detect_compute_environment
 env = detect_compute_environment()
 for k, v in sorted(env.items()): print(f'{k}={v}')
 "
@@ -56,11 +56,11 @@ See `utils/compute_deps.py` (detection logic), `tests/tool_infra_tests/test_comp
 **Debugging:**
 ```bash
 # Check env_vars.txt
-cat bio_programming_tools/tools/{category}/{tool}/standalone/env_vars.txt
+cat proto_tools/tools/{category}/{tool}/standalone/env_vars.txt
 
 # Inspect what the subprocess environment actually looks like
 python -c "
-from bio_programming_tools.utils.persistent_worker import _build_subprocess_env
+from proto_tools.utils.persistent_worker import _build_subprocess_env
 from pathlib import Path
 tool_env = Path('tool_envs/{tool}_env')
 env = _build_subprocess_env(tool_env, tool_env / 'standalone')
@@ -369,7 +369,7 @@ uv pip install -r requirements.txt --no-build-isolation-package flash-attn --ref
 **Debugging:**
 ```bash
 # Check binary_config.py
-cat bio_programming_tools/tools/{category}/{tool}/standalone/binary_config.py
+cat proto_tools/tools/{category}/{tool}/standalone/binary_config.py
 
 # Check platform
 python -c "import platform; print(platform.system(), platform.machine())"
@@ -420,7 +420,7 @@ fi
 
 **Debugging:**
 ```bash
-cat bio_programming_tools/tools/{category}/{tool}/standalone/python_version.txt
+cat proto_tools/tools/{category}/{tool}/standalone/python_version.txt
 tool_envs/{tool}_env/bin/python --version
 ```
 
@@ -445,14 +445,14 @@ Failures related to the DeviceManager infrastructure — specifically environmen
 **Debugging:**
 ```bash
 # Check if file exists in tool's standalone dir
-ls bio_programming_tools/tools/{category}/{tool}/standalone/standalone_helpers.py
+ls proto_tools/tools/{category}/{tool}/standalone/standalone_helpers.py
 
 # Check source exists
-ls bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py
+ls proto_tools/utils/standalone_helpers_source/standalone_helpers.py
 
 # Manual copy to test
-cp bio_programming_tools/utils/standalone_helpers_source/standalone_helpers.py \
-   bio_programming_tools/tools/{category}/{tool}/standalone/
+cp proto_tools/utils/standalone_helpers_source/standalone_helpers.py \
+   proto_tools/tools/{category}/{tool}/standalone/
 ```
 
 **Solution:** Bootstrap copy failed — check `_worker_bootstrap.py` stderr. If source missing, reinstall with `pip install -e ".[dev]"`. Race conditions resolve on retry. See `utils/_worker_bootstrap.py` (`_copy_standalone_helpers`), `utils/standalone_helpers_source/`.
@@ -476,7 +476,7 @@ BIO_TOOLS_MANAGED_DEVICES=cuda:0,cuda:1   → CORRECT
 **Debugging:**
 ```bash
 python -c "
-from bio_programming_tools.utils.device import number_of_visible_gpus, number_of_physical_gpus
+from proto_tools.utils.device import number_of_visible_gpus, number_of_physical_gpus
 print(f'Physical: {number_of_physical_gpus()}, Visible: {number_of_visible_gpus()}')
 "
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"

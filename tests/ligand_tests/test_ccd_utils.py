@@ -4,7 +4,7 @@ Tests for CCD utilities (SMILES / CCD code mapping)."""
 
 import pytest
 
-from bio_programming_tools.entities.ligands.ccd_utils import (
+from proto_tools.entities.ligands.ccd_utils import (
     COMMON_MODIFICATIONS,
     get_canonical_component,
     get_ccd_description,

@@ -13,7 +13,7 @@
 | **RAM** | 1007.4 GB |
 | **GPU** | 1× NVIDIA H100 80GB HBM3 |
 | **CUDA** | 12.2 |
-| **Conda Env** | `bio-programming` |
+| **Conda Env** | `proto-language` |
 
 ## Git
 
@@ -27,11 +27,11 @@
 
 ```
 BLASTDB=/common_datasets/external/databases/blast
-CONDA_DEFAULT_ENV=bio-programming
+CONDA_DEFAULT_ENV=proto-language
 CONDA_EXE=/home/daniel.guo/miniconda/bin/conda
-CONDA_PREFIX=/home/daniel.guo/miniconda/envs/bio-programming
+CONDA_PREFIX=/home/daniel.guo/miniconda/envs/proto-language
 CONDA_PREFIX_1=/home/daniel.guo/miniconda
-CONDA_PROMPT_MODIFIER=(bio-programming) 
+CONDA_PROMPT_MODIFIER=(proto-language) 
 CONDA_PYTHON_EXE=/home/daniel.guo/miniconda/bin/python
 CONDA_SHLVL=2
 CUDA_HOME=/home/daniel.guo/miniconda
@@ -51,14 +51,14 @@ LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=daniel.guo
 LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.a...
 MOTD_SHOWN=pam
-OLDPWD=/home/daniel.guo/bio-programming
+OLDPWD=/home/daniel.guo/proto-language
 OMPI_MCA_plm_slurm_args=--external-launcher
-PATH=/home/daniel.guo/.local/bin:/home/daniel.guo/miniconda/envs/bio-programming/bin:/home/daniel.guo/miniconda/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/g...
+PATH=/home/daniel.guo/.local/bin:/home/daniel.guo/miniconda/envs/proto-language/bin:/home/daniel.guo/miniconda/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/g...
 PRTE_MCA_plm_slurm_args=--external-launcher
-PWD=/home/daniel.guo/bio-programming/bio-programming-tools
+PWD=/home/daniel.guo/proto-language/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
-RDBASE=/home/daniel.guo/miniconda/envs/bio-programming/lib/python3.12/site-packages/rdkit
+RDBASE=/home/daniel.guo/miniconda/envs/proto-language/lib/python3.12/site-packages/rdkit
 ROCR_VISIBLE_DEVICES=0
 SHELL=/bin/bash
 SHLVL=3
@@ -124,7 +124,7 @@ XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ZES_ENABLE_SYSMAN=1
 ZE_AFFINITY_MASK=0
-_=/home/daniel.guo/miniconda/envs/bio-programming/bin/pytest
+_=/home/daniel.guo/miniconda/envs/proto-language/bin/pytest
 _CE_CONDA=
 _CE_M=
 ```
@@ -132,25 +132,25 @@ _CE_M=
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
+CONDA_PREFIX=/home/daniel.guo/proto-language/proto-tools/tool_envs/splice_transformer_env
 CUDA_VISIBLE_DEVICES=0
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
 HOME=/home/daniel.guo
 LANG=en_US.UTF-8
-LD_LIBRARY_PATH=/home/daniel.guo/miniconda/envs/bio-programming/lib
+LD_LIBRARY_PATH=/home/daniel.guo/miniconda/envs/proto-language/lib
 LOGNAME=daniel.guo
-PATH=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env/bin:/usr/local/cuda/bin:/home/daniel.guo/.local/bin:/home/daniel.guo/miniconda/envs/bio-programming/bin:/home/da...
+PATH=/home/daniel.guo/proto-language/proto-tools/tool_envs/splice_transformer_env/bin:/usr/local/cuda/bin:/home/daniel.guo/.local/bin:/home/daniel.guo/miniconda/envs/proto-language/bin:/home/da...
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
 RECOMMENDED_TORCH_SPEC=torch>=2.4,<3
 SHELL=/bin/bash
 TMPDIR=/tmp
 TORCH_CUDA_ARCH_LIST=9.0
-TORCH_HOME=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env/cache/torch
+TORCH_HOME=/home/daniel.guo/proto-language/proto-tools/tool_envs/splice_transformer_env/cache/torch
 USER=daniel.guo
-VIRTUAL_ENV=/home/daniel.guo/bio-programming/bio-programming-tools/tool_envs/splice_transformer_env
+VIRTUAL_ENV=/home/daniel.guo/proto-language/proto-tools/tool_envs/splice_transformer_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```

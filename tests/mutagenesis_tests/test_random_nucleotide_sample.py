@@ -3,8 +3,8 @@
 Tests for random nucleotide sampling tool."""
 import pytest
 
-from bio_programming_tools.tools.mutagenesis.codons import IUPAC_DNA
-from bio_programming_tools.tools.mutagenesis.random_nucleotide import (
+from proto_tools.tools.mutagenesis.codons import IUPAC_DNA
+from proto_tools.tools.mutagenesis.random_nucleotide import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     run_random_nucleotide_sample,

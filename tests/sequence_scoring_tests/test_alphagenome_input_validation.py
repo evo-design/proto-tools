@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools import (
+from proto_tools import (
     AlphaGenomeInterval,
     AlphaGenomeISM,
     AlphaGenomePredictIntervalsInput,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 _SETUP_SH_CONTENT = "#!/bin/bash\necho test"
 
@@ -126,7 +126,7 @@ def test_comments_not_allowed(tmp_path):
 
 def test_all_existing_python_version_files_are_valid():
     """Discover and validate all python_version.txt files in tools directory."""
-    tools_dir = Path(__file__).parent.parent.parent / "bio_programming_tools" / "tools"
+    tools_dir = Path(__file__).parent.parent.parent / "proto_tools" / "tools"
 
     version_files = list(tools_dir.glob("**/standalone/python_version.txt"))
 

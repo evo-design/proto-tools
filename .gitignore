@@ -40,7 +40,7 @@ CLAUDE.md
 
 # pytest
 .pytest_cache/
-bio_programming_tools.egg-info/
+proto_tools.egg-info/
 build/
 .coverage
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from bio_programming_tools import (
+from proto_tools import (
     AlphaGenomeInterval,
     AlphaGenomeISM,
     AlphaGenomePredictIntervalsConfig,
@@ -28,7 +28,7 @@ from bio_programming_tools import (
     run_alphagenome_score_ism_variants_batch,
     run_alphagenome_score_variants,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 # ── Module-level constants ────────────────────────────────────────────────────
 

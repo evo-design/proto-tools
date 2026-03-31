@@ -3,15 +3,15 @@
 Environment report smoke tests for mock PyTorch tools."""
 import pytest
 
-from bio_programming_tools.tools.testing.mock_pytorch_multi_gpu_tool import (
+from proto_tools.tools.testing.mock_pytorch_multi_gpu_tool import (
     MockPyTorchMultiGPUToolInput,
     run_mock_pytorch_multi_gpu_tool,
 )
-from bio_programming_tools.tools.testing.mock_pytorch_tool import (
+from proto_tools.tools.testing.mock_pytorch_tool import (
     MockPyTorchToolInput,
     run_mock_pytorch_tool,
 )
-from bio_programming_tools.utils.device import number_of_visible_gpus
+from proto_tools.utils.device import number_of_visible_gpus
 
 
 @pytest.mark.include_in_env_report(category="mock")

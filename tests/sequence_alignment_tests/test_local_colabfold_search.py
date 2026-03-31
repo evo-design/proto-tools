@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     CHIMERA_COLABFOLD_DB_LOCATION,
     ColabfoldSearchConfig,
     ColabfoldSearchInput,

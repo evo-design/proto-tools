@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from bio_programming_tools.tools.gene_annotation.mmseqs import (
+from proto_tools.tools.gene_annotation.mmseqs import (
     MmseqsClusteringConfig,
     MmseqsClusteringInput,
     MmseqsClusteringOutput,
@@ -24,7 +24,7 @@ from bio_programming_tools.tools.gene_annotation.mmseqs import (
     run_mmseqs_search_genomes,
     run_mmseqs_search_proteins,
 )
-from bio_programming_tools.tools.gene_annotation.mmseqs.search_proteins import (
+from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
     _build_sequence_search_results,
     _filter_top_hits,
     _parse_m8_output,

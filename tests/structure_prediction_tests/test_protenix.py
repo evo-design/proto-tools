@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bio_programming_tools.tools.structure_prediction import (
+from proto_tools.tools.structure_prediction import (
     Chain,
     ProtenixConfig,
     ProtenixInput,

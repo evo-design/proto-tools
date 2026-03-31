@@ -6,13 +6,13 @@ from unittest.mock import patch
 
 import pytest
 
-from bio_programming_tools.entities.structures import Structure
-from bio_programming_tools.tools.structure_dynamics.bioemu import (
+from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_dynamics.bioemu import (
     BioEmuConfig,
     BioEmuInput,
     run_bioemu,
 )
-from bio_programming_tools.tools.structure_prediction.shared_data_models import (
+from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -57,7 +57,7 @@ def test_input_rejects_non_protein_entity():
 
 def test_input_rejects_invalid_amino_acids():
     with patch(
-        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
         return_value={"1", "2", "3"},
     ):
         with pytest.raises(ValueError, match="Invalid protein characters"):
@@ -78,7 +78,7 @@ def test_input_rejects_invalid_amino_acids():
 def test_input_warns_on_long_sequence(caplog):
     long_sequence = "A" * 600
     with patch(
-        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
         return_value=set(),
     ):
         with caplog.at_level("WARNING"):
@@ -126,7 +126,7 @@ def test_multiple_complexes_produce_separate_ensembles():
     bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
     with patch(
-        "bio_programming_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
+        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance",
     ) as mock_cls:
         mock_cls.dispatch.return_value = {
             "results": [

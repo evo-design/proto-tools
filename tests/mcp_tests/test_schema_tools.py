@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from bio_tools_mcp.tools import get_tool_example, get_tool_schema
+from proto_tools_mcp.tools import get_tool_example, get_tool_schema
 
 # ── get_tool_schema ─────────────────────────────────────────────────────────
 

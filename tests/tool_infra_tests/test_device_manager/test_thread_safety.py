@@ -4,7 +4,7 @@ Tests for thread safety of DeviceManager."""
 
 import threading
 
-from bio_programming_tools.utils.device_manager import OffloadStrategy
+from proto_tools.utils.device_manager import OffloadStrategy
 
 # ── Thread safety ───────────────────────────────────────────────────────
 

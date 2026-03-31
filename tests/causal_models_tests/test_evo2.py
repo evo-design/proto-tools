@@ -5,7 +5,7 @@ Tests for Evo2."""
 import numpy as np
 import pytest
 
-from bio_programming_tools.tools.causal_models.evo2 import (
+from proto_tools.tools.causal_models.evo2 import (
     Evo2SampleConfig,
     Evo2SampleInput,
     Evo2ScoringConfig,

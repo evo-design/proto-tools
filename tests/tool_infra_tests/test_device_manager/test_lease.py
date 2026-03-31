@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from bio_programming_tools.utils.device_manager import AllocationType, OffloadStrategy
+from proto_tools.utils.device_manager import AllocationType, OffloadStrategy
 
 # ── Lease basics ──────────────────────────────────────────────────────────
 

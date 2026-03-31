@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from bio_programming_tools import (
+from proto_tools import (
     AlphaGenomePredictSequencesConfig,
     AlphaGenomePredictSequencesInput,
     run_alphagenome_predict_sequences,
 )
-from bio_programming_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance
 
 _SEQ_16K_A = "ACGT" * (16_384 // 4)
 _SEQ_16K_B = "TGCA" * (16_384 // 4)
