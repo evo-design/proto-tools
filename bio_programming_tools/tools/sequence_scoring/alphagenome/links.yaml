@@ -1,3 +1,4 @@
 github: https://github.com/google-deepmind/alphagenome_research
 image: https://raw.githubusercontent.com/google-deepmind/alphagenome_research/main/docs/_static/header.png
 huggingface: https://huggingface.co/google/alphagenome-all-folds
+organizations: Google DeepMind
