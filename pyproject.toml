@@ -14,9 +14,6 @@ authors = [
 
 requires-python = ">=3.10"
 
-[project.urls]
-Repository = "https://github.com/proto-bio/proto-tools"
-
 # Core dependencies
 dependencies = [
     # Core framework
@@ -52,6 +49,10 @@ dependencies = [
     "requests",
     "tqdm",
 ]
+
+[project.urls]
+Homepage = "https://github.com/proto-bio/proto-tools"
+Repository = "https://github.com/proto-bio/proto-tools"
 
 [project.optional-dependencies]
 

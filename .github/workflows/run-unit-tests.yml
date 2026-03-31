@@ -6,45 +6,31 @@ on:
   push:
     branches: [main]
 
-# Cancel in-progress runs when a new run is triggered
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  run-unit-tests:
-    # Only run on non-draft PRs
+  test:
     if: github.event.pull_request.draft == false
     name: Run Unit Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-
-    - name: Cache uv packages
-      uses: actions/cache@v4
+    - uses: actions/cache@v4
       with:
         path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-uv-
-
-    - name: Install package with dev dependencies
+        restore-keys: ${{ runner.os }}-uv-
+    - name: Install dependencies
       run: |
         pip install uv
         uv pip install --system ".[dev,mcp]"
-
-    - name: Run unit tests
-      run: |
-        pytest --cpu
+    - run: pytest --cpu

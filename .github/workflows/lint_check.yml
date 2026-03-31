@@ -6,31 +6,19 @@ on:
   push:
     branches: [main]
 
-# Cancel in-progress runs when a new run is triggered
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ruff-lint:
-    # Only run on non-draft PRs
+  lint:
     if: github.event.pull_request.draft == false
-    name: Run Ruff Lint
+    name: Ruff Lint
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
-        python-version: "3.12"  # or whichever version you use
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ruff
-
-    - name: Run Ruff
-      run: ruff check proto_tools tests
+        python-version: "3.12"
+    - run: pip install ruff
+    - run: ruff check proto_tools tests

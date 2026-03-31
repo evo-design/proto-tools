@@ -11,48 +11,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run-integration-tests:
+  test:
     if: >-
       github.event_name == 'push' ||
       (github.event.action == 'labeled' && github.event.label.name == 'run-integration') ||
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-integration'))
     name: Run Integration Tests
     runs-on: ubuntu-latest
-
     steps:
     - name: Free up disk space
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
           /usr/local/share/boost /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
-
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-
-    - name: Cache uv packages
-      uses: actions/cache@v4
+    - uses: actions/cache@v4
       with:
         path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-uv-
-
-    - name: Cache micromamba binary
-      uses: actions/cache@v4
+        restore-keys: ${{ runner.os }}-uv-
+    - uses: actions/cache@v4
       with:
         path: ~/.proto/.micromamba
         key: ${{ runner.os }}-micromamba
-
-    - name: Install package with dev dependencies
+    - name: Install dependencies
       run: |
         pip install uv
         uv pip install --system ".[dev,mcp]"
-
-    - name: Run integration tests
-      run: |
-        pytest --integration --cpu
+    - run: pytest --integration --cpu
