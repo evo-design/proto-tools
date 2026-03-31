@@ -1,6 +1,4 @@
-<img src="https://evodesign.org/images/logo.svg" alt="Evo Design Logo" width="120" align="left" style="margin-right: 15px;">
-
-# 🧬 Biological Programming Language Project - Tools Layer 🛠️
+# 🧬 Proto Tools 🛠️
 [![Lint Check](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml)
 [![Run Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml)
 [![Run Integration Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml)
