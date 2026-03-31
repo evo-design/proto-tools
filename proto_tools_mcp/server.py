@@ -22,7 +22,7 @@ from fastmcp import FastMCP
 mcp = FastMCP(
     name="proto-tools",
     instructions=(
-        "Bio-programming-tools: a library of bioinformatics tool wrappers organized "
+        "Proto-tools: a library of bioinformatics tool wrappers organized "
         "by category. Use the discovery tools to browse available tools, search by "
         "keyword, inspect schemas, and read citations. This server is read-only — "
         "it helps you find and understand tools so you can call them from Python."
@@ -38,7 +38,7 @@ import mcp_server.tools  # noqa: F401, E402
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Bio-programming-tools MCP server")
+    parser = argparse.ArgumentParser(description="Proto-tools MCP server")
     parser.add_argument(
         "--transport",
         choices=["stdio", "http"],
