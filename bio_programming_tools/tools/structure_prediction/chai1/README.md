@@ -228,7 +228,7 @@ for structure in result.structures:
 - Documentation: [https://chaidiscovery.com/blog/introducing-chai-1](https://chaidiscovery.com/blog/introducing-chai-1)
 
 **Additional resources:**
-- Chai Discovery Blog: [https://chaidiscovery.com/blog](https://chaidiscovery.com/blog)
+- Chai Discovery: [https://www.chaidiscovery.com](https://www.chaidiscovery.com)
 - Model weights: Available via Hugging Face through chai-lab package
 
 ## Related Tools
