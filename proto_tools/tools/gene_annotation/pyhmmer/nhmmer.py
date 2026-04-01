@@ -10,7 +10,7 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
-    _build_dataframes,
+    _build_hit_models,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import InputField, ToolInstance
@@ -110,7 +110,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
         config=config,
     )
 
-    sequence_hits_df, domain_hits_df = _build_dataframes(
+    sequence_hits, domain_hits = _build_hit_models(
         output_data["sequence_hits"], output_data["domain_hits"]
     )
 
@@ -124,6 +124,6 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
         },
-        sequence_hits_df=sequence_hits_df,
-        domain_hits_df=domain_hits_df,
+        sequence_hits=sequence_hits,
+        domain_hits=domain_hits,
     )

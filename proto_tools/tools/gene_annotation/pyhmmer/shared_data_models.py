@@ -1,13 +1,12 @@
 """proto_tools/tools/gene_annotation/pyhmmer/shared_data_models.py.
 
-Shared data models, constants, and helpers for PyHMMER tools.
+Shared data models and helpers for PyHMMER tools.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.utils import (
     BaseConfig,
@@ -18,96 +17,138 @@ from proto_tools.utils import (
 )
 
 # ============================================================================
-# Constants
-# ============================================================================
-
-# Standard column names for sequence-level hits
-SEQUENCE_HIT_COLUMNS = {
-    "query_name": ("Name of the query HMM", str),
-    "query_accession": (
-        "Accession of the query HMM. If not available, set to '-'.",
-        str,
-    ),
-    "query_description": (
-        "Description of the query HMM. If not available, set to '-'.",
-        str,
-    ),
-    "query_idx": ("Index of the query (0-indexed)", int),
-    "target_name": ("Name of the target sequence", str),
-    "target_accession": (
-        "Accession of the target sequence. If not available, set to '-'.",
-        str,
-    ),
-    "target_description": (
-        "Description of the target sequence. If not available, set to '-'.",
-        str,
-    ),
-    "evalue": ("E-value of the hit", float),
-    "score": ("Score of the full sequence", float),
-    "bias": ("Bias of the full sequence", float),
-    "sum_score": ("Sum score of the full sequence", float),
-    "reported": ("Whether the hit is reported", bool),
-    "included": ("Whether the hit is included", bool),
-    "pvalue": ("p-value of the hit", float),
-    "num_domains": ("Number of domains in the hit", int),
-}
-
-# Standard column names for domain-level hits
-DOMAIN_HIT_COLUMNS = {
-    "query_name": ("Name of the query HMM", str),
-    "query_accession": (
-        "Accession of the query HMM. If not available, set to '-'.",
-        str,
-    ),
-    "query_description": (
-        "Description of the query HMM. If not available, set to '-'.",
-        str,
-    ),
-    "query_idx": ("Index of the query (0-indexed)", int),
-    "target_name": ("Name of the target sequence", str),
-    "target_accession": (
-        "Accession of the target sequence. If not available, set to '-'.",
-        str,
-    ),
-    "target_description": (
-        "Description of the target sequence. If not available, set to '-'.",
-        str,
-    ),
-    "hmm_length": ("Length of the HMM profile", int),
-    "hmm_from": ("Start position of the domain match in the HMM (1-indexed)", int),
-    "hmm_to": ("End position of the domain match in the HMM (1-indexed)", int),
-    "target_from": (
-        "Start position of the domain match in the target sequence (1-indexed)",
-        int,
-    ),
-    "target_to": (
-        "End position of the domain match in the target sequence (1-indexed)",
-        int,
-    ),
-    "target_length": ("Length of the target sequence", int),
-    "c_evalue": ("Conditional E-value of the domain", float),
-    "i_evalue": ("Independent E-value of the domain", float),
-    "domain_score": ("Bit score of the domain", float),
-    "domain_bias": ("Bias correction of the domain score", float),
-    "domain_idx": ("Index of the domain within the hit (0-indexed)", int),
-    "env_from": (
-        "Start position of the domain envelope in the target sequence (1-indexed)",
-        int,
-    ),
-    "env_to": (
-        "End position of the domain envelope in the target sequence (1-indexed)",
-        int,
-    ),
-    "envelope_score": ("Bit score of the domain envelope", float),
-    "domain_included": ("Whether the domain passes inclusion thresholds", bool),
-    "domain_reported": ("Whether the domain passes reporting thresholds", bool),
-    "domain_pvalue": ("P-value of the domain", float),
-}
-
-
-# ============================================================================
 # Data Models
 # ============================================================================
+
+
+# Hit Models:
+class SequenceHit(BaseModel):
+    """A single sequence-level hit from a PyHMMER search.
+
+    Attributes:
+        query_name (str): Name of the query HMM.
+        query_accession (str): Accession of the query HMM. ``"-"`` if unavailable.
+        query_description (str): Description of the query HMM. ``"-"`` if unavailable.
+        query_idx (int): Index of the query (0-indexed).
+        target_name (str): Name of the target sequence.
+        target_accession (str): Accession of the target sequence. ``"-"`` if unavailable.
+        target_description (str): Description of the target sequence. ``"-"`` if unavailable.
+        evalue (float): E-value of the hit.
+        score (float): Bit score of the full sequence.
+        bias (float): Bias correction for the sequence score.
+        sum_score (float): Sum of domain scores.
+        reported (bool): Whether the hit passes reporting thresholds.
+        included (bool): Whether the hit passes inclusion thresholds.
+        pvalue (float): P-value of the hit.
+        num_domains (int): Number of domains found in the hit.
+    """
+
+    query_name: str = Field(description="Name of the query HMM")
+    query_accession: str = Field(
+        description="Accession of the query HMM. If not available, set to '-'."
+    )
+    query_description: str = Field(
+        description="Description of the query HMM. If not available, set to '-'."
+    )
+    query_idx: int = Field(description="Index of the query (0-indexed)")
+    target_name: str = Field(description="Name of the target sequence")
+    target_accession: str = Field(
+        description="Accession of the target sequence. If not available, set to '-'."
+    )
+    target_description: str = Field(
+        description="Description of the target sequence. If not available, set to '-'."
+    )
+    evalue: float = Field(description="E-value of the hit")
+    score: float = Field(description="Score of the full sequence")
+    bias: float = Field(description="Bias of the full sequence")
+    sum_score: float = Field(description="Sum score of the full sequence")
+    reported: bool = Field(description="Whether the hit is reported")
+    included: bool = Field(description="Whether the hit is included")
+    pvalue: float = Field(description="p-value of the hit")
+    num_domains: int = Field(description="Number of domains in the hit")
+
+
+class DomainHit(BaseModel):
+    """A single domain-level hit from a PyHMMER search.
+
+    Attributes:
+        query_name (str): Name of the query HMM.
+        query_accession (str): Accession of the query HMM. ``"-"`` if unavailable.
+        query_description (str): Description of the query HMM. ``"-"`` if unavailable.
+        query_idx (int): Index of the query (0-indexed).
+        target_name (str): Name of the target sequence.
+        target_accession (str): Accession of the target sequence. ``"-"`` if unavailable.
+        target_description (str): Description of the target sequence. ``"-"`` if unavailable.
+        hmm_length (int): Length of the HMM profile.
+        hmm_from (int): Start position of the domain match in the HMM (1-indexed).
+        hmm_to (int): End position of the domain match in the HMM (1-indexed).
+        target_from (int): Start position of the domain match in the target (1-indexed).
+        target_to (int): End position of the domain match in the target (1-indexed).
+        target_length (int): Length of the target sequence.
+        c_evalue (float): Conditional E-value of the domain.
+        i_evalue (float): Independent E-value of the domain.
+        domain_score (float): Bit score of the domain.
+        domain_bias (float): Bias correction of the domain score.
+        domain_idx (int): Index of the domain within the hit (0-indexed).
+        env_from (int): Envelope start position in the target (1-indexed).
+        env_to (int): Envelope end position in the target (1-indexed).
+        envelope_score (float): Bit score of the domain envelope.
+        domain_included (bool): Whether the domain passes inclusion thresholds.
+        domain_reported (bool): Whether the domain passes reporting thresholds.
+        domain_pvalue (float): P-value of the domain.
+    """
+
+    query_name: str = Field(description="Name of the query HMM")
+    query_accession: str = Field(
+        description="Accession of the query HMM. If not available, set to '-'."
+    )
+    query_description: str = Field(
+        description="Description of the query HMM. If not available, set to '-'."
+    )
+    query_idx: int = Field(description="Index of the query (0-indexed)")
+    target_name: str = Field(description="Name of the target sequence")
+    target_accession: str = Field(
+        description="Accession of the target sequence. If not available, set to '-'."
+    )
+    target_description: str = Field(
+        description="Description of the target sequence. If not available, set to '-'."
+    )
+    hmm_length: int = Field(description="Length of the HMM profile")
+    hmm_from: int = Field(
+        description="Start position of the domain match in the HMM (1-indexed)"
+    )
+    hmm_to: int = Field(
+        description="End position of the domain match in the HMM (1-indexed)"
+    )
+    target_from: int = Field(
+        description="Start position of the domain match in the target sequence (1-indexed)"
+    )
+    target_to: int = Field(
+        description="End position of the domain match in the target sequence (1-indexed)"
+    )
+    target_length: int = Field(description="Length of the target sequence")
+    c_evalue: float = Field(description="Conditional E-value of the domain")
+    i_evalue: float = Field(description="Independent E-value of the domain")
+    domain_score: float = Field(description="Bit score of the domain")
+    domain_bias: float = Field(description="Bias correction of the domain score")
+    domain_idx: int = Field(
+        description="Index of the domain within the hit (0-indexed)"
+    )
+    env_from: int = Field(
+        description="Start position of the domain envelope in the target sequence (1-indexed)"
+    )
+    env_to: int = Field(
+        description="End position of the domain envelope in the target sequence (1-indexed)"
+    )
+    envelope_score: float = Field(description="Bit score of the domain envelope")
+    domain_included: bool = Field(
+        description="Whether the domain passes inclusion thresholds"
+    )
+    domain_reported: bool = Field(
+        description="Whether the domain passes reporting thresholds"
+    )
+    domain_pvalue: float = Field(description="P-value of the domain")
+
 
 # Input:
 class PyHmmerInput(BaseToolInput):
@@ -157,7 +198,7 @@ class PyHmmerInput(BaseToolInput):
 
         for i, seq in enumerate(sequences):
             if not seq or not seq.strip():
-                raise ValueError(f"Sequence {i+1} is empty")
+                raise ValueError(f"Sequence {i + 1} is empty")
 
         return sequences
 
@@ -167,12 +208,11 @@ class PyHmmerOutput(BaseToolOutput):
     """Output from PyHMMER search operations.
 
     This class encapsulates the results of PyHMMER searches, providing both
-    sequence-level and domain-level hits in structured DataFrames. The output
-    format matches traditional HMMER tools.
+    sequence-level and domain-level hits as structured typed lists.
 
     Attributes:
-        sequence_hits_df (pd.DataFrame | None): DataFrame containing
-            sequence-level hits with the following columns:
+        sequence_hits (list[SequenceHit]): List of sequence-level hits from
+            the search. Each SequenceHit contains:
 
             - ``query_name``: Name of the query HMM or sequence
             - ``query_accession``: Accession of the query (``"-"`` if unavailable)
@@ -190,10 +230,10 @@ class PyHmmerOutput(BaseToolOutput):
             - ``pvalue``: P-value of the hit
             - ``num_domains``: Number of domains found in the hit
 
-            Returns ``None`` if no sequence hits are found.
+            Empty list if no sequence hits are found.
 
-        domain_hits_df (pd.DataFrame | None): DataFrame containing domain-level
-            hits with the following columns:
+        domain_hits (list[DomainHit]): List of domain-level hits from the search.
+            Each DomainHit contains:
 
             - ``query_name``: Name of the query HMM or sequence
             - ``query_accession``: Accession of the query (``"-"`` if unavailable)
@@ -220,30 +260,28 @@ class PyHmmerOutput(BaseToolOutput):
             - ``domain_reported``: Whether domain passes reporting thresholds
             - ``domain_pvalue``: P-value of the domain
 
-            Returns ``None`` if no domain hits are found.
+            Empty list if no domain hits are found.
 
     Properties:
         num_sequence_hits: Total number of sequence-level hits found.
         num_domain_hits: Total number of domain-level hits found.
     """
-    sequence_hits_df: pd.DataFrame | None = Field(
-        default=None, description="DataFrame with per-sequence hits"
+    sequence_hits: list[SequenceHit] = Field(
+        default_factory=list, description="Sequence-level hits from the search"
     )
-    domain_hits_df: pd.DataFrame | None = Field(
-        default=None, description="DataFrame with per-domain hits"
+    domain_hits: list[DomainHit] = Field(
+        default_factory=list, description="Domain-level hits from the search"
     )
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)  # Allow pandas DataFrame
 
     @property
     def num_sequence_hits(self) -> int:
         """Return the number of unique sequence hits."""
-        return len(self.sequence_hits_df) if self.sequence_hits_df is not None else 0
+        return len(self.sequence_hits)
 
     @property
     def num_domain_hits(self) -> int:
         """Return the number of domain-level hits."""
-        return len(self.domain_hits_df) if self.domain_hits_df is not None else 0
+        return len(self.domain_hits)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -258,36 +296,41 @@ class PyHmmerOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str):
         import warnings
 
+        import pandas as pd
+
         base_path = Path(export_path)
 
         # Check if there's any data to export
-        has_seq_hits = self.sequence_hits_df is not None and len(self.sequence_hits_df) > 0
-        has_dom_hits = self.domain_hits_df is not None and len(self.domain_hits_df) > 0
+        has_seq_hits = len(self.sequence_hits) > 0
+        has_dom_hits = len(self.domain_hits) > 0
 
         if not has_seq_hits and not has_dom_hits:
             warnings.warn(
                 "No PyHMMER results to export. The search returned no hits.",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             return
 
         seq_path = base_path.parent / f"{base_path.stem}_sequence_hits.{file_format}"
         dom_path = base_path.parent / f"{base_path.stem}_domain_hits.{file_format}"
 
-        if file_format == "csv":
-            if has_seq_hits:
-                self.sequence_hits_df.to_csv(seq_path, index=False)
-            if has_dom_hits:
-                self.domain_hits_df.to_csv(dom_path, index=False)
-
-        elif file_format == "json":
-            if has_seq_hits:
-                self.sequence_hits_df.to_json(seq_path, orient="records", indent=2)
-            if has_dom_hits:
-                self.domain_hits_df.to_json(dom_path, orient="records", indent=2)
-        else:
+        if file_format not in ("csv", "json"):
             raise ValueError(f"Unsupported format: {file_format}")
+
+        if has_seq_hits:
+            seq_df = pd.DataFrame([hit.model_dump() for hit in self.sequence_hits])
+            if file_format == "csv":
+                seq_df.to_csv(seq_path, index=False)
+            else:
+                seq_df.to_json(seq_path, orient="records", indent=2)
+
+        if has_dom_hits:
+            dom_df = pd.DataFrame([hit.model_dump() for hit in self.domain_hits])
+            if file_format == "csv":
+                dom_df.to_csv(dom_path, index=False)
+            else:
+                dom_df.to_json(dom_path, orient="records", indent=2)
 
 
 # Config:
@@ -331,6 +374,7 @@ class PyHmmerConfig(BaseConfig):
         takes precedence. This applies independently to both sequence-level and
         domain-level filtering.
     """
+
     num_threads: int = ConfigField(
         title="Number of Threads",
         default=0,
@@ -367,69 +411,20 @@ class PyHmmerConfig(BaseConfig):
 # ============================================================================
 # Helper Functions
 # ============================================================================
-def _build_dataframes(
+def _build_hit_models(
     sequence_hits: list[dict],
     domain_hits: list[dict],
-) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    """Build DataFrames from lists of hit dicts returned by the standalone script.
+) -> tuple[list[SequenceHit], list[DomainHit]]:
+    """Build lists of typed hit models from dicts returned by the standalone script.
 
     Args:
         sequence_hits (list[dict]): List of dicts with sequence-level hit data.
         domain_hits (list[dict]): List of dicts with domain-level hit data.
 
     Returns:
-        tuple[pd.DataFrame | None, pd.DataFrame | None]: Tuple of (sequence_hits_df, domain_hits_df). Either may be None if empty.
+        tuple[list[SequenceHit], list[DomainHit]]: Tuple of (sequence_hit_models, domain_hit_models).
     """
-    sequence_df = (
-        pd.DataFrame(sequence_hits, columns=list(SEQUENCE_HIT_COLUMNS.keys()))
-        if sequence_hits
-        else None
-    )
-    domain_df = (
-        pd.DataFrame(domain_hits, columns=list(DOMAIN_HIT_COLUMNS.keys()))
-        if domain_hits
-        else None
-    )
+    sequence_models = [SequenceHit(**hit) for hit in sequence_hits]
+    domain_models = [DomainHit(**hit) for hit in domain_hits]
 
-    # Convert data types
-    if sequence_df is not None:
-        sequence_df = _convert_dtypes(sequence_df, is_domain=False)
-    if domain_df is not None:
-        domain_df = _convert_dtypes(domain_df, is_domain=True)
-
-    return sequence_df, domain_df
-
-
-def _convert_dtypes(df: pd.DataFrame, is_domain: bool = False) -> pd.DataFrame:
-    """Convert DataFrame columns to appropriate data types."""
-    ACTIVE_COLUMNS = DOMAIN_HIT_COLUMNS if is_domain else SEQUENCE_HIT_COLUMNS
-
-    float_cols = [
-        col_name
-        for col_name, col_desc in ACTIVE_COLUMNS.items()
-        if col_desc[1] is float
-    ]
-    int_cols = [
-        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] is int
-    ]
-    bool_cols = [
-        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] is bool
-    ]
-
-    # Convert numeric columns
-    for col in float_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    for col in int_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-            # Keep as float to handle NaN values properly
-            if df[col].notna().any():
-                df[col] = df[col].round()
-
-    for col in bool_cols:
-        if col in df.columns:
-            df[col] = df[col].astype(bool)
-
-    return df
+    return sequence_models, domain_models

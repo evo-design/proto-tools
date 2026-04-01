@@ -10,8 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-import pandas as pd
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -63,15 +62,46 @@ BLAST_TASKS = Literal[
 # Simple heuristic for raw sequence detection: only contains valid
 # nucleotide/protein characters plus common whitespace.
 _SEQUENCE_CHARS = re.compile(r"^[A-Za-z*\-\s]+$")
-_BLAST_COLS = [
-    "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-    "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-]
 
 
 # ============================================================================
 # Data Models
 # ============================================================================
+# Output hit model:
+class BlastHit(BaseModel):
+    """A single BLAST alignment hit.
+
+    Represents one query-subject alignment from BLAST tabular output format.
+
+    Attributes:
+        qseqid (str): Query sequence ID.
+        sseqid (str): Subject sequence ID.
+        pident (float): Percentage of identical matches.
+        length (int): Alignment length.
+        mismatch (int): Number of mismatches.
+        gapopen (int): Number of gap openings.
+        qstart (int): Start of alignment in query.
+        qend (int): End of alignment in query.
+        sstart (int): Start of alignment in subject.
+        send (int): End of alignment in subject.
+        evalue (float): Expect value.
+        bitscore (float): Bit score.
+    """
+
+    qseqid: str = Field(description="Query sequence ID")
+    sseqid: str = Field(description="Subject sequence ID")
+    pident: float = Field(description="Percentage of identical matches")
+    length: int = Field(description="Alignment length")
+    mismatch: int = Field(description="Number of mismatches")
+    gapopen: int = Field(description="Number of gap openings")
+    qstart: int = Field(description="Start of alignment in query")
+    qend: int = Field(description="End of alignment in query")
+    sstart: int = Field(description="Start of alignment in subject")
+    send: int = Field(description="End of alignment in subject")
+    evalue: float = Field(description="Expect value")
+    bitscore: float = Field(description="Bit score")
+
+
 # Input:
 class BlastSearchInput(BaseToolInput):
     """Input for BLAST search.
@@ -90,8 +120,7 @@ class BlastSearchInput(BaseToolInput):
 
     query: str = InputField(
         description=(
-            "Query sequence string or path to a FASTA file containing "
-            "query sequence(s)"
+            "Query sequence string or path to a FASTA file containing query sequence(s)"
         ),
     )
     query_type: Literal["sequence", "fasta_path"] = InputField(
@@ -128,20 +157,20 @@ class BlastSearchOutput(BaseToolOutput):
     """Output from BLAST search.
 
     Attributes:
-        results_df (pd.DataFrame | None): Standard BLAST tabular results
-            with columns: qseqid, sseqid, pident, length, mismatch, gapopen,
+        hits (list[BlastHit]): BLAST alignment hits with standard tabular
+            columns: qseqid, sseqid, pident, length, mismatch, gapopen,
             qstart, qend, sstart, send, evalue, bitscore.
-        num_hits (int): Total number of alignment hits found.
     """
 
-    results_df: pd.DataFrame | None = Field(
-        default=None,
-        description="DataFrame with BLAST results",
+    hits: list[BlastHit] = Field(
+        default_factory=list,
+        description="BLAST alignment hits",
     )
-    num_hits: int = Field(
-        default=0,
-        description="Number of BLAST hits found",
-    )
+
+    @property
+    def num_hits(self) -> int:
+        """Total number of alignment hits found."""
+        return len(self.hits)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -156,7 +185,9 @@ class BlastSearchOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str):
         import warnings
 
-        if self.results_df is None or len(self.results_df) == 0:
+        import pandas as pd
+
+        if not self.hits:
             warnings.warn(
                 "No BLAST results to export. The search returned no hits.",
                 UserWarning,
@@ -166,14 +197,14 @@ class BlastSearchOutput(BaseToolOutput):
 
         path = Path(export_path).with_suffix(f".{file_format}")
 
+        df = pd.DataFrame([hit.model_dump() for hit in self.hits])
+
         if file_format == "csv":
-            self.results_df.to_csv(path, index=False)
+            df.to_csv(path, index=False)
         elif file_format == "json":
-            self.results_df.to_json(path, orient="records", indent=2)
+            df.to_json(path, orient="records", indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # Config:
@@ -323,8 +354,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Gap Open Cost",
         description=(
-            "Cost to open a gap. "
-            "Defaults: 5 (blastn), 11 (protein programs)."
+            "Cost to open a gap. Defaults: 5 (blastn), 11 (protein programs)."
         ),
         ge=0,
         advanced=True,
@@ -393,8 +423,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Max Target Sequences",
         description=(
-            "Maximum number of aligned sequences to keep. "
-            "Default: 500 (local mode)."
+            "Maximum number of aligned sequences to keep. Default: 500 (local mode)."
         ),
         ge=1,
         advanced=True,
@@ -432,8 +461,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Culling Limit",
         description=(
-            "Delete hits enveloped by at least this many "
-            "higher-scoring hits."
+            "Delete hits enveloped by at least this many higher-scoring hits."
         ),
         ge=0,
         advanced=True,
@@ -550,9 +578,7 @@ class BlastSearchConfig(BaseConfig):
     window_size: int | None = ConfigField(
         default=None,
         title="Window Size",
-        description=(
-            "Multiple-hits window size for combining initial word hits."
-        ),
+        description=("Multiple-hits window size for combining initial word hits."),
         ge=0,
         advanced=True,
     )
@@ -565,9 +591,7 @@ class BlastSearchConfig(BaseConfig):
     xdrop_gap: float | None = ConfigField(
         default=None,
         title="X-dropoff Gapped",
-        description=(
-            "X-dropoff value (in bits) for preliminary gapped extensions."
-        ),
+        description=("X-dropoff value (in bits) for preliminary gapped extensions."),
         advanced=True,
     )
     xdrop_gap_final: float | None = ConfigField(
@@ -609,9 +633,7 @@ class BlastSearchConfig(BaseConfig):
         in local mode) and logs warnings for fields that will be ignored.
         """
         if self.search_mode == "local" and not self.local_db:
-            raise ValueError(
-                "local_db is required when search_mode is 'local'"
-            )
+            raise ValueError("local_db is required when search_mode is 'local'")
 
         # Warn when online-only params are set in local mode
         if self.search_mode == "local":
@@ -657,10 +679,13 @@ def example_input():
     output_class=BlastSearchOutput,
     description="Search sequences against BLAST databases (online or local)",
     example_input=example_input,
+    iterable_input_field="query",
+    iterable_output_field="hits",
     cacheable=True,
 )
 def run_blast_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig | None = None,
+    inputs: BlastSearchInput,
+    config: BlastSearchConfig | None = None,
     instance=None,
 ) -> BlastSearchOutput:
     """Search sequences against BLAST databases.
@@ -675,7 +700,7 @@ def run_blast_search(
         instance: Optional ToolInstance for subprocess execution.
 
     Returns:
-        BlastSearchOutput: Structured output with BLAST results DataFrame.
+        BlastSearchOutput: Structured output with BLAST alignment hits.
 
     Raises:
         RuntimeError: If the BLAST search fails.
@@ -754,7 +779,7 @@ def _online_search(
     handle.close()
 
     blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))
-    results_df = _blast_results_to_df(blast_records)
+    hits = _blast_results_to_hits(blast_records)
 
     return BlastSearchOutput(
         metadata={
@@ -763,18 +788,17 @@ def _online_search(
             "database": config.database,
             "query_length": len(query_seq),
         },
-        results_df=results_df,
-        num_hits=len(results_df),
+        hits=hits,
     )
 
 
 def _local_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig,
+    inputs: BlastSearchInput,
+    config: BlastSearchConfig,
     instance=None,
 ) -> BlastSearchOutput:
     """Run BLAST+ locally against a local database."""
     import tempfile
-
 
     # If query is a raw sequence, write it to a temp FASTA file
     if inputs.query_type == "sequence":
@@ -850,14 +874,16 @@ def _local_search(
         if inputs.query_type == "sequence":
             Path(query_path).unlink(missing_ok=True)
 
-    # Parse raw tabular output into DataFrame
+    # Parse raw tabular output into BlastHit objects
+    import csv
+
     raw_output = output_data["stdout"]
-    if not raw_output.strip():
-        results_df = pd.DataFrame(columns=_BLAST_COLS)
-    else:
-        results_df = pd.read_csv(
-            io.StringIO(raw_output), sep="\t", names=_BLAST_COLS
+    hits = []
+    if raw_output.strip():
+        reader = csv.DictReader(
+            io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields)
         )
+        hits.extend(BlastHit(**row) for row in reader)
 
     return BlastSearchOutput(
         metadata={
@@ -866,13 +892,12 @@ def _local_search(
             "database": config.local_db,
             "num_threads": config.num_threads,
         },
-        results_df=results_df,
-        num_hits=len(results_df),
+        hits=hits,
     )
 
 
-def _blast_results_to_df(blast_records) -> pd.DataFrame:
-    """Convert Biopython BLAST records to a standard tabular DataFrame.
+def _blast_results_to_hits(blast_records) -> list[BlastHit]:
+    """Convert Biopython BLAST records to BlastHit objects.
 
     Produces the same 12-column layout as BLAST+ ``-outfmt 6`` so that
     online and local results are directly comparable.
@@ -881,7 +906,7 @@ def _blast_results_to_df(blast_records) -> pd.DataFrame:
         blast_records: List of Bio.Blast.Record objects from NCBIXML.parse.
 
     Returns:
-        pd.DataFrame: DataFrame with standard BLAST tabular columns.
+        list[BlastHit]: List of BLAST alignment hits.
     """
     hits = []
     for record in blast_records:
@@ -895,19 +920,21 @@ def _blast_results_to_df(blast_records) -> pd.DataFrame:
                 gap_opens = sum(
                     len(re.findall(r"-+", seq)) for seq in (hsp.query, hsp.sbjct)
                 )
-                hits.append({
-                    "qseqid": query_id,
-                    "sseqid": getattr(alignment, "accession", alignment.hit_id),
-                    "pident": (ident / align_len * 100) if align_len > 0 else 0,
-                    "length": align_len,
-                    "mismatch": align_len - ident - gaps,
-                    "gapopen": gap_opens,
-                    "qstart": hsp.query_start,
-                    "qend": hsp.query_end,
-                    "sstart": hsp.sbjct_start,
-                    "send": hsp.sbjct_end,
-                    "evalue": hsp.expect,
-                    "bitscore": hsp.bits,
-                })
+                hits.append(
+                    BlastHit(
+                        qseqid=query_id,
+                        sseqid=getattr(alignment, "accession", alignment.hit_id),
+                        pident=(ident / align_len * 100) if align_len > 0 else 0,
+                        length=align_len,
+                        mismatch=align_len - ident - gaps,
+                        gapopen=gap_opens,
+                        qstart=hsp.query_start,
+                        qend=hsp.query_end,
+                        sstart=hsp.sbjct_start,
+                        send=hsp.sbjct_end,
+                        evalue=hsp.expect,
+                        bitscore=hsp.bits,
+                    )
+                )
 
-    return pd.DataFrame(hits) if hits else pd.DataFrame(columns=_BLAST_COLS)
+    return hits

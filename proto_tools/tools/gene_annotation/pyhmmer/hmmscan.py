@@ -12,7 +12,7 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
-    _build_dataframes,
+    _build_hit_models,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import InputField, ToolInstance
@@ -100,8 +100,8 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
 
     Returns:
         PyHmmscanOutput: Structured output containing:
-            - ``sequence_hits_df``: DataFrame with sequence-level hits
-            - ``domain_hits_df``: DataFrame with domain-level hits
+            - ``sequence_hits``: List of sequence-level hits
+            - ``domain_hits``: List of domain-level hits
             - ``num_sequence_hits``: Total number of sequence hits
             - ``num_domain_hits``: Total number of domain hits
 
@@ -124,11 +124,10 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         >>> print(f"Found {result.num_domain_hits} domains")
         >>>
         >>> # Get domain architecture for each sequence
-        >>> if result.domain_hits_df is not None:
-        ...     for seq_name in result.domain_hits_df['target_name'].unique():
-        ...         domains = result.domain_hits_df[
-        ...             result.domain_hits_df['target_name'] == seq_name
-        ...         ]['query_name'].tolist()
+        >>> if result.domain_hits:
+        ...     from itertools import groupby
+        ...     for seq_name, hits in groupby(result.domain_hits, key=lambda h: h.target_name):
+        ...         domains = [h.query_name for h in hits]
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
     output_data = ToolInstance.dispatch(
@@ -148,8 +147,8 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         config=config,
     )
 
-    # Convert results to DataFrames
-    sequence_hits_df, domain_hits_df = _build_dataframes(
+    # Convert results to typed hit models
+    sequence_hits, domain_hits = _build_hit_models(
         output_data["sequence_hits"], output_data["domain_hits"]
     )
 
@@ -163,6 +162,6 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
         },
-        sequence_hits_df=sequence_hits_df,
-        domain_hits_df=domain_hits_df,
+        sequence_hits=sequence_hits,
+        domain_hits=domain_hits,
     )

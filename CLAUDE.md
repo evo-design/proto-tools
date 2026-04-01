@@ -199,6 +199,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
 - Every tool directory must include an `examples/example.ipynb` notebook. Include a `cite.bib` when wrapping a published model or tool; omit it for simple algorithmic utilities with no paper to cite
+- Output model fields must be JSON-serializable Pydantic types (primitives, `list`, nested `BaseModel`). Never use `pd.DataFrame`, numpy arrays, or other non-serializable types as `Field()` or `@computed_field` on output models — they break JSON Schema generation for MCP and downstream consumers. Never set `arbitrary_types_allowed=True` on output models. DataFrames are a presentation layer; construct them lazily inside `_export_output()` or provide a `to_dataframe()` method instead
 
 **The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 

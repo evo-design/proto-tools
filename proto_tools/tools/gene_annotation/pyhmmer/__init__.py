@@ -30,7 +30,13 @@ from proto_tools.tools.gene_annotation.pyhmmer.phmmer import (
     PyPhmmerOutput,
     run_pyhmmer_phmmer,
 )
-from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import PyHmmerConfig, PyHmmerInput, PyHmmerOutput
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
+    DomainHit,
+    PyHmmerConfig,
+    PyHmmerInput,
+    PyHmmerOutput,
+    SequenceHit,
+)
 
 __all__ = [
     # hmmsearch
@@ -62,4 +68,6 @@ __all__ = [
     "PyHmmerConfig",
     "PyHmmerInput",
     "PyHmmerOutput",
+    "SequenceHit",
+    "DomainHit",
 ]

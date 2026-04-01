@@ -8,8 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pandas as pd
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -126,15 +125,6 @@ class SegmaskerOutput(BaseToolOutput):
 
         sequence_lengths (list[int]): Length of each input sequence in amino acids.
 
-        results_df (pd.DataFrame | None): Detailed results as a pandas DataFrame
-            with columns:
-
-            - ``sequence_id``: Identifier (e.g., ``"seq_0"``, ``"seq_1"``)
-            - ``length``: Sequence length in amino acids
-            - ``lowercase_count``: Number of low-complexity positions
-            - ``low_complexity_fraction``: Fraction of low-complexity positions (0.0-1.0)
-
-            Returns ``None`` if processing fails.
     """
 
     low_complexity_fractions: list[float] = Field(
@@ -143,14 +133,7 @@ class SegmaskerOutput(BaseToolOutput):
     low_complexity_counts: list[int] = Field(
         description="Number of low-complexity positions for each sequence"
     )
-    sequence_lengths: list[int] = Field(
-        description="Length of each input sequence"
-    )
-    results_df: pd.DataFrame | None = Field(
-        default=None, description="DataFrame with detailed results"
-    )
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    sequence_lengths: list[int] = Field(description="Length of each input sequence")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -165,18 +148,17 @@ class SegmaskerOutput(BaseToolOutput):
     def _export_output(
         self, export_path: str | os.PathLike, file_format: str
     ):
+        import pandas as pd
+
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        if self.results_df is None:
-            df = pd.DataFrame(
-                {
-                    "sequence_length": self.sequence_lengths,
-                    "low_complexity_count": self.low_complexity_counts,
-                    "low_complexity_fraction": self.low_complexity_fractions,
-                }
-            )
-        else:
-            df = self.results_df
+        df = pd.DataFrame(
+            {
+                "sequence_length": self.sequence_lengths,
+                "low_complexity_count": self.low_complexity_counts,
+                "low_complexity_fraction": self.low_complexity_fractions,
+            }
+        )
 
         if file_format == "csv":
             df.to_csv(path, index=False)
@@ -231,7 +213,7 @@ def run_segmasker(
             - ``low_complexity_fractions``: Fraction of each sequence that is low-complexity
             - ``low_complexity_counts``: Number of low-complexity positions per sequence
             - ``sequence_lengths``: Length of each input sequence
-            - ``results_df``: Detailed results DataFrame
+            - ``metadata``: Execution metadata (num_sequences, window, locut, hicut)
 
     See Also:
         - BLAST+ suite: https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs
@@ -262,8 +244,6 @@ def run_segmasker(
         config=config,
     )
 
-    results_df = pd.DataFrame(output_data["results_data"])
-
     return SegmaskerOutput(
         metadata={
             "num_sequences": len(inputs.sequences),
@@ -274,5 +254,4 @@ def run_segmasker(
         low_complexity_fractions=output_data["fractions"],
         low_complexity_counts=output_data["counts"],
         sequence_lengths=output_data["lengths"],
-        results_df=results_df,
     )

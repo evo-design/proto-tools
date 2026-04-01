@@ -19,7 +19,8 @@ from proto_tools.tools.gene_annotation import (
     run_create_blast_db,
 )
 from proto_tools.tools.gene_annotation.blast.blast_search import (
-    _blast_results_to_df,
+    BlastHit,
+    _blast_results_to_hits,
 )
 from tests.conftest import make_persistent_fixture
 
@@ -102,9 +103,7 @@ class _MockHSP:
 class _MockAlignment:
     """Minimal mock of Bio.Blast.Record.Alignment."""
 
-    def __init__(
-        self, hit_id="gi|123|ref|NM_001.1|", accession="NM_001.1", hsps=None
-    ):
+    def __init__(self, hit_id="gi|123|ref|NM_001.1|", accession="NM_001.1", hsps=None):
         self.hit_id, self.accession = hit_id, accession
         self.hsps = hsps or []
 
@@ -125,9 +124,7 @@ def test_input_raw_sequence():
 
 
 def test_input_protein_sequence():
-    inp = BlastSearchInput(
-        query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
-    )
+    inp = BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT")
     assert inp.query_type == "sequence"
 
 
@@ -196,17 +193,13 @@ def test_config_local_only_warns_in_online(caplog):
 # ── XML → DataFrame parsing ───────────────────────────────────────────────
 
 
-def test_results_to_df_empty():
-    df = _blast_results_to_df([])
-    expected_cols = [
-        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-    ]
-    assert list(df.columns) == expected_cols
-    assert len(df) == 0
+def test_results_to_hits_empty():
+    hits = _blast_results_to_hits([])
+    assert len(hits) == 0
+    assert isinstance(hits, list)
 
 
-def test_results_to_df_field_values():
+def test_results_to_hits_field_values():
     hsp = _MockHSP(
         query="ATGC--GTAA",
         sbjct="ATGCAAGTAA",
@@ -219,23 +212,25 @@ def test_results_to_df_field_values():
     aln = _MockAlignment(accession="NM_001.1", hsps=[hsp])
     rec = _MockRecord(query="query_seq description", alignments=[aln])
 
-    row = _blast_results_to_df([rec]).iloc[0]
+    hits = _blast_results_to_hits([rec])
+    assert len(hits) == 1
+    hit = hits[0]
 
-    assert row["qseqid"] == "query_seq"
-    assert row["sseqid"] == "NM_001.1"
-    assert row["pident"] == pytest.approx(80.0)  # 8/10 * 100
-    assert row["length"] == 10
-    assert row["mismatch"] == 0  # 10 - 8 - 2
-    assert row["gapopen"] == 1  # one gap run in query
-    assert row["qstart"] == 1
-    assert row["qend"] == 10
-    assert row["sstart"] == 101
-    assert row["send"] == 110
-    assert row["evalue"] == pytest.approx(1e-5)
-    assert row["bitscore"] == pytest.approx(42.0)
+    assert hit.qseqid == "query_seq"
+    assert hit.sseqid == "NM_001.1"
+    assert hit.pident == pytest.approx(80.0)  # 8/10 * 100
+    assert hit.length == 10
+    assert hit.mismatch == 0  # 10 - 8 - 2
+    assert hit.gapopen == 1  # one gap run in query
+    assert hit.qstart == 1
+    assert hit.qend == 10
+    assert hit.sstart == 101
+    assert hit.send == 110
+    assert hit.evalue == pytest.approx(1e-5)
+    assert hit.bitscore == pytest.approx(42.0)
 
 
-def test_results_to_df_multiple_gap_opens():
+def test_results_to_hits_multiple_gap_opens():
     # query: 1 gap run of 2; subject: 1 gap run of 1 → total = 2
     hsp = _MockHSP(
         query="ATG--CGTAA",
@@ -245,13 +240,15 @@ def test_results_to_df_multiple_gap_opens():
         align_length=10,
     )
     aln = _MockAlignment(hsps=[hsp])
-    row = _blast_results_to_df([_MockRecord(alignments=[aln])]).iloc[0]
+    hits = _blast_results_to_hits([_MockRecord(alignments=[aln])])
 
-    assert row["gapopen"] == 2
-    assert row["mismatch"] == 0  # 10 - 7 - 3
+    assert len(hits) == 1
+    hit = hits[0]
+    assert hit.gapopen == 2
+    assert hit.mismatch == 0  # 10 - 7 - 3
 
 
-def test_results_to_df_no_gaps():
+def test_results_to_hits_no_gaps():
     hsp = _MockHSP(
         query="ATGCGTAACC",
         sbjct="ATGCTTAACC",
@@ -260,14 +257,16 @@ def test_results_to_df_no_gaps():
         align_length=10,
     )
     aln = _MockAlignment(hsps=[hsp])
-    row = _blast_results_to_df([_MockRecord(alignments=[aln])]).iloc[0]
+    hits = _blast_results_to_hits([_MockRecord(alignments=[aln])])
 
-    assert row["gapopen"] == 0
-    assert row["mismatch"] == 1  # 10 - 9 - 0
-    assert row["pident"] == pytest.approx(90.0)
+    assert len(hits) == 1
+    hit = hits[0]
+    assert hit.gapopen == 0
+    assert hit.mismatch == 1  # 10 - 9 - 0
+    assert hit.pident == pytest.approx(90.0)
 
 
-def test_results_to_df_none_tuple_handling():
+def test_results_to_hits_none_tuple_handling():
     """Biopython sets gaps/identities to (None, None) when XML omits them."""
     hsp = _MockHSP(
         query="ATGCGTAA",
@@ -280,22 +279,25 @@ def test_results_to_df_none_tuple_handling():
     hsp.identities = (None, None)
 
     aln = _MockAlignment(hsps=[hsp])
-    row = _blast_results_to_df([_MockRecord(alignments=[aln])]).iloc[0]
+    hits = _blast_results_to_hits([_MockRecord(alignments=[aln])])
 
-    assert row["pident"] == pytest.approx(0.0)  # identities → 0
-    assert row["mismatch"] == 8  # 8 - 0 - 0
+    assert len(hits) == 1
+    hit = hits[0]
+    assert hit.pident == pytest.approx(0.0)  # identities → 0
+    assert hit.mismatch == 8  # 8 - 0 - 0
 
 
-def test_results_to_df_accession_fallback():
+def test_results_to_hits_accession_fallback():
     hsp = _MockHSP()
     aln = _MockAlignment(hit_id="gi|456|ref|XM_002.1|", hsps=[hsp])
     del aln.accession
 
-    row = _blast_results_to_df([_MockRecord(alignments=[aln])]).iloc[0]
-    assert row["sseqid"] == "gi|456|ref|XM_002.1|"
+    hits = _blast_results_to_hits([_MockRecord(alignments=[aln])])
+    assert len(hits) == 1
+    assert hits[0].sseqid == "gi|456|ref|XM_002.1|"
 
 
-def test_results_to_df_multiple_records():
+def test_results_to_hits_multiple_records():
     hsp1 = _MockHSP(identities=8, gaps=0, align_length=8)
     hsp2 = _MockHSP(identities=4, gaps=0, align_length=4)
     rec1 = _MockRecord(
@@ -307,16 +309,16 @@ def test_results_to_df_multiple_records():
         alignments=[_MockAlignment(accession="B", hsps=[hsp1])],
     )
 
-    df = _blast_results_to_df([rec1, rec2])
-    assert len(df) == 3  # 2 HSPs from rec1 + 1 from rec2
-    assert list(df["qseqid"]) == ["qA", "qA", "qB"]
+    hits = _blast_results_to_hits([rec1, rec2])
+    assert len(hits) == 3  # 2 HSPs from rec1 + 1 from rec2
+    assert [h.qseqid for h in hits] == ["qA", "qA", "qB"]
 
 
 # ── Output ─────────────────────────────────────────────────────────────────
 
 
 def test_output_export_empty_warns(tmp_path):
-    output = BlastSearchOutput(results_df=None, num_hits=0)
+    output = BlastSearchOutput()
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         output._export_output(tmp_path / "results", "csv")
@@ -326,7 +328,22 @@ def test_output_export_empty_warns(tmp_path):
 
 def test_output_export_invalid_format(tmp_path):
     output = BlastSearchOutput(
-        results_df=pd.DataFrame({"x": [1]}), num_hits=1
+        hits=[
+            BlastHit(
+                qseqid="q",
+                sseqid="s",
+                pident=100.0,
+                length=10,
+                mismatch=0,
+                gapopen=0,
+                qstart=1,
+                qend=10,
+                sstart=1,
+                send=10,
+                evalue=1e-5,
+                bitscore=42.0,
+            )
+        ]
     )
     with pytest.raises(ValueError, match="Unsupported format"):
         output._export_output(tmp_path / "results", "xlsx")
@@ -354,10 +371,7 @@ def test_create_db_input_rejects_missing_file():
 @pytest.mark.integration
 def test_local_blastn_exact_match(nucl_blast_db):
     """Exact subsequence from the database → 100% identity hit."""
-    query = (
-        "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
-        "ATGCGTAAACCCGGGTTTTTTAAACCC"
-    )
+    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
     result = run_blast_search(
         BlastSearchInput(query=query),
         BlastSearchConfig(
@@ -368,7 +382,7 @@ def test_local_blastn_exact_match(nucl_blast_db):
         ),
     )
     assert result.num_hits >= 1
-    assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
+    assert result.hits[0].pident == pytest.approx(100.0)
 
 
 @pytest.mark.integration
@@ -391,9 +405,7 @@ def test_local_blastn_no_hits(nucl_blast_db):
 def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
     """Query from a FASTA file instead of raw sequence."""
     fasta = tmp_path / "query.fasta"
-    fasta.write_text(
-        ">query\nATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT\n"
-    )
+    fasta.write_text(">query\nATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT\n")
     result = run_blast_search(
         BlastSearchInput(query=str(fasta)),
         BlastSearchConfig(
@@ -408,11 +420,8 @@ def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
 
 @pytest.mark.integration
 def test_local_blastn_output_structure(nucl_blast_db):
-    """Verify output metadata and DataFrame columns."""
-    query = (
-        "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
-        "ATGCGTAAACCCGGGTTTTTTAAACCC"
-    )
+    """Verify output metadata and hits structure."""
+    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
     result = run_blast_search(
         BlastSearchInput(query=query),
         BlastSearchConfig(
@@ -426,11 +435,21 @@ def test_local_blastn_output_structure(nucl_blast_db):
     assert result.execution_time > 0
     assert result.metadata["search_mode"] == "local"
     assert result.metadata["program"] == "blastn"
-    expected_cols = [
-        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-    ]
-    assert list(result.results_df.columns) == expected_cols
+    # Verify BlastHit has expected fields
+    assert len(result.hits) > 0
+    hit = result.hits[0]
+    assert hasattr(hit, "qseqid")
+    assert hasattr(hit, "sseqid")
+    assert hasattr(hit, "pident")
+    assert hasattr(hit, "length")
+    assert hasattr(hit, "mismatch")
+    assert hasattr(hit, "gapopen")
+    assert hasattr(hit, "qstart")
+    assert hasattr(hit, "qend")
+    assert hasattr(hit, "sstart")
+    assert hasattr(hit, "send")
+    assert hasattr(hit, "evalue")
+    assert hasattr(hit, "bitscore")
 
 
 @pytest.mark.integration
@@ -446,16 +465,14 @@ def test_local_blastp_exact_match(prot_blast_db):
         ),
     )
     assert result.num_hits >= 1
-    assert result.results_df.iloc[0]["pident"] == pytest.approx(100.0)
+    assert result.hits[0].pident == pytest.approx(100.0)
 
 
 @pytest.mark.integration
 def test_local_blastp_no_hits(prot_blast_db):
     """Unrelated protein sequence with strict evalue → 0 hits."""
     result = run_blast_search(
-        BlastSearchInput(
-            query="WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
-        ),
+        BlastSearchInput(query="WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"),
         BlastSearchConfig(
             search_mode="local",
             program="blastp",
@@ -470,9 +487,7 @@ def test_local_blastp_no_hits(prot_blast_db):
 def test_online_blastp():
     """Search a known hemoglobin fragment against swissprot → expect hits."""
     result = run_blast_search(
-        BlastSearchInput(
-            query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
-        ),
+        BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"),
         BlastSearchConfig(
             search_mode="online",
             program="blastp",
@@ -482,20 +497,18 @@ def test_online_blastp():
     )
     assert isinstance(result, BlastSearchOutput)
     assert result.num_hits >= 1
-    assert result.results_df is not None
+    assert len(result.hits) > 0
     assert result.metadata["search_mode"] == "online"
     assert result.metadata["program"] == "blastp"
     # Hemoglobin is highly conserved, so top hit should be high identity
-    assert result.results_df.iloc[0]["pident"] > 80.0
+    assert result.hits[0].pident > 80.0
 
 
 @pytest.mark.integration
 def test_online_blastn():
     """Search a short nucleotide sequence against nt → verify structure."""
     # Human beta-globin exon 1 fragment
-    query = (
-        "ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTG"
-    )
+    query = "ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTG"
     result = run_blast_search(
         BlastSearchInput(query=query),
         BlastSearchConfig(
@@ -508,11 +521,21 @@ def test_online_blastn():
     )
     assert isinstance(result, BlastSearchOutput)
     assert result.num_hits >= 1
-    expected_cols = [
-        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
-        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
-    ]
-    assert list(result.results_df.columns) == expected_cols
+    # Verify BlastHit has expected fields
+    assert len(result.hits) > 0
+    hit = result.hits[0]
+    assert hasattr(hit, "qseqid")
+    assert hasattr(hit, "sseqid")
+    assert hasattr(hit, "pident")
+    assert hasattr(hit, "length")
+    assert hasattr(hit, "mismatch")
+    assert hasattr(hit, "gapopen")
+    assert hasattr(hit, "qstart")
+    assert hasattr(hit, "qend")
+    assert hasattr(hit, "sstart")
+    assert hasattr(hit, "send")
+    assert hasattr(hit, "evalue")
+    assert hasattr(hit, "bitscore")
 
 
 @pytest.mark.integration
@@ -543,10 +566,7 @@ def test_full_pipeline_create_db_search_export(tmp_path):
     )
 
     # Search
-    query = (
-        "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTT"
-        "ATGCGTAAACCCGGGTTTTTTAAACCC"
-    )
+    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
     search_result = run_blast_search(
         BlastSearchInput(query=query),
         BlastSearchConfig(
@@ -565,4 +585,19 @@ def test_full_pipeline_create_db_search_export(tmp_path):
 
     loaded = pd.read_csv(csv_path)
     assert len(loaded) == search_result.num_hits
-    assert list(loaded.columns) == list(search_result.results_df.columns)
+    # Verify CSV has expected BLAST columns
+    expected_cols = [
+        "qseqid",
+        "sseqid",
+        "pident",
+        "length",
+        "mismatch",
+        "gapopen",
+        "qstart",
+        "qend",
+        "sstart",
+        "send",
+        "evalue",
+        "bitscore",
+    ]
+    assert list(loaded.columns) == expected_cols

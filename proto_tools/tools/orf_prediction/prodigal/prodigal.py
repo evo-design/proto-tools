@@ -11,8 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pandas as pd
-from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 
 from proto_tools.tools.orf_prediction.orf import ORF
 from proto_tools.tools.tool_registry import tool
@@ -51,15 +50,15 @@ class ProdigalInput(BaseToolInput):
         description="DNA sequence(s) to analyze for open reading frames"
     )
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def normalize_sequences(cls, data):
         """Normalize input_sequences from string to list."""
-        if isinstance(data.get('input_sequences'), str):
-            data['input_sequences'] = [data['input_sequences']]
+        if isinstance(data.get("input_sequences"), str):
+            data["input_sequences"] = [data["input_sequences"]]
         return data
 
-    @field_validator('input_sequences')
+    @field_validator("input_sequences")
     @classmethod
     def validate_sequences(cls, sequences):
         """Validate DNA sequences."""
@@ -129,6 +128,7 @@ class ProdigalConfig(BaseConfig):
         Prodigal is optimized for prokaryotic genomes. For eukaryotic gene
         prediction, use specialized eukaryotic gene finders.
     """
+
     meta_mode: bool = ConfigField(
         title="Meta Mode",
         default=True,
@@ -173,36 +173,13 @@ class ProdigalOutput(BaseToolOutput):
         num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
 
-        results_df: All ORF results as a pandas DataFrame with columns:
-
-            - ``parent_id``: ID of the parent sequence
-            - ``orf_id``: Unique ORF identifier within the parent
-            - ``amino_acid_sequence``: Translated protein sequence
-            - ``nucleotide_sequence``: DNA sequence of the ORF
-            - ``amino_acid_length``: Length of protein in amino acids
-            - ``nucleotide_length``: Length of ORF in nucleotides
-            - ``nucleotide_start``: Start position in parent sequence (1-indexed, inclusive)
-            - ``nucleotide_end``: End position in parent sequence (1-indexed, inclusive)
-            - ``strand``: Strand direction (``"+"`` for forward, ``"-"`` for reverse)
-            - ``frame``: Reading frame (1, 2, or 3)
-            - ``gc_content``: GC content of the gene (0.0-1.0)
-            - ``start_type``: Start codon type (e.g., ``"ATG"``, ``"GTG"``, ``"TTG"``)
-            - ``rbs_motif``: Ribosome binding site motif detected
-            - ``rbs_spacer``: Spacing between RBS and start codon
-            - ``partial_begin``: Partial status at 5' end (0=complete, 1=partial)
-            - ``partial_end``: Partial status at 3' end (0=complete, 1=partial)
-            - ``description``: Full Prodigal annotation string
-
+        num_orfs_per_sequence: Number of ORFs predicted for each input sequence.
             Computed property derived from predicted_orfs.
     """
 
     predicted_orfs: list[list[ORF]] = Field(
         default_factory=list,
         description="List of ORF results per input sequence",
-    )
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True  # Required for pd.DataFrame in computed_field
     )
 
     @computed_field
@@ -217,15 +194,6 @@ class ProdigalOutput(BaseToolOutput):
         """Number of ORFs predicted for each input sequence."""
         return [len(result) for result in self.predicted_orfs]
 
-    @computed_field
-    @property
-    def results_df(self) -> pd.DataFrame:
-        """All ORF results as a pandas DataFrame."""
-        all_orfs = [
-            orf.model_dump() for sr in self.predicted_orfs for orf in sr
-        ]
-        return pd.DataFrame(all_orfs)
-
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
@@ -239,11 +207,15 @@ class ProdigalOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        if file_format == "csv":
-            self.results_df.to_csv(path, index=False)
+        if file_format in ("csv", "json"):
+            import pandas as pd
 
-        elif file_format == "json":
-            self.results_df.to_json(path, orient="records", indent=2)
+            all_orfs = [orf.model_dump() for sr in self.predicted_orfs for orf in sr]
+            df = pd.DataFrame(all_orfs)
+            if file_format == "csv":
+                df.to_csv(path, index=False)
+            else:
+                df.to_json(path, orient="records", indent=2)
 
         elif file_format in ["faa", "fna"]:
             with open(path, "w") as f:
@@ -252,7 +224,11 @@ class ProdigalOutput(BaseToolOutput):
                         # Prodigal header format style
                         # >sequence_id_gene_id start_pos end_pos strand info...
                         header = f">{orf.parent_id}_{orf.orf_id} # {orf.nucleotide_start} # {orf.nucleotide_end} # {1 if orf.strand == '+' else -1} # {orf.description}"
-                        seq = orf.amino_acid_sequence if file_format == "faa" else orf.nucleotide_sequence
+                        seq = (
+                            orf.amino_acid_sequence
+                            if file_format == "faa"
+                            else orf.nucleotide_sequence
+                        )
                         f.write(f"{header}\n{seq}\n")
 
         elif file_format == "gff":
@@ -280,7 +256,7 @@ class ProdigalOutput(BaseToolOutput):
                             f"{orf.strand}\t0\t{attributes}\n"
                         )
         else:
-             raise ValueError(f"Unsupported format: {file_format}")
+            raise ValueError(f"Unsupported format: {file_format}")
 
 
 # ============================================================================
@@ -304,7 +280,9 @@ def example_input():
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )
-def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None = None, instance=None) -> ProdigalOutput:
+def run_prodigal_prediction(
+    inputs: ProdigalInput, config: ProdigalConfig | None = None, instance=None
+) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
     Uses pyrodigal Python bindings for  gene prediction in bacterial and archaeal

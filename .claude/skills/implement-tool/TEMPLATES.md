@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Literal
 
-from pydantic import ConfigDict, Field, computed_field, field_validator
+from pydantic import Field, computed_field, field_validator
 
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 from proto_tools.tools.tool_registry import tool
@@ -141,13 +141,12 @@ class {ToolName}Output(BaseToolOutput):
     """
 
     # --- Tool-specific result fields only ---
+    # All fields must be JSON-serializable Pydantic types (primitives, list, nested BaseModel).
+    # Never use pd.DataFrame, numpy arrays, or arbitrary_types_allowed=True.
+    # DataFrames are constructed lazily in _export_output() only.
     results: List[str] = Field(
         default_factory=list,
         description="Tool-specific results",
-    )
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True  # Add this if using DataFrames or numpy arrays
     )
 
     # --- Computed properties for derived data ---

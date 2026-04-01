@@ -2,6 +2,7 @@
 
 # BLAST tools
 from proto_tools.tools.gene_annotation.blast import (
+    BlastHit,
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -54,6 +55,7 @@ from proto_tools.tools.gene_annotation.mmseqs import (
 
 # PyHMMER tools
 from proto_tools.tools.gene_annotation.pyhmmer import (
+    DomainHit,
     PyHmmerConfig,
     PyHmmscanConfig,
     PyHmmscanInput,
@@ -70,6 +72,7 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
     PyPhmmerConfig,
     PyPhmmerInput,
     PyPhmmerOutput,
+    SequenceHit,
     run_pyhmmer_hmmscan,
     run_pyhmmer_hmmsearch,
     run_pyhmmer_jackhmmer,
@@ -81,6 +84,7 @@ __all__ = [
     # BLAST
     "run_blast_search",
     "run_create_blast_db",
+    "BlastHit",
     "BlastSearchInput",
     "BlastSearchConfig",
     "BlastSearchOutput",
@@ -108,6 +112,8 @@ __all__ = [
     "PyJackhmmerInput",
     "PyJackhmmerConfig",
     "PyJackhmmerOutput",
+    "SequenceHit",
+    "DomainHit",
     "PyHmmerConfig",
     # MMseqs2 schema classes
     "MmseqsHit",
