@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> This repo contains an unpublished project codebase. Do not share the source code externally.
+> If you are a beta tester, start here: [Beta Tester Instructions](notes/beta-welcome.md)
+
 # 🧬 Proto Tools 🛠️
 [![Lint Check](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml)
 [![Run Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml)
@@ -8,6 +12,9 @@
 Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **60+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
 
 Every tool runs in its own automatically managed isolated environment, so you never have to fight dependency conflicts or build complex conda setups. Just install, call, and get results. Run tools locally on your own hardware, or dispatch to remote compute.
+
+> [!TIP]
+> **COMING SOON:** Cloud dispatch will allow you to run GPU jobs even without local compute.
 
 You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) system.
 
