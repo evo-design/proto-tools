@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class ColabFoldRemoteSearchWrapper:
     """Wrapper for ColabFold remote MSA search using the ColabFold API."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ColabFold remote search wrapper."""
         self._loaded = False
         self.run_mmseqs2 = None
@@ -69,7 +69,7 @@ class ColabFoldRemoteSearchWrapper:
                 temp_output_prefix = str(output_dir / seq_id)
 
                 # Run remote MSA search
-                self.run_mmseqs2(
+                self.run_mmseqs2(  # type: ignore[misc]
                     sequence,
                     temp_output_prefix,
                     use_env=use_metagenomic_db,
@@ -157,7 +157,7 @@ class ColabFoldRemoteSearchWrapper:
 
         return result
 
-    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
+    def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load ColabFold remote search module."""
         logger.debug("Initializing ColabFold remote search")
 
@@ -176,7 +176,7 @@ class ColabFoldRemoteSearchWrapper:
         logger.debug("ColabFold remote search initialized")
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     wrapper = ColabFoldRemoteSearchWrapper()
     return wrapper(

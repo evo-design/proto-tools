@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -126,7 +126,7 @@ class SpliceTransformerInput(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def validate_input_format(self):
+    def validate_input_format(self) -> Any:
         """Validate that the input sequence format is correct."""
         if len(self.target_seqs) != len(self.left_contexts):
             raise ValueError(
@@ -227,9 +227,9 @@ class SpliceTransformerOutput(BaseToolOutput):
     )
 
     @field_serializer('prediction')
-    def serialize_prediction(self, value: np.ndarray) -> list:
+    def serialize_prediction(self, value: np.ndarray) -> list[Any]:
         """Serialize a prediction array to a JSON-compatible list."""
-        return value.tolist()
+        return value.tolist()  # type: ignore[no-any-return]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -241,7 +241,7 @@ class SpliceTransformerOutput(BaseToolOutput):
         """Return the default output format."""
         return "npy"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         from pathlib import Path
 
         import numpy as np
@@ -265,7 +265,7 @@ class SpliceTransformerOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return SpliceTransformerInput(
         target_seqs=["ATCG" * 250],
@@ -289,7 +289,7 @@ def example_input():
 def run_splice_transformer(
     inputs: SpliceTransformerInput,
     config: SpliceTransformerConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> SpliceTransformerOutput:
     """Predict splice sites in RNA/DNA sequences using SpliceTransformer.
 
@@ -304,7 +304,7 @@ def run_splice_transformer(
         config (SpliceTransformerConfig | None): Validated SpliceTransformer configuration
             specifying context length and device settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         SpliceTransformerOutput: Structured output containing:
@@ -341,16 +341,16 @@ def run_splice_transformer(
     # Local GPU/CPU via standalone venv
 
     logger.debug(
-        f"Using local device for SpliceTransformer inference (context_length={config.context_length})"
+        f"Using local device for SpliceTransformer inference (context_length={config.context_length})"  # type: ignore[union-attr]
     )
 
     input_data = {
         "target_seqs": inputs.target_seqs,
         "left_contexts": inputs.left_contexts,
         "right_contexts": inputs.right_contexts,
-        "context_length": config.context_length,
-        "device": config.device,
-        "verbose": config.verbose,
+        "context_length": config.context_length,  # type: ignore[union-attr]
+        "device": config.device,  # type: ignore[union-attr]
+        "verbose": config.verbose,  # type: ignore[union-attr]
     }
 
     output_data = ToolInstance.dispatch(
@@ -363,6 +363,6 @@ def run_splice_transformer(
     prediction = np.array(output_data["prediction"])
 
     return SpliceTransformerOutput(
-        metadata={"context_length": config.context_length},
+        metadata={"context_length": config.context_length},  # type: ignore[union-attr]
         prediction=prediction,
     )

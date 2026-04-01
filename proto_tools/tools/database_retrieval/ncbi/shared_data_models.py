@@ -130,13 +130,13 @@ def _ncbi_esearch(
 
     response = session.get(
         f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
-        params=params,
+        params=params,  # type: ignore[arg-type]
         timeout=config.request_timeout_seconds,
     )
     if not _check_response(response, "ncbi-esearch"):
         return []
     data = json.loads(response.text, strict=False)
-    return data.get("esearchresult", {}).get("idlist", [])
+    return data.get("esearchresult", {}).get("idlist", [])  # type: ignore[no-any-return]
 
 
 def _ncbi_esummary(
@@ -232,7 +232,7 @@ def _parse_fasta_records(text: str) -> list[NCBIFastaRecord]:
             sequence=str(record.seq),
             accession=_accession_from_header(record.description),
         )
-        for record in SeqIO.parse(StringIO(text), "fasta")
+        for record in SeqIO.parse(StringIO(text), "fasta")  # type: ignore[no-untyped-call]
     ]
 
 

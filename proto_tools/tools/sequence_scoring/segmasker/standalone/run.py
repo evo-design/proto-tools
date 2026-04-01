@@ -29,7 +29,7 @@ def _find_binary(name: str) -> str:
     return str(binary)
 
 
-def run_segmasker(input_data: dict) -> dict:
+def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run segmasker on protein sequences and return low-complexity results.
 
     Args:
@@ -96,7 +96,7 @@ def run_segmasker(input_data: dict) -> dict:
         if result.returncode != 0:
             raise RuntimeError(f"Segmasker failed: {result.stderr}")
 
-        seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))
+        seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))  # type: ignore[no-untyped-call]
 
         if len(seq_records) != len(sequences):
             raise RuntimeError(
@@ -153,7 +153,7 @@ def run_segmasker(input_data: dict) -> dict:
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_segmasker(input_dict)
 
@@ -162,7 +162,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

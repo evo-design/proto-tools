@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from pydantic import Field, field_validator
@@ -66,7 +67,7 @@ class MmseqsSearchGenomesInput(BaseToolInput):
 
     @field_validator("query_genomes", mode="before")
     @classmethod
-    def validate_query_genomes(cls, v):
+    def validate_query_genomes(cls, v: Any) -> None:
         """Validate query genomes input."""
         if not isinstance(v, list):
             raise ValueError(f"query_genomes must be a list, got {type(v)}")
@@ -74,11 +75,11 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             raise ValueError("query_genomes list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_genomes list must be strings")
-        return v
+        return v  # type: ignore[return-value]
 
     @field_validator("target_genomes", mode="before")
     @classmethod
-    def validate_target_genomes(cls, v):
+    def validate_target_genomes(cls, v: Any) -> None:
         """Validate target genomes input."""
         if not isinstance(v, list):
             raise ValueError(f"target_genomes must be a list, got {type(v)}")
@@ -86,7 +87,7 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             raise ValueError("target_genomes list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in target_genomes list must be strings")
-        return v
+        return v  # type: ignore[return-value]
 
 
 # Output:
@@ -111,7 +112,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:
+    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -130,7 +131,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         """Return the default output format."""
         return "m8"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats
@@ -196,7 +197,7 @@ class MmseqsSearchGenomesConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MmseqsSearchGenomesInput(
         query_genomes=["ATCGATCG"],
@@ -219,7 +220,7 @@ def example_input():
 )
 def run_mmseqs_search_genomes(
     inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MmseqsSearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
 
@@ -231,7 +232,7 @@ def run_mmseqs_search_genomes(
             and target genome sequences.
         config (MmseqsSearchGenomesConfig | None): Configuration with search parameters.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         MmseqsSearchGenomesOutput: Per-sequence search results in query order.
@@ -264,9 +265,9 @@ def run_mmseqs_search_genomes(
             "query_ids": query_ids,
             "target_sequences": target_sequences,
             "target_ids": target_ids,
-            "search_type": config.search_type,
-            "threads": config.threads,
-            "sensitivity": config.sensitivity,
+            "search_type": config.search_type,  # type: ignore[union-attr]
+            "threads": config.threads,  # type: ignore[union-attr]
+            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -282,9 +283,9 @@ def run_mmseqs_search_genomes(
 
     return MmseqsSearchGenomesOutput(
         metadata={
-            "search_type": config.search_type,
-            "threads": config.threads,
-            "sensitivity": config.sensitivity,
+            "search_type": config.search_type,  # type: ignore[union-attr]
+            "threads": config.threads,  # type: ignore[union-attr]
+            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
             "num_queries": num_queries,
             "num_targets": len(target_sequences),
         },

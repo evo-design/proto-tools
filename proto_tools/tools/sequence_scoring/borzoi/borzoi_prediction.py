@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -97,7 +97,7 @@ class BorzoiOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
             "tool_id", "execution_time", "timestamp", "success",
@@ -186,7 +186,7 @@ class BorzoiConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return BorzoiInput(sequence="A" * 524288)
 
@@ -202,19 +202,19 @@ def example_input():
     uses_gpu=True,
     example_input=example_input,
 )
-def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance=None) -> BorzoiOutput:
+def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance: Any = None) -> BorzoiOutput:
     """Predict regulatory activity using a single Borzoi replicate.
 
     Args:
         inputs (BorzoiInput): Validated sequence input.
         config (BorzoiConfig | None): Validated runtime and model configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         BorzoiOutput: Prediction object for one Borzoi replicate.
     """
-    if config.use_flash_attn and not config.device.startswith("cuda"):
+    if config.use_flash_attn and not config.device.startswith("cuda"):  # type: ignore[union-attr]
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 
     logger.debug("Using local venv for Borzoi prediction")
@@ -223,13 +223,13 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance
         "borzoi",
         {
             "sequence": inputs.sequence,
-            "output_tracks": config.output_tracks,
-            "species": config.species,
-            "replicate": config.replicate,
-            "use_flash_attn": config.use_flash_attn,
-            "avg_output_tracks": config.avg_output_tracks,
-            "device": config.device,
-            "verbose": config.verbose,
+            "output_tracks": config.output_tracks,  # type: ignore[union-attr]
+            "species": config.species,  # type: ignore[union-attr]
+            "replicate": config.replicate,  # type: ignore[union-attr]
+            "use_flash_attn": config.use_flash_attn,  # type: ignore[union-attr]
+            "avg_output_tracks": config.avg_output_tracks,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -239,8 +239,8 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance
         sequence=inputs.sequence,
         sequence_length=len(inputs.sequence),
         prediction=result["prediction"],
-        output_tracks=config.output_tracks,
-        species=config.species,
-        replicate=config.replicate,
-        avg_output_tracks=config.avg_output_tracks,
+        output_tracks=config.output_tracks,  # type: ignore[union-attr]
+        species=config.species,  # type: ignore[union-attr]
+        replicate=config.replicate,  # type: ignore[union-attr]
+        avg_output_tracks=config.avg_output_tracks,  # type: ignore[union-attr]
     )

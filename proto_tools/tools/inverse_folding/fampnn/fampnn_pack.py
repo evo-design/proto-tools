@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 from tqdm import tqdm
@@ -125,7 +126,7 @@ class FAMPNNPackingResult(BaseToolOutput):
         """Return the default output format."""
         return "pdb"
 
-    def _export_output(self, export_path, file_format):
+    def _export_output(self, export_path: Any, file_format: Any) -> None:
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
 
@@ -147,11 +148,11 @@ class FAMPNNPackingResult(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNPackInput(
         inputs=[FAMPNNStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
+            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
         )]
     )
 
@@ -172,7 +173,7 @@ def example_input():
 def run_fampnn_pack(
     inputs: FAMPNNPackInput,
     config: FAMPNNPackConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> FAMPNNPackingResult:
     """Pack protein sidechains using FAMPNN with per-atom confidence scores.
 
@@ -183,7 +184,7 @@ def run_fampnn_pack(
     Args:
         inputs (FAMPNNPackInput): FAMPNNPackInput containing structure inputs.
         config (FAMPNNPackConfig | None): Configuration for packing.
-        instance: Optional ToolInstance for persistent execution.
+        instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNPackingResult: FAMPNNPackingResult with packed PDB structures and pSCE values.
@@ -195,23 +196,23 @@ def run_fampnn_pack(
         inputs.inputs,
         desc="FAMPNN packing",
         unit="structure",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         struct_pdbs, struct_psce = [], []
-        remaining = config.num_samples_per_structure
+        remaining = config.num_samples_per_structure  # type: ignore[union-attr]
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)
+            chunk = min(config.batch_size, remaining)  # type: ignore[union-attr]
             input_dict = {
                 "operation": "pack",
                 "pdb_contents": inp.structure_pdb,
                 "num_samples": chunk,
-                "scn_diffusion_steps": config.scn_diffusion_steps,
-                "scn_step_scale": config.scn_step_scale,
-                "seed": config.seed + chunk_idx,
-                "model_variant": config.model_variant,
-                "device": config.device,
-                "verbose": config.verbose,
+                "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
+                "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
+                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
+                "model_variant": config.model_variant,  # type: ignore[union-attr]
+                "device": config.device,  # type: ignore[union-attr]
+                "verbose": config.verbose,  # type: ignore[union-attr]
                 "fixed_positions": inp.fixed_positions,
                 "fixed_sidechain_positions": inp.fixed_sidechain_positions,
             }

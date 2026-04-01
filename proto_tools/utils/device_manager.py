@@ -1010,7 +1010,7 @@ class DeviceManager:
                 f"Set device='cpu' in the tool config to run on CPU."
             )
 
-        def noop_callback(action):  # noqa: ARG001 — required by tool interface
+        def noop_callback(action: Any) -> None:  # noqa: ARG001 — required by tool interface
             return None
         deadline = time.monotonic() + timeout
 
@@ -1086,11 +1086,11 @@ class DeviceManager:
                 {
                     "device_id": f"cuda:{gpu['index']}",
                     "name": gpu['name'],
-                    "total_gb": round(gpu['total_bytes'] / 1e9, 1),
-                    "used_gb": round(gpu['used_bytes'] / 1e9, 1),
-                    "free_gb": round(gpu['free_bytes'] / 1e9, 1),
+                    "total_gb": round(gpu['total_bytes'] / 1e9, 1),  # type: ignore[operator]
+                    "used_gb": round(gpu['used_bytes'] / 1e9, 1),  # type: ignore[operator]
+                    "free_gb": round(gpu['free_bytes'] / 1e9, 1),  # type: ignore[operator]
                     "utilization_percent": round(
-                        (gpu['used_bytes'] / gpu['total_bytes'] * 100) if gpu['total_bytes'] > 0 else 0,
+                        (gpu['used_bytes'] / gpu['total_bytes'] * 100) if gpu['total_bytes'] > 0 else 0,  # type: ignore[operator]
                         1
                     ),
                 }
@@ -1234,7 +1234,7 @@ class DeviceManager:
         self,
         instance_name: str,
         target_device: str,
-        worker_callback=None,
+        worker_callback: Any = None,
     ) -> str | None:
         """Move a tool instance to a different device.
 
@@ -1251,7 +1251,7 @@ class DeviceManager:
             target_device (str): Target device ID (e.g., ``"cuda:1"``, ``"cpu"``) or
                 generic (``"cuda"``).
 
-            worker_callback: Callback invoked when a worker needs to be moved to a different device.
+            worker_callback (Any): Callback invoked when a worker needs to be moved to a different device.
 
         Returns:
             str | None: The resolved device string, or None if the instance is not allocated.

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-class TinyModel(nn.Module):
+class TinyModel(nn.Module):  # type: ignore[misc]
     """Minimal PyTorch model that allocates a realistic amount of GPU memory."""
 
     def __init__(self, input_size: int = 4, hidden_size: int = 128, output_size: int = 4, memory_mb: int = 512):
@@ -170,7 +170,7 @@ _model: MockPyTorchMultiGPUToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -189,7 +189,7 @@ def dispatch(input_dict: dict) -> dict:
     return _model.run(data)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move both models to specified devices (called by DeviceManager)."""
     global _model
 
@@ -199,7 +199,7 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "models not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Get memory statistics from both devices."""
     global _model
 
@@ -211,9 +211,9 @@ def get_memory_stats() -> dict:
     for label, device in [("model_a", _model._device_a), ("model_b", _model._device_b)]:
         if device.type == "cuda":
             device_idx = device.index if device.index is not None else 0
-            stats["devices"][label] = get_pytorch_memory_stats(device_idx)
+            stats["devices"][label] = get_pytorch_memory_stats(device_idx)  # type: ignore[index]
         else:
-            stats["devices"][label] = {"device": str(device), "type": "cpu"}
+            stats["devices"][label] = {"device": str(device), "type": "cpu"}  # type: ignore[index]
 
     return stats
 

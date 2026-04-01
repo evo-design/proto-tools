@@ -163,7 +163,7 @@ class Structure:
             raise ValueError("Structure content is invalid")
 
         # Otherwise, detect the structure format from the content string
-        structure_format = detect_structure_format(structure_content)
+        structure_format = detect_structure_format(structure_content)  # type: ignore[arg-type]
 
         # Save the structure content and format
         self.structure = structure_content
@@ -171,7 +171,7 @@ class Structure:
 
         # Save other attributes
         self.b_factor_type = (
-            BFactorType(b_factor_type) if isinstance(b_factor_type, str) else b_factor_type
+            BFactorType(b_factor_type) if isinstance(b_factor_type, str) else b_factor_type  # type: ignore[redundant-expr]
         )
         self.source = source
 
@@ -202,35 +202,35 @@ class Structure:
         """
         if self._gemmi_struct is None:
             if self.structure_format == "cif":
-                doc = gemmi.cif.read_string(self.structure)
+                doc = gemmi.cif.read_string(self.structure)  # type: ignore[arg-type]
 
                 # Find first valid structure block
                 for block in doc:
                     struct = gemmi.make_structure_from_block(block)
-                    if struct is not None and len(struct) > 0:
-                        self._gemmi_struct = struct
+                    if struct is not None and len(struct) > 0:  # type: ignore[redundant-expr]
+                        self._gemmi_struct = struct  # type: ignore[assignment]
                         break
 
                 if self._gemmi_struct is None:
                     raise ValueError("No valid structure found in CIF content")
             else:
-                self._gemmi_struct = gemmi.read_pdb_string(self.structure)
+                self._gemmi_struct = gemmi.read_pdb_string(self.structure)  # type: ignore[arg-type, assignment]
 
-        return self._gemmi_struct
+        return self._gemmi_struct  # type: ignore[return-value]
 
     @property
     def structure_pdb(self) -> str:
         """Converts the CIF representation of the structure to a PDB string."""
         if self.structure_format == "cif":
-            return convert_cif_str_to_pdb_str(self.structure)
-        return self.structure
+            return convert_cif_str_to_pdb_str(self.structure)  # type: ignore[arg-type]
+        return self.structure  # type: ignore[return-value]
 
     @property
     def structure_cif(self) -> str:
         """Converts the PDB representation of the structure to a CIF string."""
         if self.structure_format == "pdb":
-            return convert_pdb_str_to_cif_str(self.structure)
-        return self.structure
+            return convert_pdb_str_to_cif_str(self.structure)  # type: ignore[arg-type]
+        return self.structure  # type: ignore[return-value]
 
     # ===============================
     # File I/O
@@ -384,8 +384,8 @@ class Structure:
 
         in the chain. Residue ID is the 1-letter code of the residue.
         """
-        position_map = {}
-        for model in self._gemmi_struct:
+        position_map = {}  # type: ignore[var-annotated]
+        for model in self._gemmi_struct:  # type: ignore[attr-defined]
             for chain in model:
                 chain_id = chain.name
                 position_map[chain_id] = []
@@ -436,7 +436,7 @@ class Structure:
         width: int = 400,
         height: int = 400,
         ligand_style: Literal["stick", "sphere", "line", "licorice"] = "stick"
-    ):
+    ) -> None:
         """Visualize the structure using py3Dmol with optional coloring modes and legends.
 
         Supports two coloring modes:
@@ -567,7 +567,7 @@ class Structure:
             </div>
             """
 
-            display(HTML(combined_html))
+            display(HTML(combined_html))  # type: ignore[no-untyped-call]
         else:
             # Show the viewer normally
             viewer.show()

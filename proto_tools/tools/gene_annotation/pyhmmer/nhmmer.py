@@ -4,6 +4,8 @@ PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import field_validator
 
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
@@ -39,7 +41,7 @@ class PyNhmmerInput(PyHmmerInput):
 
     @field_validator("target_sequences", mode="before")
     @classmethod
-    def normalize_target_sequences(cls, value) -> list[str]:
+    def normalize_target_sequences(cls, value: Any) -> list[str]:
         """Normalize target sequences to list of strings."""
         return PyHmmerInput.normalize_sequences(value)
 
@@ -60,7 +62,7 @@ PyNhmmerConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return PyNhmmerInput(
         sequences=["ATCGATCG"],
@@ -79,7 +81,7 @@ def example_input():
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance=None) -> PyNhmmerOutput:
+def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance: Any = None) -> PyNhmmerOutput:
     """Search nucleotide sequences against nucleotide database using PyHMMER.
 
     Args:
@@ -88,7 +90,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
         config (PyNhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PyNhmmerOutput: Structured output with sequence-level and domain-level hits.
@@ -100,11 +102,11 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
             "operation": "nhmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -118,11 +120,11 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

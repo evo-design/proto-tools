@@ -124,7 +124,7 @@ def _build_legacy_dispatch(module: Any) -> Any:
             func_name = f"run_{operation}"
             func = run_funcs.get(func_name)
             if func is not None:
-                return func(input_dict)
+                return func(input_dict)  # type: ignore[no-any-return]
             raise ValueError(
                 f"Cannot dispatch operation '{operation}': no function "
                 f"'{func_name}' found in {module.__name__}"
@@ -133,7 +133,7 @@ def _build_legacy_dispatch(module: Any) -> Any:
         # No operation key; auto-route if there's exactly one run_* function.
         if len(run_funcs) == 1:
             func = next(iter(run_funcs.values()))
-            return func(input_dict)
+            return func(input_dict)  # type: ignore[no-any-return]
 
         available = ", ".join(sorted(run_funcs)) or "(none)"
         raise ValueError(

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class MockCLIToolModel:
     """Wrapper that spawns CLI subprocesses for inference."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize MockCLIToolModel."""
         self._loaded = True
         logger.info("MockCLIToolModel initialized")
@@ -69,7 +69,7 @@ class MockCLIToolModel:
 
         output = json.loads(proc.stdout.strip())
         output["device_used"] = device
-        return output
+        return output  # type: ignore[no-any-return]
 
 
 # ============================================================================
@@ -84,7 +84,7 @@ _model: MockCLIToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -98,12 +98,12 @@ def dispatch(input_dict: dict) -> dict:
     return _model(data=data, scale_factor=scale_factor, device=device)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool; automatically unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     # CLI tools don't hold models in memory; report as unavailable
     return {"available": False, "framework": "pytorch", "reason": "CLI tool, no persistent model"}

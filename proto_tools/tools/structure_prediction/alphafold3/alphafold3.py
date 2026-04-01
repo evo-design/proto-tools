@@ -166,9 +166,9 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return AlphaFold3Input(complexes=["MKTL"])
+    return AlphaFold3Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -188,7 +188,7 @@ def example_input():
 def run_alphafold3(
     inputs: AlphaFold3Input,
     config: AlphaFold3Config | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
@@ -201,18 +201,18 @@ def run_alphafold3(
     ):
         input_json = _create_input_json_from_complex(
             comp,
-            f"{config.name}_{comp_idx}",
-            config.seeds,
+            f"{config.name}_{comp_idx}",  # type: ignore[union-attr]
+            config.seeds,  # type: ignore[union-attr]
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Determine output directory
-            if config.output_dir is None:
+            if config.output_dir is None:  # type: ignore[union-attr]
                 # Create inside temp directory for auto-cleanup
-                output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")
+                output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")  # type: ignore[union-attr]
             else:
                 # Create at specified path (persists after execution)
-                output_dir = f"{config.output_dir}_af3_results"
+                output_dir = f"{config.output_dir}_af3_results"  # type: ignore[union-attr]
 
             # Create input directory for MSAs
             input_dir = os.path.join(output_dir, "af3_inputs")
@@ -220,10 +220,10 @@ def run_alphafold3(
 
             # Write pre-computed MSAs to A3M files
             if inputs.msas:
-                input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)
+                input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)  # type: ignore[arg-type, union-attr]
 
             # Write input JSON to file for worker protocol
-            input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
+            input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")  # type: ignore[union-attr]
             with open(input_json_path, "w") as f:
                 json.dump(input_json, f, indent=2)
 
@@ -231,12 +231,12 @@ def run_alphafold3(
             input_data = {
                 "input_json_path": input_json_path,
                 "output_dir": output_dir,
-                "device": config.device,
-                "repo_path": config.repo_path,
-                "sif_path": config.sif_path,
-                "model_dir": config.model_dir,
-                "db_dir": config.db_dir,
-                "verbose": config.verbose,
+                "device": config.device,  # type: ignore[union-attr]
+                "repo_path": config.repo_path,  # type: ignore[union-attr]
+                "sif_path": config.sif_path,  # type: ignore[union-attr]
+                "model_dir": config.model_dir,  # type: ignore[union-attr]
+                "db_dir": config.db_dir,  # type: ignore[union-attr]
+                "verbose": config.verbose,  # type: ignore[union-attr]
             }
 
             # Dispatch to worker (goes through DeviceManager)
@@ -305,13 +305,13 @@ def _assign_msas_to_input_json(
             chain_id = chain_id[0]
 
         a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{seq_idx}.a3m")
-        msa.to_a3m_file(a3m_path, query_index=0)
+        msa.to_a3m_file(a3m_path, query_index=0)  # type: ignore[attr-defined]
 
         rel_path = os.path.relpath(a3m_path, input_dir)
         seq_entry["protein"]["unpairedMsaPath"] = rel_path
 
         if verbose:
-            logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")
+            logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")  # type: ignore[arg-type]
 
     return input_json_data
 
@@ -378,7 +378,7 @@ def _create_input_json_from_complex(
 
         else:
             sequence_entry = {
-                mol_type: {
+                mol_type: {  # type: ignore[dict-item]
                     "id": CHAIN_IDS[idx],
                     "sequence": sequence,
                     "pairedMsa": "",
@@ -405,8 +405,8 @@ def _create_input_json_from_complex(
                     )
 
             # Add modifications to the sequence entry
-            sequence_entry[mol_type]["modifications"] = alphafold3_modifications
+            sequence_entry[mol_type]["modifications"] = alphafold3_modifications  # type: ignore[assignment, index]
 
-        input_json_data["sequences"].append(sequence_entry)
+        input_json_data["sequences"].append(sequence_entry)  # type: ignore[attr-defined]
 
     return input_json_data

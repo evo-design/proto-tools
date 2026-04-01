@@ -5,7 +5,7 @@ ESM3 embeddings tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
@@ -106,7 +106,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ESM3EmbeddingsInput(sequences=["MKTL"])
 
@@ -125,7 +125,7 @@ def example_input():
     iterable_output_field="results",
     cacheable=True,
 )
-def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance=None) -> ESM3EmbeddingsOutput:
+def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance: Any = None) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
     Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
@@ -139,7 +139,7 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
         config (ESM3EmbeddingsConfig | None): Validated ESM3 configuration specifying model variant,
             batch size, and device settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM3EmbeddingsOutput: Structured output containing:
@@ -174,17 +174,17 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution
-    logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")
+    logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")  # type: ignore[union-attr]
     outputs = ToolInstance.dispatch(
         "esm3",
         {
             "operation": "embeddings",
             "sequences": inputs.sequences,
-            "batch_size": config.batch_size,
-            "model_checkpoint": config.model_checkpoint,
-            "device": config.device,
-            "verbose": config.verbose,
-            "return_logits": config.return_logits,
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -201,10 +201,10 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
 
     return ESM3EmbeddingsOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
             "num_sequences": len(inputs.sequences),
-            "batch_size": config.batch_size,
-            "device": config.device,
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         results=results,
     )

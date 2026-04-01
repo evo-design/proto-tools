@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from typing import Any
 
 import torch
 
@@ -19,11 +20,11 @@ class EnformerModel:
     Uses the EleutherAI/enformer-official-rough model for human and mouse predictions.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Enformer model wrapper."""
         self._loaded = False
 
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load Enformer model to device."""
         from enformer_pytorch import from_pretrained
 
@@ -37,7 +38,7 @@ class EnformerModel:
         if verbose:
             logger.info("Enformer model loaded successfully")
 
-    def unload(self, verbose: bool = False):
+    def unload(self, verbose: bool = False) -> None:
         """Move model to CPU and clear CUDA cache."""
         if hasattr(self, "model") and hasattr(self, "device"):
             if verbose:
@@ -46,7 +47,7 @@ class EnformerModel:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def to_device(self, device: str):
+    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
         """Move model to a different device."""
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
@@ -98,7 +99,7 @@ class EnformerModel:
         return prediction
 
 
-def _serialize_output(value):
+def _serialize_output(value: Any) -> Any:
     """Recursively serialize tensors and arrays to JSON-safe types."""
     if value is None:
         return None
@@ -123,7 +124,7 @@ def _serialize_output(value):
 _model: EnformerModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -146,7 +147,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -156,13 +157,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

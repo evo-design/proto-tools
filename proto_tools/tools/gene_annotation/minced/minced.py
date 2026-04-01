@@ -8,6 +8,7 @@ a tool for finding CRISPR repeats and spacers in genomic sequences.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -103,11 +104,11 @@ class MincedInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize a single sequence to a list."""
         if isinstance(value, str):
             return [value]
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 # Output:
@@ -138,7 +139,7 @@ class MincedOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import pandas as pd
 
         path = Path(export_path).with_suffix(f".{file_format}")
@@ -193,7 +194,7 @@ class MincedConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MincedInput(sequences=["ATCGATCG"])
 
@@ -211,7 +212,7 @@ def example_input():
     iterable_output_field="results",
     cacheable=True,
 )
-def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance=None) -> MincedOutput:
+def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance: Any = None) -> MincedOutput:
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
 
     Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
@@ -224,7 +225,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         config (MincedConfig | None): MinCED configuration with minimum repeat count
             and length thresholds.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         MincedOutput: Per-sequence CRISPR array detection results.
@@ -241,8 +242,8 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         "sequences": inputs.sequences,
         "sequence_ids": sequence_ids,
         "config": {
-            "min_num_repeats": config.min_num_repeats,
-            "min_repeat_length": config.min_repeat_length,
+            "min_num_repeats": config.min_num_repeats,  # type: ignore[union-attr]
+            "min_repeat_length": config.min_repeat_length,  # type: ignore[union-attr]
         },
     }
 
@@ -269,8 +270,8 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     return MincedOutput(
         metadata={
-            "min_num_repeats": config.min_num_repeats,
-            "min_repeat_length": config.min_repeat_length,
+            "min_num_repeats": config.min_num_repeats,  # type: ignore[union-attr]
+            "min_repeat_length": config.min_repeat_length,  # type: ignore[union-attr]
             "num_sequences": len(inputs.sequences),
         },
         results=results,

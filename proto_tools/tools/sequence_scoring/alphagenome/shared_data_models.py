@@ -161,7 +161,7 @@ class AlphaGenomePredictOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         payload = self.model_dump(mode="json")
 
@@ -173,7 +173,7 @@ class AlphaGenomePredictOutput(BaseToolOutput):
         if file_format == "npy":
             import numpy as np
 
-            np.save(path, payload)
+            np.save(path, payload)  # type: ignore[arg-type]
             return
 
         raise ValueError(f"Unsupported format: {file_format}")
@@ -206,7 +206,7 @@ class AlphaGenomeScoreOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":

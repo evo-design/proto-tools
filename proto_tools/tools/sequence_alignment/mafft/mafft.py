@@ -6,7 +6,7 @@ This module provides a standardized interface for MAFFT multiple sequence alignm
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -49,7 +49,7 @@ class MafftInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def validate_sequences(cls, v):
+    def validate_sequences(cls, v: Any) -> Any:
         """Validate sequences input."""
         if not isinstance(v, list):
             raise ValueError(f"sequences must be a list, got {type(v)}")
@@ -85,7 +85,7 @@ class MafftOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +138,7 @@ class MafftConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MafftInput(sequences=["MKTL", "MKTA"])
 
@@ -154,7 +154,7 @@ def example_input():
     example_input=example_input,
     cacheable=True,
 )
-def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, instance=None) -> MafftOutput:
+def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, instance: Any = None) -> MafftOutput:
     """Perform multiple sequence alignment using MAFFT.
 
     Aligns input sequences using MAFFT with the specified method and
@@ -165,7 +165,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         inputs (MafftInput): Validated input containing sequences to align.
         config (MafftConfig | None): Configuration with alignment parameters.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         MafftOutput: MSA result with alignment metadata.
@@ -192,9 +192,9 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
     input_data = {
         "sequences": sequences,
         "sequence_ids": sequence_ids,
-        "align_method": config.align_method,
-        "max_iterations": config.max_iterations,
-        "threads": config.threads,
+        "align_method": config.align_method,  # type: ignore[union-attr]
+        "max_iterations": config.max_iterations,  # type: ignore[union-attr]
+        "threads": config.threads,  # type: ignore[union-attr]
     }
 
     input_data["device"] = "cpu"
@@ -210,9 +210,9 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
 
     return MafftOutput(
         metadata={
-            "align_method": config.align_method,
-            "max_iterations": config.max_iterations,
-            "threads": config.threads,
+            "align_method": config.align_method,  # type: ignore[union-attr]
+            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
+            "threads": config.threads,  # type: ignore[union-attr]
             "num_sequences": num_sequences,
         },
         msa=MSA(

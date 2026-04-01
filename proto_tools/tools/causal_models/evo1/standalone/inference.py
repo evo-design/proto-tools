@@ -80,8 +80,8 @@ class Evo1Model:
         if not self._loaded:
             self.load(self.device, verbose=verbose)
 
-        if isinstance(prompts, str):
-            prompts = [prompts]
+        if isinstance(prompts, str):  # type: ignore[unreachable]
+            prompts = [prompts]  # type: ignore[unreachable]
 
         from evo.generation import generate as evo_generate
 
@@ -182,7 +182,7 @@ class Evo1Model:
                 )
 
                 # Forward pass: (batch, length, vocab_size)
-                logits, _ = self.model(input_ids)
+                logits, _ = self.model(input_ids)  # type: ignore[misc]
 
                 if verbose:
                     logger.info(
@@ -215,7 +215,7 @@ class Evo1Model:
             "vocab": vocab,
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:
+    def load(self, device: str = "cuda", verbose: bool = False) -> Any:
         """Load Evo1 model and tokenizer."""
         if verbose:
             logger.info(f"Loading Evo1: {self.model_name} on {device}")
@@ -231,7 +231,7 @@ class Evo1Model:
         # to ignore these formats.
         import huggingface_hub
         _orig_snapshot_download = huggingface_hub.snapshot_download
-        def _filtered_snapshot_download(*args, **kwargs):
+        def _filtered_snapshot_download(*args: Any, **kwargs: Any) -> Any:
             kwargs.setdefault("ignore_patterns", ["*.bin", "*.pt"])
             return _orig_snapshot_download(*args, **kwargs)
         huggingface_hub.snapshot_download = _filtered_snapshot_download
@@ -243,7 +243,7 @@ class Evo1Model:
         self.model = evo_obj.model
         self.tokenizer = evo_obj.tokenizer
 
-        self.model = self.model.to(device).eval()
+        self.model = self.model.to(device).eval()  # type: ignore[attr-defined]
         self.device = device
         self._loaded = True
 
@@ -263,7 +263,7 @@ class Evo1Model:
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info("Unloading Evo1 from GPU")
-            self.model = self.model.to("cpu")
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -276,7 +276,7 @@ class Evo1Model:
 _model: Evo1Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -294,13 +294,13 @@ def dispatch(input_dict: dict) -> dict:
             top_k=input_dict.get("top_k", 4),
             temperature=input_dict.get("temperature", 1.0),
             top_p=input_dict.get("top_p", 1.0),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             verbose=input_dict.get("verbose", False),
         )
     if operation == "score":
         result = _model.score(
             sequences=input_dict.get("sequences", []),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
             verbose=input_dict.get("verbose", False),
         )
@@ -311,7 +311,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -321,13 +321,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

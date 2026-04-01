@@ -21,12 +21,12 @@ class ViennaRNAModel:
     algorithm with lazy loading and JSON-compatible I/O.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ViennaRNA model (lazy loading)."""
         self._RNA = None
         logger.debug("ViennaRNAModel initialized (lazy loading)")
 
-    def load(self):
+    def load(self) -> None:
         """Load ViennaRNA package if not already loaded."""
         if self._RNA is None:
             import RNA
@@ -89,16 +89,16 @@ class ViennaRNAModel:
                 )
 
         # Configure model details
-        md = RNA.md()
+        md = RNA.md()  # type: ignore[attr-defined]
         md.temperature = temperature
         md.noLP = 1 if no_lonely_pairs else 0
 
         # Load appropriate energy parameters
         if use_dna_params:
-            RNA.params_load_DNA_Mathews2004()
+            RNA.params_load_DNA_Mathews2004()  # type: ignore[attr-defined]
             logger.debug("Using DNA energy parameters (Mathews 2004)")
         else:
-            RNA.params_load_RNA_Turner2004()
+            RNA.params_load_RNA_Turner2004()  # type: ignore[attr-defined]
             logger.debug("Using RNA energy parameters (Turner 2004)")
 
         # Fold each sequence
@@ -124,13 +124,13 @@ class ViennaRNAModel:
             )
 
             # Create fold compound and compute MFE structure
-            fc = RNA.fold_compound(normalized_seq, md)
+            fc = RNA.fold_compound(normalized_seq, md)  # type: ignore[attr-defined]
             structure, mfe = fc.mfe()
 
             results.append({
-                "sequence": normalized_seq,
+                "sequence": normalized_seq,  # type: ignore[dict-item]
                 "structure": structure,
-                "mfe": float(mfe),
+                "mfe": float(mfe),  # type: ignore[dict-item]
             })
 
             if verbose:
@@ -156,7 +156,7 @@ class ViennaRNAModel:
 _model: ViennaRNAModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -174,7 +174,7 @@ def dispatch(input_dict: dict) -> dict:
 # Standalone Entry Point
 # ============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 

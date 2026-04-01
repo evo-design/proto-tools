@@ -51,7 +51,7 @@ def ConfigField(
     reload_on_change: bool = False,
     include_in_key: bool = True,
     depends_on: dict[str, Any] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
 
@@ -152,7 +152,7 @@ class BaseConfig(BaseModel):
         return {
             name
             for name, info in cls.model_fields.items()
-            if (info.json_schema_extra or {}).get("reload_on_change", False)
+            if (info.json_schema_extra or {}).get("reload_on_change", False)  # type: ignore[union-attr]
         }
 
     @classmethod
@@ -161,7 +161,7 @@ class BaseConfig(BaseModel):
         return {
             name
             for name, info in cls.model_fields.items()
-            if not (info.json_schema_extra or {}).get("include_in_key", True)
+            if not (info.json_schema_extra or {}).get("include_in_key", True)  # type: ignore[union-attr]
         }
 
     def cache_key(self) -> str:

@@ -5,7 +5,7 @@ Evo2 scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import field_validator, model_validator
 
@@ -49,7 +49,7 @@ class Evo2ScoringInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, v):
+    def normalize_sequences(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -94,7 +94,7 @@ class Evo2ScoringConfig(BaseConfig):
     """
 
     @model_validator(mode="after")
-    def _validate_40b(self):
+    def _validate_40b(self) -> Any:
         if "40b" in self.model_checkpoint:
             raise NotImplementedError(
                 f"The {self.model_checkpoint} model requires 2 GPUs with tensor "
@@ -141,7 +141,7 @@ class Evo2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return Evo2ScoringInput(sequences=["ATCGATCG"])
 
@@ -162,7 +162,7 @@ def example_input():
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.
 
@@ -176,7 +176,7 @@ def run_evo2_score(
         config (Evo2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo2ScoringOutput: Contains SequenceScores for each input sequence with:
@@ -206,19 +206,19 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
+    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
 
     result = ToolInstance.dispatch(
         "evo2",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_checkpoint": config.model_checkpoint,
-            "local_path": config.local_path,
-            "device": config.device,
-            "verbose": config.verbose,
-            "batch_size": config.batch_size,
-            "return_logits": config.return_logits,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "local_path": config.local_path,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

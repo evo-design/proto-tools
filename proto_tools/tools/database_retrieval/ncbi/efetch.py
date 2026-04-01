@@ -6,7 +6,7 @@ records from protein, nuccore, and gene databases.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -94,7 +94,7 @@ class NCBIEfetchOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path, file_format: str):
+    def _export_output(self, export_path: Any, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -114,7 +114,7 @@ NCBIEfetchConfig = NCBIFetchConfig
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return NCBIEfetchInput(db="protein", identifier="NP_000537.3")
 
@@ -133,7 +133,7 @@ def example_input():
 def run_ncbi_efetch(
     inputs: NCBIEfetchInput,
     config: NCBIFetchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> NCBIEfetchOutput:
     """Fetch sequences from NCBI Entrez databases.
 
@@ -145,7 +145,7 @@ def run_ncbi_efetch(
             parameters.
         config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.
@@ -153,9 +153,9 @@ def run_ncbi_efetch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=config.http_retries,  # type: ignore[union-attr]
+        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
+        user_agent=config.user_agent,  # type: ignore[union-attr]
         allowed_methods=["GET", "POST"],
     )
 
@@ -164,7 +164,7 @@ def run_ncbi_efetch(
             db=inputs.db,
             identifier=inputs.identifier,
             rettype=inputs.return_format,
-            config=config,
+            config=config,  # type: ignore[arg-type]
             session=session,
             seq_start=inputs.seq_start,
             seq_stop=inputs.seq_stop,

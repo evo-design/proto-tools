@@ -79,7 +79,7 @@ class InverseFoldingStructureInput(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def resolve_and_validate(cls, data):
+    def resolve_and_validate(cls, data: Any) -> Any:
         """Load structure, default chain_ids, and validate constraints."""
         if isinstance(data, dict):
             structure = data.get("structure")
@@ -217,7 +217,7 @@ class InverseFoldingConfig(BaseConfig):
     )
 
     @model_validator(mode="after")
-    def resolve_batch_size(self):
+    def resolve_batch_size(self) -> Any:
         """Default batch_size to num_sequences_per_structure if not set."""
         if self.batch_size is None:
             self.batch_size = self.num_sequences_per_structure
@@ -295,7 +295,7 @@ class DesignedSequences(BaseModel, ABC):
         """Get a designed sequence by index."""
         return self.sequences[index]
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         """Iterate over the designed sequences."""
         return iter(self.sequences)
 
@@ -340,7 +340,7 @@ class InverseFoldingOutput(BaseToolOutput):
         """Get a designed sequence by index."""
         return self.designed_sequences[index]
 
-    def __iter__(self) -> Iterator[DesignedSequences]:
+    def __iter__(self) -> Iterator[DesignedSequences]:  # type: ignore[override]
         """Iterate over the designed sequences."""
         return iter(self.designed_sequences)
 
@@ -362,7 +362,7 @@ class InverseFoldingOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
 
         if file_format == "fasta":
@@ -376,7 +376,7 @@ class InverseFoldingOutput(BaseToolOutput):
             path.mkdir(parents=True, exist_ok=True)
 
             # Handle potential numpy types in metrics
-            def default(obj):
+            def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
                     return obj.tolist()
                 return str(obj)
@@ -430,7 +430,7 @@ class SequenceScores(BaseModel):
         """Add a metric to the output."""
         self.metrics[name] = value
 
-    def __iter__(self) -> Iterator[float]:
+    def __iter__(self) -> Iterator[float]:  # type: ignore[override]
         return iter(self.metrics.values())
 
 
@@ -461,7 +461,7 @@ class InverseFoldingScoringOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> SequenceScores:
         return self.scores[index]
 
-    def __iter__(self) -> Iterator[SequenceScores]:
+    def __iter__(self) -> Iterator[SequenceScores]:  # type: ignore[override]
         return iter(self.scores)
 
     @property
@@ -474,13 +474,13 @@ class InverseFoldingScoringOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
             import json
 
-            def default(obj):
+            def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
                     return obj.tolist()
                 return str(obj)
@@ -489,9 +489,9 @@ class InverseFoldingScoringOutput(BaseToolOutput):
             for s in self.scores:
                 score_data = dict(s.metrics)
                 if s.logits is not None:
-                    score_data["logits"] = s.logits
+                    score_data["logits"] = s.logits  # type: ignore[assignment]
                 if s.vocab is not None:
-                    score_data["vocab"] = s.vocab
+                    score_data["vocab"] = s.vocab  # type: ignore[assignment]
                 data.append(score_data)
 
             with open(path, "w") as f:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -78,7 +78,7 @@ class ESM2SampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "fasta":
@@ -146,7 +146,7 @@ class ESM2SampleConfig(BaseConfig):
         advanced=True,
     )
 
-    def preprocess(self, inputs):
+    def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
         position_score_fn = build_position_score_fn("esm2", self.masking_strategy, self.device)
         return apply_masking_strategy(self, inputs, position_score_fn=position_score_fn)
@@ -155,7 +155,7 @@ class ESM2SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ESM2SampleInput(sequences=["MKTL"])
 
@@ -175,7 +175,7 @@ def example_input():
 )
 def run_esm2_sample(
     inputs: ESM2SampleInput, config: ESM2SampleConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ESM2SampleOutput:
     """Sample protein sequences using ESM2 language model.
 
@@ -187,23 +187,23 @@ def run_esm2_sample(
         inputs (ESM2SampleInput): Protein sequences with ``_`` at designable positions.
         config (ESM2SampleConfig | None): Sampling configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
-    logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
+    logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
     result = ToolInstance.dispatch(
         "esm2",
         {
             "operation": "sample",
             "sequences": inputs.sequences,
-            "temperature": config.temperature,
-            "batch_size": config.batch_size,
-            "model_checkpoint": config.model_checkpoint,
-            "device": config.device,
-            "verbose": config.verbose,
-            "return_logits": config.return_logits,
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -211,9 +211,9 @@ def run_esm2_sample(
 
     return ESM2SampleOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
             "num_sequences": len(inputs.sequences),
-            "temperature": config.temperature,
+            "temperature": config.temperature,  # type: ignore[union-attr]
         },
         sequences=result["sequences"],
         logits=result["logits"],

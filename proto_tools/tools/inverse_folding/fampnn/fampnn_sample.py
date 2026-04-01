@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, field_validator
 from tqdm import tqdm
@@ -142,7 +143,7 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
 
     @field_validator("excluded_amino_acids")
     @classmethod
-    def _reject_excluded_aa(cls, v):
+    def _reject_excluded_aa(cls, v: Any) -> None:
         if v is not None:
             raise ValueError("'excluded_amino_acids' is not supported by FAMPNN")
         return v
@@ -172,11 +173,11 @@ FAMPNNSampleOutput = InverseFoldingOutput
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNSampleInput(
         inputs=[FAMPNNStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
+            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
         )]
     )
 
@@ -197,7 +198,7 @@ def example_input():
 def run_fampnn_sample(
     inputs: FAMPNNSampleInput,
     config: FAMPNNSampleConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> FAMPNNSampleOutput:
     """Design protein sequences with full-atom sidechain co-generation using FAMPNN.
 
@@ -210,7 +211,7 @@ def run_fampnn_sample(
         inputs (FAMPNNSampleInput): FAMPNNSampleInput containing structure inputs with optional
             chain_ids, fixed_positions, and fixed_sidechain_positions.
         config (FAMPNNSampleConfig | None): Configuration for sampling (temperature, num_steps, etc.).
-        instance: Optional ToolInstance for persistent execution.
+        instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNSampleOutput: FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
@@ -221,29 +222,29 @@ def run_fampnn_sample(
         inputs.inputs,
         desc="FAMPNN sampling",
         unit="structure",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         all_seqs, all_pdbs, all_psce = [], [], []
-        remaining = config.num_sequences_per_structure
+        remaining = config.num_sequences_per_structure  # type: ignore[union-attr]
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)
+            chunk = min(config.batch_size, remaining)  # type: ignore[type-var, union-attr]
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "num_sequences": chunk,
-                "temperature": config.temperature,
-                "num_steps": config.num_steps,
-                "seq_only": config.seq_only,
-                "repack_last": config.repack_last,
-                "psce_threshold": config.psce_threshold,
-                "scn_diffusion_steps": config.scn_diffusion_steps,
-                "scn_step_scale": config.scn_step_scale,
-                "seed": config.seed + chunk_idx,
-                "model_variant": config.model_variant,
-                "device": config.device,
-                "verbose": config.verbose,
+                "temperature": config.temperature,  # type: ignore[union-attr]
+                "num_steps": config.num_steps,  # type: ignore[union-attr]
+                "seq_only": config.seq_only,  # type: ignore[union-attr]
+                "repack_last": config.repack_last,  # type: ignore[union-attr]
+                "psce_threshold": config.psce_threshold,  # type: ignore[union-attr]
+                "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
+                "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
+                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
+                "model_variant": config.model_variant,  # type: ignore[union-attr]
+                "device": config.device,  # type: ignore[union-attr]
+                "verbose": config.verbose,  # type: ignore[union-attr]
                 "fixed_positions": inp.fixed_positions,
                 "fixed_sidechain_positions": inp.fixed_sidechain_positions,
             }
@@ -257,7 +258,7 @@ def run_fampnn_sample(
             all_pdbs.extend(result["pdb_strings"])
             all_psce.extend(result["psce"])
             chunk_idx += 1
-            remaining -= chunk
+            remaining -= chunk  # type: ignore[operator]
 
         designed_sequences.append(
             FAMPNNSequences(
@@ -267,4 +268,4 @@ def run_fampnn_sample(
             )
         )
 
-    return FAMPNNSampleOutput(designed_sequences=designed_sequences)
+    return FAMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]

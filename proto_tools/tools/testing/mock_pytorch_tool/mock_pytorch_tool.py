@@ -7,6 +7,7 @@ in <1 second while still exercising all DeviceManager and ToolPool code paths.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -98,7 +99,7 @@ class MockPyTorchToolOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -123,7 +124,7 @@ class MockPyTorchToolOutput(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MockPyTorchToolInput()
 
@@ -145,16 +146,16 @@ def example_input():
 def run_mock_pytorch_tool(
     inputs: MockPyTorchToolInput,
     config: MockPyTorchToolConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MockPyTorchToolOutput:
     """Run mock PyTorch tool (minimal model for fast testing)."""
     result = ToolInstance.dispatch(
         "mock_pytorch_tool",
         {
             "data_items": [list(item) for item in inputs.data_items],
-            "device": config.device,
-            "hidden_size": config.hidden_size,
-            "memory_mb": config.memory_mb,
+            "device": config.device,  # type: ignore[union-attr]
+            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
+            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

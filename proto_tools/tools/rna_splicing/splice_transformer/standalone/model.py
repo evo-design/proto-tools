@@ -1,5 +1,7 @@
 """Copied from https://github.com/ShenLab-Genomics/SpliceTransformer."""
+from __future__ import annotations
 
+from typing import Any
 
 import numpy as np
 import torch
@@ -9,10 +11,10 @@ from axial_positional_embedding import AxialPositionalEmbedding
 from sinkhorn_transformer import SinkhornTransformer
 
 
-class ResBlock(nn.Module):
+class ResBlock(nn.Module):  # type: ignore[misc]
     """Dilated convolutional residual block with batch normalization."""
 
-    def __init__(self, L, W, AR, pad=True):
+    def __init__(self, L: Any, W: Any, AR: Any, pad: Any = True) -> None:
         """Initialize ResBlock."""
         super().__init__()
         self.bn1 = nn.BatchNorm1d(L)
@@ -24,7 +26,7 @@ class ResBlock(nn.Module):
         self.bn2 = nn.BatchNorm1d(L)
         self.conv2 = nn.Conv1d(L, L, W, dilation=AR, padding=padding)
 
-    def forward(self, x):
+    def forward(self, x: Any) -> Any:
         """Run the forward pass."""
         out = self.bn1(x)
         out = torch.relu(out)
@@ -35,10 +37,10 @@ class ResBlock(nn.Module):
         return out + x
 
 
-class SpEncoder(nn.Module):
+class SpEncoder(nn.Module):  # type: ignore[misc]
     """SpliceAI-style convolutional encoder for splice site prediction."""
 
-    def __init__(self, L, tissue_cnt=11, context_len=4000):
+    def __init__(self, L: Any, tissue_cnt: Any = 11, context_len: Any = 4000) -> None:
         """Initialize SpEncoder."""
         super().__init__()
         self.W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
@@ -57,7 +59,7 @@ class SpEncoder(nn.Module):
         self.tissue_output = nn.Conv1d(L, tissue_cnt, 1)
         self.context_len = context_len
 
-    def forward(self, x, use_usage_head=True):  # noqa: ARG002 — kept for API compatibility with upstream
+    def forward(self, x: Any, use_usage_head: Any = True) -> Any:  # noqa: ARG002 — kept for API compatibility with upstream
         """Run the forward pass."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -74,7 +76,7 @@ class SpEncoder(nn.Module):
         out_usage = self.tissue_output(skip)
         return torch.concat([out_splice, out_usage], dim=1)
 
-    def forward_feature(self, x):
+    def forward_feature(self, x: Any) -> Any:
         """Run the forward pass returning intermediate features."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -88,7 +90,7 @@ class SpEncoder(nn.Module):
                 skip = skip + dense
         return skip
 
-    def random_mask(self, seq, label):
+    def random_mask(self, seq: Any, label: Any) -> Any:
         """Randomly mask flanking context regions for data augmentation."""
         if (torch.rand(1)) < 0.05:
             seq[:, :, :self.context_len] *= 0
@@ -96,10 +98,10 @@ class SpEncoder(nn.Module):
         return seq, label
 
 
-class SpEncoder_4tis(nn.Module):
+class SpEncoder_4tis(nn.Module):  # type: ignore[misc]
     """Four-tissue variant of SpEncoder with separate output heads per tissue pair."""
 
-    def __init__(self, L, tissue_cnt=11, context_len=4000):  # noqa: ARG002 — kept for API compatibility with upstream
+    def __init__(self, L: Any, tissue_cnt: Any = 11, context_len: Any = 4000):  # noqa: ARG002 — kept for API compatibility with upstream
         """Initialize SpEncoder_4tis."""
         super().__init__()
         #
@@ -128,7 +130,7 @@ class SpEncoder_4tis(nn.Module):
         self.conv_last8 = nn.Conv1d(L, 1, 1)
         self.context_len = context_len
 
-    def forward(self, x, use_usage_head=True):  # noqa: ARG002 — kept for API compatibility with upstream
+    def forward(self, x: Any, use_usage_head: Any = True) -> Any:  # noqa: ARG002 — kept for API compatibility with upstream
         """Run the forward pass."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -152,7 +154,7 @@ class SpEncoder_4tis(nn.Module):
             torch.sigmoid(self.conv_last8(skip))]
         return torch.cat(out, 1)
 
-    def forward_feature(self, x):
+    def forward_feature(self, x: Any) -> Any:
         """Run the forward pass returning intermediate features."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -167,10 +169,10 @@ class SpEncoder_4tis(nn.Module):
         return skip
 
 
-class AttnBlock(nn.Module):
+class AttnBlock(nn.Module):  # type: ignore[misc]
     """Sinkhorn transformer attention block with axial positional embedding."""
 
-    def __init__(self, dim=256, depth=6, causal=False, max_seq_len=8192, reversible=False) -> None:
+    def __init__(self, dim: Any = 256, depth: Any = 6, causal: Any = False, max_seq_len: Any = 8192, reversible: Any = False) -> None:
         """Initialize AttnBlock."""
         super().__init__()
         bucket_size = 64
@@ -187,7 +189,7 @@ class AttnBlock(nn.Module):
             ff_chunks=10, causal=causal, reversible=reversible, non_permutative=True)
         self.norm = nn.LayerNorm(dim)
 
-    def forward(self, x):
+    def forward(self, x: Any) -> Any:
         """Run the forward pass."""
         x = torch.transpose(x, 1, 2).contiguous()
         x = x + self.pos_emb(x)
@@ -196,10 +198,10 @@ class AttnBlock(nn.Module):
         return torch.transpose(x, 1, 2).contiguous()
 
 
-class SpEncoder_L(nn.Module):
+class SpEncoder_L(nn.Module):  # type: ignore[misc]
     """Large-channel SpEncoder variant with configurable tissue count."""
 
-    def __init__(self, L, tissue_cnt=15, context_len=4000):
+    def __init__(self, L: Any, tissue_cnt: Any = 15, context_len: Any = 4000) -> None:
         """Initialize SpEncoder_L."""
         super().__init__()
         self.W = np.asarray([11, 11, 11, 11, 11, 11, 11, 11,
@@ -218,7 +220,7 @@ class SpEncoder_L(nn.Module):
         self.tissue_output = nn.Conv1d(L, tissue_cnt, 1)
         self.context_len = context_len
 
-    def forward(self, x, feature=False):
+    def forward(self, x: Any, feature: Any = False) -> Any:
         """Run the forward pass."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -238,10 +240,10 @@ class SpEncoder_L(nn.Module):
         return torch.concat([out_splice, out_usage], dim=1)
 
 
-class SpEncoder2_L(nn.Module):
+class SpEncoder2_L(nn.Module):  # type: ignore[misc]
     """Stage-2 convolutional encoder for multi-tissue splice site scoring."""
 
-    def __init__(self, L, tissue_cnt=4, context_len=4000):  # noqa: ARG002 — kept for API compatibility with upstream
+    def __init__(self, L: Any, tissue_cnt: Any = 4, context_len: Any = 4000):  # noqa: ARG002 — kept for API compatibility with upstream
         """Initialize SpEncoder2_L."""
         super().__init__()
         #
@@ -262,7 +264,7 @@ class SpEncoder2_L(nn.Module):
                 self.convs.append(nn.Conv1d(L, L, 1))
         self.context_len = context_len
 
-    def forward(self, x, feature=False):
+    def forward(self, x: Any, feature: Any = False) -> Any:
         """Run the forward pass."""
         x = x[:, 0:4, :]
         conv = self.conv1(x)
@@ -284,10 +286,10 @@ class SpEncoder2_L(nn.Module):
         return torch.cat(out, 1)
 
 
-class SpTransformer(nn.Module):
+class SpTransformer(nn.Module):  # type: ignore[misc]
     """Splice Transformer combining convolutional encoders with Sinkhorn attention."""
 
-    def __init__(self, dim=32, context_len=4000, tissue_num=15, max_seq_len=8192, attn_depth=6, training=False) -> None:
+    def __init__(self, dim: Any = 32, context_len: Any = 4000, tissue_num: Any = 15, max_seq_len: Any = 8192, attn_depth: Any = 6, training: Any = False) -> None:
         """Initialize SpTransformer."""
         super().__init__()
         self.context_len = context_len
@@ -306,7 +308,7 @@ class SpTransformer(nn.Module):
         self.splice = nn.Conv1d(dim*2, 3, 1)
         self.usage = nn.Conv1d(dim*2, tissue_num, 1)
 
-    def load_pretrain(self, training=False):
+    def load_pretrain(self, training: Any = False) -> Any:
         """Load pretrained encoder weights."""
         model1 = SpEncoder_L(128, tissue_cnt=self.tissue_num,
                              context_len=self.context_len)
@@ -325,7 +327,7 @@ class SpTransformer(nn.Module):
             print('Done')
         return nn.ModuleList([model1, model2])
 
-    def forward(self, x):
+    def forward(self, x: Any) -> Any:
         """Run the forward pass."""
         target_output_len = x.size(2) - 2 * self.context_len
         target_mid_len = self.max_seq_len

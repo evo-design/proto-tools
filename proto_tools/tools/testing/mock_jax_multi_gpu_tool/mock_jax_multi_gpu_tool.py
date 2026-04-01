@@ -7,6 +7,7 @@ device change, no in-place .to().
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -101,7 +102,7 @@ class MockJAXMultiGPUToolOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -132,7 +133,7 @@ class MockJAXMultiGPUToolOutput(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MockJAXMultiGPUToolInput()
 
@@ -152,16 +153,16 @@ def example_input():
 def run_mock_jax_multi_gpu_tool(
     inputs: MockJAXMultiGPUToolInput,
     config: MockJAXMultiGPUToolConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MockJAXMultiGPUToolOutput:
     """Run mock JAX multi-GPU tool (two minimal models with JAX semantics)."""
     result = ToolInstance.dispatch(
         "mock_jax_multi_gpu_tool",
         {
             "data": inputs.data,
-            "device": config.device,
-            "hidden_size": config.hidden_size,
-            "memory_mb": config.memory_mb,
+            "device": config.device,  # type: ignore[union-attr]
+            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
+            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

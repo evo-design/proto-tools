@@ -44,7 +44,7 @@ class PartialFailureError(RuntimeError):
         self,
         message: str,
         succeeded: list[tuple[int, Any]],
-        failed: list[dict],
+        failed: list[dict[str, Any]],
     ):
         """Initialize PartialFailureError."""
         super().__init__(message)
@@ -170,7 +170,7 @@ def _build_dispatch_stats(
     total_items: int,
     local_items: int,
     local_devices: int,
-) -> dict:
+) -> dict[str, Any]:
     """Build dispatch stats dict for output metadata."""
     return {
         "total_items": total_items,
@@ -234,7 +234,7 @@ class ToolPool:
         if self._devices_arg is not None:
             self._devices: list[str] = list(self._devices_arg)
             if self._devices:
-                determine_visible_devices(self._devices)
+                determine_visible_devices(self._devices)  # type: ignore[arg-type]
         else:
             n = number_of_available_gpus()
             if n == 0:
@@ -247,21 +247,21 @@ class ToolPool:
         logger.info("ToolPool entering with devices: %s", self._devices)
 
         # Enter persistence context for local workers
-        self._persist_ctx = ToolInstance.persist()
-        self._persist_ctx.__enter__()
+        self._persist_ctx = ToolInstance.persist()  # type: ignore[assignment]
+        self._persist_ctx.__enter__()  # type: ignore[attr-defined]
 
         # Set ourselves as the active pool
-        self._token = _active_pool.set(self)
+        self._token = _active_pool.set(self)  # type: ignore[assignment]
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
         # Clear active pool
-        _active_pool.reset(self._token)
+        _active_pool.reset(self._token)  # type: ignore[arg-type]
         self._token = None
 
         # Exit persistence context
         if self._persist_ctx is not None:
-            self._persist_ctx.__exit__(exc_type, exc_val, exc_tb)
+            self._persist_ctx.__exit__(exc_type, exc_val, exc_tb)  # type: ignore[unreachable]
             self._persist_ctx = None
 
         logger.info("ToolPool exited")
@@ -270,7 +270,7 @@ class ToolPool:
     def _parallel_dispatch(
         self,
         tool_key: str,
-        func: Callable,
+        func: Callable[..., Any],
         inputs: Any,
         config: Any,
     ) -> Any:
@@ -282,7 +282,7 @@ class ToolPool:
 
         Args:
             tool_key (str): Tool registry key.
-            func (Callable): The raw tool function to execute.
+            func (Callable[..., Any]): The raw tool function to execute.
             inputs (Any): Tool input model containing the iterable field.
             config (Any): Tool configuration.
         """
@@ -294,7 +294,7 @@ class ToolPool:
         iterable_output_field = spec.iterable_output_field
 
         # Extract items
-        items = list(getattr(inputs, iterable_input_field))
+        items = list(getattr(inputs, iterable_input_field))  # type: ignore[arg-type]
         n_items = len(items)
 
         # Single-item optimization: skip pool overhead
@@ -363,7 +363,7 @@ class ToolPool:
                     config_copy = config.model_copy(update={"device": device_id})
                     result = func(partition_input, config_copy, instance=worker_name)
 
-                    output_items = getattr(result, iterable_output_field, [])
+                    output_items = getattr(result, iterable_output_field, [])  # type: ignore[arg-type]
                     if len(output_items) != len(assignment.items):
                         raise RuntimeError(
                             f"ToolPool: {tool_key} returned {len(output_items)} "
@@ -378,7 +378,7 @@ class ToolPool:
                 finally:
                     _pool_executing.reset(token)
 
-            failed: list[dict] = []
+            failed: list[dict[str, Any]] = []
 
             with ThreadPoolExecutor(max_workers=len(active_assignments)) as executor:
                 contexts = [contextvars.copy_context() for _ in active_assignments]
@@ -427,8 +427,8 @@ class ToolPool:
             n_items, len(work_items), len(capabilities),
         )
 
-        return output_model.model_construct(
-            **{
+        return output_model.model_construct(  # type: ignore[arg-type]
+            **{  # type: ignore[arg-type]
                 iterable_output_field: merged_items,
                 "warnings": all_warnings,
                 "errors": all_errors,

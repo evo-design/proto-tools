@@ -15,7 +15,7 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
@@ -71,7 +71,7 @@ class ProtenixInput(StructurePredictionInput):
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
-    def to_json(self, complex_idx: int, name: str) -> list[dict]:
+    def to_json(self, complex_idx: int, name: str) -> list[dict[str, Any]]:
         """Convert a complex to Protenix JSON input format.
 
         Args:
@@ -79,7 +79,7 @@ class ProtenixInput(StructurePredictionInput):
             name (str): Name identifier for the prediction job
 
         Returns:
-            list[dict]: List containing a single dict in Protenix JSON format
+            list[dict[str, Any]]: List containing a single dict in Protenix JSON format
         """
         comp = self.complexes[complex_idx]
         sequences = []
@@ -267,9 +267,9 @@ class ProtenixConfig(MSAStructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return ProtenixInput(complexes=["MKTL"])
+    return ProtenixInput(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -289,7 +289,7 @@ def example_input():
 def run_protenix(
     inputs: ProtenixInput,
     config: ProtenixConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ProtenixOutput:
     """Predict 3D structures using Protenix.
 
@@ -306,7 +306,7 @@ def run_protenix(
         config (ProtenixConfig | None): Validated Protenix configuration specifying model
             variant, MSA settings, diffusion parameters, and execution options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProtenixOutput: Structured output containing:
@@ -362,7 +362,7 @@ def run_protenix(
 
         # Write pre-computed MSAs and inject paths into the batch JSON
         if inputs.msas:
-            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)
+            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)  # type: ignore[arg-type]
 
         # Write the batch input JSON
         input_json_path = os.path.join(temp_dir, "protenix_input.json")
@@ -370,23 +370,23 @@ def run_protenix(
             json.dump(batch_json, f)
 
         # Prepare input data for inference script
-        seeds_str = ",".join(str(s) for s in config.seeds)
+        seeds_str = ",".join(str(s) for s in config.seeds)  # type: ignore[union-attr]
         input_data = {
             "input_json_path": input_json_path,
             "output_dir": output_dir,
-            "model_name": config.model_name,
+            "model_name": config.model_name,  # type: ignore[union-attr]
             "seeds": seeds_str,
-            "num_diffusion_samples": config.num_diffusion_samples,
-            "num_diffusion_steps": config.num_diffusion_steps,
-            "num_pairformer_cycles": config.num_pairformer_cycles,
-            "use_msa": config.use_msa,
+            "num_diffusion_samples": config.num_diffusion_samples,  # type: ignore[union-attr]
+            "num_diffusion_steps": config.num_diffusion_steps,  # type: ignore[union-attr]
+            "num_pairformer_cycles": config.num_pairformer_cycles,  # type: ignore[union-attr]
+            "use_msa": config.use_msa,  # type: ignore[union-attr]
         }
 
         # Call the inference script (single batched call)
         logger.info(f"Running Protenix prediction for {len(inputs.complexes)} complex(es)...")
 
-        input_data["device"] = config.device
-        input_data["verbose"] = config.verbose
+        input_data["device"] = config.device  # type: ignore[union-attr]
+        input_data["verbose"] = config.verbose  # type: ignore[union-attr]
         output_data = ToolInstance.dispatch(
             "protenix",
             input_data,
@@ -397,7 +397,7 @@ def run_protenix(
     # Parse results for each complex
     results = []
     for _i, job_result in enumerate(output_data):
-        raw_metrics = job_result.get("metrics", {})
+        raw_metrics = job_result.get("metrics", {})  # type: ignore[attr-defined]
 
         metrics = {
             "confidence_score": float(raw_metrics.get("ranking_score", 0.0)),
@@ -413,7 +413,7 @@ def run_protenix(
 
         results.append(
             Structure(
-                structure_filepath_or_content=job_result["structure_cif_output"],
+                structure_filepath_or_content=job_result["structure_cif_output"],  # type: ignore[index]
                 b_factor_type=BFactorType.PLDDT,
                 metrics=metrics,
                 source="protenix-prediction",
@@ -427,7 +427,7 @@ def run_protenix(
 # Helper Functions
 # ============================================================================
 def _write_msas_to_batch_json(
-    batch_json: list[dict],
+    batch_json: list[dict[str, Any]],
     inputs: ProtenixInput,
     config: ProtenixConfig,
     temp_dir: str,
@@ -435,7 +435,7 @@ def _write_msas_to_batch_json(
     """Write pre-computed MSAs to A3M files and inject paths into batch JSON.
 
     Args:
-        batch_json (list[dict]): List of Protenix job dicts (modified in place).
+        batch_json (list[dict[str, Any]]): List of Protenix job dicts (modified in place).
         inputs (ProtenixInput): ProtenixInput with the original complexes and pre-computed MSAs.
         config (ProtenixConfig): ProtenixConfig with verbose setting.
         temp_dir (str): Directory for writing A3M files.
@@ -452,14 +452,14 @@ def _write_msas_to_batch_json(
 
         msa_paths: dict[str, str] = {}
         for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
-            if seq in inputs.msas:
+            if seq in inputs.msas:  # type: ignore[operator]
                 a3m_path = os.path.join(msa_dir, f"job_{job_idx}_{chain_id}.a3m")
-                inputs.msas[seq].to_a3m_file(a3m_path, query_index=0)
+                inputs.msas[seq].to_a3m_file(a3m_path, query_index=0)  # type: ignore[index]
                 msa_paths[chain_id] = a3m_path
 
                 if config.verbose:
                     logger.info(
-                        f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(inputs.msas[seq])} sequences)"
+                        f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(inputs.msas[seq])} sequences)"  # type: ignore[index]
                     )
 
         # Inject MSA paths into the job's proteinChain entries

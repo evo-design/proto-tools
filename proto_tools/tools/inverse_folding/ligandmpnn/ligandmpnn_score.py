@@ -86,7 +86,7 @@ class LigandMPNNScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def run_ligandmpnn_score(
+def run_ligandmpnn_score(  # type: ignore[return]
     inputs: LigandMPNNScoringInput,
     config: LigandMPNNScoringConfig,
 ) -> LigandMPNNScoringOutput:

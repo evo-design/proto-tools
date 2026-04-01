@@ -49,9 +49,9 @@ def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
 
     # For data arrays.
     if hasattr(obj, "nbytes"):  # NumPy / Pandas
-        return obj.nbytes
+        return obj.nbytes  # type: ignore[no-any-return]
     if hasattr(obj, "element_size") and hasattr(obj, "nelement"):  # PyTorch
-        return obj.element_size() * obj.nelement()
+        return obj.element_size() * obj.nelement()  # type: ignore[no-any-return]
 
     # Standard Python objects.
     try:
@@ -76,7 +76,7 @@ class ToolCache:
     isolation between different optimization runs.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize empty cache storage."""
         self._cache: dict[str, dict[str, Any]] = {}
         self._current_size_bytes = 0
@@ -218,7 +218,7 @@ def _serialize_for_cache_key(obj: Any) -> str:
         obj (Any): Object to serialize into a deterministic string.
     """
     if hasattr(obj, "cache_key"):
-        return obj.cache_key()
+        return obj.cache_key()  # type: ignore[no-any-return]
     if isinstance(obj, BaseModel):
         model_dict = obj.model_dump(exclude_none=True)
         return json.dumps(model_dict, sort_keys=True, default=str)
@@ -229,7 +229,7 @@ def _serialize_for_cache_key(obj: Any) -> str:
     return str(obj)
 
 
-def _generate_cache_key(tool_name: str, *args, **kwargs) -> str:
+def _generate_cache_key(tool_name: str, *args: Any, **kwargs: Any) -> str:
     """Generate a deterministic cache key for tool operations.
 
     Args:

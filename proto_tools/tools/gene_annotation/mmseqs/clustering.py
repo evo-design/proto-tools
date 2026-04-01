@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
@@ -82,7 +83,7 @@ class MmseqsClusteringInput(BaseToolInput):
 
     @field_validator("input_sequences", mode="before")
     @classmethod
-    def validate_input_sequences(cls, v):
+    def validate_input_sequences(cls, v: Any) -> None:
         """Validate input sequences."""
         if not isinstance(v, list):
             raise ValueError(f"input_sequences must be a list, got {type(v)}")
@@ -90,7 +91,7 @@ class MmseqsClusteringInput(BaseToolInput):
             raise ValueError("input_sequences list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in input_sequences list must be strings")
-        return v
+        return v  # type: ignore[return-value]
 
 
 # Output:
@@ -115,7 +116,7 @@ class MmseqsClusteringOutput(BaseToolOutput):
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsClusterResult]:
+    def __iter__(self) -> Iterator[MmseqsClusterResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -139,7 +140,7 @@ class MmseqsClusteringOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         data = [r.model_dump() for r in self.results]
@@ -176,7 +177,7 @@ class MmseqsClusteringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MmseqsClusteringInput(input_sequences=["MKTL", "MKTL", "ARND"])
 
@@ -194,7 +195,7 @@ def example_input():
 )
 def run_mmseqs_clustering(
     inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MmseqsClusteringOutput:
     """Perform sequence clustering using MMseqs2.
 
@@ -206,7 +207,7 @@ def run_mmseqs_clustering(
             to cluster.
         config (MmseqsClusteringConfig | None): Configuration with clustering threshold.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         MmseqsClusteringOutput: Per-sequence cluster assignments in input order.
@@ -235,7 +236,7 @@ def run_mmseqs_clustering(
             "operation": "clustering",
             "sequences": sequences,
             "sequence_ids": sequence_ids,
-            "min_seq_id": config.min_seq_id,
+            "min_seq_id": config.min_seq_id,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -258,7 +259,7 @@ def run_mmseqs_clustering(
 
     return MmseqsClusteringOutput(
         metadata={
-            "min_seq_id": config.min_seq_id,
+            "min_seq_id": config.min_seq_id,  # type: ignore[union-attr]
             "num_sequences": num_sequences,
         },
         results=results,

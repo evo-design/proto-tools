@@ -48,7 +48,7 @@ class AlphaGenomePredictIntervalsInput(BaseToolInput):
 
     @field_validator("intervals", mode="before")
     @classmethod
-    def normalize_intervals(cls, value: Any) -> list:
+    def normalize_intervals(cls, value: Any) -> list[Any]:
         """Validate and normalize interval specifications from raw input."""
         if value is None:
             raise ValueError("intervals cannot be None")
@@ -56,7 +56,7 @@ class AlphaGenomePredictIntervalsInput(BaseToolInput):
             value = [value]
         if not value:
             raise ValueError("intervals cannot be empty")
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
@@ -92,7 +92,7 @@ class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
         if file_format == "npy":
             import numpy as np
 
-            np.save(path, payload)
+            np.save(path, payload)  # type: ignore[arg-type]
             return
 
         raise ValueError(f"Unsupported format: {file_format}")
@@ -103,7 +103,7 @@ class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> AlphaGenomePredictOutput:
         return self.results[index]
 
-    def __iter__(self) -> Iterator[AlphaGenomePredictOutput]:
+    def __iter__(self) -> Iterator[AlphaGenomePredictOutput]:  # type: ignore[override]
         return iter(self.results)
 
 
@@ -113,7 +113,7 @@ AlphaGenomePredictIntervalsConfig = AlphaGenomePredictConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomePredictIntervalsInput(
         intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=196608)]
@@ -137,7 +137,7 @@ def example_input():
 def run_alphagenome_predict_intervals(
     inputs: AlphaGenomePredictIntervalsInput,
     config: AlphaGenomePredictIntervalsConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaGenomePredictIntervalsOutput:
     """Predict genomic features for batched intervals using AlphaGenome."""
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
@@ -154,11 +154,11 @@ def run_alphagenome_predict_intervals(
                 }
                 for item in inputs.intervals
             ],
-            "requested_outputs": config.requested_outputs,
-            "ontology_terms": config.ontology_terms,
-            "organism": config.organism,
-            "model_version": config.model_version,
-            "device": config.device,
+            "requested_outputs": config.requested_outputs,  # type: ignore[union-attr]
+            "ontology_terms": config.ontology_terms,  # type: ignore[union-attr]
+            "organism": config.organism,  # type: ignore[union-attr]
+            "model_version": config.model_version,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -170,7 +170,7 @@ def run_alphagenome_predict_intervals(
             chromosome=item.chromosome,
             interval_start=item.interval_start,
             interval_end=item.interval_end,
-            requested_outputs=config.requested_outputs,
+            requested_outputs=config.requested_outputs,  # type: ignore[union-attr]
             result={"predictions": prediction},
         )
         for item, prediction in zip(inputs.intervals, predictions, strict=True)

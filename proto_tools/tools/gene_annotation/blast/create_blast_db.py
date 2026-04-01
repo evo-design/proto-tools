@@ -5,7 +5,7 @@ BLAST database creation tool.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -80,7 +80,7 @@ class CreateBlastDbOutput(BaseToolOutput):
         """Return the default output format."""
         return ""
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Export output - No-op for database creation (output IS the DB path)."""
 
 
@@ -163,7 +163,7 @@ class CreateBlastDbConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return CreateBlastDbInput(fasta=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"))
 
@@ -180,7 +180,7 @@ def example_input():
 )
 def run_create_blast_db(
     inputs: CreateBlastDbInput, config: CreateBlastDbConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> CreateBlastDbOutput:
     """Create a local BLAST database from a FASTA file.
 
@@ -191,7 +191,7 @@ def run_create_blast_db(
         inputs (CreateBlastDbInput): Validated BLAST database creation input
         config (CreateBlastDbConfig | None): Validated BLAST database creation configuration
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         CreateBlastDbOutput: Structured output with database path
@@ -212,8 +212,8 @@ def run_create_blast_db(
     fasta_path = Path(inputs.fasta)
 
     # Default prefix is the FASTA stem in the same directory
-    if config.out_prefix is not None:
-        out_prefix = str(Path(config.out_prefix).expanduser().resolve())
+    if config.out_prefix is not None:  # type: ignore[union-attr]
+        out_prefix = str(Path(config.out_prefix).expanduser().resolve())  # type: ignore[union-attr]
     else:
         out_prefix = str(fasta_path.with_suffix(""))
 
@@ -223,10 +223,10 @@ def run_create_blast_db(
             "device": "cpu",
             "operation": "create_blast_db",
             "fasta_path": str(fasta_path),
-            "dbtype": config.dbtype,
+            "dbtype": config.dbtype,  # type: ignore[union-attr]
             "out_prefix": out_prefix,
-            "title": config.title,
-            "additional_params": config.additional_params,
+            "title": config.title,  # type: ignore[union-attr]
+            "additional_params": config.additional_params,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -234,9 +234,9 @@ def run_create_blast_db(
 
     return CreateBlastDbOutput(
         metadata={
-            "dbtype": config.dbtype,
+            "dbtype": config.dbtype,  # type: ignore[union-attr]
             "fasta_file": str(fasta_path),
-            "title": config.title,
+            "title": config.title,  # type: ignore[union-attr]
         },
         db_path=output_data["db_path"],
     )

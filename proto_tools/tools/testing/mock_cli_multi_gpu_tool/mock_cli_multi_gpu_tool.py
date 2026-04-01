@@ -7,6 +7,7 @@ get_subprocess_device_env() for device routing with comma-separated device strin
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -92,7 +93,7 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -123,7 +124,7 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MockCLIMultiGPUToolInput()
 
@@ -143,15 +144,15 @@ def example_input():
 def run_mock_cli_multi_gpu_tool(
     inputs: MockCLIMultiGPUToolInput,
     config: MockCLIMultiGPUToolConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MockCLIMultiGPUToolOutput:
     """Run mock CLI multi-GPU tool (subprocess-based with 2-GPU routing)."""
     result = ToolInstance.dispatch(
         "mock_cli_multi_gpu_tool",
         {
             "data": inputs.data,
-            "device": config.device,
-            "scale_factor": config.scale_factor,
+            "device": config.device,  # type: ignore[union-attr]
+            "scale_factor": config.scale_factor,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

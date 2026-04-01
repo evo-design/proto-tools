@@ -70,7 +70,7 @@ class UniProtFetchInput(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def validate_lookup_params(self):
+    def validate_lookup_params(self) -> Any:
         """Require either uniprot_id or target_name+organism."""
         if not self.uniprot_id and not (self.target_name and self.organism):
             raise ValueError(
@@ -122,7 +122,7 @@ class UniProtFetchOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path, file_format: str):
+    def _export_output(self, export_path: Any, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -179,7 +179,7 @@ class UniProtFetchConfig(BaseConfig):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return UniProtFetchInput(uniprot_id="P04637")
 
@@ -198,7 +198,7 @@ def example_input():
 def run_uniprot_fetch(
     inputs: UniProtFetchInput,
     config: UniProtFetchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> UniProtFetchOutput:
     """Fetch protein entries from UniProt.
 
@@ -210,7 +210,7 @@ def run_uniprot_fetch(
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
         config (UniProtFetchConfig | None): HTTP timeout and retry settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and
@@ -219,25 +219,25 @@ def run_uniprot_fetch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=config.http_retries,  # type: ignore[union-attr]
+        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
+        user_agent=config.user_agent,  # type: ignore[union-attr]
     )
 
     try:
         if inputs.uniprot_id:
-            entry = _fetch_entry(inputs.uniprot_id, config, session)
+            entry = _fetch_entry(inputs.uniprot_id, config, session)  # type: ignore[arg-type]
             if entry is None:
                 raise ValueError(
                     f"UniProt ID '{inputs.uniprot_id}' not found"
                 )
         else:
             entry = _search_entry(
-                target_name=inputs.target_name,
-                organism=inputs.organism,
+                target_name=inputs.target_name,  # type: ignore[arg-type]
+                organism=inputs.organism,  # type: ignore[arg-type]
                 prefer_pdb_crossref=inputs.prefer_pdb_crossref,
                 max_candidates=inputs.max_candidates,
-                config=config,
+                config=config,  # type: ignore[arg-type]
                 session=session,
             )
             if entry is None:
@@ -287,7 +287,7 @@ def _fetch_entry(
         logger.debug("UniProt ID '%s' not found", uniprot_id)
         return None
     response.raise_for_status()
-    return response.json()
+    return response.json()  # type: ignore[no-any-return]
 
 
 def _search_entry(
@@ -315,7 +315,7 @@ def _search_entry(
         }
         response = session.get(
             f"{_UNIPROT_BASE}/uniprotkb/search",
-            params=params,
+            params=params,  # type: ignore[arg-type]
             timeout=config.request_timeout_seconds,
         )
         if response.status_code >= 400:

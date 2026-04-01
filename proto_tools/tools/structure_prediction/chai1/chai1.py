@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from pydantic import field_validator
 from tqdm import tqdm
@@ -194,9 +194,9 @@ class Chai1Config(MSAStructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return Chai1Input(complexes=["MKTL"])
+    return Chai1Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -213,7 +213,7 @@ def example_input():
     iterable_output_field="structures",
     cacheable=True,
 )
-def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=None) -> Chai1Output:
+def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: Any = None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.
 
     Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,
@@ -226,7 +226,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
         config (Chai1Config | None): Validated Chai1 configuration specifying ESM embeddings,
             MSA settings, refinement parameters, and execution options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Chai1Output: Structured output containing:
@@ -284,7 +284,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
         - Does not support DNA or RNA (use Boltz2 for nucleic acids)
     """
     results = [
-        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
+        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)  # type: ignore[arg-type]
         for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes))
     ]
     return Chai1Output(
@@ -293,7 +293,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
 
 
 def _msa_to_pqt_file(
-    msa, pqt_path: str, query_index: int = 0, source_database: str = "uniref90"
+    msa: Any, pqt_path: str, query_index: int = 0, source_database: str = "uniref90"
 ) -> None:
     """Write an MSA object to Chai1's .aligned.pqt Parquet format."""
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
@@ -312,8 +312,8 @@ def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
 def run_chai1_on_complex(
     comp: StructurePredictionComplex,
     config: Chai1Config,
-    msas: dict | None = None,
-    instance=None,
+    msas: dict[str, Any] | None = None,
+    instance: Any = None,
 ) -> Structure:
     """Run Chai1 structure prediction on a single complex. This function is wrapped.
 

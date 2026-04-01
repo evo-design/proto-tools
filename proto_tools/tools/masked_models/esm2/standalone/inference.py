@@ -90,7 +90,7 @@ class ESM2Model:
         # For each batch
         for batch_sequences in tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)):
             # Tokenize the batch
-            batch_inputs = self.tokenizer(
+            batch_inputs = self.tokenizer(  # type: ignore[misc]
                 batch_sequences,
                 add_special_tokens=True,
                 padding=True,
@@ -103,7 +103,7 @@ class ESM2Model:
 
             # Forward pass
             with torch.inference_mode():
-                batch_outputs = self.model(
+                batch_outputs = self.model(  # type: ignore[misc]
                     input_ids=batch_inputs["input_ids"],
                     attention_mask=batch_inputs["attention_mask"],
                     output_hidden_states=True,
@@ -188,7 +188,7 @@ class ESM2Model:
             self.to_device(device)
 
         # Record mask positions, replace '_' with the model's mask token
-        mask_token = self.tokenizer.mask_token
+        mask_token = self.tokenizer.mask_token  # type: ignore[attr-defined]
         mask_positions: list[list[int]] = []
         tokenizer_sequences: list[str] = []
         for seq in sequences:
@@ -214,7 +214,7 @@ class ESM2Model:
             batch_originals = sequences[start:end]
 
             # Tokenize (mask tokens are handled natively by the tokenizer)
-            batch_inputs = self.tokenizer(
+            batch_inputs = self.tokenizer(  # type: ignore[misc]
                 batch_tok_seqs,
                 add_special_tokens=True,
                 padding=True,
@@ -226,7 +226,7 @@ class ESM2Model:
 
             # Forward pass
             with torch.inference_mode():
-                outputs = self.model(
+                outputs = self.model(  # type: ignore[misc]
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                 )
@@ -267,7 +267,7 @@ class ESM2Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> dict[str, list]:
+    ) -> dict[str, list[Any]]:
         """Score protein sequences using ESM2 with MLM pseudo-perplexity.
 
         Computes pseudo-perplexity by masking each position individually and
@@ -325,7 +325,7 @@ class ESM2Model:
             })
 
         return {
-            "logits": all_logits if return_logits else None,
+            "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
             "metrics": all_metrics,
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
@@ -351,13 +351,13 @@ class ESM2Model:
                 - valid_count: Number of standard AA positions (excludes ambiguous)
         """
         # Tokenize once
-        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")
+        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")  # type: ignore[misc]
         original_ids = encoded["input_ids"].to(self.device)
 
         # Create all masked variants (L variants for sequence of length L)
         masked_ids = original_ids.repeat(len(seq), 1)
         for pos in range(len(seq)):
-            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS token
+            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # type: ignore[attr-defined]  # +1 for BOS token
 
         # Get true token IDs directly from tokenized input
         true_token_ids = original_ids[0, 1 : 1 + len(seq)] # Token positions: [BOS] + seq + [EOS]
@@ -376,7 +376,7 @@ class ESM2Model:
             batch_ids = masked_ids[batch_start:batch_end]
 
             with torch.inference_mode():
-                outputs = self.model(input_ids=batch_ids)
+                outputs = self.model(input_ids=batch_ids)  # type: ignore[misc]
 
             # Extract logits at masked positions
             batch_indices = torch.arange(batch_end - batch_start, device=self.device)
@@ -406,7 +406,7 @@ class ESM2Model:
     # ============================================================================
     # Helper Functions
     # ============================================================================
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM2 model and tokenizer to device."""
         if verbose:
             logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
@@ -419,10 +419,10 @@ class ESM2Model:
 
         # Create amino acid token IDs and keep them on the same device as model
         self.amino_acid_token_ids = torch.tensor(
-            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],
+            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
             device=device
         )
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
@@ -435,8 +435,8 @@ class ESM2Model:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
-            self.device = device
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)  # type: ignore[attr-defined]
+            self.device = device  # type: ignore[assignment]
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
@@ -444,9 +444,9 @@ class ESM2Model:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
-            self.model = self.model.to("cpu")
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")
-            self.device = "cpu"
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -473,7 +473,7 @@ def _serialize_output(value: Any) -> Any:
 _model: ESM2Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -511,7 +511,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -521,13 +521,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

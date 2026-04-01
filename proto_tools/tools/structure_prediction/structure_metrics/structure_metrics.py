@@ -8,6 +8,7 @@ artifactual predicted protein structures.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -50,7 +51,7 @@ class StructureMetricsInput(BaseToolInput):
 
     @field_validator("pdb_paths", mode="before")
     @classmethod
-    def normalize_paths(cls, value) -> list[str]:
+    def normalize_paths(cls, value: Any) -> list[str]:
         """Normalize a single path to a list."""
         if isinstance(value, str):
             return [value]
@@ -81,7 +82,7 @@ class StructureMetricsOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import pandas as pd
 
         path = Path(export_path).with_suffix(f".{file_format}")
@@ -106,7 +107,7 @@ class StructureMetricsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return StructureMetricsInput(pdb_paths=[str(Path(__file__).parent / "examples" / "example.pdb")])
 
@@ -125,7 +126,7 @@ def example_input():
     cacheable=True,
 )
 def run_structure_metrics(
-    inputs: StructureMetricsInput, config: StructureMetricsConfig | None = None, instance=None,
+    inputs: StructureMetricsInput, config: StructureMetricsConfig | None = None, instance: Any = None,
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
 
@@ -138,7 +139,7 @@ def run_structure_metrics(
         inputs (StructureMetricsInput): Validated input containing PDB file paths.
         config (StructureMetricsConfig | None): Configuration (no parameters needed).
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         StructureMetricsOutput: Per-structure metrics.
@@ -154,7 +155,7 @@ def run_structure_metrics(
         "pdb_paths": inputs.pdb_paths,
     }
 
-    input_data["device"] = "cpu"
+    input_data["device"] = "cpu"  # type: ignore[assignment]
     output_data = ToolInstance.dispatch(
         "structure_metrics",
         input_data,

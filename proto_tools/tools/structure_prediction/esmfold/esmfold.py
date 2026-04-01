@@ -190,9 +190,9 @@ class ESMFoldConfig(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return ESMFoldInput(complexes=["MKTL"])
+    return ESMFoldInput(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -211,7 +211,7 @@ def example_input():
 )
 def run_esmfold(
     inputs: ESMFoldInput, config: ESMFoldConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ESMFoldOutput:
     """Predict protein 3D structures using ESMFold.
 
@@ -225,7 +225,7 @@ def run_esmfold(
         config (ESMFoldConfig | None): Validated ESMFold configuration specifying chain linking,
             batching, and execution options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMFoldOutput: Structured output containing:
@@ -270,11 +270,11 @@ def run_esmfold(
         - Multi-chain complexes are predicted by linking chains
     """
     # Prepare complexes for inference
-    prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)
+    prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)  # type: ignore[union-attr]
 
     # Split into memory-safe sub-batches
     sub_batches = _split_into_safe_batches(
-        prepared_complexes, max_residues=config.max_batch_residues
+        prepared_complexes, max_residues=config.max_batch_residues  # type: ignore[union-attr]
     )
 
     logger.debug(
@@ -302,13 +302,13 @@ def run_esmfold(
         # Prepare input data for inference script
         input_data = {
             "batch_data": sub_batch,
-            "residue_idx_offset": config.residue_idx_offset,
-            "chain_linker": config.chain_linker,
+            "residue_idx_offset": config.residue_idx_offset,  # type: ignore[union-attr]
+            "chain_linker": config.chain_linker,  # type: ignore[union-attr]
         }
 
         # Call the inference script
-        input_data["device"] = config.device
-        input_data["verbose"] = config.verbose
+        input_data["device"] = config.device  # type: ignore[union-attr]
+        input_data["verbose"] = config.verbose  # type: ignore[union-attr]
         output_data = ToolInstance.dispatch(
             "esmfold",
             input_data,

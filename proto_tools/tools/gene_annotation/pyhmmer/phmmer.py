@@ -4,6 +4,8 @@ PyHMMER phmmer tool: search protein sequences against protein sequences.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import field_validator
 
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
@@ -44,7 +46,7 @@ class PyPhmmerInput(PyHmmerInput):
 
     @field_validator("target_sequences", mode="before")
     @classmethod
-    def normalize_target_sequences(cls, value) -> list[str]:
+    def normalize_target_sequences(cls, value: Any) -> list[str]:
         """Normalize target sequences to list of strings."""
         # Reuse the same logic as sequences validation
         return PyHmmerInput.normalize_sequences(value)
@@ -60,7 +62,7 @@ PyPhmmerConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return PyPhmmerInput(
         sequences=["MKTL"],
@@ -79,7 +81,7 @@ def example_input():
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance=None) -> PyPhmmerOutput:
+def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance: Any = None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
     This function implements the phmmer algorithm, which performs iterative
@@ -93,7 +95,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         config (PyPhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PyPhmmerOutput: Structured output containing:
@@ -130,11 +132,11 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
             "operation": "phmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -149,11 +151,11 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

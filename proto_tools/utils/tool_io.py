@@ -23,7 +23,7 @@ def InputField(
     hidden: bool = False,
     advanced: bool = False,
     include_in_key: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper for tool Input classes.
 
@@ -83,7 +83,7 @@ class BaseToolInput(BaseModel):
         return {
             name
             for name, info in cls.model_fields.items()
-            if not (info.json_schema_extra or {}).get("include_in_key", True)
+            if not (info.json_schema_extra or {}).get("include_in_key", True)  # type: ignore[union-attr]
         }
 
     def cache_key(self) -> str:
@@ -187,7 +187,7 @@ class BaseToolOutput(BaseModel, ABC):
         },
     )
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> None:
         """Raise ToolExecutionError when accessing unset fields after failure."""
         # Check if we're trying to access a model field that wasn't set
         if name in self.__class__.model_fields:
@@ -239,7 +239,7 @@ class BaseToolOutput(BaseModel, ABC):
         return ""
 
     @abstractmethod
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         """Exports the tool output to a file or directory of files.
 
         Must be implemented by all subclasses of BaseToolOutput.
@@ -255,7 +255,7 @@ class BaseToolOutput(BaseModel, ABC):
         name: str,
         export_path: Path | str | None = None,
         file_format: str | None = None,
-    ):
+    ) -> None:
         """Export the tool output to a file or directory containing files.
 
         Args:

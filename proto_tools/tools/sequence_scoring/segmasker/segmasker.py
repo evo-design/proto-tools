@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, field_validator
 
@@ -44,11 +45,11 @@ class SegmaskerInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize single string to list."""
         if isinstance(value, str):
             return [value]
-        return value
+        return value  # type: ignore[no-any-return]
 
     @field_validator("sequences")
     @classmethod
@@ -146,8 +147,8 @@ class SegmaskerOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(
-        self, export_path: str | os.PathLike, file_format: str
-    ):
+        self, export_path: str | os.PathLike, file_format: str  # type: ignore[type-arg]
+    ) -> None:
         import pandas as pd
 
         path = Path(export_path).with_suffix(f".{file_format}")
@@ -173,7 +174,7 @@ class SegmaskerOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return SegmaskerInput(sequences=["MKTL"])
 
@@ -192,7 +193,7 @@ def example_input():
 def run_segmasker(
     inputs: SegmaskerInput,
     config: SegmaskerConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> SegmaskerOutput:
     """Detect low-complexity regions in protein sequences using NCBI segmasker.
 
@@ -206,7 +207,7 @@ def run_segmasker(
         config (SegmaskerConfig | None): Validated segmasker configuration specifying
             window size and complexity thresholds.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         SegmaskerOutput: Structured output containing:
@@ -230,9 +231,9 @@ def run_segmasker(
     input_data = {
         "sequences": inputs.sequences,
         "config": {
-            "window": config.window,
-            "locut": config.locut,
-            "hicut": config.hicut,
+            "window": config.window,  # type: ignore[union-attr]
+            "locut": config.locut,  # type: ignore[union-attr]
+            "hicut": config.hicut,  # type: ignore[union-attr]
         },
     }
 
@@ -247,9 +248,9 @@ def run_segmasker(
     return SegmaskerOutput(
         metadata={
             "num_sequences": len(inputs.sequences),
-            "window": config.window,
-            "locut": config.locut,
-            "hicut": config.hicut,
+            "window": config.window,  # type: ignore[union-attr]
+            "locut": config.locut,  # type: ignore[union-attr]
+            "hicut": config.hicut,  # type: ignore[union-attr]
         },
         low_complexity_fractions=output_data["fractions"],
         low_complexity_counts=output_data["counts"],

@@ -82,7 +82,7 @@ def _process_sequence(
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_prodigal(input_data: dict) -> dict:
+def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run Prodigal gene prediction on one or more sequences.
 
     Args:
@@ -134,7 +134,7 @@ def run_prodigal(input_data: dict) -> dict:
     return {"predicted_orfs": all_results}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_prodigal(input_dict)
 
@@ -143,7 +143,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 

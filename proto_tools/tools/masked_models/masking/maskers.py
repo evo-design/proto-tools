@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import ClassVar, Literal, get_args
+from typing import Any, ClassVar, Literal, get_args
 
 import numpy as np
 
@@ -67,7 +67,7 @@ class Masker(ABC):
 
     supported_models: list[str] | None = None
 
-    def __init__(self, strategy):
+    def __init__(self, strategy: Any) -> None:
         """Initialize MyCustomMasker."""
         self.strategy = strategy
 
@@ -75,13 +75,13 @@ class Masker(ABC):
     def score(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,
+        position_score_fn: Callable[..., Any] | None = None,
     ) -> list[list[float]]:
         """Score all positions for all sequences.
 
         Args:
             sequences (list[str]): Protein sequences to score.
-            position_score_fn (Callable | None): Callable that takes a list of sequences
+            position_score_fn (Callable[..., Any] | None): Callable that takes a list of sequences
                 and returns per-position scores. Required for model-based
                 maskers; ``None`` for maskers that don't use a model.
 
@@ -103,7 +103,7 @@ class RandomMasker(Masker):
     def score(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,  # noqa: ARG002 — required by abstract Masker interface
+        position_score_fn: Callable[..., Any] | None = None,  # noqa: ARG002 — required by abstract Masker interface
     ) -> list[list[float]]:
         """Score a sequence at masked positions using the model."""
         return [[0.0] * len(seq) for seq in sequences]
@@ -112,15 +112,15 @@ class RandomMasker(Masker):
 class EntropyMasker(Masker):
     """Score positions by Shannon entropy. High uncertainty leads to masking."""
 
-    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]
+    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]  # type: ignore[misc]
 
     def score(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,
+        position_score_fn: Callable[..., Any] | None = None,
     ) -> list[list[float]]:
         """Compute per-position Shannon entropy from model logits."""
-        logits = position_score_fn(sequences)
+        logits = position_score_fn(sequences)  # type: ignore[misc]
         all_scores = []
         for seq_logits in logits:
             # (seq_len, vocab_size)  # noqa: ERA001 -- tensor shape annotation
@@ -138,15 +138,15 @@ class EntropyMasker(Masker):
 class MaxLogitMasker(Masker):
     """Score positions by negated max-logit. Low confidence leads to masking."""
 
-    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]
+    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]  # type: ignore[misc]
 
     def score(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,
+        position_score_fn: Callable[..., Any] | None = None,
     ) -> list[list[float]]:
         """Compute negated max-logit per position from model logits."""
-        logits = position_score_fn(sequences)
+        logits = position_score_fn(sequences)  # type: ignore[misc]
         all_scores = []
         for seq_logits in logits:
             arr = np.array(seq_logits)

@@ -63,7 +63,7 @@ class ProGen2Model:
         self.model = None
         self.pad_token_id = None
 
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load ProGen2 model and tokenizer to device."""
         if verbose:
             logger.info(f"Loading ProGen2 model: {self.model_checkpoint} on {device}")
@@ -80,8 +80,8 @@ class ProGen2Model:
         ).to(device).eval()
 
         self.tokenizer = Tokenizer.from_pretrained(model_path)
-        self.device = device
-        self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # ID 0
+        self.device = device  # type: ignore[assignment]
+        self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # type: ignore[attr-defined]  # ID 0
         self._loaded = True
 
         if verbose:
@@ -93,15 +93,15 @@ class ProGen2Model:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device
+            self.device = device  # type: ignore[assignment]
 
     def unload(self, verbose: bool = False) -> None:
         """Unload model to free GPU memory."""
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
-            self.model = self.model.to("cpu")
-            self.device = "cpu"
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -113,7 +113,7 @@ class ProGen2Model:
         """Tokenize and pad sequences into a batch with attention mask."""
         if not sequences:
             raise ValueError("Cannot prepare empty batch")
-        encodings = self.tokenizer.encode_batch(sequences)
+        encodings = self.tokenizer.encode_batch(sequences)  # type: ignore[attr-defined]
         token_lists = [e.ids for e in encodings]
         lengths = [len(t) for t in token_lists]
         max_len = max(lengths)
@@ -202,7 +202,7 @@ class ProGen2Model:
                 # Left-pad for generation
                 input_ids, attention_mask, _ = self._prepare_batch(batch_prompts, pad_left=True)
 
-                output = self.model.generate(
+                output = self.model.generate(  # type: ignore[attr-defined]
                     input_ids,
                     attention_mask=attention_mask,
                     do_sample=True,
@@ -229,7 +229,7 @@ class ProGen2Model:
 
                         # Strip padding tokens
                         token_ids = [t for t in token_ids if t != self.pad_token_id]
-                        seq = self.tokenizer.decode(token_ids)
+                        seq = self.tokenizer.decode(token_ids)  # type: ignore[attr-defined]
 
                         if truncate_at_stop:
                             seq = self._truncate_at_terminals(seq)
@@ -311,7 +311,7 @@ class ProGen2Model:
 
                 input_ids, _, lengths = self._prepare_batch(batch_sequences, pad_left=False)
 
-                outputs = self.model(input_ids)
+                outputs = self.model(input_ids)  # type: ignore[misc]
                 logits = outputs.logits  # [batch, seq_len, vocab_size]
 
                 # Shift for autoregressive scoring: predict position i from positions 0..i-1
@@ -371,7 +371,7 @@ def _serialize_output(value: Any) -> Any:
 _model: ProGen2Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -394,7 +394,7 @@ def dispatch(input_dict: dict) -> dict:
             prepend_prompt=input_dict.get("prepend_prompt", True),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
         )
     if operation == "score":
@@ -402,14 +402,14 @@ def dispatch(input_dict: dict) -> dict:
             sequences=input_dict.get("sequences", []),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -419,13 +419,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

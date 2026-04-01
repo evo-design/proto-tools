@@ -166,7 +166,7 @@ def _fetch_pdb_fasta(
         return []
     return [
         (record.description, str(record.seq))
-        for record in SeqIO.parse(StringIO(text), "fasta")
+        for record in SeqIO.parse(StringIO(text), "fasta")  # type: ignore[no-untyped-call]
     ]
 
 

@@ -13,7 +13,7 @@ import shutil
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -120,7 +120,7 @@ class ColabfoldSearchInput(BaseToolInput):
 
     @field_validator("queries", mode="before")
     @classmethod
-    def normalize_queries(cls, value):
+    def normalize_queries(cls, value: Any) -> Any:
         """Normalize various input formats to List[ColabfoldSearchQuery]."""
         # If single instance, immediately convert to list
         if not isinstance(value, list):
@@ -147,7 +147,7 @@ class ColabfoldSearchInput(BaseToolInput):
         return validated_queries
 
     @model_validator(mode="after")
-    def populate_sequence_ids(self):
+    def populate_sequence_ids(self) -> Any:
         """Auto-generate sequence IDs if not provided."""
         # Auto-generate sequence IDs from hash of sequence
         for query in self.queries:
@@ -175,7 +175,7 @@ class ColabfoldSearchInput(BaseToolInput):
         """Get a query by index."""
         return self.queries[index]
 
-    def __iter__(self) -> Iterator[ColabfoldSearchQuery]:
+    def __iter__(self) -> Iterator[ColabfoldSearchQuery]:  # type: ignore[override]
         """Iterate over the queries."""
         return iter(self.queries)
 
@@ -236,7 +236,7 @@ class ColabfoldSearchOutput(BaseToolOutput):
         """Return the default output format."""
         return "a3m"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         if file_format not in ["a3m", "fasta"]:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -258,7 +258,7 @@ class ColabfoldSearchOutput(BaseToolOutput):
         """Get a result by index."""
         return self.results[index]
 
-    def __iter__(self) -> Iterator[ColabfoldSearchResult]:
+    def __iter__(self) -> Iterator[ColabfoldSearchResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -375,24 +375,24 @@ class ColabfoldSearchConfig(BaseConfig):
     _user_specified_output_dir: bool = False
 
     @model_validator(mode="after")
-    def set_default_msa_db_dir(self):
+    def set_default_msa_db_dir(self) -> Any:
         """Set default database directory if not provided and track user specification."""
         if self.msa_db_dir is None:
-            self.msa_db_dir = str(DEFAULT_DB_DIR)
+            self.msa_db_dir = str(DEFAULT_DB_DIR)  # type: ignore[unreachable]
             self._user_specified_db_dir = False
         else:
             self._user_specified_db_dir = True
         return self
 
     @model_validator(mode="after")
-    def validate_local_database_dir_and_name(self):
+    def validate_local_database_dir_and_name(self) -> Any:
         """If the msa_db_dir is specified, ensure the folder exists."""
         # This check should only run for local search mode
         if self.search_mode != "local":
             return self
 
         if self.msa_db_dir is None:
-            return self
+            return self  # type: ignore[unreachable]
 
         # Ensure the specified directory exists
         if not Path(self.msa_db_dir).exists():
@@ -412,7 +412,7 @@ class ColabfoldSearchConfig(BaseConfig):
         return self
 
     @model_validator(mode="after")
-    def set_default_output_dir(self):
+    def set_default_output_dir(self) -> Any:
         """Set default output directory if not provided and track user specification."""
         if self.output_dir is None:
             self.output_dir = str(_default_output_dir())
@@ -427,9 +427,9 @@ class ColabfoldSearchConfig(BaseConfig):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return ColabfoldSearchInput(queries=["MKTL"])
+    return ColabfoldSearchInput(queries=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -447,7 +447,7 @@ def example_input():
 )
 def run_colabfold_search(
     inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ColabfoldSearchOutput:
     """Generate MSAs for protein sequences using ColabFold search, with options.
 
@@ -465,7 +465,7 @@ def run_colabfold_search(
         inputs (ColabfoldSearchInput): Validated input containing sequences to search.
         config (ColabfoldSearchConfig | None): Configuration with database path and search parameters.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ColabfoldSearchOutput: List of results containing MSA objects.
@@ -492,22 +492,22 @@ def run_colabfold_search(
         return ColabfoldSearchOutput(results=[])
 
     # Cleanup leftover files from previous runs if using default directory and cache is empty
-    _cleanup_default_output_dir_if_cache_empty(config)
+    _cleanup_default_output_dir_if_cache_empty(config)  # type: ignore[arg-type]
 
     # Extract sequences and IDs from queries
     sequences = [query.sequence for query in inputs.queries]
     sequence_ids = [query.sequence_id for query in inputs.queries]
 
     # Create output directory structure
-    os.makedirs(config.output_dir, exist_ok=True)
-    msa_out_dir = os.path.join(config.output_dir, "msas")
+    os.makedirs(config.output_dir, exist_ok=True)  # type: ignore[arg-type, union-attr]
+    msa_out_dir = os.path.join(config.output_dir, "msas")  # type: ignore[arg-type, union-attr]
     os.makedirs(msa_out_dir, exist_ok=True)
 
-    if config.search_mode == "local":
-        return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
-    if config.search_mode == "remote":
-        return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
-    raise ValueError(f"Invalid search mode: {config.search_mode}")
+    if config.search_mode == "local":  # type: ignore[union-attr]
+        return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
+    if config.search_mode == "remote":  # type: ignore[union-attr]
+        return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
+    raise ValueError(f"Invalid search mode: {config.search_mode}")  # type: ignore[union-attr]
 
 
 # ============================================================================
@@ -541,8 +541,8 @@ def _cleanup_default_output_dir_if_cache_empty(
         return
 
     # Safe to clean up: using default dir and cache is empty
-    if os.path.exists(config.output_dir):
-        shutil.rmtree(config.output_dir, ignore_errors=True)
+    if os.path.exists(config.output_dir):  # type: ignore[arg-type]
+        shutil.rmtree(config.output_dir, ignore_errors=True)  # type: ignore[arg-type]
         if config.verbose:
             logger.info(
                 f"Cleaned up default output directory (cache is empty): {config.output_dir}"
@@ -645,7 +645,7 @@ def _local_search(
     sequence_ids: list[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,
-    instance=None,
+    instance: Any = None,
 ) -> ColabfoldSearchOutput:
     """Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
@@ -664,7 +664,7 @@ def _local_search(
         # Prepare input data for standalone script
         num_threads = config.num_threads
         if num_threads is None:
-            num_threads = len(os.sched_getaffinity(0))
+            num_threads = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1
 
         input_data = {
             "query_fasta_path": str(fasta_path),
@@ -728,7 +728,7 @@ def _remote_search(
     sequence_ids: list[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,  # noqa: ARG001 — required by tool interface
-    instance=None,
+    instance: Any = None,
 ) -> ColabfoldSearchOutput:
     """Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")

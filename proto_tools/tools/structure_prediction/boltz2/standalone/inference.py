@@ -16,20 +16,20 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-def _prepare_output_values(value: any) -> any:
+def _prepare_output_values(value: any) -> any:  # type: ignore[valid-type]
     """Prepare Boltz output dictionaries by unpacking them into lists."""
     if isinstance(value, dict):
         return [
-            _prepare_output_values(value[str(k)])
+            _prepare_output_values(value[str(k)])  # type: ignore[index]
             for k in range(len(value))
         ]
-    return value
+    return value  # type: ignore[unreachable]
 
 
 class Boltz2Model:
     """Boltz2 model for multi-modal structure prediction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Boltz2 model wrapper."""
         self._loaded = False
         from standalone_helpers import resolve_weights_dir
@@ -107,7 +107,7 @@ class Boltz2Model:
             f"--num_workers={num_workers}",
         ]
 
-        logger.debug(f"Running Boltz command: {' '.join(cmd)}")
+        logger.debug(f"Running Boltz command: {' '.join(cmd)}")  # type: ignore[arg-type]
         sys.stdout.flush()
 
         # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
@@ -117,7 +117,7 @@ class Boltz2Model:
 
         # Run the command with stdout/stderr visible
         subprocess.run(
-            cmd,
+            cmd,  # type: ignore[arg-type]
             check=True,
             text=True,
             env=env,
@@ -174,21 +174,21 @@ class Boltz2Model:
             "metrics": metrics,
         }
 
-    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
+    def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load Boltz2 model components."""
         logger.debug("Initializing Boltz2")
 
         # First try to find boltz in the current venv's bin directory
         venv_boltz = Path(sys.executable).parent / "boltz"
         self.boltz_executable = (
-            str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")
+            str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")  # type: ignore[assignment]
         )
         if not self.boltz_executable:
             raise ImportError(
                 "Could not find the 'boltz' executable. Please make sure Boltz2 is installed in the current environment."
             )
 
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)  # type: ignore[unreachable]
         self._loaded = True
 
         logger.debug(
@@ -202,7 +202,7 @@ class Boltz2Model:
 _model: Boltz2Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -223,7 +223,7 @@ def dispatch(input_dict: dict) -> dict:
     raise ValueError(f"Unknown operation: {operation}")
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - Boltz2 naturally unloads after each call."""
     # Boltz2 is a CLI tool that spawns subprocesses and naturally unloads
     # after each call, so explicit device management is not needed.
@@ -231,11 +231,11 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=0)
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

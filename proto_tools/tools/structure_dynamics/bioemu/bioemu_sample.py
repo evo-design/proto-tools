@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 
@@ -107,7 +107,7 @@ class BioEmuOutput(BaseToolOutput):
         """Return the default output format."""
         return "pdb"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
 
         if file_format == "pdb":
@@ -207,7 +207,7 @@ class BioEmuConfig(StructurePredictionConfig):
         hidden=True,
     )
 
-    def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:
+    def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
         """Generate MSAs via ColabFold search (always — BioEmu requires them).
 
         Skips the search if MSAs are already pre-supplied on ``inputs.msas``.
@@ -230,9 +230,9 @@ class BioEmuConfig(StructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return BioEmuInput(complexes=["MKTL"])
+    return BioEmuInput(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -248,7 +248,7 @@ def example_input():
     iterable_input_field="complexes",
     iterable_output_field="ensembles",
 )
-def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance=None) -> BioEmuOutput:
+def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance: Any = None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 
@@ -260,7 +260,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
             msa = inputs.msas.get(seq)
             if msa is not None:
                 msa_a3m_contents[seq] = msa.to_a3m_string()
-                if config.verbose:
+                if config.verbose:  # type: ignore[union-attr]
                     logger.info(
                         f"Loaded MSA for sequence (length {len(seq)}): "
                         f"{len(msa)} homologs"
@@ -271,13 +271,13 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
         {
             "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
             "msa_a3m_contents": msa_a3m_contents,
-            "num_samples": config.num_samples,
-            "model_name": config.model_name,
-            "filter_samples": config.filter_samples,
-            "batch_size": config.batch_size,
-            "device": config.device,
-            "output_dir": config.output_dir,
-            "verbose": config.verbose,
+            "num_samples": config.num_samples,  # type: ignore[union-attr]
+            "model_name": config.model_name,  # type: ignore[union-attr]
+            "filter_samples": config.filter_samples,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "output_dir": config.output_dir,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -302,7 +302,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
         metadata={
             "num_complexes": len(inputs.complexes),
             "total_structures": total_structures,
-            "model_name": config.model_name,
+            "model_name": config.model_name,  # type: ignore[union-attr]
         },
     )
 

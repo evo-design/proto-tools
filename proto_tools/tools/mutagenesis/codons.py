@@ -100,7 +100,7 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
         }
 
     codons = _expand_degenerate_codon(name)
-    weights: dict[str, float] = {}
+    weights: dict[str, float] = {}  # type: ignore[no-redef]
     for codon in codons:
         aa = CODON_TO_AA.get(codon)
         if aa is None or aa == "*":
@@ -123,10 +123,10 @@ def sample_amino_acid(scheme: str, rng: random.Random | None = None) -> str:
     """Sample a single amino acid from a codon scheme (stops excluded)."""
     info = get_codon_scheme(scheme)
     weights = info["weights"]
-    aas = list(weights.keys())
-    ws = list(weights.values())
+    aas = list(weights.keys())  # type: ignore[union-attr]
+    ws = list(weights.values())  # type: ignore[union-attr]
     r = rng or random
-    return r.choices(aas, weights=ws, k=1)[0]
+    return r.choices(aas, weights=ws, k=1)[0]  # type: ignore[no-any-return]
 
 
 # ============================================================================

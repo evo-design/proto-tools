@@ -38,7 +38,7 @@ class CausalModelScoringInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, v):
+    def normalize_sequences(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -110,7 +110,7 @@ class SequenceScores(BaseModel):
         """Add a metric to the output."""
         self.metrics[name] = value
 
-    def __iter__(self) -> Iterator[float]:
+    def __iter__(self) -> Iterator[float]:  # type: ignore[override]
         return iter(self.metrics.values())
 
     def __len__(self) -> int:
@@ -144,7 +144,7 @@ class CausalModelScoringOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> SequenceScores:
         return self.scores[index]
 
-    def __iter__(self) -> Iterator[SequenceScores]:
+    def __iter__(self) -> Iterator[SequenceScores]:  # type: ignore[override]
         return iter(self.scores)
 
     @property
@@ -157,13 +157,13 @@ class CausalModelScoringOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
             import json
 
-            def default(obj):
+            def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
                     return obj.tolist()
                 return str(obj)
@@ -172,9 +172,9 @@ class CausalModelScoringOutput(BaseToolOutput):
             for s in self.scores:
                 score_data = dict(s.metrics)
                 if s.logits is not None:
-                    score_data["logits"] = s.logits
+                    score_data["logits"] = s.logits  # type: ignore[assignment]
                 if s.vocab is not None:
-                    score_data["vocab"] = s.vocab
+                    score_data["vocab"] = s.vocab  # type: ignore[assignment]
                 data.append(score_data)
 
             with open(path, "w") as f:
@@ -212,7 +212,7 @@ class CausalModelSampleInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, v):
+    def normalize_sequences(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -254,7 +254,7 @@ class CausalModelSampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
 
         if file_format == "fasta":

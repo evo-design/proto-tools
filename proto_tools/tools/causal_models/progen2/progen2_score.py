@@ -5,7 +5,7 @@ ProGen2 scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import field_validator
 
@@ -48,7 +48,7 @@ class ProGen2ScoringInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def validate_sequences(cls, v):
+    def validate_sequences(cls, v: Any) -> Any:
         """Coerce a single string to a list and validate non-empty."""
         if isinstance(v, str):
             v = [v]
@@ -132,7 +132,7 @@ class ProGen2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProGen2ScoringInput(sequences=["MKTL"])
 
@@ -153,7 +153,7 @@ def example_input():
 )
 def run_progen2_score(
     inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ProGen2ScoringOutput:
     """Score protein sequences using ProGen2 autoregressive language model.
 
@@ -167,7 +167,7 @@ def run_progen2_score(
         config (ProGen2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProGen2ScoringOutput: Contains SequenceScores for each input sequence with:
@@ -201,18 +201,18 @@ def run_progen2_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")
+    logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
     result = ToolInstance.dispatch(
         "progen2",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_checkpoint": config.model_checkpoint,
-            "local_path": config.local_path,
-            "device": config.device,
-            "verbose": config.verbose,
-            "batch_size": config.batch_size,
-            "return_logits": config.return_logits,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "local_path": config.local_path,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

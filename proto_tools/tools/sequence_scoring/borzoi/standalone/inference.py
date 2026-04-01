@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from typing import Any
 
 import torch
 
@@ -49,7 +50,7 @@ class BorzoiModel:
         if species == "mouse":
             self.model_name += "-mouse"
 
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load Borzoi model to device."""
         from borzoi_pytorch import Borzoi
 
@@ -63,7 +64,7 @@ class BorzoiModel:
         if verbose:
             logger.info("Borzoi model loaded successfully")
 
-    def unload(self, verbose: bool = False):
+    def unload(self, verbose: bool = False) -> None:
         """Move model to CPU and clear CUDA cache."""
         if hasattr(self, "model") and hasattr(self, "device"):
             if verbose:
@@ -72,7 +73,7 @@ class BorzoiModel:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def _reload_to_device(self, model, old_device: str, new_device: str):  # noqa: ARG002 — required by device transition callback signature
+    def _reload_to_device(self, model: Any, old_device: str, new_device: str) -> Any:  # noqa: ARG002 — required by device transition callback signature
         """Custom move function: reload the model onto the target GPU.
 
         Borzoi uses flash-attn/Triton kernels that cannot run on CPU, so
@@ -81,7 +82,7 @@ class BorzoiModel:
         self.load(new_device)
         return self.model
 
-    def to_device(self, device: str):
+    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
         """Move model to a different device.
 
         GPU→GPU and GPU→CPU use standard .to(). CPU→GPU requires a full
@@ -93,7 +94,7 @@ class BorzoiModel:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device == device:
-            return
+            return  # type: ignore[return-value]
 
         if self.device == "cpu" and device.startswith("cuda"):
             # CPU→GPU: reload needed for flash-attn/Triton
@@ -151,7 +152,7 @@ class BorzoiModel:
         return prediction
 
 
-def _serialize_output(value):
+def _serialize_output(value: Any) -> Any:
     """Recursively serialize tensors and arrays to JSON-safe types."""
     if value is None:
         return None
@@ -176,7 +177,7 @@ def _serialize_output(value):
 _model: BorzoiModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -219,7 +220,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -229,13 +230,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

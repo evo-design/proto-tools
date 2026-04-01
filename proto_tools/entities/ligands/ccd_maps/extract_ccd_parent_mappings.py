@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""proto_tools/entities/ligands/ccd_maps/extract_ccd_parent_mappings.py.
+"""Extract CCD parent mappings from components.cif.
 
 This script reads the components.cif file and extracts mappings from modified
 residues and bases (CCD codes) to their parent (canonical) amino acids or nucleotides.
@@ -23,12 +23,13 @@ Example entries:
     2MG,G,G      # 2'-O-methylguanosine -> Guanosine (RNA modification)
     6MA,DA,A     # N6-methyladenine -> Adenine (DNA modification)
 """
+from __future__ import annotations
 
 import gzip
 from pathlib import Path
 
 
-def extract_parent_mappings(cif_path: Path, output_path: Path):
+def extract_parent_mappings(cif_path: Path, output_path: Path) -> int:
     """Extract parent residue mappings from CCD file.
 
     Args:
@@ -55,7 +56,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
                     current_parent and current_parent != "?" and
                     current_one_letter and current_one_letter != "?" and
                     len(current_one_letter) == 1):  # Only single-letter codes (not peptides)
-                    results.append((current_id, current_parent, current_one_letter))
+                    results.append((current_id, current_parent, current_one_letter))  # type: ignore[arg-type]
 
                 # Start new entry
                 current_id = line[5:]  # Remove "data_" prefix
@@ -79,7 +80,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
             current_parent and current_parent != "?" and
             current_one_letter and current_one_letter != "?" and
             len(current_one_letter) == 1):  # Only single-letter codes (not peptides)
-            results.append((current_id, current_parent, current_one_letter))
+            results.append((current_id, current_parent, current_one_letter))  # type: ignore[arg-type]
 
     finally:
         f.close()
@@ -107,7 +108,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
     return len(results)
 
 
-def main():
+def main() -> int:
     """Main entry point."""
     # Find input file (try both .cif and .cif.gz)
     script_dir = Path(__file__).parent

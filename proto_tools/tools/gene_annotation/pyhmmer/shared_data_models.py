@@ -5,6 +5,7 @@ Shared data models and helpers for PyHMMER tools.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -174,7 +175,7 @@ class PyHmmerInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize sequences to a list of strings.
 
         Handles input formats:
@@ -293,7 +294,7 @@ class PyHmmerOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import warnings
 
         import pandas as pd
@@ -412,14 +413,14 @@ class PyHmmerConfig(BaseConfig):
 # Helper Functions
 # ============================================================================
 def _build_hit_models(
-    sequence_hits: list[dict],
-    domain_hits: list[dict],
+    sequence_hits: list[dict[str, Any]],
+    domain_hits: list[dict[str, Any]],
 ) -> tuple[list[SequenceHit], list[DomainHit]]:
     """Build lists of typed hit models from dicts returned by the standalone script.
 
     Args:
-        sequence_hits (list[dict]): List of dicts with sequence-level hit data.
-        domain_hits (list[dict]): List of dicts with domain-level hit data.
+        sequence_hits (list[dict[str, Any]]): List of dicts with sequence-level hit data.
+        domain_hits (list[dict[str, Any]]): List of dicts with domain-level hit data.
 
     Returns:
         tuple[list[SequenceHit], list[DomainHit]]: Tuple of (sequence_hit_models, domain_hit_models).

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -50,7 +50,7 @@ class Evo1SampleInput(BaseToolInput):
 
     @field_validator("prompts", mode="before")
     @classmethod
-    def normalize_prompts(cls, v):
+    def normalize_prompts(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -83,7 +83,7 @@ class Evo1SampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "fasta":
@@ -172,7 +172,7 @@ class Evo1SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return Evo1SampleInput(prompts=["ATCGATCG"])
 
@@ -191,7 +191,7 @@ def example_input():
     iterable_output_field="sequences",
 )
 def run_evo1_sample(
-    inputs: Evo1SampleInput, config: Evo1SampleConfig | None = None, instance=None,
+    inputs: Evo1SampleInput, config: Evo1SampleConfig | None = None, instance: Any = None,
 ) -> Evo1SampleOutput:
     """Sample DNA sequences using the Evo1 language model.
 
@@ -204,7 +204,7 @@ def run_evo1_sample(
         config (Evo1SampleConfig | None): Sampling configuration including model
             checkpoint, temperature, and top-k parameters.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo1SampleOutput: Generated DNA sequences with optional scores.
@@ -215,20 +215,20 @@ def run_evo1_sample(
         >>> result = run_evo1_sample(inputs, config)
         >>> print(f"Generated {len(result.sequences)} sequences")
     """
-    logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
+    logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")  # type: ignore[union-attr]
 
     result = ToolInstance.dispatch(
         "evo1",
         {
-            "model_name": config.model_name,
+            "model_name": config.model_name,  # type: ignore[union-attr]
             "prompts": inputs.prompts,
-            "num_tokens": config.num_tokens,
-            "top_k": config.top_k,
-            "temperature": config.temperature,
-            "top_p": config.top_p,
-            "batch_size": config.batch_size,
-            "device": config.device,
-            "verbose": config.verbose,
+            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
+            "top_k": config.top_k,  # type: ignore[union-attr]
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "top_p": config.top_p,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -238,7 +238,7 @@ def run_evo1_sample(
     scores = result.get("scores")
 
     # Prepend prompts if requested
-    if config.prepend_prompt:
+    if config.prepend_prompt:  # type: ignore[union-attr]
         sequences = [
             prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)
         ]
@@ -246,12 +246,12 @@ def run_evo1_sample(
     return Evo1SampleOutput(
         metadata={
             "prompts": inputs.prompts,
-            "model_name": config.model_name,
-            "top_k": config.top_k,
-            "temperature": config.temperature,
-            "top_p": config.top_p,
-            "num_tokens": config.num_tokens,
-            "prepend_prompt": config.prepend_prompt,
+            "model_name": config.model_name,  # type: ignore[union-attr]
+            "top_k": config.top_k,  # type: ignore[union-attr]
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "top_p": config.top_p,  # type: ignore[union-attr]
+            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
+            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
         },
         sequences=sequences,
         scores=scores,

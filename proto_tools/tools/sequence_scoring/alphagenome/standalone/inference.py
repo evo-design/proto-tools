@@ -19,7 +19,7 @@ from alphagenome_research.model import dna_model
 logger = logging.getLogger(__name__)
 
 
-def _safe_tidy_scores(scores) -> list:
+def _safe_tidy_scores(scores: Any) -> list[Any]:
     """Wrap variant_scorers_lib.tidy_scores to handle upstream empty-result bug."""
     try:
         df = variant_scorers_lib.tidy_scores(scores)
@@ -31,7 +31,7 @@ def _safe_tidy_scores(scores) -> list:
         return []
     if df is None or df.empty:
         return []
-    return json.loads(df.to_json(orient="records"))
+    return json.loads(df.to_json(orient="records"))  # type: ignore[no-any-return]
 
 _SUPPORTED_CONTEXT_LENGTHS = [1_048_576, 524_288, 131_072, 16_384]
 
@@ -130,7 +130,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_intervals(
+        predictions = self.model.predict_intervals(  # type: ignore[attr-defined]
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
@@ -161,7 +161,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_variants(
+        predictions = self.model.predict_variants(  # type: ignore[attr-defined]
             intervals=parsed_intervals,
             variants=parsed_variants,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -184,7 +184,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_sequences(
+        predictions = self.model.predict_sequences(  # type: ignore[attr-defined]
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
@@ -216,7 +216,7 @@ class AlphaGenomeModel:
             ))
         self._ensure_loaded(device)
 
-        scores_per_variant = self.model.score_variants(
+        scores_per_variant = self.model.score_variants(  # type: ignore[attr-defined]
             intervals=parsed_intervals,
             variants=parsed_variants,
             variant_scorers=_resolve_variant_scorers(variant_scorers, organism),
@@ -240,7 +240,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
-        scores_per_interval = self.model.score_intervals(
+        scores_per_interval = self.model.score_intervals(  # type: ignore[attr-defined]
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),
             organism=_ORGANISM_ENUMS[organism],
@@ -280,7 +280,7 @@ class AlphaGenomeModel:
                     alternate_bases=req["alternate_bases"],
                 )
 
-            scores = self.model.score_ism_variants(
+            scores = self.model.score_ism_variants(  # type: ignore[attr-defined]
                 interval=interval,
                 ism_interval=ism_interval,
                 variant_scorers=scorers,
@@ -294,7 +294,7 @@ class AlphaGenomeModel:
     # ============================================================================
     # Device Management
     # ============================================================================
-    def load(self, device: str = "cuda", verbose: bool = False):
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load AlphaGenome model to device."""
         if verbose:
             logger.info(f"Loading AlphaGenome model: {self.model_version} on {device}")
@@ -314,7 +314,7 @@ class AlphaGenomeModel:
                     self.model_version,
                 )
             self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
@@ -414,16 +414,16 @@ def _serialize_data(value: Any) -> Any:
 def _resolve_variant_scorers(
     scorer_names: list[str] | None,
     organism: str,
-) -> list:
+) -> list[Any]:
     """Resolve variant scorer names to scorer objects."""
     if scorer_names is None:
-        return variant_scorers_lib.get_recommended_scorers(_ORGANISM_PROTOS[organism])
+        return variant_scorers_lib.get_recommended_scorers(_ORGANISM_PROTOS[organism])  # type: ignore[no-any-return]
     return [
         variant_scorers_lib.RECOMMENDED_VARIANT_SCORERS[name]
         for name in scorer_names
     ]
 
-def _resolve_interval_scorers(scorer_names: list[str] | None) -> list:
+def _resolve_interval_scorers(scorer_names: list[str] | None) -> list[Any]:
     """Resolve interval scorer names to scorer objects."""
     recommended = interval_scorers_lib.RECOMMENDED_INTERVAL_SCORERS
     if scorer_names is None:
@@ -507,7 +507,7 @@ _OPERATIONS = {
 _model: AlphaGenomeModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -524,7 +524,7 @@ def dispatch(input_dict: dict) -> dict:
         raise ValueError(f"Unsupported operation: {operation!r}")
 
     method = getattr(_model, operation)
-    return method(**kwargs)
+    return method(**kwargs)  # type: ignore[no-any-return]
 
 
 # ============================================================================
@@ -532,7 +532,7 @@ def dispatch(input_dict: dict) -> dict:
 # ============================================================================
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and hasattr(_model, "to_device"):
@@ -540,11 +540,11 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_jax_memory_stats
 
-    return get_jax_memory_stats(device_index=0)
+    return get_jax_memory_stats(device_index=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

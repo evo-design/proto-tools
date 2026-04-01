@@ -31,7 +31,7 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
     """
     lines = output.split("\n")
     all_arrays = []
-    current_array = []
+    current_array = []  # type: ignore[var-annotated]
     parse = False
 
     for line in lines:
@@ -82,7 +82,7 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
 
 
 def _run_single_minced(
-    sequence: str, seq_id: str, config: dict
+    sequence: str, seq_id: str, config: dict[str, Any]
 ) -> dict[str, Any]:
     """Run MinCED on a single nucleotide sequence.
 
@@ -143,7 +143,7 @@ def _run_single_minced(
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_minced(input_data: dict) -> dict:
+def run_minced(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MinCED CRISPR detection on one or more sequences.
 
     Args:
@@ -164,7 +164,7 @@ def run_minced(input_data: dict) -> dict:
     return {"results": results}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_minced(input_dict)
 
@@ -173,7 +173,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

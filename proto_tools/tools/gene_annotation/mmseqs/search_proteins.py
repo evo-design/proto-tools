@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
@@ -119,7 +120,7 @@ class MmseqsSearchProteinsInput(BaseToolInput):
 
     @field_validator("query_sequences", mode="before")
     @classmethod
-    def validate_query_sequences(cls, v):
+    def validate_query_sequences(cls, v: Any) -> None:
         """Validate query sequences input."""
         if not isinstance(v, list):
             raise ValueError(f"query_sequences must be a list, got {type(v)}")
@@ -127,7 +128,7 @@ class MmseqsSearchProteinsInput(BaseToolInput):
             raise ValueError("query_sequences list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_sequences list must be strings")
-        return v
+        return v  # type: ignore[return-value]
 
     @field_validator("mmseqs_db")
     @classmethod
@@ -160,7 +161,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         """Get a result by index."""
         return self.results[idx]
 
-    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:
+    def __iter__(self) -> Iterator[MmseqsSequenceSearchResult]:  # type: ignore[override]
         """Iterate over the results."""
         return iter(self.results)
 
@@ -179,7 +180,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         """Return the default output format."""
         return "m8"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats
@@ -259,7 +260,7 @@ class MmseqsSearchProteinsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MmseqsSearchProteinsInput(
         query_sequences=["MKTL"],
@@ -282,7 +283,7 @@ def example_input():
 )
 def run_mmseqs_search_proteins(
     inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MmseqsSearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
 
@@ -294,7 +295,7 @@ def run_mmseqs_search_proteins(
             sequences and target database path.
         config (MmseqsSearchProteinsConfig | None): Configuration with search parameters.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         MmseqsSearchProteinsOutput: Per-sequence search results in input order.
@@ -326,9 +327,9 @@ def run_mmseqs_search_proteins(
             "sequences": sequences,
             "sequence_ids": sequence_ids,
             "mmseqs_db": inputs.mmseqs_db,
-            "threads": config.threads,
-            "split": config.split,
-            "sensitivity": config.sensitivity,
+            "threads": config.threads,  # type: ignore[union-attr]
+            "split": config.split,  # type: ignore[union-attr]
+            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -340,7 +341,7 @@ def run_mmseqs_search_proteins(
     df = _parse_m8_output(raw_output)
 
     # Filter to top hits if requested
-    if config.only_top_hits and not df.empty:
+    if config.only_top_hits and not df.empty:  # type: ignore[union-attr]
         df = _filter_top_hits(df)
 
     # Build per-sequence results
@@ -349,9 +350,9 @@ def run_mmseqs_search_proteins(
     return MmseqsSearchProteinsOutput(
         metadata={
             "mmseqs_db": inputs.mmseqs_db,
-            "threads": config.threads,
-            "sensitivity": config.sensitivity,
-            "only_top_hits": config.only_top_hits,
+            "threads": config.threads,  # type: ignore[union-attr]
+            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
+            "only_top_hits": config.only_top_hits,  # type: ignore[union-attr]
             "num_sequences": num_sequences,
         },
         results=results,

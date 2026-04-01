@@ -13,11 +13,12 @@ import sys
 import warnings
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 
 class BioToolsOnlyFilter(logging.Filter):
     """Filter to only allow logs from proto_tools project packages."""
-    def filter(self, record):
+    def filter(self, record: Any) -> Any:
         """Filter log records to exclude noisy third-party messages."""
         # Include logs from proto_tools and tests
         allowed_prefixes = ("proto_tools", "tests")
@@ -27,7 +28,7 @@ class BioToolsOnlyFilter(logging.Filter):
 class SelectiveLevelFormatter(logging.Formatter):
     """Formatter that shows level prefix only for WARNING and above."""
 
-    def format(self, record):
+    def format(self, record: Any) -> Any:
         """Format a log record with colored level and structured output."""
         # For WARNING, ERROR, CRITICAL: add level prefix
         if record.levelno >= logging.WARNING:
@@ -60,7 +61,7 @@ def _parse_log_level(level: int | str) -> int:
     if isinstance(level, str):
         level_upper = level.upper()
         if hasattr(logging, level_upper):
-            return getattr(logging, level_upper)
+            return getattr(logging, level_upper)  # type: ignore[no-any-return]
         raise ValueError(
             f"Unknown log level: '{level}'. "
             f"Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL"

@@ -51,11 +51,11 @@ def _extract_structure_and_scores(
 
     # Convert mmCIF structure file to PDB format.
     pdb_path = os.path.join(output_dir, f"{name}_af3.pdb")
-    parser = PDB.MMCIFParser(QUIET=True)
-    io = PDB.PDBIO()
-    structure = parser.get_structure("structure", alphafold3_structure)
-    io.set_structure(structure)
-    io.save(pdb_path)
+    parser = PDB.MMCIFParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]
+    io = PDB.PDBIO()  # type: ignore[attr-defined, no-untyped-call]
+    structure = parser.get_structure("structure", alphafold3_structure)  # type: ignore[no-untyped-call]
+    io.set_structure(structure)  # type: ignore[no-untyped-call]
+    io.save(pdb_path)  # type: ignore[no-untyped-call]
 
     # Extract confidence scores from AlphaFold3 JSON output files.
     summary_confidences_path = os.path.join(
@@ -89,7 +89,7 @@ def _extract_structure_and_scores(
 class AlphaFold3Model:
     """Wrapper for AlphaFold3 Singularity execution."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize model with unset paths."""
         self._loaded = False
         self.repo_path = None
@@ -97,7 +97,7 @@ class AlphaFold3Model:
         self.model_dir = None
         self.db_dir = None
 
-    def load(self):
+    def load(self) -> None:
         """Validate that all required Singularity paths are set and exist."""
         required_paths = {
             "repo_path": self.repo_path,
@@ -106,12 +106,12 @@ class AlphaFold3Model:
             "db_dir": self.db_dir,
         }
 
-        missing = [name for name, path in required_paths.items() if not path]
+        missing = [name for name, path in required_paths.items() if not path]  # type: ignore[redundant-expr]
         if missing:
             raise ValueError(f"Missing required paths: {', '.join(missing)}")
 
         for name, path in required_paths.items():
-            if not os.path.exists(path):
+            if not os.path.exists(path):  # type: ignore[arg-type]
                 raise FileNotFoundError(f"{name} does not exist: {path}")
 
         self._loaded = True
@@ -170,7 +170,7 @@ class AlphaFold3Model:
             ("db_dir", self.db_dir),
             ("sif_path", self.sif_path),
         ]:
-            if not os.path.exists(path):
+            if not os.path.exists(path):  # type: ignore[arg-type]
                 raise AlphaFold3ExecutionError(f"Path does not exist for {name}: {path}")
 
         # === UNCHANGED LOGIC: Build Singularity command ===
@@ -209,7 +209,7 @@ class AlphaFold3Model:
 
         # === UNCHANGED LOGIC: Run Singularity subprocess ===
         process = subprocess.Popen(
-            run_cmds,
+            run_cmds,  # type: ignore[arg-type]
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -222,7 +222,7 @@ class AlphaFold3Model:
         if process.returncode != 0:
             error_msg = (
                 f"AlphaFold3 failed with return code {process.returncode}\n"
-                f"Command: {' '.join(run_cmds)}\n"
+                f"Command: {' '.join(run_cmds)}\n"  # type: ignore[arg-type]
                 f"Stderr:\n{stderr}"
             )
             raise AlphaFold3ExecutionError(error_msg)
@@ -242,7 +242,7 @@ class AlphaFold3Model:
             "metrics": alphafold3_scores,
         }
 
-    def to_device(self, device: str):
+    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[empty-body]
         """Passthrough for CLI tool - Singularity handles device via environment."""
 
 
@@ -253,7 +253,7 @@ class AlphaFold3Model:
 _model: AlphaFold3Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for ToolInstance worker protocol.
 
     MSA generation is handled in the main process, so this only runs AlphaFold3.
@@ -284,7 +284,7 @@ def dispatch(input_dict: dict) -> dict:
     )
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """DeviceManager callback for moving model to different device.
 
     For AlphaFold3 (CLI tool), this is a passthrough - Singularity subprocess
@@ -299,7 +299,7 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """CLI tool, no persistent GPU state to report."""
     return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
