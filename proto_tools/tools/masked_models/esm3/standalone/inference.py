@@ -153,69 +153,6 @@ class ESM3Model:
             "attention_masks": all_attention_masks,
         }
 
-    def predict_structure(
-        self,
-        sequences: List[str],
-        batch_size: int = 40,
-        device: str = "cuda",
-        verbose: bool = False,
-    ) -> List[Dict[str, Any]]:
-        """
-        Predict 3D structures for protein sequences.
-
-        Args:
-            sequences: Protein sequences
-            batch_size: Batch size for structure prediction
-            device: Device to run on
-
-        Returns:
-            List of structure dictionaries
-        """
-        # Lazy import ESM3 dependencies
-        from esm.sdk.api import ESMProtein, GenerationConfig
-
-        # Lazy load on first call or device change
-        if not self._loaded:
-            self.load(device, verbose)
-        elif self.device != device:
-            self.to_device(device)
-
-        # Split the sequences into batches
-        max_batch_size = min(batch_size, len(sequences))
-        batches = [
-            sequences[i : i + max_batch_size]
-            for i in range(0, len(sequences), max_batch_size)
-        ]
-
-        all_structures = []
-
-        # For each batch
-        for batch_sequences in tqdm(batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)):
-            # Create protein and config objects
-            esm3_proteins = [ESMProtein(sequence=seq) for seq in batch_sequences]
-            structure_configs = [GenerationConfig(track="structure")] * len(
-                esm3_proteins
-            )
-
-            # Generate the structures
-            structures = self.model.batch_generate(
-                inputs=esm3_proteins,
-                configs=structure_configs,
-            )
-
-            # Unpack predicted structures
-            for struct in structures:
-                all_structures.append(
-                    {
-                        "sequence": struct.sequence,
-                        "pdb_string": struct.to_pdb_string(),
-                        "avg_plddt": struct.plddt.mean().item(),
-                        "ptm": struct.ptm.item(),
-                    }
-                )
-
-        return all_structures
-
     def sample(
         self,
         sequences: List[str],
@@ -568,13 +505,6 @@ def dispatch(input_dict: dict) -> dict:
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
-        )
-    elif operation == "predict_structure":
-        return _model.predict_structure(
-            sequences=input_dict.get("sequences", []),
-            batch_size=input_dict.get("batch_size", 128),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
         )
     else:
         raise ValueError(f"Unknown operation: {operation}")

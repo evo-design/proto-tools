@@ -9,11 +9,8 @@ from proto_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsInput,
     ESM3ScoringConfig,
     ESM3ScoringInput,
-    ESM3StructurePredictionConfig,
-    ESM3StructurePredictionInput,
     run_esm3_embeddings,
     run_esm3_score,
-    run_esm3_structure_prediction,
 )
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -63,18 +60,6 @@ def test_esm3_forward_pass():
 
     # Logit details
     assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
-
-
-@pytest.mark.uses_gpu
-def test_esm3_predict_structure():
-    sequences = [_GFP] * 2
-
-    inputs = ESM3StructurePredictionInput(sequences=sequences)
-    config = ESM3StructurePredictionConfig(batch_size=2)
-
-    result = run_esm3_structure_prediction(inputs=inputs, config=config)
-
-    assert len(result.structures) == 2
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────

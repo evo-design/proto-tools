@@ -215,9 +215,6 @@ from .masked_models import (  # ESM2; ESM3; Masking
     ESM3ScoringConfig,
     ESM3ScoringInput,
     ESM3ScoringOutput,
-    ESM3StructurePredictionConfig,
-    ESM3StructurePredictionInput,
-    ESM3StructurePredictionOutput,
     MaskingStrategy,
     SequenceEmbedding,
     run_esm2_embeddings,
@@ -226,7 +223,6 @@ from .masked_models import (  # ESM2; ESM3; Masking
     run_esm3_embeddings,
     run_esm3_sample,
     run_esm3_score,
-    run_esm3_structure_prediction,
 )
 
 # Mutagenesis tools
@@ -782,11 +778,6 @@ __all__ = [
     "ESM3ScoringInput",
     "ESM3ScoringConfig",
     "ESM3ScoringOutput",
-    # Masked models - ESM3 Structure Prediction
-    "run_esm3_structure_prediction",
-    "ESM3StructurePredictionInput",
-    "ESM3StructurePredictionConfig",
-    "ESM3StructurePredictionOutput",
     # RNA splicing - SpliceTransformer
     "run_splice_transformer",
     "SpliceTransformerInput",

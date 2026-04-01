@@ -22,13 +22,9 @@ from .esm3 import (
     ESM3ScoringConfig,
     ESM3ScoringInput,
     ESM3ScoringOutput,
-    ESM3StructurePredictionConfig,
-    ESM3StructurePredictionInput,
-    ESM3StructurePredictionOutput,
     run_esm3_embeddings,
     run_esm3_sample,
     run_esm3_score,
-    run_esm3_structure_prediction,
 )
 from .masking import (
     MaskingMethod,
@@ -62,11 +58,6 @@ __all__ = [
     "ESM3EmbeddingsInput",
     "ESM3EmbeddingsConfig",
     "ESM3EmbeddingsOutput",
-    # ESM3 - Structure Prediction
-    "run_esm3_structure_prediction",
-    "ESM3StructurePredictionInput",
-    "ESM3StructurePredictionConfig",
-    "ESM3StructurePredictionOutput",
     # ESM3 - Sampling
     "run_esm3_sample",
     "ESM3SampleInput",

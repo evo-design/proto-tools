@@ -16,12 +16,6 @@ from .esm3_score import (
     ESM3ScoringOutput,
     run_esm3_score,
 )
-from .esm3_structure_prediction import (
-    ESM3StructurePredictionConfig,
-    ESM3StructurePredictionInput,
-    ESM3StructurePredictionOutput,
-    run_esm3_structure_prediction,
-)
 
 __all__ = [
     # Tools layer - embeddings
@@ -29,11 +23,6 @@ __all__ = [
     "ESM3EmbeddingsConfig",
     "ESM3EmbeddingsOutput",
     "run_esm3_embeddings",
-    # Tools layer - structure prediction
-    "ESM3StructurePredictionInput",
-    "ESM3StructurePredictionConfig",
-    "ESM3StructurePredictionOutput",
-    "run_esm3_structure_prediction",
     # Tools layer - sampling
     "ESM3SampleInput",
     "ESM3SampleConfig",
