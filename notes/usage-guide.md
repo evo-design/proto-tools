@@ -8,7 +8,7 @@ Infer from context whether to **write a script** or **execute directly**:
 - The user says "write", "create", "set up", "notebook", or similar authoring language
 - The task is a multi-step pipeline or expensive GPU job
 - The user will likely iterate on parameters or review before running
-- When unclear — default to writing a script (safer, reproducible)
+- When unclear, default to writing a script (safer, reproducible)
 
 **Execute directly** when:
 - The user says "what is", "how many", "show me", "quick", "find", or similar query language

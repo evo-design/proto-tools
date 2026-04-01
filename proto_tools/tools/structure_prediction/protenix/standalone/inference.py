@@ -393,7 +393,7 @@ def to_device(device: str) -> dict:
 
 
 def get_memory_stats() -> dict:
-    """CLI tool — no persistent GPU state to report."""
+    """CLI tool, no persistent GPU state to report."""
     return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 

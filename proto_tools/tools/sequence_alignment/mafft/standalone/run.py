@@ -132,7 +132,7 @@ def run_mafft_alignment(
             # Pre-built layout: binaries are directly in libexec/
             env["MAFFT_BINARIES"] = str(libexec_dir)
         else:
-            # Source-compiled layout (libexec/mafft/) or missing — let
+            # Source-compiled layout (libexec/mafft/) or missing; let
             # the mafft script use its built-in path.
             env.pop("MAFFT_BINARIES", None)
 

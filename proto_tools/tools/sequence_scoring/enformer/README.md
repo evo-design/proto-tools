@@ -206,10 +206,10 @@ result.export("enformer_output", file_format="json")
 ## Related Tools
 
 **Used together:**
-- `borzoi-prediction` — Compare Enformer and Borzoi predictions for cross-validation of regulatory effects
-- `evo2-sample` — Generate candidate sequences, then score them with Enformer
+- `borzoi-prediction`: Compare Enformer and Borzoi predictions for cross-validation of regulatory effects
+- `evo2-sample`: Generate candidate sequences, then score them with Enformer
 
 **Alternatives:**
-- `borzoi-prediction` — Longer context (524 kb), higher resolution, trained on RNA-seq. Preferred for most new analyses.
-- `alphagenome` — Google DeepMind's next-generation genomics model
-- `splice-transformer` — Specialized for splice site prediction rather than general regulatory activity
+- `borzoi-prediction`: Longer context (524 kb), higher resolution, trained on RNA-seq. Preferred for most new analyses.
+- `alphagenome`: Google DeepMind's next-generation genomics model
+- `splice-transformer`: Specialized for splice site prediction rather than general regulatory activity

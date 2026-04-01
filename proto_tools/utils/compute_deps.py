@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # PyTorch CUDA Support (stable):
 #   PyTorch 2.8+: CUDA 12.8 (driver 570+)
 #   PyTorch 2.5+: CUDA 12.6 (driver 550+, cu126 via forward compat)
-#   PyTorch 2.4+: CUDA 12.6 (driver 525+, cu126 via CUDA forward compat — all CUDA 12.x drivers)
+#   PyTorch 2.4+: CUDA 12.6 (driver 525+, cu126 via CUDA forward compat, all CUDA 12.x drivers)
 
 # PyTorch version + wheel index compatibility by NVIDIA driver major version
 # Format: {min_driver_major: (min_torch, max_torch_exclusive, cuda_variant)}

@@ -118,5 +118,4 @@ def run_ligandmpnn_score(
         >>> print(f"Perplexity: {result.scores[0].perplexity}")
     """
     _ = (inputs, config)
-    # TODO: Implement LigandMPNN scoring
-    pass
+    raise NotImplementedError("LigandMPNN scoring is not yet implemented")

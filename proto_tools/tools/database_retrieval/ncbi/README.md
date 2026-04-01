@@ -6,9 +6,9 @@
 
 Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biological sequences (protein, nucleotide, gene):
 
-- **`ncbi-esearch`** — Search for IDs by query term
-- **`ncbi-esummary`** — Retrieve record metadata by ID
-- **`ncbi-efetch`** — Fetch sequences/records by ID in FASTA or other formats
+- **`ncbi-esearch`**: Search for IDs by query term
+- **`ncbi-esummary`**: Retrieve record metadata by ID
+- **`ncbi-efetch`**: Fetch sequences/records by ID in FASTA or other formats
 
 All are CPU-only tools that wrap the NCBI Entrez REST API.
 
@@ -182,7 +182,7 @@ All three tools share `NCBIFetchConfig`:
 - `fasta_cds_na` returns coding DNA even from a protein accession (by resolving to the genomic record).
 
 **Interpreting edge cases:**
-- Gene IDs (e.g., `7157` for TP53) are numeric and database-specific — they are not accessions
+- Gene IDs (e.g., `7157` for TP53) are numeric and database-specific: they are not accessions
 - Some accessions resolve to multiple FASTA records (e.g., alternatively spliced transcripts)
 - Subsequence extraction (`seq_start`/`seq_stop`) is 1-indexed and inclusive on both ends, following NCBI conventions
 - Fetching with strand `"-"` returns the reverse complement of the specified region
@@ -281,12 +281,12 @@ print(f"Region length: {len(region)} bp")
 **Tips for optimal results:**
 - Use NCBI field tags in search terms for precision: `[Gene Name]`, `[Organism]`, `[Protein Name]`, `[Title]`
 - Chain ESearch → EFetch for the standard workflow: find IDs first, then retrieve sequences
-- Provide `ncbi_email` in config — NCBI recommends this for responsible API usage
+- Provide `ncbi_email` in config: NCBI recommends this for responsible API usage
 - For coding sequences, use `return_format="fasta_cds_na"` instead of manually extracting CDS from genomic records
 
 **Edge cases to watch for:**
 - Gene database IDs are numeric (e.g., `7157`) and differ from protein/nuccore accessions
-- Some accessions are versioned (e.g., `NP_000537.3`) — omitting the version may return the latest version
+- Some accessions are versioned (e.g., `NP_000537.3`): omitting the version may return the latest version
 - Obsolete or suppressed records may return empty results or errors
 - Very large genomic regions (>100 Mb) may timeout; use subsequence extraction for specific regions
 

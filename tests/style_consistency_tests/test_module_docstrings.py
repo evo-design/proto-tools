@@ -95,7 +95,7 @@ def test_module_docstring_format(py_file: Path, rel_path: str):
 
     lines = docstring.split("\n")
     if len(lines) <= 1:
-        # Single-line docstring (just the path) — acceptable
+        # Single-line docstring (just the path), acceptable
         return
 
     assert lines[1].strip() == "", (

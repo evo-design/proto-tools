@@ -115,8 +115,8 @@ UniProtFetchOutput(
 ## Interpreting Results
 
 **Entry quality indicators:**
-- **Swiss-Prot (reviewed):** `entry_type` contains "reviewed" — manually curated, experimentally validated. Highest quality; use as reference sequences.
-- **TrEMBL (unreviewed):** `entry_type` contains "unreviewed" — computationally annotated, not manually verified. Useful but verify critical annotations independently.
+- **Swiss-Prot (reviewed):** `entry_type` contains "reviewed": manually curated, experimentally validated. Highest quality; use as reference sequences.
+- **TrEMBL (unreviewed):** `entry_type` contains "unreviewed": computationally annotated, not manually verified. Useful but verify critical annotations independently.
 
 **PDB cross-references:**
 - Non-empty `pdb_crossrefs` means experimental 3D structures exist for this protein
@@ -124,7 +124,7 @@ UniProtFetchOutput(
 - Use `pdb-fetch-entry` to get metadata (method, resolution) for specific PDB IDs
 
 **Interpreting edge cases:**
-- Empty `pdb_crossrefs` does not mean the protein structure is unknown — it may have been predicted by AlphaFold2 (check the [AlphaFold DB](https://alphafold.ebi.ac.uk/))
+- Empty `pdb_crossrefs` does not mean the protein structure is unknown: it may have been predicted by AlphaFold2 (check the [AlphaFold DB](https://alphafold.ebi.ac.uk/))
 - Multiple gene names are common for well-studied proteins with historical nomenclature
 - Very long `raw_entry` records contain rich functional annotation; explore `raw_entry["comments"]` for function, subcellular location, and disease associations
 
@@ -198,7 +198,7 @@ print(f"Cross-referenced databases: {sorted(db_types)}")
 
 **Tips for optimal results:**
 - Set `prefer_pdb_crossref=True` when you need both sequence and structure information
-- Use `raw_entry` for advanced use cases — it contains function annotations, disease associations, subcellular localization, active sites, and more
+- Use `raw_entry` for advanced use cases: it contains function annotations, disease associations, subcellular localization, active sites, and more
 - For ambiguous gene names, increase `max_candidates` to evaluate more search results
 
 **Edge cases to watch for:**

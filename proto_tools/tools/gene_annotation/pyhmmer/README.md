@@ -60,7 +60,7 @@ The module exposes five distinct functions:
 
 `pyhmmer-hmmsearch`: Searches one or more HMM profiles against a set of protein sequences. Use this when you have a specific protein family (HMM) and want to find all members in your sequences.
 
-`pyhmmer-hmmscan`: Searches protein sequences against an HMM database (like Pfam). Use this to annotate proteins with known domains—the reverse of hmmsearch.
+`pyhmmer-hmmscan`: Searches protein sequences against an HMM database (like Pfam). Use this to annotate proteins with known domains;the reverse of hmmsearch.
 
 `pyhmmer-phmmer`: Performs iterative protein-protein searches by building temporary HMM profiles from query sequences on-the-fly. Use this when you don't have pre-built HMMs but want HMM-level sensitivity.
 
@@ -120,9 +120,9 @@ Storage: HMM files are compact; Pfam-A is ~300MB.
 
 ### Sweep Priorities
 
-1. `evalue_threshold` — Most impactful; controls overall sensitivity vs specificity tradeoff
-2. `domain_evalue_threshold` — Controls domain-level filtering independently from sequence-level
-3. `score_threshold` — Use when database-size-independent thresholds are needed
+1. `evalue_threshold`; Most impactful; controls overall sensitivity vs specificity tradeoff
+2. `domain_evalue_threshold`; Controls domain-level filtering independently from sequence-level
+3. `score_threshold`; Use when database-size-independent thresholds are needed
 
 ## Output Specification
 
@@ -171,7 +171,7 @@ All tools return a `PyHmmerOutput` object with two DataFrames:
 
 **Interpreting E-values:**
 - E-value depends on database size. An E-value of 0.001 against Pfam (~20,000 HMMs) is more significant than the same E-value against a smaller custom database.
-- Always check `included` column—PyHMMER applies gathering thresholds when available.
+- Always check `included` column;PyHMMER applies gathering thresholds when available.
 
 ## Quick Start Examples
 

@@ -6,8 +6,8 @@
 
 Two tools for retrieving data from the RCSB Protein Data Bank:
 
-- **`pdb-fetch-entry`** — Fetch structure metadata (title, experimental method, resolution)
-- **`pdb-fetch-fasta`** — Fetch chain sequences with automatic protein/nucleotide classification
+- **`pdb-fetch-entry`**: Fetch structure metadata (title, experimental method, resolution)
+- **`pdb-fetch-fasta`**: Fetch chain sequences with automatic protein/nucleotide classification
 
 Both are CPU-only tools that wrap the RCSB PDB REST API.
 
@@ -143,10 +143,10 @@ PdbFetchFastaOutput(
 ## Interpreting Results
 
 **Resolution quality tiers (X-ray/cryo-EM):**
-- **High resolution:** `< 2.0 A` — Atomic detail visible; reliable for side-chain conformations and ligand binding
-- **Good resolution:** `2.0 - 3.0 A` — Backbone well-defined; side-chain positions approximate
-- **Low resolution:** `3.0 - 4.0 A` — Backbone trace visible; individual side chains unreliable
-- **Very low resolution:** `> 4.0 A` — Domain-level topology only; use with caution
+- **High resolution:** `< 2.0 A`: Atomic detail visible; reliable for side-chain conformations and ligand binding
+- **Good resolution:** `2.0 - 3.0 A`: Backbone well-defined; side-chain positions approximate
+- **Low resolution:** `3.0 - 4.0 A`: Backbone trace visible; individual side chains unreliable
+- **Very low resolution:** `> 4.0 A`: Domain-level topology only; use with caution
 
 **Method considerations:**
 - X-ray crystallography: resolution directly indicates coordinate quality
@@ -221,7 +221,7 @@ print(f"Unique protein sequences: {len(unique_seqs)}")
 
 **Tips for optimal results:**
 - Use `pdb-fetch-entry` first to check resolution and method before deciding whether to use a structure as a reference
-- For multi-chain structures, iterate over `output.chains` — a single PDB entry may contain many chains
+- For multi-chain structures, iterate over `output.chains`: a single PDB entry may contain many chains
 - Combine with `uniprot-fetch` to go from gene name → UniProt accession → PDB IDs → chain sequences
 
 **Edge cases to watch for:**

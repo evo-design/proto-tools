@@ -156,9 +156,9 @@ See `BlastSearchConfig` class for the full list of supported parameters.
 
 ### Sweep Priorities
 
-1. `evalue` — Most impactful; controls sensitivity vs noise tradeoff
-2. `program` — Must match query/database types; incorrect choice yields no results
-3. `word_size` — Decrease to find shorter/more divergent matches (slower), increase for speed
+1. `evalue`; Most impactful; controls sensitivity vs noise tradeoff
+2. `program`; Must match query/database types; incorrect choice yields no results
+3. `word_size`; Decrease to find shorter/more divergent matches (slower), increase for speed
 
 ## Output Specification
 

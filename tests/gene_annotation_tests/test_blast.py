@@ -486,7 +486,7 @@ def test_online_blastp():
     assert result.results_df is not None
     assert result.metadata["search_mode"] == "online"
     assert result.metadata["program"] == "blastp"
-    # Hemoglobin is highly conserved — top hit should be high identity
+    # Hemoglobin is highly conserved, so top hit should be high identity
     assert result.results_df.iloc[0]["pident"] > 80.0
 
 

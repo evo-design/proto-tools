@@ -1,7 +1,7 @@
 """Standalone inference script for mock JAX multi-GPU tool.
 
 Two param pytrees on separate GPUs, following Flax/Haiku conventions.
-Uses real JAX with jax.device_put() for device placement — same pattern
+Uses real JAX with jax.device_put() for device placement, same pattern
 as ProteinMPNN and other real JAX tools.
 """
 from __future__ import annotations

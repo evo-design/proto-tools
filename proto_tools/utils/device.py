@@ -384,7 +384,7 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
     indices. Non-CUDA entries (cpu) are skipped.
 
     Args:
-        device (int | str | list[int | str]): Device specification — int, single device string, or list of
+        device (int | str | list[int | str]): Device specification. Accepts an int, single device string, or list of
             ints/strings (e.g. ``["cuda:0", "cuda:1"]``).
 
     Returns:
@@ -819,7 +819,7 @@ def display_gpu_memory_usage(
         device_set = set(devices)
         gpu_info = [g for g in gpu_info if g["index"] in device_set]
 
-    # Compact mode — one short line per GPU
+    # Compact mode: one short line per GPU
     if not verbose:
         compact_bar_width = 14
         for gpu in gpu_info:

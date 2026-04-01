@@ -13,13 +13,13 @@ _persistent_tool = make_persistent_fixture("alphagenome")
 
 # Smallest supported context length (fastest inference for predictions).
 _SHORT = 16_384
-_SHORT_MID = _SHORT // 2  # 8_192 — centre of the short interval
+_SHORT_MID = _SHORT // 2  # 8_192, centre of the short interval
 
 # Scoring / ISM operations require a context wider than the scorer's centre
 # mask (the default RNA_SEQ interval scorer uses width=200,001 bp).
 # Use the smallest supported context that fits: 524,288 bp.
 _SCORE = 524_288
-_SCORE_MID = _SCORE // 2  # 262_144 — centre of the scoring interval
+_SCORE_MID = _SCORE // 2  # 262_144, centre of the scoring interval
 
 
 # ---------------------------------------------------------------------------

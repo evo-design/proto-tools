@@ -16,7 +16,7 @@ Chai1 is a multi-modal structure prediction model from Chai Discovery that predi
 - **Lead optimization:** Evaluate how chemical modifications affect binding geometry
 
 **When NOT to use this tool:**
-- **DNA/RNA complexes:** Chai1 does not support nucleic acids — use Boltz2 instead
+- **DNA/RNA complexes:** Chai1 does not support nucleic acids: use Boltz2 instead
 - **Very large complexes (>2,048 residues):** Hard limit on total sequence length; split into domains or use AlphaFold2
 - **High-throughput pure protein screening:** ESMFold is faster for protein-only predictions without ligands
 - **Membrane protein in membrane context:** Does not model lipid bilayers
@@ -143,9 +143,9 @@ metrics = {
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Excellent:** `avg_plddt > 90` and `iptm > 0.8` — High confidence; structure suitable for detailed analysis
-- **Acceptable:** `70 < avg_plddt <= 90` and `iptm > 0.6` — Moderate confidence; verify key interactions manually
-- **Poor:** `avg_plddt <= 70` or `iptm <= 0.6` — Low confidence; binding pose may be incorrect; consider redesigning
+- **Excellent:** `avg_plddt > 90` and `iptm > 0.8`: High confidence; structure suitable for detailed analysis
+- **Acceptable:** `70 < avg_plddt <= 90` and `iptm > 0.6`: Moderate confidence; verify key interactions manually
+- **Poor:** `avg_plddt <= 70` or `iptm <= 0.6`: Low confidence; binding pose may be incorrect; consider redesigning
 
 **Tips for interpreting output:**
 - For protein-ligand binding, `iptm` is more informative than `avg_plddt` about binding confidence

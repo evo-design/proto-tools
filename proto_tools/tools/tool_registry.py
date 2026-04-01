@@ -36,7 +36,7 @@ IGNORED_WARNING_SUBSTRINGS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 
-# TimeoutError excluded — retrying with the same limit would just time out again
+# TimeoutError excluded: retrying with the same limit would just time out again
 _RETRYABLE_EXCEPTIONS = (ConnectionError,)
 
 from proto_tools.utils import BaseConfig
@@ -62,8 +62,7 @@ class ToolSpec(BaseModel):
     """
     Specification for a registered tool.
 
-    Stores tool metadata in the registry and is automatically serialized
-    by FastAPI to JSON for API/frontend integration.
+    Stores tool metadata in the registry.
 
     Attributes:
         key (str): Internal identifier (e.g., ``"blast-search"``).
@@ -472,7 +471,7 @@ class ToolRegistry:
                             time.sleep(delay)
 
                     except Exception as e:
-                        # Non-retryable error — return immediately
+                        # Non-retryable error; return immediately
                         filtered_warnings = [
                             w for w in warning_list
                             if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
@@ -522,7 +521,7 @@ class ToolRegistry:
         """
         List all registered tools as Pydantic models.
 
-        Returns list of ToolSpec models that FastAPI automatically serializes to JSON.
+        Returns all registered tools as ToolSpec models.
 
         Returns:
             list[ToolSpec]: List of ToolSpec Pydantic models
@@ -570,10 +569,6 @@ class ToolRegistry:
         Args:
             key (str): Tool identifier.
 
-        TODO: Remove this workaround once DataFrame fields are refactored out of
-        output models into .to_dataframe() methods. The underlying data should be
-        structured Pydantic models; DataFrames are a presentation convenience.
-        See: https://github.com/proto-bio/proto-tools/issues/215
         """
         spec = cls.get(key)
         return spec.output_model.model_json_schema(

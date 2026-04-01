@@ -290,10 +290,10 @@ print(f"Logits shape: {len(result.scores[0].logits)} positions")
 ## Related Tools
 
 **Used together:**
-- `enformer`, `borzoi`, `alphagenome` — score generated DNA sequences for regulatory activity predictions
-- `prodigal` — find open reading frames in generated DNA sequences
-- `splice_transformer` — analyze splice site predictions in generated sequences
+- `enformer`, `borzoi`, `alphagenome`: score generated DNA sequences for regulatory activity predictions
+- `prodigal`: find open reading frames in generated DNA sequences
+- `splice_transformer`: analyze splice site predictions in generated sequences
 
 **Alternatives:**
-- `progen2` — autoregressive generation for protein (not DNA) sequences
-- `esm3` — generative protein language model with structure conditioning
+- `progen2`: autoregressive generation for protein (not DNA) sequences
+- `esm3`: generative protein language model with structure conditioning

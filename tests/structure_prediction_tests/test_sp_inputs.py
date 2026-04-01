@@ -677,7 +677,7 @@ def test_invalid_modification_error_shows_actual_residue():
 
 
 def test_invalid_modification_error_lists_allowed_modifications_for_actual_residue():
-    # Position 5 is 'P' — error should suggest HYP and other proline modifications
+    # Position 5 is 'P'; error should suggest HYP and other proline modifications
     with pytest.raises(ValueError, match="Allowed modifications for 'P' in protein: .*HYP"):
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,

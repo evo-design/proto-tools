@@ -132,12 +132,12 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         model_num (int): Which AlphaFold2 model parameter set to use (1-5).
             AF2 ships 5 independently trained parameter sets. Different sets can
             produce different predictions. Mutually exclusive with
-            ``num_ensemble_models > 1`` — set one or the other. Default: 1.
+            ``num_ensemble_models > 1``; set one or the other. Default: 1.
 
         num_ensemble_models (int): Number of model parameter sets to run and average.
             Running multiple models and averaging their outputs can improve prediction
             quality at the cost of increased computation time. Mutually exclusive with
-            ``model_num`` — when ensembling, models are selected from the full pool
+            ``model_num``; when ensembling, models are selected from the full pool
             (models 1 through N). Range: 1-5. Default: 1.
 
         seed (int | None): Random seed for reproducibility. If ``None``, uses

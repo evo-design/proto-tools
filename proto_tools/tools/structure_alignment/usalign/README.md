@@ -16,7 +16,7 @@ USalign (Universal Structure alignment) extends TMalign to support monomers, mul
 - Quality control of complex predictions from Boltz2, AlphaFold3, or Chai-1
 
 **When NOT to use this tool:**
-- Compare two simple monomeric proteins: use TMalign (`tmalign-alignment`) instead — it is faster and equivalent for monomers
+- Compare two simple monomeric proteins: use TMalign (`tmalign-alignment`) instead: it is faster and equivalent for monomers
 - Compute RMSD without alignment: use structure prediction tools' built-in RMSD or the `structure-rmsd` constraint
 - Predict structures from sequence: use ESMFold, AlphaFold2, Boltz2, etc.
 - Align sequences (not structures): use MAFFT (`mafft-alignment`) or BLAST (`blast-search`)
@@ -103,10 +103,10 @@ USalignOutput(
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Same fold/architecture:** `TM-score > 0.5` — Structures share the same fold topology or complex architecture. Validated threshold for both monomers and multimers.
-- **Similar topology:** `0.3 < TM-score <= 0.5` — Structures may share a similar fold; relationship is not definitive. Inspect visually.
-- **Different fold:** `TM-score <= 0.3` — Structures are topologically unrelated.
-- **Near-identical:** `TM-score > 0.9` — Nearly identical structures; differences are in loops or minor conformational changes.
+- **Same fold/architecture:** `TM-score > 0.5`: Structures share the same fold topology or complex architecture. Validated threshold for both monomers and multimers.
+- **Similar topology:** `0.3 < TM-score <= 0.5`: Structures may share a similar fold; relationship is not definitive. Inspect visually.
+- **Different fold:** `TM-score <= 0.3`: Structures are topologically unrelated.
+- **Near-identical:** `TM-score > 0.9`: Nearly identical structures; differences are in loops or minor conformational changes.
 
 **Interpreting edge cases:**
 - For multimers, the alignment considers all chains jointly. Poor chain mapping (e.g., for symmetric complexes with ambiguous correspondence) may lower the score.

@@ -273,10 +273,10 @@ print(f"Logits shape: {len(result.scores[0].logits)} positions x {len(result.sco
 ## Related Tools
 
 **Used together:**
-- `esmfold`, `boltz2`, `chai1` — predict structure of ProGen2-generated sequences
-- `esm2` — compute embeddings or pseudo-likelihood scores for generated sequences
-- `proteinmpnn` — inverse folding to generate sequences conditioned on a target structure
+- `esmfold`, `boltz2`, `chai1`: predict structure of ProGen2-generated sequences
+- `esm2`: compute embeddings or pseudo-likelihood scores for generated sequences
+- `proteinmpnn`: inverse folding to generate sequences conditioned on a target structure
 
 **Alternatives:**
-- `esm3` — masked/generative protein language model with structure conditioning
-- `evo2` — autoregressive generation for DNA (not protein) sequences
+- `esm3`: masked/generative protein language model with structure conditioning
+- `evo2`: autoregressive generation for DNA (not protein) sequences

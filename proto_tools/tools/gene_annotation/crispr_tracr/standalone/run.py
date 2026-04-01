@@ -301,11 +301,11 @@ def _run_tracr_batch(
         ):
             # CRISPRtracrRNA can crash on sequences where fasta36 finds no
             # anti-repeat hits (IndexError in anti_repeat_search.py).  This
-            # is expected for some generated sequences — treat as "no
+            # is expected for some generated sequences. Treat as "no
             # tracrRNA found" rather than a hard failure.
             print(
                 f"WARNING: Batch {batch_idx} produced no results "
-                f"(exit code {proc.returncode}) — treating as no tracrRNA found",
+                f"(exit code {proc.returncode}); treating as no tracrRNA found",
                 file=sys.stderr,
             )
 

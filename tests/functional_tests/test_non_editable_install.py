@@ -29,7 +29,7 @@ def main():
 
     # ── Step 1: Verify env vars are set ──────────────────────────────────
     print("[1] Environment variables")
-    assert proto_home, "PROTO_HOME must be set (we're on Sherlock — ~/.proto/ would fill $HOME)"
+    assert proto_home, "PROTO_HOME must be set (we're on Sherlock; ~/.proto/ would fill $HOME)"
     print(f"    PROTO_HOME       = {proto_home}")
     print(f"    PROTO_MODEL_CACHE = {proto_model_cache or '(not set, will use PROTO_HOME/proto_model_cache/)'}")
     print()

@@ -223,7 +223,6 @@ class MmseqsSearchProteinsConfig(BaseConfig):
         sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
         only_top_hits (bool): If True, keep only the best hit per query sequence.
     """
-    # TODO: Determine how this should be handled for the frontend.
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
@@ -231,7 +230,6 @@ class MmseqsSearchProteinsConfig(BaseConfig):
         description="Number of CPU threads for parallel processing",
         hidden=True,
     )
-    # TODO: Should this be a literal?
     split: int = ConfigField(
         title="Split",
         default=DEFAULT_SPLIT,

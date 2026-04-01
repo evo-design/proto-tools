@@ -12,7 +12,7 @@
           (`proteinmpnn-score`)."
 
    BAD:  "This tool does inverse folding."
-         (Too vague — no registry keys, no indication of input/output types)
+         (Too vague; no registry keys, no indication of input/output types)
 -->
 
 ## When to Use This Tool
@@ -38,7 +38,7 @@
 
    GOOD: "- No structure available: ProteinMPNN requires a 3D backbone. Use ESMFold
           or AlphaFold first to predict a structure."
-   BAD:  "- When you don't need it" (useless — provides no redirect path)
+   BAD:  "- When you don't need it" (useless; provides no redirect path)
 -->
 - <!-- Anti-pattern 1: situation -> use {alternative_tool} instead -->
 - <!-- Anti-pattern 2: situation -> use {alternative_tool} instead -->
@@ -91,7 +91,7 @@
 -->
 
 ## Tool Catalog
-<!-- [If Applicable — include when the tool exposes 2+ registered operations] | Audience: All
+<!-- [If Applicable: include when the tool exposes 2+ registered operations] | Audience: All
    A summary matrix mapping each operation to its input, output, and primary use case.
    Agents scan this table to pick the right operation without reading the full README.
 
@@ -110,7 +110,7 @@
 | `{tool-key-2}` | <!-- primary input type --> | <!-- primary output type --> | <!-- one-line: when to use this operation --> |
 
 ## Model Variants
-<!-- [If Applicable — include for ML/AI tools with multiple checkpoints/model sizes] | Audience: All
+<!-- [If Applicable: include for ML/AI tools with multiple checkpoints/model sizes] | Audience: All
    List available checkpoints with size, speed, accuracy, and guidance on when to use each.
    Without this section, users must read source code to discover available models.
 
@@ -129,7 +129,7 @@
 | `{checkpoint_1}` | <!-- size --> | <!-- relative speed --> | <!-- relative quality --> | <!-- when to use; any caveats --> |
 
 ## Execution Modes
-<!-- [If Applicable — include for GPU tools with multiple runtimes] | Audience: Engineers
+<!-- [If Applicable: include for GPU tools with multiple runtimes] | Audience: Engineers
    Describe how the tool behaves in different execution environments.
    Call out any features that differ between modes (e.g., caching, network access).
 
@@ -215,7 +215,7 @@
 | `param2` | `type` | `default` | <!-- Description --> |
 
 ### Parameter Guides
-<!-- [If Applicable — include when a key parameter has non-obvious behavior that benefits
+<!-- [If Applicable; include when a key parameter has non-obvious behavior that benefits
    from a dedicated interpretation table] | Audience: All
    Good candidates: temperature, top_k/top_p, threshold parameters, scoring modes.
 
@@ -229,7 +229,7 @@
 -->
 
 ### Sweep Priorities
-<!-- [If Applicable — include when the tool is used as a constraint/scorer in optimization
+<!-- [If Applicable; include when the tool is used as a constraint/scorer in optimization
    or when parameter sweeps are common] | Audience: Agents, Engineers
    List the 2-3 parameters that most affect results, with recommended sweep values.
 
@@ -266,7 +266,7 @@
 
 ## Interpreting Results
 <!-- [Required] | Audience: Biologists, Agents
-   This is the "so what?" section — help users understand what the output numbers MEAN.
+   This is the "so what?" section; help users understand what the output numbers MEAN.
    Every threshold tier needs: a range, a biological interpretation, AND an actionable next step.
 -->
 
@@ -274,9 +274,9 @@
 <!-- Format each tier with range + meaning + action.
 
    GOOD:
-   - **Excellent:** `perplexity < 2.0` — Highly compatible sequence-structure pair.
+   - **Excellent:** `perplexity < 2.0`: Highly compatible sequence-structure pair.
      Proceed to experimental validation or downstream design steps.
-   - **Poor:** `perplexity > 8.0` — Likely incompatible. Redesign the sequence or
+   - **Poor:** `perplexity > 8.0`: Likely incompatible. Redesign the sequence or
      verify the input structure is correct.
 
    BAD:
@@ -284,19 +284,19 @@
    - **Bad:** `score < 0.5`
    (No biological meaning, no recommended action)
 -->
-- **Excellent:** `metric > X` — <!-- Biological meaning. Recommended action. -->
-- **Acceptable:** `Y < metric <= X` — <!-- Biological meaning. What to check. -->
-- **Poor:** `metric <= Y` — <!-- What this indicates. Recommended next steps. -->
+- **Excellent:** `metric > X`: <!-- Biological meaning. Recommended action. -->
+- **Acceptable:** `Y < metric <= X`: <!-- Biological meaning. What to check. -->
+- **Poor:** `metric <= Y`: <!-- What this indicates. Recommended next steps. -->
 
 **Interpreting edge cases:**
 <!-- 2-3 bullets covering non-obvious interpretation scenarios that trip up users.
 
    GOOD: "- Low perplexity does NOT guarantee folding. Always validate designs with
           structure prediction (ESMFold, AlphaFold)."
-   GOOD: "- Perplexity is exponential — a value of 2.0 means the model is 'uncertain'
+   GOOD: "- Perplexity is exponential; a value of 2.0 means the model is 'uncertain'
           between ~2 amino acids per position on average."
    GOOD: "- Low pLDDT regions may be biologically relevant (e.g., flexible linkers,
-          disordered regions) — don't automatically discard them."
+          disordered regions); don't automatically discard them."
 -->
 
 ## Quick Start Examples
@@ -423,13 +423,13 @@ result = run_{tool_name}(inputs, config)
 - Documentation: <!-- [docs-link](https://...) -->
 
 **Additional resources:**
-<!-- [If Applicable — tutorials, blog posts, Colab notebooks, related papers] -->
+<!-- [If Applicable; tutorials, blog posts, Colab notebooks, related papers] -->
 - <!-- Resource 1 -->
 
 ## Related Tools
 <!-- [Required] | Audience: Agents, All
    Split into workflow partners (used together) and alternatives (substitutes).
-   Include a brief phrase explaining the relationship — agents use this to build pipelines.
+   Include a brief phrase explaining the relationship; agents use this to build pipelines.
 
    GOOD: "- **`esmfold-prediction`**: Use after ProteinMPNN to validate that designed sequences
           fold into the target structure (compare RMSD to backbone)."

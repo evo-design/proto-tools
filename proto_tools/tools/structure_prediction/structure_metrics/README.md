@@ -10,7 +10,7 @@ Structure Metrics computes structural quality metrics from PDB files, specifical
 **What does this tool measure/predict?**
 This tool computes two structural properties from PDB files:
 1. **Longest alpha helix**: The length (in residues) of the longest contiguous [alpha-helical](https://en.wikipedia.org/wiki/Alpha_helix) segment, as determined by secondary structure assignment.
-2. **[Radius of gyration](https://en.wikipedia.org/wiki/Radius_of_gyration)**: A measure of the overall compactness of the protein structure — the root-mean-square distance of all atoms from the structure's center of mass.
+2. **[Radius of gyration](https://en.wikipedia.org/wiki/Radius_of_gyration)**: A measure of the overall compactness of the protein structure; the root-mean-square distance of all atoms from the structure's center of mass.
 
 **Why is this important?**
 Structure prediction tools (ESMFold, AlphaFold2) can produce artifacts, especially for generated or unusual sequences. Two common failure modes are:
@@ -94,7 +94,7 @@ No configuration parameters. Both metrics are computed deterministically from th
 
 | Field | Type | Units | Interpretation |
 |-------|------|-------|----------------|
-| `pdb_path` | `str` | — | Path to the analyzed PDB file |
+| `pdb_path` | `str` |: | Path to the analyzed PDB file |
 | `longest_alpha_helix` | `int` | residues | Length of the longest contiguous alpha helix |
 | `gyration_radius` | `float` | Angstroms | Radius of gyration; lower = more compact |
 
@@ -176,7 +176,7 @@ for m in result.metrics:
         reasons.append(f"high Rg ({m.gyration_radius:.1f} A)")
 
     if reasons:
-        print(f"{m.pdb_path}: FILTERED — {', '.join(reasons)}")
+        print(f"{m.pdb_path}: FILTERED; {', '.join(reasons)}")
     else:
         print(f"{m.pdb_path}: PASS")
 ```

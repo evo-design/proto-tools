@@ -405,7 +405,6 @@ def run_evo2_sample(
     """
 
     # Local GPU
-    # TODO: Refactor Evo2 to use standalone .venv after figuring out how to deal with kv caching.
     logger.debug(f"Using local GPU for Evo2 sampling: {config.model_checkpoint}")
 
     model = get_cached_evo2_model(

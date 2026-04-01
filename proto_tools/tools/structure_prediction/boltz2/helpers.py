@@ -1,8 +1,7 @@
 """
 proto_tools/tools/structure_prediction/boltz2/helpers.py
 
-These helpers are used by both the tool layer (boltz2.py) and the service layer
-(boltz2_service.py in proto-language-api deployment). They provide utilities for
+Shared helpers for Boltz2 structure prediction. Provides utilities for
 MSA CSV file writing and YAML input generation.
 """
 

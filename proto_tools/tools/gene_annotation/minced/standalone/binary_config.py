@@ -16,7 +16,7 @@ from pathlib import Path
 _VERSION = "0.4.2"
 _BASE_URL = f"https://github.com/ctSkennerton/minced/releases/download/{_VERSION}"
 
-# Platform-independent — same JAR for all platforms (requires Java).
+# Platform-independent: same JAR for all platforms (requires Java).
 URLS = {
     ("Darwin", "arm64"): f"{_BASE_URL}/minced.jar",
     ("Darwin", "x86_64"): f"{_BASE_URL}/minced.jar",

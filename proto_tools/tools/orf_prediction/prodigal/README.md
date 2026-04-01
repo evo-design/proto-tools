@@ -91,9 +91,9 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 
 ### Sweep Priorities
 
-1. `meta_mode` — Most impactful; determines whether model trains on input or uses pre-trained parameters
-2. `translation_table` — Must match organism; incorrect code produces wrong translations
-3. `closed_ends` — Only relevant for complete circular genomes
+1. `meta_mode`; Most impactful; determines whether model trains on input or uses pre-trained parameters
+2. `translation_table`; Must match organism; incorrect code produces wrong translations
+3. `closed_ends`; Only relevant for complete circular genomes
 
 ## Output Specification
 
@@ -143,7 +143,7 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 | `00_01` | Truncated at 3' end |
 | `10_01` | Both ends truncated |
 
-Partial genes are real genes that extend beyond contig boundaries — do not automatically discard them.
+Partial genes are real genes that extend beyond contig boundaries; do not automatically discard them.
 
 **Start codon distribution:**
 In typical bacterial genomes, ~80% of genes use ATG, ~10-15% use GTG, and ~5-10% use TTG. Significant deviations may indicate the wrong translation table.
@@ -271,7 +271,7 @@ print(df[['parent_id', 'orf_id', 'amino_acid_length', 'strand']])
 
 2. **closed_ends on linear fragments**: Losing real genes at contig ends.
 
-3. **Ignoring partial genes**: Partial genes are real — don't automatically discard them.
+3. **Ignoring partial genes**: Partial genes are real; don't automatically discard them.
 
 ## References
 
@@ -290,4 +290,4 @@ print(df[['parent_id', 'orf_id', 'amino_acid_length', 'strand']])
 - `esm2`: Score predicted proteins with a protein language model.
 
 **Alternative tools:**
-- `orfipy`: General ORF prediction — more flexible for custom start/stop codons but less accurate for prokaryotic gene calling.
+- `orfipy`: General ORF prediction: more flexible for custom start/stop codons but less accurate for prokaryotic gene calling.

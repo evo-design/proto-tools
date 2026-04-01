@@ -2,6 +2,7 @@
 [![Lint Check](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/lint_check.yml)
 [![Run Unit Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-unit-tests.yml)
 [![Run Integration Tests](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/proto-bio/proto-tools/actions/workflows/run-integration-tests.yml)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/evs3Unkegv)
 
 
 Welcome! This repository contains the **tools layer** of the biological programming language project. It puts **60+ computational biology and biological AI tools** at your fingertips through a single, consistent Python interface. Protein language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all just one function call away.
@@ -135,7 +136,7 @@ To use these models:
 
 ## Usage
 
-Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. Config is always optional — omit it to use defaults.
+Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern. Config is always optional; omit it to use defaults.
 
 ```python
 from proto_tools.tools.gene_annotation.blast import (
@@ -170,26 +171,13 @@ See `notes/tool_instance_example.ipynb` for a full walkthrough with timing compa
 
 ## MCP Servers
 
-### proto-tools — tool discovery & schemas
+### proto-tools: tool discovery & schemas
 
 The proto-tools MCP server has been migrated to [proto-tools-api](https://github.com/proto-bio/proto-tools-api). See that repo for setup and usage.
 
-### proto-language — DSL, constraints, generators
+### proto-language: DSL, constraints, generators
 
-Lives in [`proto-language-api/proto_mcp/`](https://github.com/proto-bio/proto-language-api). Exposes the language layer: constraints, generators, optimizers, program validation, and doc search.
-
-```bash
-# From the proto-language-api repo root
-python -m proto_mcp
-```
-
-**Example — explore the DSL and validate a program:**
-```
-> list_constraints(category="sequence")
-> list_generators()
-> get_component_schema(component_type="constraint", key="gc-content")
-> validate_program(program_json='{"constructs": [...]}')
-```
+A separate MCP server exposes the language layer: constraints, generators, optimizers, program validation, and doc search. See the [proto-language repo](https://github.com/proto-bio/proto-language) for details.
 
 ## Using with Claude Code
 
@@ -216,8 +204,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configu
 ### Claude Code features for developers
 
 Slash commands for common development tasks (invoked with `/command-name`):
-- **`/fix-issue <number>`** — full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
-- **`/implement-tool`** — step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
+- **`/fix-issue <number>`**: full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
+- **`/implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.
 

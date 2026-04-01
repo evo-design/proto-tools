@@ -59,7 +59,7 @@ _FAST_PREDICTORS = ["esmfold"]
 # Predictors that require Chimera cluster (hardcoded paths to /large_storage/hielab/brk/)
 _CHIMERA_ONLY_PREDICTORS = ["alphafold3"]
 
-# Short sequences used by batched-inference tests — kept at module level so they
+# Short sequences used by batched-inference tests, kept at module level so they
 # are visible to all flat functions that share this fixture data.
 _BATCHED_TEST_SEQUENCES = [
     "MARFLGL",   # Short sequence
@@ -273,7 +273,7 @@ def _release_between_predictors(request):
     consecutive tests, shuts down the previous predictor's worker so GPU memory
     is freed before the next model loads.
 
-    Not autouse — only parametrized tests have callspec.params. Applied
+    Not autouse; only parametrized tests have callspec.params. Applied
     via @pytest.mark.usefixtures on test_folding only.
     """
     prev = getattr(request.module, "_active_predictor", None)
@@ -418,7 +418,7 @@ def test_folding_cache():
 
     Directly manipulates the _program_tool_cache ContextVar to activate the
     cache for this test only. This is the intended test-time API for the cache
-    infrastructure — there is no higher-level public equivalent.
+    infrastructure; there is no higher-level public equivalent.
     """
     # Create short test complexes
     complexes_first_pass = [["MAR"], ["GAR"], ["YTW"]]
@@ -457,7 +457,7 @@ def test_folding_cache():
         cache_info = get_cache_info()
         assert cache_info["total_entries"] == 4
 
-        # Verify structures are consistent — first three should match exactly
+        # Verify structures are consistent; first three should match exactly
         assert (
             output_second_pass.structures[0].structure_cif
             == output_first_pass.structures[0].structure_cif

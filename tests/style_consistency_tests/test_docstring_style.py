@@ -77,7 +77,7 @@ def test_docstring_types_match_signatures(
         # Look up the annotation from the signature/class
         sig_type = annotations.get(param.arg_name)
         if sig_type is None:
-            # No annotation in signature — skip
+            # No annotation in signature, skip
             continue
 
         norm_sig = normalize_type(sig_type)
@@ -206,7 +206,7 @@ def test_docstring_return_type_matches_signature(
     norm_doc = normalize_type(doc_return_type)
 
     assert norm_doc == norm_sig, (
-        f"{file_path}::{name}: return type mismatch — "
+        f"{file_path}::{name}: return type mismatch, "
         f"docstring '{doc_return_type}' != signature '{return_type}' "
         f"(normalized: '{norm_doc}' vs '{norm_sig}')"
     )

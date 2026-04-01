@@ -18,7 +18,7 @@ from tests.conftest import make_persistent_fixture
 
 _persistent_tool = make_persistent_fixture("protenix")
 
-# Cro repressor from bacteriophage lambda — short, well-folded test protein.
+# Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
 
 _PROTENIX_MODEL_VARIANTS = [
@@ -79,7 +79,7 @@ def test_protenix_config_defaults():
 def test_protenix_config_colabfold_lazy_init():
     """colabfold_search_config is None by default, initialized lazily in preprocess."""
     config = ProtenixConfig(verbose=True)
-    # Not eagerly initialized — stays None until preprocess() is called
+    # Not eagerly initialized; stays None until preprocess() is called
     assert config.colabfold_search_config is None
 
 

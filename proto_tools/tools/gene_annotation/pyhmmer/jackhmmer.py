@@ -1,6 +1,6 @@
 """proto_tools/tools/gene_annotation/pyhmmer/jackhmmer.py
 
-PyHMMER jackhmmer tool — iterative protein sequence search."""
+PyHMMER jackhmmer tool: iterative protein sequence search."""
 from __future__ import annotations
 
 from typing import List

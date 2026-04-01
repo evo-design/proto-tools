@@ -80,7 +80,7 @@ def setup_mini_database():
         return
 
     # We need the mmseqs binary directly (not via run_*), so explicitly
-    # build the env — ToolInstance.get() alone defers env creation.
+    # build the env; ToolInstance.get() alone defers env creation.
     logger.info("Initializing mmseqs environment...")
     tool = ToolInstance.get("mmseqs")
     tool.ensure_ready()

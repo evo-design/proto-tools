@@ -257,7 +257,7 @@ class AlphaGenomeModel:
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
-        """Run batched ISM scoring (sequential — upstream has no batched ISM)."""
+        """Run batched ISM scoring (sequential; upstream has no batched ISM)."""
         self._ensure_loaded(device)
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
@@ -325,7 +325,7 @@ class AlphaGenomeModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        AlphaGenome is GPU-only — CPU loading is not supported because the
+        AlphaGenome is GPU-only. CPU loading is not supported because the
         model requires XLA compilation (10+ minutes) that would be wasted
         on a device where inference is impractical. When asked to move to
         CPU (e.g., LRU eviction), we unload the model to free GPU memory
@@ -360,7 +360,7 @@ class AlphaGenomeModel:
         clear_jax_caches : bool
             If True (default), also clear JAX's XLA compilation caches.
             Set to False when unloading for GPU eviction to preserve
-            compiled kernels — reloading on the same GPU can then skip
+            compiled kernels; reloading on the same GPU can then skip
             the expensive recompilation step.
         """
         if not self._loaded:

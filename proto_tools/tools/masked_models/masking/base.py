@@ -111,7 +111,7 @@ def weighted_sample(
 
     Args:
         eligible (list[int]): 0-indexed position indices to sample from.
-        scores (list[float]): One score per position — higher means more likely to be picked.
+        scores (list[float]): One score per position. Higher means more likely to be picked.
         k (int): How many positions to select.
 
     Returns:
@@ -176,7 +176,7 @@ def apply_masking_strategy(config, inputs, position_score_fn=None):
 
 
 # ============================================================================
-# MaskingStrategy — single class for all masking strategies
+# MaskingStrategy: single class for all masking strategies
 # ============================================================================
 
 class MaskingStrategy(BaseModel):
@@ -377,7 +377,7 @@ class MaskingStrategy(BaseModel):
 
 
 # ============================================================================
-# build_position_score_fn — shared callable factory for tool preprocess hooks
+# build_position_score_fn: shared callable factory for tool preprocess hooks
 # ============================================================================
 
 def build_position_score_fn(

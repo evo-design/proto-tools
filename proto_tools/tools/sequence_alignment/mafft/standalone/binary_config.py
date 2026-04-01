@@ -24,7 +24,7 @@ URLS = {
     ("Darwin", "x86_64"): "https://mafft.cbrc.jp/alignment/software/mafft-7.526-mac.zip",
     # Linux x86_64 (pre-built)
     ("Linux", "x86_64"): "https://mafft.cbrc.jp/alignment/software/mafft-7.526-linux.tgz",
-    # Linux aarch64 — compile from source (no official pre-built binary)
+    # Linux aarch64: compile from source (no official pre-built binary)
     ("Linux", "arm64"): "https://mafft.cbrc.jp/alignment/software/mafft-7.525-without-extensions-src.tgz",
 }
 

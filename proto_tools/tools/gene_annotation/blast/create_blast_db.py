@@ -131,11 +131,11 @@ class CreateBlastDbConfig(BaseConfig):
         default="nucl",
         description="Specifies the type of database to create: Nucleotide or Protein",
     )
-    # TODO: Determine how to handle this for the frontend.
     out_prefix: Optional[str] = ConfigField(
         title="Output Prefix",
         default=None,
         description="File-path prefix for database files (default: FASTA stem)",
+        hidden=True,
     )
     title: Optional[str] = ConfigField(
         title="Database Title",

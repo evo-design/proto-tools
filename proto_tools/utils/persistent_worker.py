@@ -83,13 +83,13 @@ def _normalize_progress_line(line: str) -> str:
 # ============================================================================
 
 # Vars passed through from the parent process to tool subprocesses.
-# Everything else is blocked — conda, jupyter, mamba, etc. never leak.
+# Everything else is blocked; conda, jupyter, mamba, etc. never leak.
 _BASE_PASSTHROUGH = {
-    # Identity — many tools/libs resolve ~ or check $USER
+    # Identity: many tools/libs resolve ~ or check $USER
     "HOME",
     "USER",
     "LOGNAME",
-    # Locale — C extensions and text processing break without these
+    # Locale: C extensions and text processing break without these
     "LANG",
     "LC_ALL",
     "LC_CTYPE",
@@ -99,23 +99,23 @@ _BASE_PASSTHROUGH = {
     "LC_COLLATE",
     "LC_MONETARY",
     "LC_PAPER",
-    # Temp directories — subprocesses write scratch files here
+    # Temp directories: subprocesses write scratch files here
     "TMPDIR",
     "TEMP",
     "TMP",
-    # Shell — needed by subprocess.Popen when shell=True and by some tools
+    # Shell: needed by subprocess.Popen when shell=True and by some tools
     "SHELL",
-    # XDG dirs — model caches (HF, torch) respect these for default locations
+    # XDG dirs: model caches (HF, torch) respect these for default locations
     "XDG_CACHE_HOME",
     "XDG_DATA_HOME",
-    # HuggingFace — model download paths
+    # HuggingFace: model download paths
     "HF_HOME",
     "HF_TOKEN",
     "HUGGING_FACE_HUB_TOKEN",
     # Model weights management
     "PROTO_HOME",
     "PROTO_MODEL_CACHE",
-    # Network proxy — tools download model weights and need proxy config
+    # Network proxy: tools download model weights and need proxy config
     "HTTP_PROXY",
     "HTTPS_PROXY",
     "NO_PROXY",
@@ -124,7 +124,7 @@ _BASE_PASSTHROUGH = {
     "no_proxy",
 }
 
-# Standard system binary dirs — always present in reconstructed PATH
+# Standard system binary dirs, always present in reconstructed PATH
 _SYSTEM_PATH_DIRS = [
     "/usr/local/sbin",
     "/usr/local/bin",
@@ -247,7 +247,7 @@ def _build_subprocess_env(
     if parent_cvd is not None:
         env["CUDA_VISIBLE_DEVICES"] = parent_cvd
 
-    # Generous timeouts for pip/uv — NFS extraction can exceed the defaults
+    # Generous timeouts for pip/uv; NFS extraction can exceed the defaults
     env.setdefault("UV_HTTP_TIMEOUT", "300")
     env.setdefault("PIP_DEFAULT_TIMEOUT", "300")
 
@@ -326,7 +326,7 @@ def _build_subprocess_env(
         if p and p not in ld_parts:
             ld_parts.append(p)
 
-    # Conda shared libs (libgomp, libstdc++, etc.) — may not be in parent LD
+    # Conda shared libs (libgomp, libstdc++, etc.), may not be in parent LD
     if parent_conda_prefix:
         conda_lib = str(Path(parent_conda_prefix) / "lib")
         if conda_lib not in ld_parts:
@@ -457,7 +457,7 @@ class PersistentWorker:
     ) -> dict[str, Any]:
         """Send a request to the worker and return the response.
 
-        Thread-safe — only one request at a time.
+        Thread-safe. Only one request at a time.
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
@@ -522,7 +522,7 @@ class PersistentWorker:
                 header_line = header_line.strip()
                 if header_line.startswith("PROTO_LENGTH:") or header_line.startswith("PROTO_FILE:"):
                     break
-                # Non-protocol line (warning/log) — skip duplicates / progress bars
+                # Non-protocol line (warning/log); skip duplicates / progress bars
                 if header_line == prev_stdout_line:
                     continue
                 normalized = _normalize_progress_line(header_line)
@@ -536,7 +536,7 @@ class PersistentWorker:
 
             # Branch on header type
             if header_line.startswith("PROTO_FILE:"):
-                # Large payload — worker wrote JSON to a temp file
+                # Large payload: worker wrote JSON to a temp file
                 file_path = header_line.split(":", 1)[1]
                 if not file_path.startswith(tempfile.gettempdir()):
                     logger.warning(

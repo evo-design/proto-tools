@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
-# Default cache directory for MSA files — derived from PROTO_HOME
+# Default cache directory for MSA files, derived from PROTO_HOME
 def _default_output_dir() -> Path:
     from proto_tools.utils.proto_home import get_proto_home
 
@@ -45,8 +45,7 @@ def _default_output_dir() -> Path:
 # Default database directory (in the same directory as this file)
 DEFAULT_DB_DIR = Path(__file__).parent / "databases"
 
-# TODO: In the future, we should remove this hardcoded path and use the DEFAULT_DB_DIR
-# - This is a temporary solution for the backend that allows us to use the same database instead of downloading again
+# NOTE: Hardcoded path to shared ColabFold database on Chimera to avoid redundant downloads.
 CHIMERA_COLABFOLD_DB_LOCATION = "/large_storage/hielab/brk/databases/colabfold"
 
 

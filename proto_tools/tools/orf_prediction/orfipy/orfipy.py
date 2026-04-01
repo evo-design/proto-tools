@@ -146,13 +146,11 @@ class OrfipyConfig(BaseConfig):
         description="Number of CPU threads to use",
         hidden=True,
     )
-    # TODO: This should be a multi-select. Can we do that?
     start_codons: str = ConfigField(
         title="Start Codons",
         default="ATG,GTG,TTG",
         description="Comma-separated list of start codons",
     )
-    # TODO: This should be a multi-select. Can we do that?
     stop_codons: str = ConfigField(
         title="Stop Codons",
         default="TAA,TAG,TGA",
@@ -180,7 +178,6 @@ class OrfipyConfig(BaseConfig):
         default=True,
         description="Whether to include the stop codon in the reported ORF",
     )
-    # TODO: This should be a literal with string values that get translated to ints internally
     translation_table: Optional[int] = ConfigField(
         title="Translation Table",
         default=None,

@@ -18,7 +18,6 @@ from standalone_helpers import move_model_to_device
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
-# TODO: Standardize where this seed is set
 DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation (standard MPNN)
@@ -150,8 +149,7 @@ class LigandMPNNModel:
                 - logits: Per-position logits array (seq_len, vocab_size)
                 - metrics: Dict with log_likelihood, avg_log_likelihood, perplexity
         """
-        # TODO: Implement LigandMPNN scoring
-        pass
+        raise NotImplementedError("LigandMPNN scoring is not yet implemented")
 
     def load(self, device: str = "cuda", verbose: bool = False):
         """Load the LigandMPNN model via Foundry."""

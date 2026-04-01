@@ -84,9 +84,9 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 
 ### Sweep Priorities
 
-1. `min_len` — Most impactful for controlling output volume and filtering noise
-2. `start_codons` — Controls whether alternative start codons are included
-3. `strand` — Reduce to `f` or `r` when coding strand is known
+1. `min_len`; Most impactful for controlling output volume and filtering noise
+2. `start_codons`; Controls whether alternative start codons are included
+3. `strand`; Reduce to `f` or `r` when coding strand is known
 
 ## Output Specification
 
@@ -126,7 +126,7 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 - Custom: Any valid codons for specialized genetic codes
 
 **ORF vs gene prediction:**
-ORFipy reports all ORFs matching your criteria — it does not score or rank them. For distinguishing real genes from spurious ORFs, use Prodigal or annotate ORF translations against protein databases with BLAST/HMMER.
+ORFipy reports all ORFs matching your criteria; it does not score or rank them. For distinguishing real genes from spurious ORFs, use Prodigal or annotate ORF translations against protein databases with BLAST/HMMER.
 
 ## Quick Start Examples
 
@@ -267,4 +267,4 @@ for i, orfs in enumerate(result.predicted_orfs):
 - `esm2`: Score ORF translations with a protein language model to assess protein-likeness.
 
 **Alternative tools:**
-- `prodigal`: ML-based prokaryotic gene prediction — more accurate for bacteria/archaea but less flexible for custom ORF criteria.
+- `prodigal`: ML-based prokaryotic gene prediction: more accurate for bacteria/archaea but less flexible for custom ORF criteria.

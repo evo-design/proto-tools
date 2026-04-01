@@ -32,7 +32,7 @@ ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodyna
 ## Biological Background
 
 **What does this tool measure/predict?**
-ViennaRNA predicts the secondary structure of RNA molecules — the pattern of [Watson-Crick](https://en.wikipedia.org/wiki/Watson%E2%80%93Crick_base_pair) and wobble base pairs that form within a single RNA strand. It outputs the structure in dot-bracket notation along with the minimum free energy (MFE).
+ViennaRNA predicts the secondary structure of RNA molecules; the pattern of [Watson-Crick](https://en.wikipedia.org/wiki/Watson%E2%80%93Crick_base_pair) and wobble base pairs that form within a single RNA strand. It outputs the structure in dot-bracket notation along with the minimum free energy (MFE).
 
 **Why is this important?**
 RNA secondary structure is fundamental to understanding RNA function:
@@ -132,9 +132,9 @@ MFE interpretation depends heavily on sequence length. Use normalized metrics:
 
 **Tips for interpreting output:**
 - Always normalize MFE by sequence length for cross-sequence comparisons
-- Similar MFE values (within 1-2 kcal/mol) represent similar stability — don't over-interpret small differences
+- Similar MFE values (within 1-2 kcal/mol) represent similar stability: don't over-interpret small differences
 - The MFE structure is not always the biologically relevant structure; compare suboptimal structures when possible
-- Dot-bracket notation is 2D only — it does not encode 3D spatial information
+- Dot-bracket notation is 2D only: it does not encode 3D spatial information
 
 ## Quick Start Examples
 

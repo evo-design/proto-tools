@@ -15,7 +15,7 @@ import requests
 from Bio.Seq import transcribe
 from pydantic import BaseModel, Field, computed_field, field_validator
 
-# Database tool imports — orchestrator calls these directly
+# Database tool imports (orchestrator calls these directly)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     NCBIFastaRecord,
     NCBIFetchConfig,
@@ -419,7 +419,7 @@ class SequenceFetchConfig(BaseConfig):
 
 
 # ============================================================================
-# Config Adapters — map SequenceFetchConfig to per-database configs
+# Config Adapters: map SequenceFetchConfig to per-database configs
 # ============================================================================
 
 
@@ -691,7 +691,7 @@ def _validate_request_type_compatibility(
 
 
 # ============================================================================
-# Molecule-type Fetchers — route to database tools
+# Molecule-type Fetchers: route to database tools
 # ============================================================================
 
 

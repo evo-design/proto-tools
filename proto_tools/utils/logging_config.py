@@ -114,7 +114,7 @@ def setup_logging(
             # pytest: disable unless explicitly requested with log_filename
             log_to_file = False
         elif os.environ.get("PROTO_LOG_DIR"):
-            # User explicitly set a log dir — they want file logging
+            # User explicitly set a log dir; they want file logging
             log_to_file = True
         else:
             # Enable file logging only in a dev repo (pyproject.toml present)

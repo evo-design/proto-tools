@@ -9,11 +9,11 @@ and `setup.sh` scripts.
 
 ## Files
 
-- **`standalone_helpers.py`** — Python helpers for device management, memory
+- **`standalone_helpers.py`**: Python helpers for device management, memory
   stats, weight directory resolution. Imported by standalone inference/run
   scripts via `from standalone_helpers import ...`.
 
-- **`standalone_helpers.sh`** — Bash helper functions for `setup.sh` scripts.
+- **`standalone_helpers.sh`**: Bash helper functions for `setup.sh` scripts.
   Sourced via `source standalone_helpers.sh`. Provides `proto_install_pytorch`,
   `proto_install_jax`, `proto_install_cuda_toolkit`, `proto_resolve_weights_dir`,
   and `proto_check_gated_hf_repo`.

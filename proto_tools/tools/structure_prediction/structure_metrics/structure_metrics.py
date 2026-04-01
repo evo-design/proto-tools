@@ -98,7 +98,7 @@ class StructureMetricsOutput(BaseToolOutput):
 class StructureMetricsConfig(BaseConfig):
     """Configuration for structure metrics computation.
 
-    No configuration parameters are needed — metrics are computed
+    No configuration parameters are needed. Metrics are computed
     directly from the PDB structure.
     """
 

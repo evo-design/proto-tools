@@ -183,7 +183,6 @@ class ESMFoldConfig(StructurePredictionConfig):
         description="Sequence to link chains (default: 25 glycines)",
         advanced=True,
     )
-    # TODO: We need to think about how to handle this for the frontend.
     max_batch_residues: int = ConfigField(
         title="Max Batch Residues",
         default=1200,

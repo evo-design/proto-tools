@@ -190,7 +190,7 @@ def get_gpu_info() -> GPUInfo:
                     vram_gb = round(float(parts[3]) / 1024, 1)
                 except (ValueError, TypeError):
                     # Unified memory GPUs (e.g., GB10) report [N/A] for
-                    # dedicated VRAM — fall back to total system RAM since
+                    # dedicated VRAM; fall back to total system RAM since
                     # it's all GPU-addressable.
                     vram_gb = round(_get_ram_gb(), 1)
                 driver_version = parts[4]
@@ -616,7 +616,7 @@ def _get_git_commit_short(length: int = 7) -> str | None:
             return result.stdout.strip()
     except Exception:
         pass
-    # Not in a git repo (e.g., non-editable pip install) — use package version
+    # Not in a git repo (e.g., non-editable pip install); use package version
     try:
         from proto_tools import __version__
         return f"v{__version__}"

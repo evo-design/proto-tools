@@ -19,7 +19,7 @@ _TOOL_MEMORY_MB = 4096
 
 # Tolerance for GPU memory assertions (MB).  Must absorb CUDA/JAX runtime
 # context (~500-700 MB per framework), caching allocator overhead, nvidia-smi
-# granularity, and residual context from cross-framework eviction — but less
+# granularity, and residual context from cross-framework eviction, but less
 # than _TOOL_MEMORY_MB so "loaded" vs "freed" states remain distinguishable.
 _GPU_MEMORY_TOLERANCE_MB = 3072
 
@@ -168,7 +168,7 @@ def _assert_gpu_memory(
                 after each call and should NOT be listed here.
         freed: Devices that previously had a model but should now be near
                baseline (model moved away / evicted). Functionally identical
-               to unmentioned devices — included for test readability.
+               to unmentioned devices; included for test readability.
         tolerance_mb: Acceptable deviation in MB for all comparisons.
         label: Context string for assertion messages.
 
@@ -195,7 +195,7 @@ def _assert_gpu_memory(
                 f"{noise_note}"
             )
         else:
-            # freed or unmentioned — should be near baseline
+            # freed or unmentioned, should be near baseline
             assert abs(delta) < tolerance_mb, (
                 f"{device}: expected near baseline{suffix}, "
                 f"got delta={delta:.0f} MB (tolerance=+/-{tolerance_mb} MB)"
@@ -265,7 +265,7 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
 
                 time.sleep(0.01)
 
-                # 3) Re-run A — auto-restarts (RESTART) or moves back from CPU.
+                # 3) Re-run A; auto-restarts (RESTART) or moves back from CPU.
                 result_a2 = _run_tool(tool_a_factory, "inst_a")
                 assert result_a2.success, "Tool A should reload after eviction"
 
@@ -327,7 +327,7 @@ def test_cross_framework_eviction_restart(tool_a_factory, tool_b_factory):
 
                 time.sleep(0.01)
 
-                # 3) Re-run A — auto-restarts, gets fresh allocation on GPU,
+                # 3) Re-run A: auto-restarts, gets fresh allocation on GPU,
                 #    evicts B via RESTART (B's worker is killed).
                 #    This covers the GPU->killed->GPU round-trip.
                 result_a2 = _run_tool(tool_a_factory, "inst_a")
@@ -425,7 +425,7 @@ def test_config_moves_between_gpus(tool_factory):
             _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                                label="after loading on cuda:0")
 
-            # Re-run with device=cuda:1 — mismatch detection should move it
+            # Re-run with device=cuda:1; mismatch detection should move it
             result2 = _run_tool(tool_factory, "mover", device="cuda:1")
             assert result2.success, "Should work after config-driven move"
             assert dm.get_device_status()["allocations"]["mover"]["device_id"] == "cuda:1"
@@ -456,14 +456,14 @@ def test_config_gpu_cpu_gpu_multi_gpu(tool_factory):
             _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
                                label="after loading on both GPUs")
 
-            # Run with device=cpu — mismatch detection should move to CPU
+            # Run with device=cpu; mismatch detection should move to CPU
             result2 = _run_tool(tool_factory, "bouncer", device="cpu")
             assert result2.success, "Should work on CPU"
             assert dm.get_device_status()["allocations"]["bouncer"]["device_id"] == "cpu"
             _assert_gpu_memory(dm, baseline, freed=["cuda:0", "cuda:1"],
                                label="after move to CPU")
 
-            # Run with device back on GPUs — should move back
+            # Run with device back on GPUs; should move back
             result3 = _run_tool(tool_factory, "bouncer", device="cuda:0,cuda:1")
             assert result3.success, "Should work back on GPUs"
             status = dm.get_device_status()
@@ -495,13 +495,13 @@ def test_shutdown_and_auto_restart(tool_factory):
         _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                            label="after loading")
 
-        # Kill the worker — GPU memory should return to baseline
+        # Kill the worker; GPU memory should return to baseline
         inst.shutdown(remove_from_cache=False)
         assert inst._worker is None
         _assert_gpu_memory(dm, baseline, freed=["cuda:0"],
                            label="after shutdown")
 
-        # Next call should auto-restart — GPU memory should rise again
+        # Next call should auto-restart; GPU memory should rise again
         result2 = _run_tool(tool_factory, "restarter")
         assert result2.success, "Should auto-restart after shutdown"
         assert inst._worker is not None, "Worker should be back"
@@ -541,7 +541,7 @@ def test_evict_then_restart_preserves_correctness():
             _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                                label="after RESTART eviction, tool B loaded")
 
-        # Re-run A — should restart and produce same-shape output
+        # Re-run A; should restart and produce same-shape output
         result2 = _run_tool(_pytorch_tool, "a")
         assert result2.success
         assert len(result2.results) == len(first_output), \
@@ -582,7 +582,7 @@ def test_multi_gpu_tool_evicts_two_single_gpu_tools():
 
                 time.sleep(0.01)
 
-                # Multi-GPU tool needs both GPUs — should evict both
+                # Multi-GPU tool needs both GPUs; should evict both
                 with ToolInstance.persist_tool("mock_pytorch_multi_gpu_tool", instance_name="mg"):
                     result_mg = _run_tool(_pytorch_multi_gpu_tool, "mg")
                     assert result_mg.success
@@ -683,7 +683,7 @@ def test_rapid_eviction_cycle():
         for tool_name, _, inst_name in tools:
             ToolInstance.get(tool_name, instance_name=inst_name)
 
-        # Run each tool twice — forces eviction/restore cycles
+        # Run each tool twice to force eviction/restore cycles
         for cycle in range(2):
             for _, factory, inst_name in tools:
                 result = _run_tool(factory, inst_name)
@@ -774,7 +774,7 @@ def test_two_tools_share_one_gpu():
                 assert status["allocations"]["pt"]["device_id"] == "cuda:0"
                 assert status["allocations"]["jx"]["device_id"] == "cuda:0"
 
-                # Memory should be roughly double — second tool added more
+                # Memory should be roughly double; second tool added more
                 _assert_gpu_memory(dm, after_one, loaded=["cuda:0"],
                                    label="second tool also on cuda:0")
     finally:

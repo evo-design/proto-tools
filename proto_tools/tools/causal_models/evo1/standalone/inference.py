@@ -226,7 +226,7 @@ class Evo1Model:
         # The evo library's load_checkpoint() calls snapshot_download() without
         # any file filters, which downloads ALL formats in the HF repo: safetensors
         # shards (~14 GB), pytorch .bin shards (~10 GB), and a monolithic
-        # pytorch_model.pt (~16 GB) — totaling ~40 GB for a 7B model. Only the
+        # pytorch_model.pt (~16 GB), totaling ~40 GB for a 7B model. Only the
         # safetensors files are actually used (load_checkpoint reads them via
         # safetensors.torch.load_file). The redundant .bin/.pt files waste disk
         # space and, on slow filesystems like Oak/Lustre, can cause warm-up

@@ -24,7 +24,7 @@ _handler.setFormatter(logging.Formatter("%(levelname)s | %(message)s"))
 logger.addHandler(_handler)
 logger.setLevel(logging.DEBUG)
 
-# ColabDesign creates a fresh model per prediction — no persistent state to cache.
+# ColabDesign creates a fresh model per prediction. No persistent state to cache.
 # The params directory is resolved once and reused.
 _params_dir: str | None = None
 
@@ -164,7 +164,7 @@ def _predict_structure(
         af_model.set_seq(seq="".join(chains))
 
     # Run prediction
-    # When ensembling (num_ensemble_models > 1), don't restrict the model pool —
+    # When ensembling (num_ensemble_models > 1), don't restrict the model pool;
     # ColabDesign's num_models picks the first N from the available set.
     # When not ensembling, models= selects the specific parameter set (0-indexed).
     predict_kwargs = {

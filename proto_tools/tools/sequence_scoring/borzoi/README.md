@@ -245,15 +245,15 @@ result.export("borzoi_output", file_format="json")
 
 - Linder, J., Srivastava, D., Yuan, H. et al. "Predicting RNA-seq coverage from DNA sequence as a unifying model of gene regulation." *Nature Genetics* 57, 587-597 (2025). DOI: [10.1038/s41588-024-02053-6](https://doi.org/10.1038/s41588-024-02053-6)
 - GitHub: [calico/borzoi](https://github.com/calico/borzoi)
-- Model weights: [HuggingFace — johahi/borzoi-models](https://huggingface.co/collections/johahi/borzoi-models)
+- Model weights: [HuggingFace: johahi/borzoi-models](https://huggingface.co/collections/johahi/borzoi-models)
 
 ## Related Tools
 
 **Used together:**
-- `enformer-prediction` — Cross-validate regulatory predictions between Enformer and Borzoi
-- `evo2-sample` — Generate candidate sequences, then score them with Borzoi
+- `enformer-prediction`: Cross-validate regulatory predictions between Enformer and Borzoi
+- `evo2-sample`: Generate candidate sequences, then score them with Borzoi
 
 **Alternatives:**
-- `enformer-prediction` — Shorter context (196 kb), faster inference. Use when long-range context is not needed.
-- `alphagenome` — Google DeepMind's next-generation genomics model
-- `splice-transformer` — Specialized for splice site prediction rather than general regulatory activity
+- `enformer-prediction`: Shorter context (196 kb), faster inference. Use when long-range context is not needed.
+- `alphagenome`: Google DeepMind's next-generation genomics model
+- `splice-transformer`: Specialized for splice site prediction rather than general regulatory activity

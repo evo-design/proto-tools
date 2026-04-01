@@ -1,8 +1,7 @@
 """
 proto_tools/tools/structure_prediction/chai1/helpers.py
 
-These helpers are used by both the tool layer (chai1.py) and the service layer
-(chai1_service.py in proto-language-api deployment). They provide utilities for
+Shared helpers for Chai-1 structure prediction. Provides utilities for
 sequence hashing, MSA Parquet file writing, and FASTA generation.
 """
 

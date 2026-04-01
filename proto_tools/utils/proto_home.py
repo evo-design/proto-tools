@@ -4,7 +4,7 @@ proto_tools/utils/proto_home.py
 Unified PROTO_HOME resolution for all persistent data.
 
 Provides a single function to determine where model weights, tool
-environments, and micromamba live.  Lightweight — only ``os``, ``sys``,
+environments, and micromamba live.  Lightweight: only ``os``, ``sys``,
 and ``pathlib`` are imported so it can be used anywhere without side effects.
 
 ``PROTO_HOME`` is the single source of truth for all install modes.
@@ -73,12 +73,12 @@ def show_first_run_notice() -> None:
     model_cache_set = bool(os.environ.get("PROTO_MODEL_CACHE"))
 
     if proto_home_set and model_cache_set:
-        # User configured everything — create sentinel silently
+        # User configured everything; create sentinel silently
         proto_home.mkdir(parents=True, exist_ok=True)
         sentinel.touch()
         return
 
-    # At least one default location in use — show notice
+    # At least one default location in use, show notice
     proto_home.mkdir(parents=True, exist_ok=True)
 
     tool_envs_path = str(proto_home / "proto_tool_envs")

@@ -329,7 +329,6 @@ class PyHmmerConfig(BaseConfig):
         takes precedence. This applies independently to both sequence-level and
         domain-level filtering.
     """
-    # TODO: Determine how this should be handled for the frontend.
     num_threads: int = ConfigField(
         title="Number of Threads",
         default=0,

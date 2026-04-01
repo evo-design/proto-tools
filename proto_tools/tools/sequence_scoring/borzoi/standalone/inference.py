@@ -197,7 +197,7 @@ def dispatch(input_dict: dict) -> dict:
                 import flash_attn  # noqa: F401
             except ImportError:
                 logger.warning(
-                    "flash-attn not installed — falling back to "
+                    "flash-attn not installed, falling back to "
                     "use_flash_attn=False (standard borzoi model)"
                 )
                 use_flash_attn = False

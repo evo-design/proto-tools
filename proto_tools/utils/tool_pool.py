@@ -83,12 +83,12 @@ class DeviceCapability:
             The scheduler divides a device's accumulated cost by its weight
             to estimate finish time, so a weight of 2.0 means "twice as fast"
             and the device will be assigned roughly twice the work. **Currently
-            unused** — all devices default to 1.0 (uniform). Reserved for
+            unused**; all devices default to 1.0 (uniform). Reserved for
             future heterogeneous GPU support (e.g., mixed H100/A100 pools).
         max_item_cost (float | None): Maximum item cost this device can handle, or None for
             no limit. Items whose ``item_cost()`` exceeds this cap are routed
             to other devices that can handle them (falls back to least-loaded
-            if no device qualifies). **Currently unused** — all devices
+            if no device qualifies). **Currently unused**; all devices
             default to None. Reserved for future VRAM-aware scheduling
             (e.g., a 24 GB GPU cannot fold a 5000-residue protein).
     """
@@ -154,7 +154,7 @@ def lpt_schedule(
             if a.device.max_item_cost is None or work_item.cost <= a.device.max_item_cost
         ]
         if not eligible:
-            # No device can handle this item — assign to least-loaded anyway
+            # No device can handle this item; assign to least-loaded anyway
             eligible = assignments
 
         # Pick device with lowest estimated finish time
@@ -202,7 +202,7 @@ class ToolPool:
 
     Multi-GPU tools override ``BaseConfig.devices_per_instance`` (a
     ``@property``, not a field) to tell the pool how many GPUs each worker
-    needs.  The pool groups its device list into slots of that size — e.g.,
+    needs.  The pool groups its device list into slots of that size, e.g.
     4 GPUs with ``devices_per_instance == 2`` yields 2 workers on
     ``cuda:0,cuda:1`` and ``cuda:2,cuda:3``.
     """

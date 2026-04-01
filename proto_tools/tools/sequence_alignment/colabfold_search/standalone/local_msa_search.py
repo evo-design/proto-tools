@@ -162,7 +162,6 @@ class ColabFoldSearchWrapper:
         )
 
         if use_gpu:
-            # TODO: Figure out why this flag is failing
             raise NotImplementedError(
                 "GPU acceleration is not currently supported for colabfold_search"
             )

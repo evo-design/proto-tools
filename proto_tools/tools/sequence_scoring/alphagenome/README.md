@@ -65,7 +65,7 @@ Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipe
 
 ### Shared Inner Models
 
-**`AlphaGenomeInterval`** — Base input for interval-based tools.
+**`AlphaGenomeInterval`**; Base input for interval-based tools.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -73,7 +73,7 @@ Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipe
 | `interval_start` | `int` | Interval start (0-based, inclusive) |
 | `interval_end` | `int` | Interval end (0-based, exclusive) |
 
-**`AlphaGenomeVariant`** — Extends `AlphaGenomeInterval` with variant alleles.
+**`AlphaGenomeVariant`**; Extends `AlphaGenomeInterval` with variant alleles.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -84,7 +84,7 @@ Coordinates use **0-based indexing with exclusive end** ([BED](https://en.wikipe
 | `reference_bases` | `str` | Reference allele (A/C/G/T/N string) |
 | `alternate_bases` | `str` | Alternate allele (A/C/G/T/N string) |
 
-**`AlphaGenomeISM`** — Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context.
+**`AlphaGenomeISM`**; Extends `AlphaGenomeInterval` with ISM sub-interval and optional variant context.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -329,11 +329,11 @@ print(f"ISM scores: {len(result[0].scores)} records")
 ## Related Tools
 
 **Used together:**
-- `enformer`, `borzoi` — compare expression predictions across models
-- `splice_transformer` — detailed splice-specific analysis alongside AlphaGenome's splice predictions
-- `evo2` — generate candidate DNA sequences, then score with AlphaGenome
+- `enformer`, `borzoi`: compare expression predictions across models
+- `splice_transformer`: detailed splice-specific analysis alongside AlphaGenome's splice predictions
+- `evo2`: generate candidate DNA sequences, then score with AlphaGenome
 
 **Alternatives:**
-- `enformer` — lighter-weight expression prediction (200 KB context, Basenji-style architecture)
-- `borzoi` — mammalian expression prediction at 32 bp resolution with RNA-seq coverage tracks
-- `splice_transformer` — dedicated splice site prediction
+- `enformer`: lighter-weight expression prediction (200 KB context, Basenji-style architecture)
+- `borzoi`: mammalian expression prediction at 32 bp resolution with RNA-seq coverage tracks
+- `splice_transformer`: dedicated splice site prediction

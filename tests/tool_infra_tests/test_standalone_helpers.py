@@ -213,7 +213,7 @@ def test_gpu_subprocess_removes_jax_preallocation_restrictions(monkeypatch):
 
     env = get_subprocess_device_env("cuda:0")
 
-    # Subprocess gets GPU access — preallocation restrictions should be removed
+    # Subprocess gets GPU access; preallocation restrictions should be removed
     assert "XLA_PYTHON_CLIENT_PREALLOCATE" not in env
     assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
     assert "JAX_PLATFORMS" not in env
@@ -237,7 +237,7 @@ def test_gpu_subprocess_removes_jax_platforms_if_inherited(monkeypatch):
 
     env = get_subprocess_device_env("cuda:0")
 
-    # Subprocess gets GPU — should not be forced to CPU
+    # Subprocess gets GPU; should not be forced to CPU
     assert "JAX_PLATFORMS" not in env
 
 

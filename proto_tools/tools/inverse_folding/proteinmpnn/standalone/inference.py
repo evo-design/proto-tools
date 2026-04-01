@@ -232,7 +232,7 @@ class ProteinMPNNModel:
         if self.verbose:
             logger.info(f"Moving ProteinMPNN to {device}")
 
-        # params is a dict pytree — move_model_to_device handles via device_put
+        # params is a dict pytree; move_model_to_device handles via device_put
         self.params = move_model_to_device(self.params, self.device, device)
         self.device = device
 

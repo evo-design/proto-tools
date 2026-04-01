@@ -89,14 +89,14 @@ See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverag
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports two sections:
-- `[passthrough]` — Variable names copied from the parent environment (e.g., `HF_TOKEN`)
-- `[set]` — Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
+- `[passthrough]`: Variable names copied from the parent environment (e.g., `HF_TOKEN`)
+- `[set]`: Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
 
 **Auto-set environment variables** (always injected by `_build_subprocess_env()`):
-- `CONDA_PREFIX` — set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
-- `VIRTUAL_ENV` — set to the **tool env path** for uv >=0.10 compatibility
-- `PATH` — `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs
-- `LD_LIBRARY_PATH` — tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib`
+- `CONDA_PREFIX`: set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
+- `VIRTUAL_ENV`: set to the **tool env path** for uv >=0.10 compatibility
+- `PATH`: `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs
+- `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib`
 
 ## GCC/nvcc Compatibility for CUDA JIT Tools
 
@@ -170,13 +170,13 @@ Tools can specify their required Python version via `standalone/python_version.t
 
 **Validation:** Version ≥3.8, numeric components only, no comments/prefixes. Missing file defaults to Python 3.12.
 
-**Rebuilds:** Content is included in the environment setup hash — changing version triggers rebuild.
+**Rebuilds:** Content is included in the environment setup hash; changing version triggers rebuild.
 
 See `tests/tool_infra_tests/test_python_version_files.py` for validation tests.
 
 ## Binary Installation
 
-Tools needing external binaries must use `utils/install_binary.py` — never raw `curl`/`wget` in `setup.sh`.
+Tools needing external binaries must use `utils/install_binary.py`; never raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
@@ -187,7 +187,7 @@ See blast or mmseqs for the standard pattern. For platform-independent tools (e.
 
 ## Compile-from-Source Tools
 
-Tools distributed as C/C++ source compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed — just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
+Tools distributed as C/C++ source compile during `setup.sh`. No `binary_config.py` or `requirements.txt` needed; just check for the compiler (`g++`), clone the source, compile into the venv's `bin/`, and clean up. Use `BUILD_DIR` (not `TMPDIR`) for the temporary clone directory. See TMalign/USalign (`tools/structure_alignment/`) as canonical examples.
 
 ## Standalone Helpers for CLI Subprocess Device Routing
 

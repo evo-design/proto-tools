@@ -84,7 +84,7 @@ class BlastSearchInput(BaseToolInput):
         query (str): A raw nucleotide/protein sequence (e.g. ``"ATGCGTAAA"``)
             or a path to a FASTA file.
         query_type (Literal['sequence', 'fasta_path']): Automatically set to ``"sequence"`` or ``"fasta_path"``
-            during validation. Read-only — do not set manually.
+            during validation. Read-only; do not set manually.
     """
 
     query: str = InputField(
@@ -108,7 +108,7 @@ class BlastSearchInput(BaseToolInput):
         if path.exists() and path.is_file():
             object.__setattr__(self, "query_type", "fasta_path")
         else:
-            # Not a file — treat as raw sequence. Validate characters.
+            # Not a file; treat as raw sequence. Validate characters.
             cleaned = self.query.strip()
             if not cleaned:
                 raise ValueError("Query sequence cannot be empty")
@@ -224,11 +224,6 @@ class BlastSearchConfig(BaseConfig):
         hitlist_size (int | None): Number of hits to return (online mode only).
         megablast (bool | None): Use MegaBLAST algorithm (online mode, blastn only).
     """
-
-    # TODO: Add conditional rendering for the frontend so that online-only
-    # and local-only params are shown/hidden based on the selected search_mode.
-    # Online-only: database, entrez_query, hitlist_size, megablast
-    # Local-only: local_db, num_threads
 
     # --- Mode selection ---
     search_mode: Literal["online", "local"] = ConfigField(

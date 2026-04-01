@@ -4,7 +4,7 @@ This script mimics CLI-based tools (Boltz2, RFDiffusion3, Protenix) that spawn
 subprocesses for inference. It uses get_subprocess_device_env() for correct
 CUDA_VISIBLE_DEVICES routing and subprocess.run for the actual "CLI" call.
 
-The subprocess is a simple Python one-liner that scales input data — lightweight
+The subprocess is a simple Python one-liner that scales input data, lightweight
 but exercises the full subprocess device routing path.
 """
 from __future__ import annotations
@@ -98,13 +98,13 @@ def dispatch(input_dict: dict) -> dict:
 
 
 def to_device(device: str) -> dict:
-    """Passthrough for CLI tool — automatically unloads after each call."""
+    """Passthrough for CLI tool; automatically unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
 def get_memory_stats() -> dict:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    # CLI tools don't hold models in memory — report as unavailable
+    # CLI tools don't hold models in memory; report as unavailable
     return {"available": False, "framework": "pytorch", "reason": "CLI tool, no persistent model"}
 
 

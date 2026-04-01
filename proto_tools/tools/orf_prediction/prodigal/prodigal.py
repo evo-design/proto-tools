@@ -129,9 +129,7 @@ class ProdigalConfig(BaseConfig):
 
     Note:
         Prodigal is optimized for prokaryotic genomes. For eukaryotic gene
-        prediction, use specialized eukaryotic gene finders. The ``translation_table``
-        parameter should be converted to a Literal type with descriptive string
-        values in future versions. TODO
+        prediction, use specialized eukaryotic gene finders.
     """
     meta_mode: bool = ConfigField(
         title="Meta Mode",
@@ -139,7 +137,6 @@ class ProdigalConfig(BaseConfig):
         description="Use meta mode for short sequences/fragments (True) or single-genome mode (False)",
         advanced=True,
     )
-    # TODO: This should be a literal with string values that get translated to ints internally
     translation_table: int = ConfigField(
         title="Translation Table",
         default=11,
@@ -154,7 +151,6 @@ class ProdigalConfig(BaseConfig):
         description="Prevent genes from running off sequence edges (use True for complete circular genomes)",
         advanced=True,
     )
-    # TODO: Determine how to handle this for the frontend.
     num_threads: int = ConfigField(
         title="Number of Threads",
         default_factory=lambda: os.cpu_count() or 1,

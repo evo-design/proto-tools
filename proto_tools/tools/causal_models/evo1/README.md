@@ -11,7 +11,7 @@ Evo1 is a 7-billion parameter DNA language model built on the [StripedHyena](htt
 Evo1 generates novel DNA sequences by learning the statistical patterns of prokaryotic and phage genomes. It can also score sequences by log-likelihood, providing a measure of how "natural" a generated sequence appears relative to the training distribution.
 
 **Why is this important?**
-Generative DNA models enable de novo design of biological sequences — genes, [operons](https://en.wikipedia.org/wiki/Operon), [CRISPR](https://en.wikipedia.org/wiki/CRISPR) systems, and [mobile genetic elements](https://en.wikipedia.org/wiki/Transposable_element) — without requiring template sequences. By learning the grammar of genomes at single-nucleotide resolution, Evo1 can propose functional DNA that respects codon usage, regulatory signals, and structural constraints.
+Generative DNA models enable de novo design of biological sequences; genes, [operons](https://en.wikipedia.org/wiki/Operon), [CRISPR](https://en.wikipedia.org/wiki/CRISPR) systems, and [mobile genetic elements](https://en.wikipedia.org/wiki/Transposable_element); without requiring template sequences. By learning the grammar of genomes at single-nucleotide resolution, Evo1 can propose functional DNA that respects codon usage, regulatory signals, and structural constraints.
 
 **Scientific foundation:**
 Evo1 uses the StripedHyena architecture, a hybrid state-space/attention model that processes DNA at single-nucleotide resolution. Unlike transformer-only models, StripedHyena supports efficient long-range sequence modeling up to 131k tokens. The model is trained with a standard autoregressive (next-token prediction) objective on raw genomic DNA.
@@ -118,7 +118,7 @@ Evo1 performs autoregressive generation: given a prompt DNA sequence, it predict
   - High values (1.0-1.5): More diverse; useful for exploring sequence space but may produce less realistic sequences
 
 **Common mistakes:**
-1. **Using the wrong checkpoint for your task**: The `evo-1-8k-crispr` checkpoint is fine-tuned specifically for CRISPR loci — it will not perform well for general gene generation. Use `evo-1-8k-base` for general purposes.
+1. **Using the wrong checkpoint for your task**: The `evo-1-8k-crispr` checkpoint is fine-tuned specifically for CRISPR loci; it will not perform well for general gene generation. Use `evo-1-8k-base` for general purposes.
 2. **Expecting eukaryotic-quality generation**: Evo1 was trained on prokaryotic and phage genomes. For eukaryotic sequences, use Evo2.
 3. **Ignoring prompt length limits**: The 8k model has an 8,192-token context window. Prompt + generated tokens must fit within this limit.
 

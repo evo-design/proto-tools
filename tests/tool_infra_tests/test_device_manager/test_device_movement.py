@@ -137,7 +137,7 @@ def test_move_to_generic_cuda_excludes_self_from_eviction(
 def _make_instance(device_manager, tool_name="mock_pytorch_tool", instance_name="inst"):
     """Create a ToolInstance with a mock worker (no real subprocess).
 
-    Also stubs _ensure_env to skip the real micromamba/PyTorch install —
+    Also stubs _ensure_env to skip the real micromamba/PyTorch install;
     these tests only exercise device-movement logic.
     """
     ToolInstance.clear_all()

@@ -6,7 +6,7 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 - **One-liner module docstring**: `"""Tests for {tool/entity name}."""`
 - **No `from __future__ import annotations`** in test files
-- **Flat functions only**: No `class Test*` — use descriptive function names (e.g., `test_blast_search_exact_match`)
+- **Flat functions only**: No `class Test*`; use descriptive function names (e.g., `test_blast_search_exact_match`)
 - **Section separators**: Use `# ── Section name ──...` for groups. Use `# ---------------------------------------------------------------------------` + `# Integration tests` for the integration boundary
 - **File ordering**: Unit tests first, then the integration boundary separator, then integration/GPU tests
 - **Module-level fixtures**: Use `@pytest.fixture` at module level, not inside classes. Use `scope="module"` for expensive setup
@@ -15,15 +15,15 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 ## Assertions
 
-- **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")` — never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`
+- **Specific exception matching**: Always use `pytest.raises(ExceptionType, match="...")`; never bare `pytest.raises(Exception)`. For Pydantic `ge=N` constraints, match `"greater than or equal to N"`
 - **No trivial tests**: Don't test that Pydantic stores default values. Test computed properties, validators, normalization, and error cases
 - **`tmp_path` over `tempfile`**: Use pytest's built-in `tmp_path` fixture
 
 ## Markers
 
 - **`@pytest.mark.integration`**: Tests calling `ToolInstance.dispatch()` for CPU tools. Skipped by default; run with `--integration`
-- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement — do **not** also add `@pytest.mark.integration`
-- **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization — do not add manually
+- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement; do **not** also add `@pytest.mark.integration`
+- **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization; do not add manually
 - **No `@pytest.mark.skip_ci`** for core dependencies: If a package is in `pyproject.toml`, its tests should run without special markers
 - **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`
 

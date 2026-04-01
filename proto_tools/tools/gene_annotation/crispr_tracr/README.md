@@ -8,7 +8,7 @@ CRISPRtracrRNA predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activatin
 ## Biological Background
 
 **What does this tool measure/predict?**
-This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for [Type II CRISPR-Cas](https://en.wikipedia.org/wiki/CRISPR#Class_2) systems — it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with [Cas9](https://en.wikipedia.org/wiki/Cas9) to guide DNA cleavage.
+This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for [Type II CRISPR-Cas](https://en.wikipedia.org/wiki/CRISPR#Class_2) systems; it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with [Cas9](https://en.wikipedia.org/wiki/Cas9) to guide DNA cleavage.
 
 **Why is this important?**
 For a CRISPR-Cas9 system to function, three components must be present: the Cas9 protein, the [crRNA](https://en.wikipedia.org/wiki/CRISPR#crRNA) (from the CRISPR array), and the tracrRNA. Detecting the tracrRNA is essential for:
@@ -18,7 +18,7 @@ For a CRISPR-Cas9 system to function, three components must be present: the Cas9
 - Discovering novel CRISPR-Cas9 systems in metagenomic data
 
 **Scientific foundation:**
-CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure — similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
+CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure; similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
 
 ## When to Use This Tool
 
@@ -108,7 +108,7 @@ The tool operates in two stages:
 | `tracr_start` / `tracr_end` | `int` | Sequence coordinates | Genomic position of predicted tracrRNA |
 | `interaction_energy` | `float` | < 0 kcal/mol | IntaRNA interaction energy; more negative = stronger (complete_run mode) |
 | `anti_repeat_similarity_coverage_multiplication` | `float` | 0.0 - 1.0 | Combined similarity x coverage of anti-repeat interaction |
-| `intarna_anti_repeat_interaction` | `str` | — | Predicted RNA-RNA interaction structure |
+| `intarna_anti_repeat_interaction` | `str` |: | Predicted RNA-RNA interaction structure |
 
 **Properties:**
 - `TracrPrediction.has_tracr`: `True` if a tracrRNA was detected
@@ -117,10 +117,10 @@ The tool operates in two stages:
 **Supported export formats:** `csv`, `json`
 
 **Thresholds & decision boundaries (complete_run mode):**
-- **Strong interaction:** `interaction_energy < -5.0` kcal/mol — strong anti-repeat/tracrRNA duplex
-- **Moderate interaction:** `-5.0 <= interaction_energy < -2.0` — plausible tracrRNA
-- **Weak interaction:** `interaction_energy >= -2.0` — unlikely to form stable duplex
-- **No detection:** `tracr_start is None` — no tracrRNA found; the locus may not contain a Type II system
+- **Strong interaction:** `interaction_energy < -5.0` kcal/mol: strong anti-repeat/tracrRNA duplex
+- **Moderate interaction:** `-5.0 <= interaction_energy < -2.0`: plausible tracrRNA
+- **Weak interaction:** `interaction_energy >= -2.0`: unlikely to form stable duplex
+- **No detection:** `tracr_start is None`: no tracrRNA found; the locus may not contain a Type II system
 
 ## Best Practices & Gotchas
 

@@ -313,7 +313,7 @@ def test_stop_kills_child_processes(tmp_path: Path):
 
         # Both the worker and its child should be dead
         assert not worker.alive
-        # Poll briefly — the child may take a moment to be reaped after
+        # Poll briefly; the child may take a moment to be reaped after
         # the process group receives SIGTERM.
         for _ in range(50):
             try:

@@ -32,7 +32,7 @@ from typing import Any
 
 # Responses larger than this (in bytes) are written to a temp file instead of
 # being sent through the pipe.  With line-buffered text mode, flush() writes
-# the entire payload in one call — if it exceeds the OS pipe buffer (~1 MB on
+# the entire payload in one call. If it exceeds the OS pipe buffer (~1 MB on
 # Linux), the write blocks until the reader drains, risking deadlock.  100 MB
 # stays well above the pipe buffer while keeping file I/O overhead negligible.
 _FILE_FALLBACK_THRESHOLD = 100_000_000
@@ -126,11 +126,11 @@ def _build_legacy_dispatch(module: Any) -> Any:
             if func is not None:
                 return func(input_dict)
             raise ValueError(
-                f"Cannot dispatch operation '{operation}' — no function "
+                f"Cannot dispatch operation '{operation}': no function "
                 f"'{func_name}' found in {module.__name__}"
             )
 
-        # No operation key — auto-route if there's exactly one run_* function.
+        # No operation key; auto-route if there's exactly one run_* function.
         if len(run_funcs) == 1:
             func = next(iter(run_funcs.values()))
             return func(input_dict)
@@ -230,7 +230,7 @@ def main() -> None:
         try:
             request = json.loads(line)
         except json.JSONDecodeError as exc:
-            # Can't parse request — write error with no id
+            # Can't parse request; write error with no id
             error_response = {"id": None, "error": f"Invalid JSON: {exc}"}
             response_json = json.dumps(error_response, separators=(",", ":"))
             _send_response(_json_out, response_json)

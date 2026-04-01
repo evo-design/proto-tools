@@ -163,7 +163,7 @@ def test_ncbi_gene_term_format():
 
 
 # ---------------------------------------------------------------------------
-# Integration tests — call real upstream APIs (NCBI, UniProt, PDB)
+# Integration tests: call real upstream APIs (NCBI, UniProt, PDB)
 # ---------------------------------------------------------------------------
 
 
@@ -292,7 +292,7 @@ def test_sequence_fetch_premrna_minus_strand_no_double_rc():
     Uses a real NCBI fetch of a short lacI region on the minus strand of
     E. coli K-12 (NC_000913.3). The genomic DNA fetch already asks NCBI
     for strand=2 (reverse complement), so _fetch_rna_premrna must simply
-    convert T->U — not RC again.
+    convert T->U, not RC again.
 
     We fetch the same region as both dna_genomic and rna_premrna and verify
     that the pre-mRNA is exactly the T->U conversion of the genomic DNA.

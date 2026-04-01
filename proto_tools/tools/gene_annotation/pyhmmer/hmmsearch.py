@@ -1,6 +1,6 @@
 """proto_tools/tools/gene_annotation/pyhmmer/hmmsearch.py
 
-PyHMMER hmmsearch tool — search HMM profiles against protein sequences."""
+PyHMMER hmmsearch tool: search HMM profiles against protein sequences."""
 from __future__ import annotations
 
 from pathlib import Path

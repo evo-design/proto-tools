@@ -8,7 +8,7 @@ proto_tools is a modular computational biology and biological AI tool library pr
 
 ## Knowledge Management
 
-Three layers for persistent knowledge — put information in the right one:
+Three layers for persistent knowledge. Put information in the right one:
 
 | Layer | Location | Shared? | Best For |
 |-------|----------|---------|----------|
@@ -20,7 +20,7 @@ Three layers for persistent knowledge — put information in the right one:
 
 Team-shared development docs. Read at the start of relevant tasks.
 
-- `environments/` — Machine-generated platform compatibility reports (Chimera H100, DGX Spark, macOS)
+- `environments/`: Machine-generated platform compatibility reports (Chimera H100, DGX Spark, macOS)
 
 Update notes/ when you discover something **every developer needs to know** (platform issues, new setup steps, architecture decisions).
 
@@ -34,7 +34,7 @@ Documentation reference pages are auto-generated from Python docstrings and fiel
 
 ## Build & Development Setup
 
-Assume `proto_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools — just use `python3` directly.
+Assume `proto_tools` is already installed in the current Python environment. Do **not** create or activate a virtual environment before running tools; just use `python3` directly.
 
 ```bash
 # First-time setup only
@@ -88,7 +88,7 @@ proto_tools/
 └── utils/                          # Shared utilities
 ```
 
-### Tool Registry — Quick Navigation
+### Tool Registry: Quick Navigation
 
 Every tool is registered via `@tool()` and discoverable through `ToolRegistry`. Tools are at `tools/{category}/{tool_name}/`.
 
@@ -103,7 +103,7 @@ ToolRegistry.get_example_input("esmfold-prediction")  # Minimal valid Input
 
 ### The Universal Tool Pattern
 
-Every tool follows this exact pattern — no exceptions:
+Every tool follows this exact pattern, no exceptions:
 
 ```python
 def example_input():
@@ -114,13 +114,13 @@ def example_input():
 def run_tool_name(inputs: ToolInput, config: ToolConfig | None = None) -> ToolOutput:
 ```
 
-- **Input** (`BaseToolInput`) — primary data (sequences, structures, files). Uses `extra="forbid"`.
-- **Config** (`BaseConfig`) — parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time** — if `config=None`, the decorator auto-instantiates defaults. All config fields must have defaults.
-- **Output** (`BaseToolOutput`) — results + auto-populated metadata (tool_id, execution_time, success, errors).
-- **`@tool()`** — handles error catching, timing, metadata, registry, default config, and device allocation validation.
-- **`example_input`** — callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
-- **`device_count`** (optional) — expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
-- **`devices_per_instance`** — a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Defaults to 1. Override in tool config subclasses where needed.
+- **Input** (`BaseToolInput`): primary data (sequences, structures, files). Uses `extra="forbid"`.
+- **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time**; if `config=None`, the decorator auto-instantiates defaults. All config fields must have defaults.
+- **Output** (`BaseToolOutput`): results + auto-populated metadata (tool_id, execution_time, success, errors).
+- **`@tool()`**: handles error catching, timing, metadata, registry, default config, and device allocation validation.
+- **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
+- **`device_count`** (optional): expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
+- **`devices_per_instance`**: a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Defaults to 1. Override in tool config subclasses where needed.
 
 ### Tool Execution & Persistence
 
@@ -141,27 +141,27 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `ToolCache`, `cache_strip_items`, `cache_store_items`, `cache_stitch_items` |
-| `utils/tool_instance.py` | `ToolInstance` — isolated environment execution with opt-in persistence |
-| `utils/tool_pool.py` | `ToolPool` — multi-GPU parallel execution with LPT scheduling |
+| `utils/tool_instance.py` | `ToolInstance`: isolated environment execution with opt-in persistence |
+| `utils/tool_pool.py` | `ToolPool`: multi-GPU parallel execution with LPT scheduling |
 | `utils/device.py` | GPU detection, `DeviceSpec`, `number_of_visible_gpus()`, `determine_visible_devices()` |
-| `utils/device_manager.py` | `DeviceManager` — centralized GPU allocation tracking with LRU eviction |
-| `utils/compute_deps.py` | `detect_compute_environment()` — hardware detection & version resolution |
+| `utils/device_manager.py` | `DeviceManager`: centralized GPU allocation tracking with LRU eviction |
+| `utils/compute_deps.py` | `detect_compute_environment()`: hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
 | `utils/standalone_helpers_source/standalone_helpers.py` | `resolve_weights_dir()`, `get_subprocess_device_env()`, `move_model_to_device()` |
 | `utils/standalone_helpers_source/standalone_helpers.sh` | `proto_install_pytorch()`, `proto_install_jax()`, `proto_resolve_weights_dir()`, `proto_check_gated_hf_repo()` |
 | `utils/sequence.py` | Sequence validation, detection, `resolve_sequence_ids()` |
-| `utils/auth.py` | `require_hf_token()` — HuggingFace gated model auth |
-| `utils/chemistry.py` | `validate_smiles()` — SMILES string validation |
-| `utils/msa.py` | `extract_msa_sequences()` — MSA extraction utilities |
-| `tools/__init__.py` | Master export — all tools re-exported here |
+| `utils/auth.py` | `require_hf_token()`: HuggingFace gated model auth |
+| `utils/chemistry.py` | `validate_smiles()`: SMILES string validation |
+| `utils/msa.py` | `extract_msa_sequences()`: MSA extraction utilities |
+| `tools/__init__.py` | Master export, all tools re-exported here |
 
 ## Naming Conventions
 
-- **Tool registry key**: `{tool}-{action}` kebab-case — `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`. Every key must have an action suffix.
-- **Run function**: `run_{tool_name}` — `run_evo2_sample`, `run_blast_search`
-- **Classes**: PascalCase — `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
-- **Directories**: snake_case — `evo2/`, `blast/`
-- **Files**: snake_case — `evo2_sample.py`, `blast_search.py`
+- **Tool registry key**: `{tool}-{action}` kebab-case, e.g. `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`. Every key must have an action suffix.
+- **Run function**: `run_{tool_name}`, e.g. `run_evo2_sample`, `run_blast_search`
+- **Classes**: PascalCase, e.g. `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
+- **Directories**: snake_case, e.g. `evo2/`, `blast/`
+- **Files**: snake_case, e.g. `evo2_sample.py`, `blast_search.py`
 - **Code section headers**: `# ============================================================================`
 
 ## Docstring Conventions
@@ -177,7 +177,7 @@ Google style everywhere. Enforced by `tests/style_consistency_tests/test_module_
   """
   ```
 - **One-liners**: Acceptable for simple functions. No structured sections needed.
-- **Multi-line docstrings** (anything with a blank line): Google style — summary line, blank line, then sections as needed: `Args:`, `Returns:`, `Raises:`, `Attributes:`, `Example:`, `Note:`.
+- **Multi-line docstrings** (anything with a blank line): Google style. Summary line, blank line, then sections as needed: `Args:`, `Returns:`, `Raises:`, `Attributes:`, `Example:`, `Note:`.
 - **Types required in docstrings**: Every `Args:`, `Attributes:`, and `Returns:` entry must include the type annotation matching the function signature or class annotation. Use modern Python syntax (`list[str]`, `X | None`). Consistency tests enforce that docstring types match signatures.
   ```python
   Args:
@@ -190,16 +190,16 @@ Google style everywhere. Enforced by `tests/style_consistency_tests/test_module_
   Returns:
       list[float]: Constraint scores for each sequence.
   ```
-- **Pydantic classes**: Always include `Attributes:` section with full descriptions. These intentionally duplicate the short `Field(description=...)` / `ConfigField(description=...)` strings — field descriptions are short tooltips for the frontend UI, while docstring descriptions are longer developer-facing explanations.
+- **Pydantic classes**: Always include `Attributes:` section with full descriptions. These intentionally duplicate the short `Field(description=...)` / `ConfigField(description=...)` strings; field descriptions are short tooltips for the frontend UI, while docstring descriptions are longer developer-facing explanations.
 
 ## Rules When Implementing Tools
 
-- Use `ConfigField()` for Config fields, `Field()` for Input and Output fields — never mix them. `ConfigField` supports `reload_on_change=True` (triggers worker restart) and `include_in_key=False` (excludes from cache key). `include_in_key` defaults to `True`; set it to `False` for fields that don't affect computation (device, verbose, timeout — already excluded on `BaseConfig`)
-- Never catch exceptions inside tool functions — the `@tool` decorator handles all error wrapping
+- Use `ConfigField()` for Config fields, `Field()` for Input and Output fields; never mix them. `ConfigField` supports `reload_on_change=True` (triggers worker restart) and `include_in_key=False` (excludes from cache key). `include_in_key` defaults to `True`; set it to `False` for fields that don't affect computation (device, verbose, timeout, already excluded on `BaseConfig`)
+- Never catch exceptions inside tool functions; the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
 - Use `from __future__ import annotations` at the top of every file
-- Use `logging.getLogger(__name__)` — never `print()`
+- Use `logging.getLogger(__name__)`, never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
 - Every tool directory must include an `examples/example.ipynb` notebook. Include a `cite.bib` when wrapping a published model or tool; omit it for simple algorithmic utilities with no paper to cite
@@ -215,14 +215,14 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 ## Configuration
 
 - Python >=3.10, Pydantic >=2.0
-- Do **not** auto-format — formatting is handled manually
+- Do **not** auto-format; formatting is handled manually
 - Ruff (line length 88, checks F401 + F841 + import sorting). No auto-formatting.
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
-- Integration tests are **skipped by default** — run with `pytest --integration` or `pytest --all`
+- Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`
 - **Generally use `--all` when running tests** to include integration and GPU tests
 - Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
-- Test logs saved to `logs/` — every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
-- **`PROTO_HOME`** controls where all persistent data lives — model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/model-weights.md`.
+- Test logs saved to `logs/`. Every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
+- **`PROTO_HOME`** controls where all persistent data lives: model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/model-weights.md`.
 
 ## Using proto-tools with Claude Code
 
@@ -243,16 +243,16 @@ from proto_tools.tools.{category}.{tool} import run_{tool}, {Tool}Input, {Tool}C
 
 result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 # result.success, result.execution_time, result.errors, plus tool-specific fields
-# Config is optional — omit to use all defaults: run_{tool}({Tool}Input(...))
+# Config is optional; omit to use all defaults: run_{tool}({Tool}Input(...))
 ```
 
 For script patterns, batch persistence, GPU tools, and citations, see `notes/usage-guide.md`.
 
 ## Skills & Commands
 
-- **`implement-tool`** — Full lifecycle for implementing a new tool wrapper
-- **`fix-env`** — Debug and fix tool environment setup failures
-- **`/fix-issue <number>`** — Full GitHub issue fix lifecycle
+- **`implement-tool`**: Full lifecycle for implementing a new tool wrapper
+- **`fix-env`**: Debug and fix tool environment setup failures
+- **`/fix-issue <number>`**: Full GitHub issue fix lifecycle
 
 ## Detailed Reference Docs
 

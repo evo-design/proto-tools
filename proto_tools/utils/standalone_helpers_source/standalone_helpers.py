@@ -83,12 +83,12 @@ def _apply_jax_subprocess_env(env: Dict[str, str]) -> Dict[str, str]:
     """
     cvd = env.get("CUDA_VISIBLE_DEVICES", "")
     if cvd and cvd.strip():
-        # Subprocess has GPU access — allow JAX preallocation (ephemeral process)
+        # Subprocess has GPU access; allow JAX preallocation (ephemeral process)
         env.pop("XLA_PYTHON_CLIENT_PREALLOCATE", None)
         env.pop("XLA_PYTHON_CLIENT_ALLOCATOR", None)
         env.pop("JAX_PLATFORMS", None)
     else:
-        # No GPUs — force CPU-only so JAX doesn't probe for devices
+        # No GPUs; force CPU-only so JAX doesn't probe for devices
         env["JAX_PLATFORMS"] = "cpu"
     return env
 
@@ -130,8 +130,8 @@ def get_subprocess_device_env(device: str) -> Dict[str, str]:
     """
     env = os.environ.copy()
 
-    # Normalize bare "cuda" to "cuda:0" — standard PyTorch usage for single-GPU
-    # environments (e.g. Modal containers) where there's no DeviceManager
+    # Normalize bare "cuda" to "cuda:0" for single-GPU environments
+    # where there's no DeviceManager
     if device == "cuda":
         device = "cuda:0"
 
@@ -154,7 +154,7 @@ def get_subprocess_device_env(device: str) -> Dict[str, str]:
     parent_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
 
     if not parent_visible or not parent_visible.strip():
-        # No parent CUDA_VISIBLE_DEVICES — use indices directly
+        # No parent CUDA_VISIBLE_DEVICES; use indices directly
         logger.warning(
             f"CUDA_VISIBLE_DEVICES not set in worker environment for device '{device}'. "
             f"CLI subprocess may access unintended GPUs."
@@ -162,7 +162,7 @@ def get_subprocess_device_env(device: str) -> Dict[str, str]:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(idx) for idx in indices)
         return _apply_jax_subprocess_env(env)
 
-    # Parent has CUDA_VISIBLE_DEVICES — map logical to physical
+    # Parent has CUDA_VISIBLE_DEVICES; map logical to physical
     parent_devices = [d.strip() for d in parent_visible.split(",")]
 
     for idx in indices:
@@ -338,12 +338,12 @@ def move_model_to_device(
 
         jax_device = resolve_jax_device(new_device)
 
-        # Pytree-compatible types (dict, list, tuple) — device_put recurses natively
+        # Pytree-compatible types (dict, list, tuple): device_put recurses natively
         # This is the standard path for Flax/Haiku params dicts
         if isinstance(model_or_params, (dict, list, tuple)):
             model_or_params = jax.device_put(model_or_params, jax_device)
         else:
-            # Objects with jax.Array attributes — walk and move each one
+            # Objects with jax.Array attributes: walk and move each one
             if model_or_params is not None:
                 for attr_name in list(vars(model_or_params)):
                     val = getattr(model_or_params, attr_name)
@@ -515,7 +515,7 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
             return path
         logger.warning(
             "PROTO_MODEL_CACHE=IN_ENV but no TOOL_VENV_PATH or VENV_PATH set. "
-            "Returning None — tool will use its own default."
+            "Returning None; tool will use its own default."
         )
         return None
 
@@ -526,7 +526,7 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
         # Default: PROTO_HOME/proto_model_cache/ directory
         proto_home = os.environ.get("PROTO_HOME", "")
         if not proto_home:
-            # Same default as get_proto_home() — ~/.proto/
+            # Same default as get_proto_home(): ~/.proto/
             proto_home = os.path.join(os.path.expanduser("~"), ".proto")
             logger.warning(
                 "PROTO_HOME not set in subprocess environment. "

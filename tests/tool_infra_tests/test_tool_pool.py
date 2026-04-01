@@ -891,7 +891,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
         ]
 
         with ToolPool(devices=["cuda:0", "cuda:1"]):
-            # Cold call — pays model loading on both GPUs
+            # Cold call: pays model loading on both GPUs
             t0 = time.time()
             result1 = run_mock_pytorch_tool(
                 MockPyTorchToolInput(data_items=data_items),
@@ -899,7 +899,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
             )
             cold_time = time.time() - t0
 
-            # Warm call — workers already loaded
+            # Warm call: workers already loaded
             t0 = time.time()
             result2 = run_mock_pytorch_tool(
                 MockPyTorchToolInput(data_items=data_items),
@@ -911,7 +911,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
         assert result2.success
         assert warm_time < cold_time, (
             f"Warm call ({warm_time:.2f}s) should be faster than "
-            f"cold call ({cold_time:.2f}s) — workers should persist"
+            f"cold call ({cold_time:.2f}s), workers should persist"
         )
     finally:
         ToolInstance.clear_all()

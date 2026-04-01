@@ -1,6 +1,6 @@
 """proto_tools/tools/gene_annotation/pyhmmer/phmmer.py
 
-PyHMMER phmmer tool — search protein sequences against protein sequences."""
+PyHMMER phmmer tool: search protein sequences against protein sequences."""
 from __future__ import annotations
 
 from typing import List

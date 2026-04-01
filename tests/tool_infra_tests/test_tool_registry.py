@@ -638,7 +638,7 @@ def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
 
 def test_timeout_error_not_retried(clean_registry, fast_retry):
     """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its
-    configured timeout — retrying with the same limit would just time out again."""
+    configured timeout; retrying with the same limit would just time out again."""
     call_count = 0
 
     def tool(inputs, config, instance=None):
@@ -1061,7 +1061,7 @@ def test_no_cache_when_contextvar_none(clean_registry):
     spec = _register_cacheable_iterable(clean_registry, "no-ctx-cache", run_tool)
     config = MockToolConfig(param1="v")
 
-    # No cache set (contextvar is None) — every call dispatches
+    # No cache set (contextvar is None), so every call dispatches
     spec.function(MockIterableInput(items=["a"]), config)
     assert call_count == 1
 

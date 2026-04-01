@@ -165,7 +165,7 @@ class SpliceTransformerConfig(BaseConfig):
         reload_on_change=True,
     )
     device: str = (
-        ConfigField(  # TODO: Device management should be managed elsewhere eventually
+        ConfigField(
             default="cuda",
             title="Device",
             description="Device to run the model on (e.g., 'cuda', 'cpu')",

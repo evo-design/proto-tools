@@ -138,9 +138,9 @@ Storage: Databases are typically 2-3x the size of the input FASTA.
 
 ### Sweep Priorities
 
-1. `sensitivity` — Most impactful for search quality; higher values find more distant hits at the cost of speed
-2. `min_seq_id` (clustering) — Directly controls cluster granularity
-3. `only_top_hits` — Set to `False` when multiple hits per query are needed for downstream analysis
+1. `sensitivity`; Most impactful for search quality; higher values find more distant hits at the cost of speed
+2. `min_seq_id` (clustering); Directly controls cluster granularity
+3. `only_top_hits`; Set to `False` when multiple hits per query are needed for downstream analysis
 
 ## Output Specification
 
@@ -183,7 +183,7 @@ When `extract_representatives=True`, the DataFrame instead contains:
 - **Remote homologs:** `min_seq_id = 0.30` (loose clustering)
 
 **Clustering representative selection:**
-The representative sequence is not necessarily the "best" sequence—it's the first sequence that covered the cluster during greedy set-cover. Do not assume it is the longest or highest-quality member.
+The representative sequence is not necessarily the "best" sequence;it's the first sequence that covered the cluster during greedy set-cover. Do not assume it is the longest or highest-quality member.
 
 ## Quick Start Examples
 
@@ -304,7 +304,7 @@ print(f"Average cluster size: {cluster_sizes.mean():.1f}")
 
 4. **Ignoring `only_top_hits`:** By default, only the best hit per query is returned. Set `only_top_hits=False` if you need all hits above threshold.
 
-5. **Clustering Interpretation:** The representative sequence is not necessarily the "best" sequence—it's the first sequence that covered the cluster during greedy set-cover.
+5. **Clustering Interpretation:** The representative sequence is not necessarily the "best" sequence;it's the first sequence that covered the cluster during greedy set-cover.
 
 ## References
 

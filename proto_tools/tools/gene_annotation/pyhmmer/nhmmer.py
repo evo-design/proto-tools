@@ -1,6 +1,6 @@
 """proto_tools/tools/gene_annotation/pyhmmer/nhmmer.py
 
-PyHMMER nhmmer tool — search nucleotide sequences against nucleotide sequences."""
+PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences."""
 from __future__ import annotations
 
 from typing import List

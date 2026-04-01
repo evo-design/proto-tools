@@ -70,7 +70,7 @@ class BaseConfig(BaseModel):
     Properties:
         devices_per_instance: Number of GPUs each worker needs (default 1).
             Override in tool configs where the active model variant determines
-            GPU requirements — e.g., a large checkpoint may need 2 GPUs while
+            GPU requirements, e.g. a large checkpoint may need 2 GPUs while
             the small variant fits on 1. ``ToolPool`` reads this at dispatch
             time to group devices into worker slots.
 
@@ -157,7 +157,7 @@ class BaseConfig(BaseModel):
         ``cuda:2,cuda:3``.
 
         This lives on Config (not ToolSpec) because the required device count
-        can depend on a runtime config value — e.g., a large model checkpoint
+        can depend on a runtime config value, e.g. a large model checkpoint
         may need 4 GPUs while the small variant fits on 1.  Override in tool
         config subclasses where this applies; the default is 1.
         """

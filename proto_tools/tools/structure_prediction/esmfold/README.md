@@ -125,9 +125,9 @@ PredictedStructure(
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Excellent:** `avg_plddt > 0.9` — High confidence, well-folded structure suitable for most applications
-- **Acceptable:** `0.7 < avg_plddt <= 0.9` — Moderate confidence; some flexible or uncertain regions; review per-residue pLDDT
-- **Poor:** `avg_plddt <= 0.7` — Low confidence; likely disordered or poorly modeled; consider redesigning sequence
+- **Excellent:** `avg_plddt > 0.9`: High confidence, well-folded structure suitable for most applications
+- **Acceptable:** `0.7 < avg_plddt <= 0.9`: Moderate confidence; some flexible or uncertain regions; review per-residue pLDDT
+- **Poor:** `avg_plddt <= 0.7`: Low confidence; likely disordered or poorly modeled; consider redesigning sequence
 
 **Tips for interpreting output:**
 - Average pLDDT can hide poorly-folded regions. Always check `per_residue_plddt` to identify problem areas.

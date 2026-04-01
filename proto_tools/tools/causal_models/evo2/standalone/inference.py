@@ -380,7 +380,7 @@ class Evo2Model:
             return
 
         if device == "cpu":
-            # Standard offload — no reload needed
+            # Standard offload, no reload needed
             self.model.model = move_model_to_device(
                 self.model.model, self.device, device,
             )

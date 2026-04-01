@@ -147,7 +147,7 @@ Each `Structure` contains 3D coordinates (mmCIF format) and a `metrics` dictiona
 | `chain_ptm` | `List[float]` | 0.0-1.0 each | Per-chain PTM scores |
 | `chain_plddt` | `List[float]` | 0.0-1.0 each | Per-chain average pLDDT |
 | `chain_pair_iptm` | `List[List[float]]` | 0.0-1.0 each | Pairwise interface PTM between all chain pairs |
-| `has_clash` | `bool` | — | Whether the structure has steric clashes |
+| `has_clash` | `bool` |: | Whether the structure has steric clashes |
 
 ## Interpreting Results
 
@@ -155,9 +155,9 @@ Each `Structure` contains 3D coordinates (mmCIF format) and a `metrics` dictiona
 
 | Range | Interpretation | Action |
 |-------|---------------|--------|
-| > 0.8 | Excellent — high confidence | Structure suitable for detailed analysis |
-| 0.6-0.8 | Good — moderate confidence | Verify key interactions manually |
-| < 0.6 | Poor — low confidence | Consider more samples, MSA, or alternative approaches |
+| > 0.8 | Excellent: high confidence | Structure suitable for detailed analysis |
+| 0.6-0.8 | Good: moderate confidence | Verify key interactions manually |
+| < 0.6 | Poor: low confidence | Consider more samples, MSA, or alternative approaches |
 
 **Metric-specific guidance:**
 - **ptm > 0.8**: High confidence in the overall fold. Suitable for structural analysis.
@@ -273,10 +273,10 @@ result.export("protenix_output/", file_format="pdb")
 ## Related Tools
 
 **Used together:**
-- `colabfold-search` — MSA generation used internally by Protenix when `use_msa=True`
-- `proteinmpnn` — Design sequences for predicted structures, then validate with Protenix
+- `colabfold-search`: MSA generation used internally by Protenix when `use_msa=True`
+- `proteinmpnn`: Design sequences for predicted structures, then validate with Protenix
 
 **Alternatives:**
-- `alphafold3-prediction` — Original AlphaFold3 (requires API access)
-- `esmfold-prediction` — Fast single-chain protein folding without MSA (no DNA/RNA/ligand support)
-- `chai-prediction` — Another open-source multi-modal structure prediction model
+- `alphafold3-prediction`: Original AlphaFold3 (requires API access)
+- `esmfold-prediction`: Fast single-chain protein folding without MSA (no DNA/RNA/ligand support)
+- `chai-prediction`: Another open-source multi-modal structure prediction model

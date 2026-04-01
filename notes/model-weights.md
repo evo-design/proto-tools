@@ -36,16 +36,16 @@ The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool
 For teams sharing weights across collaborators, set `PROTO_MODEL_CACHE` to a shared directory while keeping `PROTO_HOME` per-user:
 
 ```bash
-# Per-user — tool envs and micromamba (should NOT be shared between users,
+# Per-user: tool envs and micromamba (should NOT be shared between users,
 # as different users may have different CUDA versions, library paths, etc.)
 export PROTO_HOME=~/.proto
 
-# Shared with collaborators — just model weights (safe for concurrent access;
+# Shared with collaborators: just model weights (safe for concurrent access;
 # HuggingFace uses file locks internally to handle simultaneous downloads)
 export PROTO_MODEL_CACHE=/shared/team/model_weights
 ```
 
-Do **not** share `PROTO_HOME` itself across users — tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
+Do **not** share `PROTO_HOME` itself across users. Tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
 
 ## Per-tool override
 
@@ -69,7 +69,7 @@ if weights_dir:
     ...
 ```
 
-HF-based tools need no code changes — `persistent_worker.py` sets `HF_HOME` automatically.
+HF-based tools need no code changes; `persistent_worker.py` sets `HF_HOME` automatically.
 
 For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (auto-copied):
 

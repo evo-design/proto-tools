@@ -1,4 +1,4 @@
-"""In-process mode for Evo2 — loads the model directly into the current Python process."""
+"""In-process mode for Evo2: loads the model directly into the current Python process."""
 from .evo2_cache import clear_evo2_cache, get_cached_evo2_model
 from .evo2_sample import (
     Evo2SampleConfig,

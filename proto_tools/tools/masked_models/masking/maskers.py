@@ -18,7 +18,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# MaskingMethod — single source of truth for valid method names
+# MaskingMethod: single source of truth for valid method names
 # ============================================================================
 
 MaskingMethod = Literal["random", "entropy", "max-logit"]
@@ -93,7 +93,7 @@ class Masker(ABC):
 # ============================================================================
 
 class RandomMasker(Masker):
-    """Uniform random selection — all positions scored equally."""
+    """Uniform random selection; all positions scored equally."""
 
     supported_models = None
 
@@ -106,7 +106,7 @@ class RandomMasker(Masker):
 
 
 class EntropyMasker(Masker):
-    """Score positions by Shannon entropy — high uncertainty → mask."""
+    """Score positions by Shannon entropy. High uncertainty leads to masking."""
 
     supported_models = ["esm2", "esm3"]
 
@@ -132,7 +132,7 @@ class EntropyMasker(Masker):
 
 
 class MaxLogitMasker(Masker):
-    """Score positions by negated max-logit — low confidence → mask."""
+    """Score positions by negated max-logit. Low confidence leads to masking."""
 
     supported_models = ["esm2", "esm3"]
 
@@ -152,7 +152,7 @@ class MaxLogitMasker(Masker):
 
 
 # ============================================================================
-# MASKERS — the lookup table
+# MASKERS: the lookup table
 # ============================================================================
 
 MASKERS: dict[str, type[Masker]] = {

@@ -47,7 +47,7 @@ Understanding how biomolecules interact is fundamental to biology and drug disco
 **Scientific foundation:**
 AlphaFold3 uses a next-generation architecture combining:
 1. **Pairformer module**: An improved version of the Evoformer architecture from AlphaFold2, using triangular attention to process sequence and structural features across all molecule types.
-2. **Diffusion-based structure generation**: Starting from random atomic coordinates, a diffusion network iteratively refines positions to generate physically realistic 3D structures—similar to AI image generators but for molecular structures.
+2. **Diffusion-based structure generation**: Starting from random atomic coordinates, a diffusion network iteratively refines positions to generate physically realistic 3D structures;similar to AI image generators but for molecular structures.
 3. **[Multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSAs)**: Evolutionary information from homologous sequences improves prediction accuracy for proteins and RNA.
 
 Confidence metrics include:
@@ -150,15 +150,15 @@ metrics = {
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Excellent:** `iptm > 0.8` and `plddt > 90` — High confidence; structure suitable for detailed analysis and drug design
-- **Acceptable:** `0.6 < iptm <= 0.8` and `70 < plddt <= 90` — Moderate confidence; verify key interactions manually
-- **Poor:** `iptm <= 0.6` or `plddt <= 50` — Low confidence; interaction may be incorrect; consider redesigning or using alternative methods
+- **Excellent:** `iptm > 0.8` and `plddt > 90`: High confidence; structure suitable for detailed analysis and drug design
+- **Acceptable:** `0.6 < iptm <= 0.8` and `70 < plddt <= 90`: Moderate confidence; verify key interactions manually
+- **Poor:** `iptm <= 0.6` or `plddt <= 50`: Low confidence; interaction may be incorrect; consider redesigning or using alternative methods
 
 **Tips for interpreting output:**
 - For multi-chain predictions, `iptm` is more informative than `ptm` about interface quality
 - Use `chain_pair_iptm` to identify which specific interfaces are well-predicted vs uncertain
 - Visualize structures colored by pLDDT (stored in B-factor column) to identify uncertain regions
-- Check PAE plots for inter-domain/inter-chain relationships — low PAE between domains indicates confident relative positioning
+- Check PAE plots for inter-domain/inter-chain relationships: low PAE between domains indicates confident relative positioning
 - For ligands, examine `chain_iptm` for the ligand chain specifically to assess binding confidence
 - Very small proteins (<20 residues): pTM becomes unreliable due to TM-score definition; rely on pLDDT and PAE instead
 

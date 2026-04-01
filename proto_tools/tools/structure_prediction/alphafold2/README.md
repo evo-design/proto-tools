@@ -162,10 +162,10 @@ Structure(
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Excellent:** `avg_plddt > 0.9` and `ptm > 0.8` — High-confidence prediction. Structure is reliable for downstream analysis (docking, design, function annotation). Proceed to experimental validation.
-- **Good:** `0.8 < avg_plddt <= 0.9` and `ptm > 0.7` — Moderate confidence. Core domains likely correct; flexible regions may be uncertain. Check per-residue pLDDT for problem areas.
-- **Marginal:** `0.7 < avg_plddt <= 0.8` — Mixed confidence. Some well-folded regions but significant uncertainty. Consider redesigning low-confidence regions or trying MSA-enhanced prediction.
-- **Poor:** `avg_plddt <= 0.7` or `ptm < 0.5` — Low confidence. Structure likely unreliable. Sequence may be intrinsically disordered, or the model lacks sufficient evolutionary information. Redesign or use alternative methods.
+- **Excellent:** `avg_plddt > 0.9` and `ptm > 0.8`: High-confidence prediction. Structure is reliable for downstream analysis (docking, design, function annotation). Proceed to experimental validation.
+- **Good:** `0.8 < avg_plddt <= 0.9` and `ptm > 0.7`: Moderate confidence. Core domains likely correct; flexible regions may be uncertain. Check per-residue pLDDT for problem areas.
+- **Marginal:** `0.7 < avg_plddt <= 0.8`: Mixed confidence. Some well-folded regions but significant uncertainty. Consider redesigning low-confidence regions or trying MSA-enhanced prediction.
+- **Poor:** `avg_plddt <= 0.7` or `ptm < 0.5`: Low confidence. Structure likely unreliable. Sequence may be intrinsically disordered, or the model lacks sufficient evolutionary information. Redesign or use alternative methods.
 
 **For multimeric complexes:**
 - `iptm > 0.8`: Confident interface prediction
@@ -174,7 +174,7 @@ Structure(
 **Interpreting edge cases:**
 - High avg_plddt but low pTM can indicate well-folded domains with incorrect relative orientation
 - Low pLDDT regions may be biologically relevant (flexible linkers, disordered regions) rather than prediction failures
-- MSA-free predictions (`use_msa=False`) may have systematically lower confidence for well-characterized protein families — this reflects reduced information, not necessarily poor structure
+- MSA-free predictions (`use_msa=False`) may have systematically lower confidence for well-characterized protein families: this reflects reduced information, not necessarily poor structure
 
 ## Quick Start Examples
 
@@ -201,7 +201,7 @@ from proto_tools.tools.structure_prediction.alphafold2 import (
     run_alphafold2, AlphaFold2Input, AlphaFold2Config,
 )
 
-# Faster prediction without MSA — useful for screening designed sequences
+# Faster prediction without MSA; useful for screening designed sequences
 # that may not have evolutionary relatives
 inputs = AlphaFold2Input(complexes=["MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI"])
 config = AlphaFold2Config(use_msa=False, num_recycles=3)
@@ -275,7 +275,7 @@ with ToolInstance.persist():
 
 **Tips for optimal results:**
 - Screen with ESMFold first (fast), then validate top candidates with AlphaFold2 (accurate)
-- For designed proteins, compare `use_msa=True` vs `use_msa=False` — if scores are similar, MSA isn't helping
+- For designed proteins, compare `use_msa=True` vs `use_msa=False`: if scores are similar, MSA isn't helping
 - Use `num_ensemble_models=3` or higher for important final predictions
 - Check per-residue pLDDT (in B-factor column of PDB output) to identify problematic regions
 

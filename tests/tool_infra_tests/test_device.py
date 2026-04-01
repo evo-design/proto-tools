@@ -406,7 +406,7 @@ def test_determine_visible_devices_cpu_ignores_parent(monkeypatch):
     assert determine_visible_devices("cpu") == ""
 
 
-# ── determine_visible_devices() — List Input ─────────────────────────────────
+# ── determine_visible_devices(): List Input ───────────────────────────────────
 
 
 @pytest.mark.uses_gpu

@@ -158,14 +158,14 @@ metrics = {
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Excellent:** `confidence_score > 0.85` and `complex_plddt > 80` — High confidence; structure suitable for detailed analysis
-- **Acceptable:** `0.7 < confidence_score <= 0.85` — Moderate confidence; verify key interactions
-- **Poor:** `confidence_score <= 0.7` — Low confidence; consider more samples or alternative approaches
+- **Excellent:** `confidence_score > 0.85` and `complex_plddt > 80`: High confidence; structure suitable for detailed analysis
+- **Acceptable:** `0.7 < confidence_score <= 0.85`: Moderate confidence; verify key interactions
+- **Poor:** `confidence_score <= 0.7`: Low confidence; consider more samples or alternative approaches
 
 **Tips for interpreting output:**
-- Use `ligand_iptm` for drug binding assessment, `protein_iptm` for protein-protein interfaces — not just the overall `confidence_score`
+- Use `ligand_iptm` for drug binding assessment, `protein_iptm` for protein-protein interfaces: not just the overall `confidence_score`
 - Check `pair_chains_iptm` to identify which chain pairs have confident vs uncertain interfaces
-- Compare `complex_plddt` vs `complex_iplddt` — if interface pLDDT is much lower, the binding mode may be uncertain
+- Compare `complex_plddt` vs `complex_iplddt`: if interface pLDDT is much lower, the binding mode may be uncertain
 - Visualize PAE matrices to understand confidence in relative domain/chain positions
 - `complex_pde < 10A` indicates good relative positioning between chains
 

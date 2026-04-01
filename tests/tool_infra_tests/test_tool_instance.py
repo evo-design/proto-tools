@@ -274,7 +274,7 @@ def test_dispatch_respects_instance_string_key(
     inst.run = MagicMock()
 
     result = ToolInstance.dispatch("esm2", {"op": "score"}, instance="other-key")
-    # Should NOT use cached "esm2" — key mismatch
+    # Should NOT use cached "esm2"; key mismatch
     assert result == {"result": "oneshot"}
     inst.run.assert_not_called()
 
@@ -465,7 +465,7 @@ def test_persist_tool_does_not_cache_other_tools(
     with ToolInstance.persist_tool("esm2"):
         assert "esm2" in _instances
 
-        # Dispatch a *different* tool — should NOT be cached
+        # Dispatch a *different* tool; should NOT be cached
         result = ToolInstance.dispatch("blast", {"op": "search"})
         assert result == {"result": "oneshot"}
         mock_oneshot.assert_called_once()
@@ -550,7 +550,7 @@ def test_scope_does_not_affect_other_threads(mock_init: MagicMock):
 
     def other_thread():
         barrier.wait()
-        # This thread is not inside any scope — should see _instances
+        # This thread is not inside any scope, so should see _instances
         other_thread_saw_global[0] = _active_cache() is _instances
 
     ToolInstance.get("esm2")
@@ -732,14 +732,14 @@ def test_persist_with_nested_persist_tool(mock_init: MagicMock):
                 assert "blast" in _active_cache()
                 ToolInstance.dispatch("blast", {"op": "search"})
 
-            # persist_tool() exited — blast cleaned up, esm2 still alive
+            # persist_tool() exited; blast cleaned up, esm2 still alive
             assert "blast" not in _active_cache()
             assert "esm2" in _active_cache()
 
             # esm2 still works via persist auto-cache
             ToolInstance.dispatch("esm2", {"op": "score"})
 
-    # persist() exited — everything cleaned up
+    # persist() exited; everything cleaned up
     assert len(_instances) == 0
 
 
@@ -1050,7 +1050,7 @@ def test_send_timeout_kills_worker():
     worker._stderr_lines = []
 
     with patch("proto_tools.utils.persistent_worker.select") as mock_sel:
-        mock_sel.select.return_value = ([], [], [])  # timeout — nothing ready
+        mock_sel.select.return_value = ([], [], [])  # timeout, nothing ready
 
         with pytest.raises(TimeoutError, match="timed out after 5s"):
             worker.send({"op": "score"}, timeout=5)
@@ -1392,7 +1392,7 @@ def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
 
 def test_build_failures_cleared_between_tests():
     """The autouse fixture clears _build_failures so tests are isolated."""
-    # The fixture already ran — _build_failures should be empty
+    # The fixture already ran, so _build_failures should be empty
     assert len(ToolInstance._build_failures) == 0
     ToolInstance._build_failures["some_tool"] = "test error"
     # Next test will see it cleared by the fixture
@@ -1408,7 +1408,7 @@ def test_hash_includes_requirements_txt(tmp_path: Path):
 
     hash_without_req = inst._setup_hash()
 
-    # Add a requirements.txt — hash should change
+    # Add a requirements.txt; hash should change
     req = tmp_path / "requirements.txt"
     req.write_text("numpy==1.26\n")
 

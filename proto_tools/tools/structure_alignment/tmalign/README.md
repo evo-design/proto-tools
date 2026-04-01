@@ -100,11 +100,11 @@ TMalignOutput(
 ## Interpreting Results
 
 **Thresholds & decision boundaries:**
-- **Same fold:** `TM-score > 0.5` — Structures share the same fold topology with high confidence. This threshold is statistically validated and widely used in structural biology.
-- **Similar fold:** `0.3 < TM-score <= 0.5` — Structures may share a similar fold or superfold, but the relationship is not definitive. Inspect visually.
-- **Different fold:** `TM-score <= 0.3` — Structures are structurally unrelated or share only local structural motifs.
-- **Near-identical:** `TM-score > 0.9` — Structures are nearly identical in topology; differences are in loop regions or minor conformational changes.
-- **Random baseline:** `TM-score ~ 0.17` — Expected for randomly related proteins of typical length.
+- **Same fold:** `TM-score > 0.5`: Structures share the same fold topology with high confidence. This threshold is statistically validated and widely used in structural biology.
+- **Similar fold:** `0.3 < TM-score <= 0.5`: Structures may share a similar fold or superfold, but the relationship is not definitive. Inspect visually.
+- **Different fold:** `TM-score <= 0.3`: Structures are structurally unrelated or share only local structural motifs.
+- **Near-identical:** `TM-score > 0.9`: Structures are nearly identical in topology; differences are in loop regions or minor conformational changes.
+- **Random baseline:** `TM-score ~ 0.17`: Expected for randomly related proteins of typical length.
 
 **Interpreting edge cases:**
 - The two TM-scores (normalized by Chain 1 vs Chain 2) differ when chains have different lengths. The score normalized by the shorter chain is always higher.
@@ -221,7 +221,7 @@ for path, score in sorted(results, key=lambda x: -x[1]):
 - GitHub: [https://github.com/pylelab/USalign](https://github.com/pylelab/USalign) (TMalign is included in the USalign package)
 
 **Additional resources:**
-- Zhang, Y. & Skolnick, J. (2004). "Scoring function for automated assessment of protein structure template quality." *Proteins*, 57(4), 702-710. [DOI: 10.1002/prot.20264](https://doi.org/10.1002/prot.20264) — Original TM-score paper.
+- Zhang, Y. & Skolnick, J. (2004). "Scoring function for automated assessment of protein structure template quality." *Proteins*, 57(4), 702-710. [DOI: 10.1002/prot.20264](https://doi.org/10.1002/prot.20264): Original TM-score paper.
 
 ## Related Tools
 

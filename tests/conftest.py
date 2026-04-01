@@ -414,7 +414,7 @@ class EnvReportCollector:
                     status = "⏭️ Skip"
 
                 # Duration formatting
-                duration = f"{r.duration_seconds:.1f}s" if r.status != "skipped" else "—"
+                duration = f"{r.duration_seconds:.1f}s" if r.status != "skipped" else "-"
 
                 # GPU indicator
                 gpu_req = "yes" if r.uses_gpu else "no"
@@ -425,7 +425,7 @@ class EnvReportCollector:
                 elif r.env_status == "build_failed":
                     venv = "❌"
                 else:
-                    venv = "—"
+                    venv = "-"
 
                 # Commit tag
                 if r.git_commit:
@@ -1020,7 +1020,7 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_tool_instances():
-    """Final safety net — kill any stray ToolInstance workers at session end."""
+    """Final safety net: kill any stray ToolInstance workers at session end."""
     yield
     ToolInstance.clear_all()
 

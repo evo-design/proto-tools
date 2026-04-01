@@ -1,8 +1,7 @@
 """
 proto_tools/tools/structure_prediction/esmfold/helpers.py
 
-These helpers are used by both the tool layer (esmfold.py) and the service layer
-(esmfold_service.py in proto-language-api deployment). They provide utilities for
+Shared helpers for ESMFold structure prediction. Provides utilities for
 batching complexes and relabeling chains in PDB output.
 """
 

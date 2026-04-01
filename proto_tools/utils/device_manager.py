@@ -250,7 +250,7 @@ class DeviceManager:
         if self._offload_strategy == OffloadStrategy.CPU:
             if is_exclusive_process_mode():
                 logger.warning(
-                    "GPU compute mode is Exclusive_Process — CPU offload strategy "
+                    "GPU compute mode is Exclusive_Process; CPU offload strategy "
                     "is incompatible (evicted subprocess retains CUDA context). "
                     "Auto-switching to RESTART strategy."
                 )
@@ -425,11 +425,11 @@ class DeviceManager:
 
         Compatibility rules:
 
-        - ``"cpu"`` — existing must be ``cpu``.
-        - ``"cuda"`` (auto single) — any single CUDA device.
-        - ``"cudaxN"`` (auto multi) — any N CUDA devices.
-        - ``"cuda:0"`` (specific) — exact device match.
-        - ``"cuda:0,1"`` / ``"cuda:0,cuda:1"`` (specific multi) — exact
+        - ``"cpu"``: existing must be ``cpu``.
+        - ``"cuda"`` (auto single): any single CUDA device.
+        - ``"cudaxN"`` (auto multi): any N CUDA devices.
+        - ``"cuda:0"`` (specific): exact device match.
+        - ``"cuda:0,1"`` / ``"cuda:0,cuda:1"`` (specific multi): exact
           device list match.
         """
         if instance_name not in self._allocations:
@@ -442,10 +442,10 @@ class DeviceManager:
         spec = parse_device_string(device)
 
         if spec.devices is not None:
-            # Specific device(s) requested — must match exactly.
+            # Specific device(s) requested; must match exactly.
             compatible = existing.device_ids == spec.devices
         else:
-            # General CUDA requested — any GPU allocation with the
+            # General CUDA requested; any GPU allocation with the
             # right device count is compatible.
             compatible = (
                 existing_str != "cpu"
@@ -876,7 +876,7 @@ class DeviceManager:
             from proto_tools.utils.device import parse_device_string
             spec = parse_device_string(device)
 
-            # Validate callback — always required since a CPU allocation
+            # Validate callback: always required since a CPU allocation
             # may later be moved to GPU and need eviction support.
             if eviction_callback is None:
                 raise ValueError(
@@ -944,7 +944,7 @@ class DeviceManager:
         then automatically releases it on exit (including exceptions).
 
         Transient leases differ from persistent allocations:
-        - They are **never evicted** — persistent allocations are evicted first
+        - They are **never evicted**; persistent allocations are evicted first
         - They **wait** when all GPUs are held by other transient leases
         - They are **auto-released** on context exit
 
@@ -1037,7 +1037,7 @@ class DeviceManager:
                     return result
 
                 except RuntimeError:
-                    # All GPUs occupied by transient leases — wait for release
+                    # All GPUs occupied by transient leases; wait for release
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise TimeoutError(
@@ -1254,7 +1254,7 @@ class DeviceManager:
         moves. Updates allocation record and invokes worker_callback to send
         the ``to_device`` command to the subprocess.
 
-        This is NOT used for eviction moves — eviction is handled entirely
+        This is NOT used for eviction moves. Eviction is handled entirely
         by ``_evict_allocation()`` (bookkeeping) + the eviction callback
         (worker command), which avoids lock ordering issues.
 

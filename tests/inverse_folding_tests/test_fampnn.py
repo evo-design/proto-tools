@@ -38,7 +38,7 @@ def pdb_structure():
 
 
 # ============================================================================
-# Unit tests (no GPU required — schema and data model validation)
+# Unit tests (no GPU required, schema and data model validation)
 # ============================================================================
 def test_fampnn_sample_input_schema():
     """FAMPNNSampleInput accepts a structure path and validates."""
@@ -147,7 +147,7 @@ def test_fampnn_sample_config_rejects_excluded_amino_acids():
 
 
 # ============================================================================
-# Integration tests (GPU required — run with --integration or --all)
+# Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
 @pytest.mark.uses_gpu
 def test_fampnn_sample_simple(pdb_structure):

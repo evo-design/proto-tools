@@ -32,11 +32,11 @@ See the [README](README.md) for HuggingFace authentication setup.
 
 Use descriptive branch names with a category prefix:
 
-- `feat/description` — new features or tools
-- `fix/description` — bug fixes
-- `refactor/description` — code restructuring without behavior change
-- `docs/description` — documentation-only changes
-- `test/description` — test additions or fixes
+- `feat/description`: new features or tools
+- `fix/description`: bug fixes
+- `refactor/description`: code restructuring without behavior change
+- `docs/description`: documentation-only changes
+- `test/description`: test additions or fixes
 
 ## Pull Requests
 
@@ -68,17 +68,17 @@ What's broken and why.
 
 Reference related issues in the PR body:
 
-- `Closes #123` — automatically closes the issue when merged
-- `Fixes #123` — same behavior, preferred for bug fixes
-- `Related to #123` — links without auto-closing
+- `Closes #123`: automatically closes the issue when merged
+- `Fixes #123`: same behavior, preferred for bug fixes
+- `Related to #123`: links without auto-closing
 
 ## Issues
 
 We use three issue templates:
 
-- **Bug report** — something is broken (include reproduction steps, error output, environment)
-- **Feature request** — propose new functionality (include use case, proposed solution)
-- **Tool request** — request a new bioinformatics tool wrapper (include tool name, operations to wrap, motivation)
+- **Bug report**: something is broken (include reproduction steps, error output, environment)
+- **Feature request**: propose new functionality (include use case, proposed solution)
+- **Tool request**: request a new bioinformatics tool wrapper (include tool name, operations to wrap, motivation)
 
 When filing a bug, include the full traceback and your environment details (OS, Python version, GPU if relevant).
 
@@ -86,19 +86,19 @@ When filing a bug, include the full traceback and your environment details (OS, 
 
 ### Formatting
 
-- **No auto-formatting** — formatting is handled manually
-- **ruff** — enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check proto_tools` before committing
+- **No auto-formatting**: formatting is handled manually
+- **ruff**: enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check proto_tools` before committing
 
 ### Conventions
 
 - `from __future__ import annotations` at the top of every file
-- Use `logging.getLogger(__name__)` — never `print()`
+- Use `logging.getLogger(__name__)`, never `print()`
 - All biological coordinates are **1-indexed, inclusive**
 - Pydantic v2 models: Config uses `extra="ignore"`, Input uses `extra="forbid"`, Output uses `extra="forbid"`
 
 ## Testing
 
-Tests use flat functions only — no test classes.
+Tests use flat functions only, no test classes.
 
 ### Running Tests
 
@@ -112,10 +112,10 @@ pytest --all --cpu              # Slow + integration, but skip GPU
 
 ### Markers
 
-- `@pytest.mark.uses_gpu` — requires GPU (auto-skipped without one)
-- `@pytest.mark.integration` — tests external APIs or dispatches to real environments (skipped by default)
-- `@pytest.mark.slow` — long-running tests
-- `@pytest.mark.skip_ci` — skip in CI (e.g., tests that exceed CI runner memory limits)
+- `@pytest.mark.uses_gpu`: requires GPU (auto-skipped without one)
+- `@pytest.mark.integration`: tests external APIs or dispatches to real environments (skipped by default)
+- `@pytest.mark.slow`: long-running tests
+- `@pytest.mark.skip_ci`: skip in CI (e.g., tests that exceed CI runner memory limits)
 
 ### CI Integration Tests
 
