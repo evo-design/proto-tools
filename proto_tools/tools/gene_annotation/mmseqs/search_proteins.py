@@ -1,12 +1,13 @@
-"""proto_tools/tools/gene_annotation/mmseqs/search_proteins.py
+"""proto_tools/tools/gene_annotation/mmseqs/search_proteins.py.
 
 Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
-constants, and helper functions used by all MMseqs2 search tools."""
+constants, and helper functions used by all MMseqs2 search tools.
+"""
 from __future__ import annotations
 
 import io
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
@@ -70,10 +71,10 @@ class MmseqsSequenceSearchResult(BaseModel):
     """
     query_id: str = Field(description="Query sequence identifier")
     query_sequence: str = Field(description="The input query sequence")
-    hits: List[MmseqsHit] = Field(default_factory=list, description="List of hits for this query")
+    hits: list[MmseqsHit] = Field(default_factory=list, description="List of hits for this query")
 
     @property
-    def top_hit(self) -> Optional[MmseqsHit]:
+    def top_hit(self) -> MmseqsHit | None:
         """Get the best hit by percent identity, or None if no hits."""
         return max(self.hits, key=lambda h: h.pident) if self.hits else None
 
@@ -105,10 +106,10 @@ class MmseqsSearchProteinsInput(BaseToolInput):
             - Path to a pre-built MMseqs2 database (created with ``mmseqs createdb``)
     """
 
-    query_sequences: List[str] = InputField(
+    query_sequences: list[str] = InputField(
         description="List of protein sequences to search",
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
@@ -147,7 +148,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input sequence. The order matches the input sequences order.
     """
-    results: List[MmseqsSequenceSearchResult] = Field(
+    results: list[MmseqsSequenceSearchResult] = Field(
         description="List of search results, one per input sequence"
     )
 
@@ -169,26 +170,29 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         return sum(r.num_hits for r in self.results)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["m8", "csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "m8"
 
     def _export_output(self, export_path: str | Path, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats
-        data = []
-        for result in self.results:
-            for hit in result.hits:
-                data.append({
-                    "query": result.query_id,
-                    "target": hit.target_id,
-                    "pident": hit.pident,
-                    "evalue": hit.evalue,
-                })
+        data = [
+            {
+                "query": result.query_id,
+                "target": hit.target_id,
+                "pident": hit.pident,
+                "evalue": hit.evalue,
+            }
+            for result in self.results
+            for hit in result.hits
+        ]
 
         df = pd.DataFrame(data, columns=["query", "target", "pident", "evalue"]) if data else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
 
@@ -197,7 +201,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
 
             # m8 usually doesn't have header, but csv does.
             # Standard m8 is tab-separated content.
-            header = False if file_format == "m8" else True
+            header = file_format != "m8"
             df.to_csv(path, sep=sep, index=False, header=header)
 
         elif file_format == "json":
@@ -290,6 +294,8 @@ def run_mmseqs_search_proteins(
             sequences and target database path.
         config (MmseqsSearchProteinsConfig | None): Configuration with search parameters.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         MmseqsSearchProteinsOutput: Per-sequence search results in input order.
 
@@ -308,7 +314,6 @@ def run_mmseqs_search_proteins(
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
-
     sequences = inputs.query_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
@@ -395,8 +400,8 @@ def _filter_top_hits(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_sequence_search_results(
-    sequences: List[str], sequence_ids: List[str], df: pd.DataFrame
-) -> List[MmseqsSequenceSearchResult]:
+    sequences: list[str], sequence_ids: list[str], df: pd.DataFrame
+) -> list[MmseqsSequenceSearchResult]:
     """Build per-sequence search results from DataFrame.
 
     Args:
@@ -408,7 +413,7 @@ def _build_sequence_search_results(
         list[MmseqsSequenceSearchResult]: List of MmseqsSequenceSearchResult objects, one per input sequence.
     """
     results = []
-    for seq, seq_id in zip(sequences, sequence_ids):
+    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
         # Get hits for this sequence
         if not df.empty and "query" in df.columns:
             seq_df = df[df["query"] == seq_id]

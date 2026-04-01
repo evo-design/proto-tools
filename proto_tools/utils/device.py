@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/device.py
+"""proto_tools/utils/device.py.
 
 GPU detection and device visibility.
 
@@ -23,7 +22,7 @@ def _run_nvidia_smi_query(*args: str) -> str | None:
     """Run nvidia-smi query, returning stdout or None on failure."""
     try:
         result = subprocess.run(
-            ["nvidia-smi"] + list(args),
+            ["nvidia-smi", *list(args)],
             capture_output=True, text=True, timeout=10,
         )
         return result.stdout if result.returncode == 0 else None
@@ -227,7 +226,7 @@ def _parse_count_suffix(device: str, prefix: str) -> int:
     try:
         num = int(suffix)
     except ValueError:
-        raise ValueError(f"Invalid device string: '{device}' (count must be integer)")
+        raise ValueError(f"Invalid device string: '{device}' (count must be integer)") from None
     if num < 1:
         raise ValueError(f"Invalid count in '{device}': must be >= 1")
     return num
@@ -286,7 +285,7 @@ def parse_device_string(device: str) -> DeviceSpec:
         try:
             int(idx_str)  # Validate it's a number
         except ValueError:
-            raise ValueError(f"Invalid device: '{device}' (index must be integer)")
+            raise ValueError(f"Invalid device: '{device}' (index must be integer)") from None
         return DeviceSpec(kind="cuda", devices=[device], count=1)
 
     # Multiple explicit devices: "cuda:0,1" or "cuda:0,cuda:1"
@@ -355,10 +354,9 @@ def _validate_and_map_cuda_indices(
                 f"Device index {max_idx} exceeds parent "
                 f"CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
             )
-        else:
-            raise ValueError(
-                f"Device index {max_idx} exceeds available GPUs ({num_gpus})"
-            )
+        raise ValueError(
+            f"Device index {max_idx} exceeds available GPUs ({num_gpus})"
+        )
 
     seen: set[str] = set()
     physical: list[str] = []
@@ -371,8 +369,8 @@ def _validate_and_map_cuda_indices(
 
 
 def determine_visible_devices(device: int | str | list[int | str]) -> str:
-    """
-    Returns a string corresponding to the CUDA_VISIBLE_DEVICES environment variable
+    """Returns a string corresponding to the CUDA_VISIBLE_DEVICES environment variable.
+
     for a given device or devices.
 
     Supports single and multi-GPU device strings and correctly handles the case where
@@ -426,8 +424,7 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
             spec = parse_device_string(d)
             if spec.kind != "cuda" or spec.devices is None:
                 continue
-            for dev in spec.devices:
-                all_cuda_indices.append(int(dev.split(":")[1]))
+            all_cuda_indices.extend(int(dev.split(":")[1]) for dev in spec.devices)
         physical = _validate_and_map_cuda_indices(all_cuda_indices, parent_device_list)
         return ",".join(physical)
 
@@ -509,12 +506,12 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
                 try:
                     result["min"] = int(part[2:])
                 except ValueError:
-                    raise ValueError(f"Invalid device count specification: '{spec}'")
+                    raise ValueError(f"Invalid device count specification: '{spec}'") from None
             elif part.startswith("<="):
                 try:
                     result["max"] = int(part[2:])
                 except ValueError:
-                    raise ValueError(f"Invalid device count specification: '{spec}'")
+                    raise ValueError(f"Invalid device count specification: '{spec}'") from None
             else:
                 raise ValueError(
                     f"Invalid device count specification: '{spec}'. "
@@ -522,12 +519,11 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
                 )
 
         # Validate min <= max if both present
-        if result["min"] is not None and result["max"] is not None:
-            if result["min"] > result["max"]:
-                raise ValueError(
-                    f"Invalid device count specification: '{spec}'. "
-                    f"Minimum ({result['min']}) cannot exceed maximum ({result['max']})."
-                )
+        if result["min"] is not None and result["max"] is not None and result["min"] > result["max"]:
+            raise ValueError(
+                f"Invalid device count specification: '{spec}'. "
+                f"Minimum ({result['min']}) cannot exceed maximum ({result['max']})."
+            )
 
         return result
 
@@ -537,14 +533,14 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
             min_count = int(spec[2:])
             return {"min": min_count, "max": None}
         except ValueError:
-            raise ValueError(f"Invalid device count specification: '{spec}'")
+            raise ValueError(f"Invalid device count specification: '{spec}'") from None
 
     if spec.startswith("<="):
         try:
             max_count = int(spec[2:])
             return {"min": None, "max": max_count}
         except ValueError:
-            raise ValueError(f"Invalid device count specification: '{spec}'")
+            raise ValueError(f"Invalid device count specification: '{spec}'") from None
 
     # Range spec: "1-2"
     if "-" in spec:
@@ -556,7 +552,7 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
             min_count = int(parts[0])
             max_count = int(parts[1])
         except ValueError:
-            raise ValueError(f"Invalid device count specification: '{spec}'")
+            raise ValueError(f"Invalid device count specification: '{spec}'") from None
 
         if min_count > max_count:
             raise ValueError(
@@ -576,7 +572,7 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
     try:
         count = int(spec)
     except ValueError:
-        raise ValueError(f"Invalid device count specification: '{spec}'")
+        raise ValueError(f"Invalid device count specification: '{spec}'") from None
 
     if count < 1:
         raise ValueError(

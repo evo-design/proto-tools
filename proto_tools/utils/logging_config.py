@@ -1,10 +1,11 @@
-"""
-proto_tools/utils/logging_config.py
+"""proto_tools/utils/logging_config.py.
 
 Provides centralized logging setup with file and console handlers,
 automatic log directory management, suppression of noisy third-party loggers,
 and integration with Python's warnings system.
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -12,12 +13,12 @@ import sys
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
 
 
 class BioToolsOnlyFilter(logging.Filter):
     """Filter to only allow logs from proto_tools project packages."""
     def filter(self, record):
+        """Filter log records to exclude noisy third-party messages."""
         # Include logs from proto_tools and tests
         allowed_prefixes = ("proto_tools", "tests")
         return record.name.startswith(allowed_prefixes)
@@ -27,6 +28,7 @@ class SelectiveLevelFormatter(logging.Formatter):
     """Formatter that shows level prefix only for WARNING and above."""
 
     def format(self, record):
+        """Format a log record with colored level and structured output."""
         # For WARNING, ERROR, CRITICAL: add level prefix
         if record.levelno >= logging.WARNING:
             # Save original format
@@ -37,14 +39,12 @@ class SelectiveLevelFormatter(logging.Formatter):
             # Restore original format
             self._style._fmt = original_fmt
             return result
-        else:
-            # For DEBUG and INFO: just the message
-            return record.getMessage()
+        # For DEBUG and INFO: just the message
+        return record.getMessage()
 
 
-def _parse_log_level(level: Union[int, str]) -> int:
-    """
-    Parse log level from string or int, case-insensitive.
+def _parse_log_level(level: int | str) -> int:
+    """Parse log level from string or int, case-insensitive.
 
     Args:
         level (int | str): Log level as int (e.g., logging.INFO) or string (e.g., "INFO", "info", "Info")
@@ -69,18 +69,17 @@ def _parse_log_level(level: Union[int, str]) -> int:
 
 
 def setup_logging(
-    level: Union[int, str] = logging.INFO,
-    log_dir: Optional[str] = None,
-    log_filename: Optional[str] = None,
-    log_to_file: Optional[bool] = None,
+    level: int | str = logging.INFO,
+    log_dir: str | None = None,
+    log_filename: str | None = None,
+    log_to_file: bool | None = None,
     log_to_console: bool = True,
-    console_level: Optional[Union[int, str]] = None,
-    file_level: Optional[Union[int, str]] = None,
+    console_level: int | str | None = None,
+    file_level: int | str | None = None,
     console_output_formatted: bool = False,
-    log_file_header: Optional[str] = None,
+    log_file_header: str | None = None,
 ) -> None:
-    """
-    Configure logging for proto_tools.
+    """Configure logging for proto_tools.
 
     Args:
         level (int | str): Default logging level for all handlers. Can be an int (e.g., logging.INFO)
@@ -120,14 +119,14 @@ def setup_logging(
             # Enable file logging only in a dev repo (pyproject.toml present)
             log_to_file = any(
                 (parent / "pyproject.toml").exists()
-                for parent in [Path.cwd()] + list(Path.cwd().parents)
+                for parent in [Path.cwd(), *list(Path.cwd().parents)]
             )
 
     # Determine log directory
     if log_dir is None:
         current = Path.cwd()
         project_root = current
-        for parent in [current] + list(current.parents):
+        for parent in [current, *list(current.parents)]:
             if (parent / "pyproject.toml").exists():
                 project_root = parent
                 break
@@ -233,8 +232,7 @@ def setup_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """
-    Get a logger for a proto_tools module.
+    """Get a logger for a proto_tools module.
 
     Args:
         name (str): Logger name, typically __name__ from the calling module.

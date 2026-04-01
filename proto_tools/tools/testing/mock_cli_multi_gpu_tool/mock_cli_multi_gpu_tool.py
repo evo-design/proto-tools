@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_cli_multi_gpu_tool/mock_cli_multi_gpu_tool.py
+"""proto_tools/tools/testing/mock_cli_multi_gpu_tool/mock_cli_multi_gpu_tool.py.
 
 This is a minimal 2-GPU CLI-pattern tool that spawns subprocesses for inference,
 matching tools like Boltz2 with multi-GPU support. It uses
-get_subprocess_device_env() for device routing with comma-separated device strings."""
+get_subprocess_device_env() for device routing with comma-separated device strings.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,10 +84,12 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -143,7 +146,6 @@ def run_mock_cli_multi_gpu_tool(
     instance=None,
 ) -> MockCLIMultiGPUToolOutput:
     """Run mock CLI multi-GPU tool (subprocess-based with 2-GPU routing)."""
-
     result = ToolInstance.dispatch(
         "mock_cli_multi_gpu_tool",
         {

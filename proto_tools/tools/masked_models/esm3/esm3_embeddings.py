@@ -1,6 +1,7 @@
-"""proto_tools/tools/masked_models/esm3/esm3_embeddings.py
+"""proto_tools/tools/masked_models/esm3/esm3_embeddings.py.
 
-ESM3 embeddings tool."""
+ESM3 embeddings tool.
+"""
 from __future__ import annotations
 
 import logging
@@ -138,6 +139,8 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
         config (ESM3EmbeddingsConfig | None): Validated ESM3 configuration specifying model variant,
             batch size, and device settings.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         ESM3EmbeddingsOutput: Structured output containing:
             - ``mean_embeddings``: Mean-pooled embeddings for each sequence
@@ -168,7 +171,6 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
         >>> result = run_esm3_embeddings(inputs, config)
 
     """
-
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution

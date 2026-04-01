@@ -1,5 +1,4 @@
-"""
-ESMFold standalone inference implementation.
+"""ESMFold standalone inference implementation.
 
 This script can be run independently in an isolated venv with only ESMFold
 dependencies installed. It communicates via JSON files for input/output.
@@ -13,7 +12,7 @@ import json
 import logging
 import sys
 from contextlib import contextmanager
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -24,9 +23,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
 class ESMFoldModel:
-    """
-    ESMFold model for protein structure prediction.
-    """
+    """ESMFold model for protein structure prediction."""
 
     def __init__(self):
         """Initialize ESMFold model wrapper."""
@@ -37,14 +34,13 @@ class ESMFoldModel:
 
     def __call__(
         self,
-        batch_data: List[Dict[str, Any]],
+        batch_data: list[dict[str, Any]],
         residue_idx_offset: int,
         chain_linker: str,
         device: str = "cuda",
         verbose: bool = False,
-    ) -> List[Dict[str, Any]]:
-        """
-        Run ESMFold structure prediction on protein sequences.
+    ) -> list[dict[str, Any]]:
+        """Run ESMFold structure prediction on protein sequences.
 
         Args:
             batch_data: List of dicts with keys: linked_seq, chains, seq_lengths
@@ -101,20 +97,16 @@ class ESMFoldModel:
             outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
 
         # Extract per-complex results
-        results = []
-        for idx in range(len(batch_data)):
-            results.append(self._extract_result(outputs, idx))
+        return [self._extract_result(outputs, idx) for idx in range(len(batch_data))]
 
-        return results
 
     def _build_batch_tensors(
         self,
-        batch_data: List[Dict[str, Any]],
+        batch_data: list[dict[str, Any]],
         residue_idx_offset: int,
         chain_linker: str
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Build position_ids and linker_masks for entire batch.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build position_ids and linker_masks for entire batch.
 
         Returns:
             position_ids: (batch_size, max_length) - residue numbering with offsets
@@ -144,12 +136,11 @@ class ESMFoldModel:
 
     def _build_single_tensors(
         self,
-        chains: List[str],
+        chains: list[str],
         residue_idx_offset: int,
         chain_linker: str
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Build position_ids and linker_mask for a single complex.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build position_ids and linker_mask for a single complex.
 
         Args:
             chains: List of chain sequences
@@ -188,11 +179,10 @@ class ESMFoldModel:
 
     def _extract_result(
         self,
-        outputs: Dict[str, torch.Tensor],
+        outputs: dict[str, torch.Tensor],
         batch_idx: int
-    ) -> Dict[str, Any]:
-        """
-        Extract results for a single complex from batched outputs.
+    ) -> dict[str, Any]:
+        """Extract results for a single complex from batched outputs.
 
         Returns:
             Dict with keys: pdb, avg_plddt, ptm, avg_pae
@@ -256,7 +246,7 @@ class ESMFoldModel:
             raise ImportError(
                 "Could not import transformers. Make sure ESMFold dependencies "
                 "are installed in the current environment."
-            )
+            ) from None
 
         if verbose:
             logger.info(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
@@ -328,8 +318,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
         )
         return {"results": results}
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 def to_device(device: str) -> dict:
@@ -338,9 +327,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -359,7 +347,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

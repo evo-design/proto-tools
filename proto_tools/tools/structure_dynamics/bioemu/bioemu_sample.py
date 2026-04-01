@@ -1,11 +1,12 @@
-"""proto_tools/tools/structure_dynamics/bioemu/bioemu_sample.py
+"""proto_tools/tools/structure_dynamics/bioemu/bioemu_sample.py.
 
-BioEmu conformational ensemble sampling tool."""
+BioEmu conformational ensemble sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import ClassVar, Literal
 
 from pydantic import Field, field_validator
 
@@ -49,14 +50,14 @@ class BioEmuInput(StructurePredictionInput):
             Populated by preprocess() or supplied directly. Default: None.
     """
 
-    SUPPORTED_ENTITY_TYPES = {"protein"}
-    ALLOWS_CHAIN_MODIFICATIONS = False
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
+    ALLOWS_CHAIN_MODIFICATIONS: ClassVar[bool] = False
 
     @field_validator("complexes", mode="after")
     @classmethod
     def validate_complexes(
-        cls, complexes: List[StructurePredictionComplex]
-    ) -> List[StructurePredictionComplex]:
+        cls, complexes: list[StructurePredictionComplex]
+    ) -> list[StructurePredictionComplex]:
         """Validate BioEmu input constraints for each complex."""
         for comp_idx, comp in enumerate(complexes):
             if comp.num_chains() != 1:
@@ -92,16 +93,18 @@ class BioEmuOutput(BaseToolOutput):
             input complex.
     """
 
-    ensembles: List[StructureEnsemble] = Field(
+    ensembles: list[StructureEnsemble] = Field(
         description="Generated protein conformational ensembles"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["pdb", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "pdb"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -191,13 +194,13 @@ class BioEmuConfig(StructurePredictionConfig):
         description="Batch size control for BioEmu internal sampling",
         advanced=True,
     )
-    output_dir: Optional[str] = ConfigField(
+    output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional directory for raw BioEmu output files",
         hidden=True,
     )
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
+    colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
         title="ColabFold Search Config",
         default=None,
         description="Configuration for ColabFold MSA search. If None, uses default settings.",
@@ -281,7 +284,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
     )
     raw_results = output["results"]
 
-    ensembles: List[StructureEnsemble] = []
+    ensembles: list[StructureEnsemble] = []
     total_structures = 0
     for comp_idx, comp in enumerate(inputs.complexes):
         sequence = comp.chains[0].sequence
@@ -308,9 +311,9 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
 # Helpers
 # ============================================================================
 def _pdb_frames_to_structures(
-    pdb_frames: List[str],
+    pdb_frames: list[str],
     comp_idx: int,
-) -> List[Structure]:
+) -> list[Structure]:
     """Convert PDB frame strings to Structure objects."""
     structures = []
     for frame_idx, pdb_content in enumerate(pdb_frames):

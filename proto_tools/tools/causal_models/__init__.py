@@ -1,4 +1,6 @@
-from .evo1 import (
+"""Autoregressive language models for biological sequence generation."""
+
+from proto_tools.tools.causal_models.evo1 import (
     EVO1_MODEL_CHECKPOINTS,
     Evo1SampleConfig,
     Evo1SampleInput,
@@ -9,7 +11,7 @@ from .evo1 import (
     run_evo1_sample,
     run_evo1_score,
 )
-from .evo2 import (
+from proto_tools.tools.causal_models.evo2 import (
     Evo2SampleConfig,
     Evo2SampleInput,
     Evo2SampleOutput,
@@ -19,7 +21,7 @@ from .evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
-from .progen2 import (
+from proto_tools.tools.causal_models.progen2 import (
     ProGen2SampleConfig,
     ProGen2SampleInput,
     ProGen2SampleOutput,

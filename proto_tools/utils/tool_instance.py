@@ -1,8 +1,7 @@
-"""
-proto_tools/utils/tool_instance.py
+"""proto_tools/utils/tool_instance.py.
 
-**One-shot by default**: ``dispatch()`` runs an ephemeral subprocess
-with no leaked workers and no GPU memory retained after the call.
+**One-shot by default**: ``dispatch()`` runs an ephemeral subprocess —
+no leaked workers, no GPU memory retained after the call.
 
 **Opt-in persistence**: use ``persist()`` (auto-cache all tools),
 ``persist_tool()`` (tool-specific), or ``get()`` (manual lifecycle)
@@ -12,28 +11,28 @@ Device is always driven by ``config.device`` (a ``BaseConfig`` field)
 which flows through ``input_dict["device"]``.  Persistent workers
 auto-restart when any ``reload_on_change`` config field changes between
 calls (device, model checkpoint, etc.).  Standalone scripts must NOT
-check for config changes themselves; the ToolInstance layer handles
+check for config changes themselves — the ToolInstance layer handles
 restarts.  Any config field that affects model initialization must be
 marked ``reload_on_change=True`` in the tool's Config class.
 
 Usage::
 
-    # Default: safe, no leak (device comes from config -> input_dict)
+    # Default — safe, no leak (device comes from config → input_dict)
     result = ToolInstance.dispatch("esm2", {"device": "cuda", ...})
 
-    # Auto-persist everything (recommended): all tools auto-cached
+    # Auto-persist everything (recommended) — all tools auto-cached
     with ToolInstance.persist():
         run_esmfold(inputs, config)       # auto-cached on first call
         run_esm2_score(inputs2, config2)  # also auto-cached
         run_esmfold(inputs3, config)      # reuses cached worker
     # everything cleaned up on exit
 
-    # Tool-specific persistence: named instances / multi-GPU
+    # Tool-specific persistence — named instances / multi-GPU
     with ToolInstance.persist_tool("esmfold"):
         for i in range(500):
             output = run_esmfold(inputs, config)  # reuses worker
 
-    # Manual persistence: power user
+    # Manual persistence — power user
     tool = ToolInstance.get("esmfold")
     output = run_esmfold(inputs, config)
     tool.shutdown()  # also evicts from cache
@@ -59,18 +58,14 @@ import subprocess
 import sys
 import tempfile
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, ClassVar
 
-from ._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
-from .base_config import DEFAULT_TIMEOUT, BaseConfig
-from .device_manager import DeviceManager
-from .persistent_worker import (
-    PersistentWorker,
-    _build_subprocess_env,
-    _parse_env_vars_file,
-)
+from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers as copy_standalone_helpers
+from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
+from proto_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.persistent_worker import PersistentWorker, _build_subprocess_env, _parse_env_vars_file
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +77,6 @@ DEVICE_MOVE_TIMEOUT = 200
 # ============================================================================
 _lock = threading.Lock()  # protects _instances dict
 _instances: dict[str, ToolInstance] = {}
-atexit.register(lambda: ToolInstance.clear_all())
 
 _scope_override: contextvars.ContextVar[dict[str, ToolInstance] | None] = (
     contextvars.ContextVar("_scope_override", default=None)
@@ -132,11 +126,11 @@ class ToolInstance:
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
-        # Create outside lock; __init__ is lightweight now (no venv build)
+        # Create outside lock — __init__ is lightweight now (no venv build)
         new_inst = cls(tool_name)
         with _lock:
             cache = _active_cache()
-            # Double-check; another thread may have created it
+            # Double-check — another thread may have created it
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
@@ -235,7 +229,7 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 3: persist mode, auto-create and cache instead of one-shot
+        # Path 3: persist mode — auto-create and cache instead of one-shot
         if _persist_mode.get():
             logger.debug(
                 "dispatch(%s): persist mode, auto-caching instance (key=%r)",
@@ -249,7 +243,7 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 4: no cached instance, ephemeral one-shot subprocess
+        # Path 4: no cached instance — ephemeral one-shot subprocess
         logger.debug("dispatch(%s): no cached instance, running one-shot", tool_name)
         return cls._oneshot(
             tool_name,
@@ -269,7 +263,7 @@ class ToolInstance:
         verbose: bool = False,
         timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Run a tool in an ephemeral subprocess. No caching, no worker.
+        """Run a tool in an ephemeral subprocess — no caching, no worker.
 
         For GPU devices, acquires a transient lease from DeviceManager
         to prevent concurrent one-shot calls from stomping the same GPU.
@@ -358,7 +352,7 @@ class ToolInstance:
                     "A persistent instance for %r with the default "
                     "instance_name is already cached. This new instance "
                     "will NOT be automatically used by tool calls and "
-                    "must be explicitly specified. Pass instance=<this "
+                    "must be explicitly specified — pass instance=<this "
                     "instance> to run_*() calls, or use instance_name= "
                     "to give it a unique cache key.",
                     tool_name,
@@ -398,7 +392,7 @@ class ToolInstance:
         """Context manager that auto-caches tools on first dispatch.
 
         Any tool called inside the block via :meth:`dispatch` is
-        automatically cached on first use; subsequent calls to the
+        automatically cached on first use — subsequent calls to the
         same tool reuse the warm worker.  On exit, all auto-created
         instances are shut down and GPU memory is freed.
 
@@ -411,8 +405,8 @@ class ToolInstance:
                 run_esmfold(inputs3, config)      # reuses cached
             # everything cleaned up on exit
 
-        Nestable: each ``persist()`` block gets its own scope.
-        Thread-safe: persist mode is per-thread (uses contextvars).
+        Nestable — each ``persist()`` block gets its own scope.
+        Thread-safe — persist mode is per-thread (uses contextvars).
         """
         token = _persist_mode.set(True)
         try:
@@ -425,6 +419,7 @@ class ToolInstance:
     # Init
     # ------------------------------------------------------------------
     def __init__(self, tool_name: str) -> None:
+        """Initialize ToolInstance."""
         self.tool_name = self._validate_tool_name(tool_name)
         self.device = "cpu"
 
@@ -450,7 +445,7 @@ class ToolInstance:
 
         Called lazily on first actual execution (not during ``__init__``),
         so that the double-check-locking loser in ``get()`` discards only
-        a lightweight object, not one that already built an environment.
+        a lightweight object — not one that already built an environment.
 
         Fails fast if this tool already failed to build in this process.
         On a cross-session failure (FAILED STATUS.txt from a previous run),
@@ -466,7 +461,7 @@ class ToolInstance:
                 f"system. Check logs for details.{hint}"
             )
         # Show one-time notice if using default storage locations
-        from .proto_home import show_first_run_notice
+        from proto_tools.utils.proto_home import show_first_run_notice
         show_first_run_notice()
 
         if not self.env_path.exists() or not self._is_env_ok():
@@ -486,7 +481,7 @@ class ToolInstance:
                         hint = f": {summary}" if summary else ""
                         logger.warning(
                             "'%s' previously failed to build with the "
-                            "same setup files (hash=%s)%s. Retrying; "
+                            "same setup files (hash=%s)%s. Retrying — "
                             "if this keeps failing, the tool may not be "
                             "compatible with your system, or you may "
                             "need to accept a license agreement (e.g. "
@@ -497,7 +492,7 @@ class ToolInstance:
                         )
                     else:
                         logger.info(
-                            "Setup files changed for %s; retrying venv build",
+                            "Setup files changed for %s — retrying venv build",
                             self.tool_name,
                         )
             try:
@@ -591,7 +586,7 @@ class ToolInstance:
 
         Called by device mismatch detection in ``_run_persistent`` (e.g.,
         recovery from CPU after eviction, or explicit device change).
-        Not part of the public API. Device changes should be driven by
+        Not part of the public API — device changes should be driven by
         the config's ``device`` field at ``run()`` time.
 
         Sends a ``to_device`` command to the persistent worker subprocess,
@@ -659,47 +654,18 @@ class ToolInstance:
         or JAX), which tracks only the memory allocated by this specific model
         instance within the worker process.
 
-        Returns
-        -------
-        dict[str, Any]
-            Memory statistics dictionary with standardized keys across frameworks:
+        Returns:
+            dict[str, Any]: Memory statistics with standardized keys (available,
+                framework, allocated_bytes, max_allocated_bytes) plus framework-specific
+                keys. Returns ``{"available": False}`` if no worker is running.
 
-            **Common keys (all frameworks):**
-
-            - ``available`` (bool): Whether stats are available
-            - ``framework`` (str): "pytorch", "jax", or error info
-            - ``allocated_bytes`` (int): Currently allocated GPU memory in bytes
-            - ``max_allocated_bytes`` (int): Peak allocated memory since program start
-
-            **PyTorch-specific keys:**
-
-            - ``reserved_bytes`` (int): Reserved memory in PyTorch cache (not yet allocated)
-
-            **JAX-specific keys:**
-
-            - ``device_kind`` (str): Device type (e.g., "gpu", "cpu")
-            - Legacy: ``bytes_in_use``, ``peak_bytes_in_use`` (same as standardized keys)
-
-            **CLI tools or tools without support:**
-
-            - ``available`` (bool): False
-            - ``error`` (str): Error message or "not supported"
-
-        Example
-        -------
-        >>> tool = ToolInstance.get("esm2", instance_name="esm2_1")
-        >>> with ToolInstance.persist_tool("esm2", instance_name="esm2_1"):
-        ...     result = run_esm2_sample(inputs, config, instance="esm2_1")
-        ...     stats = tool.get_memory_stats()
-        ...     if stats["available"]:
-        ...         print(f"ESM2 using {stats['allocated_bytes'] / 1e9:.2f} GB")
-
-        Notes
-        -----
-        - Returns ``{"available": False}`` if no worker is running
-        - Only reports memory for THIS instance, not total GPU memory
-        - For total GPU memory across all processes, use
-          ``DeviceManager.get_gpu_memory_used("cuda:0")``
+        Example:
+            >>> tool = ToolInstance.get("esm2", instance_name="esm2_1")
+            >>> with ToolInstance.persist_tool("esm2", instance_name="esm2_1"):
+            ...     result = run_esm2_sample(inputs, config, instance="esm2_1")
+            ...     stats = tool.get_memory_stats()
+            ...     if stats["available"]:
+            ...         print(f"ESM2 using {stats['allocated_bytes'] / 1e9:.2f} GB")
         """
         with self._instance_lock:
             # If no worker, can't get stats
@@ -712,14 +678,13 @@ class ToolInstance:
             # Send get_memory_stats command to worker
             command = {"command": "get_memory_stats"}
             try:
-                result = self._worker.send(command, timeout=10)
-                return result
+                return self._worker.send(command, timeout=10)
             except Exception as e:
                 logger.error("Failed to get memory stats: %s", e)
                 return {"available": False, "error": str(e)}
 
     # ------------------------------------------------------------------
-    # Warmup timeout: per-config first-run detection
+    # Warmup timeout — per-config first-run detection
     # ------------------------------------------------------------------
     def _config_marker_path(self, reload_params: dict[str, Any]) -> Path:
         """Return the marker file path for a specific reload-param combination.
@@ -749,10 +714,8 @@ class ToolInstance:
 
     def _mark_warmup_complete(self, reload_params: dict[str, Any]) -> None:
         """Mark that a config combination completed successfully."""
-        try:
+        with suppress(OSError):
             self._config_marker_path(reload_params).touch()
-        except OSError:
-            pass  # non-critical; worst case warmup timeout applies again
 
     def _apply_warmup_timeout(
         self,
@@ -776,16 +739,13 @@ class ToolInstance:
         WARMUP_TIMEOUT = 3600  # 60 minutes
         params = reload_params or {}
         if self._needs_warmup(params):
-            if timeout is None:
-                effective_timeout = WARMUP_TIMEOUT
-            else:
-                effective_timeout = max(WARMUP_TIMEOUT, timeout)
+            effective_timeout = WARMUP_TIMEOUT if timeout is None else max(WARMUP_TIMEOUT, timeout)
             if timeout is None or effective_timeout > timeout:
                 config_desc = ""
                 if params:
-                    config_desc = " (config: %s)" % ", ".join(
+                    config_desc = " (config: {})".format(", ".join(
                         f"{k}={v!r}" for k, v in sorted(params.items())
-                    )
+                    ))
                 logger.info(
                     "First run of %s%s detected, using extended warm-up timeout: "
                     "%ds (configured: %s)",
@@ -805,7 +765,7 @@ class ToolInstance:
         input_dict: dict[str, Any],
         *,
         script_path: Path | None = None,
-        verbose: bool = False,
+        verbose: bool = False,  # noqa: ARG002 — required by tool interface
         timeout: int | None = None,
         reload_on: set[str] | None = None,
     ) -> dict[str, Any]:
@@ -861,7 +821,7 @@ class ToolInstance:
             device = input_dict.get("device", "cpu")
             device_manager = DeviceManager.get_instance()
 
-            # Eviction callback: sends to_device directly to avoid lock ordering deadlock
+            # Eviction callback — sends to_device directly to avoid lock ordering deadlock
             def eviction_callback(action: str) -> None:
                 if action == "cpu":
                     worker = self._worker
@@ -1032,7 +992,7 @@ class ToolInstance:
         Always uses ``PROTO_HOME`` regardless of install mode.
         See :func:`~.proto_home.get_proto_home`.
         """
-        from .proto_home import get_proto_home
+        from proto_tools.utils.proto_home import get_proto_home
 
         return get_proto_home() / "proto_tool_envs"
 
@@ -1043,7 +1003,7 @@ class ToolInstance:
         Always uses ``PROTO_HOME`` regardless of install mode.
         See :func:`~.proto_home.get_proto_home`.
         """
-        from .proto_home import get_proto_home
+        from proto_tools.utils.proto_home import get_proto_home
 
         return get_proto_home() / ".micromamba"
 
@@ -1069,7 +1029,7 @@ class ToolInstance:
         mamba_root.mkdir(parents=True, exist_ok=True)
         lock = FileLock(mamba_root / ".install.lock", timeout=300)
         with lock:
-            # Re-check after acquiring lock; another process may have installed it
+            # Re-check after acquiring lock — another process may have installed it
             if mamba_bin.exists():
                 return mamba_bin
 
@@ -1119,7 +1079,7 @@ class ToolInstance:
                     mamba_bin.chmod(0o755)
                     logger.info("Micromamba installed successfully from %s", url)
                     return mamba_bin
-                except subprocess.CalledProcessError as e:
+                except subprocess.CalledProcessError as e:  # noqa: PERF203 -- retry loop
                     last_err = e
                     logger.warning("Failed to download micromamba from %s: %s", url, e)
                     continue
@@ -1146,7 +1106,7 @@ class ToolInstance:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to read {version_file} for tool '{self.tool_name}': {e}"
-            )
+            ) from e
 
         # Validate format
         if not version_str:
@@ -1171,7 +1131,7 @@ class ToolInstance:
             raise ValueError(
                 f"Invalid Python version in {version_file}: '{version_str}'. "
                 f"Version components must be integers."
-            )
+            ) from None
 
         # Check reasonable bounds
         if major != 3 or minor < 8:
@@ -1257,7 +1217,7 @@ class ToolInstance:
         """Return the last few non-empty lines of stderr for error messages."""
         if not stderr:
             return ""
-        lines = [l for l in stderr.strip().splitlines() if l.strip()]
+        lines = [line for line in stderr.strip().splitlines() if line.strip()]
         return "\n".join(lines[-max_lines:])
 
     def _failure_summary(self) -> str:
@@ -1269,8 +1229,8 @@ class ToolInstance:
             "FAILED", "Return code:", "Command:",
             "Setup hash:", "Timestamp:", "STDERR:",
         )
-        for line in status_file.read_text().splitlines():
-            line = line.strip()
+        for raw_line in status_file.read_text().splitlines():
+            line = raw_line.strip()
             if line and not line.startswith(skip):
                 return line[:200]
         return ""
@@ -1297,9 +1257,7 @@ class ToolInstance:
                 return False
             # Compare stored hash to current setup files
             current_hash = self._setup_hash()
-            if f"Setup hash: {current_hash}" not in status:
-                return False
-            return True
+            return f"Setup hash: {current_hash}" in status
         except Exception:
             return False
 
@@ -1346,7 +1304,7 @@ class ToolInstance:
         )
 
         # Run setup.sh directly (not via micromamba run, which overwrites PATH
-        # and strips conda prefix, breaking access to git, curl, gcc, etc.)
+        # and strips conda prefix — breaking access to git, curl, gcc, etc.)
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
         env = _build_subprocess_env(
             self.device,
@@ -1363,10 +1321,8 @@ class ToolInstance:
         sh_source = Path(__file__).parent / "standalone_helpers_source" / "standalone_helpers.sh"
         sh_target = self.setup_script.parent / "standalone_helpers.sh"
         if sh_source.exists():
-            try:
+            with suppress(Exception):
                 shutil.copy2(sh_source, sh_target)
-            except Exception:
-                pass  # Non-critical; only needed by setup.sh that source it
 
         proc = subprocess.Popen(
             ["bash", str(self.setup_script)],
@@ -1405,3 +1361,6 @@ class ToolInstance:
                 f"'{self.tool_name}' may not be compatible with your "
                 f"system. setup.sh failed (exit {proc.returncode}).{hint}"
             )
+
+
+atexit.register(ToolInstance.clear_all)

@@ -1,6 +1,7 @@
-"""proto_tools/tools/masked_models/esm2/esm2_embeddings.py
+"""proto_tools/tools/masked_models/esm2/esm2_embeddings.py.
 
-ESM2 embeddings tool."""
+ESM2 embeddings tool.
+"""
 from __future__ import annotations
 
 import logging
@@ -150,6 +151,8 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
         config (ESM2EmbeddingsConfig | None): Validated ESM2 configuration specifying model variant,
             batch size, and device settings.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         ESM2EmbeddingsOutput: Structured output containing:
             - ``mean_embeddings``: Mean-pooled embeddings for each sequence
@@ -193,7 +196,6 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
     Note:
         - Larger models require more GPU memory but provide better representations
     """
-
     logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
     outputs = ToolInstance.dispatch(
         "esm2",

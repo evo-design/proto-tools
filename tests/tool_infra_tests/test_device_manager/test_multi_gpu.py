@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_multi_gpu.py
+"""tests/tool_infra_tests/test_device_manager/test_multi_gpu.py.
 
-Tests for multi-GPU allocation."""
+Tests for multi-GPU allocation.
+"""
 
 import os
 import time
@@ -70,23 +71,23 @@ def test_allocate_2_gpus_explicit_shorthand():
     with patch(
         "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
-    ):
-        with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "4,5,6"}):
-            dm = DeviceManager.get_instance()
-            mock_callback = lambda action: None
+    ), patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "4,5,6"}):
+        dm = DeviceManager.get_instance()
+        def mock_callback(action):
+            return None
 
-            devices = dm.request_device(
-                "tool1",
-                "instance1",
-                device="cuda:0,2",
-                eviction_callback=mock_callback,
-            )
+        devices = dm.request_device(
+            "tool1",
+            "instance1",
+            device="cuda:0,2",
+            eviction_callback=mock_callback,
+        )
 
-            assert devices == "cuda:0,cuda:2", "Should allocate cuda:0 and cuda:2"
-            assert dm._allocations["instance1"].device_ids == [
-                "cuda:0",
-                "cuda:2",
-            ], "Should store both device IDs"
+        assert devices == "cuda:0,cuda:2", "Should allocate cuda:0 and cuda:2"
+        assert dm._allocations["instance1"].device_ids == [
+            "cuda:0",
+            "cuda:2",
+        ], "Should store both device IDs"
 
     DeviceManager.reset_instance()
 
@@ -192,9 +193,12 @@ def test_lru_eviction_multi_gpu_request():
         dm.configure(offload_strategy=OffloadStrategy.CPU)
 
         calls1, calls2, calls3 = [], [], []
-        cb1 = lambda action: calls1.append(action)
-        cb2 = lambda action: calls2.append(action)
-        cb3 = lambda action: calls3.append(action)
+        def cb1(action):
+            return calls1.append(action)
+        def cb2(action):
+            return calls2.append(action)
+        def cb3(action):
+            return calls3.append(action)
 
         dm.request_device(
             "tool1", "instance1", device="cuda:0", eviction_callback=cb1
@@ -212,7 +216,8 @@ def test_lru_eviction_multi_gpu_request():
         assert dm._allocations["instance2"].device_ids == ["cuda:1"]
         assert dm._allocations["instance3"].device_ids == ["cuda:2"]
 
-        cb4 = lambda action: None
+        def cb4(action):
+            return None
         dm.request_device(
             "tool4", "instance4", device="cudax2", eviction_callback=cb4
         )
@@ -266,13 +271,15 @@ def test_multi_gpu_move():
         return_value=4,
     ):
         dm = DeviceManager.get_instance()
-        cb = lambda action: None
+        def cb(action):
+            return None
 
         dm.request_device(
             "tool1", "instance1", device="cuda:0,1", eviction_callback=cb
         )
 
-        move_cb = lambda dev: {"success": True}
+        def move_cb(dev):
+            return {"success": True}
         dm.move_to_device("instance1", "cuda:2,3", move_cb)
 
         assert dm._allocations["instance1"].device_ids == ["cuda:2", "cuda:3"]
@@ -308,7 +315,8 @@ def test_mixed_single_and_multi_gpu():
         return_value=3,
     ):
         dm = DeviceManager.get_instance()
-        cb = lambda action: None
+        def cb(action):
+            return None
 
         result1 = dm.request_device(
             "tool1", "instance1", device="cuda", eviction_callback=cb

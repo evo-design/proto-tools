@@ -1,4 +1,6 @@
-from .sequence_fetch import (
+"""Unified sequence fetching from multiple databases."""
+
+from proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
     FetchedSequence,
     FetchedStructure,
     SequenceFetchConfig,

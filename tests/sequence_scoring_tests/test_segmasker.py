@@ -1,8 +1,7 @@
-"""tests/sequence_scoring_tests/test_segmasker.py
+"""tests/sequence_scoring_tests/test_segmasker.py.
 
-Tests for Segmasker low-complexity region detection tool."""
-from __future__ import annotations
-
+Tests for Segmasker low-complexity region detection tool.
+"""
 import pytest
 from pydantic import ValidationError
 

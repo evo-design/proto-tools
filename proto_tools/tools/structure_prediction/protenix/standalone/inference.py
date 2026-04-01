@@ -1,6 +1,4 @@
-"""
-Protenix inference implementation.
-"""
+"""Protenix inference implementation."""
 
 from __future__ import annotations
 
@@ -12,7 +10,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +92,14 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
             logger.warning(f"Removing corrupted checkpoint: {checkpoint_path}")
             checkpoint_path.unlink()
             marker_path.unlink(missing_ok=True)
-            logger.info(f"Corrupted checkpoint removed. It will be re-downloaded on next use.")
+            logger.info("Corrupted checkpoint removed. It will be re-downloaded on next use.")
         else:
             stat = checkpoint_path.stat()
             marker_path.write_text(f"{stat.st_size},{stat.st_mtime}")
             logger.debug(f"Validation marker created: {marker_path.name}")
 
 
-def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:
+def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:  # noqa: ARG001 — required by tool interface
     """Check and remove corrupted checkpoint files in the checkpoint directory.
 
     Validates ALL .pt files in the directory (not just the named model),
@@ -114,7 +112,7 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
 
     Args:
         checkpoint_dir: Directory containing checkpoint files
-        model_name: Name of the primary model (used for logging only)
+        model_name: Name of the primary model (reserved by tool interface, currently unused)
     """
     if not checkpoint_dir.exists():
         return
@@ -147,9 +145,8 @@ class ProtenixModel:
         num_pairformer_cycles: int = 10,
         use_msa: bool = True,
         verbose: bool = False,
-    ) -> List[Dict[str, Any]]:
-        """
-        Run Protenix structure prediction on one or more complexes.
+    ) -> list[dict[str, Any]]:
+        """Run Protenix structure prediction on one or more complexes.
 
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
@@ -234,15 +231,13 @@ class ProtenixModel:
         if err_dir.is_dir():
             err_files = list(err_dir.iterdir())
             if err_files:
-                messages = []
-                for ef in err_files:
-                    messages.append(f"{ef.name}: {ef.read_text()[:500]}")
+                messages = [f"{ef.name}: {ef.read_text()[:500]}" for ef in err_files]
                 raise RuntimeError(
                     "Protenix reported errors:\n" + "\n".join(messages)
                 )
 
         # Read job names from input JSON to preserve ordering
-        with open(input_json_path, "r") as f:
+        with open(input_json_path) as f:
             input_data = json.load(f)
 
         job_names = [job["name"] for job in input_data]
@@ -254,7 +249,7 @@ class ProtenixModel:
 
     def _extract_job_output(
         self, output_dir: str, job_name: str, seeds: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Extract structure and metrics for a single job from Protenix output.
 
         Protenix output structure:
@@ -299,7 +294,7 @@ class ProtenixModel:
                 break
 
             if confidence_file.exists():
-                with open(confidence_file, "r") as f:
+                with open(confidence_file) as f:
                     metrics = json.load(f)
 
                 ranking_score = float(metrics.get("ranking_score", 0.0))
@@ -382,8 +377,7 @@ def dispatch(input_dict: dict) -> dict:
             use_msa=input_dict.get("use_msa", True),
             verbose=input_dict.get("verbose", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -401,7 +395,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

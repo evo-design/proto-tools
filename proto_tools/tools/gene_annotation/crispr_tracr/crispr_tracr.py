@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/gene_annotation/crispr_tracr/crispr_tracr.py
+"""proto_tools/tools/gene_annotation/crispr_tracr/crispr_tracr.py.
 
 This module provides a standardized interface for predicting tracrRNA sequences
 from nucleotide CRISPR loci using the CRISPRtracrRNA tool from the Backofen Lab
@@ -10,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -33,24 +32,24 @@ class TracrPrediction(BaseModel):
     """A single tracrRNA prediction for a sequence."""
 
     sequence_id: str = Field(description="ID of the input sequence")
-    tracr_start: Optional[int] = Field(
+    tracr_start: int | None = Field(
         default=None, description="Start position of predicted tracrRNA"
     )
-    tracr_end: Optional[int] = Field(
+    tracr_end: int | None = Field(
         default=None, description="End position of predicted tracrRNA"
     )
-    tracr_hit: Optional[str] = Field(
+    tracr_hit: str | None = Field(
         default=None, description="tracrRNA hit description"
     )
-    interaction_energy: Optional[float] = Field(
+    interaction_energy: float | None = Field(
         default=None,
         description="IntaRNA interaction energy in kcal/mol, more negative = stronger (complete_run mode)",
     )
-    anti_repeat_similarity_coverage_multiplication: Optional[float] = Field(
+    anti_repeat_similarity_coverage_multiplication: float | None = Field(
         default=None,
         description="Anti-repeat similarity x coverage score",
     )
-    intarna_anti_repeat_interaction: Optional[str] = Field(
+    intarna_anti_repeat_interaction: str | None = Field(
         default=None,
         description="IntaRNA anti-repeat interaction prediction",
     )
@@ -71,17 +70,17 @@ class CrisprTracrInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Nucleotide sequence(s) to predict tracrRNA from"
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize a single sequence to a list."""
         if isinstance(value, str):
             return [value]
@@ -96,7 +95,7 @@ class CrisprTracrOutput(BaseToolOutput):
         predictions (list[TracrPrediction]): Per-sequence tracrRNA predictions.
     """
 
-    predictions: List[TracrPrediction] = Field(
+    predictions: list[TracrPrediction] = Field(
         default_factory=list,
         description="Per-sequence tracrRNA predictions",
     )
@@ -107,11 +106,13 @@ class CrisprTracrOutput(BaseToolOutput):
         return sum(1 for p in self.predictions if p.has_tracr)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -147,7 +148,7 @@ class CrisprTracrConfig(BaseConfig):
         default="complete_run",
         description='Pipeline mode: "complete_run" for full analysis, "model_only" for fast scan',
     )
-    num_workers: Optional[int] = ConfigField(
+    num_workers: int | None = ConfigField(
         title="Number of Workers",
         default=None,
         description="Number of parallel workers (defaults to SLURM CPUs or 1)",
@@ -189,6 +190,8 @@ def run_crispr_tracr(
         inputs (CrisprTracrInput): Validated input containing nucleotide sequences.
         config (CrisprTracrConfig | None): CRISPRtracrRNA configuration including model type.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         CrisprTracrOutput: Per-sequence tracrRNA predictions.
 
@@ -198,7 +201,6 @@ def run_crispr_tracr(
         >>> result = run_crispr_tracr(inputs, config)
         >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
     """
-
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     num_workers = config.num_workers

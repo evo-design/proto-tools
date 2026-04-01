@@ -1,14 +1,16 @@
-"""proto_tools/tools/database_retrieval/ncbi/esearch.py
+"""proto_tools/tools/database_retrieval/ncbi/esearch.py.
 
 Wraps the NCBI E-utilities esearch endpoint for finding IDs across
-protein, nuccore, and gene databases."""
+protein, nuccore, and gene databases.
+"""
 
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import Field
 
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import NCBIFetchConfig, _ncbi_esearch
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -16,8 +18,6 @@ from proto_tools.utils import (
     InputField,
     build_http_session,
 )
-
-from .shared_data_models import NCBIFetchConfig, _ncbi_esearch
 
 # ============================================================================
 # Data Models
@@ -56,16 +56,18 @@ class NCBIEsearchOutput(BaseToolOutput):
         ids (list[str]): List of NCBI IDs matching the search query.
     """
 
-    ids: List[str] = Field(
+    ids: list[str] = Field(
         default_factory=list, description="List of NCBI IDs found by the search"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -115,6 +117,8 @@ def run_ncbi_esearch(
         inputs (NCBIEsearchInput): Search parameters including database, query term, and
             max results.
         config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.

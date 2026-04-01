@@ -1,11 +1,11 @@
-"""proto_tools/tools/inverse_folding/fampnn/fampnn_pack.py
+"""proto_tools/tools/inverse_folding/fampnn/fampnn_pack.py.
 
-FAMPNN sidechain packing tool."""
+FAMPNN sidechain packing tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List
 
 from pydantic import Field
 from tqdm import tqdm
@@ -33,7 +33,7 @@ class FAMPNNPackInput(BaseToolInput):
         inputs (list[FAMPNNStructureInput]): List of structure inputs for sidechain packing.
     """
 
-    inputs: List[FAMPNNStructureInput] = InputField(
+    inputs: list[FAMPNNStructureInput] = InputField(
         description="List of structure inputs for sidechain packing."
     )
 
@@ -108,19 +108,21 @@ class FAMPNNPackingResult(BaseToolOutput):
         psce (list[list[list[float]]]): Per-residue predicted sidechain error (Angstroms) for each sample.
     """
 
-    packed_structures: List[List[str]] = Field(
+    packed_structures: list[list[str]] = Field(
         description="PDB strings with packed sidechains (outer=structures, inner=samples)"
     )
-    psce: List[List[List[float]]] = Field(
+    psce: list[list[list[float]]] = Field(
         description="Per-residue pSCE for each sample (outer=structures, inner=samples)"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["pdb", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "pdb"
 
     def _export_output(self, export_path, file_format):
@@ -134,7 +136,7 @@ class FAMPNNPackingResult(BaseToolOutput):
                     out_file.write_text(pdb_str)
         elif file_format == "json":
             import json
-            for i, (pdb_list, psce_list) in enumerate(zip(self.packed_structures, self.psce)):
+            for i, (pdb_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
                 out_file = path / f"packed_{i}.json"
                 with open(out_file, "w") as f:
                     json.dump({"pdb_strings": pdb_list, "psce": psce_list}, f, indent=2)

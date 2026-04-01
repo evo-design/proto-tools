@@ -1,11 +1,12 @@
-"""proto_tools/tools/sequence_scoring/enformer/enformer_prediction.py
+"""proto_tools/tools/sequence_scoring/enformer/enformer_prediction.py.
 
-Enformer sequence scoring tool."""
+Enformer sequence scoring tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal, Union
+from typing import Literal
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -75,23 +76,25 @@ class EnformerOutput(BaseToolOutput):
 
     sequence: str = Field(description="Input DNA/RNA sequence")
     sequence_length: int = Field(description="Length of input sequence")
-    prediction: List[List[float]] = Field(
+    prediction: list[list[float]] = Field(
         description="Predicted activity matrix with shape [896, num_tracks]"
     )
-    output_tracks: List[int] = Field(description="Track indices extracted from Enformer")
+    output_tracks: list[int] = Field(description="Track indices extracted from Enformer")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
             "tool_id", "execution_time", "timestamp", "success",
@@ -132,7 +135,7 @@ class EnformerConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    output_tracks: List[int] = ConfigField(
+    output_tracks: list[int] = ConfigField(
         title="Output Tracks",
         default=[0],
         description="Track indices to extract from model output",
@@ -172,10 +175,11 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
         inputs (EnformerInput): Validated sequence input.
         config (EnformerConfig | None): Validated runtime and model configuration.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         EnformerOutput: Prediction object with sequence, tracks, and metadata.
     """
-
     logger.debug("Using local venv for Enformer prediction")
 
     result = ToolInstance.dispatch(

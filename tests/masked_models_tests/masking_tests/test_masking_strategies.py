@@ -1,6 +1,7 @@
-"""tests/masked_models_tests/masking_tests/test_masking_strategies.py
+"""tests/masked_models_tests/masking_tests/test_masking_strategies.py.
 
-Tests for masking strategies."""
+Tests for masking strategies.
+"""
 import logging
 import warnings
 
@@ -59,8 +60,8 @@ def test_only_mask_tokens_introduced(strategy):
     """Masked positions become '_'; non-masked positions keep original character."""
     seq = "ABCDEFGHIJ"
     result = strategy.mask([seq])
-    for orig, out in zip(seq, result[0]):
-        assert out == orig or out == MASK_TOKEN
+    for orig, out in zip(seq, result[0], strict=False):
+        assert out in (orig, MASK_TOKEN)
 
 
 @pytest.mark.parametrize("strategy", CPU_STRATEGIES)
@@ -417,7 +418,7 @@ def _validate_masked_output(original, masked, num_mutations, fixed_positions=Non
     """Assert correct mask count, preserved context, and fixed positions."""
     assert len(masked) == len(original)
     assert masked.count(MASK_TOKEN) == num_mutations
-    for i, (o, m) in enumerate(zip(original, masked)):
+    for i, (o, m) in enumerate(zip(original, masked, strict=False)):
         if m != MASK_TOKEN:
             assert m == o, f"Position {i}: expected '{o}', got '{m}'"
     # Fixed positions (1-indexed) must never be masked
@@ -430,8 +431,10 @@ def _validate_masked_output(original, masked, num_mutations, fixed_positions=Non
 
 @pytest.mark.parametrize("method", _ALL_METHODS)
 def test_method_num_mutations(method):
-    """Each method masks exactly num_mutations positions, respects
-    fixed_positions, and handles a batch of different-length sequences."""
+    """Each method masks exactly num_mutations positions, respects.
+
+    fixed_positions, and handles a batch of different-length sequences.
+    """
     sequences = ["MKTAYIAK", "MKTAYIAKQR", "MKTAYIAKQRQISFVK"]
     strategy = _create_strategy(
         method,
@@ -440,7 +443,7 @@ def test_method_num_mutations(method):
     )
     result = strategy.mask(sequences)
     assert len(result) == len(sequences)
-    for orig, masked in zip(sequences, result):
+    for orig, masked in zip(sequences, result, strict=False):
         _validate_masked_output(
             orig, masked, _E2E_NUM_MUTATIONS,
             fixed_positions=_E2E_FIXED_POSITIONS,
@@ -449,8 +452,10 @@ def test_method_num_mutations(method):
 
 @pytest.mark.parametrize("method", _ALL_METHODS)
 def test_method_mask_fraction(method):
-    """Each method masks ~50% of designable positions, respects
-    fixed_positions, and handles a batch of different-length sequences."""
+    """Each method masks ~50% of designable positions, respects.
+
+    fixed_positions, and handles a batch of different-length sequences.
+    """
     sequences = ["MKTAYIAK", "MKTAYIAKQR", "MKTAYIAKQRQISFVK"]
     fraction = 0.5
     strategy = _create_strategy(
@@ -460,7 +465,7 @@ def test_method_mask_fraction(method):
     )
     result = strategy.mask(sequences)
     assert len(result) == len(sequences)
-    for orig, masked in zip(sequences, result):
+    for orig, masked in zip(sequences, result, strict=False):
         # Designable = total - fixed positions present in this sequence
         n_fixed = sum(1 for p in _E2E_FIXED_POSITIONS if p <= len(orig))
         n_designable = len(orig) - n_fixed

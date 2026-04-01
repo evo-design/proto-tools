@@ -1,14 +1,12 @@
-"""proto_tools/utils/chemistry.py
+"""proto_tools/utils/chemistry.py.
 
-Chemistry utilities for small molecules and ligands."""
-from __future__ import annotations
-
+Chemistry utilities for small molecules and ligands.
+"""
 import warnings
 
 
 def validate_smiles(smiles: str, verbose: bool = True) -> bool:
-    """
-    Validate SMILES string using RDKit if available.
+    """Validate SMILES string using RDKit if available.
 
     Args:
         smiles (str): The SMILES string to validate.
@@ -24,11 +22,11 @@ def validate_smiles(smiles: str, verbose: bool = True) -> bool:
             if verbose:
                 warnings.warn(
                     f"RDKit could not parse SMILES: '{smiles}'. "
-                    "This may not be a valid molecule."
+                    "This may not be a valid molecule.", stacklevel=2
                 )
             return False
         return True
     except ImportError:
         if verbose:
-            warnings.warn("RDKit not installed. Cannot validate SMILES.")
+            warnings.warn("RDKit not installed. Cannot validate SMILES.", stacklevel=2)
         return False

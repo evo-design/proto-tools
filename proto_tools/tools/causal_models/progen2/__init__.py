@@ -1,10 +1,12 @@
-from .progen2_sample import (
+"""ProGen2 protein language model for sequence generation."""
+
+from proto_tools.tools.causal_models.progen2.progen2_sample import (
     ProGen2SampleConfig,
     ProGen2SampleInput,
     ProGen2SampleOutput,
     run_progen2_sample,
 )
-from .progen2_score import (
+from proto_tools.tools.causal_models.progen2.progen2_score import (
     ProGen2ScoringConfig,
     ProGen2ScoringInput,
     ProGen2ScoringOutput,

@@ -1,12 +1,11 @@
-"""
-proto_tools/tools/structure_prediction/dispatch.py
+"""proto_tools/tools/structure_prediction/dispatch.py.
 
 Router function for structure prediction tools.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from proto_tools.tools.structure_prediction.alphafold2 import (
     AlphaFold2Config,
@@ -54,11 +53,9 @@ SP_TOOL_MAP = {
 
 
 def predict_structures(
-    complexes: Union[StructurePredictionComplex, List[StructurePredictionComplex]],
+    complexes: StructurePredictionComplex | list[StructurePredictionComplex],
     tool_name: str,
-    tool_config: Optional[
-        Union[ESMFoldConfig, AlphaFold2Config, AlphaFold3Config, Boltz2Config, Chai1Config, ProtenixConfig, Dict[str, Any]]
-    ] = None,
+    tool_config: ESMFoldConfig | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | dict[str, Any] | None = None,
 ) -> StructurePredictionOutput:
     """Dispatch structure prediction to the specified tool.
 
@@ -77,7 +74,6 @@ def predict_structures(
     Raises:
         ValueError: If tool_name is not recognized.
     """
-
     # If complexes is a single StructurePredictionComplex, normalize it to a list
     if isinstance(complexes, StructurePredictionComplex):
         complexes = [complexes]
@@ -111,6 +107,5 @@ def predict_structures(
     inputs = SP_TOOL_MAP[tool_name]["input"](complexes=complexes)
 
     # Run the prediction
-    output = run_func(inputs, tool_config)
+    return run_func(inputs, tool_config)
 
-    return output

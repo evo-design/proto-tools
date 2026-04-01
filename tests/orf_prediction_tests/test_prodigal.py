@@ -1,6 +1,7 @@
-"""tests/orf_prediction_tests/test_prodigal.py
+"""tests/orf_prediction_tests/test_prodigal.py.
 
-Tests for Prodigal ORF prediction tool."""
+Tests for Prodigal ORF prediction tool.
+"""
 
 from unittest.mock import patch
 
@@ -254,7 +255,7 @@ def test_batch_processing_consistency():
     assert result_batch.num_orfs == sum(r.num_orfs for r in results_individual)
     assert len(result_batch.predicted_orfs) == len(sequences)
 
-    for batch_orfs, single_result in zip(result_batch.predicted_orfs, results_individual):
+    for batch_orfs, single_result in zip(result_batch.predicted_orfs, results_individual, strict=False):
         assert len(batch_orfs) == single_result.num_orfs
 
 

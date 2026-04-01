@@ -1,5 +1,4 @@
-"""
-Prodigal standalone runner for ToolInstance venv execution.
+"""Prodigal standalone runner for ToolInstance venv execution.
 
 Handles prokaryotic gene prediction via pyrodigal Python bindings.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -15,7 +14,7 @@ import sys
 import warnings
 from functools import partial
 from multiprocessing.pool import ThreadPool
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pyrodigal
 
@@ -25,8 +24,8 @@ import pyrodigal
 # =============================================================================
 def _process_sequence(
     gene_finder: pyrodigal.GeneFinder,
-    seq_idx_and_seq: Tuple[int, str],
-) -> Tuple[int, List[Dict[str, Any]]]:
+    seq_idx_and_seq: tuple[int, str],
+) -> tuple[int, list[dict[str, Any]]]:
     """Process a single sequence using pyrodigal.
 
     Returns:
@@ -160,7 +159,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_prodigal(input_data)

@@ -1,6 +1,7 @@
-"""tests/sequence_alignment_tests/test_msas.py
+"""tests/sequence_alignment_tests/test_msas.py.
 
-Tests for MSA class."""
+Tests for MSA class.
+"""
 
 import pytest
 
@@ -37,8 +38,7 @@ def sample_fasta_file(tmp_path, sample_aligned_sequences, sample_sequence_ids):
     """Create a temporary FASTA file with sample sequences."""
     fasta_path = tmp_path / "test_msa.fasta"
     with open(fasta_path, "w") as f:
-        for seq_id, seq in zip(sample_sequence_ids, sample_aligned_sequences):
-            f.write(f">{seq_id}\n{seq}\n")
+        f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in zip(sample_sequence_ids, sample_aligned_sequences, strict=False))
     return fasta_path
 
 
@@ -192,7 +192,7 @@ def test_msa_iter_with_ids_in_memory(sample_aligned_sequences, sample_sequence_i
 
     assert len(seq_id_pairs) == len(sample_aligned_sequences)
     for (seq_id, seq), expected_id, expected_seq in zip(
-        seq_id_pairs, sample_sequence_ids, sample_aligned_sequences
+        seq_id_pairs, sample_sequence_ids, sample_aligned_sequences, strict=False
     ):
         assert seq_id == expected_id
         assert seq == expected_seq
@@ -214,7 +214,7 @@ def test_msa_iter_with_ids_file_backed(
     assert seq_id_pairs[-1][0] == sample_sequence_ids[-1]
     # Verify sequences match
     for (seq_id, seq), expected_id, expected_seq in zip(
-        seq_id_pairs, sample_sequence_ids, sample_aligned_sequences
+        seq_id_pairs, sample_sequence_ids, sample_aligned_sequences, strict=False
     ):
         assert seq_id == expected_id
         assert seq == expected_seq
@@ -521,11 +521,11 @@ def test_msa_to_fasta_file(tmp_path, sample_aligned_sequences, sample_sequence_i
     assert output_path.exists()
 
     # Read back and verify
-    with open(output_path, "r") as f:
+    with open(output_path) as f:
         lines = f.read().strip().split("\n")
 
     assert len(lines) == 2 * len(sample_aligned_sequences)
-    for i, (seq_id, seq) in enumerate(zip(sample_sequence_ids, sample_aligned_sequences)):
+    for i, (seq_id, seq) in enumerate(zip(sample_sequence_ids, sample_aligned_sequences, strict=False)):
         assert lines[2 * i] == f">{seq_id}"
         assert lines[2 * i + 1] == seq
 
@@ -592,7 +592,7 @@ def test_msa_to_a3m_file(tmp_path, sample_sequence_ids):
     assert output_path.exists()
 
     # Read back and verify
-    with open(output_path, "r") as f:
+    with open(output_path) as f:
         content = f.read()
 
     assert ">seq_0\n" in content
@@ -614,7 +614,7 @@ def test_msa_to_a3m_file_from_file_backed(sample_fasta_file, tmp_path, monkeypat
     assert output_path.exists()
 
     # Verify file is not empty
-    with open(output_path, "r") as f:
+    with open(output_path) as f:
         content = f.read()
     assert len(content) > 0
     assert content.count(">") == msa.num_sequences
@@ -691,7 +691,7 @@ def test_msa_fasta_to_a3m_roundtrip(tmp_path):
         "ACGTTTAAA",  # insertions preserved
     ]
 
-    for i, expected_seq in enumerate(expected_sequences):
+    for i, _expected_seq in enumerate(expected_sequences):
         # A3M format removes gaps in query, so sequences will be different lengths
         # We just verify the MSA can be round-tripped
         assert msa3[i] == msa2[i]
@@ -728,10 +728,10 @@ ACGTttAAA
     msa2.to_a3m_file(str(a3m_path2), query_index=0)
 
     # Read both A3M files and compare
-    with open(a3m_path1, "r") as f:
+    with open(a3m_path1) as f:
         original_lines = [line.strip() for line in f if line.strip()]
 
-    with open(a3m_path2, "r") as f:
+    with open(a3m_path2) as f:
         roundtrip_lines = [line.strip() for line in f if line.strip()]
 
     # Should have same structure (may differ in exact insertion representation)
@@ -813,7 +813,7 @@ def test_msa_fasta_file_no_temp_cleanup(sample_fasta_file):
 
 
 def test_convert_a3m_to_fasta(tmp_path):
-    """Test convert_a3m_to_fasta"""
+    """Test convert_a3m_to_fasta."""
     a3m_path = tmp_path / "test.a3m"
     fasta_path = tmp_path / "test.fasta"
 
@@ -826,7 +826,7 @@ def test_convert_a3m_to_fasta(tmp_path):
 
     convert_a3m_to_fasta(str(a3m_path), str(fasta_path))
 
-    with open(fasta_path, "r") as f:
+    with open(fasta_path) as f:
         content = f.read()
 
     assert ">seq1\n" in content
@@ -850,7 +850,7 @@ def test_convert_a3m_to_fasta_with_comments(tmp_path):
 
     convert_a3m_to_fasta(str(a3m_path), str(fasta_path))
 
-    with open(fasta_path, "r") as f:
+    with open(fasta_path) as f:
         lines = [line.strip() for line in f if line.strip()]
 
     # Should only have sequence headers and sequences, no comments
@@ -871,7 +871,7 @@ def test_convert_a3m_to_fasta_with_null_bytes(tmp_path):
 
     convert_a3m_to_fasta(str(a3m_path), str(fasta_path))
 
-    with open(fasta_path, "r") as f:
+    with open(fasta_path) as f:
         content = f.read()
 
     assert "\x00" not in content

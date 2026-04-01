@@ -1,5 +1,4 @@
-"""
-Standalone inference script for ViennaRNA secondary structure prediction.
+"""Standalone inference script for ViennaRNA secondary structure prediction.
 
 This script provides a standalone interface for ViennaRNA that can be executed
 in an isolated virtual environment with JSON-based I/O.
@@ -9,15 +8,14 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 class ViennaRNAModel:
-    """
-    ViennaRNA secondary structure prediction model.
+    """ViennaRNA secondary structure prediction model.
 
     This class provides a lightweight wrapper around ViennaRNA's MFE folding
     algorithm with lazy loading and JSON-compatible I/O.
@@ -37,14 +35,13 @@ class ViennaRNAModel:
 
     def __call__(
         self,
-        sequences: List[str],
+        sequences: list[str],
         temperature: float = 37.0,
         use_dna_params: bool = False,
         no_lonely_pairs: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Predict RNA secondary structures using ViennaRNA's MFE algorithm.
+    ) -> dict[str, Any]:
+        """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
 
         Args:
             sequences: List of RNA sequences to fold. Each sequence should
@@ -170,8 +167,7 @@ def dispatch(input_dict: dict) -> dict:
     kwargs.pop("device", None)  # ViennaRNA is CPU-only, doesn't use device
     if operation == "predict":
         return _model(**kwargs)
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 # ============================================================================
@@ -187,7 +183,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

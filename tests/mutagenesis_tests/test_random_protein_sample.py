@@ -1,6 +1,7 @@
-"""tests/mutagenesis_tests/test_random_protein_sample.py
+"""tests/mutagenesis_tests/test_random_protein_sample.py.
 
-Tests for random protein sampling tool."""
+Tests for random protein sampling tool.
+"""
 import pytest
 
 from proto_tools.tools.mutagenesis.codons import get_codon_scheme

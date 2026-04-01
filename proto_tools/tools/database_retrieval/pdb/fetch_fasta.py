@@ -1,29 +1,27 @@
-"""proto_tools/tools/database_retrieval/pdb/fetch_fasta.py
+"""proto_tools/tools/database_retrieval/pdb/fetch_fasta.py.
 
 Wraps the RCSB PDB FASTA endpoint for fetching chain sequences with
-automatic protein/nucleic acid classification."""
+automatic protein/nucleic acid classification.
+"""
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import Field
 
-from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import (
-    BaseToolInput,
-    BaseToolOutput,
-    InputField,
-    build_http_session,
-)
-
-from .shared_data_models import (
+from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
     _PDB_FASTA_BASE,
     PdbChain,
     PdbFetchConfig,
     _chain_id_from_header,
     _fetch_pdb_fasta,
     _is_protein_sequence,
+)
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import (
+    BaseToolInput,
+    BaseToolOutput,
+    InputField,
+    build_http_session,
 )
 
 # ============================================================================
@@ -49,15 +47,17 @@ class PdbFetchFastaOutput(BaseToolOutput):
         source_url (str | None): URL used for the request.
     """
 
-    chains: List[PdbChain] = Field(default_factory=list, description="Parsed chain sequences")
-    source_url: Optional[str] = Field(default=None, description="Request URL")
+    chains: list[PdbChain] = Field(default_factory=list, description="Parsed chain sequences")
+    source_url: str | None = Field(default=None, description="Request URL")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -109,6 +109,8 @@ def run_pdb_fetch_fasta(
     Args:
         inputs (PdbFetchFastaInput): PDB accession to look up.
         config (PdbFetchConfig | None): HTTP timeout and retry settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.

@@ -1,8 +1,10 @@
-"""tests/tool_infra_tests/test_tool_cache.py
+"""tests/tool_infra_tests/test_tool_cache.py.
 
-Tests for tool_cache."""
+Tests for tool_cache.
+"""
 
-from typing import List, Union
+
+from __future__ import annotations
 
 import pytest
 from pydantic import BaseModel
@@ -233,7 +235,7 @@ def test_strip_different_configs_separate_cache(_setup_cache):
 
 class _MockOptimizer:
     """Mock class to test the configuration logic."""
-    def __init__(self, clear_config: Union[bool, List[str], int]):
+    def __init__(self, clear_config: bool | list[str] | int):
         self.clear_tool_cache = clear_config
         self.tool_cache = ToolCache()
 

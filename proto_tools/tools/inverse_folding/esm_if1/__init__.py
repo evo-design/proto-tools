@@ -1,3 +1,5 @@
+"""ESM-IF1 inverse folding model."""
+
 from proto_tools.tools.inverse_folding.esm_if1.esm_if1_sample import (
     ESMIF1SampleConfig,
     ESMIF1SampleInput,

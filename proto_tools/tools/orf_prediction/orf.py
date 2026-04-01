@@ -1,7 +1,7 @@
-"""proto_tools/tools/orf_prediction/orf.py"""
+"""proto_tools/tools/orf_prediction/orf.py."""
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
@@ -46,8 +46,9 @@ class ORF:
         nucleotide_length: int,
         nucleotide_start: int,
         nucleotide_end: int,
-        metrics: Optional[Dict[str, Any]] = None,
+        metrics: dict[str, Any] | None = None,
     ) -> None:
+        """Initialize ORF."""
         self.parent_id = parent_id
         self.orf_id = orf_id
         self.strand = strand
@@ -128,7 +129,7 @@ class ORF:
     # ===============================
     # Pydantic Serialization
     # ===============================
-    def model_dump(self) -> Dict[str, Any]:
+    def model_dump(self) -> dict[str, Any]:
         """Serialize ORF to a dictionary (for Pydantic models and DataFrames)."""
         return self._serialize_to_dict()
 
@@ -138,9 +139,7 @@ class ORF:
         source_type: Any,
         handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
-        """
-        Tells Pydantic how to validate and serialize ORF objects.
-        """
+        """Tells Pydantic how to validate and serialize ORF objects."""
         return core_schema.no_info_after_validator_function(
             cls._validate_from_dict,
             core_schema.union_schema(
@@ -159,10 +158,8 @@ class ORF:
         )
 
     @classmethod
-    def _validate_from_dict(cls, value: Dict[str, Any] | ORF) -> ORF:
-        """
-        Create an ORF from a dictionary (used during deserialization).
-        """
+    def _validate_from_dict(cls, value: dict[str, Any] | ORF) -> ORF:
+        """Create an ORF from a dictionary (used during deserialization)."""
         if isinstance(value, cls):
             return value
 
@@ -204,10 +201,8 @@ class ORF:
         init_args["metrics"] = extra_metrics
         return cls(**init_args)
 
-    def _serialize_to_dict(self) -> Dict[str, Any]:
-        """
-        Serialize ORF to a dictionary (for Pydantic models).
-        """
+    def _serialize_to_dict(self) -> dict[str, Any]:
+        """Serialize ORF to a dictionary (for Pydantic models)."""
         data = {
             "parent_id": self.parent_id,
             "orf_id": self.orf_id,

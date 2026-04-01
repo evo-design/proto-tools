@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_pytorch_multi_gpu_tool/mock_pytorch_multi_gpu_tool.py
+"""proto_tools/tools/testing/mock_pytorch_multi_gpu_tool/mock_pytorch_multi_gpu_tool.py.
 
 This is a minimal 2-GPU PyTorch tool designed for testing multi-device allocation,
 movement, and eviction. It loads two tiny models (one per GPU) while exercising
-all DeviceManager multi-device code paths."""
+all DeviceManager multi-device code paths.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -92,10 +93,12 @@ class MockPyTorchMultiGPUToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -152,7 +155,6 @@ def run_mock_pytorch_multi_gpu_tool(
     instance=None,
 ) -> MockPyTorchMultiGPUToolOutput:
     """Run mock multi-GPU tool (two minimal models for fast testing)."""
-
     result = ToolInstance.dispatch(
         "mock_pytorch_multi_gpu_tool",
         {

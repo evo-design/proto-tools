@@ -1,6 +1,7 @@
-"""tests/structure_design_tests/test_rfdiffusion3.py
+"""tests/structure_design_tests/test_rfdiffusion3.py.
 
-Tests for RFdiffusion3."""
+Tests for RFdiffusion3.
+"""
 
 import json
 
@@ -21,13 +22,13 @@ _persistent_tool = make_persistent_fixture("rfdiffusion3")
 
 def test_rfdiffusion3_input_rejects_empty():
     """Must provide either design_specs or raw_json."""
-    with pytest.raises(ValueError, match="Either 'design_specs'.*or 'raw_json'"):
+    with pytest.raises(ValueError, match=r"Either 'design_specs'.*or 'raw_json'"):
         RFdiffusion3Input()
 
 
 def test_rfdiffusion3_design_spec_rejects_empty():
     """Each spec needs at least contig, length, or another design parameter."""
-    with pytest.raises(ValueError, match="At least one of.*must be provided"):
+    with pytest.raises(ValueError, match=r"At least one of.*must be provided"):
         RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec()])
 
 

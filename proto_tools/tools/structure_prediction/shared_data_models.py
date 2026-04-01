@@ -1,11 +1,13 @@
-"""proto_tools/tools/structure_prediction/shared_data_models.py
+"""proto_tools/tools/structure_prediction/shared_data_models.py.
 
-Shared data models (configs and outputs) for structure prediction tools."""
+Shared data models (configs and outputs) for structure prediction tools.
+"""
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar, Iterator, List, Optional, Set, Union
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -162,11 +164,11 @@ class Chain(BaseModel):
     sequence: str = Field(
         description="Sequence of the chain (protein, DNA, RNA, or ligand SMILES)"
     )
-    entity_type: Optional[str] = Field(
+    entity_type: str | None = Field(
         default=None,
         description="Entity type: 'protein', 'dna', 'rna', or 'ligand'. Auto-inferred if None.",
     )
-    modifications: List[ChainModification] = Field(
+    modifications: list[ChainModification] = Field(
         default_factory=list, description="List of modifications to apply to this chain"
     )
 
@@ -180,7 +182,7 @@ class Chain(BaseModel):
 
     @field_validator("modifications", mode="before")
     @classmethod
-    def convert_modifications(cls, mods) -> List[ChainModification]:
+    def convert_modifications(cls, mods) -> list[ChainModification]:
         """Convert tuples to ChainModification objects."""
         if not isinstance(mods, list):
             raise ValueError(f"modifications must be a list, got {type(mods)}")
@@ -245,24 +247,20 @@ class Chain(BaseModel):
             canonical_for_mod = get_canonical_component(mod.modification_code)
 
             # If the modification has a canonical parent, validate compatibility
-            if canonical_for_mod is not None:
-                if residue_or_base_char.upper() != canonical_for_mod.upper():
-                    # Get allowed modifications for this residue or base to show in error
-                    allowed_mods = get_modifications_for_component(
-                        self.entity_type, residue_or_base_char.upper()
-                    )
+            if canonical_for_mod is not None and residue_or_base_char.upper() != canonical_for_mod.upper():
+                # Get allowed modifications for this residue or base to show in error
+                allowed_mods = get_modifications_for_component(
+                    self.entity_type, residue_or_base_char.upper()
+                )
 
-                    if allowed_mods:
-                        mods_str = ", ".join(allowed_mods)
-                    else:
-                        mods_str = "none"
+                mods_str = ", ".join(allowed_mods) if allowed_mods else "none"
 
-                    raise ValueError(
-                        f"Invalid modification '{mod.modification_code}' at position {mod.position}. "
-                        f"This modification is for residue or base '{canonical_for_mod}', but position "
-                        f"{mod.position} contains '{residue_or_base_char}'. "
-                        f"Allowed modifications for '{residue_or_base_char}' in {self.entity_type}: {mods_str}"
-                    )
+                raise ValueError(
+                    f"Invalid modification '{mod.modification_code}' at position {mod.position}. "
+                    f"This modification is for residue or base '{canonical_for_mod}', but position "
+                    f"{mod.position} contains '{residue_or_base_char}'. "
+                    f"Allowed modifications for '{residue_or_base_char}' in {self.entity_type}: {mods_str}"
+                )
 
         return self
 
@@ -300,24 +298,20 @@ class Chain(BaseModel):
             residue_or_base_char = self.sequence[mod.position - 1]  # Convert to 0-based
             canonical_for_mod = get_canonical_component(mod.modification_code)
 
-            if canonical_for_mod is not None:
-                if residue_or_base_char.upper() != canonical_for_mod.upper():
-                    # Get allowed modifications for this residue or base
-                    allowed_mods = get_modifications_for_component(
-                        self.entity_type, residue_or_base_char.upper()
-                    )
+            if canonical_for_mod is not None and residue_or_base_char.upper() != canonical_for_mod.upper():
+                # Get allowed modifications for this residue or base
+                allowed_mods = get_modifications_for_component(
+                    self.entity_type, residue_or_base_char.upper()
+                )
 
-                    if allowed_mods:
-                        mods_str = ", ".join(allowed_mods)
-                    else:
-                        mods_str = "none"
+                mods_str = ", ".join(allowed_mods) if allowed_mods else "none"
 
-                    raise ValueError(
-                        f"Invalid modification '{mod.modification_code}' at position {mod.position}. "
-                        f"This modification is for residue or base '{canonical_for_mod}', but position "
-                        f"{mod.position} contains '{residue_or_base_char}'. "
-                        f"Allowed modifications for '{residue_or_base_char}' in {self.entity_type}: {mods_str}"
-                    )
+                raise ValueError(
+                    f"Invalid modification '{mod.modification_code}' at position {mod.position}. "
+                    f"This modification is for residue or base '{canonical_for_mod}', but position "
+                    f"{mod.position} contains '{residue_or_base_char}'. "
+                    f"Allowed modifications for '{residue_or_base_char}' in {self.entity_type}: {mods_str}"
+                )
 
         self.modifications.append(mod)
         return self
@@ -446,7 +440,7 @@ class StructurePredictionComplex(BaseModel):
         at the Chain level and accessed via the entity_types property.
     """
 
-    chains: List[Chain] = Field(
+    chains: list[Chain] = Field(
         description="Chains in the complex. Can be strings, Chain objects, or dictionaries with chain fields."
     )
 
@@ -465,7 +459,7 @@ class StructurePredictionComplex(BaseModel):
 
     @field_validator("chains", mode="before")
     @classmethod
-    def normalize_chains(cls, chains) -> List[Chain]:
+    def normalize_chains(cls, chains) -> list[Chain]:
         """Normalize chains to Chain objects, converting strings and dicts as needed."""
         if not isinstance(chains, list):
             raise ValueError(f"chains must be a list, got {type(chains)}")
@@ -482,7 +476,7 @@ class StructurePredictionComplex(BaseModel):
                 except Exception as e:
                     raise ValueError(
                         f"Chain {chain_idx} dictionary is invalid: {e}"
-                    )
+                    ) from e
             elif isinstance(chain, Chain):
                 # Already a Chain object
                 normalized_chains.append(chain)
@@ -495,12 +489,12 @@ class StructurePredictionComplex(BaseModel):
         return normalized_chains
 
     @property
-    def chain_sequences(self) -> List[str]:
+    def chain_sequences(self) -> list[str]:
         """Get the sequences of all chains in the complex."""
         return [chain.sequence for chain in self.chains]
 
     @property
-    def entity_types(self) -> List[str]:
+    def entity_types(self) -> list[str]:
         """Get the entity types for all chains in the complex.
 
         Returns:
@@ -516,7 +510,7 @@ class StructurePredictionComplex(BaseModel):
         """Get the number of chains in the complex."""
         return len(self.chains)
 
-    def get_entity_type_set(self) -> Set[str]:
+    def get_entity_type_set(self) -> set[str]:
         """Get the set of unique entity types in the complex."""
         return set(self.entity_types)
 
@@ -652,7 +646,7 @@ class StructurePredictionInput(BaseToolInput):
     """
 
     # Subclasses must define this
-    SUPPORTED_ENTITY_TYPES: ClassVar[Set[str]]
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]]
     ALLOWS_CHAIN_MODIFICATIONS: ClassVar[bool]
 
     def __init_subclass__(cls, **kwargs):
@@ -670,7 +664,7 @@ class StructurePredictionInput(BaseToolInput):
                 f"Example: ALLOWS_CHAIN_MODIFICATIONS = True"
             )
 
-    complexes: List[StructurePredictionComplex] = InputField(
+    complexes: list[StructurePredictionComplex] = InputField(
         description="List of complexes to predict structure for containing chains and entity types."
     )
     msas: dict[str, MSA] | None = InputField(
@@ -687,6 +681,7 @@ class StructurePredictionInput(BaseToolInput):
     @field_validator("complexes", mode="before", check_fields=False)
     @classmethod
     def normalize_complexes(cls, value):
+        """Validate and normalize complex specifications from raw input."""
         if value is None:
             raise ValueError("Input cannot be None")
 
@@ -726,12 +721,11 @@ class StructurePredictionInput(BaseToolInput):
                     f"{', '.join(sorted(cls.SUPPORTED_ENTITY_TYPES))}"
                 )
 
-            if not cls.ALLOWS_CHAIN_MODIFICATIONS:
-                if comp.has_modifications():
-                    raise ValueError(
-                        f"Complex {comp_idx} contains modifications. "
-                        f"{cls.__name__} does not allow chain modifications."
-                    )
+            if not cls.ALLOWS_CHAIN_MODIFICATIONS and comp.has_modifications():
+                raise ValueError(
+                    f"Complex {comp_idx} contains modifications. "
+                    f"{cls.__name__} does not allow chain modifications."
+                )
 
         return final_complexes
 
@@ -755,7 +749,7 @@ class StructurePredictionInput(BaseToolInput):
         """Get a string representation of the complexes."""
         return f"StructurePredictionInput(complexes={self.complexes})"
 
-    def get_entity_type_set(self) -> Set[str]:
+    def get_entity_type_set(self) -> set[str]:
         """Get the set of unique entity types in the input across all complexes."""
         entity_type_set = set()
         for complex in self.complexes:
@@ -807,7 +801,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         default=True,
         description="Whether to generate and use MSAs for protein chains using ColabFold search",
     )
-    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
+    colabfold_search_config: ColabfoldSearchConfig | None = ConfigField(
         title="ColabFold Search Config",
         default=None,
         description="Nested configuration for ColabFold MSA search. If None, uses default settings.",
@@ -815,6 +809,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
     )
 
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:
+        """Preprocess structure prediction inputs before execution."""
         if not self.use_msa:
             return inputs
         if self.colabfold_search_config is None:
@@ -843,7 +838,7 @@ class StructurePredictionOutput(BaseToolOutput):
         and length (``len(output)``).
     """
 
-    structures: List[Structure] = Field(description="List of predicted structures")
+    structures: list[Structure] = Field(description="List of predicted structures")
 
     def __len__(self) -> int:
         """Get the number of predicted structures."""
@@ -869,7 +864,7 @@ class StructurePredictionOutput(BaseToolOutput):
     # Export Options
     # ===============================
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
         """List of valid file formats for exporting the tool output."""
         return ["cif", "pdb"]
 
@@ -878,7 +873,7 @@ class StructurePredictionOutput(BaseToolOutput):
         """Default file format for exporting the tool output."""
         return "pdb"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         """Export the tool output to a file or directory of files."""
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
@@ -942,7 +937,7 @@ def _preprocess_structure_prediction_msas(
             f"using ColabFold search..."
         )
 
-    queries = [(seq, name) for seq, name in unique_seqs.items()]
+    queries = list(unique_seqs.items())
     colabfold_input = ColabfoldSearchInput(queries=queries)
     colabfold_output = run_colabfold_search(colabfold_input, colabfold_search_config)
 

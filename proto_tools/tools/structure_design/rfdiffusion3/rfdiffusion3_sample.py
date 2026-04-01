@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_design/rfdiffusion3/rfdiffusion3_sample.py
+"""proto_tools/tools/structure_design/rfdiffusion3/rfdiffusion3_sample.py.
 
 Example:
     >>> from proto_tools.tools.structure_design.rfdiffusion3 import run_rfdiffusion3, RFdiffusion3Input, RFdiffusion3Config, RFdiffusion3DesignSpec
@@ -15,8 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class RFdiffusion3DesignSpec(BaseModel):
-    """Single design specification for RFdiffusion3.
+    r"""Single design specification for RFdiffusion3.
 
     This class represents a single design task with its constraints. Multiple
     design specs can be provided to generate designs under different conditions.
@@ -55,7 +55,8 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``\\0``.
-            Examples:
+
+    Examples:
                 - ``"50-80"`` - design 50-80 residue monomer
                 - ``"A1-100,50,A150-200"`` - scaffold around residues A1-100 and A150-200
                 - ``"50,\\0,B1-50"`` - design 50 residues, chain break, then keep B1-50
@@ -107,39 +108,39 @@ class RFdiffusion3DesignSpec(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    input_structure: Optional[str] = Field(
+    input_structure: str | None = Field(
         default=None,
         description="Path to input PDB/CIF file or PDB content string",
     )
-    contig: Optional[str] = Field(
+    contig: str | None = Field(
         default=None,
         description="Contig string specifying design topology (e.g., '50-80,\\0,A1-100')",
     )
-    length: Optional[str] = Field(
+    length: str | None = Field(
         default=None,
         description="Total design length constraint ('min-max' or int)",
     )
-    ligand: Optional[str] = Field(
+    ligand: str | None = Field(
         default=None,
         description="Ligand selection by residue name (e.g., 'HAX,OAA')",
     )
-    unindex: Optional[Union[str, Dict[str, str]]] = Field(
+    unindex: str | dict[str, str] | None = Field(
         default=None,
         description="Unindexed motif components for flexible positioning (e.g., 'A244,A274,A320')",
     )
-    select_fixed_atoms: Optional[Union[bool, str, Dict[str, str]]] = Field(
+    select_fixed_atoms: bool | str | dict[str, str] | None = Field(
         default=None,
         description="Atoms to fix in 3D space (True/False, contig string, or dict with BKBN/TIP/ALL)",
     )
-    select_unfixed_sequence: Optional[Union[bool, str, Dict[str, str]]] = Field(
+    select_unfixed_sequence: bool | str | dict[str, str] | None = Field(
         default=None,
         description="Residues whose sequence can change (True/False, contig string, or dict)",
     )
-    select_hotspots: Optional[Union[str, Dict[str, str]]] = Field(
+    select_hotspots: str | dict[str, str] | None = Field(
         default=None,
         description="Atom/residue-level hotspots for binder design (contig string or dict)",
     )
-    partial_t: Optional[float] = Field(
+    partial_t: float | None = Field(
         default=None,
         ge=0.0,
         description="Noise level (Angstroms) for partial diffusion (5.0-15.0 recommended)",
@@ -161,13 +162,13 @@ class RFdiffusion3DesignSpec(BaseModel):
             )
         return self
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert design spec to RFdiffusion3 JSON format.
 
         Returns a dictionary compatible with RFdiffusion3's InputSpecification format.
         See https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
         """
-        spec: Dict[str, Any] = {}
+        spec: dict[str, Any] = {}
 
         # Start with extra kwargs (allows advanced options to be passed through)
         if self.model_extra:
@@ -232,11 +233,11 @@ class RFdiffusion3Input(BaseToolInput):
         ... )
     """
 
-    design_specs: List[RFdiffusion3DesignSpec] = InputField(
+    design_specs: list[RFdiffusion3DesignSpec] = InputField(
         default_factory=list,
         description="List of design specifications",
     )
-    raw_json: Optional[str] = InputField(
+    raw_json: str | None = InputField(
         default=None,
         description="Raw JSON string for advanced RFdiffusion3 configuration",
     )
@@ -255,7 +256,7 @@ class RFdiffusion3Input(BaseToolInput):
         if self.raw_json:
             return self.raw_json
 
-        spec_dict: Dict[str, Any] = {}
+        spec_dict: dict[str, Any] = {}
         for i, spec in enumerate(self.design_specs):
             spec_dict[f"spec-{i}"] = spec.to_dict()
 
@@ -356,13 +357,13 @@ class RFdiffusion3Config(BaseConfig):
         description="String containing the path and file name of the checkpoint path you want to use (default: rfd3).",
         hidden=True,
     )
-    input_dir: Optional[str] = ConfigField(
+    input_dir: str | None = ConfigField(
         title="Input Directory",
         default=None,
         description="Optional input directory for local execution inputs",
         hidden=True,
     )
-    output_dir: Optional[str] = ConfigField(
+    output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Optional output directory for local execution outputs",
@@ -376,7 +377,7 @@ class RFdiffusion3Config(BaseConfig):
         include_in_key=False,
     )
 
-    def get_cli_kwargs(self) -> Dict[str, Any]:
+    def get_cli_kwargs(self) -> dict[str, Any]:
         """Get all CLI arguments to pass to the inference script."""
         cli_kwargs = {
             "n_batches": self.n_batches,
@@ -420,7 +421,7 @@ class RFdiffusion3Structure(BaseModel):
         description="Identifier of the input spec that produced this design"
     )
     design_index: int = Field(ge=0, description="Index of this design within its batch")
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional metadata from RFdiffusion3 output",
     )
@@ -444,7 +445,7 @@ class RFdiffusion3Output(BaseToolOutput):
         and length (``len(output)``).
     """
 
-    output_structures: List[RFdiffusion3Structure] = Field(
+    output_structures: list[RFdiffusion3Structure] = Field(
         default_factory=list,
         description="List of designed structures",
     )
@@ -470,11 +471,13 @@ class RFdiffusion3Output(BaseToolOutput):
         return self.__repr__()
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["pdb", "cif"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "pdb"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -494,9 +497,6 @@ class RFdiffusion3Output(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-# Input: RFdiffusion3Input
-# Output: RFdiffusion3Output
-# Config: RFdiffusion3Config
 
 
 def example_input():
@@ -539,6 +539,8 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
         config (RFdiffusion3Config | None): Validated configuration specifying diffusion
             parameters and execution options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         RFdiffusion3Output: Structured output containing:
             - ``output_structures``: List of ``RFdiffusion3Structure`` instances
@@ -575,8 +577,8 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir = Path(temp_dir)
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
         input_dir = Path(config.input_dir) if config.input_dir else temp_dir
         output_dir = (
             Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"

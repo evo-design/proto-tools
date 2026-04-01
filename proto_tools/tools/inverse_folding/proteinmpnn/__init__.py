@@ -1,3 +1,5 @@
+"""ProteinMPNN backbone-conditioned sequence design."""
+
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNSampleConfig,
     ProteinMPNNSampleInput,

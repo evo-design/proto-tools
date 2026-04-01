@@ -1,16 +1,23 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_intervals.py
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_intervals.py.
 
-AlphaGenome batched interval scoring tool."""
+AlphaGenome batched interval scoring tool.
+"""
 from __future__ import annotations
 
 import csv
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.sequence_scoring.alphagenome.shared_data_models import (
+    DEFAULT_ALPHAGENOME_MODEL_VERSION,
+    AlphaGenomeInterval,
+    AlphaGenomeScoreOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -20,12 +27,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
     require_hf_token,
-)
-
-from .shared_data_models import (
-    DEFAULT_ALPHAGENOME_MODEL_VERSION,
-    AlphaGenomeInterval,
-    AlphaGenomeScoreOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,13 +47,14 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
             A single interval is auto-wrapped into a list.
     """
 
-    intervals: List[AlphaGenomeInterval] = InputField(
+    intervals: list[AlphaGenomeInterval] = InputField(
         description="Genomic intervals for scoring",
     )
 
     @field_validator("intervals", mode="before")
     @classmethod
     def normalize_intervals(cls, value: Any) -> list:
+        """Validate and normalize interval specifications from raw input."""
         if value is None:
             raise ValueError("intervals cannot be None")
         if not isinstance(value, list):
@@ -69,19 +71,21 @@ class AlphaGenomeScoreIntervalsOutput(BaseToolOutput):
         results (list[AlphaGenomeScoreOutput]): Per-interval score outputs.
     """
 
-    results: List[AlphaGenomeScoreOutput] = Field(
+    results: list[AlphaGenomeScoreOutput] = Field(
         description="Per-interval AlphaGenome score outputs",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str) -> None:
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
@@ -132,7 +136,7 @@ class AlphaGenomeScoreIntervalsConfig(BaseConfig):
         advanced=True,
         reload_on_change=True,
     )
-    interval_scorers: Optional[List[IntervalScorerName]] = ConfigField(
+    interval_scorers: list[IntervalScorerName] | None = ConfigField(
         title="Interval Scorers",
         default=None,
         description="Scorer names to use. None uses all recommended scorers.",

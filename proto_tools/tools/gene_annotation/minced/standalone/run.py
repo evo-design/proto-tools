@@ -1,5 +1,4 @@
-"""
-MinCED standalone runner for ToolInstance venv execution.
+"""MinCED standalone runner for ToolInstance venv execution.
 
 Handles CRISPR array detection via the minced CLI tool and output parsing.
 Communicates via JSON input/output files.
@@ -15,13 +14,13 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
 # =============================================================================
 # Output Parsing
 # =============================================================================
-def _process_minced_output(output: str) -> List[List[Dict[str, Any]]]:
+def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
     """Parse MinCED stdout into structured CRISPR array data.
 
     Args:
@@ -84,7 +83,7 @@ def _process_minced_output(output: str) -> List[List[Dict[str, Any]]]:
 
 def _run_single_minced(
     sequence: str, seq_id: str, config: dict
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run MinCED on a single nucleotide sequence.
 
     Args:
@@ -158,7 +157,7 @@ def run_minced(input_data: dict) -> dict:
     config = input_data.get("config", {})
 
     results = []
-    for seq, seq_id in zip(sequences, sequence_ids):
+    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
         result = _run_single_minced(seq, seq_id, config)
         results.append(result)
 
@@ -192,7 +191,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_minced(input_data)

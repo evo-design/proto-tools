@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_cli_tool/mock_cli_tool.py
+"""proto_tools/tools/testing/mock_cli_tool/mock_cli_tool.py.
 
 This is a minimal CLI-pattern tool that spawns a subprocess for inference,
 matching the pattern used by tools like Boltz2, RFDiffusion3, and Protenix.
-It uses get_subprocess_device_env() for device routing."""
+It uses get_subprocess_device_env() for device routing.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,10 +84,12 @@ class MockCLIToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -143,7 +146,6 @@ def run_mock_cli_tool(
     instance=None,
 ) -> MockCLIToolOutput:
     """Run mock CLI tool (subprocess-based for testing device routing)."""
-
     result = ToolInstance.dispatch(
         "mock_cli_tool",
         {

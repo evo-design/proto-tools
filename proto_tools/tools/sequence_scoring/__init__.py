@@ -1,4 +1,6 @@
-from .alphagenome import (
+"""Sequence scoring and variant effect prediction tools."""
+
+from proto_tools.tools.sequence_scoring.alphagenome import (
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
     AlphaGenomeInterval,
     AlphaGenomeISM,
@@ -31,7 +33,7 @@ from .alphagenome import (
     run_alphagenome_score_ism_variants_batch,
     run_alphagenome_score_variants,
 )
-from .borzoi import (
+from proto_tools.tools.sequence_scoring.borzoi import (
     BORZOI_CONTEXT,
     BORZOI_OUTPUT,
     BorzoiConfig,
@@ -42,7 +44,7 @@ from .borzoi import (
     run_borzoi,
     run_borzoi_ensemble,
 )
-from .enformer import (
+from proto_tools.tools.sequence_scoring.enformer import (
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
     EnformerConfig,
@@ -50,7 +52,7 @@ from .enformer import (
     EnformerOutput,
     run_enformer,
 )
-from .segmasker import SegmaskerConfig, SegmaskerInput, SegmaskerOutput, run_segmasker
+from proto_tools.tools.sequence_scoring.segmasker import SegmaskerConfig, SegmaskerInput, SegmaskerOutput, run_segmasker
 
 __all__ = [
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",

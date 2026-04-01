@@ -1,13 +1,15 @@
-"""tests/tool_infra_tests/test_export_functionality.py
+"""tests/tool_infra_tests/test_export_functionality.py.
 
-Tests for BaseToolOutput export functionality."""
+Tests for BaseToolOutput export functionality.
+"""
+
+from __future__ import annotations
 
 import json
 import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import List
 
 import pytest
 from pydantic import Field
@@ -21,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def validate_export_output(export_path: Path) -> bool:
-    """
-    Validate that an export output exists and is not empty.
+    """Validate that an export output exists and is not empty.
 
     This helper checks whether the exported output (file or directory) exists
     and contains actual data. Used in tests to verify export functionality.
@@ -56,12 +57,12 @@ def validate_export_output(export_path: Path) -> bool:
         logger.debug(f"Valid export output file found at {export_path} with size {size} bytes")
         return True
 
-    elif export_path.is_dir():
+    if export_path.is_dir():
         # For directories, check that at least one non-empty file exists
         files = list(export_path.rglob("*"))
         non_empty_files = [f for f in files if f.is_file() and f.stat().st_size > 0]
         if len(non_empty_files) == 0:
-            logger.warning(f"Export path exists and is a directory, but no non-empty files found")
+            logger.warning("Export path exists and is a directory, but no non-empty files found")
             return False
 
         logger.debug(f"Valid export output directory found at {export_path} with {len(non_empty_files)} non-empty files")
@@ -72,8 +73,7 @@ def validate_export_output(export_path: Path) -> bool:
 
 
 def validate_output(output: BaseToolOutput, check_export: bool = True):
-    """
-    Validate tool output and test export functionality.
+    """Validate tool output and test export functionality.
 
     This is a standardized helper for testing tool outputs. It checks that:
     1. The tool execution was successful (success=True)
@@ -102,7 +102,7 @@ def validate_output(output: BaseToolOutput, check_export: bool = True):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output.export(name="test_output", export_path=tmp_dir)
             export_path = Path(tmp_dir) / "test_output"
-            tool_name = output.tool_id if output.tool_id else "unknown tool"
+            tool_name = output.tool_id or "unknown tool"
 
             # Pattern 1: Directory export (path is a directory with files inside)
             if validate_export_output(export_path):
@@ -122,15 +122,14 @@ def validate_output(output: BaseToolOutput, check_export: bool = True):
             if sibling_files:
                 return
 
-            assert False, f"Export validation failed for {tool_name}"
+            raise AssertionError(f"Export validation failed for {tool_name}")
 
 
 # ── Mock tool outputs ────────────────────────────────────────────────────────
 
 
 class MockToolOutputBase(BaseToolOutput):
-    """
-    Base class for mock tool outputs in tests.
+    """Base class for mock tool outputs in tests.
 
     This class provides no-op implementations of the export abstract methods,
     allowing test mock classes to inherit from BaseToolOutput without having
@@ -141,7 +140,7 @@ class MockToolOutputBase(BaseToolOutput):
     """
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
         return []
 
     @property
@@ -150,19 +149,18 @@ class MockToolOutputBase(BaseToolOutput):
 
     def _export_output(self, export_path: Path, file_format: str):
         """No-op export for mock outputs."""
-        pass
 
 
 class MockToolOutput(BaseToolOutput):
     """Mock tool output for testing export functionality."""
 
-    data: List[str] = Field(
+    data: list[str] = Field(
         default_factory=list,
         description="Mock data for testing"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
         return ["txt", "json", "csv"]
 
     @property
@@ -176,8 +174,7 @@ class MockToolOutput(BaseToolOutput):
 
         if file_format == "txt":
             with open(path, "w") as f:
-                for item in self.data:
-                    f.write(f"{item}\n")
+                f.writelines(f"{item}\n" for item in self.data)
 
         elif file_format == "json":
             with open(path, "w") as f:
@@ -186,8 +183,7 @@ class MockToolOutput(BaseToolOutput):
         elif file_format == "csv":
             with open(path, "w") as f:
                 f.write("value\n")
-                for item in self.data:
-                    f.write(f"{item}\n")
+                f.writelines(f"{item}\n" for item in self.data)
 
 
 # ── validate_output helper ───────────────────────────────────────────────────
@@ -219,7 +215,7 @@ def test_validate_output_with_empty_export():
     """Test validate_output fails when export creates empty output."""
     class _EmptyExportOutput(BaseToolOutput):
         @property
-        def output_format_options(self) -> List[str]:
+        def output_format_options(self) -> list[str]:
             return ["txt"]
 
         @property
@@ -424,7 +420,7 @@ class _MultiFileOutput(BaseToolOutput):
     files: dict = Field(default_factory=dict)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
         return ["multi"]
 
     @property

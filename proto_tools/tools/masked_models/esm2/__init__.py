@@ -1,16 +1,18 @@
-from .esm2_embeddings import (
+"""ESM-2 protein masked language model."""
+
+from proto_tools.tools.masked_models.esm2.esm2_embeddings import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
     run_esm2_embeddings,
 )
-from .esm2_sample import (
+from proto_tools.tools.masked_models.esm2.esm2_sample import (
     ESM2SampleConfig,
     ESM2SampleInput,
     ESM2SampleOutput,
     run_esm2_sample,
 )
-from .esm2_score import (
+from proto_tools.tools.masked_models.esm2.esm2_score import (
     ESM2ScoringConfig,
     ESM2ScoringInput,
     ESM2ScoringOutput,

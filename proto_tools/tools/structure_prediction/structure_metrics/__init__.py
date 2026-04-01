@@ -1,4 +1,6 @@
-from .structure_metrics import (
+"""Structure quality metrics (pLDDT, pTM, DockQ)."""
+
+from proto_tools.tools.structure_prediction.structure_metrics.structure_metrics import (
     StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,

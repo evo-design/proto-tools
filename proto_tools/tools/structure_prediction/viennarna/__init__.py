@@ -1,4 +1,11 @@
-from .viennarna import ViennaRNAConfig, ViennaRNAInput, ViennaRNAOutput, run_viennarna
+"""ViennaRNA RNA secondary structure prediction."""
+
+from proto_tools.tools.structure_prediction.viennarna.viennarna import (
+    ViennaRNAConfig,
+    ViennaRNAInput,
+    ViennaRNAOutput,
+    run_viennarna,
+)
 
 __all__ = [
     "ViennaRNAInput",

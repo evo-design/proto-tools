@@ -1,6 +1,4 @@
-"""
-ProteinMPNN standalone inference implementation for venv execution.
-"""
+"""ProteinMPNN standalone inference implementation for venv execution."""
 from __future__ import annotations
 
 import json
@@ -10,7 +8,7 @@ import sys
 import tempfile
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # JAX memory settings - prevent preallocation
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -22,7 +20,7 @@ DEFAULT_TEMPERATURE = 1.0
 DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation
-ALPHAFOLD_VOCAB: List[str] = list("ARNDCQEGHILKMFPSTWYVX")  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
+ALPHAFOLD_VOCAB: list[str] = list("ARNDCQEGHILKMFPSTWYVX")  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
 
 # Maps model_choice to ColabDesign's model_name parameter
 _MODEL_NAME_MAP = {
@@ -35,6 +33,7 @@ class ProteinMPNNModel:
     """ProteinMPNN model for structure-conditioned protein sequence design."""
 
     def __init__(self):
+        """Initialize ProteinMPNNModel."""
         self._loaded = False
         self._model_choice = None
         self.device = None
@@ -45,19 +44,18 @@ class ProteinMPNNModel:
     def sample(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         batch_size: int,
-        temperature: Optional[float] = DEFAULT_TEMPERATURE,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
-        excluded_amino_acids: Optional[List[str]] = None,
-        seed: Optional[int] = DEFAULT_SEED,
+        temperature: float | None = DEFAULT_TEMPERATURE,
+        fixed_positions: dict[str, list[int]] | None = None,
+        excluded_amino_acids: list[str] | None = None,
+        seed: int | None = DEFAULT_SEED,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Sample protein sequences from the ProteinMPNN model.
+    ) -> dict[str, Any]:
+        """Sample protein sequences from the ProteinMPNN model.
 
         Args:
             pdb_structure: Path to PDB file or PDB content string
@@ -117,17 +115,16 @@ class ProteinMPNNModel:
     def score(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         sequence: str,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
+        fixed_positions: dict[str, list[int]] | None = None,
         seed: int = DEFAULT_SEED,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Score a protein sequence against a structure.
+    ) -> dict[str, Any]:
+        """Score a protein sequence against a structure.
 
         Args:
             pdb_structure: Path to PDB file or PDB content string
@@ -307,7 +304,7 @@ def dispatch(input_dict: dict) -> dict:
                 verbose=input_dict.get("verbose", False),
                 return_logits=input_dict.get("return_logits", False),
             )
-        elif operation == "score":
+        if operation == "score":
             return _model.score(
                 pdb_structure=pdb_structure,
                 chain_ids=input_dict.get("chain_ids", []),
@@ -319,8 +316,7 @@ def dispatch(input_dict: dict) -> dict:
                 verbose=input_dict.get("verbose", False),
                 return_logits=input_dict.get("return_logits", False),
             )
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -343,7 +339,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

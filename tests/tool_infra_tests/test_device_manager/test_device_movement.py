@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_device_movement.py
+"""tests/tool_infra_tests/test_device_manager/test_device_movement.py.
 
-Tests for moving tool instances between devices."""
+Tests for moving tool instances between devices.
+"""
 
 import time
 from unittest.mock import MagicMock, patch
@@ -154,7 +155,7 @@ def _make_instance(device_manager, tool_name="mock_pytorch_tool", instance_name=
 
 def test_cpu_to_generic_cuda(device_manager, mock_callback):
     """Tool on CPU + config says 'cuda' -> should move to GPU."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     device_manager.request_device(
         "mock_pytorch_tool", "inst", device="cpu", eviction_callback=mock_callback
@@ -172,7 +173,7 @@ def test_cpu_to_generic_cuda(device_manager, mock_callback):
 
 def test_cpu_to_specific_cuda(device_manager, mock_callback):
     """Tool on CPU + config says 'cuda:1' -> should move to cuda:1."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     input_dict = {"device": "cuda:1"}
     with patch.object(inst, "_to", wraps=inst._to) as mock_to:
@@ -183,7 +184,7 @@ def test_cpu_to_specific_cuda(device_manager, mock_callback):
 
 def test_wrong_gpu_to_specific_cuda(device_manager, mock_callback):
     """Tool on cuda:0 + config says 'cuda:1' -> should move to cuda:1."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     device_manager.request_device(
         "mock_pytorch_tool", "inst", device="cuda:0", eviction_callback=mock_callback
@@ -199,7 +200,7 @@ def test_wrong_gpu_to_specific_cuda(device_manager, mock_callback):
 
 def test_already_on_correct_gpu_no_move(device_manager, mock_callback):
     """Tool on cuda:0 + config says 'cuda:0' -> no move needed."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     device_manager.request_device(
         "mock_pytorch_tool", "inst", device="cuda:0", eviction_callback=mock_callback
@@ -215,7 +216,7 @@ def test_already_on_correct_gpu_no_move(device_manager, mock_callback):
 
 def test_generic_cuda_already_on_gpu_no_move(device_manager, mock_callback):
     """Tool on cuda:0 + config says 'cuda' -> no move (already on a GPU)."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     device_manager.request_device(
         "mock_pytorch_tool", "inst", device="cuda:0", eviction_callback=mock_callback
@@ -231,7 +232,7 @@ def test_generic_cuda_already_on_gpu_no_move(device_manager, mock_callback):
 
 def test_gpu_to_cpu(device_manager, mock_callback):
     """Tool on cuda:0 + config says 'cpu' -> should move to CPU."""
-    inst, mock_worker = _make_instance(device_manager)
+    inst, _mock_worker = _make_instance(device_manager)
 
     device_manager.request_device(
         "mock_pytorch_tool", "inst", device="cuda:0", eviction_callback=mock_callback

@@ -1,21 +1,19 @@
-"""proto_tools/tools/gene_annotation/pyhmmer/nhmmer.py
+"""proto_tools/tools/gene_annotation/pyhmmer/nhmmer.py.
 
-PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences."""
+PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences.
+"""
 from __future__ import annotations
-
-from typing import List
 
 from pydantic import field_validator
 
-from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
-
-from .shared_data_models import (
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
     _build_dataframes,
 )
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import InputField, ToolInstance
 
 
 # ============================================================================
@@ -35,19 +33,19 @@ class PyNhmmerInput(PyHmmerInput):
             strings.
     """
 
-    target_sequences: List[str] = InputField(
+    target_sequences: list[str] = InputField(
         description="Target nucleotide sequences as: single sequence string or list of sequence strings"
     )
 
     @field_validator("target_sequences", mode="before")
     @classmethod
-    def normalize_target_sequences(cls, value) -> List[str]:
+    def normalize_target_sequences(cls, value) -> list[str]:
         """Normalize target sequences to list of strings."""
         return PyHmmerInput.normalize_sequences(value)
 
     @field_validator("target_sequences")
     @classmethod
-    def validate_target_sequences(cls, sequences: List[str]) -> List[str]:
+    def validate_target_sequences(cls, sequences: list[str]) -> list[str]:
         """Validate target sequences are non-empty."""
         return PyHmmerInput.validate_sequences(sequences)
 
@@ -90,10 +88,11 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
         config (PyNhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         PyNhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

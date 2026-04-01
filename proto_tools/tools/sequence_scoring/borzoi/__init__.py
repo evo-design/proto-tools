@@ -1,9 +1,11 @@
-from .borzoi_ensemble import (
+"""Borzoi genomic sequence-to-function prediction."""
+
+from proto_tools.tools.sequence_scoring.borzoi.borzoi_ensemble import (
     BorzoiEnsembleConfig,
     BorzoiEnsembleOutput,
     run_borzoi_ensemble,
 )
-from .borzoi_prediction import (
+from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
     BORZOI_CONTEXT,
     BORZOI_OUTPUT,
     BorzoiConfig,

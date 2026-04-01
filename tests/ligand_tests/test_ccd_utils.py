@@ -1,6 +1,7 @@
-"""tests/ligand_tests/test_ccd_utils.py
+"""tests/ligand_tests/test_ccd_utils.py.
 
-Tests for CCD utilities (SMILES / CCD code mapping)."""
+Tests for CCD utilities (SMILES / CCD code mapping).
+"""
 
 import pytest
 

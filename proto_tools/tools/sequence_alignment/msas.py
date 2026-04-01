@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/sequence_alignment/msas.py
+"""proto_tools/tools/sequence_alignment/msas.py.
 
 Contains class for representing multiple sequence alignments (MSAs).
 """
@@ -10,8 +9,8 @@ import os
 import shutil
 import warnings
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
 
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
@@ -34,8 +33,8 @@ class MSA:
 
     def __init__(
         self,
-        aligned_sequences_or_filepath: List[str] | str,
-        sequence_ids: Optional[List[str]] = None,
+        aligned_sequences_or_filepath: list[str] | str,
+        sequence_ids: list[str] | None = None,
     ) -> None:
         """Initialize the MSA object.
 
@@ -46,9 +45,8 @@ class MSA:
                 with '-' characters indicating gaps, or a path to an A3M/FASTA file.
             sequence_ids (list[str] | None): Optional list of sequence identifiers (only used when providing sequences directly).
         """
-
         self._in_memory = False
-        self._temp_fasta_path: Optional[Path] = None
+        self._temp_fasta_path: Path | None = None
 
         # ============================
         # In-memory initialization
@@ -139,17 +137,16 @@ class MSA:
             for seq_id in self._sequence_ids:
                 yield self._fasta[seq_id][:]
 
-    def iter_with_ids(self) -> Iterator[Tuple[str, str]]:
+    def iter_with_ids(self) -> Iterator[tuple[str, str]]:
+        """Iterate over aligned sequences yielding (identifier, sequence) pairs."""
         if self._in_memory:
-            yield from zip(self._sequence_ids, self._aligned_sequences)
+            yield from zip(self._sequence_ids, self._aligned_sequences, strict=False)
         else:
             for seq_id in self._sequence_ids:
                 yield seq_id, self._fasta[seq_id][:]
 
     def rm_temp_files(self) -> None:
-        """
-        Deletes the temporary FASTA file and its index file if they exist
-        """
+        """Deletes the temporary FASTA file and its index file if they exist."""
         if self._temp_fasta_path and self._temp_fasta_path.exists():
             os.remove(self._temp_fasta_path)
             fai = self._temp_fasta_path.with_suffix(
@@ -167,13 +164,12 @@ class MSA:
     def __getitem__(self, idx: int) -> str:
         if self._in_memory:
             return self._aligned_sequences[idx]
-        else:
-            return self._fasta[self._sequence_ids[idx]][:]
+        return self._fasta[self._sequence_ids[idx]][:]
 
     def __enter__(self):
         """Allows the MSA to be used as a context manager.
-        Example:
 
+        Example:
         with MSA(msa_filepath_or_aligned_sequences="path/to/msa.fasta") as msa:
             # Use the MSA
             pass
@@ -185,8 +181,10 @@ class MSA:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Deletes the temporary FASTA file and its index file if they exist
-        when the MSA is exited as a context manager."""
+        """Deletes the temporary FASTA file and its index file if they exist.
+
+        when the MSA is exited as a context manager.
+        """
         self.rm_temp_files()
 
     def __str__(self) -> str:
@@ -200,8 +198,9 @@ class MSA:
     # ============================
 
     @property
-    def aligned_sequences(self) -> List[str]:
-        """Get a list containing the aligned sequences. If the MSA is not
+    def aligned_sequences(self) -> list[str]:
+        """Get a list containing the aligned sequences. If the MSA is not.
+
         in-memory, this will convert the MSA to an in-memory representation.
 
         WARNING: It is highly recommended to use __iter__ or access via indexing
@@ -209,32 +208,30 @@ class MSA:
         """
         if self._in_memory:
             return self._aligned_sequences
-        else:
-            warnings.warn(
-                "Converting to in-memory representation from file. This may be slow."
-            )
-            self._aligned_sequences = [
-                self._fasta[seq_id][:] for seq_id in self._sequence_ids
-            ]
-            self._in_memory = True
-            self.rm_temp_files()
-            return self._aligned_sequences
+        warnings.warn(
+            "Converting to in-memory representation from file. This may be slow.", stacklevel=2
+        )
+        self._aligned_sequences = [
+            self._fasta[seq_id][:] for seq_id in self._sequence_ids
+        ]
+        self._in_memory = True
+        self.rm_temp_files()
+        return self._aligned_sequences
 
     @property
-    def original_sequences(self) -> List[str]:
+    def original_sequences(self) -> list[str]:
         """Get the list of original sequences (without gap characters)."""
         if self._original_sequences is None and self.num_sequences < MAX_SEQS_IN_MEMORY:
             self._original_sequences = [
                 seq.replace("-", "") for seq in self._aligned_sequences
             ]
             return self._original_sequences
-        elif self._original_sequences is not None:
+        if self._original_sequences is not None:
             return self._original_sequences
-        else:
-            return [seq.replace("-", "") for seq in self.aligned_sequences]
+        return [seq.replace("-", "") for seq in self.aligned_sequences]
 
     @property
-    def sequence_ids(self) -> List[str]:
+    def sequence_ids(self) -> list[str]:
         """Get the list of sequence IDs."""
         return self._sequence_ids
 
@@ -257,10 +254,9 @@ class MSA:
         """Returns the total number of gaps in the MSA."""
         if self._in_memory:
             return sum(seq.count("-") for seq in self._aligned_sequences)
-        else:
-            return sum(
-                self._fasta[seq_id][:].count("-") for seq_id in self._sequence_ids
-            )
+        return sum(
+            self._fasta[seq_id][:].count("-") for seq_id in self._sequence_ids
+        )
 
     @property
     def average_gap_fraction(self) -> float:
@@ -276,20 +272,19 @@ class MSA:
                 )
                 / self.num_sequences
             )
-        else:
-            return (
-                sum(
-                    self._fasta[seq_id][:].count("-") / self.alignment_length
-                    for seq_id in self._sequence_ids
-                )
-                / self.num_sequences
+        return (
+            sum(
+                self._fasta[seq_id][:].count("-") / self.alignment_length
+                for seq_id in self._sequence_ids
             )
+            / self.num_sequences
+        )
 
     # ============================
     # Column Statistics
     # ============================
 
-    def get_column(self, position: int) -> List[str]:
+    def get_column(self, position: int) -> list[str]:
         """Returns the characters at the given position in the MSA."""
         if position < 0 or position >= self._alignment_length:
             raise IndexError(
@@ -298,8 +293,7 @@ class MSA:
 
         if self._in_memory:
             return [seq[position] for seq in self._aligned_sequences]
-        else:
-            return [self._fasta[seq_id][position] for seq_id in self._sequence_ids]
+        return [self._fasta[seq_id][position] for seq_id in self._sequence_ids]
 
     def get_conservation(self, position: int, exclude_gaps: bool = True) -> float:
         """Fraction of sequences with the most common character at position."""
@@ -312,7 +306,7 @@ class MSA:
 
     def get_position_frequencies(
         self, position: int, include_gaps: bool = False
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Returns the character frequencies at the given position in the MSA."""
         column = self.get_column(position)
         counts = (
@@ -341,8 +335,7 @@ class MSA:
         else:
             # In-memory: write sequences one by one
             with open(fasta_path, "w") as f:
-                for seq_id, seq in self.iter_with_ids():
-                    f.write(f">{seq_id}\n{seq}\n")
+                f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in self.iter_with_ids())
 
     def to_a3m_string(self, query_index: int = 0) -> str:
         """Returns the MSA as an A3M format string.
@@ -374,7 +367,7 @@ class MSA:
         query_gap_positions = {i for i, char in enumerate(query_seq) if char == "-"}
 
         lines = []
-        for idx, (seq_id, seq) in enumerate(self.iter_with_ids()):
+        for _idx, (seq_id, seq) in enumerate(self.iter_with_ids()):
             lines.append(f">{seq_id}")
 
             a3m_seq = []
@@ -439,8 +432,8 @@ class MSA:
     # ============================
     @classmethod
     def __get_pydantic_core_schema__(cls, source, handler):
-        """
-        Accept either:
+        """Accept either:.
+
         - an existing MSA
         - a list[str] of aligned sequences
         - a string filepath
@@ -463,10 +456,9 @@ class MSA:
             # For large file-backed MSAs, this will convert to in-memory
             if instance._in_memory:
                 return instance._aligned_sequences
-            else:
-                # For large file-backed MSAs, we need to serialize as list
-                # This may be memory intensive but is necessary for serialization
-                return list(instance)
+            # For large file-backed MSAs, we need to serialize as list
+            # This may be memory intensive but is necessary for serialization
+            return list(instance)
 
         # Create a schema that validates from Python objects
         from_python_schema = core_schema.no_info_plain_validator_function(validate)
@@ -494,9 +486,7 @@ class MSA:
         core_schema,
         handler,
     ) -> JsonSchemaValue:
-        """
-        JSON schema representation of an MSA.
-        """
+        """JSON schema representation of an MSA."""
         return {
             "title": "MSA",
             "description": (
@@ -525,8 +515,7 @@ def convert_a3m_to_fasta(
     a3m_path: str,
     fasta_path: str,
 ) -> Path:
-    """
-    Convert an A3M file to a rectangular FASTA MSA with '-' for gaps.
+    """Convert an A3M file to a rectangular FASTA MSA with '-' for gaps.
 
     Args:
         a3m_path (str): Path to input A3M.
@@ -535,10 +524,9 @@ def convert_a3m_to_fasta(
     Raises:
         FileNotFoundError: If the A3M file does not exist.
     """
-
-    with open(a3m_path, "r") as a3m_f, open(fasta_path, "w") as fasta_f:
-        for line in a3m_f:
-            line = line.replace("\x00", "").rstrip()
+    with open(a3m_path) as a3m_f, open(fasta_path, "w") as fasta_f:
+        for raw_line in a3m_f:
+            line = raw_line.replace("\x00", "").rstrip()
             if not line:
                 continue
             if line.startswith(">"):

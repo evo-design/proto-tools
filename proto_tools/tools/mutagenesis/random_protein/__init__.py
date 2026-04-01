@@ -1,4 +1,6 @@
-from .random_protein_sample import (
+"""Random protein mutagenesis."""
+
+from proto_tools.tools.mutagenesis.random_protein.random_protein_sample import (
     RandomProteinSampleConfig,
     RandomProteinSampleInput,
     RandomProteinSampleOutput,

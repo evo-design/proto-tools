@@ -1,13 +1,10 @@
-"""
-MMseqs2 binary download and extraction configuration.
+"""MMseqs2 binary download and extraction configuration.
 
 Provides platform-specific download URLs and extraction logic for MMseqs2.
 Used by the shared install_binary.py utility during venv setup.
 
 Archive structure: mmseqs/bin/mmseqs (single static binary)
 """
-
-from __future__ import annotations
 
 import stat
 import tarfile

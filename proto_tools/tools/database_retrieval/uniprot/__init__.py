@@ -1,4 +1,6 @@
-from .uniprot_fetch import (
+"""UniProt protein record retrieval."""
+
+from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,

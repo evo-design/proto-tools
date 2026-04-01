@@ -1,5 +1,4 @@
-"""
-Structure metrics standalone runner for ToolInstance venv execution.
+"""Structure metrics standalone runner for ToolInstance venv execution.
 
 Computes longest alpha helix length and gyration radius from PDB files
 using biotite for SSE annotation and structural analysis.
@@ -12,7 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -48,7 +47,7 @@ def _longest_alpha(sse: np.ndarray) -> int:
     return max(lens, default=0)
 
 
-def _compute_metrics(pdb_path: str) -> Dict[str, Any]:
+def _compute_metrics(pdb_path: str) -> dict[str, Any]:
     """Compute structure metrics for a single PDB file.
 
     Args:
@@ -119,7 +118,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_structure_metrics(input_data)

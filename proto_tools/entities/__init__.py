@@ -1,6 +1,6 @@
 """Entities: structures and ligands."""
 
-from .ligands import (
+from proto_tools.entities.ligands import (
     CCD_DATABASE_PATH,
     Fragment,
     Ligands,
@@ -12,7 +12,7 @@ from .ligands import (
     map_ccd_code_to_smiles,
     map_smiles_to_ccd_code,
 )
-from .structures import (
+from proto_tools.entities.structures import (
     GFP_CIF_PATH,
     BFactorType,
     Structure,

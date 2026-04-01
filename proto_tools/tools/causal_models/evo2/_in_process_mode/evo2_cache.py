@@ -1,11 +1,12 @@
-"""proto_tools/tools/causal_models/evo2/_in_process_mode/evo2_cache.py
+"""proto_tools/tools/causal_models/evo2/_in_process_mode/evo2_cache.py.
 
-Model cache helpers for Evo2."""
+Model cache helpers for Evo2.
+"""
 from __future__ import annotations
 
-from typing import Dict, Literal, Optional
+from typing import Literal
 
-from ..standalone.inference import Evo2Model
+from proto_tools.tools.causal_models.evo2.standalone.inference import Evo2Model
 
 EVO2_MODEL_CHECKPOINTS = Literal[
     "evo2_7b",
@@ -17,12 +18,12 @@ EVO2_MODEL_CHECKPOINTS = Literal[
     "evo2_7b_microviridae",
 ]
 
-_evo2_model_cache: Dict[str, Evo2Model] = {}
+_evo2_model_cache: dict[str, Evo2Model] = {}
 
 
 def get_cached_evo2_model(
     model_checkpoint: EVO2_MODEL_CHECKPOINTS,
-    local_path: Optional[str] = None,
+    local_path: str | None = None,
 ) -> Evo2Model:
     """Get or create cached Evo2 model instance."""
     cache_key = f"{model_checkpoint}:{local_path}"

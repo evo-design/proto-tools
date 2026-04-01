@@ -1,7 +1,9 @@
-from .examples import GFP_CIF_PATH, get_gfp_structure
-from .structure import BFactorType, Structure
-from .structure_ensemble import StructureEnsemble
-from .utils import (
+"""Macromolecular structure representations and format conversion."""
+
+from proto_tools.entities.structures.examples import GFP_CIF_PATH, get_gfp_structure
+from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure_ensemble import StructureEnsemble
+from proto_tools.entities.structures.utils import (
     adjacent_distances,
     convert_cif_str_to_pdb_str,
     convert_pdb_str_to_cif_str,

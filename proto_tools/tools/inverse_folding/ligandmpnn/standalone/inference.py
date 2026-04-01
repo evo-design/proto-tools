@@ -1,6 +1,4 @@
-"""
-LigandMPNN inference implementation using Foundry.
-"""
+"""LigandMPNN inference implementation using Foundry."""
 from __future__ import annotations
 
 import gc
@@ -10,7 +8,7 @@ import sys
 import tempfile
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -18,6 +16,7 @@ from standalone_helpers import move_model_to_device
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
+# TODO: Standardize where this seed is set
 DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation (standard MPNN)
@@ -28,8 +27,9 @@ class LigandMPNNModel:
 
     def __init__(
         self,
-        checkpoint_path: Optional[str] = None,
+        checkpoint_path: str | None = None,
     ):
+        """Initialize LigandMPNNModel."""
         self._loaded = False
         self._engine = None
         self.device = None
@@ -38,17 +38,16 @@ class LigandMPNNModel:
     def sample(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         batch_size: int,
         temperature: float = DEFAULT_TEMPERATURE,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
-        excluded_amino_acids: Optional[List[str]] = None,
+        fixed_positions: dict[str, list[int]] | None = None,
+        excluded_amino_acids: list[str] | None = None,
         seed: int = DEFAULT_SEED,
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Sample protein sequences using LigandMPNN.
+    ) -> dict[str, Any]:
+        """Sample protein sequences using LigandMPNN.
 
         Args:
             pdb_structure: Path to PDB file containing the structure.
@@ -65,9 +64,7 @@ class LigandMPNNModel:
             Dictionary with keys: sequences, metrics
         """
         # Lazy load the model
-        if not self._loaded:
-            self.load(device, verbose)
-        elif self.device != device:
+        if not self._loaded or self.device != device:
             self.load(device, verbose)
 
         # Build fixed_residues list from fixed_positions dict
@@ -109,8 +106,8 @@ class LigandMPNNModel:
         results = self._engine.run(input_dicts=[input_dict])
 
         # Extract sequences and metrics
-        sequences: List[str] = []
-        metrics: List[Dict[str, Any]] = []
+        sequences: list[str] = []
+        metrics: list[dict[str, Any]] = []
         for output in results:
             sequences.append(output.output_dict["designed_sequence"])
             metrics.append(output.output_dict)
@@ -121,15 +118,14 @@ class LigandMPNNModel:
     def score(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         sequence: str,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
+        fixed_positions: dict[str, list[int]] | None = None,
         seed: int = DEFAULT_SEED,
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Score a protein sequence against a structure via forward pass.
+    ) -> dict[str, Any]:
+        """Score a protein sequence against a structure via forward pass.
 
         Computes logits for the sequence given the structure, then calculates
         scoring metrics (log_likelihood, avg_log_likelihood, perplexity) from
@@ -149,7 +145,7 @@ class LigandMPNNModel:
                 - logits: Per-position logits array (seq_len, vocab_size)
                 - metrics: Dict with log_likelihood, avg_log_likelihood, perplexity
         """
-        raise NotImplementedError("LigandMPNN scoring is not yet implemented")
+        # TODO: Implement LigandMPNN scoring
 
     def load(self, device: str = "cuda", verbose: bool = False):
         """Load the LigandMPNN model via Foundry."""
@@ -261,7 +257,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        elif operation == "score":
+        if operation == "score":
             return _model.score(
                 pdb_structure=pdb_structure,
                 chain_ids=input_dict.get("chain_ids", []),
@@ -271,8 +267,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -282,9 +277,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -300,7 +294,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

@@ -1,5 +1,4 @@
-"""
-Orfipy standalone runner for ToolInstance venv execution.
+"""Orfipy standalone runner for ToolInstance venv execution.
 
 Handles ORF prediction via the orfipy CLI tool and FASTA output parsing.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -16,15 +15,14 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 # =============================================================================
 # Parsing Utilities
 # =============================================================================
-def _parse_orfipy_header(header: str) -> Optional[Dict[str, Any]]:
-    """
-    Parse Orfipy FASTA header to extract ORF information.
+def _parse_orfipy_header(header: str) -> dict[str, Any] | None:
+    """Parse Orfipy FASTA header to extract ORF information.
 
     Args:
         header: Orfipy FASTA header string.
@@ -157,8 +155,8 @@ def run_orfipy(input_data: dict) -> dict:
             )
 
         # Group ORFs by parent sequence index
-        orfs_by_seq: Dict[int, List[Dict[str, Any]]] = {i: [] for i in range(len(sequences))}
-        for aa_record, nt_record in zip(aa_records, nt_records):
+        orfs_by_seq: dict[int, list[dict[str, Any]]] = {i: [] for i in range(len(sequences))}
+        for aa_record, nt_record in zip(aa_records, nt_records, strict=False):
             parsed_info = _parse_orfipy_header(aa_record.description)
             if not parsed_info:
                 continue
@@ -216,7 +214,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_orfipy(input_data)

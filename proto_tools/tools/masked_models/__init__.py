@@ -1,4 +1,6 @@
-from .esm2 import (
+"""Masked language models for protein sequence editing."""
+
+from proto_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
@@ -12,7 +14,7 @@ from .esm2 import (
     run_esm2_sample,
     run_esm2_score,
 )
-from .esm3 import (
+from proto_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsConfig,
     ESM3EmbeddingsInput,
     ESM3EmbeddingsOutput,
@@ -26,11 +28,8 @@ from .esm3 import (
     run_esm3_sample,
     run_esm3_score,
 )
-from .masking import (
-    MaskingMethod,
-    MaskingStrategy,
-)
-from .shared_data_models import SequenceEmbedding
+from proto_tools.tools.masked_models.masking import MaskingMethod, MaskingStrategy
+from proto_tools.tools.masked_models.shared_data_models import SequenceEmbedding
 
 __all__ = [
     # Masking strategies

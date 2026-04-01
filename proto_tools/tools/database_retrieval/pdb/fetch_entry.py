@@ -1,26 +1,24 @@
-"""proto_tools/tools/database_retrieval/pdb/fetch_entry.py
+"""proto_tools/tools/database_retrieval/pdb/fetch_entry.py.
 
 Wraps the RCSB PDB REST API core entry endpoint for fetching title,
-experimental method, and resolution for a PDB accession."""
+experimental method, and resolution for a PDB accession.
+"""
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import Field
 
+from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
+    _PDB_ENTRY_BASE,
+    PdbFetchConfig,
+    _fetch_pdb_entry,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     InputField,
     build_http_session,
-)
-
-from .shared_data_models import (
-    _PDB_ENTRY_BASE,
-    PdbFetchConfig,
-    _fetch_pdb_entry,
 )
 
 # ============================================================================
@@ -48,17 +46,19 @@ class PdbFetchEntryOutput(BaseToolOutput):
         source_url (str | None): URL used for the request.
     """
 
-    title: Optional[str] = Field(default=None, description="Structure title")
-    method: Optional[str] = Field(default=None, description="Experimental method")
-    resolution: Optional[float] = Field(default=None, description="Resolution in angstroms")
-    source_url: Optional[str] = Field(default=None, description="Request URL")
+    title: str | None = Field(default=None, description="Structure title")
+    method: str | None = Field(default=None, description="Experimental method")
+    resolution: float | None = Field(default=None, description="Resolution in angstroms")
+    source_url: str | None = Field(default=None, description="Request URL")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -109,6 +109,8 @@ def run_pdb_fetch_entry(
     Args:
         inputs (PdbFetchEntryInput): PDB accession to look up.
         config (PdbFetchConfig | None): HTTP timeout and retry settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.

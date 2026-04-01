@@ -1,6 +1,9 @@
-"""tests/tool_infra_tests/test_base_tool_output.py
+"""tests/tool_infra_tests/test_base_tool_output.py.
 
-Tests for BaseToolOutput."""
+Tests for BaseToolOutput.
+"""
+
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -11,12 +14,12 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
 class _SimpleToolOutput(MockToolOutputBase):
-    """Example tool output for testing"""
+    """Example tool output for testing."""
     result: str = Field(description="Simple result string")
 
 
 class _ComplexToolOutput(MockToolOutputBase):
-    """Example complex tool output for testing"""
+    """Example complex tool output for testing."""
     sequences: list[str] = Field(description="Output sequences")
     scores: list[float] = Field(description="Quality scores")
     count: int = Field(description="Number of results")

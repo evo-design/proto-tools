@@ -1,6 +1,4 @@
-"""
-ESM-IF/ProteinDPO inference implementation for standalone venv execution.
-"""
+"""ESM-IF/ProteinDPO inference implementation for standalone venv execution."""
 from __future__ import annotations
 
 import gc
@@ -11,7 +9,7 @@ import sys
 import tempfile
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -26,6 +24,7 @@ class ESMIF1Model:
     """ESM-IF1/ProteinDPO model for structure-conditioned inverse folding."""
 
     def __init__(self):
+        """Initialize ESMIF1Model."""
         self._loaded = False
         self.device = None
         self.model = None
@@ -35,7 +34,7 @@ class ESMIF1Model:
     def _load_structure(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
     ):
         """Load structure and extract coords for the complex.
 
@@ -53,15 +52,15 @@ class ESMIF1Model:
         all_coords, all_native_seqs = (
             esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
         )
-        target_chain = chain_ids[0] if chain_ids else list(all_coords.keys())[0]
+        target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))
         return all_coords, all_native_seqs, target_chain
 
     def _sample_with_fixed_positions(
         self,
-        all_coords: Dict,
-        all_native_seqs: Dict,
+        all_coords: dict,
+        all_native_seqs: dict,
         target_chain: str,
-        fixed_pos: List[int],
+        fixed_pos: list[int],
         temperature: float,
     ) -> str:
         """Sample a sequence with certain positions fixed to native residues.
@@ -116,15 +115,15 @@ class ESMIF1Model:
     def sample(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         batch_size: int,
         temperature: float = DEFAULT_TEMPERATURE,
         seed: int = DEFAULT_SEED,
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
-        fixed_positions: Dict[str, List[int]] | None = None,
-    ) -> Dict[str, Any]:
+        fixed_positions: dict[str, list[int]] | None = None,
+    ) -> dict[str, Any]:
         """Sample sequences using ESM-IF autoregressive decoder.
 
         Args:
@@ -188,12 +187,12 @@ class ESMIF1Model:
     def score(
         self,
         pdb_structure: str,
-        chain_ids: List[str],
+        chain_ids: list[str],
         sequence: str,
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Score a sequence against a structure using the score_complex approach.
 
         Uses score_sequence_in_complex to score the full sequence with
@@ -218,7 +217,7 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, all_native_seqs, target_chain = self._load_structure(
+        all_coords, _all_native_seqs, target_chain = self._load_structure(
             pdb_structure, chain_ids
         )
 
@@ -370,7 +369,7 @@ def dispatch(input_dict: dict) -> dict:
                 verbose=input_dict.get("verbose", False),
                 fixed_positions=input_dict.get("fixed_positions"),
             )
-        elif operation == "score":
+        if operation == "score":
             return _model.score(
                 pdb_structure=pdb_structure,
                 chain_ids=input_dict.get("chain_ids", []),
@@ -379,8 +378,7 @@ def dispatch(input_dict: dict) -> dict:
                 weights_variant=input_dict.get("weights_variant", "protein_dpo"),
                 verbose=input_dict.get("verbose", False),
             )
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"Unknown operation: {operation}")
 
 
 def to_device(device: str) -> dict:
@@ -389,8 +387,7 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -408,7 +405,7 @@ if __name__ == "__main__":
             "Usage: python inference.py <input_json_path> <output_json_path>"
         )
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

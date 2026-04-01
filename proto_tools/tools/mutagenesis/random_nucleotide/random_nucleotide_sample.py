@@ -1,12 +1,13 @@
-"""proto_tools/tools/mutagenesis/random_nucleotide/random_nucleotide_sample.py
+"""proto_tools/tools/mutagenesis/random_nucleotide/random_nucleotide_sample.py.
 
-Random nucleotide sampling with IUPAC degenerate base support."""
+Random nucleotide sampling with IUPAC degenerate base support.
+"""
 from __future__ import annotations
 
 import logging
 import random
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -44,14 +45,14 @@ class RandomNucleotideSampleInput(BaseToolInput):
             positions to mutate. Accepts a single string or a list.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="DNA/RNA sequence(s) to mutate. May contain '_' at positions to sample.",
         examples=["ACGTACGT", ["ACGT_CGT", "AUGC"]],
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize sequences to a list."""
         if isinstance(value, str):
             return [value]
@@ -69,16 +70,18 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
             by random bases drawn from the configured substitution scheme.
     """
 
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Nucleotide sequences with masked positions randomly filled",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -86,12 +89,10 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "txt":
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
             import json
 
@@ -132,7 +133,7 @@ class RandomNucleotideSampleConfig(BaseConfig):
         description="Sequence type: auto-detect, force DNA, or force RNA.",
         hidden=True,
     )
-    seed: Optional[int] = ConfigField(
+    seed: int | None = ConfigField(
         title="Random Seed",
         default=None,
         description="Random seed for reproducible sampling.",
@@ -191,7 +192,7 @@ def example_input():
 def run_random_nucleotide_sample(
     inputs: RandomNucleotideSampleInput,
     config: RandomNucleotideSampleConfig | None = None,
-    instance=None,
+    instance=None,  # noqa: ARG001 — required by tool interface
 ) -> RandomNucleotideSampleOutput:
     """Fill masked positions with random nucleotides from an IUPAC scheme.
 
@@ -205,10 +206,12 @@ def run_random_nucleotide_sample(
         inputs (RandomNucleotideSampleInput): Nucleotide sequences with ``_`` at designable positions.
         config (RandomNucleotideSampleConfig | None): Sampling configuration.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None
+    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
     scheme = config.substitution_scheme
 
     # Resolve sequence type

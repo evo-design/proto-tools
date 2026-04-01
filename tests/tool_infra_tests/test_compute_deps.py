@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_compute_deps.py
+"""tests/tool_infra_tests/test_compute_deps.py.
 
-Tests for centralized compute dependency detection."""
+Tests for centralized compute dependency detection.
+"""
 
 from unittest.mock import patch
 

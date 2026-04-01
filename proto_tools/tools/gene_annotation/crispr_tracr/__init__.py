@@ -1,4 +1,6 @@
-from .crispr_tracr import (
+"""CRISPR tracrRNA prediction."""
+
+from proto_tools.tools.gene_annotation.crispr_tracr.crispr_tracr import (
     CrisprTracrConfig,
     CrisprTracrInput,
     CrisprTracrOutput,

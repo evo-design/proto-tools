@@ -1,6 +1,7 @@
-"""tests/masked_models_tests/test_sampling.py
+"""tests/masked_models_tests/test_sampling.py.
 
-Integration tests for sampling tools (masked models + random mutagenesis)."""
+Integration tests for sampling tools (masked models + random mutagenesis).
+"""
 import pytest
 
 from proto_tools.tools.masked_models.esm2 import (
@@ -31,8 +32,8 @@ from proto_tools.utils.sequence import (
 
 # Validators per entity type
 _VALIDATORS = {
-    "protein": lambda seq: return_invalid_protein_chars(seq),
-    "nucleotide": lambda seq: return_invalid_dna_chars(seq),
+    "protein": return_invalid_protein_chars,
+    "nucleotide": return_invalid_dna_chars,
 }
 
 # ── Protein sampling tools ────────────────────────────────────────────────────
@@ -90,13 +91,13 @@ def _validate_sample_output(sequences, result_sequences, entity_type):
     """Shared assertions for all sampling tests."""
     assert len(result_sequences) == len(sequences)
     validator = _VALIDATORS[entity_type]
-    for orig, sampled in zip(sequences, result_sequences):
+    for orig, sampled in zip(sequences, result_sequences, strict=False):
         # Length preserved
         assert len(sampled) == len(orig)
         # All masks filled
         assert "_" not in sampled
         # Non-masked positions unchanged
-        for i, (o, s) in enumerate(zip(orig, sampled)):
+        for i, (o, s) in enumerate(zip(orig, sampled, strict=False)):
             if o != "_":
                 assert s == o, f"Position {i}: expected '{o}', got '{s}'"
         # All characters are valid for this entity type
@@ -135,7 +136,7 @@ def test_protein_sample_fills_masks(
     if has_logits:
         assert result.logits is not None, "Logits should be returned"
         assert len(result.logits) == len(sequences)
-        for seq, logits in zip(sequences, result.logits):
+        for seq, logits in zip(sequences, result.logits, strict=False):
             assert len(logits) == len(seq), (
                 f"Expected {len(seq)} positions, got {len(logits)}"
             )
@@ -190,7 +191,7 @@ def test_protein_sample_masking_strategy_integration(
 
     # At most 3 positions can differ (could be fewer if the sampler
     # produces the original character at a masked position)
-    diffs = sum(a != b for a, b in zip(sequences[0], result.sequences[0]))
+    diffs = sum(a != b for a, b in zip(sequences[0], result.sequences[0], strict=False))
     assert diffs <= 3, f"Expected at most 3 mutations, got {diffs}"
 
 
@@ -213,7 +214,7 @@ def test_nucleotide_sample_masking_strategy_integration(
     invalid = _VALIDATORS[entity_type](result.sequences[0])
     assert not invalid, f"Invalid characters in output: {invalid}"
 
-    diffs = sum(a != b for a, b in zip(sequences[0], result.sequences[0]))
+    diffs = sum(a != b for a, b in zip(sequences[0], result.sequences[0], strict=False))
     assert diffs <= 3, f"Expected at most 3 mutations, got {diffs}"
 
 

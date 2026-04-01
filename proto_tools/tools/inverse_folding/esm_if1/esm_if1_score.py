@@ -1,11 +1,12 @@
-"""proto_tools/tools/inverse_folding/esm_if1/esm_if1_score.py
+"""proto_tools/tools/inverse_folding/esm_if1/esm_if1_score.py.
 
-ESM-IF1/ProteinDPO scoring tool."""
+ESM-IF1/ProteinDPO scoring tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal
+from typing import Literal
 
 from tqdm import tqdm
 
@@ -33,7 +34,7 @@ class ESMIF1ScoringInput(BaseToolInput):
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
-    sequence_structure_pairs: List[SequenceStructurePair] = InputField(
+    sequence_structure_pairs: list[SequenceStructurePair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 
@@ -122,6 +123,8 @@ def run_esm_if1_score(
     Args:
         inputs (ESMIF1ScoringInput): Sequence-structure pairs to score.
         config (ESMIF1ScoringConfig | None): Configuration including weights variant.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMIF1ScoringOutput: ESMIF1ScoringOutput with scores for each input pair.

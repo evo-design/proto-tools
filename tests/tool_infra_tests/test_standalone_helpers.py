@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_standalone_helpers.py
+"""tests/tool_infra_tests/test_standalone_helpers.py.
 
-Tests for standalone_helpers.py."""
+Tests for standalone_helpers.py.
+"""
 
 import os
 
@@ -266,7 +267,7 @@ def test_invalid_device_empty_cvd_gets_jax_cpu(monkeypatch):
 
 # ── resolve_weights_dir ──────────────────────────────────────────────────────
 
-from proto_tools.utils.standalone_helpers_source.standalone_helpers import (
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import (  # noqa: E402 -- grouped with tests below
     resolve_weights_dir,
 )
 

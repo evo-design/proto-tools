@@ -1,14 +1,15 @@
-"""proto_tools/tools/database_retrieval/ncbi/shared_data_models.py
+"""proto_tools/tools/database_retrieval/ncbi/shared_data_models.py.
 
 Contains configuration, FASTA record models, and private helpers used
-by esearch, esummary, and efetch tool modules."""
+by esearch, esummary, and efetch tool modules.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
 from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import requests
 from Bio import SeqIO
@@ -37,7 +38,7 @@ class NCBIFastaRecord(BaseModel):
 
     header: str = Field(description="FASTA header line")
     sequence: str = Field(description="Sequence string")
-    accession: Optional[str] = Field(
+    accession: str | None = Field(
         default=None, description="Accession extracted from header"
     )
 
@@ -76,13 +77,13 @@ class NCBIFetchConfig(BaseConfig):
         description="Seconds to wait between retries (doubles after each attempt)",
         advanced=True,
     )
-    ncbi_api_key: Optional[str] = ConfigField(
+    ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key",
         advanced=True,
     )
-    ncbi_email: Optional[str] = ConfigField(
+    ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
         description="Optional NCBI contact email",
@@ -101,9 +102,9 @@ class NCBIFetchConfig(BaseConfig):
 # ============================================================================
 
 
-def _ncbi_common_params(config: NCBIFetchConfig) -> Dict[str, Any]:
+def _ncbi_common_params(config: NCBIFetchConfig) -> dict[str, Any]:
     """Build common NCBI eutils parameters."""
-    params: Dict[str, Any] = {"tool": "proto_tools_ncbi_fetch"}
+    params: dict[str, Any] = {"tool": "proto_tools_ncbi_fetch"}
     if config.ncbi_email:
         params["email"] = config.ncbi_email
     if config.ncbi_api_key:
@@ -117,7 +118,7 @@ def _ncbi_esearch(
     max_results: int,
     config: NCBIFetchConfig,
     session: requests.Session,
-) -> List[str]:
+) -> list[str]:
     """Run NCBI esearch and return ID list."""
     params = {
         "db": db,
@@ -143,9 +144,9 @@ def _ncbi_esummary(
     identifier: str,
     config: NCBIFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[Dict[str, Any], str]]:
+) -> tuple[dict[str, Any], str] | None:
     """Run NCBI esummary and return (result_map, sanitized_url) or None."""
-    params: Dict[str, Any] = {
+    params: dict[str, Any] = {
         "db": db,
         "id": identifier,
         "retmode": "json",
@@ -170,12 +171,12 @@ def _ncbi_efetch(
     rettype: str,
     config: NCBIFetchConfig,
     session: requests.Session,
-    seq_start: Optional[int] = None,
-    seq_stop: Optional[int] = None,
-    strand: Optional[str] = None,
-) -> Optional[Tuple[str, str]]:
+    seq_start: int | None = None,
+    seq_stop: int | None = None,
+    strand: str | None = None,
+) -> tuple[str, str] | None:
     """Run NCBI efetch and return (text, sanitized_url) or None."""
-    params: Dict[str, Any] = {
+    params: dict[str, Any] = {
         "db": db,
         "id": identifier,
         "rettype": rettype,
@@ -221,7 +222,7 @@ def _sanitize_url(url: str) -> str:
     return urlunsplit(parts._replace(query=clean_query))
 
 
-def _parse_fasta_records(text: str) -> List[NCBIFastaRecord]:
+def _parse_fasta_records(text: str) -> list[NCBIFastaRecord]:
     """Parse FASTA text into NCBIFastaRecord objects."""
     if not text or not text.strip():
         return []
@@ -235,7 +236,7 @@ def _parse_fasta_records(text: str) -> List[NCBIFastaRecord]:
     ]
 
 
-def _accession_from_header(header: str) -> Optional[str]:
+def _accession_from_header(header: str) -> str | None:
     """Best-effort accession extraction from FASTA header."""
     tokens = header.split()
     if not tokens:

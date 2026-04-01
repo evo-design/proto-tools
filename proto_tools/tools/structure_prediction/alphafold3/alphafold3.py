@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/alphafold3/alphafold3.py
+"""proto_tools/tools/structure_prediction/alphafold3/alphafold3.py.
 
 Protein structure prediction using AlphaFold3.
 
@@ -13,7 +12,7 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from tqdm import tqdm
 
@@ -31,7 +30,7 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
 
 # Type alias for AlphaFold3 JSON format
-AlphaFold3JSON = Dict[str, Any]
+AlphaFold3JSON = dict[str, Any]
 
 
 # ============================================================================
@@ -55,7 +54,7 @@ class AlphaFold3Input(StructurePredictionInput):
     """
 
     # AlphaFold3 supports all standard entity types except glycan
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
 # Output:
@@ -118,14 +117,14 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         advanced=True,
     )
 
-    seeds: List[int] = ConfigField(
+    seeds: list[int] = ConfigField(
         title="AlphaFold3 Seeds",
         default=[0],
         description="Seeds to use for AlphaFold3",
         advanced=True,
     )
 
-    output_dir: Optional[str] = ConfigField(
+    output_dir: str | None = ConfigField(
         title="Output Directory Prefix",
         default=None,
         description="Prefix for the AlphaFold3 output directory. If None, uses temp directory with auto-cleanup.",
@@ -187,8 +186,7 @@ def run_alphafold3(
     instance=None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
-
-    output_structures: List[Structure] = []
+    output_structures: list[Structure] = []
 
     for comp_idx, comp in tqdm(enumerate(inputs.complexes), desc="Folding structures (AlphaFold3)", unit="complex", total=len(inputs.complexes)):
         input_json = _create_input_json_from_complex(
@@ -314,10 +312,9 @@ def _assign_msas_to_input_json(
 def _create_input_json_from_complex(
     sp_complex: StructurePredictionComplex,
     name: str,
-    seed: int | List[int],
+    seed: int | list[int],
 ) -> AlphaFold3JSON:
-    """
-    Create input JSON data for AlphaFold3 inference from a list of components.
+    """Create input JSON data for AlphaFold3 inference from a list of components.
 
     The "alphafold3" JSON dialect is documented here:
     https://github.com/google-deepmind/alphafold3/blob/main/docs/input.md
@@ -361,14 +358,13 @@ def _create_input_json_from_complex(
                 raise ValueError(
                     f"Unable to map SMILES to CCD code: {sequence}. Please ensure the SMILES is valid and in the CCD database."
                 )
-            else:
-                # AlphaFold3 prefers CCD codes.
-                sequence_entry = {
-                    mol_type: {
-                        "id": chain_ids[idx],
-                        "ccdCodes": [ccd_code],
-                    }
+            # AlphaFold3 prefers CCD codes.
+            sequence_entry = {
+                mol_type: {
+                    "id": chain_ids[idx],
+                    "ccdCodes": [ccd_code],
                 }
+            }
 
         elif mol_type == "dna" or mol_type == "rna":
             # Ignore MSA fields for DNA and RNA.

@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/esmfold/helpers.py
+"""proto_tools/tools/structure_prediction/esmfold/helpers.py.
 
 Shared helpers for ESMFold structure prediction. Provides utilities for
 batching complexes and relabeling chains in PDB output.
@@ -16,8 +15,7 @@ CHAIN_IDS = list(string.ascii_uppercase)
 def split_into_safe_batches(
     complexes: list[dict[str, Any]], max_residues: int
 ) -> list[list[dict[str, Any]]]:
-    """
-    Split complexes into sub-batches respecting GPU memory limits.
+    """Split complexes into sub-batches respecting GPU memory limits.
 
     Args:
         complexes (list[dict[str, Any]]): List of complex dicts, each with a "total_residues" key
@@ -56,8 +54,7 @@ def split_into_safe_batches(
 
 
 def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
-    """
-    Relabel single-chain PDB output into multiple chains (A, B, C, ...).
+    """Relabel single-chain PDB output into multiple chains (A, B, C, ...).
 
     ESMFold predicts multi-chain complexes by linking chains together, producing
     a single-chain PDB. This function splits the single chain back into separate
@@ -79,7 +76,7 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     structure = parser.get_structure("structure", io.StringIO(pdb_str))
     model = structure[0]
 
-    original_chain = list(model.get_chains())[0]
+    original_chain = next(iter(model.get_chains()))
     all_residues = list(original_chain.get_residues())
 
     new_chains = []

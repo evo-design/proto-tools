@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_configuration.py
+"""tests/tool_infra_tests/test_device_manager/test_configuration.py.
 
-Tests for DeviceManager configuration and device pool discovery."""
+Tests for DeviceManager configuration and device pool discovery.
+"""
 
 import os
 from unittest.mock import patch
@@ -18,16 +19,15 @@ def test_env_var_overrides():
     with patch(
         "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
+    ), patch.dict(
+        os.environ,
+        {
+            "BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2",
+            "BIO_TOOLS_OFFLOAD_STRATEGY": "restart",
+            "BIO_TOOLS_ALLOW_MULTI_DEVICE": "true",
+        },
     ):
-        with patch.dict(
-            os.environ,
-            {
-                "BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2",
-                "BIO_TOOLS_OFFLOAD_STRATEGY": "restart",
-                "BIO_TOOLS_ALLOW_MULTI_DEVICE": "true",
-            },
-        ):
-            dm = DeviceManager.get_instance()
+        dm = DeviceManager.get_instance()
 
     assert dm._managed_devices == [
         "cuda:0",
@@ -49,9 +49,8 @@ def test_env_var_managed_devices_number_format():
     with patch(
         "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=3,
-    ):
-        with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
-            dm = DeviceManager.get_instance()
+    ), patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
+        dm = DeviceManager.get_instance()
 
     # Number format should be normalized to cuda:N format internally
     assert dm._managed_devices == [
@@ -67,13 +66,14 @@ def test_env_var_managed_devices_mixed_format():
     """Test that BIO_TOOLS_MANAGED_DEVICES accepts mixed formats."""
     DeviceManager.reset_instance()
 
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=3,
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=3,
+        ),
+        patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,cuda:1,2"}),
     ):
-        # Mix of number format and cuda: format
-        with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,cuda:1,2"}):
-            dm = DeviceManager.get_instance()
+        dm = DeviceManager.get_instance()
 
     # All should be normalized to cuda:N format
     assert dm._managed_devices == [
@@ -182,12 +182,11 @@ def test_cuda_visible_devices_one_visible():
     with patch(
         "proto_tools.utils.device_manager.number_of_visible_gpus",
         return_value=1,
-    ):
-        with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "5"}):
-            dm = DeviceManager.get_instance()
-            devices = dm._get_available_devices()
-            # Should return cuda:0 (the logical device, not physical GPU 5)
-            assert devices == ["cuda:0"], "Should map physical GPU 5 to logical cuda:0"
+    ), patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "5"}):
+        dm = DeviceManager.get_instance()
+        devices = dm._get_available_devices()
+        # Should return cuda:0 (the logical device, not physical GPU 5)
+        assert devices == ["cuda:0"], "Should map physical GPU 5 to logical cuda:0"
 
     DeviceManager.reset_instance()
 

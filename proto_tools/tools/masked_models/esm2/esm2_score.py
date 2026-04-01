@@ -1,6 +1,7 @@
-"""proto_tools/tools/masked_models/esm2/esm2_score.py
+"""proto_tools/tools/masked_models/esm2/esm2_score.py.
 
-ESM2 scoring tool."""
+ESM2 scoring tool.
+"""
 from __future__ import annotations
 
 import logging
@@ -137,6 +138,8 @@ def run_esm2_score(
             to score.
         config (ESM2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM2ScoringOutput: Contains SequenceScores for each input sequence with:

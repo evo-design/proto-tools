@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/orf_prediction/orfipy/orfipy.py
+"""proto_tools/tools/orf_prediction/orfipy/orfipy.py.
 
 This module provides a standardized interface for ORF prediction using Orfipy,
 supporting general ORF prediction and analysis of results.
@@ -8,7 +7,7 @@ supporting general ORF prediction and analysis of results.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator
@@ -49,17 +48,17 @@ class OrfipyInput(BaseToolInput):
             These IDs are used as ``parent_id`` in the output ORFs.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="DNA sequence(s) to analyze for open reading frames"
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize sequences to a list."""
         if isinstance(value, str):
             return [value]
@@ -146,11 +145,13 @@ class OrfipyConfig(BaseConfig):
         description="Number of CPU threads to use",
         hidden=True,
     )
+    # TODO: This should be a multi-select. Can we do that?
     start_codons: str = ConfigField(
         title="Start Codons",
         default="ATG,GTG,TTG",
         description="Comma-separated list of start codons",
     )
+    # TODO: This should be a multi-select. Can we do that?
     stop_codons: str = ConfigField(
         title="Stop Codons",
         default="TAA,TAG,TGA",
@@ -178,7 +179,8 @@ class OrfipyConfig(BaseConfig):
         default=True,
         description="Whether to include the stop codon in the reported ORF",
     )
-    translation_table: Optional[int] = ConfigField(
+    # TODO: This should be a literal with string values that get translated to ints internally
+    translation_table: int | None = ConfigField(
         title="Translation Table",
         default=None,
         ge=1,
@@ -191,7 +193,7 @@ class OrfipyConfig(BaseConfig):
     @field_validator("strand")
     @classmethod
     def validate_strand(cls, v: str) -> str:
-        """Validate strand parameter"""
+        """Validate strand parameter."""
         valid_strands = {"f", "r", "b"}
         if v not in valid_strands:
             raise ValueError(
@@ -232,7 +234,7 @@ class OrfipyOutput(BaseToolOutput):
             DataFrame if no ORFs were found.
     """
 
-    predicted_orfs: List[List[ORF]] = Field(
+    predicted_orfs: list[list[ORF]] = Field(
         default_factory=list,
         description="List of ORF results per input sequence",
     )
@@ -249,7 +251,7 @@ class OrfipyOutput(BaseToolOutput):
 
     @computed_field
     @property
-    def num_orfs_per_sequence(self) -> List[int]:
+    def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
         return [len(result) for result in self.predicted_orfs]
 
@@ -261,11 +263,13 @@ class OrfipyOutput(BaseToolOutput):
         return pd.DataFrame(all_orfs)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json", "faa", "fna"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -325,6 +329,8 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
         config (OrfipyConfig | None): Validated Orfipy configuration specifying start/stop
             codons, length filters, strand selection, and threading options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         OrfipyOutput: Structured output containing sequence results.
             Aggregated fields ``num_orfs`` and ``results_df`` are computed properties
@@ -349,7 +355,6 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     output_data = ToolInstance.dispatch(

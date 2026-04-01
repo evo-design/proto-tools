@@ -1,6 +1,9 @@
-"""tests/tool_infra_tests/test_device_manager/test_stress.py
+"""tests/tool_infra_tests/test_device_manager/test_stress.py.
 
-Tests for device movement stress with real tool instances."""
+Tests for device movement stress with real tool instances.
+"""
+
+from __future__ import annotations
 
 import time
 
@@ -103,7 +106,7 @@ def _run_tool(tool_factory, instance_name, **config_kwargs):
     """
     if "memory_mb" not in config_kwargs:
         config_kwargs["memory_mb"] = _TOOL_MEMORY_MB
-    tool_name, InputCls, ConfigCls, run_fn = tool_factory()
+    _tool_name, InputCls, ConfigCls, run_fn = tool_factory()
     return run_fn(InputCls(), ConfigCls(**config_kwargs), instance=instance_name)
 
 

@@ -1,6 +1,7 @@
-"""tests/sequence_scoring_tests/test_borzoi.py
+"""tests/sequence_scoring_tests/test_borzoi.py.
 
-Tests for Borzoi regulatory activity prediction tool."""
+Tests for Borzoi regulatory activity prediction tool.
+"""
 
 import random
 
@@ -69,7 +70,7 @@ def test_borzoi_config_rejects_mouse_with_flash_attn():
     """Test that FlashAttention cannot be used with mouse models."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
 
-    with pytest.raises(ValueError, match="FlashAttention.*not available for mouse"):
+    with pytest.raises(ValueError, match=r"FlashAttention.*not available for mouse"):
         BorzoiConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
 
 
@@ -89,7 +90,7 @@ def test_borzoi_ensemble_config_rejects_mouse_with_flash_attn():
     """Test that FlashAttention cannot be used with mouse models in ensemble."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
 
-    with pytest.raises(ValueError, match="FlashAttention.*not available for mouse"):
+    with pytest.raises(ValueError, match=r"FlashAttention.*not available for mouse"):
         BorzoiEnsembleConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
 
 
@@ -236,7 +237,7 @@ def test_borzoi_ensemble_prediction():
     assert result.num_replicates == 4
     assert result.sequence_length == _BORZOI_CONTEXT
 
-    # 4 replicates × 1 averaged track × 6144 positions
+    # 4 replicates x 1 averaged track x 6144 positions
     assert len(result.predictions) == 4
     assert len(result.predictions[0]) == 1
     assert len(result.predictions[0][0]) == 6144
@@ -265,7 +266,7 @@ def test_borzoi_ensemble_no_average():
     validate_output(result)
 
     assert result.avg_output_tracks is False
-    # 4 replicates × 4 individual tracks × 6144 positions
+    # 4 replicates x 4 individual tracks x 6144 positions
     assert len(result.predictions) == 4
     assert len(result.predictions[0]) == 4
     assert len(result.predictions[0][0]) == 6144

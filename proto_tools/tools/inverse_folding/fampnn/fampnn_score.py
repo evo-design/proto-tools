@@ -1,11 +1,11 @@
-"""proto_tools/tools/inverse_folding/fampnn/fampnn_score.py
+"""proto_tools/tools/inverse_folding/fampnn/fampnn_score.py.
 
-FAMPNN mutation scoring tool."""
+FAMPNN mutation scoring tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field
 from tqdm import tqdm
@@ -42,7 +42,7 @@ class MutationInput(BaseModel):
     structure: Structure = Field(
         description="Protein structure to evaluate mutations against"
     )
-    mutations: List[str] = Field(
+    mutations: list[str] = Field(
         description="List of mutation strings (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)"
     )
 
@@ -55,7 +55,7 @@ class FAMPNNScoreInput(BaseToolInput):
             and mutations to score.
     """
 
-    inputs: List[MutationInput] = InputField(
+    inputs: list[MutationInput] = InputField(
         description="List of mutation inputs, each with a structure and mutations."
     )
 
@@ -130,10 +130,10 @@ class MutationScoreResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mutations: List[str] = Field(
+    mutations: list[str] = Field(
         description="Mutation strings that were scored"
     )
-    scores: List[float] = Field(
+    scores: list[float] = Field(
         description="Log-likelihood ratio scores (positive = favored over wild-type)"
     )
 
@@ -145,16 +145,18 @@ class FAMPNNScoreOutput(BaseToolOutput):
         results (list[MutationScoreResult]): List of MutationScoreResult objects, one per input structure.
     """
 
-    results: List[MutationScoreResult] = Field(
+    results: list[MutationScoreResult] = Field(
         description="Scoring results, one per input structure"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path, file_format):
@@ -168,7 +170,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
                 with open(out_file, "w", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow(["mutation", "score"])
-                    for mut, score in zip(result.mutations, result.scores):
+                    for mut, score in zip(result.mutations, result.scores, strict=False):
                         writer.writerow([mut, score])
         elif file_format == "json":
             import json

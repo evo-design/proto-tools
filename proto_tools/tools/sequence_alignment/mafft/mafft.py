@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/sequence_alignment/mafft/mafft.py
+"""proto_tools/tools/sequence_alignment/mafft/mafft.py.
 
 This module provides a standardized interface for MAFFT multiple sequence alignment.
 """
@@ -7,7 +6,7 @@ This module provides a standardized interface for MAFFT multiple sequence alignm
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -40,10 +39,10 @@ class MafftInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="List of sequences to align (minimum 2 required)",
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
@@ -77,14 +76,16 @@ class MafftOutput(BaseToolOutput):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "a3m"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -164,6 +165,8 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         inputs (MafftInput): Validated input containing sequences to align.
         config (MafftConfig | None): Configuration with alignment parameters.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         MafftOutput: MSA result with alignment metadata.
 
@@ -181,7 +184,6 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.sequence_ids[i]}: {seq}")
     """
-
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)

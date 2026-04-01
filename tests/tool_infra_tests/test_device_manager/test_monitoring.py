@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_monitoring.py
+"""tests/tool_infra_tests/test_device_manager/test_monitoring.py.
 
-Tests for device status monitoring and memory tracking."""
+Tests for device status monitoring and memory tracking.
+"""
 
 import pytest
 

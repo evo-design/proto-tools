@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device.py
+"""tests/tool_infra_tests/test_device.py.
 
-Tests for device string parsing and CUDA_VISIBLE_DEVICES generation."""
+Tests for device string parsing and CUDA_VISIBLE_DEVICES generation.
+"""
 
 import os
 
@@ -92,7 +93,7 @@ def test_parse_device_string_invalid_negative_count():
 
 def test_parse_device_string_invalid_missing_prefix():
     """Test that shorthand without prefix raises ValueError."""
-    with pytest.raises(ValueError, match="shorthand .* without prefix"):
+    with pytest.raises(ValueError, match=r"shorthand .* without prefix"):
         parse_device_string("0,1")
 
 
@@ -208,10 +209,10 @@ def test_determine_visible_devices_invalid_index_exceeds_gpus():
     """Test that device index exceeding available GPUs raises ValueError."""
     # This test assumes system has fewer than 100 GPUs.
     # Error message depends on whether any GPUs exist at all.
-    with pytest.raises(ValueError, match="exceeds|no GPUs detected"):
+    with pytest.raises(ValueError, match=r"exceeds|no GPUs detected"):
         determine_visible_devices("cuda:100")
 
-    with pytest.raises(ValueError, match="exceeds|no GPUs detected"):
+    with pytest.raises(ValueError, match=r"exceeds|no GPUs detected"):
         determine_visible_devices("cuda:50,51")
 
 
@@ -348,19 +349,19 @@ def test_determine_visible_devices_with_parent_cuda_visible_devices(monkeypatch)
     """Test that determine_visible_devices correctly maps logical to physical devices."""
     # Simulate parent process with CUDA_VISIBLE_DEVICES=3,5,7
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,7")
-    
+
     # Logical cuda:0 should map to physical GPU 3
     assert determine_visible_devices("cuda:0") == "3"
-    
+
     # Logical cuda:1 should map to physical GPU 5
     assert determine_visible_devices("cuda:1") == "5"
-    
+
     # Logical cuda:2 should map to physical GPU 7
     assert determine_visible_devices("cuda:2") == "7"
-    
+
     # Multi-device: logical cuda:0,1 should map to physical 3,5
     assert determine_visible_devices("cuda:0,1") == "3,5"
-    
+
     # Multi-device: logical cuda:1,2 should map to physical 5,7
     assert determine_visible_devices("cuda:1,2") == "5,7"
 
@@ -368,7 +369,7 @@ def test_determine_visible_devices_with_parent_cuda_visible_devices(monkeypatch)
 def test_determine_visible_devices_with_single_parent_device(monkeypatch):
     """Test mapping when parent has only one visible device."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
-    
+
     # Only cuda:0 should be valid
     assert determine_visible_devices("cuda:0") == "4"
 
@@ -376,7 +377,7 @@ def test_determine_visible_devices_with_single_parent_device(monkeypatch):
 def test_determine_visible_devices_auto_allocate_with_parent(monkeypatch):
     """Test auto-allocation respects parent CUDA_VISIBLE_DEVICES."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3,4")
-    
+
     # Auto-allocate single GPU should use first visible device
     assert determine_visible_devices("cuda") == "2"
 
@@ -384,7 +385,7 @@ def test_determine_visible_devices_auto_allocate_with_parent(monkeypatch):
 def test_determine_visible_devices_parent_with_spaces(monkeypatch):
     """Test that parent CUDA_VISIBLE_DEVICES with spaces is handled correctly."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", " 3, 5 , 7 ")
-    
+
     assert determine_visible_devices("cuda:0") == "3"
     assert determine_visible_devices("cuda:1") == "5"
     assert determine_visible_devices("cuda:2") == "7"
@@ -454,7 +455,7 @@ def test_determine_visible_devices_list_deduplicates(monkeypatch):
 
 def test_determine_visible_devices_list_invalid_index():
     """List with an out-of-range CUDA index raises ValueError."""
-    with pytest.raises(ValueError, match="exceeds|no GPUs"):
+    with pytest.raises(ValueError, match=r"exceeds|no GPUs"):
         determine_visible_devices(["cuda:0", "cuda:100"])
 
 
@@ -478,7 +479,7 @@ def test_determine_visible_devices_list_int_entries():
 
 def test_determine_visible_devices_list_int_invalid():
     """List with out-of-range int raises ValueError."""
-    with pytest.raises(ValueError, match="exceeds|no GPUs"):
+    with pytest.raises(ValueError, match=r"exceeds|no GPUs"):
         determine_visible_devices([100])
 
 
@@ -495,7 +496,7 @@ def test_number_of_visible_gpus_without_cuda_visible_devices(monkeypatch):
     """Test number_of_visible_gpus() without CUDA_VISIBLE_DEVICES set."""
     # Remove CUDA_VISIBLE_DEVICES if it exists
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-    
+
     # Should return same as physical GPUs
     physical = number_of_physical_gpus()
     visible = number_of_visible_gpus()
@@ -506,7 +507,7 @@ def test_number_of_visible_gpus_with_cuda_visible_devices(monkeypatch):
     """Test number_of_visible_gpus() with CUDA_VISIBLE_DEVICES set."""
     # Set CUDA_VISIBLE_DEVICES to a subset of GPUs
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,2,5")
-    
+
     # Should return count of devices in CUDA_VISIBLE_DEVICES
     visible = number_of_visible_gpus()
     assert visible == 3
@@ -515,7 +516,7 @@ def test_number_of_visible_gpus_with_cuda_visible_devices(monkeypatch):
 def test_number_of_visible_gpus_with_single_device(monkeypatch):
     """Test number_of_visible_gpus() with single GPU visible."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
-    
+
     visible = number_of_visible_gpus()
     assert visible == 1
 
@@ -523,7 +524,7 @@ def test_number_of_visible_gpus_with_single_device(monkeypatch):
 def test_number_of_visible_gpus_with_empty_cuda_visible_devices(monkeypatch):
     """Test number_of_visible_gpus() with empty CUDA_VISIBLE_DEVICES (no GPUs visible)."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
-    
+
     visible = number_of_visible_gpus()
     assert visible == 0
 
@@ -532,11 +533,11 @@ def test_number_of_visible_gpus_with_empty_cuda_visible_devices(monkeypatch):
 def test_number_of_visible_gpus_with_invalid_indices(monkeypatch, caplog):
     """Test number_of_visible_gpus() warns when CUDA_VISIBLE_DEVICES has invalid indices."""
     import logging
-    
+
     # Set CUDA_VISIBLE_DEVICES with indices that exceed physical GPU count
     # (assuming system has < 100 GPUs)
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,99,100")
-    
+
     with caplog.at_level(logging.WARNING):
         visible = number_of_visible_gpus()
         # Should still return the count (3 devices specified)

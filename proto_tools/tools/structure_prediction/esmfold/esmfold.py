@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/esmfold/esmfold.py
+"""proto_tools/tools/structure_prediction/esmfold/esmfold.py.
 
 Protein structure prediction using ESMFold.
 
@@ -10,7 +9,7 @@ using ESMFold from Meta AI.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, ClassVar
 
 from pydantic import field_validator
 from tqdm import tqdm
@@ -66,16 +65,15 @@ class ESMFoldInput(StructurePredictionInput):
     """
 
     # ESMFold only supports proteins
-    SUPPORTED_ENTITY_TYPES = {"protein"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
     @field_validator("complexes", check_fields=False)
     @classmethod
     def validate_complexes(
-        cls, complexes: List[StructurePredictionComplex]
-    ) -> List[StructurePredictionComplex]:
-        """
-        Ensures that complexes are valid inputs for ESMFold.
+        cls, complexes: list[StructurePredictionComplex]
+    ) -> list[StructurePredictionComplex]:
+        """Ensures that complexes are valid inputs for ESMFold.
 
         Args:
             complexes (list[StructurePredictionComplex]): Complexes to validate.
@@ -108,10 +106,8 @@ class ESMFoldInput(StructurePredictionInput):
 
         return complexes
 
-    def prepare_complexes(self, chain_linker: str) -> List[Dict[str, Any]]:
-        """
-        Prepares complexes for ESMFold inference
-        """
+    def prepare_complexes(self, chain_linker: str) -> list[dict[str, Any]]:
+        """Prepares complexes for ESMFold inference."""
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
             seq_lengths = [len(chain.sequence) for chain in comp.chains]
@@ -229,6 +225,8 @@ def run_esmfold(
         config (ESMFoldConfig | None): Validated ESMFold configuration specifying chain linking,
             batching, and execution options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         ESMFoldOutput: Structured output containing:
             - ``structures``: List of ``Structure`` instances, one per input complex
@@ -271,7 +269,6 @@ def run_esmfold(
         - Maximum 2,400 residues per complex (hard limit)
         - Multi-chain complexes are predicted by linking chains
     """
-
     # Prepare complexes for inference
     prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)
 
@@ -328,7 +325,7 @@ def run_esmfold(
 
     # Post-process: relabel chains and convert to CIF
     structure_outputs = []
-    for result, metadata in zip(all_results, prepared_complexes):
+    for result, metadata in zip(all_results, prepared_complexes, strict=False):
         # Relabel chains (A, B, C, ...)
         pdb_output = _relabel_chains(result["pdb"], metadata["seq_lengths"])
 

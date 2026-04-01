@@ -1,7 +1,9 @@
-"""tests/style_consistency_tests/test_tool_config_consistency.py
+"""tests/style_consistency_tests/test_tool_config_consistency.py.
 
-Tests for tool config consistency."""
+Tests for tool config consistency.
+"""
 
+import types
 from typing import Union, get_args, get_origin
 
 import pytest
@@ -9,8 +11,7 @@ from pydantic.fields import PydanticUndefined
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import BaseConfig as ToolsBaseConfig
-
-from .helpers import field_description_is_valid, find_missing_fields_in_docstring
+from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_TITLE_LENGTH = 31
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
@@ -65,8 +66,10 @@ def test_tool_config_consistency(config_model):
             origin = get_origin(annotation)
             ann_args = get_args(annotation)
 
-            # Optional[...] is Union[..., None]
-            is_optional = origin is Union and type(None) in ann_args
+            # Optional[...] is Union[..., None]; X | None is types.UnionType
+            is_optional = (
+                origin in (Union, types.UnionType) and type(None) in ann_args
+            )
 
             if not is_optional:
                 raise TypeError(

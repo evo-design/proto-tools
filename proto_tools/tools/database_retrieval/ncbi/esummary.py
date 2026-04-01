@@ -1,14 +1,16 @@
-"""proto_tools/tools/database_retrieval/ncbi/esummary.py
+"""proto_tools/tools/database_retrieval/ncbi/esummary.py.
 
 Wraps the NCBI E-utilities esummary endpoint for fetching metadata
-about protein, nuccore, and gene records."""
+about protein, nuccore, and gene records.
+"""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import NCBIFetchConfig, _ncbi_esummary
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -16,8 +18,6 @@ from proto_tools.utils import (
     InputField,
     build_http_session,
 )
-
-from .shared_data_models import NCBIFetchConfig, _ncbi_esummary
 
 # ============================================================================
 # Data Models
@@ -50,17 +50,19 @@ class NCBIEsummaryOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    summary: Dict[str, Any] = Field(
+    summary: dict[str, Any] = Field(
         default_factory=dict, description="Record summary data returned by esummary"
     )
     source_url: str = Field(description="Sanitized request URL")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -109,6 +111,8 @@ def run_ncbi_esummary(
     Args:
         inputs (NCBIEsummaryInput): Database and identifier to summarize.
         config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEsummaryOutput: NCBIEsummaryOutput containing the record summary.

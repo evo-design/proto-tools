@@ -1,21 +1,21 @@
-"""proto_tools/tools/gene_annotation/pyhmmer/hmmscan.py
+"""proto_tools/tools/gene_annotation/pyhmmer/hmmscan.py.
 
-PyHMMER hmmscan tool: search protein sequences against an HMM database."""
+PyHMMER hmmscan tool: search protein sequences against an HMM database.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from pydantic import field_validator
 
-from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
-
-from .shared_data_models import (
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
     _build_dataframes,
 )
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import InputField, ToolInstance
 
 
 # ============================================================================
@@ -96,6 +96,8 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         config (PyHmmscanConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         PyHmmscanOutput: Structured output containing:
             - ``sequence_hits_df``: DataFrame with sequence-level hits
@@ -129,7 +131,6 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         ...         ]['query_name'].tolist()
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
-
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

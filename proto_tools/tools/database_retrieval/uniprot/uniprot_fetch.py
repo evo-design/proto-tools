@@ -1,13 +1,14 @@
-"""proto_tools/tools/database_retrieval/uniprot/uniprot_fetch.py
+"""proto_tools/tools/database_retrieval/uniprot/uniprot_fetch.py.
 
 Provides a single-API-call interface to the UniProt REST API for retrieving
 protein entries by accession or searching by gene name and organism with
-ranked result selection."""
+ranked result selection.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import requests
 from pydantic import Field, model_validator
@@ -45,15 +46,15 @@ class UniProtFetchInput(BaseToolInput):
             ranking.
     """
 
-    uniprot_id: Optional[str] = InputField(
+    uniprot_id: str | None = InputField(
         default=None,
         description="UniProt accession for direct entry lookup",
     )
-    target_name: Optional[str] = InputField(
+    target_name: str | None = InputField(
         default=None,
         description="Gene or protein name for search",
     )
-    organism: Optional[str] = InputField(
+    organism: str | None = InputField(
         default=None,
         description="Organism for search disambiguation",
     )
@@ -95,28 +96,30 @@ class UniProtFetchOutput(BaseToolOutput):
     """
 
     accession: str = Field(description="Primary UniProt accession")
-    sequence: Optional[str] = Field(default=None, description="Protein sequence")
-    length: Optional[int] = Field(default=None, description="Sequence length")
-    entry_type: Optional[str] = Field(
+    sequence: str | None = Field(default=None, description="Protein sequence")
+    length: int | None = Field(default=None, description="Sequence length")
+    entry_type: str | None = Field(
         default=None, description="Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)"
     )
-    gene_names: List[str] = Field(
+    gene_names: list[str] = Field(
         default_factory=list, description="Gene name symbols"
     )
-    pdb_crossrefs: List[str] = Field(
+    pdb_crossrefs: list[str] = Field(
         default_factory=list, description="PDB structure IDs linked to this protein entry"
     )
     source_url: str = Field(description="UniProt entry URL")
-    raw_entry: Dict[str, Any] = Field(
+    raw_entry: dict[str, Any] = Field(
         default_factory=dict, description="Complete UniProt JSON record for advanced programmatic access"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -207,6 +210,8 @@ def run_uniprot_fetch(
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
         config (UniProtFetchConfig | None): HTTP timeout and retry settings.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and
             PDB cross-references.
@@ -272,7 +277,7 @@ def _fetch_entry(
     uniprot_id: str,
     config: UniProtFetchConfig,
     session: requests.Session,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Fetch a UniProtKB entry by accession. Returns None on 404."""
     response = session.get(
         f"{_UNIPROT_BASE}/uniprotkb/{uniprot_id}.json",
@@ -292,9 +297,9 @@ def _search_entry(
     max_candidates: int,
     config: UniProtFetchConfig,
     session: requests.Session,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Search UniProt by name and organism and return best ranked entry."""
-    all_results: List[Dict[str, Any]] = []
+    all_results: list[dict[str, Any]] = []
     seen_accessions: set[str] = set()
 
     queries = [
@@ -341,10 +346,10 @@ def _search_entry(
 
 
 def _entry_priority(
-    entry: Dict[str, Any],
+    entry: dict[str, Any],
     target_name: str,
     prefer_pdb_crossref: bool,
-) -> Tuple[int, int, int, int]:
+) -> tuple[int, int, int, int]:
     """Rank UniProt candidates for deterministic, biologically sensible selection."""
     target = target_name.strip().lower()
     gene_names = _extract_gene_names(entry)
@@ -360,7 +365,7 @@ def _entry_priority(
     )
 
 
-def _extract_gene_names(entry: Dict[str, Any]) -> set[str]:
+def _extract_gene_names(entry: dict[str, Any]) -> set[str]:
     """Extract normalized gene symbol candidates from a UniProt entry."""
     names: set[str] = set()
     genes = entry.get("genes", [])
@@ -379,11 +384,11 @@ def _extract_gene_names(entry: Dict[str, Any]) -> set[str]:
     return names
 
 
-def _extract_pdb_crossrefs(entry: Dict[str, Any]) -> List[str]:
+def _extract_pdb_crossrefs(entry: dict[str, Any]) -> list[str]:
     """Extract PDB cross references from UniProt entry JSON."""
     xrefs = entry.get("uniProtKBCrossReferences", [])
-    pdb_ids = []
-    for ref in xrefs:
-        if ref.get("database") == "PDB" and ref.get("id"):
-            pdb_ids.append(ref["id"])
-    return pdb_ids
+    return [
+        ref["id"]
+        for ref in xrefs
+        if ref.get("database") == "PDB" and ref.get("id")
+    ]

@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/tool_cache.py
+"""proto_tools/utils/tool_cache.py.
 
 Tool cache utilities for caching expensive tool operations.
 
@@ -20,9 +19,10 @@ import hashlib
 import json
 import logging
 import sys
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -34,7 +34,7 @@ _program_tool_cache: ContextVar[ToolCache | None] = ContextVar(
 )
 
 
-def _get_obj_size(obj: Any, seen: set[int] = None) -> int:
+def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
     """Calculates size recursively."""
     if seen is None:
         seen = set()
@@ -70,8 +70,7 @@ def _get_obj_size(obj: Any, seen: set[int] = None) -> int:
 
 
 class ToolCache:
-    """
-    Program-scoped cache for tool results.
+    """Program-scoped cache for tool results.
 
     Each Program/Optimizer instance creates its own ToolCache, ensuring
     isolation between different optimization runs.
@@ -88,8 +87,7 @@ class ToolCache:
         return self._current_size_bytes
 
     def get(self, tool_name: str, cache_key: str) -> Any | None:
-        """
-        Get cached result for a tool and cache key.
+        """Get cached result for a tool and cache key.
 
         Args:
             tool_name (str): Name of the tool
@@ -115,8 +113,7 @@ class ToolCache:
         return None
 
     def set(self, tool_name: str, cache_key: str, result: Any) -> None:
-        """
-        Store result in cache for a tool and cache key.
+        """Store result in cache for a tool and cache key.
 
         Args:
             tool_name (str): Name of the tool
@@ -141,8 +138,7 @@ class ToolCache:
         logger.debug(f"ToolCache.set: {tool_name}, size={self._current_size_bytes} bytes")
 
     def clear(self, tool_name: str | None = None) -> int:
-        """
-        Clear cache entries.
+        """Clear cache entries.
 
         Args:
             tool_name (str | None): If provided, clear only this tool's cache.
@@ -158,15 +154,14 @@ class ToolCache:
                 for cache_key in popped:
                     self._current_size_bytes -= _get_obj_size(popped[cache_key])
             return count
-        else:
-            count = sum(len(cache_dict) for cache_dict in self._cache.values())
-            self._cache.clear()
-            self._current_size_bytes = 0
-            return count
+        count = sum(len(cache_dict) for cache_dict in self._cache.values())
+        self._cache.clear()
+        self._current_size_bytes = 0
+        return count
 
     def prune(self, target_size: int = 0) -> None:
-        """
-        Removes items until the cache size is below target_size.
+        """Removes items until the cache size is below target_size.
+
         Uses LRU eviction strategy (prioritizes least recently used entries).
 
         Args:
@@ -201,8 +196,7 @@ class ToolCache:
                 del self._cache[tool]
 
     def get_info(self) -> dict[str, Any]:
-        """
-        Get cache statistics.
+        """Get cache statistics.
 
         Returns:
             dict[str, Any]: Dictionary with cache statistics including total entries and estimated size
@@ -215,8 +209,7 @@ class ToolCache:
 
 
 def _serialize_for_cache_key(obj: Any) -> str:
-    """
-    Convert any object to a string representation suitable for cache key generation.
+    """Convert any object to a string representation suitable for cache key generation.
 
     Handles Pydantic models, basic types, lists, dicts, etc.
     Fields marked with ``include_in_key=False`` on their ConfigField are excluded.
@@ -226,20 +219,18 @@ def _serialize_for_cache_key(obj: Any) -> str:
     """
     if hasattr(obj, "cache_key"):
         return obj.cache_key()
-    elif isinstance(obj, BaseModel):
+    if isinstance(obj, BaseModel):
         model_dict = obj.model_dump(exclude_none=True)
         return json.dumps(model_dict, sort_keys=True, default=str)
-    elif isinstance(obj, (dict, list, tuple)):
+    if isinstance(obj, (dict, list, tuple)):
         # For collections, use JSON with sorted keys
         return json.dumps(obj, sort_keys=True, default=str)
-    else:
-        # For basic types, convert to string
-        return str(obj)
+    # For basic types, convert to string
+    return str(obj)
 
 
 def _generate_cache_key(tool_name: str, *args, **kwargs) -> str:
-    """
-    Generate a deterministic cache key for tool operations.
+    """Generate a deterministic cache key for tool operations.
 
     Args:
         tool_name (str): Name of the tool.
@@ -253,16 +244,17 @@ def _generate_cache_key(tool_name: str, *args, **kwargs) -> str:
     key_parts = [tool_name]
 
     # Add positional arguments
-    for arg in args:
-        key_parts.append(_serialize_for_cache_key(arg))
+    key_parts.extend(_serialize_for_cache_key(arg) for arg in args)
 
     # Add keyword arguments in sorted order
-    for key in sorted(kwargs.keys()):
-        key_parts.append(f"{key}={_serialize_for_cache_key(kwargs[key])}")
+    key_parts.extend(
+        f"{key}={_serialize_for_cache_key(kwargs[key])}"
+        for key in sorted(kwargs.keys())
+    )
 
     # Generate MD5 hash of the combined key parts
     combined = "|".join(key_parts)
-    return hashlib.md5(combined.encode()).hexdigest()[:16]
+    return hashlib.md5(combined.encode()).hexdigest()[:16]  # noqa: S324 -- cache key, not security
 
 
 @dataclass
@@ -402,7 +394,7 @@ def cache_store_items(
     if cache is None:
         return
 
-    for key, item in zip(cache_keys, result_items):
+    for key, item in zip(cache_keys, result_items, strict=False):
         cache.set(tool_name, key, item)
 
 
@@ -421,9 +413,10 @@ def cache_stitch_items(
     Returns:
         list[Any]: Merged list of length ``total_count`` with items in original order.
     """
-    result_map = dict(strip.cached_results)
-    for orig_idx, item in zip(strip.uncached_indices, computed_items):
-        result_map[orig_idx] = item
+    result_map = {
+        **dict(strip.cached_results),
+        **dict(zip(strip.uncached_indices, computed_items, strict=False)),
+    }
     return [result_map[i] for i in range(total_count)]
 
 
@@ -432,8 +425,7 @@ def cache_stitch_items(
 # ============================================================================
 
 def clear_cache() -> None:
-    """
-    Clear all cached results from the program-scoped cache.
+    """Clear all cached results from the program-scoped cache.
 
     Gets the cache from contextvar and clears it.
     """
@@ -443,8 +435,7 @@ def clear_cache() -> None:
 
 
 def clear_tool_cache(tool_name: str) -> int:
-    """
-    Clear cache entries for a specific tool.
+    """Clear cache entries for a specific tool.
 
     Args:
         tool_name (str): Name of the tool to clear cache for
@@ -459,8 +450,7 @@ def clear_tool_cache(tool_name: str) -> int:
 
 
 def get_cache_info() -> dict[str, Any]:
-    """
-    Get information about the cache.
+    """Get information about the cache.
 
     Returns:
         dict[str, Any]: Dictionary with cache statistics
@@ -472,8 +462,7 @@ def get_cache_info() -> dict[str, Any]:
 
 
 def has_cached_entries(tool_name: str) -> bool:
-    """
-    Check if a specific tool has any cached entries.
+    """Check if a specific tool has any cached entries.
 
     Args:
         tool_name (str): Name of the tool to check

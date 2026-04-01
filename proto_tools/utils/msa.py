@@ -1,6 +1,7 @@
-"""proto_tools/utils/msa.py
+"""proto_tools/utils/msa.py.
 
-Shared MSA utilities for structure prediction tools."""
+Shared MSA utilities for structure prediction tools.
+"""
 from __future__ import annotations
 
 

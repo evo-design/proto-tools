@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/system_info.py
+"""proto_tools/utils/system_info.py.
 
 Collects platform, GPU, and environment information without torch dependency.
 """
@@ -72,10 +71,8 @@ class ParentEnv:
 def get_platform_info() -> PlatformInfo:
     """Collect platform/OS information.
 
-    Returns
-    -------
-    PlatformInfo
-        OS, architecture, hostname, Python version, and RAM.
+    Returns:
+        PlatformInfo: OS, architecture, hostname, Python version, and RAM.
     """
     uname = platform.uname()
 
@@ -127,10 +124,8 @@ def get_gpu_info() -> GPUInfo:
 
     Cached for the lifetime of the process
 
-    Returns
-    -------
-    GPUInfo
-        GPU availability, count, driver/CUDA versions, and device details.
+    Returns:
+        GPUInfo: GPU availability, count, driver/CUDA versions, and device details.
     """
     # Check if CUDA is explicitly disabled
     cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
@@ -240,7 +235,7 @@ def _get_cuda_version() -> str | None:
             match = re.search(r"CUDA Version:\s*(\d+\.\d+)", result.stdout)
             if match:
                 return match.group(1)
-    except Exception:
+    except Exception:  # noqa: S110 -- best-effort CUDA version detection
         pass
     return None
 
@@ -251,10 +246,8 @@ def _get_cuda_version() -> str | None:
 def get_parent_process_env() -> ParentEnv:
     """Detect the active virtual environment (venv, conda, or mamba).
 
-    Returns
-    -------
-    ParentEnv
-        Environment type, name, and prefix path.
+    Returns:
+        ParentEnv: Environment type, name, and prefix path.
     """
     # Check for mamba (takes precedence over conda)
     if os.environ.get("MAMBA_EXE"):
@@ -334,11 +327,7 @@ def _is_sensitive_env_var(key: str, value: str) -> bool:
 
     # Check for connection strings with embedded credentials (user:pass@host pattern)
     # Common in DATABASE_URL, REDIS_URL, MONGO_URI, etc.
-    if key_upper.endswith(("_URL", "_URI")):
-        if "://" in value and "@" in value:
-            return True
-
-    return False
+    return bool(key_upper.endswith(("_URL", "_URI")) and "://" in value and "@" in value)
 
 
 def _sanitize_env_dict(env: dict[str, str] | None) -> dict[str, str] | None:
@@ -366,10 +355,8 @@ def capture_parent_env() -> dict[str, str]:
     Call this once at the start of a test session to record the parent
     process environment before any subprocesses are spawned.
 
-    Returns
-    -------
-    dict
-        Copy of os.environ at capture time.
+    Returns:
+        dict[str, str]: Copy of os.environ at capture time.
     """
     global _captured_parent_env
     _captured_parent_env = dict(os.environ)
@@ -397,11 +384,8 @@ def get_captured_env() -> dict[str, Any]:
     Sensitive variables (containing KEY, TOKEN, SECRET, PASS, AUTH, etc.)
     are automatically excluded from the returned data.
 
-    Returns
-    -------
-    dict
-        parent_env: Environment of the parent process (or None if not captured).
-        subprocess_env: Environment passed to subprocesses (or None if not captured).
+    Returns:
+        dict[str, Any]: parent_env and subprocess_env (each a dict or None).
     """
     return {
         "parent_env": _sanitize_env_dict(_captured_parent_env),
@@ -431,10 +415,8 @@ def _get_username() -> str | None:
 def _get_slurm_cluster_name() -> str | None:
     """Get SLURM cluster name if running on a SLURM cluster.
 
-    Returns
-    -------
-    str or None
-        Cluster name (e.g., "arc-slurm") or None if not on SLURM.
+    Returns:
+        str | None: Cluster name (e.g., "arc-slurm") or None if not on SLURM.
     """
     # First check environment variable (set by some SLURM configs)
     cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
@@ -513,7 +495,7 @@ def get_platform_id(
     Named clusters (chimera, dgx_spark) and macOS already have unique
     OS parts, so the hostname is omitted for brevity.
 
-    Examples
+    Examples:
     --------
     - Mac: `alice_macosDarwin_arm64_cpu_20260216_bcf5907`
     - Chimera: `bob_chimera_x86_64_h100_20260216_bcf5907`
@@ -614,7 +596,7 @@ def _get_git_commit_short(length: int = 7) -> str | None:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
+    except Exception:  # noqa: S110 -- best-effort git version detection
         pass
     # Not in a git repo (e.g., non-editable pip install); use package version
     try:
@@ -627,11 +609,9 @@ def _get_git_commit_short(length: int = 7) -> str | None:
 def get_git_info() -> dict[str, Any]:
     """Get git repository information.
 
-    Returns
-    -------
-    dict
-        commit (12-char short hash), branch name, dirty status, and
-        package version (always present as fallback).
+    Returns:
+        dict[str, Any]: commit (12-char short hash), branch name, dirty status,
+            and package version (always present as fallback).
     """
     repo_root = Path(__file__).parent.parent.parent
 
@@ -695,10 +675,8 @@ def get_git_info() -> dict[str, Any]:
 def collect_system_info() -> dict[str, Any]:
     """Collect all system information as a JSON-serializable dict.
 
-    Returns
-    -------
-    dict
-        All platform, GPU, and environment information.
+    Returns:
+        dict[str, Any]: All platform, GPU, and environment information.
     """
     platform_info = get_platform_info()
     gpu_info = get_gpu_info()

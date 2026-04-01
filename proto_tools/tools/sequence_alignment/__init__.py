@@ -1,12 +1,14 @@
+"""Sequence alignment and MSA tools."""
+
 # MAFFT tools
-from .colabfold_search import (
+from proto_tools.tools.sequence_alignment.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchOutput,
     run_colabfold_search,
 )
-from .mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
-from .msas import MSA
+from proto_tools.tools.sequence_alignment.mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
+from proto_tools.tools.sequence_alignment.msas import MSA
 
 __all__ = [
     # Schemas

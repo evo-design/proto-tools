@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_pytorch_tool/mock_pytorch_tool.py
+"""proto_tools/tools/testing/mock_pytorch_tool/mock_pytorch_tool.py.
 
 This is a minimal PyTorch tool designed for fast testing of device management,
 memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
-in <1 second while still exercising all DeviceManager and ToolPool code paths."""
+in <1 second while still exercising all DeviceManager and ToolPool code paths.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -89,10 +90,12 @@ class MockPyTorchToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -110,8 +113,7 @@ class MockPyTorchToolOutput(BaseToolOutput):
                 )
         elif file_format == "txt":
             with open(path, "w") as f:
-                for i, r in enumerate(self.results):
-                    f.write(f"Item {i}: device={r.device_used}, result={r.result}\n")
+                f.writelines(f"Item {i}: device={r.device_used}, result={r.result}\n" for i, r in enumerate(self.results))
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -146,7 +148,6 @@ def run_mock_pytorch_tool(
     instance=None,
 ) -> MockPyTorchToolOutput:
     """Run mock PyTorch tool (minimal model for fast testing)."""
-
     result = ToolInstance.dispatch(
         "mock_pytorch_tool",
         {

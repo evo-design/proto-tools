@@ -1,8 +1,6 @@
-"""
-SpliceTransformer - Tissue-specific splice site prediction.
-"""
+"""SpliceTransformer - Tissue-specific splice site prediction."""
 
-from .splice_transformer import (
+from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer import (
     CONTEXT_LENGTH,
     SPLICE_TISSUE_CHANNEL_INDEX,
     TARGET_LENGTH,

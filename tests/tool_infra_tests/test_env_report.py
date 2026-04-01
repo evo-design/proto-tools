@@ -1,5 +1,4 @@
-"""
-tests/tool_infra_tests/test_env_report.py
+"""tests/tool_infra_tests/test_env_report.py.
 
 Auto-discovered environment report smoke tests.
 

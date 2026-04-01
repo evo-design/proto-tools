@@ -1,5 +1,4 @@
-"""
-PyHMMER standalone runner for ToolInstance venv execution.
+"""PyHMMER standalone runner for ToolInstance venv execution.
 
 Handles hmmsearch, hmmscan, phmmer, nhmmer, and jackhmmer operations.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -12,7 +11,6 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Dict, List, Tuple
 
 import pyhmmer
 import pyhmmer.easel
@@ -23,7 +21,7 @@ import pyhmmer.plan7
 # ============================================================================
 
 
-def _create_hmms_from_file(hmm_file_path: str) -> List[pyhmmer.plan7.HMM]:
+def _create_hmms_from_file(hmm_file_path: str) -> list[pyhmmer.plan7.HMM]:
     """Create PyHMMER HMM objects from file path."""
     hmms = []
     with pyhmmer.plan7.HMMFile(hmm_file_path) as hmm_file:
@@ -32,9 +30,9 @@ def _create_hmms_from_file(hmm_file_path: str) -> List[pyhmmer.plan7.HMM]:
 
 
 def _create_sequences_from_strings(
-    sequences: List[str],
+    sequences: list[str],
     alphabet: str = "amino",
-) -> List[pyhmmer.easel.DigitalSequence]:
+) -> list[pyhmmer.easel.DigitalSequence]:
     """Create PyHMMER digital sequence objects from strings."""
     if alphabet == "amino":
         alphabet_obj = pyhmmer.easel.Alphabet.amino()
@@ -49,7 +47,7 @@ def _create_sequences_from_strings(
 
     for i, seq_str in enumerate(sequences):
         text_seq = pyhmmer.easel.TextSequence(
-            name=f"{i}".encode("utf-8"),
+            name=f"{i}".encode(),
             sequence=seq_str,
         )
         digital_sequences.append(text_seq.digitize(alphabet_obj))
@@ -63,16 +61,15 @@ def _convert_query_field(field) -> str:
         return "-"
     if isinstance(field, bytes):
         return field.decode("utf-8")
-    elif isinstance(field, str):
+    if isinstance(field, str):
         return field
-    else:
-        return "-"
+    return "-"
 
 
 def _convert_hits_to_dicts(
     hits: list,
     queries: list,
-) -> Tuple[List[Dict], List[Dict]]:
+) -> tuple[list[dict], list[dict]]:
     """Convert PyHMMER Hit objects to lists of dicts (JSON-serializable).
 
     Args:
@@ -373,7 +370,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     operation = input_data["operation"]

@@ -1,5 +1,4 @@
-"""
-Segmasker binary download and extraction configuration.
+"""Segmasker binary download and extraction configuration.
 
 Segmasker is distributed as part of the NCBI BLAST+ suite. This config
 downloads the full BLAST+ package and extracts only the segmasker binary.
@@ -8,8 +7,6 @@ Used by the shared install_binary.py utility during venv setup.
 
 Archive structure: ncbi-blast-2.17.0+/bin/{segmasker,...}
 """
-
-from __future__ import annotations
 
 import stat
 import tarfile

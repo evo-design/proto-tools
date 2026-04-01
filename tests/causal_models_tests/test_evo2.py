@@ -1,6 +1,7 @@
-"""tests/causal_models_tests/test_evo2.py
+"""tests/causal_models_tests/test_evo2.py.
 
-Tests for Evo2."""
+Tests for Evo2.
+"""
 
 import numpy as np
 import pytest
@@ -85,7 +86,7 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
     assert len(result.sequences) == 2
 
     valid_chars = set("ATCGN")
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         assert seq.startswith(prompt), f"Sequence {i} should start with '{prompt}'"
         assert set(seq.upper()).issubset(valid_chars)
         assert len(seq) > len(prompt), f"Sequence {i} should be longer than prompt"
@@ -172,7 +173,7 @@ def test_evo2_sample_batched_tool(model_checkpoint):
 
     assert len(result.sequences) == 6
 
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         assert seq.startswith(prompt), f"Sequence {i} should start with '{prompt}'"
         assert len(seq) > len(prompt)
 
@@ -235,7 +236,7 @@ def test_evo2_score_batched_tool(model_checkpoint):
 
     assert len(result.scores) == 6
 
-    for seq, score in zip(sequences, result.scores):
+    for _seq, score in zip(sequences, result.scores, strict=False):
         assert score.log_likelihood < 0
         assert score.perplexity >= 1.0
         assert score.logits is not None, "Logits should be present when return_logits=True"
@@ -283,7 +284,7 @@ def test_evo2_score_variable_length_sequences(model_checkpoint):
 
     result = run_evo2_score(inputs=inputs, config=config)
 
-    for (seq, score) in zip(sequences, result.scores):
+    for (seq, score) in zip(sequences, result.scores, strict=False):
         assert score.logits is not None, "Logits should be present when return_logits=True"
         assert len(score.logits) > 0, (
             f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"

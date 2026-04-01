@@ -1,7 +1,8 @@
-"""proto_tools/tools/database_retrieval/sequence_fetch/sequence_fetch.py
+"""proto_tools/tools/database_retrieval/sequence_fetch/sequence_fetch.py.
 
 Thin orchestrator that chains database-specific tools (ncbi, uniprot,
-pdb) with molecule-type routing and cross-fetcher ID resolution."""
+pdb) with molecule-type routing and cross-fetcher ID resolution.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import requests
 from Bio.Seq import transcribe
@@ -90,10 +91,10 @@ class SequenceFetchRequest(BaseModel):
         additional_ids (dict[str, str]): Extra IDs used for custom routing.
     """
 
-    request_id: Optional[str] = Field(default=None, description="Optional request identifier")
+    request_id: str | None = Field(default=None, description="Optional request identifier")
     target_name: str = Field(min_length=1, description="Gene, RNA, or protein name")
     organism: str = Field(min_length=1, description="Organism for disambiguation")
-    sequence_types: List[
+    sequence_types: list[
         Literal[
             "protein",
             "dna_genomic",
@@ -103,18 +104,18 @@ class SequenceFetchRequest(BaseModel):
             "structure",
         ]
     ] = Field(description="Requested output molecule types")
-    uniprot_id: Optional[str] = Field(default=None, description="UniProt accession override")
-    genbank_accession: Optional[str] = Field(default=None, description="GenBank accession override")
-    refseq_accession: Optional[str] = Field(default=None, description="RefSeq accession override")
-    pdb_id: Optional[str] = Field(default=None, description="PDB accession override")
-    gene_id: Optional[str] = Field(default=None, description="NCBI Gene ID override")
-    protein_id: Optional[str] = Field(default=None, description="NCBI protein accession override")
-    transcript_id: Optional[str] = Field(default=None, description="Transcript accession override")
-    genomic_coordinates: Optional[str] = Field(
+    uniprot_id: str | None = Field(default=None, description="UniProt accession override")
+    genbank_accession: str | None = Field(default=None, description="GenBank accession override")
+    refseq_accession: str | None = Field(default=None, description="RefSeq accession override")
+    pdb_id: str | None = Field(default=None, description="PDB accession override")
+    gene_id: str | None = Field(default=None, description="NCBI Gene ID override")
+    protein_id: str | None = Field(default=None, description="NCBI protein accession override")
+    transcript_id: str | None = Field(default=None, description="Transcript accession override")
+    genomic_coordinates: str | None = Field(
         default=None,
         description="Genomic coordinates as accession:start-end:strand",
     )
-    additional_ids: Dict[str, str] = Field(
+    additional_ids: dict[str, str] = Field(
         default_factory=dict,
         description="Additional IDs for custom routing",
     )
@@ -144,7 +145,7 @@ class SequenceFetchInput(BaseToolInput):
         requests (list[SequenceFetchRequest]): One or more retrieval requests.
     """
 
-    requests: List[SequenceFetchRequest] = InputField(description="One or more retrieval requests")
+    requests: list[SequenceFetchRequest] = InputField(description="One or more retrieval requests")
 
     @field_validator("requests", mode="before")
     @classmethod
@@ -158,7 +159,7 @@ class SequenceFetchInput(BaseToolInput):
 
     @field_validator("requests")
     @classmethod
-    def validate_requests(cls, value: List[SequenceFetchRequest]) -> List[SequenceFetchRequest]:
+    def validate_requests(cls, value: list[SequenceFetchRequest]) -> list[SequenceFetchRequest]:
         """Require at least one request."""
         if not value:
             raise ValueError("requests must not be empty")
@@ -189,11 +190,11 @@ class FetchedSequence(BaseModel):
     source_database: Literal["ncbi", "uniprot", "pdb"] = Field(
         description="Source database for this sequence"
     )
-    accession: Optional[str] = Field(default=None, description="Source accession identifier")
+    accession: str | None = Field(default=None, description="Source accession identifier")
     sequence: str = Field(description="Retrieved sequence")
     length: int = Field(ge=0, description="Sequence length")
-    checksum_sha256: Optional[str] = Field(default=None, description="SHA256 checksum")
-    source_url: Optional[str] = Field(default=None, description="Source URL for provenance")
+    checksum_sha256: str | None = Field(default=None, description="SHA256 checksum")
+    source_url: str | None = Field(default=None, description="Source URL for provenance")
     inferred: bool = Field(default=False, description="Whether sequence is inferred")
 
 
@@ -211,9 +212,9 @@ class FetchedStructure(BaseModel):
 
     pdb_id: str = Field(description="PDB accession")
     source_database: Literal["pdb"] = Field(default="pdb", description="Source database")
-    title: Optional[str] = Field(default=None, description="Structure title")
-    method: Optional[str] = Field(default=None, description="Experimental method")
-    resolution: Optional[float] = Field(default=None, description="Resolution in angstroms")
+    title: str | None = Field(default=None, description="Structure title")
+    method: str | None = Field(default=None, description="Experimental method")
+    resolution: float | None = Field(default=None, description="Resolution in angstroms")
     source_url: str = Field(description="Canonical structure URL")
 
 
@@ -236,22 +237,22 @@ class SequenceFetchResult(BaseModel):
     request_id: str = Field(description="Request identifier")
     target_name: str = Field(description="Original target name")
     organism: str = Field(description="Original organism name")
-    requested_types: List[str] = Field(description="Requested molecule types")
+    requested_types: list[str] = Field(description="Requested molecule types")
     status: Literal["success", "warning", "failed"] = Field(description="Result status")
-    fetched_sequences: List[FetchedSequence] = Field(
+    fetched_sequences: list[FetchedSequence] = Field(
         default_factory=list,
         description="Retrieved sequence records",
     )
-    fetched_structures: List[FetchedStructure] = Field(
+    fetched_structures: list[FetchedStructure] = Field(
         default_factory=list,
         description="Retrieved structure records",
     )
-    resolved_ids: Dict[str, str] = Field(
+    resolved_ids: dict[str, str] = Field(
         default_factory=dict,
         description="Resolved identifiers used in retrieval",
     )
-    warnings: List[str] = Field(default_factory=list, description="Non-fatal warnings")
-    errors: List[str] = Field(default_factory=list, description="Fatal or partial failure messages")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal warnings")
+    errors: list[str] = Field(default_factory=list, description="Fatal or partial failure messages")
 
 
 class SequenceFetchOutput(BaseToolOutput):
@@ -266,7 +267,7 @@ class SequenceFetchOutput(BaseToolOutput):
         num_failed: Number of failed request results.
     """
 
-    results: List[SequenceFetchResult] = Field(
+    results: list[SequenceFetchResult] = Field(
         default_factory=list,
         description="Per-request retrieval outcomes",
     )
@@ -302,11 +303,13 @@ class SequenceFetchOutput(BaseToolOutput):
         return sum(1 for r in self.results if r.status == "failed")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "fasta"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -398,13 +401,13 @@ class SequenceFetchConfig(BaseConfig):
         description="Include SHA256 checksums per sequence",
         advanced=True,
     )
-    ncbi_api_key: Optional[str] = ConfigField(
+    ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
         description="Optional NCBI API key",
         advanced=True,
     )
-    ncbi_email: Optional[str] = ConfigField(
+    ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
         description="Optional NCBI contact email",
@@ -466,10 +469,10 @@ def _ncbi_fetch_first_fasta(
     config: NCBIFetchConfig,
     session: requests.Session,
     rettype: str = "fasta",
-    seq_start: Optional[int] = None,
-    seq_stop: Optional[int] = None,
-    strand: Optional[str] = None,
-) -> Optional[Tuple[str, str, str]]:
+    seq_start: int | None = None,
+    seq_stop: int | None = None,
+    strand: str | None = None,
+) -> tuple[str, str, str] | None:
     """Fetch the first FASTA record from NCBI efetch, or None if not found."""
     result = _ncbi_efetch(
         db=db,
@@ -530,6 +533,8 @@ def run_sequence_fetch(
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
         config (SequenceFetchConfig | None): Timeout and validation settings.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         SequenceFetchOutput: Per-request retrieval status, sequences, and metadata.
 
@@ -581,11 +586,11 @@ def _process_single_request(
 ) -> SequenceFetchResult:
     """Process one request and return a normalized result object."""
     request_id = request.request_id or f"request_{request_index}"
-    warnings: List[str] = []
-    errors: List[str] = []
-    sequences: List[FetchedSequence] = []
-    structures: List[FetchedStructure] = []
-    resolved_ids: Dict[str, str] = {}
+    warnings: list[str] = []
+    errors: list[str] = []
+    sequences: list[FetchedSequence] = []
+    structures: list[FetchedStructure] = []
+    resolved_ids: dict[str, str] = {}
 
     type_error = _validate_request_type_compatibility(request, config)
     if type_error:
@@ -671,7 +676,7 @@ def _process_single_request(
 def _validate_request_type_compatibility(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
-) -> Optional[str]:
+) -> str | None:
     """Validate obvious ncRNA/protein mismatches. Returns error message or None."""
     if not config.strict_type_checks:
         return None
@@ -699,9 +704,9 @@ def _fetch_protein(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch protein sequence using ID-priority resolution."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ncfg = _ncbi_config(config)
     ucfg = _uniprot_config(config)
     pcfg = _pdb_config(config)
@@ -866,9 +871,9 @@ def _fetch_dna_genomic(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch genomic DNA sequence."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
     coords = _parse_coordinates(request.genomic_coordinates)
@@ -951,8 +956,8 @@ def _fetch_dna_genomic(
     if not ids:
         return f"No genomic DNA found for '{request.target_name}' in '{request.organism}'"
 
-    attempted_not_found: List[str] = []
-    selected_id: Optional[str] = None
+    attempted_not_found: list[str] = []
+    selected_id: str | None = None
     header = ""
     sequence = ""
     url = ""
@@ -1013,9 +1018,9 @@ def _fetch_dna_genomic_from_gene_locus(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch genomic DNA by resolving gene locus coordinates from NCBI gene."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
     if request.gene_id:
@@ -1105,9 +1110,9 @@ def _fetch_dna_cds(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch coding DNA sequence (CDS)."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
     accession = _preferred_accession(request)
@@ -1221,9 +1226,9 @@ def _fetch_rna_transcript(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch transcript RNA sequence."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
     transcript_accession = request.transcript_id or request.refseq_accession
@@ -1298,7 +1303,7 @@ def _fetch_rna_premrna(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> Optional[Tuple[FetchedSequence, Dict[str, str], List[str]]]:
+) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
     """Fetch or infer pre-mRNA sequence from genomic sequence."""
     genomic_result = _fetch_dna_genomic(request, config, session)
     if isinstance(genomic_result, str):
@@ -1330,16 +1335,16 @@ def _fetch_structure(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-    resolved_ids: Optional[Dict[str, str]] = None,
-) -> Optional[Tuple[FetchedStructure, Dict[str, str], List[str]]]:
+    resolved_ids: dict[str, str] | None = None,
+) -> tuple[FetchedStructure, dict[str, str], list[str]] | None:
     """Fetch structure metadata from PDB."""
-    warnings: List[str] = []
+    warnings: list[str] = []
     ucfg = _uniprot_config(config)
     pcfg = _pdb_config(config)
 
     pdb_id = request.pdb_id
     uniprot_id = request.uniprot_id
-    entry: Optional[Dict[str, Any]] = None
+    entry: dict[str, Any] | None = None
 
     if not pdb_id and not uniprot_id and resolved_ids:
         uniprot_id = resolved_ids.get("uniprot_id")
@@ -1404,7 +1409,7 @@ def _fetch_structure(
 # ============================================================================
 
 
-def _preferred_accession(request: SequenceFetchRequest) -> Optional[str]:
+def _preferred_accession(request: SequenceFetchRequest) -> str | None:
     """Return the best available accession override."""
     return (
         request.genbank_accession
@@ -1421,7 +1426,7 @@ def _ncbi_term_for_request(request: SequenceFetchRequest) -> str:
     return base_term
 
 
-def _parse_coordinates(value: Optional[str]) -> Optional[Tuple[Optional[str], int, int, Optional[str]]]:
+def _parse_coordinates(value: str | None) -> tuple[str | None, int, int, str | None] | None:
     """Parse accession:start-end:strand coordinates."""
     if not value:
         return None
@@ -1468,9 +1473,9 @@ def _sequence_record(
         "rna_premrna",
     ],
     source_database: Literal["ncbi", "uniprot", "pdb"],
-    accession: Optional[str],
+    accession: str | None,
     sequence: str,
-    source_url: Optional[str],
+    source_url: str | None,
     config: SequenceFetchConfig,
     inferred: bool,
 ) -> FetchedSequence:
@@ -1528,9 +1533,9 @@ def _ncbi_gene_term(target_name: str, organism: str) -> str:
 
 
 def _select_best_record(
-    records: List[NCBIFastaRecord],
+    records: list[NCBIFastaRecord],
     target_name: str,
-) -> Optional[NCBIFastaRecord]:
+) -> NCBIFastaRecord | None:
     """Select the FASTA record whose header best matches target_name."""
     if not records:
         return None

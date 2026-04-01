@@ -1,6 +1,7 @@
-"""tests/inverse_folding_tests/test_proteinmpnn.py
+"""tests/inverse_folding_tests/test_proteinmpnn.py.
 
-Tests for ProteinMPNN sampling and scoring."""
+Tests for ProteinMPNN sampling and scoring.
+"""
 
 import random
 from pathlib import Path

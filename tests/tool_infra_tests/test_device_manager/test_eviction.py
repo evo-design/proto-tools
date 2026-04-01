@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_eviction.py
+"""tests/tool_infra_tests/test_device_manager/test_eviction.py.
 
-Tests for LRU eviction and eviction callbacks."""
+Tests for LRU eviction and eviction callbacks.
+"""
 
 import time
 from unittest.mock import patch
@@ -101,9 +102,12 @@ def test_cpu_eviction_calls_callback_with_cpu(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1, calls2, calls3 = [], [], []
-    cb1 = lambda action: calls1.append(action)
-    cb2 = lambda action: calls2.append(action)
-    cb3 = lambda action: calls3.append(action)
+    def cb1(action):
+        return calls1.append(action)
+    def cb2(action):
+        return calls2.append(action)
+    def cb3(action):
+        return calls3.append(action)
 
     device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=cb1)
     time.sleep(0.01)
@@ -123,9 +127,12 @@ def test_restart_eviction_calls_callback_with_shutdown(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.RESTART)
 
     calls1, calls2, calls3 = [], [], []
-    cb1 = lambda action: calls1.append(action)
-    cb2 = lambda action: calls2.append(action)
-    cb3 = lambda action: calls3.append(action)
+    def cb1(action):
+        return calls1.append(action)
+    def cb2(action):
+        return calls2.append(action)
+    def cb3(action):
+        return calls3.append(action)
 
     device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=cb1)
     time.sleep(0.01)
@@ -183,8 +190,10 @@ def test_cpu_eviction_preserves_lru_ordering(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1, calls2 = [], []
-    cb1 = lambda action: calls1.append(action)
-    cb2 = lambda action: calls2.append(action)
+    def cb1(action):
+        return calls1.append(action)
+    def cb2(action):
+        return calls2.append(action)
 
     device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=cb1)
     time.sleep(0.01)
@@ -296,7 +305,8 @@ def test_multi_gpu_eviction_calls_callback_once(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1 = []
-    cb1 = lambda action: calls1.append(action)
+    def cb1(action):
+        return calls1.append(action)
 
     device_manager.request_device(
         "tool1", "instance1", device="cudax2", eviction_callback=cb1

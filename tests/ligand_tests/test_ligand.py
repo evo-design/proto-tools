@@ -1,6 +1,7 @@
-"""tests/ligand_tests/test_ligand.py
+"""tests/ligand_tests/test_ligand.py.
 
-Tests for Ligands entity."""
+Tests for Ligands entity.
+"""
 
 import pytest
 
@@ -88,7 +89,7 @@ def test_to_pdb_single_fragment():
     assert "END" in pdb_string
 
     lines = pdb_string.split('\n')
-    atom_lines = [line for line in lines if line.startswith('HETATM') or line.startswith('ATOM')]
+    atom_lines = [line for line in lines if line.startswith(('HETATM', 'ATOM'))]
     assert len(atom_lines) > 0
     # Chain ID is at position 21 in PDB format
     assert all(line[21] == 'A' for line in atom_lines)
@@ -105,8 +106,8 @@ def test_to_pdb_multiple_fragments():
     assert is_valid_structure(pdb_string)
 
     lines = pdb_string.split('\n')
-    atom_lines = [line for line in lines if line.startswith('HETATM') or line.startswith('ATOM')]
-    chain_ids = set(line[21] for line in atom_lines)
+    atom_lines = [line for line in lines if line.startswith(('HETATM', 'ATOM'))]
+    chain_ids = {line[21] for line in atom_lines}
     assert len(chain_ids) == 2
     assert 'A' in chain_ids
     assert 'B' in chain_ids
@@ -158,7 +159,7 @@ def test_to_pdb_spacing_parameter():
 
     def get_chain_b_min_x(pdb_string):
         lines = pdb_string.split('\n')
-        chain_b_atoms = [line for line in lines if (line.startswith('HETATM') or line.startswith('ATOM')) and line[21] == 'B']
+        chain_b_atoms = [line for line in lines if (line.startswith(('HETATM', 'ATOM'))) and line[21] == 'B']
         return min(float(line[30:38]) for line in chain_b_atoms)
 
     assert get_chain_b_min_x(pdb_large_spacing) > get_chain_b_min_x(pdb_small_spacing)

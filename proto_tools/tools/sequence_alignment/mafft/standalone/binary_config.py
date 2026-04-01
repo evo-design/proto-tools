@@ -1,5 +1,4 @@
-"""
-MAFFT binary download and extraction configuration.
+"""MAFFT binary download and extraction configuration.
 
 Provides platform-specific download URLs and extraction logic for MAFFT.
 Used by the shared install_binary.py utility during venv setup.
@@ -8,8 +7,6 @@ Pre-built binaries are used on x86_64 Linux and macOS. On aarch64 Linux
 (no official pre-built binary), the source tarball is downloaded and
 compiled with `make`.
 """
-
-from __future__ import annotations
 
 import platform
 import stat

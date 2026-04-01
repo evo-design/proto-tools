@@ -1,11 +1,13 @@
-"""proto_tools/tools/masked_models/shared_data_models.py
+"""proto_tools/tools/masked_models/shared_data_models.py.
 
 Contains base schemas for embeddings, scoring, and sampling operations
-shared across all masked/bidirectional protein language models."""
+shared across all masked/bidirectional protein language models.
+"""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -39,7 +41,7 @@ class MaskedModelInput(BaseToolInput):
             (20 standard amino acids + X (any amino acid) + * (stop codon)).
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Protein sequence(s) to process as string or list of strings. (will be normalized to List[str])",
         examples=[
             "MVLSP",
@@ -49,16 +51,13 @@ class MaskedModelInput(BaseToolInput):
 
     @field_validator('sequences', mode='before')
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize sequences to a list.
 
         Accepts single string or list of strings.
         Normalizes to List[str] and validates non-empty sequences.
         """
-        if isinstance(value, str):
-            seqs = [value]
-        else:
-            seqs = value
+        seqs = [value] if isinstance(value, str) else value
 
         for seq in seqs:
             if seq is None:
@@ -114,13 +113,13 @@ class SequenceEmbedding(BaseModel):
         logits (list[list[float]] | None): Optional per-position amino acid logits for one sequence.
     """
 
-    mean_embedding: List[float] = Field(
+    mean_embedding: list[float] = Field(
         description="Mean-pooled embedding vector (averaged over sequence length)",
     )
-    attention_mask: List[int] = Field(
+    attention_mask: list[int] = Field(
         description="Binary mask: 1 = valid position, 0 = padding",
     )
-    logits: Optional[List[List[float]]] = Field(
+    logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position amino acid logits (seq_len, vocab_size)",
     )
@@ -137,7 +136,7 @@ class MaskedModelOutput(BaseToolOutput):
             a mean-pooled embedding vector, attention mask, and optional logits.
     """
 
-    results: List[SequenceEmbedding] = Field(
+    results: list[SequenceEmbedding] = Field(
         description="Per-sequence embedding results",
     )
 
@@ -146,11 +145,13 @@ class MaskedModelOutput(BaseToolOutput):
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json", "pt", "npy"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -181,7 +182,7 @@ class MaskedModelOutput(BaseToolOutput):
                 import torch
                 torch.save(torch.tensor(embeddings), path)
             except ImportError:
-                raise ImportError("PyTorch ('torch') is required for .pt export. Please install it.")
+                raise ImportError("PyTorch ('torch') is required for .pt export. Please install it.") from None
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -197,7 +198,7 @@ class MaskedModelScoringInput(BaseToolInput):
             string or a list of strings.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Protein sequences to score",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -251,15 +252,15 @@ class SequenceScores(BaseModel):
         vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
-    metrics: Dict[str, float] = Field(
+    metrics: dict[str, float] = Field(
         default_factory=dict,
         description="Dictionary of scalar scoring metrics",
     )
-    logits: Optional[List[List[float]]] = Field(
+    logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
-    vocab: Optional[List[str]] = Field(
+    vocab: list[str] | None = Field(
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
@@ -296,12 +297,12 @@ class MaskedModelScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: List[SequenceScores] = Field(
+    scores: list[SequenceScores] = Field(
         description="List of scoring outputs, one per input sequence"
     )
 
     @property
-    def vocab(self) -> Optional[List[str]]:
+    def vocab(self) -> list[str] | None:
         """Token ordering for logits; derived from first score."""
         return self.scores[0].vocab if self.scores else None
 
@@ -315,11 +316,13 @@ class MaskedModelScoringOutput(BaseToolOutput):
         return iter(self.scores)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):

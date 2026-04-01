@@ -1,11 +1,12 @@
-"""proto_tools/tools/masked_models/esm2/esm2_sample.py
+"""proto_tools/tools/masked_models/esm2/esm2_sample.py.
 
-ESM2 sampling tool."""
+ESM2 sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field
 
@@ -59,20 +60,22 @@ class ESM2SampleOutput(BaseToolOutput):
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
             if return_logits=True in config.
     """
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Sampled/mutated protein sequences"
     )
-    logits: Optional[List[List[List[float]]]] = Field(
+    logits: list[list[list[float]]] | None = Field(
         default=None,
         description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -80,13 +83,11 @@ class ESM2SampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
 
         elif file_format == "txt":
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
 
         elif file_format == "json":
             import json
@@ -185,6 +186,8 @@ def run_esm2_sample(
     Args:
         inputs (ESM2SampleInput): Protein sequences with ``_`` at designable positions.
         config (ESM2SampleConfig | None): Sampling configuration.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.

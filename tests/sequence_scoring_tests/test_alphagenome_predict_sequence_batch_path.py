@@ -1,6 +1,7 @@
-"""tests/sequence_scoring_tests/test_alphagenome_predict_sequence_batch_path.py
+"""tests/sequence_scoring_tests/test_alphagenome_predict_sequence_batch_path.py.
 
-Tests for AlphaGenome predict sequences dispatch."""
+Tests for AlphaGenome predict sequences dispatch.
+"""
 
 from __future__ import annotations
 

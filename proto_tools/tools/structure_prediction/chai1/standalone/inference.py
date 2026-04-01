@@ -1,13 +1,11 @@
-"""
-Chai1 inference implementation.
-"""
+"""Chai1 inference implementation."""
 
 from __future__ import annotations
 
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class Chai1Model:
         fasta_file: Path,
         output_dir: Path,
         use_esm_embeddings: bool = True,
-        msa_directory: Optional[Path] = None,
+        msa_directory: Path | None = None,
         num_trunk_recycles: int = 3,
         num_diffn_timesteps: int = 200,
         num_diffn_samples: int = 1,
@@ -34,9 +32,8 @@ class Chai1Model:
         seed: int = 42,
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Run Chai1 structure prediction.
+    ) -> dict[str, Any]:
+        """Run Chai1 structure prediction.
 
         Args:
             fasta_file: Path to input FASTA file
@@ -58,12 +55,12 @@ class Chai1Model:
         if not self._loaded:
             self.load(device, verbose)
 
-        logger.debug(f"\n=== Chai1 Prediction ===")
+        logger.debug("\n=== Chai1 Prediction ===")
         logger.debug(f"Input FASTA: {fasta_file}")
         logger.debug(f"Output directory: {output_dir}")
         logger.debug(f"MSA directory: {msa_directory}")
-        logger.debug(f"Reading FASTA content...")
-        with open(fasta_file, "r") as f:
+        logger.debug("Reading FASTA content...")
+        with open(fasta_file) as f:
             fasta_content = f.read()
         logger.debug(f"\n--- Input FASTA ---\n{fasta_content}\n------------------\n")
         sys.stdout.flush()
@@ -98,12 +95,12 @@ class Chai1Model:
         best_iptm = candidates.ranking_data[0].ptm_scores.interface_ptm.item()
         best_pae = candidates.pae[0].mean().item()
 
-        logger.debug(f"\nChai1 prediction completed successfully")
+        logger.debug("\nChai1 prediction completed successfully")
         logger.debug(f"Best aggregate score: {best_score:.4f}")
         logger.debug(f"pLDDT: {best_plddt:.4f}, pTM: {best_ptm:.4f}, iPTM: {best_iptm:.4f}")
         sys.stdout.flush()
 
-        with open(best_cif_path, "r") as f:
+        with open(best_cif_path) as f:
             cif_output = f.read()
 
         return {
@@ -117,9 +114,8 @@ class Chai1Model:
             },
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False):
-        """
-        Load Chai1 model components.
+    def load(self, device: str = "cuda", verbose: bool = False):  # noqa: ARG002 — required by tool interface
+        """Load Chai1 model components.
 
         Args:
             device: Device to run on ('cuda' or 'cpu')
@@ -134,7 +130,7 @@ class Chai1Model:
         except ImportError:
             raise ImportError(
                 "Could not import chai_lab. Make sure Chai1 is installed in the current environment."
-            )
+            ) from None
 
         self.device = device
         self._loaded = True
@@ -173,8 +169,7 @@ def dispatch(input_dict: dict) -> dict:
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -198,7 +193,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

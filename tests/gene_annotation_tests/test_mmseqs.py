@@ -1,6 +1,7 @@
-"""tests/gene_annotation_tests/test_mmseqs.py
+"""tests/gene_annotation_tests/test_mmseqs.py.
 
-Tests for the MMseqs2 tools."""
+Tests for the MMseqs2 tools.
+"""
 
 from pathlib import Path
 

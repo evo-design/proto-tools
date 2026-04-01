@@ -1,5 +1,4 @@
-"""
-Segmasker standalone runner for ToolInstance venv execution.
+"""Segmasker standalone runner for ToolInstance venv execution.
 
 Handles low-complexity region detection via NCBI's segmasker binary.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -16,7 +15,7 @@ import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
 def _find_binary(name: str) -> str:
@@ -105,12 +104,12 @@ def run_segmasker(input_data: dict) -> dict:
                 f"but expected {len(sequences)}"
             )
 
-        fractions: List[float] = []
-        counts: List[int] = []
-        results_data: List[Dict[str, Any]] = []
+        fractions: list[float] = []
+        counts: list[int] = []
+        results_data: list[dict[str, Any]] = []
 
         for seq_idx, (original_seq, record) in enumerate(
-            zip(sequences, seq_records)
+            zip(sequences, seq_records, strict=False)
         ):
             if len(original_seq) == 0:
                 fractions.append(0.0)
@@ -148,7 +147,7 @@ def run_segmasker(input_data: dict) -> dict:
         }
 
     except subprocess.TimeoutExpired:
-        raise RuntimeError("Segmasker execution timed out after 60 seconds")
+        raise RuntimeError("Segmasker execution timed out after 60 seconds") from None
 
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -181,7 +180,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_segmasker(input_data)

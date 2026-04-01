@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_alignment/tmalign/tmalign.py
+"""proto_tools/tools/structure_alignment/tmalign/tmalign.py.
 
 Wraps the TMalign binary (Zhang & Skolnick, 2005) as a ToolInstance-dispatched
 tool.  Accepts two PDB text blobs, writes them to temp files, calls the binary,
@@ -10,7 +9,6 @@ from __future__ import annotations
 
 from logging import getLogger
 from pathlib import Path
-from typing import List, Union
 
 from pydantic import Field
 
@@ -64,14 +62,16 @@ class TMalignOutput(BaseToolOutput):
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):  # noqa: ARG002 — required by base class _export_output interface
         import json as json_mod
 
         path = Path(export_path).with_suffix(".json")
@@ -117,7 +117,6 @@ def run_tmalign(
     inputs: TMalignInput, config: TMalignConfig | None = None, instance=None
 ) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
-
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,
         "pdb_text_2": inputs.pdb_text_2,

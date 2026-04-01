@@ -1,12 +1,13 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/shared_data_models.py
+"""proto_tools/tools/sequence_scoring/alphagenome/shared_data_models.py.
 
-Shared data models, constants, and Literal types for AlphaGenome tools."""
+Shared data models, constants, and Literal types for AlphaGenome tools.
+"""
 from __future__ import annotations
 
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -143,22 +144,24 @@ class AlphaGenomePredictOutput(BaseToolOutput):
     chromosome: str = Field(description="Chromosome identifier")
     interval_start: int = Field(description="Interval start (0-based)")
     interval_end: int = Field(description="Interval end (0-based, exclusive)")
-    requested_outputs: List[OutputTypeName] = Field(description="Output types requested for this prediction")
-    result: Dict[str, Any] = Field(description="Serialized AlphaGenome prediction payload")
-    variant: Optional[Dict[str, Any]] = Field(
+    requested_outputs: list[OutputTypeName] = Field(description="Output types requested for this prediction")
+    result: dict[str, Any] = Field(description="Serialized AlphaGenome prediction payload")
+    variant: dict[str, Any] | None = Field(
         default=None,
         description="Variant metadata for variant-effect predictions",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "npy"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
         payload = self.model_dump(mode="json")
 
@@ -189,19 +192,21 @@ class AlphaGenomeScoreOutput(BaseToolOutput):
             ``interval_scorer``, ``track_name``, ``raw_score``, etc.
     """
 
-    scores: List[Dict[str, Any]] = Field(
+    scores: list[dict[str, Any]] = Field(
         description="Tidy score records (one per scorer-track-gene combination)"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
@@ -244,12 +249,12 @@ class AlphaGenomePredictConfig(BaseConfig):
         advanced=True,
         reload_on_change=True,
     )
-    requested_outputs: List[OutputTypeName] = ConfigField(
+    requested_outputs: list[OutputTypeName] = ConfigField(
         title="Requested Outputs",
         default=["RNA_SEQ"],
         description="Output type names to request from AlphaGenome",
     )
-    ontology_terms: Optional[List[str]] = ConfigField(
+    ontology_terms: list[str] | None = ConfigField(
         title="Ontology Terms",
         default=None,
         description="Optional ontology term filters",
@@ -278,10 +283,10 @@ class AlphaGenomePredictConfig(BaseConfig):
 
     @field_validator("requested_outputs")
     @classmethod
-    def validate_requested_outputs(cls, outputs: List[str]) -> List[str]:
+    def validate_requested_outputs(cls, outputs: list[str]) -> list[str]:
         """Uppercase and deduplicate requested output names."""
         seen: set[str] = set()
-        normalized: List[str] = []
+        normalized: list[str] = []
         for name in outputs:
             upper = name.strip().upper()
             if upper not in seen:

@@ -1,12 +1,9 @@
-"""
-Borzoi standalone inference implementation for venv execution.
-"""
+"""Borzoi standalone inference implementation for venv execution."""
 from __future__ import annotations
 
 import json
 import logging
 import sys
-from typing import List
 
 import torch
 
@@ -17,8 +14,7 @@ BORZOI_OUTPUT = 6_144
 
 
 class BorzoiModel:
-    """
-    Borzoi model for regulatory activity prediction.
+    """Borzoi model for regulatory activity prediction.
 
     Supports human and mouse models with optional FlashAttention.
     """
@@ -29,8 +25,7 @@ class BorzoiModel:
         replicate: str = "0",
         use_flash_attn: bool = True,
     ):
-        """
-        Initialize Borzoi model wrapper.
+        """Initialize Borzoi model wrapper.
 
         Args:
             species: Species to predict for ('human' or 'mouse')
@@ -77,7 +72,7 @@ class BorzoiModel:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def _reload_to_device(self, model, old_device: str, new_device: str):
+    def _reload_to_device(self, model, old_device: str, new_device: str):  # noqa: ARG002 — required by device transition callback signature
         """Custom move function: reload the model onto the target GPU.
 
         Borzoi uses flash-attn/Triton kernels that cannot run on CPU, so
@@ -114,13 +109,12 @@ class BorzoiModel:
     def __call__(
         self,
         sequence: str,
-        output_tracks: List[int],
+        output_tracks: list[int],
         avg_output_tracks: bool = True,
         device: str = "cuda",
         verbose: bool = False,
     ) -> torch.Tensor:
-        """
-        Run Borzoi inference on a DNA sequence.
+        """Run Borzoi inference on a DNA sequence.
 
         Args:
             sequence: DNA sequence (must be BORZOI_CONTEXT=524,288 bp)
@@ -145,9 +139,8 @@ class BorzoiModel:
         onehot[indices, range(len(sequence))] = 1
 
         # Run prediction with autocast
-        with torch.amp.autocast(device):
-            with torch.inference_mode():
-                output = self.model(onehot.unsqueeze(0), is_human=(self.species == "human"))
+        with torch.amp.autocast(device), torch.inference_mode():
+            output = self.model(onehot.unsqueeze(0), is_human=(self.species == "human"))
 
         # Process output - always return 2D (num_tracks, positions)
         if avg_output_tracks:
@@ -222,8 +215,7 @@ def dispatch(input_dict: dict) -> dict:
             "applied_species": _model.species,
             "applied_replicate": _model.replicate,
         }
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -233,9 +225,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -251,7 +242,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

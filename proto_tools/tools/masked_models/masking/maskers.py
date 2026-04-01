@@ -1,4 +1,4 @@
-"""proto_tools/tools/masked_models/masking/maskers.py
+"""proto_tools/tools/masked_models/masking/maskers.py.
 
 Each masker has:
 - ``supported_models``: which models it works with (None = no model needed)
@@ -6,12 +6,14 @@ Each masker has:
 - ``score(sequences, position_score_fn)``: returns per-position scores
 
 The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
-truth for valid method names."""
+truth for valid method names.
+"""
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Literal, get_args
+from collections.abc import Callable
+from typing import ClassVar, Literal, get_args
 
 import numpy as np
 
@@ -66,6 +68,7 @@ class Masker(ABC):
     supported_models: list[str] | None = None
 
     def __init__(self, strategy):
+        """Initialize MyCustomMasker."""
         self.strategy = strategy
 
     @abstractmethod
@@ -100,15 +103,16 @@ class RandomMasker(Masker):
     def score(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,
+        position_score_fn: Callable | None = None,  # noqa: ARG002 — required by abstract Masker interface
     ) -> list[list[float]]:
+        """Score a sequence at masked positions using the model."""
         return [[0.0] * len(seq) for seq in sequences]
 
 
 class EntropyMasker(Masker):
     """Score positions by Shannon entropy. High uncertainty leads to masking."""
 
-    supported_models = ["esm2", "esm3"]
+    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]
 
     def score(
         self,
@@ -119,7 +123,7 @@ class EntropyMasker(Masker):
         logits = position_score_fn(sequences)
         all_scores = []
         for seq_logits in logits:
-            # (seq_len, vocab_size)
+            # (seq_len, vocab_size)  # noqa: ERA001 -- tensor shape annotation
             arr = np.array(seq_logits)
             # Numerically stable softmax
             arr = arr - arr.max(axis=-1, keepdims=True)
@@ -134,7 +138,7 @@ class EntropyMasker(Masker):
 class MaxLogitMasker(Masker):
     """Score positions by negated max-logit. Low confidence leads to masking."""
 
-    supported_models = ["esm2", "esm3"]
+    supported_models: ClassVar[list[str]] = ["esm2", "esm3"]
 
     def score(
         self,
@@ -161,7 +165,7 @@ MASKERS: dict[str, type[Masker]] = {
     "max-logit": MaxLogitMasker,
 }
 
-assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (
+assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (  # noqa: S101
     f"MASKERS keys {set(MASKERS.keys())} don't match "
     f"MaskingMethod values {set(get_args(MaskingMethod))}"
 )

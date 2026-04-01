@@ -1,5 +1,4 @@
-"""
-RFdiffusion3 inference implementation.
+"""RFdiffusion3 inference implementation.
 
 References:
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
@@ -16,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, ClassVar
 
 import gemmi
 
@@ -30,8 +29,8 @@ class RFdiffusion3Model:
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
     """
 
-    _STRUCTURE_EXTENSIONS = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
-    _AA_MAP = {
+    _STRUCTURE_EXTENSIONS: ClassVar[tuple[str, ...]] = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
+    _AA_MAP: ClassVar[dict[str, str]] = {
         "ALA": "A", "CYS": "C", "ASP": "D", "GLU": "E", "PHE": "F",
         "GLY": "G", "HIS": "H", "ILE": "I", "LYS": "K", "LEU": "L",
         "MET": "M", "ASN": "N", "PRO": "P", "GLN": "Q", "ARG": "R",
@@ -59,9 +58,8 @@ class RFdiffusion3Model:
         verbose: bool = False,
         # All other CLI args pass through to rfd3
         **cli_kwargs,
-    ) -> Dict[str, Any]:
-        """
-        Run RFdiffusion3 structure design.
+    ) -> dict[str, Any]:
+        """Run RFdiffusion3 structure design.
 
         This method supports all CLI arguments documented in the RFdiffusion3 input specification.
         Common parameters are explicit; all other RFdiffusion3 CLI args can be passed as keyword arguments.
@@ -82,6 +80,8 @@ class RFdiffusion3Model:
             verbose: Whether to print status messages
             **cli_kwargs: Additional CLI arguments passed directly to rfd3.
                 See RFdiffusion3 docs for complete list.
+
+            device: Target device for model execution.
 
         Returns:
             Dictionary containing list of designed structures with metadata
@@ -121,7 +121,7 @@ class RFdiffusion3Model:
 
             if value is None:
                 continue
-            elif isinstance(value, (dict, list)):
+            if isinstance(value, (dict, list)):
                 cmd.append(f"{key}={json.dumps(value)}")
             else:
                 cmd.append(f"{key}={value}")
@@ -148,7 +148,7 @@ class RFdiffusion3Model:
         # Extract the outputs
         return self._extract_rfd3_outputs(output_dir)
 
-    def load(self, verbose: bool = False):
+    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
         """Load RFdiffusion3 model components."""
         logger.debug("Initializing RFdiffusion3")
 
@@ -168,7 +168,7 @@ class RFdiffusion3Model:
 
         logger.debug(f"RFdiffusion3 initialized. Executable: {self.rfd3_executable}")
 
-    def _extract_rfd3_outputs(self, output_dir: str) -> Dict[str, Any]:
+    def _extract_rfd3_outputs(self, output_dir: str) -> dict[str, Any]:
         """Extract designed structures from RFdiffusion3 outputs.
 
         RFdiffusion3 output files follow this naming convention:
@@ -233,11 +233,11 @@ class RFdiffusion3Model:
                 return filename[:-len(ext)]
         return filename
 
-    def _read_output_json(self, structure_file: Path) -> Dict[str, Any]:
+    def _read_output_json(self, structure_file: Path) -> dict[str, Any]:
         """Read the JSON metadata file corresponding to a structure file."""
         json_path = structure_file.parent / f"{self._strip_ext(structure_file.name)}.json"
         if json_path.exists():
-            with open(json_path, "r") as f:
+            with open(json_path) as f:
                 return json.load(f)
         return {}
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

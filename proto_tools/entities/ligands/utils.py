@@ -1,8 +1,9 @@
-"""
-proto_tools/entities/ligands/utils.py
+"""proto_tools/entities/ligands/utils.py.
 
 Utility functions for working with ligands.
 """
+
+from __future__ import annotations
 
 import time
 from urllib.parse import quote
@@ -15,9 +16,7 @@ from rdkit import Chem
 # Validation
 # ===============================
 def is_smiles_valid(smiles: str) -> bool:
-    """
-    Check if a SMILES string is valid.
-    """
+    """Check if a SMILES string is valid."""
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
@@ -27,14 +26,10 @@ def is_smiles_valid(smiles: str) -> bool:
         return False
 
 def is_mol_valid(mol: Chem.Mol) -> bool:
-    """
-    Check if a RDKit Mol object is valid.
-    """
+    """Check if a RDKit Mol object is valid."""
     if mol is None:
         return False
-    if not mol.GetNumAtoms() > 0:
-        return False
-    return True
+    return mol.GetNumAtoms() > 0
 
 # ===============================
 # PubChem Retrieval
@@ -43,16 +38,13 @@ def is_mol_valid(mol: Chem.Mol) -> bool:
 MAX_RETRIES = 10
 TIMEOUT = 10
 
-import time
 
-import requests
 
 TIMEOUT = 10
 MAX_RETRIES = 10
 
 def fetch_pubchem_txt(url: str) -> str | None:
-    """
-    Fetch a PubChem TXT response from the given URL, with retries and timeout.
+    """Fetch a PubChem TXT response from the given URL, with retries and timeout.
 
     Args:
         url (str): The PubChem REST URL
@@ -65,7 +57,7 @@ def fetch_pubchem_txt(url: str) -> str | None:
             resp = requests.get(url, timeout=TIMEOUT)
             if resp.status_code == 200 and resp.text.strip():
                 return resp.text.strip()
-            elif resp.status_code == 429:  # rate limited
+            if resp.status_code == 429:  # rate limited
                 time.sleep(2 ** attempt)
                 continue
         except requests.RequestException:
@@ -74,8 +66,7 @@ def fetch_pubchem_txt(url: str) -> str | None:
 
 
 def get_smiles_from_name(name: str) -> str:
-    """
-    Retrieve the canonical SMILES for a molecule given its name using PubChem.
+    """Retrieve the canonical SMILES for a molecule given its name using PubChem.
 
     Args:
         name (str): Name of the molecule (e.g., "Aspirin")
@@ -95,8 +86,8 @@ def get_smiles_from_name(name: str) -> str:
 
 
 def get_name_from_smiles(smiles: str) -> str:
-    """
-    Retrieve the primary compound name from PubChem given a SMILES string. If
+    """Retrieve the primary compound name from PubChem given a SMILES string. If.
+
     the molecule is not found, returns "Unknown".
 
     Args:

@@ -1,10 +1,9 @@
-"""proto_tools/utils/http_session.py
+"""proto_tools/utils/http_session.py.
 
-Shared HTTP session builder with retry logic."""
+Shared HTTP session builder with retry logic.
+"""
 
 from __future__ import annotations
-
-from typing import List, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -17,7 +16,7 @@ def build_http_session(
     http_retries: int,
     backoff_seconds: float,
     user_agent: str,
-    allowed_methods: Optional[List[str]] = None,
+    allowed_methods: list[str] | None = None,
     mount_http: bool = False,
 ) -> requests.Session:
     """Build a requests session with retry adapter."""

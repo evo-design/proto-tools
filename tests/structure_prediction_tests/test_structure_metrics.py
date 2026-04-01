@@ -1,8 +1,7 @@
-"""tests/structure_prediction_tests/test_structure_metrics.py
+"""tests/structure_prediction_tests/test_structure_metrics.py.
 
-Tests for structure metrics."""
-
-from __future__ import annotations
+Tests for structure metrics.
+"""
 
 import json
 from pathlib import Path

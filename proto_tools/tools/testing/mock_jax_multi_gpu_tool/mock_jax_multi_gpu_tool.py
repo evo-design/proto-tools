@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_jax_multi_gpu_tool/mock_jax_multi_gpu_tool.py
+"""proto_tools/tools/testing/mock_jax_multi_gpu_tool/mock_jax_multi_gpu_tool.py.
 
 This is a minimal 2-GPU JAX-pattern tool designed for testing multi-device
 allocation, movement, and eviction with JAX semantics: model reload on
-device change, no in-place .to()."""
+device change, no in-place .to().
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -92,10 +93,12 @@ class MockJAXMultiGPUToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -152,7 +155,6 @@ def run_mock_jax_multi_gpu_tool(
     instance=None,
 ) -> MockJAXMultiGPUToolOutput:
     """Run mock JAX multi-GPU tool (two minimal models with JAX semantics)."""
-
     result = ToolInstance.dispatch(
         "mock_jax_multi_gpu_tool",
         {

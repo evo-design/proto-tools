@@ -1,3 +1,5 @@
+"""Standalone inference entry point for Splice Transformer RNA splicing prediction."""
+
 from __future__ import annotations
 
 import json
@@ -5,7 +7,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import torch
@@ -34,7 +35,10 @@ def _resolve_local_checkpoint_path() -> Path | None:
 
 
 class SpliceTransformerModel:
+    """Manages Splice Transformer model loading and batch inference."""
+
     def __init__(self, context_length: int = 4000):
+        """Initialize SpliceTransformerModel."""
         self.context_length = context_length
         self.device = None
         self.model = None
@@ -42,14 +46,13 @@ class SpliceTransformerModel:
 
     def __call__(
         self,
-        target_seqs: List[str],
-        left_contexts: List[str],
-        right_contexts: List[str],
+        target_seqs: list[str],
+        left_contexts: list[str],
+        right_contexts: list[str],
         device: str = "cuda",
         verbose: bool = False,
     ) -> np.ndarray:
-        """
-        Run SpliceTransformer inference on sequences with contexts.
+        """Run SpliceTransformer inference on sequences with contexts.
 
         Args:
             target_seqs: Target sequences to make predictions on
@@ -71,21 +74,18 @@ class SpliceTransformerModel:
             "Number of targets must be the same as the number of left and right contexts"
 
         seqs_tokenized = []
-        for target, left, right in zip(target_seqs, left_contexts, right_contexts):
+        for target, left, right in zip(target_seqs, left_contexts, right_contexts, strict=False):
             assert len(left) == len(right) == self.context_length, \
                 f"Length of left and right contexts must be {self.context_length}, got {len(left)} and {len(right)}"
             seq = left + target + right
             seqs_tokenized.append(self._one_hot_encode(seq))
         seqs_tokenized = np.stack(seqs_tokenized)
 
-        prediction = self._calc_batched_sequence(seqs_tokenized)  # (batch, target_length, 18)
-        return prediction
+        return self._calc_batched_sequence(seqs_tokenized)  # (batch, target_length, 18)
 
 
     def _one_hot_encode(self, seq: str):
-        """
-        Parse input RNA sequence into one-hot-encoding format
-        """
+        """Parse input RNA sequence into one-hot-encoding format."""
         IN_MAP = np.asarray(
             [[0, 0, 0, 0],
              [1, 0, 0, 0],
@@ -96,8 +96,7 @@ class SpliceTransformerModel:
         seq = seq.upper().replace('A', '1').replace('C', '2')
         seq = seq.replace('G', '3').replace('T', '4').replace('U', '4').replace('N', '0')
         seq = np.asarray(list(map(int, list(seq))))
-        seq = IN_MAP[seq.astype('int8')]
-        return seq
+        return IN_MAP[seq.astype('int8')]
 
 
     def _post_decorate(self, outputs: torch.Tensor):
@@ -107,8 +106,7 @@ class SpliceTransformerModel:
 
 
     def _step(self, inputs: torch.Tensor) -> torch.Tensor:
-        """
-        Run model forward pass.
+        """Run model forward pass.
 
         Args:
             inputs: Encoded sequence tensor of shape (batch, 4, length)
@@ -119,13 +117,11 @@ class SpliceTransformerModel:
         assert len(inputs.size()) == 3
         with torch.no_grad():
             out = self.model(inputs).cpu().detach()
-            out = self._post_decorate(out)
-            return out
+            return self._post_decorate(out)
 
 
     def _calc_single_sequence(self, seq: np.ndarray) -> np.ndarray:
-        """
-        Calculate model output for a single sequence.
+        """Calculate model output for a single sequence.
 
         Args:
             seq: One-hot encoded sequence array of shape (length, 4)
@@ -136,13 +132,11 @@ class SpliceTransformerModel:
         seq = torch.tensor(seq).to(self.device)
         seq = seq.unsqueeze(0).transpose(1, 2)
         res = self._step(seq.float())
-        res = res[0].transpose(0, 1).numpy()
-        return res
+        return res[0].transpose(0, 1).numpy()
 
 
     def _calc_batched_sequence(self, seq: np.ndarray) -> np.ndarray:
-        """
-        Calculate model output for multiple sequences.
+        """Calculate model output for multiple sequences.
 
         Args:
             seq: One-hot encoded sequence array of shape (batch, length, 4)
@@ -153,8 +147,7 @@ class SpliceTransformerModel:
         seq = torch.tensor(seq).to(self.device)
         seq = seq.transpose(1, 2)  # 　(batch, length, 4) -> (batch, 4, length)
         res = self._step(seq.float())
-        res = res.transpose(1, 2).numpy()  # 　(batch, 4, length) -> (batch, length, 4)
-        return res
+        return res.transpose(1, 2).numpy()  # 　(batch, 4, length) -> (batch, length, 4)
 
     # ============================================================================
     # Model Loading & Device Management
@@ -166,7 +159,7 @@ class SpliceTransformerModel:
             for key, value in state_dict.items()
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load SpliceTransformer model to device."""
         logger.debug(f"Loading SpliceTransformer (context_length={self.context_length}) on {device}")
 
@@ -213,7 +206,7 @@ class SpliceTransformerModel:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
 
-    def unload(self, verbose: bool = False) -> None:
+    def unload(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
             logger.debug("Unloading SpliceTransformer from GPU")
@@ -267,8 +260,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
         )
         return {"prediction": prediction}
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -278,9 +270,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -296,7 +287,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

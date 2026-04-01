@@ -1,5 +1,4 @@
-"""
-proto_tools/entities/ligands/ccd_utils.py
+"""proto_tools/entities/ligands/ccd_utils.py.
 
 Utilities for working with the wwPDB Chemical Component Dictionary (CCD).
 
@@ -14,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional, Set
 
 import pandas as pd
 
@@ -30,7 +28,7 @@ def _ensure_ccd_database() -> None:
         raise FileNotFoundError(f"CCD database not found at {CCD_DATABASE_PATH}")
 
 
-def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> Optional[str]:
+def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str | None:
     """Map a SMILES string to its corresponding CCD code.
 
     This function searches the CCD database for an exact SMILES match and returns
@@ -64,7 +62,7 @@ def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> Optio
     _ensure_ccd_database()
 
     # Try exact SMILES match first
-    with open(CCD_DATABASE_PATH, 'r') as f:
+    with open(CCD_DATABASE_PATH) as f:
         for line in f:
             fields = line.rstrip().split('\t')
             if len(fields) < 2:
@@ -79,7 +77,7 @@ def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> Optio
     return None
 
 
-def _map_smiles_to_ccd_via_name(smiles: str) -> Optional[str]:
+def _map_smiles_to_ccd_via_name(smiles: str) -> str | None:
     """Attempt to map SMILES to CCD code via molecule name lookup.
 
     This is a fallback method when exact SMILES matching fails. It:
@@ -106,7 +104,7 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> Optional[str]:
 
         # Search for matching descriptions in CCD database
         matches = []
-        with open(CCD_DATABASE_PATH, "r") as f:
+        with open(CCD_DATABASE_PATH) as f:
             for line in f:
                 fields = line.rstrip().split("\t")
                 if len(fields) < 3:
@@ -129,7 +127,7 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> Optional[str]:
             return matches[0]["ccd_code"]
 
         # If multiple matches, log them all and return None
-        elif len(matches) > 1:
+        if len(matches) > 1:
             logger.debug(
                 f"Multiple CCD matches found for SMILES '{smiles}' with name '{name}':"
             )
@@ -148,7 +146,7 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> Optional[str]:
         return None
 
 
-def map_ccd_code_to_smiles(ccd_code: str) -> Optional[str]:
+def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
     """Map a CCD code to its corresponding SMILES string.
 
     This function searches the CCD database for a CCD code and returns the
@@ -175,7 +173,7 @@ def map_ccd_code_to_smiles(ccd_code: str) -> Optional[str]:
 
     ccd_code_upper = ccd_code.upper()
 
-    with open(CCD_DATABASE_PATH, 'r') as f:
+    with open(CCD_DATABASE_PATH) as f:
         for line in f:
             fields = line.rstrip().split('\t')
             if len(fields) < 2:
@@ -186,7 +184,7 @@ def map_ccd_code_to_smiles(ccd_code: str) -> Optional[str]:
     return None
 
 
-def get_ccd_description(ccd_code: str) -> Optional[str]:
+def get_ccd_description(ccd_code: str) -> str | None:
     """Get the description/name for a CCD code.
 
     Args:
@@ -206,7 +204,7 @@ def get_ccd_description(ccd_code: str) -> Optional[str]:
 
     ccd_code_upper = ccd_code.upper()
 
-    with open(CCD_DATABASE_PATH, 'r') as f:
+    with open(CCD_DATABASE_PATH) as f:
         for line in f:
             fields = line.rstrip().split('\t')
             if len(fields) < 3:
@@ -246,7 +244,7 @@ def is_valid_ccd_code(ccd_code: str) -> bool:
     return code_upper in _get_ccd_code_cache()
 
 
-def get_all_ccd_codes() -> Set[str]:
+def get_all_ccd_codes() -> set[str]:
     """Get all CCD codes from the database.
 
     Warning: This loads all codes into memory. Use sparingly.
@@ -257,7 +255,7 @@ def get_all_ccd_codes() -> Set[str]:
     _ensure_ccd_database()
 
     codes = set()
-    with open(CCD_DATABASE_PATH, 'r') as f:
+    with open(CCD_DATABASE_PATH) as f:
         for line in f:
             fields = line.rstrip().split('\t')
             if len(fields) >= 2:
@@ -267,10 +265,10 @@ def get_all_ccd_codes() -> Set[str]:
 
 
 # Cache for CCD codes - populated on first access
-_CCD_CODE_CACHE: Optional[Set[str]] = None
+_CCD_CODE_CACHE: set[str] | None = None
 
 
-def _get_ccd_code_cache() -> Set[str]:
+def _get_ccd_code_cache() -> set[str]:
     """Lazy-load all CCD codes into memory on first use.
 
     This function caches the entire set of CCD codes from the database
@@ -280,7 +278,7 @@ def _get_ccd_code_cache() -> Set[str]:
     Returns:
         set[str]: Set of all CCD codes in the database
     """
-    global _CCD_CODE_CACHE
+    global _CCD_CODE_CACHE  # noqa: PLW0603 -- module-level cache
     if _CCD_CODE_CACHE is None:
         _CCD_CODE_CACHE = get_all_ccd_codes()
     return _CCD_CODE_CACHE
@@ -325,7 +323,7 @@ COMMON_MODIFICATIONS = {
 CCD_PARENT_MAPPING_PATH = Path(__file__).parent / "ccd_maps" / "ccd_to_og.csv"
 
 # Cache for the CCD parent mapping dataframe
-_CCD_PARENT_DF_CACHE: Optional[pd.DataFrame] = None
+_CCD_PARENT_DF_CACHE: pd.DataFrame | None = None
 
 
 def _get_ccd_parent_dataframe() -> pd.DataFrame:
@@ -334,7 +332,7 @@ def _get_ccd_parent_dataframe() -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame with columns: ccd_code, parent_3letter, parent_1letter
     """
-    global _CCD_PARENT_DF_CACHE
+    global _CCD_PARENT_DF_CACHE  # noqa: PLW0603 -- module-level cache
 
     if _CCD_PARENT_DF_CACHE is None:
         if not CCD_PARENT_MAPPING_PATH.exists():
@@ -346,7 +344,7 @@ def _get_ccd_parent_dataframe() -> pd.DataFrame:
     return _CCD_PARENT_DF_CACHE
 
 
-def get_canonical_component(ccd_code: str) -> Optional[str]:
+def get_canonical_component(ccd_code: str) -> str | None:
     """Get the canonical (unmodified) form for a modified CCD component.
 
     This function maps CCD codes for modified components to their canonical

@@ -1,8 +1,7 @@
-"""tests/structure_alignment_tests/test_tmalign.py
+"""tests/structure_alignment_tests/test_tmalign.py.
 
-Tests for TMalign structure alignment tool."""
-from __future__ import annotations
-
+Tests for TMalign structure alignment tool.
+"""
 from pathlib import Path
 
 import pytest

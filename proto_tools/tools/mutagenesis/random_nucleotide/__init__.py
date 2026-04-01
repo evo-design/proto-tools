@@ -1,4 +1,6 @@
-from .random_nucleotide_sample import (
+"""Random nucleotide mutagenesis."""
+
+from proto_tools.tools.mutagenesis.random_nucleotide.random_nucleotide_sample import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,

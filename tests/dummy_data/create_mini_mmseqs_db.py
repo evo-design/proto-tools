@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""
-tests/dummy_data/create_mini_mmseqs_db.py
+"""tests/dummy_data/create_mini_mmseqs_db.py.
 
 This script downloads and sets up a mini MMseqs2 database for testing purposes.
 It uses ToolInstance to access mmseqs from the isolated tool environment.
 """
-
-from __future__ import annotations
 
 import logging
 import shutil
@@ -63,7 +60,7 @@ def download_file(url: str, output_path: Path) -> None:
         logger.info("Download complete")
         return
     except Exception as e:
-        raise RuntimeError(f"Failed to download {url}: {e}")
+        raise RuntimeError(f"Failed to download {url}: {e}") from e
 
 
 def setup_mini_database():

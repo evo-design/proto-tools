@@ -166,15 +166,11 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 
 ## Docstring Conventions
 
-Google style everywhere. Enforced by `tests/style_consistency_tests/test_module_docstrings.py` and `test_docstring_style.py`.
+Google style everywhere. Enforced by ruff D rules (Google convention) and `tests/style_consistency_tests/test_docstring_style.py` (type-matching, return-type, continuation indent).
 
-- **Module docstrings**: First line is the relative path from repo root. Blank line, then short description. More content after that is optional. `__init__.py` files are exempt.
+- **Module docstrings**: A one-line Google-style summary ending with a period, or a summary line + blank line + details for longer descriptions. `__init__.py` files are exempt (D104 ignored). No path-header prefix.
   ```python
-  """
-  proto_tools/utils/device_manager.py
-
-  Centralized GPU allocation tracking with LRU eviction.
-  """
+  """Centralized GPU allocation tracking with LRU eviction."""
   ```
 - **One-liners**: Acceptable for simple functions. No structured sections needed.
 - **Multi-line docstrings** (anything with a blank line): Google style. Summary line, blank line, then sections as needed: `Args:`, `Returns:`, `Raises:`, `Attributes:`, `Example:`, `Note:`.
@@ -216,7 +212,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 
 - Python >=3.10, Pydantic >=2.0
 - Do **not** auto-format; formatting is handled manually
-- Ruff (line length 88, checks F401 + F841 + import sorting). No auto-formatting.
+- Ruff (line length 120, 22 rule groups with Google-convention pydocstyle — see `pyproject.toml [tool.ruff.lint]` for full config). No auto-formatting.
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`
 - **Generally use `--all` when running tests** to include integration and GPU tests

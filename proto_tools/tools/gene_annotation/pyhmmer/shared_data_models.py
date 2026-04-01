@@ -1,10 +1,10 @@
-"""proto_tools/tools/gene_annotation/pyhmmer/shared_data_models.py
+"""proto_tools/tools/gene_annotation/pyhmmer/shared_data_models.py.
 
-Shared data models, constants, and helpers for PyHMMER tools."""
+Shared data models, constants, and helpers for PyHMMER tools.
+"""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 from pydantic import ConfigDict, Field, field_validator
@@ -127,15 +127,14 @@ class PyHmmerInput(BaseToolInput):
             All sequences must be non-empty and contain valid characters.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Input sequences as: single sequence string or list of sequence strings"
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
-        """
-        Normalize sequences to a list of strings.
+    def normalize_sequences(cls, value) -> list[str]:
+        """Normalize sequences to a list of strings.
 
         Handles input formats:
         - Single sequence string
@@ -144,15 +143,14 @@ class PyHmmerInput(BaseToolInput):
         if isinstance(value, str):
             # Single sequence
             return [value]
-        elif isinstance(value, list):
+        if isinstance(value, list):
             # List of sequences
             return value
-        else:
-            raise ValueError(f"Unsupported sequences input type: {type(value)}")
+        raise ValueError(f"Unsupported sequences input type: {type(value)}")
 
     @field_validator("sequences")
     @classmethod
-    def validate_sequences(cls, sequences: List[str]) -> List[str]:
+    def validate_sequences(cls, sequences: list[str]) -> list[str]:
         """Validate that sequences are non-empty."""
         if not sequences:
             raise ValueError("At least one sequence is required")
@@ -228,10 +226,10 @@ class PyHmmerOutput(BaseToolOutput):
         num_sequence_hits: Total number of sequence-level hits found.
         num_domain_hits: Total number of domain-level hits found.
     """
-    sequence_hits_df: Optional[pd.DataFrame] = Field(
+    sequence_hits_df: pd.DataFrame | None = Field(
         default=None, description="DataFrame with per-sequence hits"
     )
-    domain_hits_df: Optional[pd.DataFrame] = Field(
+    domain_hits_df: pd.DataFrame | None = Field(
         default=None, description="DataFrame with per-domain hits"
     )
 
@@ -239,18 +237,22 @@ class PyHmmerOutput(BaseToolOutput):
 
     @property
     def num_sequence_hits(self) -> int:
+        """Return the number of unique sequence hits."""
         return len(self.sequence_hits_df) if self.sequence_hits_df is not None else 0
 
     @property
     def num_domain_hits(self) -> int:
+        """Return the number of domain-level hits."""
         return len(self.domain_hits_df) if self.domain_hits_df is not None else 0
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -342,7 +344,7 @@ class PyHmmerConfig(BaseConfig):
         gt=0,
         description="E-value reporting threshold for sequence level hits",
     )
-    score_threshold: Optional[float] = ConfigField(
+    score_threshold: float | None = ConfigField(
         title="Score Threshold",
         default=None,
         description="Score reporting threshold. (Overrides the E-value threshold)",
@@ -354,7 +356,7 @@ class PyHmmerConfig(BaseConfig):
         gt=0,
         description="E-value reporting threshold for domain level hits",
     )
-    domain_score_threshold: Optional[float] = ConfigField(
+    domain_score_threshold: float | None = ConfigField(
         title="Domain Score Threshold",
         default=None,
         description="Score reporting threshold for domain level hits. (Overrides the Domain E-value threshold)",
@@ -366,9 +368,9 @@ class PyHmmerConfig(BaseConfig):
 # Helper Functions
 # ============================================================================
 def _build_dataframes(
-    sequence_hits: List[dict],
-    domain_hits: List[dict],
-) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    sequence_hits: list[dict],
+    domain_hits: list[dict],
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Build DataFrames from lists of hit dicts returned by the standalone script.
 
     Args:
@@ -405,13 +407,13 @@ def _convert_dtypes(df: pd.DataFrame, is_domain: bool = False) -> pd.DataFrame:
     float_cols = [
         col_name
         for col_name, col_desc in ACTIVE_COLUMNS.items()
-        if col_desc[1] == float
+        if col_desc[1] is float
     ]
     int_cols = [
-        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] == int
+        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] is int
     ]
     bool_cols = [
-        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] == bool
+        col_name for col_name, col_desc in ACTIVE_COLUMNS.items() if col_desc[1] is bool
     ]
 
     # Convert numeric columns

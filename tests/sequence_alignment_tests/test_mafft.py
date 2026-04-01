@@ -1,6 +1,7 @@
-"""tests/sequence_alignment_tests/test_mafft.py
+"""tests/sequence_alignment_tests/test_mafft.py.
 
-Tests for MAFFT tool in proto_tools.tools.sequence_alignment.mafft"""
+Tests for MAFFT tool in proto_tools.tools.sequence_alignment.mafft
+"""
 
 import pytest
 

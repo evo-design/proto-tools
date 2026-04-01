@@ -1,6 +1,7 @@
-"""tests/masked_models_tests/test_esm2.py
+"""tests/masked_models_tests/test_esm2.py.
 
-Tests for ESM2."""
+Tests for ESM2.
+"""
 import numpy as np
 import pytest
 
@@ -80,7 +81,7 @@ def test_esm2_score_tool():
     assert isinstance(result.vocab, list), f"Vocab should be a list, got {type(result.vocab)}"
     assert len(result.vocab) == 20, f"ESM2 vocab should have 20 tokens, got {len(result.vocab)}"
 
-    for seq, score in zip(sequences, result.scores):
+    for seq, score in zip(sequences, result.scores, strict=False):
         assert "log_likelihood" in score.metrics
         assert "avg_log_likelihood" in score.metrics
         assert "perplexity" in score.metrics
@@ -144,7 +145,7 @@ def test_esm2_score_batched():
 
     assert len(result.scores) == 4
 
-    for seq, score in zip(sequences, result.scores):
+    for seq, score in zip(sequences, result.scores, strict=False):
         assert score.perplexity >= 1.0
         assert score.log_likelihood < 0
         logits = np.array(score.logits)
@@ -161,7 +162,7 @@ def test_esm2_score_variable_length():
 
     result = run_esm2_score(inputs=inputs, config=config)
 
-    for seq, score in zip(sequences, result.scores):
+    for seq, score in zip(sequences, result.scores, strict=False):
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
         assert len(score.logits) == len(seq), (
             f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"

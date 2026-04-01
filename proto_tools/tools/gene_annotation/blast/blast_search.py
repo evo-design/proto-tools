@@ -1,13 +1,14 @@
-"""proto_tools/tools/gene_annotation/blast/blast_search.py
+"""proto_tools/tools/gene_annotation/blast/blast_search.py.
 
-Unified BLAST search tool supporting both online (NCBI) and local modes."""
+Unified BLAST search tool supporting both online (NCBI) and local modes.
+"""
 from __future__ import annotations
 
 import io
 import logging
 import re
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 import pandas as pd
 from pydantic import ConfigDict, Field, model_validator
@@ -133,7 +134,7 @@ class BlastSearchOutput(BaseToolOutput):
         num_hits (int): Total number of alignment hits found.
     """
 
-    results_df: Optional[pd.DataFrame] = Field(
+    results_df: pd.DataFrame | None = Field(
         default=None,
         description="DataFrame with BLAST results",
     )
@@ -143,11 +144,13 @@ class BlastSearchOutput(BaseToolOutput):
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -250,7 +253,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    entrez_query: Optional[str] = ConfigField(
+    entrez_query: str | None = ConfigField(
         default=None,
         title="Entrez Query",
         description=(
@@ -259,7 +262,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    hitlist_size: Optional[int] = ConfigField(
+    hitlist_size: int | None = ConfigField(
         default=None,
         title="Hit List Size",
         description=(
@@ -269,7 +272,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    megablast: Optional[bool] = ConfigField(
+    megablast: bool | None = ConfigField(
         default=None,
         title="Use MegaBLAST",
         description=(
@@ -280,7 +283,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # --- Local-only ---
-    local_db: Optional[str] = ConfigField(
+    local_db: str | None = ConfigField(
         default=None,
         title="Local BLAST Database",
         description=(
@@ -297,7 +300,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # --- Scoring parameters ---
-    evalue: Optional[float] = ConfigField(
+    evalue: float | None = ConfigField(
         default=None,
         title="E-value Threshold",
         description=(
@@ -306,7 +309,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         gt=0,
     )
-    word_size: Optional[int] = ConfigField(
+    word_size: int | None = ConfigField(
         default=None,
         title="Word Size",
         description=(
@@ -316,7 +319,7 @@ class BlastSearchConfig(BaseConfig):
         ge=2,
         advanced=True,
     )
-    gapopen: Optional[int] = ConfigField(
+    gapopen: int | None = ConfigField(
         default=None,
         title="Gap Open Cost",
         description=(
@@ -326,7 +329,7 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         advanced=True,
     )
-    gapextend: Optional[int] = ConfigField(
+    gapextend: int | None = ConfigField(
         default=None,
         title="Gap Extend Cost",
         description=(
@@ -336,7 +339,7 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         advanced=True,
     )
-    matrix: Optional[SCORING_MATRICES] = ConfigField(
+    matrix: SCORING_MATRICES | None = ConfigField(
         default=None,
         title="Scoring Matrix",
         description=(
@@ -345,7 +348,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    reward: Optional[int] = ConfigField(
+    reward: int | None = ConfigField(
         default=None,
         title="Nucleotide Match Reward",
         description=(
@@ -355,7 +358,7 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         advanced=True,
     )
-    penalty: Optional[int] = ConfigField(
+    penalty: int | None = ConfigField(
         default=None,
         title="Nucleotide Mismatch Penalty",
         description=(
@@ -365,7 +368,7 @@ class BlastSearchConfig(BaseConfig):
         le=0,
         advanced=True,
     )
-    threshold: Optional[int] = ConfigField(
+    threshold: int | None = ConfigField(
         default=None,
         title="Word Score Threshold",
         description=(
@@ -375,7 +378,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    comp_based_stats: Optional[Literal[0, 1, 2, 3]] = ConfigField(
+    comp_based_stats: Literal[0, 1, 2, 3] | None = ConfigField(
         default=None,
         title="Composition-Based Statistics",
         description=(
@@ -386,7 +389,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # --- Filtering parameters ---
-    max_target_seqs: Optional[int] = ConfigField(
+    max_target_seqs: int | None = ConfigField(
         default=None,
         title="Max Target Sequences",
         description=(
@@ -396,7 +399,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    max_hsps: Optional[int] = ConfigField(
+    max_hsps: int | None = ConfigField(
         default=None,
         title="Max HSPs",
         description=(
@@ -406,7 +409,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    perc_identity: Optional[float] = ConfigField(
+    perc_identity: float | None = ConfigField(
         default=None,
         title="Percent Identity Cutoff",
         description=(
@@ -417,7 +420,7 @@ class BlastSearchConfig(BaseConfig):
         le=100,
         advanced=True,
     )
-    qcov_hsp_perc: Optional[float] = ConfigField(
+    qcov_hsp_perc: float | None = ConfigField(
         default=None,
         title="Query Coverage Per HSP",
         description="Minimum query coverage percentage per HSP (0-100).",
@@ -425,7 +428,7 @@ class BlastSearchConfig(BaseConfig):
         le=100,
         advanced=True,
     )
-    culling_limit: Optional[int] = ConfigField(
+    culling_limit: int | None = ConfigField(
         default=None,
         title="Culling Limit",
         description=(
@@ -435,7 +438,7 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         advanced=True,
     )
-    best_hit_overhang: Optional[float] = ConfigField(
+    best_hit_overhang: float | None = ConfigField(
         default=None,
         title="Best Hit Overhang",
         description=(
@@ -446,7 +449,7 @@ class BlastSearchConfig(BaseConfig):
         lt=0.5,
         advanced=True,
     )
-    best_hit_score_edge: Optional[float] = ConfigField(
+    best_hit_score_edge: float | None = ConfigField(
         default=None,
         title="Best Hit Score Edge",
         description=(
@@ -457,7 +460,7 @@ class BlastSearchConfig(BaseConfig):
         lt=0.5,
         advanced=True,
     )
-    subject_besthit: Optional[bool] = ConfigField(
+    subject_besthit: bool | None = ConfigField(
         default=None,
         title="Subject Best Hit",
         description="Only report the best hit per subject sequence.",
@@ -465,7 +468,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # --- Masking parameters ---
-    soft_masking: Optional[bool] = ConfigField(
+    soft_masking: bool | None = ConfigField(
         default=None,
         title="Soft Masking",
         description=(
@@ -474,13 +477,13 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    lcase_masking: Optional[bool] = ConfigField(
+    lcase_masking: bool | None = ConfigField(
         default=None,
         title="Lowercase Masking",
         description="Treat lowercase letters in FASTA input as masked.",
         advanced=True,
     )
-    dust: Optional[str] = ConfigField(
+    dust: str | None = ConfigField(
         default=None,
         title="DUST Filter",
         description=(
@@ -489,7 +492,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    seg: Optional[str] = ConfigField(
+    seg: str | None = ConfigField(
         default=None,
         title="SEG Filter",
         description=(
@@ -500,7 +503,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # --- Search parameters ---
-    task: Optional[BLAST_TASKS] = ConfigField(
+    task: BLAST_TASKS | None = ConfigField(
         default=None,
         title="BLAST Task",
         description=(
@@ -509,13 +512,13 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    ungapped: Optional[bool] = ConfigField(
+    ungapped: bool | None = ConfigField(
         default=None,
         title="Ungapped Alignment",
         description="Perform ungapped alignment only.",
         advanced=True,
     )
-    strand: Optional[Literal["both", "plus", "minus"]] = ConfigField(
+    strand: Literal["both", "plus", "minus"] | None = ConfigField(
         default=None,
         title="Query Strand",
         description=(
@@ -524,7 +527,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    query_gencode: Optional[int] = ConfigField(
+    query_gencode: int | None = ConfigField(
         default=None,
         title="Query Genetic Code",
         description=(
@@ -534,7 +537,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    db_gencode: Optional[int] = ConfigField(
+    db_gencode: int | None = ConfigField(
         default=None,
         title="Database Genetic Code",
         description=(
@@ -544,7 +547,7 @@ class BlastSearchConfig(BaseConfig):
         ge=1,
         advanced=True,
     )
-    window_size: Optional[int] = ConfigField(
+    window_size: int | None = ConfigField(
         default=None,
         title="Window Size",
         description=(
@@ -553,13 +556,13 @@ class BlastSearchConfig(BaseConfig):
         ge=0,
         advanced=True,
     )
-    xdrop_ungap: Optional[float] = ConfigField(
+    xdrop_ungap: float | None = ConfigField(
         default=None,
         title="X-dropoff Ungapped",
         description="X-dropoff value (in bits) for ungapped extensions.",
         advanced=True,
     )
-    xdrop_gap: Optional[float] = ConfigField(
+    xdrop_gap: float | None = ConfigField(
         default=None,
         title="X-dropoff Gapped",
         description=(
@@ -567,13 +570,13 @@ class BlastSearchConfig(BaseConfig):
         ),
         advanced=True,
     )
-    xdrop_gap_final: Optional[float] = ConfigField(
+    xdrop_gap_final: float | None = ConfigField(
         default=None,
         title="X-dropoff Final",
         description="X-dropoff value (in bits) for final gapped alignment.",
         advanced=True,
     )
-    use_sw_tback: Optional[bool] = ConfigField(
+    use_sw_tback: bool | None = ConfigField(
         default=None,
         title="Smith-Waterman Traceback",
         description=(
@@ -598,7 +601,8 @@ class BlastSearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> BlastSearchConfig:
-        """Validate that mode-specific required fields are provided and
+        """Validate that mode-specific required fields are provided and.
+
         warn about mode-inappropriate parameters.
 
         Raises ``ValueError`` for hard errors (e.g. missing ``local_db``
@@ -667,6 +671,8 @@ def run_blast_search(
     Args:
         inputs (BlastSearchInput): Validated BLAST search input.
         config (BlastSearchConfig | None): Validated BLAST search configuration.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         BlastSearchOutput: Structured output with BLAST results DataFrame.
@@ -772,7 +778,7 @@ def _local_search(
 
     # If query is a raw sequence, write it to a temp FASTA file
     if inputs.query_type == "sequence":
-        tmp = tempfile.NamedTemporaryFile(
+        tmp = tempfile.NamedTemporaryFile(  # noqa: SIM115 -- delete=False requires manual cleanup
             mode="w", suffix=".fasta", delete=False
         )
         tmp.write(f">query\n{inputs.query}\n")

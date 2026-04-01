@@ -1,4 +1,6 @@
-from .colabfold_search import (
+"""ColabFold MSA search via MMseqs2."""
+
+from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchOutput,

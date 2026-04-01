@@ -1,5 +1,4 @@
-"""
-MMseqs2 standalone runner for ToolInstance venv execution.
+"""MMseqs2 standalone runner for ToolInstance venv execution.
 
 Handles protein search, genome search, and clustering operations.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -15,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional
 
 # ============================================================================
 # Helpers
@@ -33,7 +31,7 @@ def _find_binary(name: str = "mmseqs") -> str:
     return str(binary)
 
 
-def _run_cmd(cmd: List[str], description: str) -> subprocess.CompletedProcess:
+def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:
     """Run a subprocess command and raise on failure."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -44,16 +42,15 @@ def _run_cmd(cmd: List[str], description: str) -> subprocess.CompletedProcess:
 
 
 def _write_fasta(
-    sequences: List[str],
+    sequences: list[str],
     output_path: str,
-    sequence_ids: Optional[List[str]] = None,
+    sequence_ids: list[str] | None = None,
     prefix: str = "seq",
 ) -> None:
     """Write sequences to a FASTA file."""
     ids = sequence_ids or [f"{prefix}_{i}" for i in range(len(sequences))]
     with open(output_path, "w") as f:
-        for seq_id, seq in zip(ids, sequences):
-            f.write(f">{seq_id}\n{seq}\n")
+        f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in zip(ids, sequences, strict=False))
 
 
 # ============================================================================
@@ -112,10 +109,7 @@ def run_protein_search(input_data: dict) -> dict:
 
         # Read results
         m8_file = Path(m8_path)
-        if m8_file.exists():
-            stdout = m8_file.read_text()
-        else:
-            stdout = ""
+        stdout = m8_file.read_text() if m8_file.exists() else ""
 
     return {"stdout": stdout}
 
@@ -207,10 +201,7 @@ def run_genome_search(input_data: dict) -> dict:
 
         # Read results
         m8_file = Path(results_m8)
-        if m8_file.exists():
-            stdout = m8_file.read_text()
-        else:
-            stdout = ""
+        stdout = m8_file.read_text() if m8_file.exists() else ""
 
     return {"stdout": stdout}
 
@@ -290,7 +281,7 @@ def run_clustering(input_data: dict) -> dict:
         )
 
         # Parse cluster assignments
-        cluster_assignments: Dict[str, str] = {}
+        cluster_assignments: dict[str, str] = {}
         tsv_path = Path(clusters_tsv)
         if tsv_path.exists():
             for line in tsv_path.read_text().strip().splitlines():
@@ -325,7 +316,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     operation = input_data["operation"]

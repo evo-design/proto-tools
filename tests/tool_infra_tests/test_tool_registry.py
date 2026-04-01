@@ -1,6 +1,9 @@
-"""tests/tool_infra_tests/test_tool_registry.py
+"""tests/tool_infra_tests/test_tool_registry.py.
 
-Tests for ToolRegistry."""
+Tests for ToolRegistry.
+"""
+
+from __future__ import annotations
 
 import time
 
@@ -37,42 +40,42 @@ def test_all_tools_have_example_input(tool_spec):
 
 # ── Mock data models ─────────────────────────────────────────────────────────
 class MockToolInput(BaseToolInput):
-    """Mock input for testing"""
+    """Mock input for testing."""
 
     input_data: str = Field(description="Input data to process")
 
 
 class MockToolConfig(BaseConfig):
-    """Mock configuration for testing"""
+    """Mock configuration for testing."""
     param1: str = ConfigField(description="Parameter 1")
     param2: int = ConfigField(default=10, ge=0, description="Parameter 2")
 
 
 class MockToolOutput(MockToolOutputBase):
-    """Mock output for testing"""
+    """Mock output for testing."""
     result: str = Field(description="Result string")
 
 
 class AnotherMockToolInput(BaseToolInput):
-    """Another mock input for testing"""
+    """Another mock input for testing."""
 
     sequences: list[str] = Field(description="Input sequences")
 
 
 class AnotherMockToolConfig(BaseConfig):
-    """Another mock configuration for testing"""
+    """Another mock configuration for testing."""
     threshold: float = ConfigField(default=0.5, ge=0.0, le=1.0, description="Threshold")
 
 
 class AnotherMockToolOutput(MockToolOutputBase):
-    """Another mock output for testing"""
+    """Another mock output for testing."""
     processed_data: list[str] = Field(description="Processed data")
     count: int = Field(description="Data count")
 
 
 @pytest.fixture
 def clean_registry():
-    """Fixture to provide a clean registry for each test"""
+    """Fixture to provide a clean registry for each test."""
     # Save original registry
     original_registry = ToolRegistry._registry.copy()
 
@@ -86,7 +89,7 @@ def clean_registry():
 
 
 def test_tool_registry_register_decorator(clean_registry):
-    """Test basic tool registration using decorator"""
+    """Test basic tool registration using decorator."""
 
     @clean_registry.register(
         key="mock-tool",
@@ -118,7 +121,7 @@ def test_tool_registry_register_decorator(clean_registry):
 
 
 def test_tool_registry_prevent_duplicate_registration(clean_registry):
-    """Test that duplicate registration raises error"""
+    """Test that duplicate registration raises error."""
 
     @clean_registry.register(
         key="duplicate-tool",
@@ -138,7 +141,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
         )
 
     # Attempt to register with same key should fail
-    with pytest.raises(ValueError, match="(?i)already registered"):
+    with pytest.raises(ValueError, match=r"(?i)already registered"):
 
         @clean_registry.register(
             key="duplicate-tool",  # Same key
@@ -162,7 +165,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
 
 
 def test_tool_registry_list_all(clean_registry):
-    """Test listing all registered tools"""
+    """Test listing all registered tools."""
 
     @clean_registry.register(
         key="tool-1",
@@ -266,13 +269,13 @@ def test_tool_registry_schema_methods(clean_registry):
 
 
 def test_tool_registry_get_unknown_tool(clean_registry):
-    """Test that getting unknown tool raises error"""
+    """Test that getting unknown tool raises error."""
     with pytest.raises(ValueError, match="non-existent-tool"):
         clean_registry.get("non-existent-tool")
 
 
 def test_tool_registry_decorator_populates_metadata(clean_registry):
-    """Test that decorator automatically populates metadata fields"""
+    """Test that decorator automatically populates metadata fields."""
 
     @clean_registry.register(
         key="metadata-tool",
@@ -309,7 +312,7 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
 
 
 def test_tool_registry_decorator_handles_exceptions(clean_registry):
-    """Test that decorator handles exceptions and returns error output"""
+    """Test that decorator handles exceptions and returns error output."""
 
     @clean_registry.register(
         key="failing-tool",
@@ -340,7 +343,7 @@ def test_tool_registry_decorator_handles_exceptions(clean_registry):
 
 
 def test_tool_registry_decorator_captures_warnings(clean_registry):
-    """Test that decorator captures warnings during execution"""
+    """Test that decorator captures warnings during execution."""
     import warnings
 
     @clean_registry.register(
@@ -353,7 +356,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
         description="Tool that generates warnings",
     )
     def warning_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        warnings.warn("This is a warning!")
+        warnings.warn("This is a warning!", stacklevel=2)
         return MockToolOutput(result="Done")
 
     # Get the registered function and call it
@@ -370,7 +373,7 @@ def test_tool_registry_decorator_captures_warnings(clean_registry):
 
 
 def test_tool_output_error_access_raises_exception(clean_registry):
-    """Test that accessing unset fields on failed output raises ToolExecutionError"""
+    """Test that accessing unset fields on failed output raises ToolExecutionError."""
     from proto_tools.utils.tool_io import ToolExecutionError
 
     @clean_registry.register(
@@ -411,7 +414,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
 
 
 def test_tool_output_successful_access_works(clean_registry):
-    """Test that accessing fields on successful output works normally"""
+    """Test that accessing fields on successful output works normally."""
 
     @clean_registry.register(
         key="success-access-tool",
@@ -637,8 +640,10 @@ def test_retries_exhaust_with_meaningful_traceback(clean_registry, fast_retry):
 
 
 def test_timeout_error_not_retried(clean_registry, fast_retry):
-    """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its
-    configured timeout; retrying with the same limit would just time out again."""
+    """TimeoutError from ToolInstance/PersistentWorker means the tool exceeded its.
+
+    configured timeout; retrying with the same limit would just time out again.
+    """
     call_count = 0
 
     def tool(inputs, config, instance=None):
@@ -1100,7 +1105,7 @@ def test_non_cacheable_tool_skips_cache_logic(clean_registry, _setup_cache):
 
 
 def test_cacheable_on_toolspec(clean_registry):
-    """cacheable flag is stored on ToolSpec."""
+    """Cacheable flag is stored on ToolSpec."""
 
     @clean_registry.register(
         key="cacheable-spec",

@@ -1,3 +1,5 @@
+"""FAM-PNN inverse folding with packing and scoring."""
+
 from proto_tools.tools.inverse_folding.fampnn.fampnn_pack import (
     FAMPNNPackConfig,
     FAMPNNPackingResult,

@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/sequence_scoring/segmasker/segmasker.py
+"""proto_tools/tools/sequence_scoring/segmasker/segmasker.py.
 
 Segmasker tool for detecting low-complexity regions in protein sequences.
 """
@@ -8,7 +7,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Optional, Union
 
 import pandas as pd
 from pydantic import ConfigDict, Field, field_validator
@@ -41,13 +39,13 @@ class SegmaskerInput(BaseToolInput):
             sequences are handled gracefully (assigned 0.0 low-complexity fraction).
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Protein sequence(s) to analyze for low-complexity regions"
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize single string to list."""
         if isinstance(value, str):
             return [value]
@@ -55,7 +53,7 @@ class SegmaskerInput(BaseToolInput):
 
     @field_validator("sequences")
     @classmethod
-    def validate_sequences(cls, sequences: List[str]) -> List[str]:
+    def validate_sequences(cls, sequences: list[str]) -> list[str]:
         """Validate sequences."""
         if not sequences:
             raise ValueError("At least one sequence is required")
@@ -139,31 +137,33 @@ class SegmaskerOutput(BaseToolOutput):
             Returns ``None`` if processing fails.
     """
 
-    low_complexity_fractions: List[float] = Field(
+    low_complexity_fractions: list[float] = Field(
         description="Fraction of low-complexity regions for each sequence (0.0-1.0)"
     )
-    low_complexity_counts: List[int] = Field(
+    low_complexity_counts: list[int] = Field(
         description="Number of low-complexity positions for each sequence"
     )
-    sequence_lengths: List[int] = Field(
+    sequence_lengths: list[int] = Field(
         description="Length of each input sequence"
     )
-    results_df: Optional[pd.DataFrame] = Field(
+    results_df: pd.DataFrame | None = Field(
         default=None, description="DataFrame with detailed results"
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(
-        self, export_path: Union[str, os.PathLike], file_format: str
+        self, export_path: str | os.PathLike, file_format: str
     ):
         path = Path(export_path).with_suffix(f".{file_format}")
 
@@ -224,6 +224,8 @@ def run_segmasker(
         config (SegmaskerConfig | None): Validated segmasker configuration specifying
             window size and complexity thresholds.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         SegmaskerOutput: Structured output containing:
             - ``low_complexity_fractions``: Fraction of each sequence that is low-complexity
@@ -243,7 +245,6 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
-
     input_data = {
         "sequences": inputs.sequences,
         "config": {

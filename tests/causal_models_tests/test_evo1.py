@@ -1,6 +1,7 @@
-"""tests/causal_models_tests/test_evo1.py
+"""tests/causal_models_tests/test_evo1.py.
 
-Tests for Evo1."""
+Tests for Evo1.
+"""
 
 import json
 

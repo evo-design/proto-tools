@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/gene_annotation/minced/minced.py
+"""proto_tools/tools/gene_annotation/minced/minced.py.
 
 This module provides a standardized interface for detecting CRISPR arrays
 in nucleotide sequences using MinCED (Mining CRISPRs in Environmental Datasets),
@@ -9,7 +8,6 @@ a tool for finding CRISPR repeats and spacers in genomic sequences.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -33,13 +31,13 @@ class CrisprRepeatSpacer(BaseModel):
 
     position: int = Field(description="Position of the repeat in the sequence")
     repeat: str = Field(description="Repeat sequence")
-    spacer: Optional[str] = Field(
+    spacer: str | None = Field(
         default=None, description="Spacer sequence (None for last repeat)"
     )
-    repeat_length: Optional[int] = Field(
+    repeat_length: int | None = Field(
         default=None, description="Length of the repeat"
     )
-    spacer_length: Optional[int] = Field(
+    spacer_length: int | None = Field(
         default=None, description="Length of the spacer"
     )
 
@@ -47,7 +45,7 @@ class CrisprRepeatSpacer(BaseModel):
 class CrisprArray(BaseModel):
     """A single CRISPR array detected in a sequence."""
 
-    repeats_and_spacers: List[CrisprRepeatSpacer] = Field(
+    repeats_and_spacers: list[CrisprRepeatSpacer] = Field(
         default_factory=list,
         description="List of repeat-spacer units in this CRISPR array",
     )
@@ -58,7 +56,7 @@ class CrisprArray(BaseModel):
         return len(self.repeats_and_spacers)
 
     @property
-    def spacers(self) -> List[str]:
+    def spacers(self) -> list[str]:
         """Extract spacer sequences from this array."""
         return [
             rs.spacer for rs in self.repeats_and_spacers
@@ -70,7 +68,7 @@ class MincedSequenceResult(BaseModel):
     """MinCED results for a single input sequence."""
 
     sequence_id: str = Field(description="ID of the input sequence")
-    crispr_arrays: List[CrisprArray] = Field(
+    crispr_arrays: list[CrisprArray] = Field(
         default_factory=list,
         description="CRISPR arrays detected in this sequence",
     )
@@ -95,17 +93,17 @@ class MincedInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Nucleotide sequence(s) to search for CRISPR arrays"
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> List[str]:
+    def normalize_sequences(cls, value) -> list[str]:
         """Normalize a single sequence to a list."""
         if isinstance(value, str):
             return [value]
@@ -120,7 +118,7 @@ class MincedOutput(BaseToolOutput):
         results (list[MincedSequenceResult]): Per-sequence CRISPR detection results.
     """
 
-    results: List[MincedSequenceResult] = Field(
+    results: list[MincedSequenceResult] = Field(
         default_factory=list,
         description="Per-sequence CRISPR array detection results",
     )
@@ -131,30 +129,33 @@ class MincedOutput(BaseToolOutput):
         return sum(1 for r in self.results if r.has_crispr)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
         import pandas as pd
 
         path = Path(export_path).with_suffix(f".{file_format}")
-        rows = []
-        for result in self.results:
-            for arr_idx, array in enumerate(result.crispr_arrays):
-                for rs in array.repeats_and_spacers:
-                    rows.append({
-                        "sequence_id": result.sequence_id,
-                        "array_index": arr_idx,
-                        "position": rs.position,
-                        "repeat": rs.repeat,
-                        "spacer": rs.spacer,
-                        "repeat_length": rs.repeat_length,
-                        "spacer_length": rs.spacer_length,
-                    })
+        rows = [
+            {
+                "sequence_id": result.sequence_id,
+                "array_index": arr_idx,
+                "position": rs.position,
+                "repeat": rs.repeat,
+                "spacer": rs.spacer,
+                "repeat_length": rs.repeat_length,
+                "spacer_length": rs.spacer_length,
+            }
+            for result in self.results
+            for arr_idx, array in enumerate(result.crispr_arrays)
+            for rs in array.repeats_and_spacers
+        ]
         df = pd.DataFrame(rows)
         if file_format == "csv":
             df.to_csv(path, index=False)
@@ -223,6 +224,8 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         config (MincedConfig | None): MinCED configuration with minimum repeat count
             and length thresholds.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         MincedOutput: Per-sequence CRISPR array detection results.
 
@@ -232,7 +235,6 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
-
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     input_data = {

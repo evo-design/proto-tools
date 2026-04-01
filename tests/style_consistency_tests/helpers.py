@@ -1,13 +1,14 @@
-"""tests/style_consistency_tests/helpers.py
+"""tests/style_consistency_tests/helpers.py.
 
 Shared helpers for style-consistency tests.
 """
 from __future__ import annotations
 
 import ast
+import contextlib
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 # ── Existing helpers ────────────────────────────────────────────────────────
 
@@ -190,8 +191,7 @@ def _normalize_string_fallback(t: str) -> str:
     """Basic string normalization for types that can't be parsed as Python AST."""
     for old, new in _TYPING_TO_BUILTIN.items():
         t = re.sub(rf"\b{old}\b", new, t)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
+    return re.sub(r"\s+", " ", t).strip()
 
 
 # ── Returns type extraction (workaround for docstring_parser union bug) ────
@@ -240,93 +240,6 @@ def extract_returns_type(docstring: str) -> str | None:
 
 
 # ── File and docstring collection helpers ───────────────────────────────────
-
-
-def collect_py_files(
-    repo_root: Path,
-    directories: list[str],
-    exclude_patterns: list[str] | None = None,
-) -> list[tuple[Path, str]]:
-    """Collect all .py files (excluding __init__.py) from the given directories.
-
-    Args:
-        repo_root (Path): Absolute path to the repository root.
-        directories (list[str]): Directory names relative to repo_root to scan.
-        exclude_patterns (list[str] | None): Optional glob patterns to exclude.
-
-    Returns:
-        list[tuple[Path, str]]: (absolute_path, relative_path_str) tuples, sorted by relative path.
-    """
-    exclude_patterns = exclude_patterns or []
-    results: list[tuple[Path, str]] = []
-
-    for directory in directories:
-        dir_path = repo_root / directory
-        if not dir_path.is_dir():
-            continue
-        for py_file in sorted(dir_path.rglob("*.py")):
-            if py_file.name == "__init__.py":
-                continue
-            if "__pycache__" in py_file.parts:
-                continue
-            rel_path = str(py_file.relative_to(repo_root))
-            if any(_matches_pattern(rel_path, pat) for pat in exclude_patterns):
-                continue
-            results.append((py_file, rel_path))
-
-    return sorted(results, key=lambda x: x[1])
-
-
-def collect_multiline_docstrings(
-    repo_root: Path,
-    directories: list[str],
-    exclude_patterns: list[str] | None = None,
-) -> list[tuple[str, str, str]]:
-    """Collect all multi-line docstrings from functions, methods, and classes.
-
-    Only collects docstrings that contain a blank line (indicating structured
-    multi-line format), skipping simple one-liner docstrings.
-
-    Args:
-        repo_root (Path): Absolute path to the repository root.
-        directories (list[str]): Directory names relative to repo_root to scan.
-        exclude_patterns (list[str] | None): Optional glob patterns to exclude.
-
-    Returns:
-        list[tuple[str, str, str]]: (relative_path, qualified_name, docstring_text) tuples.
-    """
-    exclude_patterns = exclude_patterns or []
-    results: list[tuple[str, str, str]] = []
-
-    for directory in directories:
-        dir_path = repo_root / directory
-        if not dir_path.is_dir():
-            continue
-        for py_file in sorted(dir_path.rglob("*.py")):
-            if "__pycache__" in py_file.parts:
-                continue
-            rel_path = str(py_file.relative_to(repo_root))
-            if any(_matches_pattern(rel_path, pat) for pat in exclude_patterns):
-                continue
-            try:
-                source = py_file.read_text(encoding="utf-8")
-                tree = ast.parse(source, filename=str(py_file))
-            except (SyntaxError, UnicodeDecodeError):
-                continue
-
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    continue
-                docstring = ast.get_docstring(node)
-                if docstring is None:
-                    continue
-                if not _is_multiline_docstring(docstring):
-                    continue
-
-                qualified_name = _get_qualified_name(node, tree)
-                results.append((rel_path, qualified_name, docstring))
-
-    return sorted(results, key=lambda x: (x[0], x[1]))
 
 
 def collect_docstrings_with_annotations(
@@ -401,10 +314,8 @@ def collect_docstrings_with_annotations(
                 annotations = _extract_function_annotations(node)
                 return_type = None
                 if node.returns is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         return_type = ast.unparse(node.returns)
-                    except Exception:
-                        pass
                 results.append((rel_path, qualified_name, docstring, annotations, return_type, "function", annotations))
 
     return sorted(results, key=lambda x: (x[0], x[1]))
@@ -539,22 +450,16 @@ def _extract_function_annotations(node: ast.FunctionDef | ast.AsyncFunctionDef) 
         if arg.arg in ("self", "cls"):
             continue
         if arg.annotation is not None:
-            try:
+            with contextlib.suppress(Exception):
                 annotations[arg.arg] = ast.unparse(arg.annotation)
-            except Exception:
-                pass
 
     # *args and **kwargs
     if node.args.vararg and node.args.vararg.annotation:
-        try:
+        with contextlib.suppress(Exception):
             annotations[f"*{node.args.vararg.arg}"] = ast.unparse(node.args.vararg.annotation)
-        except Exception:
-            pass
     if node.args.kwarg and node.args.kwarg.annotation:
-        try:
+        with contextlib.suppress(Exception):
             annotations[f"**{node.args.kwarg.arg}"] = ast.unparse(node.args.kwarg.annotation)
-        except Exception:
-            pass
 
     return annotations
 

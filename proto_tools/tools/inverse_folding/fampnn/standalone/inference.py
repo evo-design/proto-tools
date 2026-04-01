@@ -1,5 +1,4 @@
-"""
-FAMPNN standalone inference implementation for venv execution.
+"""FAMPNN standalone inference implementation for venv execution.
 
 Handles all four FAMPNN operations:
   - sample: Iterative sequence design with sidechain co-generation
@@ -15,18 +14,19 @@ import sys
 import tempfile
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = getLogger(__name__)
 
 # Standard amino acid alphabet (1-letter codes, 20 canonical)
-AMINO_ACID_VOCAB: List[str] = list("ACDEFGHIKLMNPQRSTVWY")
+AMINO_ACID_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 
 
 class FAMPNNModel:
     """FAMPNN model for full-atom protein sequence design and sidechain packing."""
 
     def __init__(self):
+        """Initialize FAMPNNModel."""
         self._loaded = False
         self._model_variant = None
         self.device = None
@@ -35,9 +35,9 @@ class FAMPNNModel:
     def sample(
         self,
         pdb_path: str,
-        chain_ids: Optional[List[str]] = None,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
-        fixed_sidechain_positions: Optional[Dict[str, List[int]]] = None,
+        chain_ids: list[str] | None = None,  # noqa: ARG002 — reserved for future chain filtering
+        fixed_positions: dict[str, list[int]] | None = None,
+        fixed_sidechain_positions: dict[str, list[int]] | None = None,
         num_sequences: int = 1,
         temperature: float = 0.1,
         num_steps: int = 100,
@@ -50,7 +50,7 @@ class FAMPNNModel:
         model_variant: str = "0.3",
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Sample sequences with optional sidechain co-generation."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
@@ -93,16 +93,18 @@ class FAMPNNModel:
             scn_str = ""
             if fixed_positions:
                 # Convert {chain: [1-indexed positions]} to "A1-5,A10-20" format
-                parts = []
-                for chain_id, positions in fixed_positions.items():
-                    for pos in positions:
-                        parts.append(f"{chain_id}{pos}")
+                parts = [
+                    f"{chain_id}{pos}"
+                    for chain_id, positions in fixed_positions.items()
+                    for pos in positions
+                ]
                 seq_str = ",".join(parts)
             if fixed_sidechain_positions:
-                parts = []
-                for chain_id, positions in fixed_sidechain_positions.items():
-                    for pos in positions:
-                        parts.append(f"{chain_id}{pos}")
+                parts = [
+                    f"{chain_id}{pos}"
+                    for chain_id, positions in fixed_sidechain_positions.items()
+                    for pos in positions
+                ]
                 scn_str = ",".join(parts)
             fixed_pos_df = pd.DataFrame(
                 {"fixed_pos_seq": [seq_str], "fixed_pos_scn": [scn_str]},
@@ -197,8 +199,7 @@ class FAMPNNModel:
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/sample_{j}.pdb" for j in range(B)]
             SeqDenoiser.save_samples_to_pdb(detached_samples, pdb_paths_out)
-            for pdb_out in pdb_paths_out:
-                all_pdb_strings.append(Path(pdb_out).read_text())
+            all_pdb_strings.extend(Path(pdb_out).read_text() for pdb_out in pdb_paths_out)
 
         return {
             "sequences": all_sequences,
@@ -209,8 +210,8 @@ class FAMPNNModel:
     def pack(
         self,
         pdb_path: str,
-        fixed_positions: Optional[Dict[str, List[int]]] = None,
-        fixed_sidechain_positions: Optional[Dict[str, List[int]]] = None,
+        fixed_positions: dict[str, list[int]] | None = None,
+        fixed_sidechain_positions: dict[str, list[int]] | None = None,
         num_samples: int = 1,
         scn_diffusion_steps: int = 50,
         scn_step_scale: float = 1.5,
@@ -218,7 +219,7 @@ class FAMPNNModel:
         model_variant: str = "0.0",
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Pack sidechains onto a backbone given known sequence."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
@@ -254,16 +255,18 @@ class FAMPNNModel:
             seq_str = ""
             scn_str = ""
             if fixed_positions:
-                parts = []
-                for chain_id, positions in fixed_positions.items():
-                    for pos in positions:
-                        parts.append(f"{chain_id}{pos}")
+                parts = [
+                    f"{chain_id}{pos}"
+                    for chain_id, positions in fixed_positions.items()
+                    for pos in positions
+                ]
                 seq_str = ",".join(parts)
             if fixed_sidechain_positions:
-                parts = []
-                for chain_id, positions in fixed_sidechain_positions.items():
-                    for pos in positions:
-                        parts.append(f"{chain_id}{pos}")
+                parts = [
+                    f"{chain_id}{pos}"
+                    for chain_id, positions in fixed_sidechain_positions.items()
+                    for pos in positions
+                ]
                 scn_str = ",".join(parts)
             fixed_pos_df = pd.DataFrame(
                 {"fixed_pos_seq": [seq_str], "fixed_pos_scn": [scn_str]},
@@ -337,8 +340,7 @@ class FAMPNNModel:
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/packed_{j}.pdb" for j in range(B)]
             SeqDenoiser.save_samples_to_pdb(detached_samples, pdb_paths_out)
-            for pdb_out in pdb_paths_out:
-                all_pdb_strings.append(Path(pdb_out).read_text())
+            all_pdb_strings.extend(Path(pdb_out).read_text() for pdb_out in pdb_paths_out)
 
         return {
             "pdb_strings": all_pdb_strings,
@@ -353,7 +355,7 @@ class FAMPNNModel:
         model_variant: str = "0.3_cath",
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Score every possible single mutation at every position."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
@@ -409,7 +411,7 @@ class FAMPNNModel:
             mut_logprobs = logprobs[torch.arange(len(positions)), positions, :]
             scores = mut_logprobs - wt_logprobs
 
-            for score, position, wt_res in zip(scores, positions, wt_aatype):
+            for score, position, wt_res in zip(scores, positions, wt_aatype, strict=False):
                 # Key format: "1A" = 1-indexed position + wild-type residue
                 key = f"{position.item() + 1}{rc.idx_to_restype_with_x[wt_res.item()]}"
                 scores_dict[key] = {
@@ -445,7 +447,7 @@ class FAMPNNModel:
     def score_mutations(
         self,
         pdb_path: str,
-        mutations: List[str],
+        mutations: list[str],
         batch_size: int = 16,
         seq_only: bool = False,
         scn_diffusion_steps: int = 50,
@@ -454,7 +456,7 @@ class FAMPNNModel:
         model_variant: str = "0.3_cath",
         device: str = "cuda",
         verbose: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Score specific mutations (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
@@ -682,7 +684,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        elif operation == "pack":
+        if operation == "pack":
             return _model.pack(
                 pdb_path=pdb_path,
                 fixed_positions=input_dict.get("fixed_positions"),
@@ -695,7 +697,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        elif operation == "score_all_mutations":
+        if operation == "score_all_mutations":
             return _model.score_all_mutations(
                 pdb_path=pdb_path,
                 batch_size=input_dict.get("batch_size", 16),
@@ -704,7 +706,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        elif operation == "score_mutations":
+        if operation == "score_mutations":
             return _model.score_mutations(
                 pdb_path=pdb_path,
                 mutations=input_dict.get("mutations", []),
@@ -717,8 +719,7 @@ def dispatch(input_dict: dict) -> dict:
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
-        else:
-            raise ValueError(f"Unknown operation: {operation}")
+        raise ValueError(f"Unknown operation: {operation}")
 
 
 def to_device(device: str) -> dict:
@@ -727,8 +728,7 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -743,7 +743,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

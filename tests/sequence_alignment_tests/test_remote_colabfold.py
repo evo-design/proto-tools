@@ -1,6 +1,7 @@
-"""tests/sequence_alignment_tests/test_remote_colabfold.py
+"""tests/sequence_alignment_tests/test_remote_colabfold.py.
 
-Tests for remote ColabFold MSA search."""
+Tests for remote ColabFold MSA search.
+"""
 
 import pytest
 

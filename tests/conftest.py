@@ -1,12 +1,11 @@
-"""
-tests/conftest.py
+"""tests/conftest.py.
 
 Supports the same CLI options and markers as the main proto-language tests:
   --cpu        Run only CPU tests
   --gpu        Run only GPU tests (skip CPU tests)
   --all        Include slow and GPU tests
   --slow       Run only slow tests
-  --exhaustive Include exhaustive combinatorial tests (e.g., every tool × device)
+  --exhaustive Include exhaustive combinatorial tests (e.g., every tool x device)
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
   --env-report[=PATH]  Run venv smoke tests and generate compatibility report
@@ -54,7 +53,7 @@ def is_on_chimera() -> bool:
     # If SLURM_JOB_ID is set, we're on SLURM - query scontrol for cluster name
     if os.environ.get("SLURM_JOB_ID"):
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: PLW1510 -- checking returncode manually
                 ["scontrol", "show", "config"],
                 capture_output=True,
                 text=True,
@@ -250,14 +249,13 @@ class EnvReportCollector:
         output_path = self._get_output_path()
 
         # Full run safety: don't overwrite with partial results
-        if not self.is_filtered:
-            if len(self.results) < self.expected_count:
-                logger = logging.getLogger("proto_tools.tests")
-                logger.warning(
-                    f"--env-report: only {len(self.results)}/{self.expected_count} "
-                    f"tests completed — skipping report write to preserve existing data"
-                )
-                return None
+        if not self.is_filtered and len(self.results) < self.expected_count:
+            logger = logging.getLogger("proto_tools.tests")
+            logger.warning(
+                f"--env-report: only {len(self.results)}/{self.expected_count} "
+                f"tests completed — skipping report write to preserve existing data"
+            )
+            return None
 
         # Merge results
         if self.is_filtered:
@@ -333,7 +331,7 @@ class EnvReportCollector:
         # GPU info
         if gpu["available"]:
             devices = ", ".join(d["name"] for d in gpu["devices"]) or "Unknown"
-            lines.append(f"| **GPU** | {gpu['count']}× {devices} |")
+            lines.append(f"| **GPU** | {gpu['count']}x {devices} |")
             if gpu["cuda_version"]:
                 lines.append(f"| **CUDA** | {gpu['cuda_version']} |")
         else:
@@ -523,7 +521,7 @@ def pytest_addoption(parser):
         "--exhaustive",
         action="store_true",
         default=False,
-        help="Include exhaustive combinatorial tests (e.g., every tool × device transition)",
+        help="Include exhaustive combinatorial tests (e.g., every tool x device transition)",
     )
     parser.addoption(
         "--no-log-console",
@@ -548,7 +546,7 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     """Configure pytest with custom markers and options."""
-    global _env_report_collector
+    global _env_report_collector  # noqa: PLW0603 -- test infrastructure
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
@@ -708,15 +706,13 @@ def pytest_sessionfinish(session, exitstatus):
             if failed > 0:
                 summary_lines.append("\nFailed tests:")
                 failed_reports = stats.get("failed", [])
-                for report in failed_reports:
-                    summary_lines.append(f"  - {report.nodeid}")
+                summary_lines.extend(f"  - {report.nodeid}" for report in failed_reports)
 
             # Add list of error tests if any
             if errors > 0:
                 summary_lines.append("\nTests with errors:")
                 error_reports = stats.get("error", [])
-                for report in error_reports:
-                    summary_lines.append(f"  - {report.nodeid}")
+                summary_lines.extend(f"  - {report.nodeid}" for report in error_reports)
 
             summary_lines.append("=" * 80)
 

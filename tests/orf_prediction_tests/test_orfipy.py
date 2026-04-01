@@ -1,6 +1,7 @@
-"""tests/orf_prediction_tests/test_orfipy.py
+"""tests/orf_prediction_tests/test_orfipy.py.
 
-Tests for Orfipy ORF prediction tool."""
+Tests for Orfipy ORF prediction tool.
+"""
 
 from pathlib import Path
 
@@ -58,7 +59,7 @@ def test_parsing_with_test_data():
     assert len(aa_records) == len(nt_records)
 
     results = []
-    for aa_record, nt_record in zip(aa_records, nt_records):
+    for aa_record, nt_record in zip(aa_records, nt_records, strict=False):
         parsed_info = _parse_orfipy_header(aa_record.description)
         if parsed_info:
             results.append({
@@ -120,9 +121,9 @@ def test_test_data_integrity():
     if not ORFIPY_AA_FILE.exists() or not ORFIPY_NT_FILE.exists():
         pytest.skip("Test data files not available")
 
-    with open(ORFIPY_AA_FILE, 'r') as f:
+    with open(ORFIPY_AA_FILE) as f:
         aa_lines = f.readlines()
-    with open(ORFIPY_NT_FILE, 'r') as f:
+    with open(ORFIPY_NT_FILE) as f:
         nt_lines = f.readlines()
 
     aa_headers = [line for line in aa_lines if line.startswith('>')]
@@ -130,7 +131,7 @@ def test_test_data_integrity():
 
     assert len(aa_headers) == len(nt_headers), \
         "AA and NT files should have same number of sequences"
-    for aa_header, nt_header in zip(aa_headers, nt_headers):
+    for aa_header, nt_header in zip(aa_headers, nt_headers, strict=False):
         assert aa_header.strip() == nt_header.strip(), \
             f"Headers don't match: {aa_header.strip()} vs {nt_header.strip()}"
 

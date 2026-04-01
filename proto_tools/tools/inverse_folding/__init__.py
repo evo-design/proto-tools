@@ -1,3 +1,5 @@
+"""Inverse folding models for structure-conditioned sequence design."""
+
 from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1SampleConfig,
     ESMIF1SampleInput,

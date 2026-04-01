@@ -1,15 +1,12 @@
-"""
-proto_tools/entities/structures/structure_ensemble.py
+"""proto_tools/entities/structures/structure_ensemble.py.
 
 Contains base class for representing a protein structure ensemble.
 """
 from __future__ import annotations
 
-from typing import List
-
 from pydantic import BaseModel
 
-from .structure import Structure
+from proto_tools.entities.structures.structure import Structure
 
 
 class StructureEnsemble(BaseModel):
@@ -26,5 +23,5 @@ class StructureEnsemble(BaseModel):
         sequence (str): The input protein sequence.
     """
 
-    structures: List[Structure]
+    structures: list[Structure]
     sequence: str

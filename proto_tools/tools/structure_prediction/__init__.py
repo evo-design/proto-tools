@@ -1,21 +1,23 @@
-from .alphafold2 import (
+"""Structure prediction tools."""
+
+from proto_tools.tools.structure_prediction.alphafold2 import (
     AlphaFold2Config,
     AlphaFold2Input,
     AlphaFold2Output,
     run_alphafold2,
 )
-from .alphafold3 import (
+from proto_tools.tools.structure_prediction.alphafold3 import (
     AlphaFold3Config,
     AlphaFold3Input,
     AlphaFold3Output,
     run_alphafold3,
 )
-from .boltz2 import Boltz2Config, Boltz2Input, Boltz2Output, run_boltz2
-from .chai1 import Chai1Config, Chai1Input, Chai1Output, run_chai1
-from .dispatch import predict_structures
-from .esmfold import ESMFoldConfig, ESMFoldInput, ESMFoldOutput, run_esmfold
-from .protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
-from .shared_data_models import (  # noqa: F401
+from proto_tools.tools.structure_prediction.boltz2 import Boltz2Config, Boltz2Input, Boltz2Output, run_boltz2
+from proto_tools.tools.structure_prediction.chai1 import Chai1Config, Chai1Input, Chai1Output, run_chai1
+from proto_tools.tools.structure_prediction.dispatch import predict_structures
+from proto_tools.tools.structure_prediction.esmfold import ESMFoldConfig, ESMFoldInput, ESMFoldOutput, run_esmfold
+from proto_tools.tools.structure_prediction.protenix import ProtenixConfig, ProtenixInput, ProtenixOutput, run_protenix
+from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     ChainModification,
     MSAStructurePredictionConfig,
@@ -24,14 +26,19 @@ from .shared_data_models import (  # noqa: F401
     StructurePredictionInput,
     StructurePredictionOutput,
 )
-from .structure_metrics import (
+from proto_tools.tools.structure_prediction.structure_metrics import (
     StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,
     StructureMetricsOutput,
     run_structure_metrics,
 )
-from .viennarna import ViennaRNAConfig, ViennaRNAInput, ViennaRNAOutput, run_viennarna
+from proto_tools.tools.structure_prediction.viennarna import (
+    ViennaRNAConfig,
+    ViennaRNAInput,
+    ViennaRNAOutput,
+    run_viennarna,
+)
 
 __all__ = [
     # AlphaFold2
@@ -72,7 +79,10 @@ __all__ = [
     # Shared Data Models
     "Chain",
     "ChainModification",
+    "MSAStructurePredictionConfig",
     "StructurePredictionComplex",
+    "StructurePredictionConfig",
+    "StructurePredictionInput",
     "StructurePredictionOutput",
     # Dispatch
     "predict_structures",

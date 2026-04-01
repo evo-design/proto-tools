@@ -1,5 +1,4 @@
-"""
-Local ProGen2 inference implementation.
+"""Local ProGen2 inference implementation.
 
 Uses Hugging Face models from https://huggingface.co/hugohrban/
 Based on the ProGen2-finetuning repository: https://github.com/hugohrban/ProGen2-finetuning
@@ -9,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 from logging import getLogger
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -24,13 +23,7 @@ PROGEN2_BOS_TOKEN = "<|bos|>"      # ID 1
 PROGEN2_EOS_TOKEN = "<|eos|>"      # ID 2
 PROGEN2_START_TOKEN = "1"          # ID 3
 PROGEN2_END_TOKEN = "2"            # ID 4
-PROGEN2_VOCAB: List[str] = [
-    PROGEN2_PAD_TOKEN,
-    PROGEN2_BOS_TOKEN,
-    PROGEN2_EOS_TOKEN,
-    PROGEN2_START_TOKEN,
-    PROGEN2_END_TOKEN,
-] + list("ABCDEFGHIKLMNOPQRSTUVWXYZ")
+PROGEN2_VOCAB: list[str] = [PROGEN2_PAD_TOKEN, PROGEN2_BOS_TOKEN, PROGEN2_EOS_TOKEN, PROGEN2_START_TOKEN, PROGEN2_END_TOKEN, *list("ABCDEFGHIKLMNOPQRSTUVWXYZ")]
 PROGEN2_FIRST_AA_TOKEN = 5
 PROGEN2_LAST_AA_TOKEN = 29
 PROGEN2_SEQUENCE_CHARS = PROGEN2_VOCAB[PROGEN2_FIRST_AA_TOKEN : PROGEN2_LAST_AA_TOKEN + 1]  # Amino acid chars only
@@ -46,8 +39,7 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 
 
 class ProGen2Model:
-    """
-    ProGen2 model wrapper for protein sequence generation.
+    """ProGen2 model wrapper for protein sequence generation.
 
     Handles model loading, device management, batched generation and scoring.
     """
@@ -55,10 +47,9 @@ class ProGen2Model:
     def __init__(
         self,
         model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = "progen2-large",
-        local_path: Optional[str] = None,
+        local_path: str | None = None,
     ):
-        """
-        Initialize ProGen2 model wrapper.
+        """Initialize ProGen2 model wrapper.
 
         Args:
             model_checkpoint: ProGen2 checkpoint name
@@ -116,12 +107,10 @@ class ProGen2Model:
 
     def _prepare_batch(
         self,
-        sequences: List[str],
+        sequences: list[str],
         pad_left: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[int]]:
-        """
-        Tokenize and pad sequences into a batch with attention mask.
-        """
+    ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
+        """Tokenize and pad sequences into a batch with attention mask."""
         if not sequences:
             raise ValueError("Cannot prepare empty batch")
         encodings = self.tokenizer.encode_batch(sequences)
@@ -132,7 +121,7 @@ class ProGen2Model:
         input_ids = torch.full((len(sequences), max_len), self.pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((len(sequences), max_len), dtype=torch.long)
 
-        for i, (tokens, length) in enumerate(zip(token_lists, lengths)):
+        for i, (tokens, length) in enumerate(zip(token_lists, lengths, strict=False)):
             if pad_left:
                 input_ids[i, max_len - length:] = torch.tensor(tokens, dtype=torch.long)
                 attention_mask[i, max_len - length:] = 1
@@ -154,7 +143,7 @@ class ProGen2Model:
 
     def sample(
         self,
-        prompts: List[str],
+        prompts: list[str],
         temperature: float = 0.2,
         top_p: float = 0.95,
         top_k: int = 0,
@@ -167,9 +156,8 @@ class ProGen2Model:
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Sample protein sequences using ProGen2 with batched generation.
+    ) -> dict[str, Any]:
+        """Sample protein sequences using ProGen2 with batched generation.
 
         Args:
             prompts: List of prompt sequences
@@ -269,14 +257,13 @@ class ProGen2Model:
 
     def score(
         self,
-        sequences: List[str],
+        sequences: list[str],
         device: str = "cuda",
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Score protein sequences by computing logits and metrics via forward pass.
+    ) -> dict[str, Any]:
+        """Score protein sequences by computing logits and metrics via forward pass.
 
         Sequences are batched with padding and attention masking. Metrics are
         computed only over non-padded tokens, and optionally only over amino acid
@@ -410,7 +397,7 @@ def dispatch(input_dict: dict) -> dict:
             batch_size=input_dict.get("batch_size"),
             return_logits=input_dict.get("return_logits", False),
         )
-    elif operation == "score":
+    if operation == "score":
         return _model.score(
             sequences=input_dict.get("sequences", []),
             device=input_dict.get("device", "cuda"),
@@ -418,8 +405,7 @@ def dispatch(input_dict: dict) -> dict:
             batch_size=input_dict.get("batch_size"),
             return_logits=input_dict.get("return_logits", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -429,9 +415,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -447,7 +432,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

@@ -1,7 +1,8 @@
-"""proto_tools/tools/mutagenesis/codons.py
+"""proto_tools/tools/mutagenesis/codons.py.
 
 Self-contained codon infrastructure for random mutagenesis tools.
-No BioPython dependency."""
+No BioPython dependency.
+"""
 from __future__ import annotations
 
 import functools
@@ -73,7 +74,7 @@ def _expand_degenerate_codon(codon: str) -> list[str]:
     return results
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     """Expand a codon scheme name into its codons and amino acid weights.
 
@@ -91,7 +92,7 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
     """
     name = name.upper()
     if name == "UNIFORM":
-        weights = {aa: 1.0 for aa in STANDARD_AMINO_ACIDS}
+        weights = dict.fromkeys(STANDARD_AMINO_ACIDS, 1.0)
         return {
             "codons": [],
             "amino_acids": sorted(weights),
@@ -132,7 +133,7 @@ def sample_amino_acid(scheme: str, rng: random.Random | None = None) -> str:
 # IUPAC nucleotide expansion and sampling
 # ============================================================================
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def get_substitution_pool(iupac: str) -> list[str]:
     """Expand an IUPAC ambiguity code into a list of concrete nucleotides."""
     iupac = iupac.upper()

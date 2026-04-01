@@ -1,13 +1,14 @@
-"""proto_tools/tools/database_retrieval/pdb/shared_data_models.py
+"""proto_tools/tools/database_retrieval/pdb/shared_data_models.py.
 
 Contains configuration, chain models, and private helpers used by
-fetch_entry and fetch_fasta tool modules."""
+fetch_entry and fetch_fasta tool modules.
+"""
 
 from __future__ import annotations
 
 import logging
 from io import StringIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import requests
 from Bio import SeqIO
@@ -39,7 +40,7 @@ class PdbChain(BaseModel):
         is_protein (bool): True if chain is protein, False if nucleic acid.
     """
 
-    chain_id: Optional[str] = Field(
+    chain_id: str | None = Field(
         default=None, description="Chain identifier from header"
     )
     header: str = Field(description="FASTA header")
@@ -97,7 +98,7 @@ def _request_pdb(
     url: str,
     config: PdbFetchConfig,
     source_label: str,
-) -> Optional[requests.Response]:
+) -> requests.Response | None:
     """Execute an HTTP GET, returning None on 404."""
     response = session.get(url, timeout=config.request_timeout_seconds)
     if response.status_code == 404:
@@ -107,7 +108,7 @@ def _request_pdb(
     return response
 
 
-def _chain_id_from_header(header: str) -> Optional[str]:
+def _chain_id_from_header(header: str) -> str | None:
     """Extract chain ID from a PDB FASTA header."""
     first_token = header.split("|")[0].strip()
     parts = first_token.split("_")
@@ -120,7 +121,7 @@ def _fetch_pdb_entry(
     pdb_id: str,
     config: PdbFetchConfig,
     session: requests.Session,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Fetch PDB entry metadata (title, method, resolution), or None on 404."""
     response = _request_pdb(
         session, f"{_PDB_ENTRY_BASE}/{pdb_id}", config, "pdb-entry"
@@ -153,7 +154,7 @@ def _fetch_pdb_fasta(
     pdb_id: str,
     config: PdbFetchConfig,
     session: requests.Session,
-) -> Optional[List[Tuple[str, str]]]:
+) -> list[tuple[str, str]] | None:
     """Fetch PDB FASTA chains as (header, sequence) tuples, or None on 404."""
     response = _request_pdb(
         session, f"{_PDB_FASTA_BASE}/{pdb_id}", config, "pdb-fasta"

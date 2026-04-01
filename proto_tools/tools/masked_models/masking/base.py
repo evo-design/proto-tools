@@ -1,24 +1,25 @@
-"""proto_tools/tools/masked_models/masking/base.py
+"""proto_tools/tools/masked_models/masking/base.py.
 
-Masking strategies for masked language model sampling."""
+Masking strategies for masked language model sampling.
+"""
 from __future__ import annotations
 
 import logging
 import warnings
-from typing import Callable, Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
+from proto_tools.tools.masked_models.masking.maskers import MASKERS, Masker, MaskingMethod
 from proto_tools.utils import ConfigField
-
-from .maskers import MASKERS, Masker, MaskingMethod
 
 logger = logging.getLogger(__name__)
 
 # The token that marks a position for re-design. Downstream sampling tools
 # replace each "_" with a predicted amino acid.
-MASK_TOKEN = "_"
+MASK_TOKEN = "_"  # noqa: S105 -- not a password
 
 
 # ============================================================================
@@ -84,7 +85,7 @@ def _resolve_count(
         return num_mutations
     if mask_fraction is not None:
         # Always mask at least 1 position when designable positions exist,
-        # even if round(n * frac) would be 0 (e.g. 2 positions × 0.1 = 0.2 → 0).
+        # even if round(n * frac) would be 0 (e.g. 2 positions × 0.1 = 0.2 → 0).  # noqa: RUF003
         count = round(n_designable * mask_fraction)
         return max(1, count) if n_designable > 0 else 0
     # Default: mask 30% of designable positions (at least 1)
@@ -240,12 +241,12 @@ class MaskingStrategy(BaseModel):
     )
 
     # -- How many positions to mask (set one or neither, not both) -------------
-    num_mutations: Optional[int] = ConfigField(
+    num_mutations: int | None = ConfigField(
         default=None,
         ge=1,
         description="Exact number of positions to mask per sequence.",
     )
-    mask_fraction: Optional[float] = ConfigField(
+    mask_fraction: float | None = ConfigField(
         default=None,
         gt=0.0,
         le=1.0,
@@ -253,7 +254,7 @@ class MaskingStrategy(BaseModel):
     )
 
     # -- Which positions to protect from masking -------------------------------
-    fixed_positions: Optional[list[int]] = ConfigField(
+    fixed_positions: list[int] | None = ConfigField(
         default=None,
         description="1-indexed positions that must NOT be masked. Applied uniformly to all sequences.",
     )
@@ -272,13 +273,13 @@ class MaskingStrategy(BaseModel):
     )
 
     # -- Model-based method fields (only relevant for entropy / max-logit) -----
-    model_name: Optional[Literal["esm2", "esm3"]] = ConfigField(
+    model_name: Literal["esm2", "esm3"] | None = ConfigField(
         default=None,
         description="Which masked model to use for scoring. Defaults to the sampling tool's model when unset.",
         depends_on={"method": ["entropy", "max-logit"]},
         advanced=True,
     )
-    model_checkpoint: Optional[str] = ConfigField(
+    model_checkpoint: str | None = ConfigField(
         default=None,
         description="Model checkpoint override (uses tool default if None).",
         depends_on={"method": ["entropy", "max-logit"]},
@@ -301,7 +302,7 @@ class MaskingStrategy(BaseModel):
             if self.model_name is not None or self.model_checkpoint is not None:
                 warnings.warn(
                     f"model_name/model_checkpoint are ignored for "
-                    f"method='{self.method}'"
+                    f"method='{self.method}'", stacklevel=2
                 )
         else:
             if (
@@ -428,7 +429,7 @@ def build_position_score_fn(
             return [r.logits for r in result.results]
         return position_score_fn
 
-    elif model_name == "esm3":
+    if model_name == "esm3":
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
             from proto_tools.tools.masked_models.esm3.esm3_embeddings import (
                 ESM3EmbeddingsConfig,
@@ -442,5 +443,4 @@ def build_position_score_fn(
             return [r.logits for r in result.results]
         return position_score_fn
 
-    else:
-        raise ValueError(f"Unknown model: {model_name}")
+    raise ValueError(f"Unknown model: {model_name}")

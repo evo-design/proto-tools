@@ -1,6 +1,7 @@
-"""tests/inverse_folding_tests/test_fampnn.py
+"""tests/inverse_folding_tests/test_fampnn.py.
 
-Tests for FAMPNN sampling, packing, and scoring."""
+Tests for FAMPNN sampling, packing, and scoring.
+"""
 
 from pathlib import Path
 
@@ -142,7 +143,7 @@ def test_fampnn_sample_config_custom_batch_size():
 
 def test_fampnn_sample_config_rejects_excluded_amino_acids():
     """excluded_amino_acids is not supported and should raise."""
-    with pytest.raises(Exception, match="excluded_amino_acids.*not supported"):
+    with pytest.raises(Exception, match=r"excluded_amino_acids.*not supported"):
         FAMPNNSampleConfig(excluded_amino_acids=["C"])
 
 
@@ -316,7 +317,7 @@ def test_fampnn_pack_multiple_samples(pdb_structure):
 
 @pytest.mark.uses_gpu
 def test_fampnn_pack_psce_values(pdb_structure):
-    """pSCE values are non-negative and in a reasonable range."""
+    """PSCE values are non-negative and in a reasonable range."""
     inp = FAMPNNPackInput(
         inputs=[FAMPNNStructureInput(structure=pdb_structure)]
     )
@@ -433,6 +434,6 @@ def test_fampnn_score_all_mutations_scores_range(pdb_structure):
     for pos_label, scores in output.results[0].scores.items():
         for residue, score in scores.items():
             assert isinstance(score, float)
-            assert not (score != score), f"NaN score at {pos_label}->{residue}"
+            assert score == score, f"NaN score at {pos_label}->{residue}"
             # Log-likelihood ratios should be bounded
             assert abs(score) < 50, f"Extreme score at {pos_label}->{residue}: {score}"

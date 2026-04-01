@@ -1,6 +1,7 @@
-"""tests/rna_splicing_tests/test_rna_splicing.py
+"""tests/rna_splicing_tests/test_rna_splicing.py.
 
-Tests for SpliceTransformer."""
+Tests for SpliceTransformer.
+"""
 
 import pytest
 

@@ -1,9 +1,8 @@
-"""proto_tools/utils/sequence.py
+"""proto_tools/utils/sequence.py.
 
-Sequence validation, detection, and ID resolution utilities."""
+Sequence validation, detection, and ID resolution utilities.
+"""
 from __future__ import annotations
-
-from typing import List, Optional, Set
 
 # ============================================================================
 # Sequence Constants
@@ -16,8 +15,7 @@ PROTEIN_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
 def calculate_gc_content(sequence: str) -> float:
-    """
-    Calculate the GC content percentage of a DNA/RNA sequence.
+    """Calculate the GC content percentage of a DNA/RNA sequence.
 
     Args:
         sequence (str): DNA or RNA sequence string.
@@ -33,7 +31,7 @@ def calculate_gc_content(sequence: str) -> float:
     return 100.0 * gc_count / len(sequence)
 
 
-def resolve_sequence_ids(sequences: List[str], ids: Optional[List[str]]) -> List[str]:
+def resolve_sequence_ids(sequences: list[str], ids: list[str] | None) -> list[str]:
     """Resolve sequence identifiers, using provided IDs or generating defaults.
 
     Args:
@@ -59,9 +57,8 @@ def resolve_sequence_ids(sequences: List[str], ids: Optional[List[str]]) -> List
 # ============================================================================
 
 
-def _return_invalid_chars(sequence: str, valid_chars: Set[str]) -> Set[str]:
-    """
-    Return the invalid characters in a sequence given a set of valid characters.
+def _return_invalid_chars(sequence: str, valid_chars: set[str]) -> set[str]:
+    """Return the invalid characters in a sequence given a set of valid characters.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -70,16 +67,14 @@ def _return_invalid_chars(sequence: str, valid_chars: Set[str]) -> Set[str]:
     Returns:
         set[str]: The set of invalid characters.
     """
-    invalid_chars = set(sequence) - valid_chars
-    return invalid_chars
+    return set(sequence) - valid_chars
 
 
 def return_invalid_dna_chars(
     sequence: str,
-    additional_valid_chars: Optional[str] = None,
-) -> Set[str]:
-    """
-    Helper function that returns the invalid characters in a DNA sequence.
+    additional_valid_chars: str | None = None,
+) -> set[str]:
+    """Helper function that returns the invalid characters in a DNA sequence.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -97,10 +92,9 @@ def return_invalid_dna_chars(
 
 def return_invalid_rna_chars(
     sequence: str,
-    additional_valid_chars: Optional[str] = None,
-) -> Set[str]:
-    """
-    Helper function that returns the invalid characters in a RNA sequence.
+    additional_valid_chars: str | None = None,
+) -> set[str]:
+    """Helper function that returns the invalid characters in a RNA sequence.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -118,10 +112,9 @@ def return_invalid_rna_chars(
 
 def return_invalid_nucleotide_chars(
     sequence: str,
-    additional_valid_chars: Optional[str] = None,
-) -> Set[str]:
-    """
-    Helper function that returns the invalid characters in a nucleotide sequence.
+    additional_valid_chars: str | None = None,
+) -> set[str]:
+    """Helper function that returns the invalid characters in a nucleotide sequence.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -139,10 +132,9 @@ def return_invalid_nucleotide_chars(
 
 def return_invalid_protein_chars(
     sequence: str,
-    additional_valid_chars: Optional[str] = None,
-) -> Set[str]:
-    """
-    Return the invalid characters in a protein sequence.
+    additional_valid_chars: str | None = None,
+) -> set[str]:
+    """Return the invalid characters in a protein sequence.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -159,8 +151,8 @@ def return_invalid_protein_chars(
 
 
 def detect_sequence_type(sequence: str) -> str:
-    """
-    Attempts to determine the type of a sequence based on the characters it contains.
+    """Attempts to determine the type of a sequence based on the characters it contains.
+
     Starts with more specific sequence types (less characters allowed) and works
     its way down to the least specific. Returns "unknown" if the sequence type
     cannot be determined.
@@ -190,7 +182,7 @@ def detect_sequence_type(sequence: str) -> str:
         return "protein"
 
     # Ligand/SMILES
-    from .chemistry import validate_smiles
+    from proto_tools.utils.chemistry import validate_smiles
     if validate_smiles(sequence, verbose=False):
         return "ligand"
 

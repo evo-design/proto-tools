@@ -1,6 +1,7 @@
-"""tests/ligand_tests/test_fragments.py
+"""tests/ligand_tests/test_fragments.py.
 
-Tests for Fragment entity."""
+Tests for Fragment entity.
+"""
 
 import pytest
 from rdkit import Chem

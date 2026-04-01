@@ -1,5 +1,7 @@
+"""Gene annotation and sequence search tools."""
+
 # BLAST tools
-from .blast import (
+from proto_tools.tools.gene_annotation.blast import (
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -11,7 +13,7 @@ from .blast import (
 )
 
 # CRISPRtracrRNA tools
-from .crispr_tracr import (
+from proto_tools.tools.gene_annotation.crispr_tracr import (
     CrisprTracrConfig,
     CrisprTracrInput,
     CrisprTracrOutput,
@@ -20,7 +22,7 @@ from .crispr_tracr import (
 )
 
 # MinCED tools
-from .minced import (
+from proto_tools.tools.gene_annotation.minced import (
     CrisprArray,
     CrisprRepeatSpacer,
     MincedConfig,
@@ -31,7 +33,7 @@ from .minced import (
 )
 
 # MMseqs2 tools
-from .mmseqs import (  # Schema classes; Protein search; Genome search; Clustering
+from proto_tools.tools.gene_annotation.mmseqs import (
     MmseqsClusteringConfig,
     MmseqsClusteringInput,
     MmseqsClusteringOutput,
@@ -51,7 +53,7 @@ from .mmseqs import (  # Schema classes; Protein search; Genome search; Clusteri
 )
 
 # PyHMMER tools
-from .pyhmmer import (
+from proto_tools.tools.gene_annotation.pyhmmer import (
     PyHmmerConfig,
     PyHmmscanConfig,
     PyHmmscanInput,

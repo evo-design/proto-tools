@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/persistent_worker.py
+"""proto_tools/utils/persistent_worker.py.
 
 Manages a subprocess that stays alive between calls, communicating via
 stdin/stdout JSON-line protocol. This avoids reloading models on every call.
@@ -7,6 +6,7 @@ stdin/stdout JSON-line protocol. This avoids reloading models on every call.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -73,9 +73,8 @@ def _normalize_progress_line(line: str) -> str:
         normalized = re.sub(r'(N%.*?N/s.*?)\s+[-|]\s+.*$', r'\1', normalized)
 
     # Normalize remaining standalone numbers
-    normalized = re.sub(r'\b\d+\.?\d*\b', 'N', normalized)
+    return re.sub(r'\b\d+\.?\d*\b', 'N', normalized)
 
-    return normalized
 
 
 # ============================================================================
@@ -202,7 +201,7 @@ def _build_subprocess_env(
         tool_env_path (Path | str | None): Path to the tool's isolated venv.
         tool_env_vars (dict[str, list[str]] | None): Parsed env_vars.txt contents.
     """
-    from .system_info import capture_subprocess_env
+    from proto_tools.utils.system_info import capture_subprocess_env
 
     env: dict[str, str] = {}
 
@@ -217,16 +216,18 @@ def _build_subprocess_env(
     # Subprocesses may have a different HF_HOME, so file-based tokens
     # wouldn't be found at the redirected path.
     if "HF_TOKEN" not in env:
-        from .auth import resolve_hf_token
+        from proto_tools.utils.auth import resolve_hf_token
 
         token = resolve_hf_token()
         if token:
             env["HF_TOKEN"] = token
 
     # Pass through per-tool weight directory overrides
-    for var, val in os.environ.items():
-        if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR"):
-            env[var] = val
+    env.update({
+        var: val
+        for var, val in os.environ.items()
+        if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")
+    })
 
     # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
     path_parts: list[str] = []
@@ -256,7 +257,7 @@ def _build_subprocess_env(
     env["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     # Always propagate PROTO_HOME so standalone helpers resolve the same root
-    from .proto_home import get_proto_home
+    from proto_tools.utils.proto_home import get_proto_home
 
     if "PROTO_HOME" not in env:
         env["PROTO_HOME"] = str(get_proto_home())
@@ -280,7 +281,7 @@ def _build_subprocess_env(
             env["TORCH_HOME"] = str(cache_path / "torch")
 
     # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
-    from .compute_deps import detect_compute_environment
+    from proto_tools.utils.compute_deps import detect_compute_environment
     compute_env = detect_compute_environment()
     env.update(compute_env)
 
@@ -344,7 +345,8 @@ def _build_subprocess_env(
 
 
 class PersistentWorker:
-    """A long-running subprocess that accepts JSON requests on stdin and
+    """A long-running subprocess that accepts JSON requests on stdin and.
+
     returns JSON responses on stdout.
 
     The subprocess runs ``_worker_bootstrap.py`` inside a tool's venv,
@@ -373,6 +375,7 @@ class PersistentWorker:
         device: str = "cpu",
         tool_env_vars: dict[str, list[str]] | None = None,
     ) -> None:
+        """Initialize PersistentWorker."""
         self.tool_name = tool_name
         self.env_path = env_path
         self.script_path = script_path
@@ -520,7 +523,7 @@ class PersistentWorker:
                     )
 
                 header_line = header_line.strip()
-                if header_line.startswith("PROTO_LENGTH:") or header_line.startswith("PROTO_FILE:"):
+                if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
                     break
                 # Non-protocol line (warning/log); skip duplicates / progress bars
                 if header_line == prev_stdout_line:
@@ -547,10 +550,8 @@ class PersistentWorker:
                     with open(file_path) as f:
                         response = json.load(f)
                 finally:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(file_path)
-                    except OSError:
-                        pass
             else:
                 # Standard LENGTH-prefixed pipe payload
                 try:
@@ -592,10 +593,8 @@ class PersistentWorker:
 
     def _killpg(self, sig: int) -> None:
         """Send *sig* to the worker's process group, ignoring already-dead."""
-        try:
+        with contextlib.suppress(OSError):
             os.killpg(self._process.pid, sig)
-        except OSError:
-            pass
 
     def stop(self) -> None:
         """Terminate the worker and all of its child processes."""
@@ -611,9 +610,7 @@ class PersistentWorker:
             finally:
                 for pipe in (self._process.stdout, self._process.stderr):
                     if pipe and not pipe.closed:
-                        try:
+                        with contextlib.suppress(Exception):
                             pipe.close()
-                        except Exception:
-                            pass
                 self._process = None
                 logger.debug("Stopped persistent worker for %s", self.tool_name)

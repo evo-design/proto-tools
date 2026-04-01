@@ -1,5 +1,4 @@
-"""
-local_msa_search.py
+"""local_msa_search.py.
 
 ColabFold MSA search standalone script for isolated venv execution.
 
@@ -15,7 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +29,9 @@ class ColabFoldSearchWrapper:
         self.mmseqs_executable = None
 
     def _detect_database_name(
-        self, msa_db_dir: Path, verbose: bool = False
+        self, msa_db_dir: Path, verbose: bool = False  # noqa: ARG002 — required by tool interface
     ) -> str | None:
-        """
-        Auto-detect the database name by scanning for .dbtype files.
+        """Auto-detect the database name by scanning for .dbtype files.
 
         Args:
             msa_db_dir: Path to the database directory
@@ -72,7 +70,7 @@ class ColabFoldSearchWrapper:
         if uniref_dbs:
             db_file = uniref_dbs[0]
             if len(dbtype_files) > 1:
-                logger.debug(f"  Note: Multiple databases found, prioritizing uniref database")
+                logger.debug("  Note: Multiple databases found, prioritizing uniref database")
         else:
             # Use the first database found if no uniref database is present
             db_file = dbtype_files[0]
@@ -97,9 +95,8 @@ class ColabFoldSearchWrapper:
         database_name: str | None = None,
         use_gpu: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Run ColabFold MSA search.
+    ) -> dict[str, Any]:
+        """Run ColabFold MSA search.
 
         Args:
             query_fasta_path: Path to query FASTA file
@@ -194,12 +191,12 @@ class ColabFoldSearchWrapper:
 
             # Check if this is a "prof_res does not exist" error
             # This happens when sequences have no hits at all
-            stderr_text = e.stderr if e.stderr else ""
+            stderr_text = e.stderr or ""
             if "prof_res does not exist" in stderr_text:
                 logger.debug("Some sequences may have no homologs (prof_res error)")
 
                 # Read the query FASTA to get sequence IDs and sequences
-                with open(query_fasta_path, "r") as f:
+                with open(query_fasta_path) as f:
                     fasta_content = f.read()
 
                 # Parse FASTA content
@@ -246,7 +243,7 @@ class ColabFoldSearchWrapper:
                 "error": error_msg,
             }
 
-    def load(self, verbose: bool = False):
+    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
         """Load ColabFold search executable."""
         logger.debug("Initializing ColabFold search")
 
@@ -314,7 +311,7 @@ if __name__ == "__main__":
     output_json_path = sys.argv[2]
 
     # Read input json
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     # Create wrapper and run search

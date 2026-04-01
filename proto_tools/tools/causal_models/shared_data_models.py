@@ -1,11 +1,13 @@
-"""proto_tools/tools/causal_models/shared_data_models.py
+"""proto_tools/tools/causal_models/shared_data_models.py.
 
 Contains base schemas for scoring and sampling operations
-shared across all causal/autoregressive language models."""
+shared across all causal/autoregressive language models.
+"""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,7 +31,7 @@ class CausalModelScoringInput(BaseToolInput):
             or a list of strings.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Sequences to score",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -82,15 +84,15 @@ class SequenceScores(BaseModel):
         vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
-    metrics: Dict[str, float] = Field(
+    metrics: dict[str, float] = Field(
         default_factory=dict,
         description="Dictionary of scalar scoring metrics",
     )
-    logits: Optional[List[List[float]]] = Field(
+    logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
-    vocab: Optional[List[str]] = Field(
+    vocab: list[str] | None = Field(
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
@@ -127,12 +129,12 @@ class CausalModelScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: List[SequenceScores] = Field(
+    scores: list[SequenceScores] = Field(
         description="List of scoring outputs, one per input sequence"
     )
 
     @property
-    def vocab(self) -> Optional[List[str]]:
+    def vocab(self) -> list[str] | None:
         """Token ordering for logits; derived from first score."""
         return self.scores[0].vocab if self.scores else None
 
@@ -146,11 +148,13 @@ class CausalModelScoringOutput(BaseToolOutput):
         return iter(self.scores)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -201,7 +205,7 @@ class CausalModelSampleInput(BaseToolInput):
             Can be provided as a single string or a list of strings.
     """
 
-    sequences: List[str] = InputField(
+    sequences: list[str] = InputField(
         description="Prompt sequence(s) to condition generation on",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
@@ -236,16 +240,18 @@ class CausalModelSampleConfig(BaseConfig):
 class CausalModelSampleOutput(BaseToolOutput):
     """Base output for causal model sampling/generation tools."""
 
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Generated sequences",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -254,8 +260,7 @@ class CausalModelSampleOutput(BaseToolOutput):
         if file_format == "fasta":
             fasta_path = path.with_suffix(".fasta")
             with open(fasta_path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "json":
             import json
             json_path = path.with_suffix(".json")

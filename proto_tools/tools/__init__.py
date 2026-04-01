@@ -1,15 +1,10 @@
+"""Bioinformatics tool wrappers and shared infrastructure."""
+
 # Base classes and registry
 
 # Causal model tools
 # Tool cache and I/O
-from proto_tools.utils.tool_cache import (
-    clear_cache,
-    clear_tool_cache,
-    get_cache_info,
-)
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
-
-from .causal_models import (  # Evo1; Evo2; ProGen2
+from proto_tools.tools.causal_models import (
     EVO1_MODEL_CHECKPOINTS,
     Evo1SampleConfig,
     Evo1SampleInput,
@@ -38,7 +33,7 @@ from .causal_models import (  # Evo1; Evo2; ProGen2
 )
 
 # Database retrieval tools
-from .database_retrieval import (
+from proto_tools.tools.database_retrieval import (
     FetchedSequence,
     FetchedStructure,
     NCBIEfetchConfig,
@@ -78,7 +73,7 @@ from .database_retrieval import (
 )
 
 # Gene annotation tools
-from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCED
+from proto_tools.tools.gene_annotation import (
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -139,7 +134,7 @@ from .gene_annotation import (  # BLAST; PyHMMER; MMseqs2; CRISPRtracrRNA; MinCE
 )
 
 # Inverse folding tools
-from .inverse_folding import (  # Shared Data Models; ESM-IF; ProteinMPNN; LigandMPNN; FAMPNN
+from proto_tools.tools.inverse_folding import (
     AllMutationsScoreResult,
     ESMIF1SampleConfig,
     ESMIF1SampleInput,
@@ -196,7 +191,7 @@ from .inverse_folding import (  # Shared Data Models; ESM-IF; ProteinMPNN; Ligan
 )
 
 # Masked model tools
-from .masked_models import (  # ESM2; ESM3; Masking
+from proto_tools.tools.masked_models import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
@@ -226,7 +221,7 @@ from .masked_models import (  # ESM2; ESM3; Masking
 )
 
 # Mutagenesis tools
-from .mutagenesis import (  # Random protein; Random nucleotide
+from proto_tools.tools.mutagenesis import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
     RandomNucleotideSampleOutput,
@@ -238,7 +233,7 @@ from .mutagenesis import (  # Random protein; Random nucleotide
 )
 
 # ORF prediction tools
-from .orf_prediction import (
+from proto_tools.tools.orf_prediction import (
     ORF,
     OrfipyConfig,
     OrfipyInput,
@@ -251,7 +246,7 @@ from .orf_prediction import (
 )
 
 # RNA splicing tools
-from .rna_splicing import (
+from proto_tools.tools.rna_splicing import (
     CONTEXT_LENGTH,
     SPLICE_TISSUE_CHANNEL_INDEX,
     TARGET_LENGTH,
@@ -264,7 +259,7 @@ from .rna_splicing import (
 )
 
 # Sequence alignment tools
-from .sequence_alignment import (
+from proto_tools.tools.sequence_alignment import (
     MSA,
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
@@ -277,7 +272,7 @@ from .sequence_alignment import (
 )
 
 # Sequence scoring tools
-from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
+from proto_tools.tools.sequence_scoring import (
     BORZOI_CONTEXT,
     BORZOI_OUTPUT,
     DEFAULT_ALPHAGENOME_MODEL_VERSION,
@@ -331,7 +326,7 @@ from .sequence_scoring import (  # AlphaGenome; Borzoi; Enformer; Segmasker
 )
 
 # Structure alignment tools
-from .structure_alignment import (
+from proto_tools.tools.structure_alignment import (
     TMalignConfig,
     TMalignInput,
     TMalignOutput,
@@ -343,7 +338,7 @@ from .structure_alignment import (
 )
 
 # Structure design tools
-from .structure_design import (
+from proto_tools.tools.structure_design import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
@@ -353,10 +348,10 @@ from .structure_design import (
 )
 
 # Structure dynamics tools
-from .structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
+from proto_tools.tools.structure_dynamics import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
 
 # Structure prediction tools
-from .structure_prediction import (  # AlphaFold2; AlphaFold3; Boltz2; Chai1; ESMFold; Protenix; ViennaRNA; Structure Metrics; Shared Data Models; Dispatch
+from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
     AlphaFold2Output,
@@ -396,7 +391,13 @@ from .structure_prediction import (  # AlphaFold2; AlphaFold3; Boltz2; Chai1; ES
     run_structure_metrics,
     run_viennarna,
 )
-from .tool_registry import ToolRegistry, ToolSpec, tool
+from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec, tool
+from proto_tools.utils.tool_cache import (
+    clear_cache,
+    clear_tool_cache,
+    get_cache_info,
+)
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 __all__ = [
     # Base classes and registry

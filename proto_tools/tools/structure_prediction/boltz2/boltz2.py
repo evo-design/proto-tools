@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/boltz2/boltz2.py
+"""proto_tools/tools/structure_prediction/boltz2/boltz2.py.
 
 Protein structure prediction using Boltz2.
 
@@ -16,6 +15,7 @@ import os
 import tempfile
 import warnings
 from logging import getLogger
+from typing import ClassVar
 
 from tqdm import tqdm
 
@@ -61,7 +61,7 @@ class Boltz2Input(StructurePredictionInput):
     """
 
     # Boltz2 supports all standard entity types except glycan
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
 # Output:
@@ -183,6 +183,8 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         config (Boltz2Config | None): Validated Boltz2 configuration specifying MSA settings,
             refinement parameters, and execution options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         Boltz2Output: Structured output containing:
             - ``structures``: List of ``Boltz2Structure`` instances, one per input complex
@@ -267,15 +269,13 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
         - Supports both local and remote ColabFold search modes when ``use_msa=True``
     """
-    results = []
-
-    for comp in tqdm(inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)):
-        results.append(
-            run_boltz2_on_complex(
-                config=config, sp_complex=comp,
-                msas=inputs.msas, instance=instance,
-            )
+    results = [
+        run_boltz2_on_complex(
+            config=config, sp_complex=comp,
+            msas=inputs.msas, instance=instance,
         )
+        for comp in tqdm(inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes))
+    ]
     return Boltz2Output(structures=results)
 
 
@@ -310,8 +310,8 @@ def run_boltz2_on_complex(
     msas: dict | None = None,
     instance=None,
 ) -> Structure:
-    """
-    Run Boltz2 structure prediction on a single complex. This function is wrapped
+    """Run Boltz2 structure prediction on a single complex. This function is wrapped.
+
     by ``run_boltz2`` to sequentially predict all complexes in the input.
 
     Args:
@@ -335,7 +335,7 @@ def run_boltz2_on_complex(
             if protein_seqs and msas:
                 msa_dir = os.path.join(temp_dir, "msas")
                 os.makedirs(msa_dir, exist_ok=True)
-                for seq, chain_id in zip(protein_seqs, protein_chain_ids):
+                for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
                     if seq in msas:
                         csv_path = os.path.join(msa_dir, f"{chain_id}.csv")
                         _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)

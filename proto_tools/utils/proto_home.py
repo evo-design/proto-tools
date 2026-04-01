@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/proto_home.py
+"""proto_tools/utils/proto_home.py.
 
 Unified PROTO_HOME resolution for all persistent data.
 
@@ -16,8 +15,6 @@ Layout under PROTO_HOME::
     ├── proto_tool_envs/          micromamba-managed tool venvs
     └── .micromamba/              micromamba binary + package cache
 """
-
-from __future__ import annotations
 
 import os
 import sys
@@ -82,10 +79,7 @@ def show_first_run_notice() -> None:
     proto_home.mkdir(parents=True, exist_ok=True)
 
     tool_envs_path = str(proto_home / "proto_tool_envs")
-    if model_cache_set:
-        weights_path = os.environ["PROTO_MODEL_CACHE"]
-    else:
-        weights_path = str(proto_home / "proto_model_cache")
+    weights_path = os.environ["PROTO_MODEL_CACHE"] if model_cache_set else str(proto_home / "proto_model_cache")
 
     # Collect content lines first, then size the box to fit
     content = []
@@ -104,15 +98,15 @@ def show_first_run_notice() -> None:
     w = max(len(title) + 4, max(len(line) for line in content) + 2)
 
     border = "═" * w
-    lines = []
-    lines.append("")
-    lines.append(f"  ╔{border}╗")
-    lines.append(f"  ║{title:^{w}}║")
-    lines.append(f"  ║{'':{w}}║")
-    for line in content:
-        lines.append(f"  ║{line:<{w}}║")
-    lines.append(f"  ╚{border}╝")
-    lines.append("")
+    lines = [
+        "",
+        f"  ╔{border}╗",
+        f"  ║{title:^{w}}║",
+        f"  ║{'':{w}}║",
+        *[f"  ║{line:<{w}}║" for line in content],
+        f"  ╚{border}╝",
+        "",
+    ]
 
     print("\n".join(lines), file=sys.stderr)
 

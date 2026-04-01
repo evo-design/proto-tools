@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/compute_deps.py
+"""proto_tools/utils/compute_deps.py.
 
 Detects GPU hardware (driver, CUDA version) and recommends compatible
 PyTorch/JAX version constraints. These are injected as environment variables
@@ -51,7 +50,7 @@ logger = logging.getLogger(__name__)
 #   PyTorch 2.4+: CUDA 12.6 (driver 525+, cu126 via CUDA forward compat, all CUDA 12.x drivers)
 
 # PyTorch version + wheel index compatibility by NVIDIA driver major version
-# Format: {min_driver_major: (min_torch, max_torch_exclusive, cuda_variant)}
+# Format: {min_driver_major: (min_torch, max_torch_exclusive, cuda_variant)}  # noqa: ERA001 -- format docs
 # The cuda_variant maps to https://download.pytorch.org/whl/{cuda_variant}
 # Sources:
 #   PyTorch releases: https://github.com/pytorch/pytorch/blob/main/RELEASE.md
@@ -70,7 +69,7 @@ _TORCH_INDEX_BASE = "https://download.pytorch.org/whl"
 # JAX version compatibility by NVIDIA driver major version
 # Based on official JAX docs (https://docs.jax.dev/en/latest/installation.html)
 # JAX cuda12 requires driver >= 525, JAX cuda13 requires driver >= 580
-# Format: {min_driver_major: (min_jax_version, max_jax_version_exclusive)}
+# Format: {min_driver_major: (min_jax_version, max_jax_version_exclusive)}  # noqa: ERA001 -- format docs
 _JAX_COMPATIBILITY = {
     525: ("0.4.20", "1"),    # Driver 525+ supports jax[cuda12] (all modern versions)
     0: ("0.4.20", "1"),      # Fallback (same as above, JAX requires modern drivers)
@@ -163,28 +162,21 @@ def detect_compute_environment() -> dict[str, str]:
     of environment variables containing detected hardware info and recommended
     PyTorch/JAX version constraints.
 
-    Returns
-    -------
-    dict[str, str]
-        Environment variables to inject into tool subprocess environments:
-        - DETECTED_COMPUTE_PLATFORM: "cpu" or "cuda"
-        - DETECTED_DRIVER_VERSION: NVIDIA driver major version
-        - DETECTED_CUDA_VERSION: CUDA toolkit major version
-        - RECOMMENDED_TORCH_SPEC: PyTorch version constraint
-        - RECOMMENDED_TORCH_INDEX: PyTorch wheel index URL
-        - RECOMMENDED_JAX_SPEC: JAX version constraint with CUDA variant
-        - RECOMMENDED_JAX_VARIANT: JAX CUDA variant (e.g., "cuda12")
+    Returns:
+        dict[str, str]: Environment variables to inject into tool subprocess environments:
+            DETECTED_COMPUTE_PLATFORM ("cpu" or "cuda"), DETECTED_DRIVER_VERSION,
+            DETECTED_CUDA_VERSION, RECOMMENDED_TORCH_SPEC, RECOMMENDED_TORCH_INDEX,
+            RECOMMENDED_JAX_SPEC, and RECOMMENDED_JAX_VARIANT.
 
-    Examples
-    --------
-    >>> env = detect_compute_environment()
-    >>> # On GPU system with driver 550, CUDA 12.4:
-    >>> env["DETECTED_COMPUTE_PLATFORM"]
-    'cuda'
-    >>> env["RECOMMENDED_TORCH_SPEC"]
-    'torch>=2.7,<2.10'
+    Examples:
+        >>> env = detect_compute_environment()
+        >>> # On GPU system with driver 550, CUDA 12.4:
+        >>> env["DETECTED_COMPUTE_PLATFORM"]
+        'cuda'
+        >>> env["RECOMMENDED_TORCH_SPEC"]
+        'torch>=2.7,<2.10'
     """
-    from .system_info import get_gpu_info
+    from proto_tools.utils.system_info import get_gpu_info
 
     gpu_info = get_gpu_info()
 
