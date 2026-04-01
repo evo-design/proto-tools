@@ -90,12 +90,13 @@ class TMalignOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-_EXAMPLE_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "examples" / "example.pdb")
 
 
 def example_input():
     """Minimal valid input for testing and examples."""
-    return TMalignInput(pdb_text_1=_EXAMPLE_PDB, pdb_text_2=_EXAMPLE_PDB)
+    _pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
+    return TMalignInput(pdb_text_1=_pdb_text, pdb_text_2=_pdb_text)
 
 
 @tool(

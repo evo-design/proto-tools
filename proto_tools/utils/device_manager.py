@@ -644,6 +644,11 @@ class DeviceManager:
         Calls the allocation's eviction_callback to actually move the model
         or shutdown the worker, then updates bookkeeping.
 
+        Note:
+            On Exclusive_Process GPUs, ``_escalate_for_exclusive_process``
+            (called at init/configure time) has already switched the strategy
+            to RESTART, so CPU offload is never used in that mode.
+
         Args:
             allocation (DeviceAllocation): The allocation to evict.
 

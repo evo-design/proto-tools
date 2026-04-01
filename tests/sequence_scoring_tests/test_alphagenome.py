@@ -29,7 +29,6 @@ _SCORE_MID = _SCORE // 2  # 262_144 — centre of the scoring interval
 # ── Interval Prediction ──────────────────────────────────────────────────────
 
 
-@pytest.mark.include_in_env_report(category="sequence_scoring")
 @pytest.mark.uses_gpu
 def test_interval_prediction():
     """Test interval prediction with multiple output types."""

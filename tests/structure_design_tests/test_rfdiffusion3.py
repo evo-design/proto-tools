@@ -54,7 +54,6 @@ def test_rfdiffusion3_json_spec_generation():
 # Integration tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.include_in_env_report(category="structure_design")
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_unconditional_design():
     """Basic unconditional design produces a valid structure."""

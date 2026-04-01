@@ -261,7 +261,7 @@ def example_input():
     """Minimal valid input for testing and examples."""
     return MmseqsSearchProteinsInput(
         query_sequences=["MKTL"],
-        mmseqs_db=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"),
+        mmseqs_db=str(Path(__file__).parent / "examples" / "example.fasta"),
     )
 
 

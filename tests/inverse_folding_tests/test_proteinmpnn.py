@@ -39,7 +39,6 @@ def pdb_structure():
     return Structure(structure_filepath_or_content=TEST_PDB_FILE)
 
 
-@pytest.mark.include_in_env_report(category="inverse_folding")
 @pytest.mark.uses_gpu
 def test_proteinmpnn_sample_simple(pdb_structure: Structure):
     inp = InverseFoldingInput(

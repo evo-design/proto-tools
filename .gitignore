@@ -19,6 +19,7 @@ model_cache
 proto_model_cache
 .micromamba
 *.hmm
+!**/examples/example.hmm
 *mini_mmseqs_db
 
 # Database files
@@ -40,7 +41,7 @@ CLAUDE.md
 
 # pytest
 .pytest_cache/
-proto_tools.egg-info/
+*.egg-info/
 build/
 .coverage
 

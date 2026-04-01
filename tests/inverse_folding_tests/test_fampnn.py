@@ -149,7 +149,6 @@ def test_fampnn_sample_config_rejects_excluded_amino_acids():
 # ============================================================================
 # Integration tests (GPU required — run with --integration or --all)
 # ============================================================================
-@pytest.mark.include_in_env_report(category="inverse_folding")
 @pytest.mark.uses_gpu
 def test_fampnn_sample_simple(pdb_structure):
     """Basic FAMPNN sequence sampling with a single structure."""

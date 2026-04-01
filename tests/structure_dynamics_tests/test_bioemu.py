@@ -156,7 +156,6 @@ def test_multiple_complexes_produce_separate_ensembles():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.include_in_env_report(category="structure_dynamics")
 @pytest.mark.uses_gpu
 def test_bioemu_sample_end_to_end():
     """Test BioEmu conformational ensemble sampling end-to-end."""

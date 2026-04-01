@@ -71,7 +71,6 @@ def test_input_uppercases_all_sequences_in_list():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="orf_prediction")
 def test_simple_gene_prediction():
     inp = ProdigalInput(input_sequences="ATGCGTAAATAA")
     result = run_prodigal_prediction(inp, ProdigalConfig())

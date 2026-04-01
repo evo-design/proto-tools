@@ -166,7 +166,6 @@ def test_evo1_scoring_export_json(tmp_path):
 # Integration tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.include_in_env_report(category="causal_models")
 @pytest.mark.uses_gpu
 def test_evo1_sample_tool():
     """Test the evo1 sampling tool end-to-end: inference, output structure, and export."""

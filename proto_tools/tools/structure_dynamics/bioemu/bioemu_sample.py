@@ -14,10 +14,14 @@ from proto_tools.entities.structures import (
     Structure,
     StructureEnsemble,
 )
+from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
+    ColabfoldSearchConfig,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
     StructurePredictionConfig,
     StructurePredictionInput,
+    _preprocess_structure_prediction_msas,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -144,14 +148,21 @@ class BioEmuOutput(BaseToolOutput):
 class BioEmuConfig(StructurePredictionConfig):
     """Configuration object for BioEmu conformational ensemble sampling.
 
+    BioEmu always requires MSA-derived Evoformer embeddings. Unlike structure
+    prediction tools (which have an optional ``use_msa`` toggle), this config
+    always runs ColabFold search during preprocessing to generate MSAs. If MSAs
+    are pre-supplied on the input, the search is skipped.
+
     Attributes:
         num_samples (int): Number of conformations to sample per input sequence.
         model_name (Literal['bioemu-v1.0', 'bioemu-v1.1']): BioEmu model variant.
         filter_samples (bool): Whether to filter lower-quality generated samples.
         batch_size (int): Batch size control for BioEmu internal sampling.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
+        colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
+            ColabFold MSA search. Default: Uses ColabfoldSearchConfig defaults.
         device (str): Inference device (inherited).
-        verbose: Verbose logging toggle (inherited).
+        verbose (bool): Verbose logging toggle (inherited).
     """
 
     num_samples: int = ConfigField(
@@ -186,6 +197,31 @@ class BioEmuConfig(StructurePredictionConfig):
         description="Optional directory for raw BioEmu output files",
         hidden=True,
     )
+    colabfold_search_config: Optional[ColabfoldSearchConfig] = ConfigField(
+        title="ColabFold Search Config",
+        default=None,
+        description="Configuration for ColabFold MSA search. If None, uses default settings.",
+        hidden=True,
+    )
+
+    def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:
+        """Generate MSAs via ColabFold search (always — BioEmu requires them).
+
+        Skips the search if MSAs are already pre-supplied on ``inputs.msas``.
+
+        Args:
+            inputs (StructurePredictionInput): Structure prediction input containing
+                complexes and optional pre-computed MSAs.
+
+        Returns:
+            StructurePredictionInput: Updated inputs with ``msas`` field populated.
+        """
+        if self.colabfold_search_config is None:
+            self.colabfold_search_config = ColabfoldSearchConfig()
+        self.colabfold_search_config.verbose = self.verbose
+        return _preprocess_structure_prediction_msas(
+            inputs, self.colabfold_search_config, self.verbose
+        )
 
 
 # ============================================================================
@@ -213,10 +249,25 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 
+    # Extract pre-computed MSA A3M strings (populated by preprocess or user)
+    msa_a3m_contents = {}
+    if inputs.msas:
+        for complex_ in inputs.complexes:
+            seq = complex_.chains[0].sequence
+            msa = inputs.msas.get(seq)
+            if msa is not None:
+                msa_a3m_contents[seq] = msa.to_a3m_string()
+                if config.verbose:
+                    logger.info(
+                        f"Loaded MSA for sequence (length {len(seq)}): "
+                        f"{len(msa)} homologs"
+                    )
+
     output = ToolInstance.dispatch(
         "bioemu",
         {
             "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
+            "msa_a3m_contents": msa_a3m_contents,
             "num_samples": config.num_samples,
             "model_name": config.model_name,
             "filter_samples": config.filter_samples,

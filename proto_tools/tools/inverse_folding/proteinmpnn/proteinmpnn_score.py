@@ -4,6 +4,7 @@ ProteinMPNN scoring tool."""
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 from tqdm import tqdm
@@ -120,10 +121,8 @@ class ProteinMPNNScoringConfig(BaseConfig):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
-    from pathlib import Path
-
     from proto_tools.entities.structures import Structure
-    _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
+    _pdb_path = str(Path(__file__).parents[1] / "examples" / "example.pdb")
     return ProteinMPNNScoringInput(
         sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))]
     )

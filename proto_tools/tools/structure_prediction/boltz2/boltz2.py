@@ -107,6 +107,8 @@ class Boltz2Config(MSAStructurePredictionConfig):
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
+        timeout (int): Maximum execution time in seconds. Default: 1200.
+
     """
 
     recycling_steps: int = ConfigField(
@@ -136,6 +138,14 @@ class Boltz2Config(MSAStructurePredictionConfig):
         ge=1,
         description="Number of workers for prediction",
         hidden=True,
+    )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1200,
+        ge=1,
+        description="Maximum execution time in seconds",
+        hidden=True,
+        include_in_key=False,
     )
 # ============================================================================
 # Tool Implementation

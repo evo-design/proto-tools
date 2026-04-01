@@ -23,7 +23,7 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 - **`@pytest.mark.integration`**: Tests calling `ToolInstance.dispatch()` for CPU tools. Skipped by default; run with `--integration`
 - **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement — do **not** also add `@pytest.mark.integration`
-- **`@pytest.mark.include_in_env_report(category="...")`**: Add to the primary integration/GPU test for each tool. Category must match the tool's category
+- **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization — do not add manually
 - **No `@pytest.mark.skip_ci`** for core dependencies: If a package is in `pyproject.toml`, its tests should run without special markers
 - **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`
 

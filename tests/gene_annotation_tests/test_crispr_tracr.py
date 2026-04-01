@@ -221,7 +221,6 @@ def test_setup_installs_conda_tools():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="gene_annotation")
 def test_run_crispr_tracr():
     """Run CRISPRtracrRNA on a synthetic sequence."""
     test_seq = "ATCGATCG" * 500

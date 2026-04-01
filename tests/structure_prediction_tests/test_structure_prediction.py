@@ -232,14 +232,6 @@ def _generate_test_params() -> list:
                 marks.append(pytest.mark.slow)
             if predictor_name in _CHIMERA_ONLY_PREDICTORS:
                 marks.append(pytest.mark.only_chimera)
-            # One smoke test per venv tool for --env-report
-            if test_name == "gfp":
-                marks.append(
-                    pytest.mark.include_in_env_report(
-                        tool=predictor_name,
-                        category="structure_prediction",
-                    )
-                )
 
             params.append(
                 pytest.param(

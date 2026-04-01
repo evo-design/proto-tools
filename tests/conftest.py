@@ -10,18 +10,20 @@ Supports the same CLI options and markers as the main proto-language tests:
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
   --env-report[=PATH]  Run venv smoke tests and generate compatibility report
+                       (combine with -k to re-test specific tools incrementally)
 """
 
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -96,6 +98,8 @@ class ToolTestResult:
     env_path: str | None
     env_status: str  # "success", "build_failed", "not_found"
     error_message: str | None
+    git_commit: str | None = None
+    git_dirty: bool = False
 
 
 @dataclass
@@ -105,6 +109,9 @@ class EnvReportCollector:
     output_path: Path | None = None
     results: list[ToolTestResult] = field(default_factory=list)
     _test_start_times: dict[str, float] = field(default_factory=dict)
+    selected_tools: set[str] = field(default_factory=set)
+    expected_count: int = 0
+    is_filtered: bool = False
 
     def record_start(self, nodeid: str) -> None:
         """Record when a test starts."""
@@ -122,33 +129,39 @@ class EnvReportCollector:
         tool_name: str | None = None,
         category: str | None = None,
     ) -> None:
-        """Record a test result."""
+        """Record a test result.
+
+        Args:
+            nodeid (str): Pytest node ID for the test.
+            outcome (str): Test outcome (``"passed"``, ``"failed"``, ``"skipped"``).
+            has_gpu_marker (bool): Whether the test is marked with ``uses_gpu``.
+            error_message (str | None): Error message if the test failed.
+            tool_name (str | None): Tool key from the ``include_in_env_report`` marker.
+            category (str | None): Tool category from the marker.
+        """
         import time
+
+        if not tool_name:
+            return  # Marker must provide tool name
 
         # Calculate duration
         start_time = self._test_start_times.pop(nodeid, time.time())
         duration = time.time() - start_time
 
-        # Use explicit tool_name/category if provided, otherwise parse from nodeid
-        if tool_name:
-            parsed_tool = tool_name
-            # Use explicit category if provided, otherwise lookup
-            if not category:
-                category = self._get_category_for_tool(tool_name)
-        else:
-            parsed_tool, parsed_category = self._parse_tool_from_nodeid(nodeid)
-            if not category:
-                category = parsed_category
-
-        if not parsed_tool:
-            return  # Not a recognizable tool test
+        if not category:
+            category = "unknown"
 
         # Determine venv path and status
-        env_path, env_status = self._get_venv_info(parsed_tool)
+        env_path, env_status = self._get_venv_info(tool_name)
+
+        # Capture git state at test time
+        from proto_tools.utils.system_info import get_git_info
+
+        git_info = get_git_info()
 
         self.results.append(
             ToolTestResult(
-                tool_name=parsed_tool,
+                tool_name=tool_name,
                 category=category,
                 test_name=nodeid,
                 status=outcome,
@@ -157,51 +170,27 @@ class EnvReportCollector:
                 env_path=env_path,
                 env_status=env_status,
                 error_message=error_message,
+                git_commit=git_info.get("commit"),
+                git_dirty=git_info.get("dirty", False),
             )
         )
 
-    def _get_category_for_tool(self, tool_name: str) -> str:
-        """Get category for a tool name from the ToolRegistry."""
-        tool_categories = ToolRegistry.get_tool_categories()
-        return tool_categories.get(tool_name, "unknown")
-
-    def _parse_tool_from_nodeid(self, nodeid: str) -> tuple[str | None, str | None]:
-        """Extract tool name and category from test nodeid."""
-        # Pattern: tests/{category}_tests/test_{tool}.py::...
-        # or: tests/test_{category}.py::...
-        match = re.search(r"test_(\w+)\.py", nodeid)
-        if not match:
-            return None, None
-
-        test_file = match.group(1)
-
-        # Map test file names to tool names (when they differ)
-        file_to_tool = {
-            "local_colabfold_search": "colabfold_search",
-            "rna_splicing": "splice_transformer",
-            "viennarna_secondary_structure_prediction": "viennarna",
-        }
-
-        tool_name = file_to_tool.get(test_file, test_file)
-        tool_categories = ToolRegistry.get_tool_categories()
-        category = tool_categories.get(tool_name)
-
-        if category:
-            return tool_name, category
-
-        # Fallback: use test file name as tool name
-        return test_file, "unknown"
-
     def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
-        """Get venv path and status for a tool."""
+        """Get venv path and status for a tool.
+
+        Args:
+            tool_name (str): Registry key (e.g., ``"fampnn-sample"``).
+        """
         from proto_tools.utils.tool_instance import ToolInstance
 
         venvs_dir = ToolInstance._get_tool_envs_root()
 
-        # Look for venv with tool name
-        for venv_dir in venvs_dir.glob(f"*{tool_name}*"):
+        # Map registry key → tool directory name via ToolRegistry
+        spec = ToolRegistry.get(tool_name)
+        if spec:
+            dir_name = spec.source_file.parent.name
+            venv_dir = venvs_dir / f"{dir_name}_env"
             if venv_dir.is_dir():
-                # Check if venv has python executable
                 python_path = venv_dir / "bin" / "python"
                 if python_path.exists():
                     return str(venv_dir), "success"
@@ -209,10 +198,77 @@ class EnvReportCollector:
 
         return None, "not_found"
 
+    def _get_output_path(self) -> Path:
+        """Resolve the output path for the report."""
+        if self.output_path:
+            path = self.output_path
+            if path.suffix != ".md":
+                path = path.with_suffix(".md")
+            return path
+        project_root = Path(__file__).parent.parent
+        env_dir = project_root / "notes" / "environments"
+        env_dir.mkdir(parents=True, exist_ok=True)
+        platform_id = get_platform_id(include_date=False, include_commit=False)
+        return env_dir / f"{platform_id}.md"
+
+    @staticmethod
+    def _load_embedded_data(path: Path) -> list[ToolTestResult]:
+        """Load ToolTestResult entries from the embedded data block in a report."""
+        if not path.exists():
+            return []
+        text = path.read_text()
+        match = re.search(
+            r"<!-- env-report-data\n(.*?)\n-->", text, re.DOTALL
+        )
+        if not match:
+            return []
+        try:
+            raw = json.loads(match.group(1))
+            return [ToolTestResult(**entry) for entry in raw]
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @staticmethod
+    def _serialize_embedded_data(results: list[ToolTestResult]) -> str:
+        """Serialize results as an HTML comment block."""
+        data = [asdict(r) for r in results]
+        return (
+            "<!-- env-report-data\n"
+            + json.dumps(data, indent=2)
+            + "\n-->"
+        )
+
     def finalize_and_write(self) -> Path | None:
-        """Write the report to disk as a README.md and return the path."""
+        """Write the report to disk and return the path.
+
+        Filtered runs (``-k``) merge new results into existing data.
+        Full runs only write if all expected tests completed.
+        """
         if not self.results:
             return None
+
+        output_path = self._get_output_path()
+
+        # Full run safety: don't overwrite with partial results
+        if not self.is_filtered:
+            if len(self.results) < self.expected_count:
+                logger = logging.getLogger("proto_tools.tests")
+                logger.warning(
+                    f"--env-report: only {len(self.results)}/{self.expected_count} "
+                    f"tests completed — skipping report write to preserve existing data"
+                )
+                return None
+
+        # Merge results
+        if self.is_filtered:
+            existing = self._load_embedded_data(output_path)
+            # Build lookup: new results override by tool_name
+            merged = {r.tool_name: r for r in existing}
+            for r in self.results:
+                merged[r.tool_name] = r
+            all_results = list(merged.values())
+        else:
+            all_results = self.results
 
         # Collect system info
         system_info = collect_system_info()
@@ -221,22 +277,22 @@ class EnvReportCollector:
         gpu = system_info["gpu"]
         parent_env = system_info["parent_process_env"]
 
-        # Build summary
-        passed = sum(1 for r in self.results if r.status == "passed")
-        failed = sum(1 for r in self.results if r.status == "failed")
-        skipped = sum(1 for r in self.results if r.status == "skipped")
-        total = len(self.results)
+        # Build summary (skipped tools excluded from pass rate)
+        passed = sum(1 for r in all_results if r.status == "passed")
+        failed = sum(1 for r in all_results if r.status == "failed")
+        skipped = sum(1 for r in all_results if r.status == "skipped")
+        tested = passed + failed
 
         # Group results by category
         by_category: dict[str, list[ToolTestResult]] = {}
-        for r in self.results:
+        for r in all_results:
             by_category.setdefault(r.category, []).append(r)
 
         # Build README content
         lines: list[str] = []
 
         # Header with badges
-        pass_rate = int(100 * passed / total) if total > 0 else 0
+        pass_rate = int(100 * passed / tested) if tested > 0 else 0
         if pass_rate >= 80:
             rate_color = "brightgreen"
         elif pass_rate >= 50:
@@ -340,13 +396,13 @@ class EnvReportCollector:
         for category in sorted(by_category.keys()):
             results = by_category[category]
             cat_passed = sum(1 for r in results if r.status == "passed")
-            cat_total = len(results)
+            cat_tested = sum(1 for r in results if r.status != "skipped")
 
             # Category header with mini badge
-            lines.append(f"### {category.replace('_', ' ').title()} ({cat_passed}/{cat_total})")
+            lines.append(f"### {category.replace('_', ' ').title()} ({cat_passed}/{cat_tested})")
             lines.append("")
-            lines.append("| Tool | Requires GPU | Venv Build Succeeded | Duration | Status |")
-            lines.append("|------|--------------|----------------------|----------|--------|")
+            lines.append("| Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |")
+            lines.append("|------|--------------|----------------------|----------|-----------|--------|")
 
             for r in sorted(results, key=lambda x: x.tool_name):
                 # Status emoji
@@ -371,12 +427,20 @@ class EnvReportCollector:
                 else:
                     venv = "—"
 
-                lines.append(f"| `{r.tool_name}` | {gpu_req} | {venv} | {duration} | {status} |")
+                # Commit tag
+                if r.git_commit:
+                    commit_tag = f"`{r.git_commit[:7]}`"
+                    if r.git_dirty:
+                        commit_tag += " ✱"
+                else:
+                    commit_tag = "—"
+
+                lines.append(f"| `{r.tool_name}` | {gpu_req} | {venv} | {duration} | {commit_tag} | {status} |")
 
             lines.append("")
 
         # Failure details section
-        failures = [r for r in self.results if r.status == "failed" and r.error_message]
+        failures = [r for r in all_results if r.status == "failed" and r.error_message]
         if failures:
             lines.append("## Failure Details")
             lines.append("")
@@ -397,20 +461,10 @@ class EnvReportCollector:
             f"*Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
             f"by `pytest --env-report`*"
         )
+        lines.append("")
 
-        # Determine output path
-        if self.output_path:
-            output_path = self.output_path
-            # Ensure .md extension
-            if output_path.suffix != ".md":
-                output_path = output_path.with_suffix(".md")
-        else:
-            # Default: notes/environments/{platform_id}.md
-            project_root = Path(__file__).parent.parent
-            env_dir = project_root / "notes" / "environments"
-            env_dir.mkdir(parents=True, exist_ok=True)
-            platform_id = get_platform_id(include_date=False, include_commit=False)
-            output_path = env_dir / f"{platform_id}.md"
+        # Embedded data block (source of truth for merging)
+        lines.append(self._serialize_embedded_data(all_results))
 
         # Write report
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -484,8 +538,10 @@ def pytest_addoption(parser):
         default=False,
         help=(
             "Run venv smoke tests and generate platform compatibility report. "
-            "Cleans tool_envs/ first, overrides --cpu/--gpu/--slow/skip_ci filters. "
-            "Optionally specify output path: --env-report=path/to/report.md"
+            "Combine with -k to re-test specific tools (only their envs are cleaned, "
+            "results merge into existing report). Without -k, cleans all tool_envs/ "
+            "and writes a fresh report. Optionally specify output path: "
+            "--env-report=path/to/report.md"
         ),
     )
 
@@ -497,8 +553,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
     config.addinivalue_line(
-        "markers", "include_in_env_report: Include test in --env-report (one smoke test per tool). "
-        "Accepts optional kwargs: tool='tool_name', category='category_name'"
+        "markers", "include_in_env_report: Include test in --env-report. "
+        "Requires kwargs: tool='tool-key', category='category_name'. "
+        "Applied automatically by test_env_report.py parametrize"
     )
 
     # Set environment variable to indicate we're in pytest
@@ -604,6 +661,16 @@ def pytest_runtest_makereport(item, call):
                 tool_name=tool_name,
                 category=category,
             )
+        elif report.when == "setup" and report.skipped:
+            # Skipped via marker (e.g., insufficient GPUs)
+            _env_report_collector.record_result(
+                item.nodeid,
+                "skipped",
+                has_gpu_marker="uses_gpu" in item.keywords,
+                error_message=str(report.longrepr) if report.longrepr else None,
+                tool_name=tool_name,
+                category=category,
+            )
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -667,25 +734,62 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
-    # --env-report: keep only venv smoke tests, skip everything else
+    # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
-        skip_not_venv = pytest.mark.skip(reason="--env-report: not a venv smoke test")
         skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
         skip_not_chimera = pytest.mark.skip(
             reason="--env-report: requires Chimera cluster"
         )
         gpu_available = _gpu_available()
+        visible_gpus = number_of_visible_gpus() if gpu_available else 0
         on_chimera = is_on_chimera()
 
+        selected = []
+        deselected = []
         for item in items:
             if "include_in_env_report" not in item.keywords:
-                item.add_marker(skip_not_venv)
+                deselected.append(item)
             elif "only_chimera" in item.keywords and not on_chimera:
                 item.add_marker(skip_not_chimera)
+                selected.append(item)
             elif "uses_gpu" in item.keywords and not gpu_available:
                 # Skip GPU tests on platforms without GPU, but still include in report
                 item.add_marker(skip_no_gpu)
+                selected.append(item)
+            else:
+                # Check multi-GPU requirements (e.g., uses_gpu(2) on a 1-GPU machine)
+                for marker in item.iter_markers("uses_gpu"):
+                    required = marker.args[0] if marker.args else 1
+                    if visible_gpus < required:
+                        item.add_marker(pytest.mark.skip(
+                            reason=f"--env-report: requires {required} GPUs, only {visible_gpus} visible"
+                        ))
+                        break
+                selected.append(item)
+        items[:] = selected
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+
+        # Detect -k filtering. Note: pytest applies -k AFTER this hook,
+        # so we detect it from the config option. The actual selected_tools
+        # set is populated in the _env_report_clean_envs fixture which runs
+        # after all collection hooks (including -k) have completed.
+        if _env_report_collector is not None:
+            k_expr = config.getoption("-k", default=None)
+            _env_report_collector.is_filtered = bool(k_expr)
         return
+
+    # Normal mode: deselect env-report-only tests entirely
+    selected = []
+    deselected = []
+    for item in items:
+        if "include_in_env_report" in item.keywords:
+            deselected.append(item)
+        else:
+            selected.append(item)
+    if deselected:
+        items[:] = selected
+        config.hook.pytest_deselected(items=deselected)
 
     # Auto-mark all tests as CPU-only unless explicitly marked as GPU
     for item in items:
@@ -813,8 +917,12 @@ def setup_test_logging(request):
     datestamp = now.strftime("%m/%d/%Y")
     header = f"Pytest Run Command: `{pytest_command}`\nRun Started: {timestamp} on {datestamp}\n{'=' * 80}\n\n"
 
-    # Create log filename based on -k parameter or timestamp
-    if k_expression:
+    # Create log filename — env-report gets a distinct prefix
+    env_report = request.config.getoption("--env-report")
+    if env_report:
+        file_timestamp = now.strftime("%Y%m%d_%H%M%S")
+        log_filename = f"pytest_env_report_{file_timestamp}.log"
+    elif k_expression:
         # Sanitize the -k expression to make it filename-safe
         # Replace spaces with underscores, remove special characters
         sanitized = re.sub(
@@ -853,14 +961,51 @@ def setup_test_logging(request):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _env_report_clean_envs(setup_test_logging):
-    """Clean tool envs when --env-report is active (after logging is configured)."""
+def _env_report_clean_envs(request, setup_test_logging):
+    """Clean tool envs when --env-report is active (after logging is configured).
+
+    When ``-k`` filtering is active, only deletes envs for selected tools.
+    Otherwise deletes the entire ``tool_envs/`` directory for a full rebuild.
+    """
     if _env_report_collector is None:
         return
 
+    # Populate selected_tools from the session's final item list (after -k
+    # filtering has been applied by pytest's built-in hook).
+    for item in request.session.items:
+        marker = item.get_closest_marker("include_in_env_report")
+        if marker:
+            tool = marker.kwargs.get("tool")
+            if tool:
+                _env_report_collector.selected_tools.add(tool)
+    _env_report_collector.expected_count = len(
+        _env_report_collector.selected_tools
+    )
+
+    logger = logging.getLogger("proto_tools.tests")
     venvs_dir = ToolInstance._get_tool_envs_root()
-    if venvs_dir.exists():
-        logger = logging.getLogger("proto_tools.tests")
+    if not venvs_dir.exists():
+        return
+
+    if _env_report_collector.is_filtered:
+        # Selective cleanup: only delete envs for the tools being re-tested.
+        # Map registry key → tool directory name via ToolRegistry.
+        env_dirs_to_clean: set[str] = set()
+        for key in _env_report_collector.selected_tools:
+            spec = ToolRegistry.get(key)
+            if spec:
+                env_dirs_to_clean.add(spec.source_file.parent.name)
+        for dir_name in env_dirs_to_clean:
+            env_dir = venvs_dir / f"{dir_name}_env"
+            if env_dir.exists():
+                logger.warning(f"Cleaning {env_dir} for rebuild...")
+                subprocess.run(
+                    ["rm", "-rf", str(env_dir)],
+                    check=False,
+                    capture_output=True,
+                )
+    else:
+        # Full run: clean everything
         logger.warning(
             f"Cleaning {venvs_dir} for fresh environment rebuilds "
             "(this may take a while on network filesystems)..."

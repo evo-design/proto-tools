@@ -259,7 +259,6 @@ def setup_mini_database():
 )
 @pytest.mark.skip_ci
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="sequence_alignment")
 def test_finding_self_in_database(setup_mini_database, tmp_path):
     """Test end-to-end search with a single sequence against test database."""
     # Bacillus subtilis YunC protein

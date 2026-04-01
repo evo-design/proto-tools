@@ -169,7 +169,6 @@ def test_export_json(sample_output, tmp_path):
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="gene_annotation")
 def test_run_minced_with_crispr_sequence():
     """Run MinCED on a sequence with known CRISPR arrays."""
     inputs = MincedInput(
