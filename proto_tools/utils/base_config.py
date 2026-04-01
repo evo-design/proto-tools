@@ -17,6 +17,30 @@ from pydantic import Field as PydanticField
 DEFAULT_TIMEOUT = 600  # seconds
 
 
+def _normalize_depends_on(depends_on: dict[str, Any]) -> dict[str, Any]:
+    """Convert shorthand depends_on to explicit format if needed.
+
+    Args:
+        depends_on (dict[str, Any]): Either shorthand ``{"field_name": value}``
+            or explicit ``{"field": "field_name", "value": ...}`` format.
+
+    Returns:
+        dict[str, Any]: Explicit format with ``field`` key.
+    """
+    if "field" in depends_on:
+        return depends_on
+    # Shorthand: single key-value pair like {"search_mode": ["online"]}
+    keys = [k for k in depends_on if k not in ("value", "not_null")]
+    if len(keys) != 1:
+        msg = (
+            "Shorthand depends_on must have exactly one field key, "
+            f"got {list(depends_on.keys())}"
+        )
+        raise ValueError(msg)
+    field_name = keys[0]
+    return {"field": field_name, "value": depends_on[field_name]}
+
+
 def ConfigField(
     default: Any = ...,
     *,
@@ -26,6 +50,7 @@ def ConfigField(
     hidden: bool = False,
     reload_on_change: bool = False,
     include_in_key: bool = True,
+    depends_on: dict[str, Any] | None = None,
     **kwargs,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
@@ -41,10 +66,21 @@ def ConfigField(
         include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
+        depends_on (dict[str, Any] | None): If set, field is only visible when the
+            sibling field satisfies the condition. Accepts two formats:
+            shorthand ``{"field_name": ["val1", "val2"]}`` or explicit
+            ``{"field": "field_name", "value": ["val1", "val2"]}``.
+            Use ``{"field": "x", "not_null": True}`` to show when the
+            target field is not None. ``value`` and ``not_null`` are
+            mutually exclusive.
         kwargs: All other standard Pydantic Field arguments (via ``**kwargs``).
 
     Usage:
-        param: int = Field(default=42, title="Param", description="...", advanced=True)
+        param: int = ConfigField(default=42, title="Param", description="...", advanced=True)
+        mode_field: str = ConfigField(
+            default="a",
+            depends_on={"mode": ["advanced"]},
+        )
     """
     json_schema_extra = kwargs.get("json_schema_extra", {})
 
@@ -53,6 +89,12 @@ def ConfigField(
     json_schema_extra["reload_on_change"] = reload_on_change
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "ConfigField"
+
+    if depends_on is not None:
+        normalized = _normalize_depends_on(depends_on)
+        if "value" in normalized and "not_null" in normalized:
+            raise ValueError("depends_on cannot specify both 'value' and 'not_null'")
+        json_schema_extra["x-depends-on"] = normalized
 
     kwargs["json_schema_extra"] = json_schema_extra
 

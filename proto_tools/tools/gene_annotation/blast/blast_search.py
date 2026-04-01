@@ -283,6 +283,7 @@ class BlastSearchConfig(BaseConfig):
             "Ignored when search_mode is 'local'."
         ),
         advanced=True,
+        depends_on={"search_mode": ["online"]},
     )
     entrez_query: str | None = ConfigField(
         default=None,
@@ -292,6 +293,7 @@ class BlastSearchConfig(BaseConfig):
             "(e.g. 'Homo sapiens[Organism]'). Online only."
         ),
         advanced=True,
+        depends_on={"search_mode": ["online"]},
     )
     hitlist_size: int | None = ConfigField(
         default=None,
@@ -302,6 +304,7 @@ class BlastSearchConfig(BaseConfig):
         ),
         ge=1,
         advanced=True,
+        depends_on={"search_mode": ["online"]},
     )
     megablast: bool | None = ConfigField(
         default=None,
@@ -311,6 +314,7 @@ class BlastSearchConfig(BaseConfig):
             "Ignored when search_mode is 'local'."
         ),
         advanced=True,
+        depends_on={"search_mode": ["online"]},
     )
 
     # --- Local-only ---
@@ -321,6 +325,7 @@ class BlastSearchConfig(BaseConfig):
             "Path to a local BLAST database (no file extensions). "
             "Required for local mode."
         ),
+        depends_on={"search_mode": ["local"]},
     )
     num_threads: int = ConfigField(
         default=4,
@@ -328,6 +333,7 @@ class BlastSearchConfig(BaseConfig):
         title="Number of Threads",
         description="Number of CPU threads for local BLAST search",
         advanced=True,
+        depends_on={"search_mode": ["local"]},
     )
 
     # --- Scoring parameters ---
