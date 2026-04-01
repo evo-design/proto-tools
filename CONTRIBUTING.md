@@ -85,8 +85,7 @@ When filing a bug, include the full traceback and your environment details (OS, 
 
 ### Formatting
 
-- **No auto-formatting**: formatting is handled manually
-- **ruff**: enforced. Checks F401 (unused imports), F841 (unused variables), and import sorting (line length 88). Run `ruff check proto_tools` before committing
+- **ruff**: enforced. Linting covers 22 rule groups including Pyflakes, pycodestyle, isort, pyupgrade, bugbear, bandit, pydocstyle (Google convention), and more (line length 120). Formatting is enforced in CI via `ruff format --check`. Run `ruff check proto_tools tests` before committing
 
 ### Conventions
 

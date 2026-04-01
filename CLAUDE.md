@@ -20,7 +20,7 @@ Three layers for persistent knowledge. Put information in the right one:
 
 Team-shared development docs. Read at the start of relevant tasks.
 
-- `environments/`: Machine-generated platform compatibility reports (Chimera H100, DGX Spark, macOS)
+- `environments/`: Machine-generated platform compatibility reports (Chimera H100, DGX Spark, Ashley Lab H100, Sherlock)
 
 Update notes/ when you discover something **every developer needs to know** (platform issues, new setup steps, architecture decisions).
 
@@ -41,7 +41,7 @@ Assume `proto_tools` is already installed in the current Python environment. Do 
 pip install -e ".[dev]"
 
 # Linting & type checking
-ruff check proto_tools
+ruff check proto_tools tests
 ruff format .
 mypy proto_tools/
 ```
@@ -140,6 +140,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | File | Provides |
 |---|---|
 | `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
+| `utils/base_config.py` | `BaseConfig`, `ConfigField()` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `ToolCache`, `cache_strip_items`, `cache_store_items`, `cache_stitch_items` |
 | `utils/tool_instance.py` | `ToolInstance`: isolated environment execution with opt-in persistence |
@@ -169,7 +170,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 
 Google style everywhere. Enforced by ruff D rules (Google convention) and `tests/style_consistency_tests/test_docstring_style.py` (type-matching, return-type, continuation indent).
 
-- **Module docstrings**: A one-line Google-style summary ending with a period, or a summary line + blank line + details for longer descriptions. `__init__.py` files are exempt (D104 ignored). No path-header prefix.
+- **Module docstrings**: A one-line Google-style summary ending with a period, or a summary line + blank line + details for longer descriptions. `__init__.py` files in test directories are exempt (D104 suppressed via per-file-ignores for `tests/**/*.py`). No path-header prefix.
   ```python
   """Centralized GPU allocation tracking with LRU eviction."""
   ```
@@ -217,6 +218,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - Mypy (strict mode with Pydantic plugin). All code must pass `mypy proto_tools/` with zero errors. Use `# type: ignore[error-code]` only when third-party types are genuinely unfixable — every ignore must include the error code. Third-party deps without stubs are listed in `[[tool.mypy.overrides]]`.
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`
+- Other useful flags: `--gpu` (GPU tests only), `--slow` (slow tests only), `--exhaustive` (combinatorial tests)
 - **Generally use `--all` when running tests** to include integration and GPU tests
 - Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
 - Test logs saved to `logs/`. Every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
