@@ -204,7 +204,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage configu
 ### Claude Code features for developers
 
 Slash commands for common development tasks (invoked with `/command-name`):
-- **`/fix-issue <number>`**: full GitHub issue fix lifecycle (read issue, explore, reproduce, fix, test, verify)
 - **`/implement-tool`**: step-by-step guide for implementing a new tool wrapper (architecture, templates, export chain, examples, tests)
 
 Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` pattern.

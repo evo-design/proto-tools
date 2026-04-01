@@ -150,7 +150,6 @@ ptshell
 conda activate proto-tools
 cd /path/to/proto-tools
 pip install -e ".[dev]"
-pre-commit install
 ```
 
 To set up Claude Code inside the container, see [section 4](#4-claude-code-in-the-container).

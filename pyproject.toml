@@ -48,6 +48,7 @@ dependencies = [
     "pyyaml",
     "requests",
     "tqdm",
+    "filelock",
 ]
 
 [project.urls]
@@ -69,8 +70,6 @@ dev = [
     "ruff",
     "mypy",
     "types-requests",       # mypy stubs for requests
-    "pre-commit",
-
     # Notebooks & interactive
     "jupyter",
     "ipykernel",

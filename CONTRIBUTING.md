@@ -12,7 +12,6 @@ We recommend using the provided `environment.yml`, which sets up Python, compile
 conda env create -f environment.yml
 conda activate proto-tools
 pip install -e ".[dev]"
-pre-commit install
 ```
 
 Most newer systems will already have compilers and build tools available at a system level, which should allow you to just `pip install -e ".[dev]"` in any Python 3.10+ environment.

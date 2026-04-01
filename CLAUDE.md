@@ -39,7 +39,6 @@ Assume `proto_tools` is already installed in the current Python environment. Do 
 ```bash
 # First-time setup only
 pip install -e ".[dev]"
-pre-commit install
 
 # Linting & type checking
 ruff check proto_tools
@@ -251,7 +250,6 @@ For script patterns, batch persistence, GPU tools, and citations, see `notes/usa
 
 - **`implement-tool`**: Full lifecycle for implementing a new tool wrapper
 - **`fix-env`**: Debug and fix tool environment setup failures
-- **`/fix-issue <number>`**: Full GitHub issue fix lifecycle
 
 ## Detailed Reference Docs
 
