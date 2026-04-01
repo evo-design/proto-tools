@@ -22,9 +22,6 @@ from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 _EXCLUDED_CATEGORIES = {"database_retrieval"}
 _CHIMERA_ONLY_KEYS = {"alphafold3-prediction"}
 
-# Tools that always require MSAs — provide fixture A3M instead of calling API
-_TOOLS_WITH_REQUIRED_MSA = {"bioemu-sample"}
-
 
 def _parse_min_gpu_count(device_count: str) -> int:
     """Parse minimum GPU count from a device_count spec (e.g. '1', '2', '1-2', '>=1', '>1')."""
@@ -94,7 +91,7 @@ def _build_tool_params() -> list:
 # Test
 # ============================================================================
 @pytest.mark.parametrize("spec", _build_tool_params())
-def test_tool_env_report(spec: ToolSpec):
+def test_tool_env_report(spec: ToolSpec, tmp_path):
     """Smoke-test a single tool: build env, run example_input, verify success."""
     inputs = spec.example_input()
 
@@ -103,9 +100,14 @@ def test_tool_env_report(spec: ToolSpec):
     if issubclass(spec.config_model, MSAStructurePredictionConfig):
         config_kwargs["use_msa"] = False
 
-    # Tools that always require MSAs: load fixture A3M so preprocess skips
-    # the remote ColabFold API call.
-    if spec.key in _TOOLS_WITH_REQUIRED_MSA:
+    # blast-create-db writes output files relative to the input fasta;
+    # redirect to a temp dir so database files don't pollute the repo.
+    if spec.key == "blast-create-db":
+        config_kwargs["out_prefix"] = str(tmp_path / "blast_db")
+
+    # bioemu-sample always requires MSAs — load fixture A3M so preprocess
+    # skips the remote ColabFold API call.
+    if spec.key == "bioemu-sample":
         from proto_tools.tools.sequence_alignment.msas import MSA
 
         a3m_path = spec.source_file.parent / "examples" / "example.a3m"
