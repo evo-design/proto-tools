@@ -1,4 +1,4 @@
-name: Lint Check
+name: Unit Tests
 
 on:
   pull_request:
@@ -11,31 +11,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
+  test:
     if: github.event.pull_request.draft == false
-    name: Ruff Lint
-    runs-on: ubuntu-latest
+    name: Run Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-        cache: "pip"
-    - run: pip install ruff
-    - run: ruff check proto_tools tests
-
-  typecheck:
-    if: github.event.pull_request.draft == false
-    name: Mypy Type Check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/cache@v4
       with:
-        python-version: "3.12"
-        cache: "pip"
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+        restore-keys: ${{ runner.os }}-uv-
     - name: Install dependencies
       run: |
         pip install uv
         uv pip install --system ".[dev]"
-    - run: mypy proto_tools/
+    - run: pytest --cpu
