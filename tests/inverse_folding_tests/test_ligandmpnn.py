@@ -29,7 +29,6 @@ def cif_structure():
     return Structure(structure_filepath_or_content=TEST_CIF_FILE)
 
 
-@pytest.mark.include_in_env_report(category="inverse_folding")
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_simple(cif_structure: Structure):
     """Basic LigandMPNN sampling with a single structure."""

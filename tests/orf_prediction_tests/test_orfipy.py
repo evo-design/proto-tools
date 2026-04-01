@@ -139,7 +139,6 @@ def test_test_data_integrity():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="orf_prediction")
 def test_full_workflow():
     inp = OrfipyInput(
         sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"

@@ -52,7 +52,6 @@ def test_segmasker_config_rejects_invalid_window():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="sequence_scoring")
 def test_segmasker_scores_sequences():
     """Run segmasker on a mix of low-complexity and normal sequences."""
     inputs = SegmaskerInput(

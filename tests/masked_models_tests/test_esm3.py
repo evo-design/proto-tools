@@ -79,7 +79,6 @@ def test_esm3_predict_structure():
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
 
-@pytest.mark.include_in_env_report(category="masked_models")
 @pytest.mark.uses_gpu
 def test_esm3_score_tool():
     """Test the esm3 scoring tool with run_esm3_score."""

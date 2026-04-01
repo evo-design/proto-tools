@@ -309,7 +309,6 @@ def test_clustering_input_rejects_empty():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="gene_annotation")
 def test_mmseqs_search_proteins_execution(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")

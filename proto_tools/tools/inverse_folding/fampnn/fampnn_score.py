@@ -189,7 +189,7 @@ def example_input():
     return FAMPNNScoreInput(
         inputs=[MutationInput(
             structure=Structure(structure_filepath_or_content=str(
-                Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"
+                Path(__file__).parents[1] / "examples" / "example.pdb"
             )),
             mutations=["A1V"],
         )]

@@ -3,22 +3,11 @@
 Tests for DeviceManager integration with real tool instances."""
 
 import time
-from unittest.mock import patch
 
 import pytest
 
+from proto_tools.utils.device import is_exclusive_process_mode
 from proto_tools.utils.device_manager import OffloadStrategy
-
-
-@pytest.fixture(autouse=True)
-def _mock_exclusive_process():
-    """Disable Exclusive_Process auto-escalation so tests control the strategy."""
-    with patch(
-        "proto_tools.utils.device_manager.is_exclusive_process_mode",
-        return_value=False,
-    ):
-        yield
-
 
 # ---------------------------------------------------------------------------
 # Integration tests
@@ -72,33 +61,35 @@ def test_real_tool_eviction_cpu_strategy():
 
             time.sleep(0.01)  # Ensure different timestamps
 
-            # Step 2: Create second instance - should evict mock_1 (LRU) to CPU
+            # Step 2: Create second instance - should evict mock_1 (LRU)
+            # On Exclusive_Process: auto-escalates to RESTART (allocation removed)
+            # On Default mode: CPU offload (allocation moved to "cpu")
+            exclusive = is_exclusive_process_mode()
             with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="mock_2"):
                 result2 = run_mock_pytorch_tool(input1, config1, instance="mock_2")
                 assert result2.success, f"Second call failed: {result2.errors}"
 
                 # Verify eviction happened
                 status2 = dm.get_device_status()
-                assert "mock_1" in status2["allocations"]
                 assert "mock_2" in status2["allocations"]
-
-                # mock_1 should be on CPU (evicted)
-                assert status2["allocations"]["mock_1"]["device_id"] == "cpu"
-                # mock_2 should be on GPU
                 assert status2["allocations"]["mock_2"]["device_id"] == "cuda:0"
+
+                if exclusive:
+                    # RESTART: mock_1 allocation removed entirely
+                    assert "mock_1" not in status2["allocations"]
+                else:
+                    # CPU: mock_1 moved to CPU
+                    assert "mock_1" in status2["allocations"]
+                    assert status2["allocations"]["mock_1"]["device_id"] == "cpu"
 
                 # Verify mock_2 (on GPU) reports memory usage
                 stats_2 = dm.get_instance_memory_stats("mock_2")
                 assert stats_2["available"], "mock_2 memory stats should be available"
                 assert stats_2["allocated_bytes"] > 0, "mock_2 should have allocated memory"
 
-                # mock_1 was evicted to CPU - verify allocation tracking is correct
-                assert status2["allocations"]["mock_1"]["device_id"] == "cpu"
-                assert status2["allocations"]["mock_2"]["device_id"] == "cuda:0"
-
-                # Step 3: Verify evicted tool still works on CPU
+                # Step 3: Verify evicted tool still works (auto-restarts if needed)
                 result3 = run_mock_pytorch_tool(input1, config1, instance="mock_1")
-                assert result3.success, f"Evicted tool (on CPU) failed: {result3.errors}"
+                assert result3.success, f"Evicted tool failed: {result3.errors}"
                 assert (
                     len(result3.results) > 0
                 ), "Evicted tool should still produce results"

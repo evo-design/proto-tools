@@ -66,7 +66,6 @@ def test_progen2_score_input_validation():
 
 # ── Sampling tests ────────────────────────────────────────────────────────────
 
-@pytest.mark.include_in_env_report(category="causal_models")
 @pytest.mark.uses_gpu
 def test_progen2_sample_basic():
     """Test basic ProGen2 sampling via run_progen2_sample."""

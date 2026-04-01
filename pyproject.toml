@@ -99,7 +99,7 @@ markers = [
     "skip_ci: Skip test in GitHub Actions CI",
     "only_chimera: Test only runs on Chimera cluster (arc-slurm)",
     "exhaustive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --exhaustive is passed",
-    "include_in_env_report: Include test in --env-report (one smoke test per tool). Accepts optional kwargs: tool='tool_name', category='category_name'",
+    "include_in_env_report: Include test in --env-report. Requires kwargs: tool='tool-key', category='category_name'. Applied by test_env_report.py",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

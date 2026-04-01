@@ -67,7 +67,7 @@ def example_input():
     """Minimal valid input for testing and examples."""
     return PyHmmsearchInput(
         sequences=["MKTL"],
-        hmm=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"),
+        hmm=str(Path(__file__).parent / "examples" / "example.hmm"),
     )
 
 

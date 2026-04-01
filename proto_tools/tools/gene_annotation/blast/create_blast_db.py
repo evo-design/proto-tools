@@ -163,7 +163,7 @@ class CreateBlastDbConfig(BaseConfig):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
-    return CreateBlastDbInput(fasta=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"))
+    return CreateBlastDbInput(fasta=str(Path(__file__).parent / "examples" / "example.fasta"))
 
 
 @tool(

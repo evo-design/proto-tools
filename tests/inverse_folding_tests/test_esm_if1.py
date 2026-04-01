@@ -37,7 +37,6 @@ def pdb_structure():
 # ============================================================================
 # Sampling Tests
 # ============================================================================
-@pytest.mark.include_in_env_report(category="inverse_folding")
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_simple(pdb_structure: Structure):
     """Basic sampling with default ProteinDPO config."""

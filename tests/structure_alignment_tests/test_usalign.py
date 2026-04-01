@@ -44,7 +44,6 @@ def test_usalign_input_rejects_extra_fields():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="structure_alignment")
 def test_usalign_aligns_two_structures():
     """Align two different PDB structures and verify TM-scores."""
     pdb_1 = _PDB_1_PATH.read_text()
@@ -58,7 +57,6 @@ def test_usalign_aligns_two_structures():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="structure_alignment")
 def test_usalign_self_alignment_perfect_score():
     """Aligning a structure to itself should give TM-score = 1.0."""
     pdb_1 = _PDB_1_PATH.read_text()

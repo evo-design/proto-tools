@@ -105,7 +105,6 @@ def test_borzoi_ensemble_config_mouse_without_flash_attn():
 # Integration tests
 
 
-@pytest.mark.include_in_env_report(category="sequence_scoring")
 @pytest.mark.uses_gpu
 def test_borzoi_prediction_human():
     """Test Borzoi prediction for human genome."""

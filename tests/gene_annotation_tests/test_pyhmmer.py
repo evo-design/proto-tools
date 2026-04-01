@@ -141,7 +141,6 @@ def test_build_dataframes_empty():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="gene_annotation")
 def test_pyhmmer_hmmsearch_success():
     inputs = PyHmmsearchInput(
         hmm=str(TEST_HMM_FILE),

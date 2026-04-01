@@ -13,34 +13,39 @@ pytest --env-report=custom_report.md
 
 # List tests without running (dry run)
 pytest --env-report --collect-only
+
+# Re-test specific tools incrementally (merges into existing report)
+pytest --env-report -k "bioemu"
 ```
 
 The `--env-report` flag:
-1. Cleans the `tool_envs/` directory to force fresh venv rebuilds
-2. Runs ALL tests marked `@pytest.mark.include_in_env_report` (overrides `--cpu`, `--gpu`, `--slow`, `skip_ci`)
-3. Skips GPU tests if no GPU is available
+1. Auto-discovers all tools from `ToolRegistry` and runs each tool's `example_input()` — one test per tool directory (standalone environment)
+2. Cleans tool envs for fresh rebuilds (with `-k`, only cleans envs for selected tools)
+3. Skips GPU tools if no GPU is available, skips multi-GPU tools if insufficient GPUs
 4. Captures parent process and subprocess environment variables
-5. Generates a Markdown report in this directory
+5. Generates a Markdown report in this directory with an embedded data block for incremental merging
 
-## Marking Tests for Reports
+## How It Works
 
-Mark one smoke test per tool with `@pytest.mark.include_in_env_report`:
+Tests are defined in `tests/tool_infra_tests/test_env_report.py`. A single parametrized test function auto-discovers tools via `ToolRegistry.list_all()` — no manual markers needed. When a new tool is added to the registry with an `example_input`, it's automatically included in env-report runs.
 
-```python
-@pytest.mark.include_in_env_report
-def test_my_tool_basic():
-    ...
+Config overrides for self-contained testing:
+- `verbose=True` on all tools for diagnostic logging
+- `use_msa=False` for structure prediction tools (avoids ColabFold dependency)
+- Pre-computed MSA fixture for BioEmu (always requires MSAs)
+
+## Incremental Retesting
+
+Use `-k` to re-test specific tools without re-running everything:
+
+```bash
+pytest --env-report -k "esmfold"
 ```
 
-For tools where the test file name doesn't match the tool name, or where auto-detection fails, you can explicitly specify the tool name and category:
-
-```python
-@pytest.mark.include_in_env_report(tool="my_tool", category="my_category")
-def test_my_tool_basic():
-    ...
-```
-
-Categories should match the directory structure in `proto_tools/tools/` (e.g., `sequence_scoring`, `gene_annotation`, `structure_prediction`, etc.).
+This:
+- Only cleans and rebuilds the env for the selected tool(s)
+- Merges new results into the existing report (via embedded data block)
+- Preserves all other tool results from previous runs
 
 ## Report Naming
 
@@ -57,7 +62,8 @@ Named clusters (chimera, dgx_spark) and macOS already have unique OS parts. Exam
 - `viggiano_sherlock_x86_64_h100.md` (Sherlock compute node)
 - `alice_linux_myhost_x86_64_a100.md` (Unknown Linux machine, hostname included)
 
-Reports are overwritten on each run to keep the latest results per platform/user.
+Reports are overwritten on each full run to keep the latest results per platform/user.
+Incremental runs (`-k`) merge into the existing report.
 
 ## Report Contents
 
@@ -69,6 +75,7 @@ Each report includes:
 4. **Environment variables** — Both parent process env and subprocess env (what gets passed to tools)
 5. **Results by category** — Table per tool category with status, GPU requirement, venv build status, duration
 6. **Failure details** — Full error messages for any failed tests
+7. **Embedded data block** — JSON data block for incremental merging across runs
 
 ## Interpreting Reports
 

@@ -146,22 +146,23 @@ class FAMPNNModel:
             verbose=False, mode="seq_design",
         )
 
-        x_denoised, aatype_denoised, aux = self.model.sample(
-            batch["x"],
-            aatype=batch["aatype"],
-            seq_mask=batch["seq_mask"],
-            missing_atom_mask=batch["missing_atom_mask"],
-            residue_index=batch["residue_index"],
-            chain_index=batch["chain_index"],
-            timesteps=timesteps,
-            seq_only=seq_only,
-            temperature=temperature,
-            repack_last=repack_last,
-            psce_threshold=psce_threshold,
-            aatype_override_mask=aatype_override_mask,
-            scn_override_mask=scn_override_mask,
-            scd_inputs=scd_inputs,
-        )
+        with torch.no_grad():
+            x_denoised, aatype_denoised, aux = self.model.sample(
+                batch["x"],
+                aatype=batch["aatype"],
+                seq_mask=batch["seq_mask"],
+                missing_atom_mask=batch["missing_atom_mask"],
+                residue_index=batch["residue_index"],
+                chain_index=batch["chain_index"],
+                timesteps=timesteps,
+                seq_only=seq_only,
+                temperature=temperature,
+                repack_last=repack_last,
+                psce_threshold=psce_threshold,
+                aatype_override_mask=aatype_override_mask,
+                scn_override_mask=scn_override_mask,
+                scd_inputs=scd_inputs,
+            )
 
         samples = {
             "x_denoised": x_denoised,
@@ -300,17 +301,18 @@ class FAMPNNModel:
             verbose=False, mode="packing",
         )
 
-        x_denoised, aatype_denoised, aux = self.model.sidechain_pack(
-            batch["x"],
-            batch["aatype"],
-            seq_mask=batch["seq_mask"],
-            missing_atom_mask=batch["missing_atom_mask"],
-            residue_index=batch["residue_index"],
-            chain_index=batch["chain_index"],
-            aatype_override_mask=aatype_override_mask,
-            scn_override_mask=scn_override_mask,
-            scd_inputs=scd_inputs,
-        )
+        with torch.no_grad():
+            x_denoised, aatype_denoised, aux = self.model.sidechain_pack(
+                batch["x"],
+                batch["aatype"],
+                seq_mask=batch["seq_mask"],
+                missing_atom_mask=batch["missing_atom_mask"],
+                residue_index=batch["residue_index"],
+                chain_index=batch["chain_index"],
+                aatype_override_mask=aatype_override_mask,
+                scn_override_mask=scn_override_mask,
+                scd_inputs=scd_inputs,
+            )
 
         samples = {
             "x_denoised": x_denoised,
@@ -391,15 +393,16 @@ class FAMPNNModel:
                 x, aatype, seq_mask, missing_atom_mask, positions,
             )
 
-            logprobs = self.model.score(
-                x=x_masked,
-                aatype=aatype_masked,
-                missing_atom_mask=missing_atom_mask_masked,
-                seq_mask=seq_mask,
-                scn_mlm_mask=scn_mlm_mask,
-                residue_index=residue_index,
-                chain_index=chain_index,
-            )
+            with torch.no_grad():
+                logprobs = self.model.score(
+                    x=x_masked,
+                    aatype=aatype_masked,
+                    missing_atom_mask=missing_atom_mask_masked,
+                    seq_mask=seq_mask,
+                    scn_mlm_mask=scn_mlm_mask,
+                    residue_index=residue_index,
+                    chain_index=chain_index,
+                )
 
             wt_aatype = aatype[torch.arange(len(positions)), positions]
             wt_logprobs = logprobs[torch.arange(len(positions)), positions, wt_aatype][:, None]

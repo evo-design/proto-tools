@@ -42,7 +42,6 @@ def test_viennarna_input_rejects_invalid_nucleotides():
 
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="structure_prediction")
 def test_viennarna_basic_folding():
     """Basic RNA folding: a classic hairpin should produce a stem-loop structure."""
     inputs = ViennaRNAInput(sequences=[_HAIRPIN])

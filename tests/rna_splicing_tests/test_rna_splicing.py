@@ -42,7 +42,6 @@ def test_splice_transformer_cpu() -> None:
     _run_splice_transformer_and_check(device="cpu")
 
 
-@pytest.mark.include_in_env_report(category="rna_splicing")
 @pytest.mark.uses_gpu
 def test_splice_transformer_gpu():
     """Test SpliceTransformer on GPU."""

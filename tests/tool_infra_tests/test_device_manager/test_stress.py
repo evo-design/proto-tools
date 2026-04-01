@@ -3,23 +3,12 @@
 Tests for device movement stress with real tool instances."""
 
 import time
-from unittest.mock import patch
 
 import pytest
 
+from proto_tools.utils.device import is_exclusive_process_mode
 from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 from proto_tools.utils.tool_instance import ToolInstance
-
-
-@pytest.fixture(autouse=True)
-def _mock_exclusive_process():
-    """Disable Exclusive_Process auto-escalation so tests control the strategy."""
-    with patch(
-        "proto_tools.utils.device_manager.is_exclusive_process_mode",
-        return_value=False,
-    ):
-        yield
-
 
 # ── Constants ───────────────────────────────────────────────────────────
 
@@ -229,8 +218,12 @@ def _assert_gpu_memory(
     pytest.param(_cli_tool, _jax_tool, id="cli-evicts-jax"),
 ])
 def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
-    """Tool B should evict tool A to CPU when only 1 GPU is available."""
+    """Tool B should evict tool A when only 1 GPU is available.
+
+    On Exclusive_Process GPUs, CPU strategy auto-escalates to RESTART.
+    """
     dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
     tool_a_name = tool_a_factory()[0]
     tool_b_name = tool_b_factory()[0]
     is_a_persistent = "cli" not in tool_a_name
@@ -257,8 +250,12 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
                 assert result_b.success, f"Tool B failed: {result_b.errors}"
 
                 status = dm.get_device_status()
-                assert status["allocations"]["inst_a"]["device_id"] == "cpu", \
-                    "Tool A should be evicted to CPU"
+                if exclusive:
+                    assert "inst_a" not in status["allocations"], \
+                        "Tool A should be removed (RESTART on Exclusive_Process)"
+                else:
+                    assert status["allocations"]["inst_a"]["device_id"] == "cpu", \
+                        "Tool A should be evicted to CPU"
                 assert status["allocations"]["inst_b"]["device_id"] == "cuda:0", \
                     "Tool B should be on GPU"
 
@@ -268,18 +265,19 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
 
                 time.sleep(0.01)
 
-                # 3) Re-run A — config says "cuda", so _run_persistent
-                #    detects the mismatch (worker on CPU, config wants GPU),
-                #    moves A back to GPU, evicting B to CPU.
-                #    This covers the GPU->CPU->GPU round-trip.
+                # 3) Re-run A — auto-restarts (RESTART) or moves back from CPU.
                 result_a2 = _run_tool(tool_a_factory, "inst_a")
                 assert result_a2.success, "Tool A should reload after eviction"
 
                 status = dm.get_device_status()
                 assert status["allocations"]["inst_a"]["device_id"] == "cuda:0", \
                     "Tool A should be back on GPU after reload"
-                assert status["allocations"]["inst_b"]["device_id"] == "cpu", \
-                    "Tool B should be evicted to CPU"
+                if exclusive:
+                    assert "inst_b" not in status["allocations"], \
+                        "Tool B should be removed (RESTART on Exclusive_Process)"
+                else:
+                    assert status["allocations"]["inst_b"]["device_id"] == "cpu", \
+                        "Tool B should be evicted to CPU"
 
                 if is_a_persistent:
                     _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
@@ -351,8 +349,12 @@ def test_cross_framework_eviction_restart(tool_a_factory, tool_b_factory):
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_three_tool_eviction_chain():
-    """Three different frameworks compete for 1 GPU: each evicts the previous."""
+    """Three different frameworks compete for 1 GPU: each evicts the previous.
+
+    On Exclusive_Process GPUs, CPU strategy auto-escalates to RESTART.
+    """
     dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
 
     try:
         baseline = _snapshot_gpu_memory(dm)
@@ -371,7 +373,10 @@ def test_three_tool_eviction_chain():
                 assert result.success
 
                 status = dm.get_device_status()
-                assert status["allocations"]["pt"]["device_id"] == "cpu"
+                if exclusive:
+                    assert "pt" not in status["allocations"]
+                else:
+                    assert status["allocations"]["pt"]["device_id"] == "cpu"
                 assert status["allocations"]["jx"]["device_id"] == "cuda:0"
                 _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
                                    label="JAX replaced PyTorch")
@@ -383,11 +388,15 @@ def test_three_tool_eviction_chain():
                     assert result.success
 
                     status = dm.get_device_status()
-                    assert status["allocations"]["pt"]["device_id"] == "cpu"
-                    assert status["allocations"]["jx"]["device_id"] == "cpu"
+                    if exclusive:
+                        assert "pt" not in status["allocations"]
+                        assert "jx" not in status["allocations"]
+                    else:
+                        assert status["allocations"]["pt"]["device_id"] == "cpu"
+                        assert status["allocations"]["jx"]["device_id"] == "cpu"
                     assert status["allocations"]["cl"]["device_id"] == "cuda:0"
 
-                    # All three should still produce results
+                    # All three should still produce results (auto-restart if needed)
                     for name, factory in [("pt", _pytorch_tool), ("jx", _jax_tool), ("cl", _cli_tool)]:
                         r = _run_tool(factory, name)
                         assert r.success, f"{name} should still work after eviction chain"
@@ -550,6 +559,7 @@ def test_evict_then_restart_preserves_correctness():
 def test_multi_gpu_tool_evicts_two_single_gpu_tools():
     """A 2-GPU tool should evict two single-GPU tools occupying both GPUs."""
     dm = _setup_dm(managed_devices=["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
 
     try:
         baseline = _snapshot_gpu_memory(dm)
@@ -578,14 +588,18 @@ def test_multi_gpu_tool_evicts_two_single_gpu_tools():
                     assert result_mg.success
 
                     status = dm.get_device_status()
-                    assert status["allocations"]["pt"]["device_id"] == "cpu"
-                    assert status["allocations"]["jx"]["device_id"] == "cpu"
+                    if exclusive:
+                        assert "pt" not in status["allocations"]
+                        assert "jx" not in status["allocations"]
+                    else:
+                        assert status["allocations"]["pt"]["device_id"] == "cpu"
+                        assert status["allocations"]["jx"]["device_id"] == "cpu"
                     assert "cuda:0" in status["allocations"]["mg"]["device_id"]
                     assert "cuda:1" in status["allocations"]["mg"]["device_id"]
                     _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
                                        label="multi-GPU tool replaced both")
 
-                    # Evicted tools still work on CPU
+                    # Evicted tools still work (auto-restart if needed)
                     assert _run_tool(_pytorch_tool, "pt").success
                     assert _run_tool(_jax_tool, "jx").success
     finally:
@@ -597,6 +611,7 @@ def test_multi_gpu_tool_evicts_two_single_gpu_tools():
 def test_single_gpu_tool_evicts_multi_gpu_tool():
     """A single-GPU request should evict a multi-GPU tool (freeing 2 GPUs)."""
     dm = _setup_dm(managed_devices=["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
 
     try:
         baseline = _snapshot_gpu_memory(dm)
@@ -625,7 +640,10 @@ def test_single_gpu_tool_evicts_multi_gpu_tool():
                     assert result_jx.success
 
                     status = dm.get_device_status()
-                    assert status["allocations"]["mg"]["device_id"] == "cpu"
+                    if exclusive:
+                        assert "mg" not in status["allocations"]
+                    else:
+                        assert status["allocations"]["mg"]["device_id"] == "cpu"
                     single_devices = {
                         status["allocations"]["pt1"]["device_id"],
                         status["allocations"]["jx1"]["device_id"],
@@ -642,6 +660,7 @@ def test_single_gpu_tool_evicts_multi_gpu_tool():
 def test_rapid_eviction_cycle():
     """Rapidly cycle tools on and off GPUs to stress eviction bookkeeping."""
     dm = _setup_dm(managed_devices=["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
 
     # Map instance names to tool names for CLI detection
     cli_instances = set()
@@ -672,28 +691,40 @@ def test_rapid_eviction_cycle():
                     f"Cycle {cycle}, {inst_name} failed: {result.errors}"
                 time.sleep(0.01)
 
-        # All tools should still be tracked
         status = dm.get_device_status()
-        for _, _, inst_name in tools:
-            assert inst_name in status["allocations"], \
-                f"{inst_name} should still be tracked after rapid cycling"
 
-        # Exactly 2 tools on GPUs, 1 on CPU
-        gpu_allocs = {
-            name: alloc["device_id"]
-            for name, alloc in status["allocations"].items()
-            if alloc["device_id"].startswith("cuda:")
-        }
-        cpu_allocs = [
-            name for name, alloc in status["allocations"].items()
-            if alloc["device_id"] == "cpu"
-        ]
-        assert len(gpu_allocs) == 2, (
-            f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
-        )
-        assert len(cpu_allocs) == 1, (
-            f"Exactly 1 tool should be on CPU (got {len(cpu_allocs)}: {cpu_allocs})"
-        )
+        if exclusive:
+            # RESTART: evicted tools are removed from allocations.
+            # Only the 2 most recently run tools should be tracked on GPUs.
+            gpu_allocs = {
+                name: alloc["device_id"]
+                for name, alloc in status["allocations"].items()
+                if alloc["device_id"].startswith("cuda:")
+            }
+            assert len(gpu_allocs) == 2, (
+                f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
+            )
+        else:
+            # CPU: all tools still tracked, 1 on CPU
+            for _, _, inst_name in tools:
+                assert inst_name in status["allocations"], \
+                    f"{inst_name} should still be tracked after rapid cycling"
+
+            gpu_allocs = {
+                name: alloc["device_id"]
+                for name, alloc in status["allocations"].items()
+                if alloc["device_id"].startswith("cuda:")
+            }
+            cpu_allocs = [
+                name for name, alloc in status["allocations"].items()
+                if alloc["device_id"] == "cpu"
+            ]
+            assert len(gpu_allocs) == 2, (
+                f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
+            )
+            assert len(cpu_allocs) == 1, (
+                f"Exactly 1 tool should be on CPU (got {len(cpu_allocs)}: {cpu_allocs})"
+            )
 
         # Assert memory on devices with persistent (non-CLI) tools.
         # CLI tools auto-unload so their device won't show model memory.
@@ -711,6 +742,10 @@ def test_rapid_eviction_cycle():
 
 @pytest.mark.uses_gpu(1)
 @pytest.mark.slow
+@pytest.mark.skipif(
+    is_exclusive_process_mode(),
+    reason="Exclusive_Process mode: two subprocesses cannot share one GPU",
+)
 def test_two_tools_share_one_gpu():
     """Two tools on the same GPU should both have memory allocated."""
     dm = _setup_dm(managed_devices=["cuda:0"], strategy=OffloadStrategy.CPU)

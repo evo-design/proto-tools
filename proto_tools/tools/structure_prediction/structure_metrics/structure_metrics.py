@@ -108,7 +108,7 @@ class StructureMetricsConfig(BaseConfig):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
-    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta")])
+    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parent / "examples" / "example.pdb")])
 
 
 @tool(

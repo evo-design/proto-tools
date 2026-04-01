@@ -149,7 +149,7 @@ def example_input():
     """Minimal valid input for testing and examples."""
     return FAMPNNPackInput(
         inputs=[FAMPNNStructureInput(
-            structure=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"),
+            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
         )]
     )
 

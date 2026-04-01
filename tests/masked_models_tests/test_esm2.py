@@ -60,7 +60,6 @@ def test_esm2_forward_pass():
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
 
-@pytest.mark.include_in_env_report(category="masked_models")
 @pytest.mark.uses_gpu
 def test_esm2_score_tool():
     """Test the esm2 scoring tool with run_esm2_score."""

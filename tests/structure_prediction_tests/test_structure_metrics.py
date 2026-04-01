@@ -114,7 +114,6 @@ def test_output_format_options(sample_output):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
-@pytest.mark.include_in_env_report(category="structure_prediction")
 def test_run_structure_metrics_on_pdb(tmp_path):
     """Run structure metrics on a minimal PDB file."""
     pdb_content = """\

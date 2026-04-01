@@ -81,7 +81,6 @@ def test_enformer_config_rejects_invalid_species():
 # ---------------------------------------------------------------------------
 # Integration tests
 
-@pytest.mark.include_in_env_report(category="sequence_scoring")
 @pytest.mark.uses_gpu
 def test_enformer_prediction_human():
     """Enformer produces a [896, num_tracks] output matrix for human sequences."""
