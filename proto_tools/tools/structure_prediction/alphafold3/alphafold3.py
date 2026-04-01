@@ -348,11 +348,6 @@ def _create_input_json_from_complex(
         "sequences": [],
     }
 
-    if len(sp_complex.chains) > len(CHAIN_IDS):
-        # This is a hard limit on the PDB file format.
-        # Consider moving to mmCIF if this becomes an issue.
-        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
-
     for idx, chain in enumerate(sp_complex.chains):
         mol_type = chain.entity_type  # Currently, we use the same conventions as AlphaFold3.
         sequence = chain.sequence

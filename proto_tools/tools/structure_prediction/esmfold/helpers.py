@@ -71,9 +71,6 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
 
     from Bio import PDB
 
-    if len(chain_lengths) > len(CHAIN_IDS):
-        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
-
     parser = PDB.PDBParser(QUIET=True)
     structure = parser.get_structure("structure", io.StringIO(pdb_str))
     model = structure[0]

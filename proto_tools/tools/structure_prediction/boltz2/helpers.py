@@ -46,9 +46,6 @@ def complex_to_yaml(
     """
     import yaml
 
-    if len(chains) > len(CHAIN_IDS):
-        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
-
     yaml_entries = []
 
     for i, chain in enumerate(chains):
