@@ -3,6 +3,7 @@
 from proto_tools.tools.gene_annotation.blast.blast_search import (
     BLAST_DATABASES,
     BLAST_PROGRAMS,
+    BlastHit,
     BlastSearchConfig,
     BlastSearchInput,
     BlastSearchOutput,
@@ -17,6 +18,7 @@ from proto_tools.tools.gene_annotation.blast.create_blast_db import (
 
 __all__ = [
     # BLAST Search
+    "BlastHit",
     "BlastSearchInput",
     "BlastSearchConfig",
     "BlastSearchOutput",

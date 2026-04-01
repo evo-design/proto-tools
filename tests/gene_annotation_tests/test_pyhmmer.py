@@ -5,7 +5,6 @@ Tests for the PyHMMER tools.
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 from Bio import SeqIO
 
@@ -28,8 +27,7 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
     run_pyhmmer_phmmer,
 )
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
-    _build_dataframes,
-    _convert_dtypes,
+    _build_hit_models,
 )
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -48,9 +46,7 @@ with open(_DATA_DIR / "test_dna_sequences.fna") as _f:
 
 def test_hmmsearch_input_single_sequence():
     """Single sequence string is normalized to a list."""
-    inputs = PyHmmsearchInput(
-        hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES[0]
-    )
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES[0])
     assert inputs.sequences == [SAMPLE_SEQUENCES[0]]
 
 
@@ -92,48 +88,10 @@ def test_jackhmmer_config_invalid_max_iterations():
 # ── Helper functions ─────────────────────────────────────────────────────
 
 
-def test_convert_dtypes_sequence_format():
-    df = pd.DataFrame(
-        {
-            "target_name": ["test"],
-            "evalue": ["1.2e-10"],
-            "score": ["45.6"],
-            "bias": ["0.1"],
-        }
-    )
-    result = _convert_dtypes(df, is_domain=False)
-
-    assert result["evalue"].dtype == float
-    assert result["score"].dtype == float
-    assert result["bias"].dtype == float
-
-
-def test_convert_dtypes_domain_format():
-    df = pd.DataFrame(
-        {
-            "target_name": ["test"],
-            "domain_idx": ["1"],
-            "c_evalue": ["2.5e-11"],
-            "domain_score": ["44.2"],
-            "target_length": ["150"],
-            "hmm_from": ["5"],
-            "hmm_to": ["78"],
-        }
-    )
-    result = _convert_dtypes(df, is_domain=True)
-
-    assert result["domain_idx"].iloc[0] == 1.0
-    assert result["c_evalue"].dtype == float
-    assert result["domain_score"].dtype == float
-    assert result["target_length"].iloc[0] == 150.0
-    assert result["hmm_from"].iloc[0] == 5.0
-    assert result["hmm_to"].iloc[0] == 78.0
-
-
-def test_build_dataframes_empty():
-    seq_df, dom_df = _build_dataframes([], [])
-    assert seq_df is None
-    assert dom_df is None
+def test_build_hit_models_empty():
+    seq_hits, dom_hits = _build_hit_models([], [])
+    assert seq_hits == []
+    assert dom_hits == []
 
 
 # ---------------------------------------------------------------------------

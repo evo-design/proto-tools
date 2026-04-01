@@ -5,7 +5,6 @@ Tests for Orfipy ORF prediction tool.
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from proto_tools.tools.orf_prediction import (
@@ -62,26 +61,32 @@ def test_parsing_with_test_data():
     for aa_record, nt_record in zip(aa_records, nt_records, strict=False):
         parsed_info = _parse_orfipy_header(aa_record.description)
         if parsed_info:
-            results.append({
-                "parent_id": "dna_seq_1",
-                "orf_id": parsed_info["orf_id"],
-                "strand": parsed_info["strand"],
-                "frame": parsed_info["frame"],
-                "amino_acid_sequence": str(aa_record.seq).rstrip("*"),
-                "nucleotide_sequence": str(nt_record.seq),
-                "amino_acid_length": len(str(aa_record.seq).rstrip("*")),
-                "nucleotide_length": len(str(nt_record.seq)),
-                "nucleotide_start": parsed_info["start"] + 1,
-                "nucleotide_end": parsed_info["end"],
-            })
+            results.append(
+                {
+                    "parent_id": "dna_seq_1",
+                    "orf_id": parsed_info["orf_id"],
+                    "strand": parsed_info["strand"],
+                    "frame": parsed_info["frame"],
+                    "amino_acid_sequence": str(aa_record.seq).rstrip("*"),
+                    "nucleotide_sequence": str(nt_record.seq),
+                    "amino_acid_length": len(str(aa_record.seq).rstrip("*")),
+                    "nucleotide_length": len(str(nt_record.seq)),
+                    "nucleotide_start": parsed_info["start"] + 1,
+                    "nucleotide_end": parsed_info["end"],
+                }
+            )
 
     assert len(results) == 4
 
     first_row = results[0]
     assert first_row["parent_id"] == "dna_seq_1"
     assert first_row["orf_id"] == "ORF.1"
-    assert first_row["amino_acid_sequence"].startswith("MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGK")
-    assert first_row["nucleotide_sequence"].startswith("ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAG")
+    assert first_row["amino_acid_sequence"].startswith(
+        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGK"
+    )
+    assert first_row["nucleotide_sequence"].startswith(
+        "ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAG"
+    )
 
 
 @pytest.mark.parametrize(
@@ -89,11 +94,25 @@ def test_parsing_with_test_data():
     [
         (
             "dna_seq_1_ORF.1 [0-180](+) frame:1",
-            {"parent_id": "dna_seq_1", "orf_id": "ORF.1", "start": 0, "end": 180, "strand": "+", "frame": 1},
+            {
+                "parent_id": "dna_seq_1",
+                "orf_id": "ORF.1",
+                "start": 0,
+                "end": 180,
+                "strand": "+",
+                "frame": 1,
+            },
         ),
         (
             "complex-name_ORF.15 [100-250](-) frame:2",
-            {"parent_id": "complex-name", "orf_id": "ORF.15", "start": 100, "end": 250, "strand": "-", "frame": 2},
+            {
+                "parent_id": "complex-name",
+                "orf_id": "ORF.15",
+                "start": 100,
+                "end": 250,
+                "strand": "-",
+                "frame": 2,
+            },
         ),
         ("invalid header", None),
     ],
@@ -126,14 +145,16 @@ def test_test_data_integrity():
     with open(ORFIPY_NT_FILE) as f:
         nt_lines = f.readlines()
 
-    aa_headers = [line for line in aa_lines if line.startswith('>')]
-    nt_headers = [line for line in nt_lines if line.startswith('>')]
+    aa_headers = [line for line in aa_lines if line.startswith(">")]
+    nt_headers = [line for line in nt_lines if line.startswith(">")]
 
-    assert len(aa_headers) == len(nt_headers), \
+    assert len(aa_headers) == len(nt_headers), (
         "AA and NT files should have same number of sequences"
+    )
     for aa_header, nt_header in zip(aa_headers, nt_headers, strict=False):
-        assert aa_header.strip() == nt_header.strip(), \
+        assert aa_header.strip() == nt_header.strip(), (
             f"Headers don't match: {aa_header.strip()} vs {nt_header.strip()}"
+        )
 
 
 # ── Integration ────────────────────────────────────────────────────────
@@ -156,13 +177,14 @@ def test_full_workflow():
     total_orfs_in_list = sum(len(sr) for sr in result.predicted_orfs)
     assert result.num_orfs == total_orfs_in_list
 
-    assert isinstance(result.results_df, pd.DataFrame)
-    assert len(result.results_df) == result.num_orfs
+    # Check that predicted_orfs is a list
+    assert isinstance(result.predicted_orfs, list)
+    assert len(result.predicted_orfs) == 1
 
     if result.num_orfs > 0:
         first_orf_model = result.predicted_orfs[0][0]
-        first_row = result.results_df.iloc[0]
-        assert first_orf_model.amino_acid_sequence == first_row["amino_acid_sequence"]
+        assert isinstance(first_orf_model, ORF)
+        assert first_orf_model.amino_acid_sequence is not None
 
 
 @pytest.mark.integration
@@ -179,7 +201,6 @@ def test_custom_sequence_ids_preserved():
     if result.num_orfs > 0:
         for orf in result.predicted_orfs[0]:
             assert orf.parent_id == "my_custom_gene"
-        assert all(result.results_df["parent_id"] == "my_custom_gene")
 
 
 @pytest.mark.integration
@@ -218,6 +239,7 @@ def test_multiple_sequences_with_custom_ids():
 
 def test_sequence_ids_length_mismatch_raises():
     from proto_tools.utils import resolve_sequence_ids
+
     with pytest.raises(ValueError, match="must match"):
         resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
 
@@ -251,8 +273,9 @@ def test_computed_fields_count(orfs_per_sequence, expected_total):
     )
 
     assert output.num_orfs == expected_total
-    assert isinstance(output.results_df, pd.DataFrame)
-    assert len(output.results_df) == expected_total
+    # Verify predicted_orfs structure matches expected count
+    total_from_list = sum(len(orfs) for orfs in output.predicted_orfs)
+    assert total_from_list == expected_total
 
 
 def test_results_df_columns_and_content():
@@ -263,16 +286,18 @@ def test_results_df_columns_and_content():
         success=True,
     )
 
-    expected_columns = {
-        "parent_id", "orf_id", "id", "strand", "frame",
-        "amino_acid_sequence", "nucleotide_sequence",
-        "amino_acid_length", "nucleotide_length",
-        "nucleotide_start", "nucleotide_end",
-        "metrics", "gc_content",
-    }
-    assert set(output.results_df.columns) == expected_columns
-    assert output.results_df.iloc[0]["parent_id"] == "seq_0"
-    assert output.results_df.iloc[0]["amino_acid_sequence"] == "MVLS"
+    # Check ORF object attributes directly
+    orf = output.predicted_orfs[0][0]
+    assert orf.parent_id == "seq_0"
+    assert orf.orf_id == "ORF.1"
+    assert orf.amino_acid_sequence == "MVLS"
+    assert orf.nucleotide_sequence == "ATGGTGCTGAGC"
+    assert orf.strand == "+"
+    assert orf.frame == 1
+    assert orf.amino_acid_length == 4
+    assert orf.nucleotide_length == 12
+    assert orf.nucleotide_start == 1
+    assert orf.nucleotide_end == 12
 
 
 def test_cache_reconstruction():
@@ -289,4 +314,6 @@ def test_cache_reconstruction():
     )
 
     assert output.num_orfs == 2
-    assert len(output.results_df) == 2
+    assert len(output.predicted_orfs[0]) == 2
+    assert output.predicted_orfs[0][0].orf_id == "ORF.1"
+    assert output.predicted_orfs[0][1].orf_id == "ORF.2"

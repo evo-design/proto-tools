@@ -72,6 +72,7 @@ def test_segmasker_scores_sequences():
     assert all(0.0 <= f <= 1.0 for f in result.low_complexity_fractions)
     assert result.low_complexity_fractions[0] >= result.low_complexity_fractions[1]
 
-    # DataFrame should be populated
-    assert result.results_df is not None
-    assert len(result.results_df) == 2
+    # All output lists should be populated and equal length
+    assert len(result.low_complexity_fractions) == 2
+    assert len(result.low_complexity_counts) == 2
+    assert len(result.sequence_lengths) == 2

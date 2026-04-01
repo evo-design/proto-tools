@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
 from proto_tools.tools.orf_prediction.orf import ORF
@@ -216,31 +215,13 @@ class OrfipyOutput(BaseToolOutput):
         num_orfs: Total number of ORFs predicted across all input sequences.
             Computed property derived from predicted_orfs.
 
-        results_df: Parsed results as a pandas DataFrame
-            with the following columns:
-
-            - ``parent_id``: ID of the parent sequence
-            - ``orf_id``: Unique ORF identifier within the parent
-            - ``amino_acid_sequence``: Translated protein sequence
-            - ``nucleotide_sequence``: DNA sequence of the ORF
-            - ``amino_acid_length``: Length of protein in amino acids
-            - ``nucleotide_length``: Length of ORF in nucleotides
-            - ``nucleotide_start``: Start position in parent sequence (1-indexed, inclusive)
-            - ``nucleotide_end``: End position in parent sequence (1-indexed, inclusive)
-            - ``strand``: Strand direction (``"+"`` for forward, ``"-"`` for reverse)
-            - ``frame``: Reading frame (1, 2, or 3)
-
-            Computed property derived from predicted_orfs. Returns empty
-            DataFrame if no ORFs were found.
+        num_orfs_per_sequence: Number of ORFs predicted for each input sequence.
+            Computed property derived from predicted_orfs.
     """
 
     predicted_orfs: list[list[ORF]] = Field(
         default_factory=list,
         description="List of ORF results per input sequence",
-    )
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True  # Required for pd.DataFrame in computed_field
     )
 
     @computed_field
@@ -255,13 +236,6 @@ class OrfipyOutput(BaseToolOutput):
         """Number of ORFs predicted for each input sequence."""
         return [len(result) for result in self.predicted_orfs]
 
-    @computed_field
-    @property
-    def results_df(self) -> pd.DataFrame:
-        """All ORF results as a pandas DataFrame."""
-        all_orfs = [orf.model_dump() for sr in self.predicted_orfs for orf in sr]
-        return pd.DataFrame(all_orfs)
-
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
@@ -275,11 +249,15 @@ class OrfipyOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        if file_format == "csv":
-            self.results_df.to_csv(path, index=False)
+        if file_format in ("csv", "json"):
+            import pandas as pd
 
-        elif file_format == "json":
-            self.results_df.to_json(path, orient="records", indent=2)
+            all_orfs = [orf.model_dump() for sr in self.predicted_orfs for orf in sr]
+            df = pd.DataFrame(all_orfs)
+            if file_format == "csv":
+                df.to_csv(path, index=False)
+            else:
+                df.to_json(path, orient="records", indent=2)
 
         elif file_format in ["faa", "fna"]:
             with open(path, "w") as f:
@@ -317,7 +295,9 @@ def example_input():
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )
-def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = None, instance=None) -> OrfipyOutput:
+def run_orfipy_prediction(
+    inputs: OrfipyInput, config: OrfipyConfig | None = None, instance=None
+) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
     Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
@@ -333,8 +313,8 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig | None = Non
 
     Returns:
         OrfipyOutput: Structured output containing sequence results.
-            Aggregated fields ``num_orfs`` and ``results_df`` are computed properties
-            derived from ``predicted_orfs`` on access.
+            Aggregated fields ``num_orfs`` and ``num_orfs_per_sequence`` are computed
+            properties derived from ``predicted_orfs`` on access.
 
     See Also:
         - Orfipy GitHub: https://github.com/urmi-21/orfipy

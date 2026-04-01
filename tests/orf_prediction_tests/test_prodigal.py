@@ -5,7 +5,6 @@ Tests for Prodigal ORF prediction tool.
 
 from unittest.mock import patch
 
-import pandas as pd
 import pytest
 from pydantic import ValidationError
 
@@ -147,10 +146,21 @@ def test_orf_structure_fields():
         assert isinstance(orf, ORF)
 
         expected_fields = [
-            'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
-            'amino_acid_length', 'nucleotide_length', 'nucleotide_start', 'nucleotide_end',
-            'strand', 'frame', 'gc_content', 'start_type', 'rbs_motif',
-            'partial_begin', 'partial_end',
+            "parent_id",
+            "orf_id",
+            "amino_acid_sequence",
+            "nucleotide_sequence",
+            "amino_acid_length",
+            "nucleotide_length",
+            "nucleotide_start",
+            "nucleotide_end",
+            "strand",
+            "frame",
+            "gc_content",
+            "start_type",
+            "rbs_motif",
+            "partial_begin",
+            "partial_end",
         ]
         for field in expected_fields:
             assert hasattr(orf, field), f"Missing field: {field}"
@@ -162,30 +172,18 @@ def test_orf_structure_fields():
         assert isinstance(orf.gc_content, float)
 
         # ID format
-        assert orf.parent_id.startswith('seq_')
-        assert 'gene_' in orf.orf_id
+        assert orf.parent_id.startswith("seq_")
+        assert "gene_" in orf.orf_id
 
         # Strand format
         for o in result.predicted_orfs[0]:
-            assert o.strand in ['+', '-']
+            assert o.strand in ["+", "-"]
 
         # Protein sequence format
         for o in result.predicted_orfs[0]:
             assert isinstance(o.amino_acid_sequence, str)
             assert len(o.amino_acid_sequence) > 0
-            assert not o.amino_acid_sequence.endswith('*')
-
-        # DataFrame structure
-        df = result.results_df
-        assert isinstance(df, pd.DataFrame)
-        essential_columns = [
-            'parent_id', 'orf_id', 'amino_acid_sequence', 'nucleotide_sequence',
-            'amino_acid_length', 'nucleotide_length',
-            'nucleotide_start', 'nucleotide_end', 'strand', 'frame',
-            'gc_content', 'start_type', 'partial_begin', 'partial_end',
-        ]
-        for col in essential_columns:
-            assert col in df.columns, f"Missing column: {col}"
+            assert not o.amino_acid_sequence.endswith("*")
 
 
 @pytest.mark.integration
@@ -213,10 +211,10 @@ def test_end_to_end_prediction():
 
     if result.num_orfs > 0 and result.predicted_orfs:
         orf = result.predicted_orfs[0][0]
-        assert orf.parent_id.startswith('seq_')
+        assert orf.parent_id.startswith("seq_")
         assert isinstance(orf.amino_acid_sequence, str)
         assert orf.amino_acid_length > 0
-        assert orf.strand in ['+', '-']
+        assert orf.strand in ["+", "-"]
 
 
 @pytest.mark.integration
@@ -233,7 +231,7 @@ def test_comparison_with_direct_pyrodigal():
     validate_output(our_result)
 
     gene_finder = pyrodigal.GeneFinder(meta=True)
-    direct_genes = gene_finder.find_genes(sequence.encode('utf-8'))
+    direct_genes = gene_finder.find_genes(sequence.encode("utf-8"))
     assert our_result.num_orfs == len(direct_genes)
 
 
@@ -283,7 +281,9 @@ def test_caching_behavior():
 
         real_dispatch = ToolInstance.dispatch
 
-        with patch.object(ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True) as mock_call:
+        with patch.object(
+            ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True
+        ) as mock_call:
             result1 = run_prodigal_prediction(inp, config)
             assert result1.success is True
             assert mock_call.call_count == 1

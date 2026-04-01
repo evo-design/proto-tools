@@ -10,7 +10,7 @@ from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
-    _build_dataframes,
+    _build_hit_models,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import InputField, ToolInstance
@@ -97,8 +97,8 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
 
     Returns:
         PyPhmmerOutput: Structured output containing:
-            - ``sequence_hits_df``: DataFrame with sequence-level hits
-            - ``domain_hits_df``: DataFrame with domain-level hits
+            - ``sequence_hits``: List of sequence-level hits
+            - ``domain_hits``: List of domain-level hits
             - ``num_sequence_hits``: Total number of sequence hits
             - ``num_domain_hits``: Total number of domain hits
 
@@ -120,11 +120,8 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         >>> print(f"Found {result.num_sequence_hits} similar sequences")
         >>>
         >>> # Find all hits with >80% identity
-        >>> if result.sequence_hits_df is not None:
-        ...     # Calculate identity from alignment scores
-        ...     high_identity = result.sequence_hits_df[
-        ...         result.sequence_hits_df['evalue'] < 1e-10
-        ...     ]
+        >>> if result.sequence_hits:
+        ...     high_identity = [hit for hit in result.sequence_hits if hit.evalue < 1e-10]
     """
     output_data = ToolInstance.dispatch(
         "pyhmmer",
@@ -143,8 +140,8 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         config=config,
     )
 
-    # Convert results to DataFrames
-    sequence_hits_df, domain_hits_df = _build_dataframes(
+    # Convert results to typed hit models
+    sequence_hits, domain_hits = _build_hit_models(
         output_data["sequence_hits"], output_data["domain_hits"]
     )
 
@@ -158,6 +155,6 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
             "domain_evalue_threshold": config.domain_evalue_threshold,
             "domain_score_threshold": config.domain_score_threshold,
         },
-        sequence_hits_df=sequence_hits_df,
-        domain_hits_df=domain_hits_df,
+        sequence_hits=sequence_hits,
+        domain_hits=domain_hits,
     )
