@@ -460,6 +460,8 @@ class StructurePredictionComplex(BaseModel):
         protein_seqs: list[str] = []
         protein_chain_ids: list[str] = []
         for i, chain in enumerate(self.chains):
+            if i >= len(CHAIN_IDS):
+                raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
             if chain.entity_type == "protein":
                 protein_seqs.append(chain.sequence)
                 protein_chain_ids.append(CHAIN_IDS[i])
