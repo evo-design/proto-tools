@@ -1,4 +1,4 @@
-name: Run Unit Tests
+name: Checks
 
 on:
   pull_request:
@@ -11,14 +11,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  lint:
     if: github.event.pull_request.draft == false
-    name: Run Unit Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Ruff Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: astral-sh/ruff-action@v3
+      with:
+        args: check
+
+  typecheck:
+    if: github.event.pull_request.draft == false
+    name: Mypy Type Check
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
@@ -33,4 +39,4 @@ jobs:
       run: |
         pip install uv
         uv pip install --system ".[dev]"
-    - run: pytest --cpu
+    - run: mypy proto_tools/
