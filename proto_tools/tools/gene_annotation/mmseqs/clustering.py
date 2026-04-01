@@ -1,14 +1,16 @@
-"""proto_tools/tools/gene_annotation/mmseqs/clustering.py
+"""proto_tools/tools/gene_annotation/mmseqs/clustering.py.
 
-MMseqs2 sequence clustering tool."""
+MMseqs2 sequence clustering tool.
+"""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
+from proto_tools.tools.gene_annotation.mmseqs.search_proteins import DEFAULT_MIN_SEQ_ID
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -19,8 +21,6 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_sequence_ids,
 )
-
-from .search_proteins import DEFAULT_MIN_SEQ_ID
 
 
 # ============================================================================
@@ -72,10 +72,10 @@ class MmseqsClusteringInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (seq_0, seq_1, ...).
     """
 
-    input_sequences: List[str] = InputField(
+    input_sequences: list[str] = InputField(
         description="List of sequences to cluster",
     )
-    sequence_ids: Optional[List[str]] = InputField(
+    sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
@@ -103,7 +103,7 @@ class MmseqsClusteringOutput(BaseToolOutput):
         results (list[MmseqsClusterResult]): List of clustering results, one per
             input sequence. The order matches the input sequences order.
     """
-    results: List[MmseqsClusterResult] = Field(
+    results: list[MmseqsClusterResult] = Field(
         description="List of clustering results, one per input sequence"
     )
 
@@ -122,19 +122,21 @@ class MmseqsClusteringOutput(BaseToolOutput):
     @property
     def num_clusters(self) -> int:
         """Total number of unique clusters found."""
-        return len(set(r.cluster_id for r in self.results))
+        return len({r.cluster_id for r in self.results})
 
     @property
-    def representative_indices(self) -> List[int]:
+    def representative_indices(self) -> list[int]:
         """Get indices of sequences that are cluster representatives."""
         return [i for i, r in enumerate(self.results) if r.is_representative]
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -204,6 +206,8 @@ def run_mmseqs_clustering(
             to cluster.
         config (MmseqsClusteringConfig | None): Configuration with clustering threshold.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         MmseqsClusteringOutput: Per-sequence cluster assignments in input order.
 
@@ -220,7 +224,6 @@ def run_mmseqs_clustering(
         >>> for i, r in enumerate(result):
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
     """
-
     sequences = inputs.input_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
@@ -243,7 +246,7 @@ def run_mmseqs_clustering(
 
     # Build per-sequence results
     results = []
-    for seq, seq_id in zip(sequences, sequence_ids):
+    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
         cluster_id = cluster_assignments.get(seq_id, seq_id)
         is_rep = (seq_id == cluster_id)
         results.append(MmseqsClusterResult(

@@ -1,7 +1,7 @@
 """Mock multi-GPU PyTorch tool for testing multi-device management."""
 from __future__ import annotations
 
-from .mock_pytorch_multi_gpu_tool import (
+from proto_tools.tools.testing.mock_pytorch_multi_gpu_tool.mock_pytorch_multi_gpu_tool import (
     MockPyTorchMultiGPUToolConfig,
     MockPyTorchMultiGPUToolInput,
     MockPyTorchMultiGPUToolOutput,

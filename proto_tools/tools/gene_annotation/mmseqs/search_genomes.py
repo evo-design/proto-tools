@@ -1,14 +1,24 @@
-"""proto_tools/tools/gene_annotation/mmseqs/search_genomes.py
+"""proto_tools/tools/gene_annotation/mmseqs/search_genomes.py.
 
-MMseqs2 genome-to-genome nucleotide search tool."""
+MMseqs2 genome-to-genome nucleotide search tool.
+"""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 import pandas as pd
 from pydantic import Field, field_validator
 
+from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
+    DEFAULT_GENOME_SENSITIVITY,
+    DEFAULT_THREADS,
+    M8_COLUMNS,
+    SEARCH_TYPE_NUCLEOTIDE,
+    MmseqsSequenceSearchResult,
+    _build_sequence_search_results,
+    _parse_m8_output,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -18,16 +28,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
     resolve_sequence_ids,
-)
-
-from .search_proteins import (
-    DEFAULT_GENOME_SENSITIVITY,
-    DEFAULT_THREADS,
-    M8_COLUMNS,
-    SEARCH_TYPE_NUCLEOTIDE,
-    MmseqsSequenceSearchResult,
-    _build_sequence_search_results,
-    _parse_m8_output,
 )
 
 
@@ -49,17 +49,17 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (target_0, target_1, ...).
     """
 
-    query_genomes: List[str] = InputField(
+    query_genomes: list[str] = InputField(
         description="List of query genome sequences (nucleotide)"
     )
-    query_ids: Optional[List[str]] = InputField(
+    query_ids: list[str] | None = InputField(
         default=None,
         description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
-    target_genomes: List[str] = InputField(
+    target_genomes: list[str] = InputField(
         description="List of target genome sequences to search against"
     )
-    target_ids: Optional[List[str]] = InputField(
+    target_ids: list[str] | None = InputField(
         default=None,
         description="Optional target identifiers (defaults to target_0, target_1, ...)",
     )
@@ -99,7 +99,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input query genome. The order matches the input query genomes order.
     """
-    results: List[MmseqsSequenceSearchResult] = Field(
+    results: list[MmseqsSequenceSearchResult] = Field(
         description="List of search results, one per input query genome"
     )
 
@@ -121,33 +121,36 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         return sum(r.num_hits for r in self.results)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["m8", "csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "m8"
 
     def _export_output(self, export_path: str | Path, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats
-        data = []
-        for result in self.results:
-            for hit in result.hits:
-                data.append({
-                    "query": result.query_id,
-                    "target": hit.target_id,
-                    "pident": hit.pident,
-                    "evalue": hit.evalue,
-                })
+        data = [
+            {
+                "query": result.query_id,
+                "target": hit.target_id,
+                "pident": hit.pident,
+                "evalue": hit.evalue,
+            }
+            for result in self.results
+            for hit in result.hits
+        ]
 
         df = pd.DataFrame(data, columns=["query", "target", "pident", "evalue"]) if data else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
 
         if file_format in ["m8", "csv"]:
             sep = "\t" if file_format == "m8" else ","
 
-            header = False if file_format == "m8" else True
+            header = file_format != "m8"
             df.to_csv(path, sep=sep, index=False, header=header)
 
         elif file_format == "json":
@@ -228,6 +231,8 @@ def run_mmseqs_search_genomes(
             and target genome sequences.
         config (MmseqsSearchGenomesConfig | None): Configuration with search parameters.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         MmseqsSearchGenomesOutput: Per-sequence search results in query order.
 
@@ -244,7 +249,6 @@ def run_mmseqs_search_genomes(
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
-
     query_sequences = inputs.query_genomes
     target_sequences = inputs.target_genomes
     query_ids = resolve_sequence_ids(query_sequences, inputs.query_ids)

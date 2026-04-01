@@ -1,6 +1,4 @@
-"""
-Local Evo2 inference implementation.
-"""
+"""Local Evo2 inference implementation."""
 from __future__ import annotations
 
 import json
@@ -8,7 +6,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -39,12 +37,12 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # Token id j maps to chr(j) for interpretation. Special tokens: 0=eos, 1=pad. DNA nucleotides (ASCII): 'A'=65, 'C'=67, 'G'=71, 'T'=84, 'N'=78.
 # logits[t, j] = score for token j; character is EVO2_VOCAB[j].
 EVO2_VOCAB_SIZE = 512
-EVO2_VOCAB: List[str] = [chr(j) for j in range(EVO2_VOCAB_SIZE)]
+EVO2_VOCAB: list[str] = [chr(j) for j in range(EVO2_VOCAB_SIZE)]
 
 
 class Evo2Model:
-    """
-    Evo2 model implementation.
+    """Evo2 model implementation.
+
     Example:
         >>> model = Evo2Model("evo2_7b")
         >>>
@@ -65,9 +63,8 @@ class Evo2Model:
         ... )
     """
 
-    def __init__(self, model_checkpoint: EVO2_MODEL_CHECKPOINTS = "evo2_7b", local_path: Optional[str] = None):
-        """
-        Initialize Evo2 model wrapper.
+    def __init__(self, model_checkpoint: EVO2_MODEL_CHECKPOINTS = "evo2_7b", local_path: str | None = None):
+        """Initialize Evo2 model wrapper.
 
         Args:
             model_checkpoint: Evo2 checkpoint to use
@@ -83,7 +80,7 @@ class Evo2Model:
     def sample(
         self,
         # input arguments
-        prompts: List[str],
+        prompts: list[str],
 
         # vortex model arguments
         top_k: int = 4,
@@ -94,17 +91,16 @@ class Evo2Model:
         device: str = "cuda",
         num_tokens: int = 32,
         cached_generation: bool = True,
-        force_prompt_threshold: Optional[int] = None,
-        max_seqlen: Optional[int] = None,
+        force_prompt_threshold: int | None = None,
+        max_seqlen: int | None = None,
         print_generation: bool = True,
         verbose: bool = False,
         stop_at_eos: bool = True,
-        old_kv_cache: Optional[Dict] = None,
+        old_kv_cache: dict | None = None,
         batch_size: int = 1,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Sample DNA sequences using vortex generation.
+    ) -> dict[str, Any]:
+        """Sample DNA sequences using vortex generation.
 
         Args:
             prompts: DNA prompt sequences (same length if using cached_inference_params_dict)
@@ -218,9 +214,9 @@ class Evo2Model:
 
     def _prepare_batch(
         self,
-        sequences: List[str],
+        sequences: list[str],
         pad_left: bool = False,
-    ) -> Tuple[torch.Tensor, List[int]]:
+    ) -> tuple[torch.Tensor, list[int]]:
         """Tokenize and pad sequences into a batch."""
         if not sequences:
             raise ValueError("Cannot prepare empty batch")
@@ -235,7 +231,7 @@ class Evo2Model:
 
         # Create padded input_ids
         input_ids = torch.full((len(sequences), max_len), EVO2_PAD_TOKEN_ID, dtype=torch.long)
-        for i, (t, length) in enumerate(zip(tokens, lengths)):
+        for i, (t, length) in enumerate(zip(tokens, lengths, strict=False)):
             if pad_left:
                 input_ids[i, max_len - length:] = t
             else:
@@ -245,14 +241,13 @@ class Evo2Model:
 
     def score(
         self,
-        sequences: List[str],
+        sequences: list[str],
         device: str = "cuda",
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Score DNA sequences by computing logits and metrics via forward pass.
+    ) -> dict[str, Any]:
+        """Score DNA sequences by computing logits and metrics via forward pass.
 
         Sequences are batched with padding and attention masking. Metrics are
         computed only over non-padded tokens.
@@ -265,7 +260,8 @@ class Evo2Model:
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
 
-        Returns a dict with optional logits (per-sequence tensors), metrics, and vocab tokens."""
+        Returns a dict with optional logits (per-sequence tensors), metrics, and vocab tokens.
+        """
         # Lazy load on first call or device change
         if not self._loaded:
             self.load(device, verbose=verbose)
@@ -355,7 +351,7 @@ class Evo2Model:
         if verbose:
             logger.info("Evo2 model loaded successfully")
 
-    def _reload_to_device(self, model, old_device: str, new_device: str):
+    def _reload_to_device(self, model, old_device: str, new_device: str):  # noqa: ARG002 — required by device transition callback signature
         """Custom move function: reload the model onto the target GPU.
 
         Vortex auto-shards based on CUDA_VISIBLE_DEVICES at construction
@@ -402,7 +398,7 @@ class Evo2Model:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-def _slice_cache(cache: Dict, start: int, end: int) -> Dict:
+def _slice_cache(cache: dict, start: int, end: int) -> dict:
     """Slice a batched cache from index start to end.
 
     Args:
@@ -482,7 +478,7 @@ def _slice_cache(cache: Dict, start: int, end: int) -> Dict:
     }
 
 
-def _split_cache(cache: Dict) -> List[Dict]:
+def _split_cache(cache: dict) -> list[dict]:
     """Split batched cache into per-sample caches.
 
     Args:
@@ -550,7 +546,7 @@ def dispatch(input_dict: dict) -> dict:
         # KV caches are vortex GPU objects, not JSON-serializable
         result["kv_caches"] = None
         return result
-    elif operation == "score":
+    if operation == "score":
         return _model.score(
             sequences=input_dict.get("sequences", []),
             device=input_dict.get("device", "cuda"),
@@ -558,8 +554,7 @@ def dispatch(input_dict: dict) -> dict:
             batch_size=input_dict.get("batch_size"),
             return_logits=input_dict.get("return_logits", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 def _cleanup_vortex_debug_log():
@@ -585,9 +580,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -603,7 +597,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

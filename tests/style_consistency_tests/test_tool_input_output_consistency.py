@@ -1,6 +1,7 @@
-"""tests/style_consistency_tests/test_tool_input_output_consistency.py
+"""tests/style_consistency_tests/test_tool_input_output_consistency.py.
 
-Tests for tool input and output consistency."""
+Tests for tool input and output consistency.
+"""
 
 import inspect
 
@@ -8,18 +9,17 @@ import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
-
-from .helpers import field_description_is_valid, find_missing_fields_in_docstring
+from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
 
 
 def _list_tool_inputs_and_outputs():
     """List of all tool inputs and outputs."""
-    full_list = []
-    for tool in ToolRegistry.list_all():
-        full_list.append((tool.input_model, tool.output_model))
-    return full_list
+    return [
+        (tool.input_model, tool.output_model)
+        for tool in ToolRegistry.list_all()
+    ]
 
 
 def _list_tool_input_models():

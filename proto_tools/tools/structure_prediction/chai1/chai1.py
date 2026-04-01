@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/chai1/chai1.py
+"""proto_tools/tools/structure_prediction/chai1/chai1.py.
 
 Protein structure prediction using Chai1.
 """
@@ -9,7 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from typing import List, Optional
+from typing import ClassVar
 
 from pydantic import field_validator
 from tqdm import tqdm
@@ -63,16 +62,15 @@ class Chai1Input(StructurePredictionInput):
     """
 
     # Chai1 supports proteins, ligands, and glycans (no DNA/RNA)
-    SUPPORTED_ENTITY_TYPES = {"protein", "ligand", "glycan"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "ligand", "glycan"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
     @field_validator("complexes")
     @classmethod
     def validate_sequence_length(
-        cls, complexes: List[StructurePredictionComplex]
-    ) -> List[StructurePredictionComplex]:
+        cls, complexes: list[StructurePredictionComplex]
+    ) -> list[StructurePredictionComplex]:
         """Validate total sequence length doesn't exceed Chai1 limit (2048 residues)."""
-
         for comp_idx, comp in enumerate(complexes):
             if comp.sum_of_chain_lengths() > 2048:
                 raise ValueError(
@@ -177,7 +175,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         description="Number of independent trunk forward passes per diffusion sample",
         advanced=True,
     )
-    seed: Optional[int] = ConfigField(
+    seed: int | None = ConfigField(
         title="Random Seed",
         default=42,
         description="Random seed for reproducible results",
@@ -227,6 +225,8 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
             predict structures for. Each complex must be ≤ 2,048 residues total.
         config (Chai1Config | None): Validated Chai1 configuration specifying ESM embeddings,
             MSA settings, refinement parameters, and execution options.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         Chai1Output: Structured output containing:
@@ -283,11 +283,10 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance=No
         - ESM embeddings generally improve prediction quality
         - Does not support DNA or RNA (use Boltz2 for nucleic acids)
     """
-
-    results = []
-
-    for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)):
-        results.append(run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance))
+    results = [
+        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
+        for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes))
+    ]
     return Chai1Output(
         structures=results,
     )
@@ -316,8 +315,8 @@ def run_chai1_on_complex(
     msas: dict | None = None,
     instance=None,
 ) -> Structure:
-    """
-    Run Chai1 structure prediction on a single complex. This function is wrapped
+    """Run Chai1 structure prediction on a single complex. This function is wrapped.
+
     by ``run_chai1`` to sequentially predict all complexes in the input.
     """
     # Local GPU execution via venv subprocess

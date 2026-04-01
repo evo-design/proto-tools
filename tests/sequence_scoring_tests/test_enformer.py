@@ -1,6 +1,7 @@
-"""tests/sequence_scoring_tests/test_enformer.py
+"""tests/sequence_scoring_tests/test_enformer.py.
 
-Tests for Enformer regulatory activity prediction tool."""
+Tests for Enformer regulatory activity prediction tool.
+"""
 
 import random
 
@@ -47,7 +48,7 @@ def test_enformer_input_rejects_empty():
     """Empty sequences are rejected."""
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
-    with pytest.raises((ValueError, ValidationError), match="[Ss]equence"):
+    with pytest.raises((ValueError, ValidationError), match=r"[Ss]equence"):
         EnformerInput(sequence="")
 
 
@@ -56,7 +57,7 @@ def test_enformer_input_rejects_invalid_nucleotides():
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     bad_seq = "X" * ENFORMER_CONTEXT
-    with pytest.raises((ValueError, ValidationError), match="[Ii]nvalid"):
+    with pytest.raises((ValueError, ValidationError), match=r"[Ii]nvalid"):
         EnformerInput(sequence=bad_seq)
 
 

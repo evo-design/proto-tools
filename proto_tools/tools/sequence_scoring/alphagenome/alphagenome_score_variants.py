@@ -1,16 +1,24 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_variants.py
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_variants.py.
 
-AlphaGenome batched variant scoring tool."""
+AlphaGenome batched variant scoring tool.
+"""
 from __future__ import annotations
 
 import csv
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.sequence_scoring.alphagenome.shared_data_models import (
+    DEFAULT_ALPHAGENOME_MODEL_VERSION,
+    AlphaGenomeScoreOutput,
+    AlphaGenomeVariant,
+    VariantScorerName,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -20,13 +28,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
     require_hf_token,
-)
-
-from .shared_data_models import (
-    DEFAULT_ALPHAGENOME_MODEL_VERSION,
-    AlphaGenomeScoreOutput,
-    AlphaGenomeVariant,
-    VariantScorerName,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,13 +46,14 @@ class AlphaGenomeScoreVariantsInput(BaseToolInput):
             A single variant is auto-wrapped into a list.
     """
 
-    variants: List[AlphaGenomeVariant] = InputField(
+    variants: list[AlphaGenomeVariant] = InputField(
         description="Variants (with intervals) for scoring",
     )
 
     @field_validator("variants", mode="before")
     @classmethod
     def normalize_variants(cls, value: Any) -> list:
+        """Validate and normalize variant specifications from raw input."""
         if value is None:
             raise ValueError("variants cannot be None")
         if not isinstance(value, list):
@@ -68,19 +70,21 @@ class AlphaGenomeScoreVariantsOutput(BaseToolOutput):
         results (list[AlphaGenomeScoreOutput]): Per-variant score outputs.
     """
 
-    results: List[AlphaGenomeScoreOutput] = Field(
+    results: list[AlphaGenomeScoreOutput] = Field(
         description="Per-variant AlphaGenome score outputs",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str) -> None:
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
@@ -131,7 +135,7 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
         advanced=True,
         reload_on_change=True,
     )
-    variant_scorers: Optional[List[VariantScorerName]] = ConfigField(
+    variant_scorers: list[VariantScorerName] | None = ConfigField(
         title="Variant Scorers",
         default=None,
         description="Scorer names to use. None uses all recommended scorers.",

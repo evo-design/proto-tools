@@ -1,5 +1,4 @@
-"""
-tests/ligand_tests/ligand_inputs.py
+"""tests/ligand_tests/ligand_inputs.py.
 
 Contains input data for ligand tests.
 """

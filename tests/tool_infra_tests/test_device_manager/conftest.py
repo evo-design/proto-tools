@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/conftest.py
+"""tests/tool_infra_tests/test_device_manager/conftest.py.
 
-Shared fixtures for DeviceManager tests."""
+Shared fixtures for DeviceManager tests.
+"""
 
 from unittest.mock import patch
 

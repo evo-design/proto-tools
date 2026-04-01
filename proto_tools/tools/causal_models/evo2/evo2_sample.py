@@ -1,11 +1,12 @@
-"""proto_tools/tools/causal_models/evo2/evo2_sample.py
+"""proto_tools/tools/causal_models/evo2/evo2_sample.py.
 
-Evo2 sampling tool."""
+Evo2 sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -35,7 +36,6 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input: Evo2SampleInput
 class Evo2SampleInput(BaseToolInput):
     """Input object for Evo2 DNA sequence sampling.
 
@@ -53,7 +53,7 @@ class Evo2SampleInput(BaseToolInput):
             The model will autoregressively generate DNA continuing from these prompts.
     """
 
-    prompts: List[str] = InputField(description="Prompt sequences for generation")
+    prompts: list[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
     @classmethod
@@ -65,7 +65,6 @@ class Evo2SampleInput(BaseToolInput):
             raise ValueError("prompts must not be empty")
         return v
 
-# Output: Evo2SampleOutput
 class Evo2SampleOutput(BaseToolOutput):
     """Output from Evo2 DNA sequence sampling.
 
@@ -103,22 +102,24 @@ class Evo2SampleOutput(BaseToolOutput):
         Sequences use standard DNA nucleotide characters (A, T, C, G) and may
         include Evo2's special tokens depending on the prompt format.
     """
-    sequences: List[str] = Field(description="Generated DNA sequences")
-    logits: Optional[List] = Field(
+    sequences: list[str] = Field(description="Generated DNA sequences")
+    logits: list | None = Field(
         default=None,
         description="Per-token logits for each sequence",
     )
-    kv_caches: Optional[List[Dict]] = Field(
+    kv_caches: list[dict] | None = Field(
         default=None,
         description="List of KV caches for each sequence",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -126,13 +127,11 @@ class Evo2SampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
 
         elif file_format == "txt":
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
 
         elif file_format == "json":
             import json
@@ -265,7 +264,7 @@ class Evo2SampleConfig(BaseConfig):
         description="Evo2 model checkpoint to use",
         reload_on_change=True,
     )
-    local_path: Optional[str] = ConfigField(
+    local_path: str | None = ConfigField(
         title="Local Checkpoint Path",
         default=None,
         description="Optional path to local model weights",
@@ -304,13 +303,13 @@ class Evo2SampleConfig(BaseConfig):
         description="Whether to use vortex KV caching for generation",
         advanced=True,
     )
-    force_prompt_threshold: Optional[int] = ConfigField(
+    force_prompt_threshold: int | None = ConfigField(
         title="Force Prompt Threshold",
         default=None,
         description="Optional number of tokens to prefill in parallel before switching to prompt forcing.",
         hidden=True,
     )
-    max_seqlen: Optional[int] = ConfigField(
+    max_seqlen: int | None = ConfigField(
         title="Max Sequence Length",
         default=None,
         description="Optional maximum sequence length to generate.",
@@ -328,7 +327,7 @@ class Evo2SampleConfig(BaseConfig):
         description="Whether to stop at end-of-sequence token",
         advanced=True,
     )
-    old_kv_cache: Optional[Dict] = ConfigField(
+    old_kv_cache: dict | None = ConfigField(
         title="Old KV Cache",
         default=None,
         description="Dictionary of inference parameters to use for cached sampling (KV cache)",
@@ -396,6 +395,8 @@ def run_evo2_sample(
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and caching options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         Evo2SampleOutput: Structured output containing:
             - ``sequences``: List of generated DNA sequences
@@ -422,7 +423,6 @@ def run_evo2_sample(
         - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2
         - Evo2 Website: https://arcinstitute.org/tools/evo
     """
-
     # Local GPU - use standalone venv
     logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
 
@@ -468,7 +468,7 @@ def run_evo2_sample(
     # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
     if config.prepend_prompt:
         result["sequences"] = [
-            prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"])
+            prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)
         ]
 
     return Evo2SampleOutput(

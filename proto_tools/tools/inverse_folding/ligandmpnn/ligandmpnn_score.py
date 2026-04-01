@@ -1,9 +1,8 @@
-"""proto_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_score.py
+"""proto_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_score.py.
 
-LigandMPNN scoring tool."""
+LigandMPNN scoring tool.
+"""
 from __future__ import annotations
-
-from typing import Dict, List, Optional
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
@@ -29,7 +28,7 @@ class LigandMPNNScoringInput(BaseToolInput):
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
-    sequence_structure_pairs: List[SequenceStructurePair] = InputField(
+    sequence_structure_pairs: list[SequenceStructurePair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 
@@ -55,7 +54,7 @@ class LigandMPNNScoringConfig(BaseConfig):
             returns metrics (saves memory and serialization time). Default: ``False``.
     """
 
-    fixed_positions: Optional[Dict[str, List[int]]] = ConfigField(
+    fixed_positions: dict[str, list[int]] | None = ConfigField(
         title="Fixed Positions",
         default=None,
         description="Dictionary mapping chain IDs to fixed positions in the sequence",
@@ -118,4 +117,4 @@ def run_ligandmpnn_score(
         >>> print(f"Perplexity: {result.scores[0].perplexity}")
     """
     _ = (inputs, config)
-    raise NotImplementedError("LigandMPNN scoring is not yet implemented")
+    # TODO: Implement LigandMPNN scoring

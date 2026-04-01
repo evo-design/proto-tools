@@ -1,7 +1,7 @@
 """Mock JAX multi-GPU tool for testing multi-device JAX-style management."""
 from __future__ import annotations
 
-from .mock_jax_multi_gpu_tool import (
+from proto_tools.tools.testing.mock_jax_multi_gpu_tool.mock_jax_multi_gpu_tool import (
     MockJAXMultiGPUToolConfig,
     MockJAXMultiGPUToolInput,
     MockJAXMultiGPUToolOutput,

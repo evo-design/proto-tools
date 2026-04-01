@@ -1,11 +1,11 @@
-"""proto_tools/tools/inverse_folding/fampnn/fampnn_score_all_mutations.py
+"""proto_tools/tools/inverse_folding/fampnn/fampnn_score_all_mutations.py.
 
-FAMPNN exhaustive single-mutation scoring tool."""
+FAMPNN exhaustive single-mutation scoring tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 from tqdm import tqdm
@@ -34,7 +34,7 @@ class FAMPNNScoreAllMutationsInput(BaseToolInput):
         inputs (list[Structure]): List of structures to score all mutations for.
     """
 
-    inputs: List[Structure] = InputField(
+    inputs: list[Structure] = InputField(
         description="List of structures to score all possible single mutations."
     )
 
@@ -87,7 +87,7 @@ class AllMutationsScoreResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    scores: Dict[str, Dict[str, float]] = Field(
+    scores: dict[str, dict[str, float]] = Field(
         description="Position label -> {mutant_residue: log-likelihood ratio score}"
     )
 
@@ -99,16 +99,18 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         results (list[AllMutationsScoreResult]): List of AllMutationsScoreResult objects, one per input structure.
     """
 
-    results: List[AllMutationsScoreResult] = Field(
+    results: list[AllMutationsScoreResult] = Field(
         description="All-mutations scoring results, one per input structure"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path, file_format):
@@ -125,7 +127,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
                 residue_types = list(next(iter(result.scores.values())).keys())
                 with open(out_file, "w", newline="") as f:
                     writer = csv.writer(f)
-                    writer.writerow(["position"] + residue_types)
+                    writer.writerow(["position", *residue_types])
                     for pos_label, scores in result.scores.items():
                         row = [pos_label] + [scores.get(r, 0.0) for r in residue_types]
                         writer.writerow(row)

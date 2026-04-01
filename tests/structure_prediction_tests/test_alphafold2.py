@@ -1,8 +1,7 @@
-"""tests/structure_prediction_tests/test_alphafold2.py
+"""tests/structure_prediction_tests/test_alphafold2.py.
 
-Tests for AlphaFold2."""
-
-from __future__ import annotations
+Tests for AlphaFold2.
+"""
 
 import pytest
 from pydantic import ValidationError

@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/viennarna/viennarna.py
+"""proto_tools/tools/structure_prediction/viennarna/viennarna.py.
 
 RNA secondary structure prediction using ViennaRNA.
 
@@ -11,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -49,13 +47,12 @@ class ViennaRNAInput(BaseToolInput):
         (containing T) will be converted to RNA (T -> U) before folding
         unless DNA parameters are explicitly loaded.
     """
-    sequences: List[str] = InputField(description="List of input RNA sequences")
+    sequences: list[str] = InputField(description="List of input RNA sequences")
 
     @field_validator("sequences")
     @classmethod
-    def validate_sequences(cls, sequences: List[str]) -> List[str]:
-        """
-        Validates that sequences contain only valid nucleotides.
+    def validate_sequences(cls, sequences: list[str]) -> list[str]:
+        """Validates that sequences contain only valid nucleotides.
 
         Args:
             sequences (list[str]): RNA/DNA sequences to validate.
@@ -92,8 +89,8 @@ class ViennaRNAResult(BaseModel):
         mfe (float | None): Minimum free energy in kcal/mol.
     """
     sequence: str
-    structure: Optional[str] = None
-    mfe: Optional[float] = None
+    structure: str | None = None
+    mfe: float | None = None
 
 # Output:
 class ViennaRNAOutput(BaseToolOutput):
@@ -105,14 +102,16 @@ class ViennaRNAOutput(BaseToolOutput):
             in dot-bracket notation, and the minimum free energy.
         metadata (dict[str, Any]): Additional information about the prediction run.
     """
-    results: List[ViennaRNAResult] = Field(description="List of ViennaRNA results")
+    results: list[ViennaRNAResult] = Field(description="List of ViennaRNA results")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json", "fasta"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -203,8 +202,7 @@ def run_viennarna(
     config: ViennaRNAConfig | None = None,
     instance=None,
 ) -> ViennaRNAOutput:
-    """
-    Predict RNA secondary structures using ViennaRNA's MFE algorithm.
+    """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
 
     This function uses ViennaRNA's minimum free energy (MFE) algorithm to
     predict the most thermodynamically stable secondary structure for each
@@ -213,6 +211,8 @@ def run_viennarna(
     Args:
         inputs (ViennaRNAInput): Input containing RNA sequences to fold.
         config (ViennaRNAConfig | None): Configuration parameters for ViennaRNA.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ViennaRNAOutput: Contains:

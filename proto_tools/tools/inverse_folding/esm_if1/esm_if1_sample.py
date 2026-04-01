@@ -1,11 +1,12 @@
-"""proto_tools/tools/inverse_folding/esm_if1/esm_if1_sample.py
+"""proto_tools/tools/inverse_folding/esm_if1/esm_if1_sample.py.
 
-ESM-IF1/ProteinDPO sampling tool."""
+ESM-IF1/ProteinDPO sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import Field
 from tqdm import tqdm
@@ -62,7 +63,7 @@ class ESMIF1Sequences(DesignedSequences):
             under the model.
     """
 
-    log_likelihoods: List[float] = Field(
+    log_likelihoods: list[float] = Field(
         description="Average log likelihood of each designed sequence under the model"
     )
 
@@ -114,6 +115,8 @@ def run_esm_if1_sample(
     Args:
         inputs (ESMIF1SampleInput): Structure inputs with optional chain/fixed position constraints.
         config (ESMIF1SampleConfig | None): Configuration including weights variant, temperature, etc.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.

@@ -1,6 +1,8 @@
-from .orf import ORF
-from .orfipy import OrfipyConfig, OrfipyInput, OrfipyOutput, run_orfipy_prediction
-from .prodigal import (
+"""Open reading frame prediction tools."""
+
+from proto_tools.tools.orf_prediction.orf import ORF
+from proto_tools.tools.orf_prediction.orfipy import OrfipyConfig, OrfipyInput, OrfipyOutput, run_orfipy_prediction
+from proto_tools.tools.orf_prediction.prodigal import (
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,

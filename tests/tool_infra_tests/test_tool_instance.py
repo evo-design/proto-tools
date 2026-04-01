@@ -1,7 +1,11 @@
-"""tests/tool_infra_tests/test_tool_instance.py
+"""tests/tool_infra_tests/test_tool_instance.py.
 
-Tests for ToolInstance."""
+Tests for ToolInstance.
+"""
 
+from __future__ import annotations
+
+import contextlib
 import hashlib
 import logging
 import subprocess
@@ -274,7 +278,7 @@ def test_dispatch_respects_instance_string_key(
     inst.run = MagicMock()
 
     result = ToolInstance.dispatch("esm2", {"op": "score"}, instance="other-key")
-    # Should NOT use cached "esm2"; key mismatch
+    # Should NOT use cached "esm2" — key mismatch
     assert result == {"result": "oneshot"}
     inst.run.assert_not_called()
 
@@ -351,13 +355,11 @@ def test_oneshot_injects_tool_env_path():
     ) as mock_run:
         mock_run.return_value = MagicMock()
         # Will fail on output read, but we only care about the env arg
-        try:
+        with contextlib.suppress(Exception):
             inst._run_oneshot(
                 {"op": "score"},
                 script_path=Path("/fake/inference.py"),
             )
-        except Exception:
-            pass
 
         env = mock_run.call_args.kwargs["env"]
         assert env["TOOL_VENV_PATH"] == str(inst.env_path)
@@ -384,9 +386,8 @@ def test_persistent_cleans_up_on_exit(mock_init: MagicMock):
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persistent_cleans_up_on_exception(mock_init: MagicMock):
     """Instance should be removed even if an exception occurs."""
-    with pytest.raises(RuntimeError, match="boom"):
-        with ToolInstance.persist_tool("esm2"):
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), ToolInstance.persist_tool("esm2"):
+        raise RuntimeError("boom")
     assert "esm2" not in _instances
 
 
@@ -449,9 +450,8 @@ def test_persistent_anonymous_skips_cache_when_slot_taken(mock_init: MagicMock):
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persistent_anonymous_second_is_different_object(mock_init: MagicMock):
     """Two anonymous persistent instances are distinct objects."""
-    with ToolInstance.persist_tool("esm2") as inst_a:
-        with ToolInstance.persist_tool("esm2") as inst_b:
-            assert inst_a is not inst_b
+    with ToolInstance.persist_tool("esm2") as inst_a, ToolInstance.persist_tool("esm2") as inst_b:
+        assert inst_a is not inst_b
 
 
 @patch.object(ToolInstance, "_oneshot")
@@ -465,7 +465,7 @@ def test_persist_tool_does_not_cache_other_tools(
     with ToolInstance.persist_tool("esm2"):
         assert "esm2" in _instances
 
-        # Dispatch a *different* tool; should NOT be cached
+        # Dispatch a *different* tool — should NOT be cached
         result = ToolInstance.dispatch("blast", {"op": "search"})
         assert result == {"result": "oneshot"}
         mock_oneshot.assert_called_once()
@@ -511,10 +511,9 @@ def test_scope_restores_on_exception(mock_init: MagicMock):
     """scope() should restore cache even if an exception occurs inside."""
     ToolInstance.get("esm2")
 
-    with pytest.raises(RuntimeError, match="boom"):
-        with ToolInstance.scope():
-            ToolInstance.get("blast")
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), ToolInstance.scope():
+        ToolInstance.get("blast")
+        raise RuntimeError("boom")
 
     assert "esm2" in _instances
     assert "blast" not in _instances
@@ -550,7 +549,7 @@ def test_scope_does_not_affect_other_threads(mock_init: MagicMock):
 
     def other_thread():
         barrier.wait()
-        # This thread is not inside any scope, so should see _instances
+        # This thread is not inside any scope — should see _instances
         other_thread_saw_global[0] = _active_cache() is _instances
 
     ToolInstance.get("esm2")
@@ -616,11 +615,10 @@ def test_persist_cleans_up_on_exit(mock_init: MagicMock):
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persist_cleans_up_on_exception(mock_init: MagicMock):
     """Auto-cached instances should be cleaned up even on exception."""
-    with pytest.raises(RuntimeError, match="boom"):
-        with ToolInstance.persist():
-            with patch.object(ToolInstance, "run", return_value={"r": 1}):
-                ToolInstance.dispatch("esm2", {"op": "score"})
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError, match="boom"), ToolInstance.persist():
+        with patch.object(ToolInstance, "run", return_value={"r": 1}):
+            ToolInstance.dispatch("esm2", {"op": "score"})
+        raise RuntimeError("boom")
     assert len(_instances) == 0
     assert not _persist_mode.get()
 
@@ -643,17 +641,16 @@ def test_persist_does_not_pollute_global_cache(mock_init: MagicMock):
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persist_nestable(mock_init: MagicMock):
     """Nested persist() blocks should each get their own scope."""
-    with ToolInstance.persist():
-        with patch.object(ToolInstance, "run", return_value={"r": 1}):
-            ToolInstance.dispatch("esm2", {"op": "score"})
+    with ToolInstance.persist(), patch.object(ToolInstance, "run", return_value={"r": 1}):
+        ToolInstance.dispatch("esm2", {"op": "score"})
 
-            with ToolInstance.persist():
-                ToolInstance.dispatch("blast", {"op": "search"})
-                assert "blast" in _active_cache()
-                assert "esm2" not in _active_cache()
+        with ToolInstance.persist():
+            ToolInstance.dispatch("blast", {"op": "search"})
+            assert "blast" in _active_cache()
+            assert "esm2" not in _active_cache()
 
-            assert "esm2" in _active_cache()
-            assert "blast" not in _active_cache()
+        assert "esm2" in _active_cache()
+        assert "blast" not in _active_cache()
 
     assert len(_instances) == 0
 
@@ -721,25 +718,24 @@ def test_persist_with_nested_persist_tool(mock_init: MagicMock):
     persist_tool() exits, its instance is cleaned up, but the auto-cached
     instance from persist() survives until the outer block exits.
     """
-    with ToolInstance.persist():
-        with patch.object(ToolInstance, "run", return_value={"r": 1}):
-            # Auto-cached by persist mode
-            ToolInstance.dispatch("esm2", {"op": "score"})
-            assert "esm2" in _active_cache()
+    with ToolInstance.persist(), patch.object(ToolInstance, "run", return_value={"r": 1}):
+        # Auto-cached by persist mode
+        ToolInstance.dispatch("esm2", {"op": "score"})
+        assert "esm2" in _active_cache()
 
-            # Explicit persistent for a different tool
-            with ToolInstance.persist_tool("blast"):
-                assert "blast" in _active_cache()
-                ToolInstance.dispatch("blast", {"op": "search"})
+        # Explicit persistent for a different tool
+        with ToolInstance.persist_tool("blast"):
+            assert "blast" in _active_cache()
+            ToolInstance.dispatch("blast", {"op": "search"})
 
-            # persist_tool() exited; blast cleaned up, esm2 still alive
-            assert "blast" not in _active_cache()
-            assert "esm2" in _active_cache()
+        # persist_tool() exited — blast cleaned up, esm2 still alive
+        assert "blast" not in _active_cache()
+        assert "esm2" in _active_cache()
 
-            # esm2 still works via persist auto-cache
-            ToolInstance.dispatch("esm2", {"op": "score"})
+        # esm2 still works via persist auto-cache
+        ToolInstance.dispatch("esm2", {"op": "score"})
 
-    # persist() exited; everything cleaned up
+    # persist() exited — everything cleaned up
     assert len(_instances) == 0
 
 
@@ -972,13 +968,12 @@ def test_oneshot_timeout_raises():
     with patch(
         "proto_tools.utils.tool_instance.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
-    ):
-        with pytest.raises(TimeoutError, match="timed out after 10s"):
-            inst._run_oneshot(
-                {"op": "score"},
-                script_path=Path("/fake/inference.py"),
-                timeout=10,
-            )
+    ), pytest.raises(TimeoutError, match="timed out after 10s"):
+        inst._run_oneshot(
+            {"op": "score"},
+            script_path=Path("/fake/inference.py"),
+            timeout=10,
+        )
 
 
 def test_persistent_timeout_raises():
@@ -1050,7 +1045,7 @@ def test_send_timeout_kills_worker():
     worker._stderr_lines = []
 
     with patch("proto_tools.utils.persistent_worker.select") as mock_sel:
-        mock_sel.select.return_value = ([], [], [])  # timeout, nothing ready
+        mock_sel.select.return_value = ([], [], [])  # timeout — nothing ready
 
         with pytest.raises(TimeoutError, match="timed out after 5s"):
             worker.send({"op": "score"}, timeout=5)
@@ -1263,9 +1258,8 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     ), patch(
         "proto_tools.utils.tool_instance.subprocess.Popen",
         return_value=mock_proc,
-    ):
-        with pytest.raises(RuntimeError, match="may not be compatible"):
-            inst._create_env()
+    ), pytest.raises(RuntimeError, match="may not be compatible"):
+        inst._create_env()
 
     status = (inst.env_path / "STATUS.txt").read_text()
     assert status.startswith("FAILED")
@@ -1291,7 +1285,7 @@ def test_build_failure_prevents_retry_in_process(tmp_path: Path):
             "setup.sh failed (exit 1)."
         ),
     ) as mock_create:
-        with pytest.raises(RuntimeError, match="setup.sh failed"):
+        with pytest.raises(RuntimeError, match=r"setup\.sh failed"):
             inst._ensure_env()
 
         mock_create.assert_called_once()
@@ -1392,7 +1386,7 @@ def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
 
 def test_build_failures_cleared_between_tests():
     """The autouse fixture clears _build_failures so tests are isolated."""
-    # The fixture already ran, so _build_failures should be empty
+    # The fixture already ran — _build_failures should be empty
     assert len(ToolInstance._build_failures) == 0
     ToolInstance._build_failures["some_tool"] = "test error"
     # Next test will see it cleared by the fixture
@@ -1408,7 +1402,7 @@ def test_hash_includes_requirements_txt(tmp_path: Path):
 
     hash_without_req = inst._setup_hash()
 
-    # Add a requirements.txt; hash should change
+    # Add a requirements.txt — hash should change
     req = tmp_path / "requirements.txt"
     req.write_text("numpy==1.26\n")
 

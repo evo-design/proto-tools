@@ -1,6 +1,7 @@
-"""proto_tools/tools/masked_models/esm3/esm3_score.py
+"""proto_tools/tools/masked_models/esm3/esm3_score.py.
 
-ESM3 scoring tool."""
+ESM3 scoring tool.
+"""
 from __future__ import annotations
 
 import logging
@@ -137,6 +138,8 @@ def run_esm3_score(
             to score.
         config (ESM3ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM3ScoringOutput: Contains SequenceScores for each input sequence with:

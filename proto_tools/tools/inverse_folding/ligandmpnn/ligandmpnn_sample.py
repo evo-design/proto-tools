@@ -1,11 +1,12 @@
-"""proto_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_sample.py
+"""proto_tools/tools/inverse_folding/ligandmpnn/ligandmpnn_sample.py.
 
-LigandMPNN sampling tool."""
+LigandMPNN sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import Field
 from tqdm import tqdm
@@ -41,7 +42,7 @@ class LigandMPNNSequences(DesignedSequences):
             LigandMPNN, such as sequence recovery and log-likelihood scores.
     """
 
-    ligandmpnn_metrics: List[Dict[str, Any]] = Field(
+    ligandmpnn_metrics: list[dict[str, Any]] = Field(
         description="Metrics returned by LigandMPNN",
         title="LigandMPNN Metrics",
         json_schema_extra={"advanced": True},
@@ -85,6 +86,8 @@ def run_ligandmpnn_sample(
         inputs (LigandMPNNSampleInput): LigandMPNNSampleInput containing a list of structure inputs,
             and optional chain_ids/fixed_positions constraints.
         config (LigandMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         LigandMPNNSampleOutput: LigandMPNNSampleOutput with designed sequences for each input structure.

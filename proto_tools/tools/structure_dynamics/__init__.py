@@ -1,4 +1,6 @@
-from .bioemu import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
+"""Structure dynamics simulation tools."""
+
+from proto_tools.tools.structure_dynamics.bioemu import BioEmuConfig, BioEmuInput, BioEmuOutput, run_bioemu
 
 __all__ = [
     "BioEmuOutput",

@@ -1,4 +1,6 @@
-from .clustering import (
+"""MMseqs2 sequence search and clustering."""
+
+from proto_tools.tools.gene_annotation.mmseqs.clustering import (
     MmseqsClusteringConfig,
     MmseqsClusteringInput,
     MmseqsClusteringOutput,
@@ -6,13 +8,13 @@ from .clustering import (
     MmseqsClusterResult,
     run_mmseqs_clustering,
 )
-from .search_genomes import (
+from proto_tools.tools.gene_annotation.mmseqs.search_genomes import (
     MmseqsSearchGenomesConfig,
     MmseqsSearchGenomesInput,
     MmseqsSearchGenomesOutput,
     run_mmseqs_search_genomes,
 )
-from .search_proteins import (
+from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
     MmseqsHit,
     MmseqsSearchProteinsConfig,
     MmseqsSearchProteinsInput,

@@ -1,8 +1,7 @@
-"""tests/database_retrieval_tests/test_uniprot_fetch.py
+"""tests/database_retrieval_tests/test_uniprot_fetch.py.
 
-Tests for the UniProt fetch tool."""
-
-from __future__ import annotations
+Tests for the UniProt fetch tool.
+"""
 
 import pytest
 from pydantic import ValidationError

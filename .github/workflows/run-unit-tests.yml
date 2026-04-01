@@ -32,5 +32,5 @@ jobs:
     - name: Install dependencies
       run: |
         pip install uv
-        uv pip install --system ".[dev,mcp]"
+        uv pip install --system ".[dev]"
     - run: pytest --cpu

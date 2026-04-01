@@ -1,27 +1,27 @@
-"""proto_tools/tools/database_retrieval/ncbi/efetch.py
+"""proto_tools/tools/database_retrieval/ncbi/efetch.py.
 
 Wraps the NCBI E-utilities efetch endpoint for fetching sequences and
-records from protein, nuccore, and gene databases."""
+records from protein, nuccore, and gene databases.
+"""
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field
 
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
+    NCBIFastaRecord,
+    NCBIFetchConfig,
+    _ncbi_efetch,
+    _parse_fasta_records,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     InputField,
     build_http_session,
-)
-
-from .shared_data_models import (
-    NCBIFastaRecord,
-    NCBIFetchConfig,
-    _ncbi_efetch,
-    _parse_fasta_records,
 )
 
 # ============================================================================
@@ -55,17 +55,17 @@ class NCBIEfetchInput(BaseToolInput):
         default="fasta",
         description="NCBI rettype: 'fasta' for sequences, 'fasta_cds_na' for CDS",
     )
-    seq_start: Optional[int] = InputField(
+    seq_start: int | None = InputField(
         default=None,
         ge=1,
         description="Start position for subsequence extraction (1-indexed, inclusive)",
     )
-    seq_stop: Optional[int] = InputField(
+    seq_stop: int | None = InputField(
         default=None,
         ge=1,
         description="Stop position for subsequence extraction (1-indexed, inclusive)",
     )
-    strand: Optional[Literal["+", "-"]] = InputField(
+    strand: Literal["+", "-"] | None = InputField(
         default=None,
         description="Strand for nucleotide retrieval",
     )
@@ -79,17 +79,19 @@ class NCBIEfetchOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    fasta_records: List[NCBIFastaRecord] = Field(
+    fasta_records: list[NCBIFastaRecord] = Field(
         default_factory=list, description="Parsed FASTA records"
     )
     source_url: str = Field(description="Sanitized request URL")
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path, file_format: str):
@@ -142,6 +144,8 @@ def run_ncbi_efetch(
         inputs (NCBIEfetchInput): Database, identifier, format, and optional coordinate
             parameters.
         config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.

@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/base_config.py
+"""proto_tools/utils/base_config.py.
 
 Base configuration class for all pydantic configs.
 """
@@ -7,7 +6,10 @@ Base configuration class for all pydantic configs.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from proto_tools.utils.tool_io import BaseToolInput
 
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
@@ -18,21 +20,20 @@ DEFAULT_TIMEOUT = 600  # seconds
 def ConfigField(
     default: Any = ...,
     *,
-    title: str = None,
-    description: str = None,
+    title: str | None = None,
+    description: str | None = None,
     advanced: bool = False,
     hidden: bool = False,
     reload_on_change: bool = False,
     include_in_key: bool = True,
     **kwargs,
 ) -> Any:
-    """
-    Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
+    """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
 
     Args:
         default (Any): Default value for the field. Use ``...`` for required fields.
-        title (str): Human-readable title for UI display.
-        description (str): Description of the field for documentation and UI tooltips.
+        title (str | None): Human-readable title for UI display.
+        description (str | None): Description of the field for documentation and UI tooltips.
         advanced (bool): If True, field appears in "Advanced" section of UI.
         hidden (bool): If True, field is hidden from UI completely.
         reload_on_change (bool): If True, changing this field between persistent
@@ -59,8 +60,7 @@ def ConfigField(
 
 
 class BaseConfig(BaseModel):
-    """
-    Base configuration class for consistent behavior across all configs (tools, constraints, and generators).
+    """Base configuration class for consistent behavior across all configs (tools, constraints, and generators).
 
     Attributes:
         verbose (bool): Whether to print status messages.

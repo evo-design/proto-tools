@@ -7,9 +7,10 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
+from standalone_helpers import move_model_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,10 @@ class BioEmuModel:
     """BioEmu model wrapper used by the standalone execution path."""
 
     def __init__(self):
+        """Initialize BioEmuModel."""
         self._loaded = False
-        self._model_name: Optional[str] = None
-        self.device: Optional[str] = None
+        self._model_name: str | None = None
+        self.device: str | None = None
 
     def __call__(
         self,
@@ -30,18 +32,14 @@ class BioEmuModel:
         filter_samples: bool = True,
         batch_size: int = 10,
         device: str = "cuda",
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         verbose: bool = False,
-        msa_a3m_content: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Sample a conformational ensemble with BioEmu."""
         if not self._loaded or self._model_name != model_name:
             self.load(model_name=model_name, device=device, verbose=verbose)
         elif self.device != device:
-            # BioEmu doesn't hold a persistent model object — bioemu.sample.main()
-            # creates and destroys its own model each call. Just update the device
-            # tracker so the next call passes the right device through.
-            self.device = device
+            self.to_device(device)
 
         use_temp_dir = output_dir is None
         if use_temp_dir:
@@ -60,36 +58,14 @@ class BioEmuModel:
                 )
                 logger.info(f"Using model: {self._model_name}, device: {self.device}")
 
-            # If pre-computed MSA is provided, write to a temp .a3m file and
-            # pass as the sequence argument. BioEmu auto-detects .a3m files
-            # and reads the MSA directly instead of calling ColabFold's API.
-            sequence_or_msa = sequence
-            msa_tmp_file = None
-            if msa_a3m_content is not None:
-                msa_tmp_file = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".a3m", delete=False, dir=working_dir
-                )
-                msa_tmp_file.write(msa_a3m_content)
-                msa_tmp_file.close()
-                sequence_or_msa = msa_tmp_file.name
-                if verbose:
-                    logger.info("Using pre-computed MSA from ColabFold search")
-
-            try:
-                bioemu_sample(
-                    sequence=sequence_or_msa,
-                    num_samples=num_samples,
-                    model_name=self._model_name,
-                    output_dir=working_dir,
-                    batch_size_100=batch_size,
-                    filter_samples=filter_samples,
-                )
-            finally:
-                if msa_tmp_file is not None:
-                    try:
-                        os.unlink(msa_tmp_file.name)
-                    except OSError:
-                        pass
+            bioemu_sample(
+                sequence=sequence,
+                num_samples=num_samples,
+                model_name=self._model_name,
+                output_dir=working_dir,
+                batch_size_100=batch_size,
+                filter_samples=filter_samples,
+            )
 
             pdb_frames, num_frames, num_residues = self.extract_pdb_frames(
                 working_dir, verbose
@@ -107,7 +83,7 @@ class BioEmuModel:
         self,
         output_dir: str,
         verbose: bool,
-    ) -> Tuple[List[str], int, int]:
+    ) -> tuple[list[str], int, int]:
         """Extract PDB frame strings from BioEmu trajectory files."""
         import mdtraj as md
 
@@ -125,7 +101,7 @@ class BioEmuModel:
                 f"Loaded ensemble: {traj.n_frames} frames, {traj.n_residues} residues"
             )
 
-        pdb_frames: List[str] = []
+        pdb_frames: list[str] = []
         for frame_idx in range(traj.n_frames):
             frame = traj.slice(frame_idx)
             with tempfile.NamedTemporaryFile(
@@ -134,7 +110,7 @@ class BioEmuModel:
                 tmp_path = handle.name
             try:
                 frame.save_pdb(tmp_path)
-                with open(tmp_path, "r") as handle:
+                with open(tmp_path) as handle:
                     pdb_frames.append(handle.read())
             finally:
                 try:
@@ -161,6 +137,14 @@ class BioEmuModel:
         if verbose:
             logger.info("BioEmu model initialized successfully")
 
+    def to_device(self, device: str) -> None:
+        """Move model to another device."""
+        if not self._loaded:
+            raise RuntimeError("Cannot move unloaded model. Call load() first.")
+        if self.device != device:
+            self.model = move_model_to_device(self.model, self.device, device)
+            self.device = device
+
     def unload(self, verbose: bool = False) -> None:
         """Unload model and clear CUDA cache."""
         if self._loaded:
@@ -172,14 +156,13 @@ class BioEmuModel:
                 torch.cuda.empty_cache()
 
 
-def run_bioemu_batch(input_data: Dict[str, Any]) -> Dict[str, Any]:
+def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     sequences = input_data["sequences"]
     output_dir = input_data.get("output_dir")
-    msa_a3m_contents = input_data.get("msa_a3m_contents", {})
 
     model = BioEmuModel()
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     for seq_idx, sequence in enumerate(sequences):
         per_sequence_output_dir = None
         if output_dir:
@@ -198,7 +181,6 @@ def run_bioemu_batch(input_data: Dict[str, Any]) -> Dict[str, Any]:
             device=input_data.get("device", "cuda"),
             output_dir=per_sequence_output_dir,
             verbose=input_data.get("verbose", False),
-            msa_a3m_content=msa_a3m_contents.get(sequence),
         )
         results.append(result)
 
@@ -216,8 +198,7 @@ def dispatch(input_dict: dict) -> dict:
     operation = input_dict.get("operation", "sample")
     if operation == "sample":
         return run_bioemu_batch(input_dict)
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -240,7 +221,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as handle:
+    with open(sys.argv[1]) as handle:
         input_payload = json.load(handle)
 
     output_payload = dispatch(input_payload)

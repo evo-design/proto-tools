@@ -1,6 +1,7 @@
-"""tests/sequence_scoring_tests/test_alphagenome_batch_paths.py
+"""tests/sequence_scoring_tests/test_alphagenome_batch_paths.py.
 
-Tests for AlphaGenome batch dispatch paths."""
+Tests for AlphaGenome batch dispatch paths.
+"""
 
 from __future__ import annotations
 

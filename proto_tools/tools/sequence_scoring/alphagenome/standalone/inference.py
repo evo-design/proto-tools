@@ -1,6 +1,4 @@
-"""
-AlphaGenome standalone inference implementation for venv execution.
-"""
+"""AlphaGenome standalone inference implementation for venv execution."""
 from __future__ import annotations
 
 import json
@@ -8,7 +6,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 import huggingface_hub
 import jax
@@ -50,7 +48,7 @@ def _ensure_jax_memory_compat() -> None:
     class _MemoryCompat:
         Space = _MemorySpace
 
-    setattr(jax, "memory", _MemoryCompat())
+    jax.memory = _MemoryCompat()
     logger.info("Applied JAX memory compatibility shim (jax.memory missing).")
 
 
@@ -75,7 +73,7 @@ _ORGANISM_ENUMS = {
 
 
 
-def _resolve_checkpoint_path(model_version: str) -> Optional[Path]:
+def _resolve_checkpoint_path(model_version: str) -> Path | None:
     """Resolve AlphaGenome checkpoint path for offline-friendly loading."""
     env_checkpoint = os.environ.get("ALPHAGENOME_CHECKPOINT_PATH", "").strip()
     if env_checkpoint:
@@ -122,9 +120,9 @@ class AlphaGenomeModel:
 
     def predict_intervals(
         self,
-        intervals: List[dict[str, Any]],
-        requested_outputs: List[str],
-        ontology_terms: Optional[List[str]] = None,
+        intervals: list[dict[str, Any]],
+        requested_outputs: list[str],
+        ontology_terms: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -143,10 +141,10 @@ class AlphaGenomeModel:
 
     def predict_variants(
         self,
-        intervals: List[dict[str, Any]],
-        variants: List[dict[str, Any]],
-        requested_outputs: List[str],
-        ontology_terms: Optional[List[str]] = None,
+        intervals: list[dict[str, Any]],
+        variants: list[dict[str, Any]],
+        requested_outputs: list[str],
+        ontology_terms: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -175,9 +173,9 @@ class AlphaGenomeModel:
 
     def predict_sequences(
         self,
-        sequences: List[str],
-        requested_outputs: List[str],
-        ontology_terms: Optional[List[str]] = None,
+        sequences: list[str],
+        requested_outputs: list[str],
+        ontology_terms: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -197,9 +195,9 @@ class AlphaGenomeModel:
 
     def score_variants(
         self,
-        intervals: List[dict[str, Any]],
-        variants: List[dict[str, Any]],
-        variant_scorers: Optional[List[str]] = None,
+        intervals: list[dict[str, Any]],
+        variants: list[dict[str, Any]],
+        variant_scorers: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -229,8 +227,8 @@ class AlphaGenomeModel:
 
     def score_intervals(
         self,
-        intervals: List[dict[str, Any]],
-        interval_scorers: Optional[List[str]] = None,
+        intervals: list[dict[str, Any]],
+        interval_scorers: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -252,8 +250,8 @@ class AlphaGenomeModel:
 
     def score_ism_variants_batch(
         self,
-        requests: List[dict[str, Any]],
-        variant_scorers: Optional[List[str]] = None,
+        requests: list[dict[str, Any]],
+        variant_scorers: list[str] | None = None,
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
@@ -446,12 +444,12 @@ def _validate_min_scorer_width(
     if interval_width in _SUPPORTED_CONTEXT_LENGTHS:
         effective = interval_width
     else:
-        candidates = [l for l in _SUPPORTED_CONTEXT_LENGTHS if l >= interval_width]
+        candidates = [ctx for ctx in _SUPPORTED_CONTEXT_LENGTHS if ctx >= interval_width]
         effective = min(candidates) if candidates else interval_width
 
     if effective < min_scorer_width:
         min_context = min(
-            (l for l in _SUPPORTED_CONTEXT_LENGTHS if l >= min_scorer_width),
+            (ctx for ctx in _SUPPORTED_CONTEXT_LENGTHS if ctx >= min_scorer_width),
             default=max(_SUPPORTED_CONTEXT_LENGTHS),
         )
         raise ValueError(
@@ -480,7 +478,7 @@ def _resize_interval(
     interval = genome.Interval(chromosome=chromosome, start=interval_start, end=interval_end)
     if interval.width in _SUPPORTED_CONTEXT_LENGTHS:
         return interval
-    target = min((l for l in _SUPPORTED_CONTEXT_LENGTHS if l >= interval.width), default=None)
+    target = min((ctx for ctx in _SUPPORTED_CONTEXT_LENGTHS if ctx >= interval.width), default=None)
     if target is None:
         raise ValueError(
             f"Context interval ({interval.width:,} bp) exceeds the largest "
@@ -553,7 +551,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

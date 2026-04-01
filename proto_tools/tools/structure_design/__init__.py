@@ -1,4 +1,6 @@
-from .rfdiffusion3 import (
+"""Structure design and generation tools."""
+
+from proto_tools.tools.structure_design.rfdiffusion3 import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,

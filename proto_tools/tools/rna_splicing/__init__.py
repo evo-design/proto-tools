@@ -1,4 +1,6 @@
-from .splice_transformer import (
+"""RNA splicing prediction tools."""
+
+from proto_tools.tools.rna_splicing.splice_transformer import (
     CONTEXT_LENGTH,
     SPLICE_TISSUE_CHANNEL_INDEX,
     TARGET_LENGTH,

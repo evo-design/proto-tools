@@ -1,13 +1,15 @@
-"""proto_tools/tools/causal_models/evo2/_in_process_mode/evo2_score.py
+"""proto_tools/tools/causal_models/evo2/_in_process_mode/evo2_score.py.
 
-Evo2 scoring tool."""
+Evo2 scoring tool.
+"""
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import field_validator
 
+from proto_tools.tools.causal_models.evo2._in_process_mode.evo2_cache import get_cached_evo2_model
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringOutput,
     SequenceScores,
@@ -19,8 +21,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
-
-from .evo2_cache import get_cached_evo2_model
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,6 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input: Evo2ScoringInput
 class Evo2ScoringInput(BaseToolInput):
     """Input for Evo2 DNA sequence scoring.
 
@@ -46,7 +45,7 @@ class Evo2ScoringInput(BaseToolInput):
         sequences (list[str]): DNA sequences to score.
     """
 
-    sequences: List[str] = InputField(description="DNA sequences to score")
+    sequences: list[str] = InputField(description="DNA sequences to score")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -103,7 +102,7 @@ class Evo2ScoringConfig(BaseConfig):
         default="evo2_7b",
         description="Evo2 model checkpoint to use",
     )
-    local_path: Optional[str] = ConfigField(
+    local_path: str | None = ConfigField(
         title="Local Checkpoint Path",
         default=None,
         description="Optional path to local model weights",
@@ -152,7 +151,7 @@ class Evo2ScoringConfig(BaseConfig):
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
-    instance=None,
+    instance=None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.
 
@@ -165,6 +164,8 @@ def run_evo2_score(
             to score.
         config (Evo2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo2ScoringOutput: Contains SequenceScores for each input sequence with:

@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_eviction_round_trip.py
+"""tests/tool_infra_tests/test_device_manager/test_eviction_round_trip.py.
 
-Tests for GPU tool eviction round-trip across all registered GPU tools."""
+Tests for GPU tool eviction round-trip across all registered GPU tools.
+"""
 
 import time
 from unittest.mock import patch

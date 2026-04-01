@@ -1,15 +1,22 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_sequences.py
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_sequences.py.
 
-AlphaGenome batched raw-sequence prediction tool."""
+AlphaGenome batched raw-sequence prediction tool.
+"""
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, List, Union
+from typing import Any
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.sequence_scoring.alphagenome.shared_data_models import (
+    SUPPORTED_CONTEXT_LENGTHS,
+    AlphaGenomePredictConfig,
+    AlphaGenomePredictOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -19,16 +26,11 @@ from proto_tools.utils import (
     require_hf_token,
 )
 
-from .shared_data_models import (
-    SUPPORTED_CONTEXT_LENGTHS,
-    AlphaGenomePredictConfig,
-    AlphaGenomePredictOutput,
-)
-
 logger = logging.getLogger(__name__)
 
 
 def validate_raw_sequence(sequence: str) -> str:
+    """Validate and normalize a raw DNA sequence for AlphaGenome prediction."""
     sequence = sequence.strip().upper()
     if not sequence:
         raise ValueError("sequence cannot be empty")
@@ -56,11 +58,12 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
             must match a supported context length.
     """
 
-    sequences: List[str] = InputField(description="Raw DNA sequences for prediction")
+    sequences: list[str] = InputField(description="Raw DNA sequences for prediction")
 
     @field_validator("sequences", mode="before")
     @classmethod
     def normalize_sequences(cls, value: Any) -> list:
+        """Validate and normalize sequence specifications from raw input."""
         if value is None:
             raise ValueError("sequences cannot be None")
         if isinstance(value, str):
@@ -71,7 +74,8 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
 
     @field_validator("sequences")
     @classmethod
-    def validate_sequences(cls, sequences: List[str]) -> List[str]:
+    def validate_sequences(cls, sequences: list[str]) -> list[str]:
+        """Validate that all sequences meet AlphaGenome length requirements."""
         return [validate_raw_sequence(sequence) for sequence in sequences]
 
 
@@ -82,19 +86,21 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
         results (list[AlphaGenomePredictOutput]): Per-sequence prediction outputs.
     """
 
-    results: List[AlphaGenomePredictOutput] = Field(
+    results: list[AlphaGenomePredictOutput] = Field(
         description="Per-sequence AlphaGenome prediction outputs",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "npy"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str) -> None:
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         payload = self.model_dump(mode="json")
 

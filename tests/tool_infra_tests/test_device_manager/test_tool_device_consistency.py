@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py
+"""tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py.
 
-Tests for tool protocol compliance (to_device, get_memory_stats, etc)."""
+Tests for tool protocol compliance (to_device, get_memory_stats, etc).
+"""
 
 import re
 

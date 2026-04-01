@@ -1,6 +1,7 @@
-"""tests/structure_dynamics_tests/test_bioemu.py
+"""tests/structure_dynamics_tests/test_bioemu.py.
 
-Tests for BioEmu."""
+Tests for BioEmu.
+"""
 
 from unittest.mock import patch
 
@@ -56,11 +57,13 @@ def test_input_rejects_non_protein_entity():
 
 
 def test_input_rejects_invalid_amino_acids():
-    with patch(
-        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
-        return_value={"1", "2", "3"},
+    with (
+        patch(
+            "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+            return_value={"1", "2", "3"},
+        ),
+        pytest.raises(ValueError, match="Invalid protein characters"),
     ):
-        with pytest.raises(ValueError, match="Invalid protein characters"):
             BioEmuInput(
                 complexes=[
                     StructurePredictionComplex(
@@ -77,11 +80,13 @@ def test_input_rejects_invalid_amino_acids():
 
 def test_input_warns_on_long_sequence(caplog):
     long_sequence = "A" * 600
-    with patch(
-        "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
-        return_value=set(),
+    with (
+        patch(
+            "proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.return_invalid_protein_chars",
+            return_value=set(),
+        ),
+        caplog.at_level("WARNING"),
     ):
-        with caplog.at_level("WARNING"):
             BioEmuInput(
                 complexes=[
                     StructurePredictionComplex(

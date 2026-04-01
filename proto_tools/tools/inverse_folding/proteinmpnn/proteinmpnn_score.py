@@ -1,11 +1,11 @@
-"""proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_score.py
+"""proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_score.py.
 
-ProteinMPNN scoring tool."""
+ProteinMPNN scoring tool.
+"""
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 from tqdm import tqdm
 
@@ -37,7 +37,7 @@ class ProteinMPNNScoringInput(BaseToolInput):
             Each pair contains a sequence and a structure to score the sequence against.
     """
 
-    sequence_structure_pairs: List[SequenceStructurePair] = InputField(
+    sequence_structure_pairs: list[SequenceStructurePair] = InputField(
         description="List of sequence-structure pairs to score"
     )
 
@@ -76,7 +76,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
         - Logits are structure-conditioned: P(aa_i | structure, context)
     """
 
-    fixed_positions: Optional[Dict[str, List[int]]] = ConfigField(
+    fixed_positions: dict[str, list[int]] | None = ConfigField(
         title="Fixed Positions",
         default=None,
         description="Dictionary mapping chain IDs to fixed positions in the sequence. If None, no positions will be fixed",
@@ -121,8 +121,10 @@ class ProteinMPNNScoringConfig(BaseConfig):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
+    from pathlib import Path
+
     from proto_tools.entities.structures import Structure
-    _pdb_path = str(Path(__file__).parents[1] / "examples" / "example.pdb")
+    _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
     return ProteinMPNNScoringInput(
         sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))]
     )
@@ -158,6 +160,8 @@ def run_proteinmpnn_score(
             pairs to score.
         config (ProteinMPNNScoringConfig | None): Scoring configuration specifying fixed
             positions, device settings, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ProteinMPNNScoringOutput: Contains SequenceScores for each input pair with:

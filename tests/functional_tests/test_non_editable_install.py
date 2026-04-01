@@ -1,5 +1,4 @@
-"""
-tests/functional_tests/test_non_editable_install.py
+"""tests/functional_tests/test_non_editable_install.py.
 
 Functional test: verify PROTO_HOME path resolution for non-editable pip install.
 
@@ -12,8 +11,6 @@ Usage:
     cd demo-project/
     python test_non_editable_install.py
 """
-
-from __future__ import annotations
 
 import os
 

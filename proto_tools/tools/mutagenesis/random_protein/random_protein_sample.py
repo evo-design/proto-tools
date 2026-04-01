@@ -1,12 +1,13 @@
-"""proto_tools/tools/mutagenesis/random_protein/random_protein_sample.py
+"""proto_tools/tools/mutagenesis/random_protein/random_protein_sample.py.
 
-Random protein sampling with codon scheme-biased amino acid selection."""
+Random protein sampling with codon scheme-biased amino acid selection.
+"""
 from __future__ import annotations
 
 import logging
 import random
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field
 
@@ -42,16 +43,18 @@ class RandomProteinSampleOutput(BaseToolOutput):
             by random amino acids drawn from the configured codon scheme.
     """
 
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Protein sequences with masked positions randomly filled",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -59,12 +62,10 @@ class RandomProteinSampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "txt":
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
             import json
 
@@ -97,7 +98,7 @@ class RandomProteinSampleConfig(BaseConfig):
         default="UNIFORM",
         description="Codon scheme for amino acid sampling probabilities.",
     )
-    seed: Optional[int] = ConfigField(
+    seed: int | None = ConfigField(
         title="Random Seed",
         default=None,
         description="Random seed for reproducible sampling.",
@@ -136,7 +137,7 @@ def example_input():
 def run_random_protein_sample(
     inputs: RandomProteinSampleInput,
     config: RandomProteinSampleConfig | None = None,
-    instance=None,
+    instance=None,  # noqa: ARG001 — required by tool interface
 ) -> RandomProteinSampleOutput:
     """Fill masked positions with random amino acids from a codon scheme.
 
@@ -148,10 +149,12 @@ def run_random_protein_sample(
         inputs (RandomProteinSampleInput): Protein sequences with ``_`` at designable positions.
         config (RandomProteinSampleConfig | None): Sampling configuration.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None
+    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
 
     sampled = []

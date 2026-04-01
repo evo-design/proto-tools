@@ -1,5 +1,4 @@
-"""
-proto_tools/entities/structures/structure.py
+"""proto_tools/entities/structures/structure.py.
 
 Contains base class for representing a protein structure.
 """
@@ -7,7 +6,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal
 
 import gemmi
 import py3Dmol
@@ -15,7 +14,7 @@ from IPython.display import HTML, display
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
-from .utils import (
+from proto_tools.entities.structures.utils import (
     SUPPORTED_EXTENSIONS,
     convert_cif_str_to_pdb_str,
     convert_pdb_str_to_cif_str,
@@ -74,7 +73,7 @@ def _create_bfactor_legend_html(b_factor_type: BFactorType, range_max: float) ->
     """
 
 
-def _create_chain_legend_html(chain_color_map: Dict[str, str]) -> str:
+def _create_chain_legend_html(chain_color_map: dict[str, str]) -> str:
     """Create an HTML legend for chain coloring.
 
     Args:
@@ -119,7 +118,7 @@ class BFactorType(str, Enum):
     UNSPECIFIED = "unspecified"
 
 class Structure:
-    """Base class for representing macromolecular structures
+    """Base class for representing macromolecular structures.
 
     Standardized class for representing structures (proteins, nucleic acids, etc.).
 
@@ -132,11 +131,11 @@ class Structure:
         self,
         structure_filepath_or_content: Path | str,
         b_factor_type: BFactorType | str = BFactorType.UNSPECIFIED,
-        metrics: Optional[Dict[str, float]] = None,
-        source: Optional[str] = None,
+        metrics: dict[str, float] | None = None,
+        source: str | None = None,
     ) -> None:
-        """
-        Initializes a Structure object from a provided structure file or
+        """Initializes a Structure object from a provided structure file or.
+
         structure content string (can input PDB or CIF content strings directly).
 
         Args:
@@ -149,7 +148,6 @@ class Structure:
             source (str | None): Optional source identifier for the structure. If not provided
                 and a filepath is given, will be set to the filepath. Default is None.
         """
-
         # Initialize the structure content and format strings
         structure_content = structure_filepath_or_content
         structure_format = None
@@ -192,15 +190,12 @@ class Structure:
         raise AttributeError(name)
 
     def add_metric(self, metric: str, value: float) -> None:
-        """
-        Add a metric to the structure.
-        """
+        """Add a metric to the structure."""
         self.metrics.update({metric: value})
 
     @property
     def gemmi_struct(self) -> gemmi.Structure:
-        """
-        Lazy loads the gemmi structure from the internal structure representation.
+        """Lazy loads the gemmi structure from the internal structure representation.
 
         Returns:
             gemmi.Structure: The parsed structure object
@@ -228,23 +223,20 @@ class Structure:
         """Converts the CIF representation of the structure to a PDB string."""
         if self.structure_format == "cif":
             return convert_cif_str_to_pdb_str(self.structure)
-        else:
-            return self.structure
+        return self.structure
 
     @property
     def structure_cif(self) -> str:
         """Converts the PDB representation of the structure to a CIF string."""
         if self.structure_format == "pdb":
             return convert_pdb_str_to_cif_str(self.structure)
-        else:
-            return self.structure
+        return self.structure
 
     # ===============================
     # File I/O
     # ===============================
     def write_cif(self, filepath: Path | str) -> None:
-        """
-        Write the structure to a CIF file.
+        """Write the structure to a CIF file.
 
         Args:
             filepath (Path | str): Path where to save the CIF file
@@ -252,8 +244,7 @@ class Structure:
         Path(filepath).write_text(self.structure_cif)
 
     def write_pdb(self, filepath: Path | str) -> None:
-        """
-        Write the structure to a PDB file.
+        """Write the structure to a PDB file.
 
         WARNING: PDB format has limitations that may cause data loss.
 
@@ -266,10 +257,9 @@ class Structure:
     # Chain Related
     # ===============================
     def get_chain_sequence(
-        self, chain_id: Optional[str] = None, remove_non_standard: bool = False
+        self, chain_id: str | None = None, remove_non_standard: bool = False
     ) -> str:
-        """
-        Extract the sequence of a specific chain from the structure.
+        """Extract the sequence of a specific chain from the structure.
 
         Args:
             chain_id (str | None): Chain ID to extract (e.g., 'A'). If None, returns the first chain.
@@ -305,9 +295,8 @@ class Structure:
         # Return first chain
         return next(iter(sequences.values()))
 
-    def get_chain_sequences(self, remove_non_standard: bool = False) -> Dict[str, str]:
-        """
-        Extract the sequences of all chains in the structure.
+    def get_chain_sequences(self, remove_non_standard: bool = False) -> dict[str, str]:
+        """Extract the sequences of all chains in the structure.
 
         Args:
             remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
@@ -342,18 +331,16 @@ class Structure:
                     sequences[chain.name] = seq
         return sequences
 
-    def get_chain_ids(self) -> List[str]:
-        """
-        Extract the IDs of all chains in the structure.
+    def get_chain_ids(self) -> list[str]:
+        """Extract the IDs of all chains in the structure.
 
         Returns:
             List[str]: List of chain IDs
         """
         return list(self.get_chain_sequences().keys())
 
-    def get_chain_types(self) -> Dict[str, str]:
-        """
-        Classify each chain as either 'polymer' or 'ligand' based on entity type.
+    def get_chain_types(self) -> dict[str, str]:
+        """Classify each chain as either 'polymer' or 'ligand' based on entity type.
 
         Returns:
             Dict[str, str]: Dictionary mapping chain IDs to their type ('polymer' or 'ligand')
@@ -385,18 +372,16 @@ class Structure:
 
     @property
     def num_chains(self) -> int:
-        """
-        Get the number of residues in the structure.
-        """
+        """Get the number of residues in the structure."""
         return len(self.get_chain_sequences())
 
     # ===============================
     # Residue Related
     # ===============================
 
-    def get_residue_position_map(self) -> Dict[str, List[Tuple[str, int]]]:
-        """
-        Gets a dictionary mapping chain IDs to lists of tuples of (residue_id, position)
+    def get_residue_position_map(self) -> dict[str, list[tuple[str, int]]]:
+        """Gets a dictionary mapping chain IDs to lists of tuples of (residue_id, position).
+
         in the chain. Residue ID is the 1-letter code of the residue.
         """
         position_map = {}
@@ -409,12 +394,11 @@ class Structure:
                     [residue.name for residue in chain_sequence]
                 )
                 position_list = [residue.seqid.num for residue in chain_sequence]
-                position_map[chain_id] = list(zip(residue_id_list, position_list))
+                position_map[chain_id] = list(zip(residue_id_list, position_list, strict=False))
         return position_map
 
-    def get_chain_positions(self, chain_id: str) -> List[int]:
-        """
-        Get the list of residue positions (1-indexed) for a specific chain.
+    def get_chain_positions(self, chain_id: str) -> list[int]:
+        """Get the list of residue positions (1-indexed) for a specific chain.
 
         Args:
             chain_id (str): The chain identifier (e.g., "A", "B").
@@ -435,8 +419,7 @@ class Structure:
 
     @property
     def num_residues(self) -> int:
-        """
-        Get the number of residues in the structure.
+        """Get the number of residues in the structure.
 
         TODO: Determine if we should differentiate different types of chains
         """
@@ -448,14 +431,13 @@ class Structure:
     def visualize(
         self,
         style: Literal["cartoon", "line", "stick", "sphere", "licorice"] = "cartoon",
-        color_by: Optional[Literal["bfactor", "chain"]] = None,
+        color_by: Literal["bfactor", "chain"] | None = None,
         show_legend: bool = True,
         width: int = 400,
         height: int = 400,
         ligand_style: Literal["stick", "sphere", "line", "licorice"] = "stick"
     ):
-        """
-        Visualize the structure using py3Dmol with optional coloring modes and legends.
+        """Visualize the structure using py3Dmol with optional coloring modes and legends.
 
         Supports two coloring modes:
         - "bfactor": Colors by B-factor values with a gradient (red=low to blue=high)
@@ -599,9 +581,7 @@ class Structure:
         source_type: Any,
         handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
-        """
-        Tells Pydantic how to validate and serialize Structure objects.
-        """
+        """Tells Pydantic how to validate and serialize Structure objects."""
         return core_schema.no_info_after_validator_function(
             cls._validate_from_dict,
             core_schema.union_schema(
@@ -621,11 +601,9 @@ class Structure:
 
     @classmethod
     def _validate_from_dict(
-        cls, value: Dict[str, Any] | "Structure"
+        cls, value: dict[str, Any] | Structure
     ) -> Structure:
-        """
-        Create a Structure from a dictionary (used during deserialization).
-        """
+        """Create a Structure from a dictionary (used during deserialization)."""
         if isinstance(value, cls):
             return value
 
@@ -656,10 +634,8 @@ class Structure:
         instance.metrics = value.get("metrics", {})
         return instance
 
-    def _serialize_to_dict(self) -> Dict[str, Any]:
-        """
-        Serialize Structure to a dictionary (for Pydantic models).
-        """
+    def _serialize_to_dict(self) -> dict[str, Any]:
+        """Serialize Structure to a dictionary (for Pydantic models)."""
         return {
             "structure": self.structure,
             "structure_format": self.structure_format,

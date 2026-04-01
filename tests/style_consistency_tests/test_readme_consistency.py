@@ -1,4 +1,4 @@
-"""tests/style_consistency_tests/test_readme_consistency.py"""
+"""tests/style_consistency_tests/test_readme_consistency.py."""
 
 from __future__ import annotations
 
@@ -174,7 +174,7 @@ def test_starts_with_h1(readme: Path) -> None:
     lines = readme.read_text().strip().split("\n")
     # Skip leading HTML badge line(s) and blank lines
     first_content = next(
-        (l for l in lines if l.strip() and not l.strip().startswith("<")),
+        (line for line in lines if line.strip() and not line.strip().startswith("<")),
         "",
     )
     assert re.match(r"^# \S", first_content), (

@@ -1,5 +1,7 @@
+"""Database retrieval tools for biological sequences and structures."""
+
 # NCBI Entrez tools
-from .ncbi import (
+from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEfetchConfig,
     NCBIEfetchInput,
     NCBIEfetchOutput,
@@ -17,7 +19,7 @@ from .ncbi import (
 )
 
 # PDB tools
-from .pdb import (
+from proto_tools.tools.database_retrieval.pdb import (
     PdbChain,
     PdbFetchConfig,
     PdbFetchEntryConfig,
@@ -31,7 +33,7 @@ from .pdb import (
 )
 
 # Multi-source sequence fetch (orchestrator)
-from .sequence_fetch import (
+from proto_tools.tools.database_retrieval.sequence_fetch import (
     FetchedSequence,
     FetchedStructure,
     SequenceFetchConfig,
@@ -43,7 +45,7 @@ from .sequence_fetch import (
 )
 
 # UniProt fetch
-from .uniprot import (
+from proto_tools.tools.database_retrieval.uniprot import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,

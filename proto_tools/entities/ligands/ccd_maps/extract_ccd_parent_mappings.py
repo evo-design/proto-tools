@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-proto_tools/entities/ligands/ccd_maps/extract_ccd_parent_mappings.py
+"""proto_tools/entities/ligands/ccd_maps/extract_ccd_parent_mappings.py.
 
 This script reads the components.cif file and extracts mappings from modified
 residues and bases (CCD codes) to their parent (canonical) amino acids or nucleotides.
@@ -37,10 +36,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
         output_path (Path): Path to output CSV file
     """
     # Open file (handle both gzipped and uncompressed)
-    if cif_path.suffix == '.gz':
-        f = gzip.open(cif_path, 'rt')
-    else:
-        f = open(cif_path, 'r')
+    f = gzip.open(cif_path, 'rt') if cif_path.suffix == '.gz' else open(cif_path)  # noqa: SIM115 -- conditional open
 
     try:
         # Parse CIF format
@@ -49,8 +45,8 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
         current_one_letter = None
         results = []
 
-        for line in f:
-            line = line.strip()
+        for raw_line in f:
+            line = raw_line.strip()
 
             # New component entry
             if line.startswith("data_"):
@@ -106,8 +102,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path):
         out.write("ccd_code,parent_3letter,parent_1letter\n")
 
         # Write data sorted by CCD code
-        for ccd_code, parent_3letter, one_letter in sorted(results):
-            out.write(f"{ccd_code},{parent_3letter},{one_letter}\n")
+        out.writelines(f"{ccd_code},{parent_3letter},{one_letter}\n" for ccd_code, parent_3letter, one_letter in sorted(results))
 
     return len(results)
 
@@ -129,7 +124,7 @@ def main():
     output_path = script_dir / "ccd_to_og.csv"
 
     print(f"Reading CCD file: {cif_path.name}")
-    print(f"This may take a minute...")
+    print("This may take a minute...")
 
     # Extract mappings
     num_mappings = extract_parent_mappings(cif_path, output_path)
@@ -139,8 +134,8 @@ def main():
 
     # Show some examples
     print("\nExample mappings:")
-    with open(output_path, 'r') as f:
-        lines = [l for l in f if not l.startswith('#') and l.strip() and l != 'ccd_code,parent_3letter,parent_1letter\n']
+    with open(output_path) as f:
+        lines = [line for line in f if not line.startswith('#') and line.strip() and line != 'ccd_code,parent_3letter,parent_1letter\n']
         for line in lines[:10]:
             print(f"  {line.strip()}")
 

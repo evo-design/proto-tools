@@ -1,10 +1,10 @@
-"""tests/structure_prediction_tests/test_structure_prediction.py
+"""tests/structure_prediction_tests/test_structure_prediction.py.
 
-Tests for structure prediction tools."""
+Tests for structure prediction tools.
+"""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import pytest
 from Bio import SeqIO
@@ -70,7 +70,7 @@ _BATCHED_TEST_SEQUENCES = [
 
 # ── File loading ───────────────────────────────────────────────────────────────
 
-def _parse_modifications_from_header(description: str) -> List[tuple]:
+def _parse_modifications_from_header(description: str) -> list[tuple]:
     """Parse modifications from FASTA header.
 
     Format: >name|entity_type|position:code,position:code
@@ -87,8 +87,8 @@ def _parse_modifications_from_header(description: str) -> List[tuple]:
         return []
 
     modifications = []
-    for mod in mod_string.split(","):
-        mod = mod.strip()
+    for raw_mod in mod_string.split(","):
+        mod = raw_mod.strip()
         if ":" in mod:
             pos_str, code = mod.split(":")
             modifications.append((int(pos_str), code.strip()))
@@ -96,7 +96,7 @@ def _parse_modifications_from_header(description: str) -> List[tuple]:
     return modifications
 
 
-def _parse_fasta_to_complexes(fasta_file: Path) -> List[StructurePredictionComplex]:
+def _parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionComplex]:
     """Parse a FASTA file into a list of StructurePredictionComplex objects.
 
     FASTA format supports modifications in the header:
@@ -158,7 +158,7 @@ def _supports_msa(config_class) -> bool:
     return hasattr(config_class, "model_fields") and "use_msa" in config_class.model_fields
 
 
-def _get_complex_entity_types(complexes: List[StructurePredictionComplex]) -> set:
+def _get_complex_entity_types(complexes: list[StructurePredictionComplex]) -> set:
     """Get all entity types present in a list of complexes."""
     entity_types = set()
     for comp in complexes:
@@ -166,7 +166,7 @@ def _get_complex_entity_types(complexes: List[StructurePredictionComplex]) -> se
     return entity_types
 
 
-def _has_modifications(complexes: List[StructurePredictionComplex]) -> bool:
+def _has_modifications(complexes: list[StructurePredictionComplex]) -> bool:
     """Check if any complex has modifications."""
     return any(comp.has_modifications() for comp in complexes)
 
@@ -183,10 +183,7 @@ def _is_compatible_input_for_test(complexes, input_class) -> bool:
     if not complex_entity_types.issubset(supported_types):
         return False
 
-    if _has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS:
-        return False
-
-    return True
+    return not (_has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS)
 
 
 def _generate_test_params() -> list:
@@ -293,12 +290,12 @@ def test_esmfold_input_rejects_invalid_amino_acid():
 
 
 def test_esmfold_input_rejects_sequence_too_long():
-    with pytest.raises(ValidationError, match="too long|2400"):
+    with pytest.raises(ValidationError, match=r"too long|2400"):
         ESMFoldInput(complexes=["M" * 2401])
 
 
 def test_esmfold_input_rejects_non_protein_entity():
-    with pytest.raises(ValidationError, match="unsupported entity types|only supports"):
+    with pytest.raises(ValidationError, match=r"unsupported entity types|only supports"):
         ESMFoldInput(
             complexes=[StructurePredictionComplex(
                 chains=[{"sequence": "ATCG", "entity_type": "dna"}]
@@ -389,7 +386,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         )
 
         # iPTM
-        if predictor_name not in ["esmfold"]:
+        if predictor_name != "esmfold":
             assert "iptm" in metrics, f"'iptm' not found in {predictor_name} metrics"
             assert metrics["iptm"] is None or 0 <= metrics["iptm"] <= 1.0, (
                 f"'iptm' has invalid value of {metrics['iptm']}"
@@ -398,7 +395,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         # PAE / GPDE
         if predictor_name == "protenix":
             assert "gpde" in metrics, f"'gpde' not found in {predictor_name} metrics"
-            assert 0 <= metrics["gpde"], (
+            assert metrics["gpde"] >= 0, (
                 f"'gpde' has invalid value of {metrics['gpde']}"
             )
         else:
@@ -515,7 +512,7 @@ def test_batched_vs_individual_inference_consistency():
         individual_outputs.append(single_output.structures[0])
 
     for i, (batched_struct, individual_struct) in enumerate(
-        zip(batched_output.structures, individual_outputs)
+        zip(batched_output.structures, individual_outputs, strict=False)
     ):
         batched_metrics = batched_struct.metrics
         individual_metrics = individual_struct.metrics
@@ -605,7 +602,7 @@ def test_batched_multichain_complexes():
 
     expected_chain_counts = [2, 1, 3]
     for i, (structure, expected_chains) in enumerate(
-        zip(batched_output.structures, expected_chain_counts)
+        zip(batched_output.structures, expected_chain_counts, strict=False)
     ):
         assert is_valid_structure(structure.structure_cif), (
             f"Structure {i} is invalid"

@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/install_binary.py
+"""proto_tools/utils/install_binary.py.
 
 Called from standalone/setup.sh scripts during ToolInstance venv creation.
 Each tool provides its own `binary_config.py` in its standalone/ directory with:
@@ -91,7 +90,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
     try:
         from tqdm import tqdm
 
-        response = urllib.request.urlopen(url)
+        response = urllib.request.urlopen(url)  # noqa: S310 -- URL from trusted config
         total = int(response.headers.get("Content-Length", 0))
         downloaded = 0
 
@@ -116,14 +115,14 @@ def _download_with_progress(url: str, dest: Path) -> None:
                 mb_total = total_size / (1024 * 1024)
                 print(f"\r  Downloading: {mb:.1f}/{mb_total:.1f} MB ({pct:.0f}%)", end="", flush=True)
 
-        urllib.request.urlretrieve(url, dest, _reporthook)
+        urllib.request.urlretrieve(url, dest, _reporthook)  # noqa: S310 -- URL from trusted config
         downloaded = dest.stat().st_size
         total = downloaded  # urlretrieve raises on network errors; trust actual size
         print()  # newline after progress
 
     # Validate download integrity
     if total > 0 and downloaded != total:
-        raise IOError(
+        raise OSError(
             f"Download incomplete: got {downloaded} bytes, "
             f"expected {total} bytes from {url}"
         )
@@ -157,7 +156,7 @@ def install_binary(tool_name: str) -> None:
             fallback_key = next(iter(os_matches))
             warnings.warn(
                 f"No native {machine} binary for {tool_name}, "
-                f"falling back to {fallback_key[1]}."
+                f"falling back to {fallback_key[1]}.", stacklevel=2
             )
             key = fallback_key
             url = os_matches[fallback_key]
@@ -189,7 +188,7 @@ def install_binary(tool_name: str) -> None:
 
             print(f"{tool_name} installation complete!")
             return
-        except (IOError, EOFError, urllib.error.URLError) as exc:
+        except (OSError, EOFError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
             last_error = exc
             if attempt < _MAX_DOWNLOAD_RETRIES:
                 print(

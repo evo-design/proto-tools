@@ -1,4 +1,6 @@
-from .enformer_prediction import (
+"""Enformer genomic sequence-to-function prediction."""
+
+from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import (
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
     EnformerConfig,

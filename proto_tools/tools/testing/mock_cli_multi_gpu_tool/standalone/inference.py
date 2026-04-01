@@ -26,6 +26,7 @@ class MockCLIMultiGPUToolModel:
     """Wrapper that spawns CLI subprocesses with multi-GPU device routing."""
 
     def __init__(self):
+        """Initialize MockCLIMultiGPUToolModel."""
         self._loaded = True
         logger.info("MockCLIMultiGPUToolModel initialized")
 
@@ -112,7 +113,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

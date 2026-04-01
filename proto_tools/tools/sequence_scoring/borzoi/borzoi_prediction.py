@@ -1,11 +1,12 @@
-"""proto_tools/tools/sequence_scoring/borzoi/borzoi_prediction.py
+"""proto_tools/tools/sequence_scoring/borzoi/borzoi_prediction.py.
 
-Borzoi single-replicate sequence scoring tool."""
+Borzoi single-replicate sequence scoring tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal, Union
+from typing import Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -76,10 +77,10 @@ class BorzoiOutput(BaseToolOutput):
 
     sequence: str = Field(description="Input DNA/RNA sequence")
     sequence_length: int = Field(description="Length of input sequence")
-    prediction: List[List[float]] = Field(
+    prediction: list[list[float]] = Field(
         description="Prediction matrix with shape [num_tracks, 6144]"
     )
-    output_tracks: List[int] = Field(description="Track indices used for prediction")
+    output_tracks: list[int] = Field(description="Track indices used for prediction")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
     replicate: str = Field(description="Replicate used for prediction ('0' to '3')")
     avg_output_tracks: bool = Field(description="Whether track outputs were averaged")
@@ -87,14 +88,16 @@ class BorzoiOutput(BaseToolOutput):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
             "tool_id", "execution_time", "timestamp", "success",
@@ -138,7 +141,7 @@ class BorzoiConfig(BaseConfig):
         hidden=True,
         include_in_key=False,
     )
-    output_tracks: List[int] = ConfigField(
+    output_tracks: list[int] = ConfigField(
         title="Output Tracks",
         default=[0],
         description="Track indices to extract from model output",
@@ -206,10 +209,11 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance
         inputs (BorzoiInput): Validated sequence input.
         config (BorzoiConfig | None): Validated runtime and model configuration.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         BorzoiOutput: Prediction object for one Borzoi replicate.
     """
-
     if config.use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 

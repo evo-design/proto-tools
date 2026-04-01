@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_thread_safety.py
+"""tests/tool_infra_tests/test_device_manager/test_thread_safety.py.
 
-Tests for thread safety of DeviceManager."""
+Tests for thread safety of DeviceManager.
+"""
 
 import threading
 

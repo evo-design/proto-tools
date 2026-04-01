@@ -1,13 +1,10 @@
-"""
-BLAST+ binary download and extraction configuration.
+"""BLAST+ binary download and extraction configuration.
 
 Provides platform-specific download URLs and extraction logic for BLAST+.
 Used by the shared install_binary.py utility during venv setup.
 
 Archive structure: ncbi-blast-2.17.0+/bin/{blastn,blastp,blastx,tblastn,tblastx,makeblastdb,...}
 """
-
-from __future__ import annotations
 
 import stat
 import tarfile

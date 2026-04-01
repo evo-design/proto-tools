@@ -1,4 +1,6 @@
-from .minced import (
+"""MinCED CRISPR array detection."""
+
+from proto_tools.tools.gene_annotation.minced.minced import (
     CrisprArray,
     CrisprRepeatSpacer,
     MincedConfig,

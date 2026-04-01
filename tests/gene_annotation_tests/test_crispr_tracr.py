@@ -1,8 +1,7 @@
-"""tests/gene_annotation_tests/test_crispr_tracr.py
+"""tests/gene_annotation_tests/test_crispr_tracr.py.
 
-Tests for the CRISPRtracrRNA prediction tool."""
-
-from __future__ import annotations
+Tests for the CRISPRtracrRNA prediction tool.
+"""
 
 import json
 from pathlib import Path
@@ -35,11 +34,8 @@ _persistent_tool = make_persistent_fixture("crispr_tracr", gpu=False)
 
 def _read_fasta_sequence(fasta_path: Path) -> str:
     """Read a single-record FASTA file and return the sequence string."""
-    lines = []
     with open(fasta_path) as f:
-        for line in f:
-            if not line.startswith(">"):
-                lines.append(line.strip())
+        lines = [line.strip() for line in f if not line.startswith(">")]
     return "".join(lines)
 
 

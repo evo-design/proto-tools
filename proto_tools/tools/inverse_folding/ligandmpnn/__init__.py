@@ -1,3 +1,5 @@
+"""LigandMPNN structure-aware sequence design."""
+
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,

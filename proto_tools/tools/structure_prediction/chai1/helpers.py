@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/chai1/helpers.py
+"""proto_tools/tools/structure_prediction/chai1/helpers.py.
 
 Shared helpers for Chai-1 structure prediction. Provides utilities for
 sequence hashing, MSA Parquet file writing, and FASTA generation.

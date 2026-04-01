@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/orf_prediction/prodigal/prodigal.py
+"""proto_tools/tools/orf_prediction/prodigal/prodigal.py.
 
 Utility functions for programmatic ORF calling with Prodigal.
 
@@ -11,7 +10,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 from pydantic import ConfigDict, Field, computed_field, field_validator, model_validator
@@ -49,7 +47,7 @@ class ProdigalInput(BaseToolInput):
             contain only valid DNA nucleotides including IUPAC ambiguity codes.
             Empty sequences are not allowed.
     """
-    input_sequences: List[str] = InputField(
+    input_sequences: list[str] = InputField(
         description="DNA sequence(s) to analyze for open reading frames"
     )
 
@@ -198,7 +196,7 @@ class ProdigalOutput(BaseToolOutput):
             Computed property derived from predicted_orfs.
     """
 
-    predicted_orfs: List[List[ORF]] = Field(
+    predicted_orfs: list[list[ORF]] = Field(
         default_factory=list,
         description="List of ORF results per input sequence",
     )
@@ -215,7 +213,7 @@ class ProdigalOutput(BaseToolOutput):
 
     @computed_field
     @property
-    def num_orfs_per_sequence(self) -> List[int]:
+    def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
         return [len(result) for result in self.predicted_orfs]
 
@@ -229,11 +227,13 @@ class ProdigalOutput(BaseToolOutput):
         return pd.DataFrame(all_orfs)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["gff", "csv", "json", "faa", "fna"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "gff"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -318,6 +318,8 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None
         config (ProdigalConfig | None): Validated Prodigal configuration specifying
             prediction mode (meta vs. single-genome), genetic code, and threading.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         ProdigalOutput: Structured output
 
@@ -344,7 +346,6 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig | None
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
-
     output_data = ToolInstance.dispatch(
         "prodigal",
         {

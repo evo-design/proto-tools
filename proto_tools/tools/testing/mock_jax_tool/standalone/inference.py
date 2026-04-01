@@ -87,6 +87,7 @@ class MockJAXToolModel:
     """
 
     def __init__(self, hidden_size: int = 128, memory_mb: int = 512, device: str = "cuda"):
+        """Initialize MockJAXToolModel."""
         self.hidden_size = hidden_size
         self.memory_mb = memory_mb
         self.device_str = device
@@ -159,8 +160,7 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

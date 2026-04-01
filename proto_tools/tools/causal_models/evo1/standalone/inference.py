@@ -1,5 +1,4 @@
-"""
-Local Evo1 inference implementation.
+"""Local Evo1 inference implementation.
 
 Uses the ``evo-model`` pip package (``from evo import Evo``) and delegates
 generation to ``evo.generation.generate()``.
@@ -13,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from typing import Any, Dict, List, Literal
+from typing import Any, Literal
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -30,8 +29,7 @@ EVO1_MODEL_CHECKPOINTS = Literal[
 
 
 class Evo1Model:
-    """
-    Evo1 model implementation using the evo-model pip package.
+    """Evo1 model implementation using the evo-model pip package.
 
     Example:
         >>> model = Evo1Model("evo-1-8k-base")
@@ -44,6 +42,7 @@ class Evo1Model:
         model_name: EVO1_MODEL_CHECKPOINTS = "evo-1-8k-base",
         device: str = "cuda",
     ):
+        """Initialize Evo1Model."""
         self.model_name = model_name
         self.device = device
         self._loaded = False
@@ -52,16 +51,15 @@ class Evo1Model:
 
     def sample(
         self,
-        prompts: List[str],
+        prompts: list[str],
         num_tokens: int = 100,
         top_k: int = 4,
         temperature: float = 1.0,
         top_p: float = 1.0,
         batch_size: int = 1,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Sample DNA sequences autoregressively from prompts.
+    ) -> dict[str, Any]:
+        """Sample DNA sequences autoregressively from prompts.
 
         Delegates to ``evo.generation.generate()`` which supports batched
         generation with cached recurrent state.
@@ -87,8 +85,8 @@ class Evo1Model:
 
         from evo.generation import generate as evo_generate
 
-        all_sequences: List[str] = []
-        all_scores: List[float] = []
+        all_sequences: list[str] = []
+        all_scores: list[float] = []
 
         for i in range(0, len(prompts), batch_size):
             batch = prompts[i : i + batch_size]
@@ -118,13 +116,12 @@ class Evo1Model:
 
     def score(
         self,
-        sequences: List[str],
+        sequences: list[str],
         batch_size: int = 1,
         return_logits: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Score DNA sequences by computing autoregressive log-likelihood.
+    ) -> dict[str, Any]:
+        """Score DNA sequences by computing autoregressive log-likelihood.
 
         Uses ``evo.scoring.prepare_batch`` and ``evo.scoring.logits_to_logprobs``
         which handle BOS prepending/trimming internally.
@@ -300,7 +297,7 @@ def dispatch(input_dict: dict) -> dict:
             batch_size=input_dict.get("batch_size"),
             verbose=input_dict.get("verbose", False),
         )
-    elif operation == "score":
+    if operation == "score":
         result = _model.score(
             sequences=input_dict.get("sequences", []),
             batch_size=input_dict.get("batch_size"),
@@ -310,8 +307,7 @@ def dispatch(input_dict: dict) -> dict:
         if result["logits"] is not None:
             result["logits"] = [t.tolist() for t in result["logits"]]
         return result
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -321,9 +317,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -341,7 +336,7 @@ if __name__ == "__main__":
             f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>"
         )
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

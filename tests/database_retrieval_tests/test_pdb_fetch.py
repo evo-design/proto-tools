@@ -1,8 +1,7 @@
-"""tests/database_retrieval_tests/test_pdb_fetch.py
+"""tests/database_retrieval_tests/test_pdb_fetch.py.
 
-Tests for the PDB fetch tools (fetch-entry, fetch-fasta)."""
-
-from __future__ import annotations
+Tests for the PDB fetch tools (fetch-entry, fetch-fasta).
+"""
 
 import pytest
 

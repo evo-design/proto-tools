@@ -1,7 +1,7 @@
 """Mock PyTorch tool for testing DeviceManager and ToolPool."""
 from __future__ import annotations
 
-from .mock_pytorch_tool import (
+from proto_tools.tools.testing.mock_pytorch_tool.mock_pytorch_tool import (
     MockPyTorchToolConfig,
     MockPyTorchToolInput,
     MockPyTorchToolOutput,

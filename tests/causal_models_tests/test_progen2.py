@@ -1,6 +1,7 @@
-"""tests/causal_models_tests/test_progen2.py
+"""tests/causal_models_tests/test_progen2.py.
 
-Tests for ProGen2."""
+Tests for ProGen2.
+"""
 
 import numpy as np
 import pytest
@@ -94,7 +95,7 @@ def test_progen2_sample_basic():
     assert len(result.sequences) == 2
 
     valid_chars = set(PROTEIN_AMINO_ACIDS)
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         assert isinstance(seq, str) and len(seq) > 0
         assert set(seq.upper()).issubset(valid_chars), f"Invalid chars: {set(seq) - valid_chars}"
 
@@ -194,7 +195,7 @@ def test_progen2_sample_batched():
 
     assert len(result.sequences) == 4
 
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         prompt_aa = prompt[1:]
         assert seq.startswith(prompt_aa), f"Sequence {i} should start with '{prompt_aa}', got '{seq[:10]}'"
 
@@ -217,7 +218,7 @@ def test_progen2_sample_batched_many():
 
     assert len(result.sequences) == 6
 
-    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences)):
+    for i, (prompt, seq) in enumerate(zip(prompts, result.sequences, strict=False)):
         prompt_aa = prompt[1:]
         assert seq.startswith(prompt_aa), f"Sequence {i} should start with '{prompt_aa}'"
         assert len(seq) <= 50
@@ -241,7 +242,7 @@ def test_progen2_score_tool():
     assert result.vocab[22] == "S" and result.vocab[28] == "Y"
     assert len(result.scores) == 2
 
-    for seq, score in zip(sequences, result.scores):
+    for seq, score in zip(sequences, result.scores, strict=False):
         assert isinstance(score.log_likelihood, float)
         assert isinstance(score.avg_log_likelihood, float)
         assert isinstance(score.perplexity, float)
@@ -340,7 +341,7 @@ def test_progen2_score_batched():
 
     assert len(result.scores) == 6
 
-    for i, (seq, score) in enumerate(zip(sequences, result.scores)):
+    for i, (seq, score) in enumerate(zip(sequences, result.scores, strict=False)):
         assert score.log_likelihood < 0
         assert score.perplexity >= 1.0
 
@@ -381,7 +382,7 @@ def test_progen2_score_variable_length_sequences():
 
     result = run_progen2_score(inputs=inputs, config=config)
 
-    for (seq, score) in zip(sequences, result.scores):
+    for (seq, score) in zip(sequences, result.scores, strict=False):
         expected_len = len(seq) + 1  # +1 for start token
         assert len(score.logits) == expected_len, (
             f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {len(score.logits)}"

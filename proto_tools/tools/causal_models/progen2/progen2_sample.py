@@ -1,11 +1,12 @@
-"""proto_tools/tools/causal_models/progen2/progen2_sample.py
+"""proto_tools/tools/causal_models/progen2/progen2_sample.py.
 
-ProGen2 sampling tool."""
+ProGen2 sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -33,7 +34,6 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input: ProGen2SampleInput
 class ProGen2SampleInput(BaseToolInput):
     """Input object for ProGen2 protein sequence generation.
 
@@ -53,7 +53,7 @@ class ProGen2SampleInput(BaseToolInput):
 
             The model will autoregressively generate proteins continuing from these prompts.
     """
-    prompts: List[str] = InputField(description="Prompt sequences for generation")
+    prompts: list[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
     @classmethod
@@ -65,7 +65,6 @@ class ProGen2SampleInput(BaseToolInput):
             raise ValueError("prompts must not be empty")
         return v
 
-# Output: ProGen2SampleOutput
 class ProGen2SampleOutput(BaseToolOutput):
     """Output from ProGen2 protein sequence generation.
 
@@ -91,18 +90,20 @@ class ProGen2SampleOutput(BaseToolOutput):
         '2' end) may be present depending on configuration.
     """
 
-    sequences: List[str] = Field(description="Generated protein sequences")
-    logits: Optional[List[List[List[float]]]] = Field(
+    sequences: list[str] = Field(description="Generated protein sequences")
+    logits: list[list[list[float]]] | None = Field(
         default=None,
         description="Per-position logits for generated tokens. Only present if return_logits=True.",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -112,15 +113,13 @@ class ProGen2SampleOutput(BaseToolOutput):
             if path.is_dir():
                 path = path / "progen2_sequences.fasta"
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
 
         elif file_format == "txt":
             if path.is_dir():
                 path = path / "progen2_sequences.txt"
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
 
         elif file_format == "json":
             if path.is_dir():
@@ -228,7 +227,7 @@ class ProGen2SampleConfig(BaseConfig):
         description="ProGen2 model checkpoint to use",
         reload_on_change=True,
     )
-    local_path: Optional[str] = ConfigField(
+    local_path: str | None = ConfigField(
         default=None,
         title="Local Model Path",
         description="Path to local model weights (if None, downloads from HuggingFace)",
@@ -332,6 +331,8 @@ def run_progen2_sample(
         config (ProGen2SampleConfig | None): Validated ProGen2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and output processing options.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ProGen2SampleOutput: Structured output containing:

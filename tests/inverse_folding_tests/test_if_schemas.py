@@ -1,9 +1,11 @@
-"""tests/inverse_folding_tests/test_if_schemas.py
+"""tests/inverse_folding_tests/test_if_schemas.py.
 
-Tests for inverse folding shared data models."""
+Tests for inverse folding shared data models.
+"""
+
+from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 import pytest
 from pydantic import Field
@@ -21,7 +23,7 @@ TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 @pytest.fixture(scope="module")
 def pdb_file_content() -> str:
-    with open(TEST_PDB_FILE, "r") as f:
+    with open(TEST_PDB_FILE) as f:
         return f.read()
 
 
@@ -102,7 +104,7 @@ def test_input_from_pdb_content(pdb_file_content: str):
 
 
 class _MockDesignedSequences(DesignedSequences):
-    custom_metric: List[float] = Field(
+    custom_metric: list[float] = Field(
         description="Custom metric for the designed sequences"
     )
 

@@ -1,7 +1,8 @@
-"""tests/structure_prediction_tests/test_sp_inputs.py
+"""tests/structure_prediction_tests/test_sp_inputs.py.
 
-Tests for structure prediction shared input data models."""
-from __future__ import annotations
+Tests for structure prediction shared input data models.
+"""
+from typing import ClassVar
 
 import pytest
 
@@ -26,22 +27,22 @@ _RNA_SEQ = "AUGCAUGC"
 
 
 class _AllTypesInput(StructurePredictionInput):
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
 
 class _ProteinOnlyInput(StructurePredictionInput):
-    SUPPORTED_ENTITY_TYPES = {"protein"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
 
 class _ProteinDNAInput(StructurePredictionInput):
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
 
 class _NoModificationsInput(StructurePredictionInput):
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
 
@@ -90,7 +91,7 @@ def test_complex_rejects_nonstring_chain():
 def test_input_normalises_complexes(complexes, expected_chain_sequences):
     input_obj = _AllTypesInput(complexes=complexes)
     assert len(input_obj.complexes) == len(expected_chain_sequences)
-    for comp, expected_seqs in zip(input_obj.complexes, expected_chain_sequences):
+    for comp, expected_seqs in zip(input_obj.complexes, expected_chain_sequences, strict=False):
         assert comp.chain_sequences == expected_seqs
 
 
@@ -677,8 +678,8 @@ def test_invalid_modification_error_shows_actual_residue():
 
 
 def test_invalid_modification_error_lists_allowed_modifications_for_actual_residue():
-    # Position 5 is 'P'; error should suggest HYP and other proline modifications
-    with pytest.raises(ValueError, match="Allowed modifications for 'P' in protein: .*HYP"):
+    # Position 5 is 'P' — error should suggest HYP and other proline modifications
+    with pytest.raises(ValueError, match=r"Allowed modifications for 'P' in protein: .*HYP"):
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",

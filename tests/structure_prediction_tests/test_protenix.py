@@ -1,8 +1,7 @@
-"""tests/structure_prediction_tests/test_protenix.py
+"""tests/structure_prediction_tests/test_protenix.py.
 
-Tests for Protenix."""
-
-from __future__ import annotations
+Tests for Protenix.
+"""
 
 import pytest
 from pydantic import ValidationError

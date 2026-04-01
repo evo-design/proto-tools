@@ -1,8 +1,7 @@
-"""tests/structure_prediction_tests/test_af3.py
+"""tests/structure_prediction_tests/test_af3.py.
 
-Tests for AlphaFold3."""
-
-from __future__ import annotations
+Tests for AlphaFold3.
+"""
 
 import json
 from unittest.mock import patch
@@ -48,7 +47,7 @@ def mock_af3_inference(tmp_path):
     captured_data = {}
 
     def mock_dispatch(tool_name, input_data, **kwargs):
-        with open(input_data["input_json_path"], "r") as f:
+        with open(input_data["input_json_path"]) as f:
             captured_data["input_json"] = json.load(f)
         return {
             "structure_pdb": dummy_pdb_path,

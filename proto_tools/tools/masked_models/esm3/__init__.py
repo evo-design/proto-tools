@@ -1,16 +1,18 @@
-from .esm3_embeddings import (
+"""ESM-3 multimodal protein language model."""
+
+from proto_tools.tools.masked_models.esm3.esm3_embeddings import (
     ESM3EmbeddingsConfig,
     ESM3EmbeddingsInput,
     ESM3EmbeddingsOutput,
     run_esm3_embeddings,
 )
-from .esm3_sample import (
+from proto_tools.tools.masked_models.esm3.esm3_sample import (
     ESM3SampleConfig,
     ESM3SampleInput,
     ESM3SampleOutput,
     run_esm3_sample,
 )
-from .esm3_score import (
+from proto_tools.tools.masked_models.esm3.esm3_score import (
     ESM3ScoringConfig,
     ESM3ScoringInput,
     ESM3ScoringOutput,

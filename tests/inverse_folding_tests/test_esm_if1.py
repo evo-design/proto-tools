@@ -1,6 +1,7 @@
-"""tests/inverse_folding_tests/test_esm_if1.py
+"""tests/inverse_folding_tests/test_esm_if1.py.
 
-Tests for ESM-IF1/ProteinDPO sampling and scoring."""
+Tests for ESM-IF1/ProteinDPO sampling and scoring.
+"""
 
 from pathlib import Path
 

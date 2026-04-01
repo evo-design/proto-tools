@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/boltz2/helpers.py
+"""proto_tools/tools/structure_prediction/boltz2/helpers.py.
 
 Shared helpers for Boltz2 structure prediction. Provides utilities for
 MSA CSV file writing and YAML input generation.

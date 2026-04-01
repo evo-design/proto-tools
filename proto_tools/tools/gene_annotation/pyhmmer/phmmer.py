@@ -1,21 +1,19 @@
-"""proto_tools/tools/gene_annotation/pyhmmer/phmmer.py
+"""proto_tools/tools/gene_annotation/pyhmmer/phmmer.py.
 
-PyHMMER phmmer tool: search protein sequences against protein sequences."""
+PyHMMER phmmer tool: search protein sequences against protein sequences.
+"""
 from __future__ import annotations
-
-from typing import List
 
 from pydantic import field_validator
 
-from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
-
-from .shared_data_models import (
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
     _build_dataframes,
 )
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import InputField, ToolInstance
 
 
 # ============================================================================
@@ -40,13 +38,13 @@ class PyPhmmerInput(PyHmmerInput):
             strings. The query sequences will be compared against these targets.
     """
 
-    target_sequences: List[str] = InputField(
+    target_sequences: list[str] = InputField(
         description="Target sequences as: single sequence string or list of sequence strings"
     )
 
     @field_validator("target_sequences", mode="before")
     @classmethod
-    def normalize_target_sequences(cls, value) -> List[str]:
+    def normalize_target_sequences(cls, value) -> list[str]:
         """Normalize target sequences to list of strings."""
         # Reuse the same logic as sequences validation
         return PyHmmerInput.normalize_sequences(value)
@@ -95,6 +93,8 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         config (PyPhmmerConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         PyPhmmerOutput: Structured output containing:
             - ``sequence_hits_df``: DataFrame with sequence-level hits
@@ -126,7 +126,6 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
         ...         result.sequence_hits_df['evalue'] < 1e-10
         ...     ]
     """
-
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

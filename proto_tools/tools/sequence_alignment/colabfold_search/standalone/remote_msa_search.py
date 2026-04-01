@@ -1,5 +1,4 @@
-"""
-remote_msa_search.py
+"""remote_msa_search.py.
 
 ColabFold remote MSA search standalone script for isolated venv execution.
 
@@ -14,7 +13,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +33,8 @@ class ColabFoldRemoteSearchWrapper:
         output_dir: str | Path,
         use_metagenomic_db: bool = False,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Run ColabFold remote MSA search.
+    ) -> dict[str, Any]:
+        """Run ColabFold remote MSA search.
 
         Args:
             sequences: List of protein sequences to search
@@ -63,7 +61,7 @@ class ColabFoldRemoteSearchWrapper:
         msa_paths = {}
         errors = []
 
-        for sequence, seq_id in zip(sequences, sequence_ids):
+        for sequence, seq_id in zip(sequences, sequence_ids, strict=False):
             try:
                 logger.debug(f"Running remote MSA search for {seq_id}...")
 
@@ -81,15 +79,12 @@ class ColabFoldRemoteSearchWrapper:
                 # The suffix depends on whether environmental DB is used:
                 # - use_env=True: {prefix}_env
                 # - use_env=False: {prefix}_all
-                if use_metagenomic_db:
-                    temp_results_dir = f"{temp_output_prefix}_env"
-                else:
-                    temp_results_dir = f"{temp_output_prefix}_all"
+                temp_results_dir = f"{temp_output_prefix}_env" if use_metagenomic_db else f"{temp_output_prefix}_all"
 
                 temp_results_path = Path(temp_results_dir)
 
                 # Debug: Check what directories and files exist
-                logger.debug(f"Looking for MSA files...")
+                logger.debug("Looking for MSA files...")
                 logger.debug(f"  Temp prefix: {temp_output_prefix}")
                 logger.debug(f"  Expected results dir: {temp_results_path}")
                 logger.debug(f"  Results dir exists: {temp_results_path.exists()}")
@@ -145,7 +140,7 @@ class ColabFoldRemoteSearchWrapper:
                     shutil.rmtree(temp_results_dir, ignore_errors=True)
 
             except Exception as e:
-                error_msg = f"Failed to generate MSA for {seq_id}: {str(e)}"
+                error_msg = f"Failed to generate MSA for {seq_id}: {e!s}"
                 logger.debug(f"Error: {error_msg}")
                 errors.append((seq_id, error_msg))
 
@@ -158,11 +153,11 @@ class ColabFoldRemoteSearchWrapper:
         }
 
         if errors:
-            result["errors"] = {seq_id: error for seq_id, error in errors}
+            result["errors"] = dict(errors)
 
         return result
 
-    def load(self, verbose: bool = False):
+    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
         """Load ColabFold remote search module."""
         logger.debug("Initializing ColabFold remote search")
 
@@ -205,7 +200,7 @@ if __name__ == "__main__":
     output_json_path = sys.argv[2]
 
     # Read input json
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     # Create wrapper and run search

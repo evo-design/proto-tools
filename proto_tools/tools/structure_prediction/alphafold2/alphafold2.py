@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/alphafold2/alphafold2.py
+"""proto_tools/tools/structure_prediction/alphafold2/alphafold2.py.
 
 Protein structure prediction using AlphaFold2 via ColabDesign.
 
@@ -10,7 +9,7 @@ using the original AlphaFold2 model through the ColabDesign JAX wrapper.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
 from tqdm import tqdm
@@ -18,6 +17,7 @@ from tqdm import tqdm
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
+    StructurePredictionComplex,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
@@ -56,14 +56,14 @@ class AlphaFold2Input(StructurePredictionInput):
         acids. Entity types are automatically inferred if not provided.
     """
 
-    SUPPORTED_ENTITY_TYPES = {"protein"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
     @field_validator("complexes", check_fields=False)
     @classmethod
     def validate_complexes(
-        cls, complexes: List[StructurePredictionComplex]
-    ) -> List[StructurePredictionComplex]:
+        cls, complexes: list[StructurePredictionComplex]
+    ) -> list[StructurePredictionComplex]:
         """Validate that complexes contain valid protein sequences.
 
         Args:
@@ -89,7 +89,7 @@ class AlphaFold2Input(StructurePredictionInput):
 
         return complexes
 
-    def prepare_complexes(self) -> List[Dict[str, Any]]:
+    def prepare_complexes(self) -> list[dict[str, Any]]:
         """Prepare complexes for AlphaFold2 inference.
 
         Returns:
@@ -182,7 +182,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         le=5,
         description="Number of model parameter sets to run and average (higher=better but slower)",
     )
-    seed: Optional[int] = ConfigField(
+    seed: int | None = ConfigField(
         title="Random Seed",
         default=None,
         description="Random seed for reproducibility. If None, uses non-deterministic initialization.",
@@ -267,7 +267,6 @@ def run_alphafold2(
         >>> result = run_alphafold2(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
     """
-
     prepared_complexes = inputs.prepare_complexes()
 
     structure_outputs = []

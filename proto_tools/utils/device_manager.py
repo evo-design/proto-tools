@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/device_manager.py
+"""proto_tools/utils/device_manager.py.
 
 Automatically tracks and manages GPU allocation across persistent workers,
 with LRU eviction, CPU offloading, and configurable strategies.
@@ -71,13 +70,14 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Generator
+from typing import Any
 from uuid import uuid4
 
-from .device import is_exclusive_process_mode, number_of_visible_gpus
+from proto_tools.utils.device import is_exclusive_process_mode, number_of_visible_gpus
 
 logger = logging.getLogger(__name__)
 
@@ -247,14 +247,13 @@ class DeviceManager:
         Under Exclusive_Process, an evicted subprocess retains its CUDA context
         and blocks other processes from using the GPU even after offloading to CPU.
         """
-        if self._offload_strategy == OffloadStrategy.CPU:
-            if is_exclusive_process_mode():
-                logger.warning(
-                    "GPU compute mode is Exclusive_Process; CPU offload strategy "
-                    "is incompatible (evicted subprocess retains CUDA context). "
-                    "Auto-switching to RESTART strategy."
-                )
-                self._offload_strategy = OffloadStrategy.RESTART
+        if self._offload_strategy == OffloadStrategy.CPU and is_exclusive_process_mode():
+            logger.warning(
+                "GPU compute mode is Exclusive_Process — CPU offload strategy "
+                "is incompatible (evicted subprocess retains CUDA context). "
+                "Auto-switching to RESTART strategy."
+            )
+            self._offload_strategy = OffloadStrategy.RESTART
 
     def configure(
         self,
@@ -335,13 +334,13 @@ class DeviceManager:
         3. If CUDA_VISIBLE_DEVICES is set, the auto-detected devices reflect
            the logical GPU numbering after CUDA's physical-to-logical mapping.
 
-        Returns
+        Returns:
         -------
         list[str]
             List of logical device IDs (e.g., ["cuda:0", "cuda:1"]) that
             DeviceManager will allocate from.
 
-        Raises
+        Raises:
         ------
         ValueError
             If managed_devices specifies device IDs that don't exist in the system.
@@ -425,11 +424,11 @@ class DeviceManager:
 
         Compatibility rules:
 
-        - ``"cpu"``: existing must be ``cpu``.
-        - ``"cuda"`` (auto single): any single CUDA device.
-        - ``"cudaxN"`` (auto multi): any N CUDA devices.
-        - ``"cuda:0"`` (specific): exact device match.
-        - ``"cuda:0,1"`` / ``"cuda:0,cuda:1"`` (specific multi): exact
+        - ``"cpu"`` — existing must be ``cpu``.
+        - ``"cuda"`` (auto single) — any single CUDA device.
+        - ``"cudaxN"`` (auto multi) — any N CUDA devices.
+        - ``"cuda:0"`` (specific) — exact device match.
+        - ``"cuda:0,1"`` / ``"cuda:0,cuda:1"`` (specific multi) — exact
           device list match.
         """
         if instance_name not in self._allocations:
@@ -442,10 +441,10 @@ class DeviceManager:
         spec = parse_device_string(device)
 
         if spec.devices is not None:
-            # Specific device(s) requested; must match exactly.
+            # Specific device(s) requested — must match exactly.
             compatible = existing.device_ids == spec.devices
         else:
-            # General CUDA requested; any GPU allocation with the
+            # General CUDA requested — any GPU allocation with the
             # right device count is compatible.
             compatible = (
                 existing_str != "cpu"
@@ -534,10 +533,8 @@ class DeviceManager:
     def _get_all_allocated_devices(self) -> set[str]:
         """Return set of all currently allocated device IDs.
 
-        Returns
-        -------
-        set[str]
-            Set of device IDs currently allocated (e.g., {"cuda:0", "cuda:1"})
+        Returns:
+            set[str]: Device IDs currently allocated (e.g., {"cuda:0", "cuda:1"}).
         """
         allocated = set()
         for alloc in self._allocations.values():
@@ -606,7 +603,7 @@ class DeviceManager:
         freed_devices = set(self._find_n_free_devices(n))
 
         if len(freed_devices) >= n:
-            return sorted(list(freed_devices))[:n]
+            return sorted(freed_devices)[:n]
 
         # Need to evict - sort PERSISTENT allocations by LRU
         # TRANSIENT allocations (one-shot leases) are never evicted
@@ -636,18 +633,13 @@ class DeviceManager:
                 f"after LRU eviction. Available: {sorted(freed_devices)}"
             )
 
-        return sorted(list(freed_devices))[:n]
+        return sorted(freed_devices)[:n]
 
     def _evict_allocation(self, allocation: DeviceAllocation) -> None:
         """Evict a specific allocation using the configured strategy.
 
         Calls the allocation's eviction_callback to actually move the model
         or shutdown the worker, then updates bookkeeping.
-
-        Note:
-            On Exclusive_Process GPUs, ``_escalate_for_exclusive_process``
-            (called at init/configure time) has already switched the strategy
-            to RESTART, so CPU offload is never used in that mode.
 
         Args:
             allocation (DeviceAllocation): The allocation to evict.
@@ -876,7 +868,7 @@ class DeviceManager:
             from proto_tools.utils.device import parse_device_string
             spec = parse_device_string(device)
 
-            # Validate callback: always required since a CPU allocation
+            # Validate callback — always required since a CPU allocation
             # may later be moved to GPU and need eviction support.
             if eviction_callback is None:
                 raise ValueError(
@@ -944,7 +936,7 @@ class DeviceManager:
         then automatically releases it on exit (including exceptions).
 
         Transient leases differ from persistent allocations:
-        - They are **never evicted**; persistent allocations are evicted first
+        - They are **never evicted** — persistent allocations are evicted first
         - They **wait** when all GPUs are held by other transient leases
         - They are **auto-released** on context exit
 
@@ -955,12 +947,12 @@ class DeviceManager:
             device (str): Device string (e.g., ``"cpu"``, ``"cuda"``, ``"cuda:0"``).
             timeout (float): Maximum seconds to wait for a GPU to become available.
 
-        Yields
+        Yields:
         ------
         str
             Resolved device string (e.g., "cuda:0").
 
-        Raises
+        Raises:
         ------
         TimeoutError
             If no GPU becomes available within timeout.
@@ -1018,7 +1010,8 @@ class DeviceManager:
                 f"Set device='cpu' in the tool config to run on CPU."
             )
 
-        noop_callback = lambda action: None
+        def noop_callback(action):  # noqa: ARG001 — required by tool interface
+            return None
         deadline = time.monotonic() + timeout
 
         with self._device_available:
@@ -1036,8 +1029,8 @@ class DeviceManager:
                         )
                     return result
 
-                except RuntimeError:
-                    # All GPUs occupied by transient leases; wait for release
+                except RuntimeError:  # noqa: PERF203 -- retry loop
+                    # All GPUs occupied by transient leases — wait for release
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise TimeoutError(
@@ -1067,15 +1060,9 @@ class DeviceManager:
     def get_device_status(self) -> dict[str, Any]:
         """Return current device allocation status with GPU memory information.
 
-        Returns
-        -------
-        dict
-            Status dictionary with keys:
-            - available_devices: List of all managed device IDs
-            - allocations: Dict mapping instance_name -> allocation info
-            - strategy: Current offload strategy
-            - allow_multiple: Whether multiple instances per device is allowed
-            - gpu_memory: List of dicts with memory info for each GPU (empty if no GPUs)
+        Returns:
+            dict[str, Any]: Status dictionary with available_devices, allocations,
+                offload_strategy, allow_multiple_per_device, and gpu_memory.
         """
         with self._instance_lock:
             allocations_info = {}
@@ -1095,9 +1082,8 @@ class DeviceManager:
             raw_gpu_info = get_gpu_memory_info()
 
             # Convert to GB and add device_id
-            gpu_memory = []
-            for gpu in raw_gpu_info:
-                gpu_memory.append({
+            gpu_memory = [
+                {
                     "device_id": f"cuda:{gpu['index']}",
                     "name": gpu['name'],
                     "total_gb": round(gpu['total_bytes'] / 1e9, 1),
@@ -1106,8 +1092,10 @@ class DeviceManager:
                     "utilization_percent": round(
                         (gpu['used_bytes'] / gpu['total_bytes'] * 100) if gpu['total_bytes'] > 0 else 0,
                         1
-                    )
-                })
+                    ),
+                }
+                for gpu in raw_gpu_info
+            ]
 
             return {
                 "available_devices": self._get_available_devices(),
@@ -1147,7 +1135,7 @@ class DeviceManager:
         >>> mem = dm.get_gpu_memory_used("cuda:0")
         >>> # mem includes memory from both inst1 AND inst2 (and any other processes)
 
-        Notes
+        Notes:
         -----
         - Returns TOTAL GPU memory, not per-instance
         - Cannot differentiate memory between processes without tracking PIDs
@@ -1217,7 +1205,7 @@ class DeviceManager:
         >>> print(f"Instance: {instance_mem['allocated_bytes'] / 1e9:.2f} GB")
         >>> print(f"Total GPU: {total_mem / 1e9:.2f} GB")
 
-        Notes
+        Notes:
         -----
         - Only works with persistent workers (``ToolInstance.persist_tool()``)
         - Calls through to ``ToolInstance.get_memory_stats()``
@@ -1254,7 +1242,7 @@ class DeviceManager:
         moves. Updates allocation record and invokes worker_callback to send
         the ``to_device`` command to the subprocess.
 
-        This is NOT used for eviction moves. Eviction is handled entirely
+        This is NOT used for eviction moves — eviction is handled entirely
         by ``_evict_allocation()`` (bookkeeping) + the eviction callback
         (worker command), which avoids lock ordering issues.
 
@@ -1262,6 +1250,8 @@ class DeviceManager:
             instance_name (str): Unique instance identifier (cache key).
             target_device (str): Target device ID (e.g., ``"cuda:1"``, ``"cpu"``) or
                 generic (``"cuda"``).
+
+            worker_callback: Callback invoked when a worker needs to be moved to a different device.
 
         Returns:
             str | None: The resolved device string, or None if the instance is not allocated.
@@ -1292,7 +1282,7 @@ class DeviceManager:
                 # Parse multi-GPU targets (e.g., "cuda:2,3" → ["cuda:2", "cuda:3"])
                 from proto_tools.utils.device import parse_device_string
                 spec = parse_device_string(target_device)
-                resolved_devices = spec.devices if spec.devices else [target_device]
+                resolved_devices = spec.devices or [target_device]
                 self._resolve_device_conflicts(
                     resolved_devices, exclude_instance=instance_name,
                 )

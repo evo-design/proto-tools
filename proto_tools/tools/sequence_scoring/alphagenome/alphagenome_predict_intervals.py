@@ -1,15 +1,22 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py.
 
-AlphaGenome batched interval prediction tool."""
+AlphaGenome batched interval prediction tool.
+"""
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, List, Union
+from typing import Any
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.sequence_scoring.alphagenome.shared_data_models import (
+    AlphaGenomeInterval,
+    AlphaGenomePredictConfig,
+    AlphaGenomePredictOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -17,12 +24,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
     require_hf_token,
-)
-
-from .shared_data_models import (
-    AlphaGenomeInterval,
-    AlphaGenomePredictConfig,
-    AlphaGenomePredictOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,13 +42,14 @@ class AlphaGenomePredictIntervalsInput(BaseToolInput):
             A single interval is auto-wrapped into a list.
     """
 
-    intervals: List[AlphaGenomeInterval] = InputField(
+    intervals: list[AlphaGenomeInterval] = InputField(
         description="Genomic intervals for prediction",
     )
 
     @field_validator("intervals", mode="before")
     @classmethod
     def normalize_intervals(cls, value: Any) -> list:
+        """Validate and normalize interval specifications from raw input."""
         if value is None:
             raise ValueError("intervals cannot be None")
         if not isinstance(value, list):
@@ -64,19 +66,21 @@ class AlphaGenomePredictIntervalsOutput(BaseToolOutput):
         results (list[AlphaGenomePredictOutput]): Per-interval prediction outputs.
     """
 
-    results: List[AlphaGenomePredictOutput] = Field(
+    results: list[AlphaGenomePredictOutput] = Field(
         description="Per-interval AlphaGenome prediction outputs",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "npy"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str) -> None:
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         payload = self.model_dump(mode="json")
 

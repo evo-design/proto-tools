@@ -1,10 +1,11 @@
-"""proto_tools/tools/causal_models/progen2/progen2_score.py
+"""proto_tools/tools/causal_models/progen2/progen2_score.py.
 
-ProGen2 scoring tool."""
+ProGen2 scoring tool.
+"""
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import field_validator
 
@@ -35,7 +36,6 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input: ProGen2ScoringInput
 class ProGen2ScoringInput(BaseToolInput):
     """Input for ProGen2 protein sequence scoring.
 
@@ -44,7 +44,7 @@ class ProGen2ScoringInput(BaseToolInput):
             automatically prepended if not present.
     """
 
-    sequences: List[str] = InputField(description="Protein sequences to score")
+    sequences: list[str] = InputField(description="Protein sequences to score")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -100,7 +100,7 @@ class ProGen2ScoringConfig(BaseConfig):
         description="ProGen2 model checkpoint to use",
         reload_on_change=True,
     )
-    local_path: Optional[str] = ConfigField(
+    local_path: str | None = ConfigField(
         title="Local Model Path",
         default=None,
         description="Path to local model weights",
@@ -166,6 +166,8 @@ def run_progen2_score(
             to score.
         config (ProGen2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ProGen2ScoringOutput: Contains SequenceScores for each input sequence with:

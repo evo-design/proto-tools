@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/tool_pool.py
+"""proto_tools/utils/tool_pool.py.
 
 Parallel fan-out across multiple devices for list-input tools.
 
@@ -12,10 +11,11 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from proto_tools.utils.device import (
     determine_visible_devices,
@@ -46,6 +46,7 @@ class PartialFailureError(RuntimeError):
         succeeded: list[tuple[int, Any]],
         failed: list[dict],
     ):
+        """Initialize PartialFailureError."""
         super().__init__(message)
         self.succeeded = succeeded
         self.failed = failed
@@ -211,12 +212,12 @@ class ToolPool:
         self,
         devices: list[str] | str | None = None,
     ):
-        """
-        Args:
-            devices: Device strings for the pool. Accepts a list
-                (e.g. ``["cuda:0", "cuda:1"]``), a single string
-                (e.g. ``"cuda:0"``), or ``None`` to auto-detect all
-                visible GPUs.
+        """Args:.
+
+        devices: Device strings for the pool. Accepts a list
+            (e.g. ``["cuda:0", "cuda:1"]``), a single string
+            (e.g. ``"cuda:0"``), or ``None`` to auto-detect all
+            visible GPUs.
         """
         if isinstance(devices, str):
             devices = [devices]
@@ -371,7 +372,7 @@ class ToolPool:
                         )
                     indexed = [
                         (wi.original_index, item)
-                        for wi, item in zip(assignment.items, output_items)
+                        for wi, item in zip(assignment.items, output_items, strict=False)
                     ]
                     return indexed, result
                 finally:
@@ -383,9 +384,9 @@ class ToolPool:
                 contexts = [contextvars.copy_context() for _ in active_assignments]
                 futures = [
                     executor.submit(ctx.run, _run_local_partition, a)
-                    for ctx, a in zip(contexts, active_assignments)
+                    for ctx, a in zip(contexts, active_assignments, strict=False)
                 ]
-                for future, assignment in zip(futures, active_assignments):
+                for future, assignment in zip(futures, active_assignments, strict=False):
                     try:
                         indexed, result = future.result()
                     except Exception as e:
@@ -426,7 +427,7 @@ class ToolPool:
             n_items, len(work_items), len(capabilities),
         )
 
-        merged_output = output_model.model_construct(
+        return output_model.model_construct(
             **{
                 iterable_output_field: merged_items,
                 "warnings": all_warnings,
@@ -435,4 +436,3 @@ class ToolPool:
             }
         )
 
-        return merged_output

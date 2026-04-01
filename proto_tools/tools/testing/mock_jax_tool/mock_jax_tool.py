@@ -1,8 +1,9 @@
-"""proto_tools/tools/testing/mock_jax_tool/mock_jax_tool.py
+"""proto_tools/tools/testing/mock_jax_tool/mock_jax_tool.py.
 
 This is a minimal JAX-pattern tool designed for testing device management with
 JAX semantics: no in-place .to(), model reload on device change, and
-get_jax_memory_stats() reporting."""
+get_jax_memory_stats() reporting.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -87,10 +88,12 @@ class MockJAXToolOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "txt"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -138,7 +141,6 @@ def run_mock_jax_tool(
     instance=None,
 ) -> MockJAXToolOutput:
     """Run mock JAX tool (minimal model with JAX device semantics)."""
-
     result = ToolInstance.dispatch(
         "mock_jax_tool",
         {

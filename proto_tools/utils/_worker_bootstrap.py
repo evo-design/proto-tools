@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""
-proto_tools/utils/_worker_bootstrap.py
+"""proto_tools/utils/_worker_bootstrap.py.
 
 Usage:
     python _worker_bootstrap.py <standalone_script_path>
@@ -20,6 +19,7 @@ operations directly based on the ``operation`` key in the input dict.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
@@ -182,10 +182,8 @@ def _send_response(json_out: Any, response_json: str) -> None:
                 f.write(response_json)
         except Exception:
             # Clean up on write failure
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(path)
-            except OSError:
-                pass
             raise
         json_out.write(f"PROTO_FILE:{path}\n")
         json_out.flush()
@@ -222,8 +220,8 @@ def main() -> None:
     sys.stderr.flush()
 
     # Main loop: read JSON requests from stdin, write JSON responses to stdout
-    for line in sys.stdin:
-        line = line.strip()
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
         if not line:
             continue
 

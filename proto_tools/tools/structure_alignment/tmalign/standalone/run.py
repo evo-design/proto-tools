@@ -1,5 +1,4 @@
-"""
-TMalign standalone runner for ToolInstance venv execution.
+"""TMalign standalone runner for ToolInstance venv execution.
 
 Pairwise protein structure alignment via TM-score.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -7,8 +6,6 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
-
-from __future__ import annotations
 
 import json
 import re

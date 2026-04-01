@@ -1,6 +1,4 @@
-"""
-Boltz2 inference implementation.
-"""
+"""Boltz2 inference implementation."""
 
 from __future__ import annotations
 
@@ -11,7 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import torch
 
@@ -21,12 +19,11 @@ logger = logging.getLogger(__name__)
 def _prepare_output_values(value: any) -> any:
     """Prepare Boltz output dictionaries by unpacking them into lists."""
     if isinstance(value, dict):
-        list_value = []
-        for k in range(len(value)):
-            list_value.append(_prepare_output_values(value[str(k)]))
-        return list_value
-    else:
-        return value
+        return [
+            _prepare_output_values(value[str(k)])
+            for k in range(len(value))
+        ]
+    return value
 
 
 class Boltz2Model:
@@ -62,9 +59,8 @@ class Boltz2Model:
         diffusion_samples: int = 25,
         num_workers: int = 4,
         verbose: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Run Boltz2 structure prediction.
+    ) -> dict[str, Any]:
+        """Run Boltz2 structure prediction.
 
         Args:
             input_yaml_path: Path to input YAML file
@@ -83,11 +79,11 @@ class Boltz2Model:
         if not self._loaded:
             self.load(verbose)
 
-        logger.debug(f"\n=== Boltz2 Prediction ===")
+        logger.debug("\n=== Boltz2 Prediction ===")
         logger.debug(f"Input YAML path: {input_yaml_path}")
         logger.debug(f"Output directory: {output_dir}")
-        logger.debug(f"Reading input YAML content...")
-        with open(input_yaml_path, "r") as f:
+        logger.debug("Reading input YAML content...")
+        with open(input_yaml_path) as f:
             yaml_content = f.read()
         logger.debug(f"\n--- Input YAML ---\n{yaml_content}\n------------------\n")
         sys.stdout.flush()
@@ -107,7 +103,7 @@ class Boltz2Model:
             f"--sampling_steps={sampling_steps}",
             "--output_format=mmcif",
             f"--devices={num_devices}",
-            f"--cache={str(self.cache_dir)}",
+            f"--cache={self.cache_dir!s}",
             f"--num_workers={num_workers}",
         ]
 
@@ -130,13 +126,13 @@ class Boltz2Model:
             stderr=sys.stderr if verbose else subprocess.DEVNULL,
         )
 
-        logger.debug(f"Boltz prediction completed")
+        logger.debug("Boltz prediction completed")
         sys.stdout.flush()
 
         # Extract the output
         return self._extract_boltz_output(output_dir, input_yaml_path)
 
-    def _extract_boltz_output(self, output_dir: str, input_path: str) -> Dict[str, Any]:
+    def _extract_boltz_output(self, output_dir: str, input_path: str) -> dict[str, Any]:
         """Extract structure and metrics from Boltz prediction outputs.
 
         Args:
@@ -162,7 +158,7 @@ class Boltz2Model:
         if not confidence_file.exists():
             raise FileNotFoundError(f"Confidence file not found: {confidence_file}")
 
-        with open(confidence_file, "r") as f:
+        with open(confidence_file) as f:
             confidence_data = json.load(f)
         metrics = {
             key: _prepare_output_values(value) for key, value in confidence_data.items()
@@ -178,7 +174,7 @@ class Boltz2Model:
             "metrics": metrics,
         }
 
-    def load(self, verbose: bool = False):
+    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
         """Load Boltz2 model components."""
         logger.debug("Initializing Boltz2")
 
@@ -224,8 +220,7 @@ def dispatch(input_dict: dict) -> dict:
             num_workers=input_dict.get("num_workers", 4),
             verbose=input_dict.get("verbose", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 def to_device(device: str) -> dict:
@@ -247,7 +242,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

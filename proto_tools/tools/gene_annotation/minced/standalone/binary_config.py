@@ -1,5 +1,4 @@
-"""
-MinCED binary download and extraction configuration.
+"""MinCED binary download and extraction configuration.
 
 MinCED is a Java tool (platform-independent JAR), so a single URL
 serves all platforms. The extract function copies the JAR and generates
@@ -7,8 +6,6 @@ a shell wrapper script that invokes it via `java -jar`.
 
 Used by the shared install_binary.py utility during venv setup.
 """
-
-from __future__ import annotations
 
 import stat
 from pathlib import Path
@@ -43,10 +40,10 @@ def extract(archive_path: Path, bin_dir: Path) -> None:
     # Copy the JAR
     jar_dest = bin_dir / "minced.jar"
     shutil.copy2(archive_path, jar_dest)
-    print(f"  Installed: minced.jar")
+    print("  Installed: minced.jar")
 
     # Generate the shell wrapper
     wrapper_dest = bin_dir / "minced"
     wrapper_dest.write_text(_WRAPPER_SCRIPT)
     wrapper_dest.chmod(wrapper_dest.stat().st_mode | stat.S_IEXEC)
-    print(f"  Installed: minced (wrapper)")
+    print("  Installed: minced (wrapper)")

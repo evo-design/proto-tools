@@ -1,5 +1,4 @@
-"""
-Standalone runner script for MAFFT alignment.
+"""Standalone runner script for MAFFT alignment.
 
 This script runs in an isolated venv with MAFFT binaries installed.
 It receives input via JSON and writes output via JSON.
@@ -47,8 +46,7 @@ ALIGNMENT_METHOD_FLAGS = {
 
 
 def find_mafft_binary() -> Path:
-    """
-    Find the MAFFT binary in the venv's bin directory.
+    """Find the MAFFT binary in the venv's bin directory.
 
     Returns:
         Path to the mafft executable
@@ -76,8 +74,7 @@ def run_mafft_alignment(
     max_iterations: int = 0,
     threads: int = 1,
 ) -> dict:
-    """
-    Run MAFFT alignment on the given sequences.
+    """Run MAFFT alignment on the given sequences.
 
     Args:
         sequences: List of sequence strings to align
@@ -100,7 +97,7 @@ def run_mafft_alignment(
         input_fasta = tmp_path / "input.fasta"
         records = [
             SeqRecord(Seq(seq), id=seq_id, description="")
-            for seq, seq_id in zip(sequences, sequence_ids)
+            for seq, seq_id in zip(sequences, sequence_ids, strict=False)
         ]
         SeqIO.write(records, input_fasta, "fasta")
 
@@ -198,7 +195,7 @@ def main():
     output_path = Path(sys.argv[2])
 
     # Read input JSON
-    with open(input_path, "r") as f:
+    with open(input_path) as f:
         input_data = json.load(f)
 
     # Extract parameters

@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_integration.py
+"""tests/tool_infra_tests/test_device_manager/test_integration.py.
 
-Tests for DeviceManager integration with real tool instances."""
+Tests for DeviceManager integration with real tool instances.
+"""
 
 import time
 

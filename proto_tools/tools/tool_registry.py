@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/tool_registry.py
+"""proto_tools/tools/tool_registry.py.
 
 Tool registry for managing tool discovery and schema generation.
 
@@ -13,10 +12,11 @@ import logging
 import time
 import traceback
 import warnings
+from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_serializer
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
@@ -59,8 +59,7 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
 
 
 class ToolSpec(BaseModel):
-    """
-    Specification for a registered tool.
+    """Specification for a registered tool.
 
     Stores tool metadata in the registry.
 
@@ -100,13 +99,13 @@ class ToolSpec(BaseModel):
     )
 
     # Configuration model - serialized as JSON Schema
-    config_model: Type[BaseModel] = Field(
+    config_model: type[BaseModel] = Field(
         description="Pydantic model for configuration validation and schema generation"
     )
 
     # Private fields - excluded from serialization
-    input_model: Type[BaseToolInput] = Field(exclude=True)
-    output_model: Type[BaseToolOutput] = Field(exclude=True)
+    input_model: type[BaseToolInput] = Field(exclude=True)
+    output_model: type[BaseToolOutput] = Field(exclude=True)
     function: Callable = Field(exclude=True)
     source_file: Path = Field(exclude=True, description="Path to the source file where the tool function is defined")
     example_input: Callable[[], BaseToolInput] | None = Field(
@@ -131,7 +130,7 @@ class ToolSpec(BaseModel):
     }
 
     @field_serializer('config_model')
-    def serialize_config_model(self, config_model: Type[BaseModel]) -> Dict[str, Any]:
+    def serialize_config_model(self, config_model: type[BaseModel]) -> dict[str, Any]:
         """Serialize config_model as standard JSON Schema."""
         return config_model.model_json_schema()
 
@@ -148,15 +147,14 @@ class _LenientSchemaGenerator(GenerateJsonSchema):
     """
 
     def handle_invalid_for_json_schema(
-        self, schema, error_info: str
+        self, schema, error_info: str  # noqa: ARG002 — required by tool interface
     ) -> JsonSchemaValue:
         # Return a placeholder instead of raising
         return {"type": "object", "description": f"Non-serializable type: {error_info}"}
 
 
 class ToolRegistry:
-    """
-    Registry for tool discovery and schema generation.
+    """Registry for tool discovery and schema generation.
 
     Provides discovery, schema generation, and factory methods for tools.
     Registration happens at import time via the @tool decorator.
@@ -191,15 +189,15 @@ class ToolRegistry:
         >>> result = run_blast(config)
     """
 
-    _registry: Dict[str, ToolSpec] = {}
+    _registry: ClassVar[dict[str, ToolSpec]] = {}
 
     @classmethod
     def _try_dispatch(
         cls,
-        key: str,
-        inputs: BaseToolInput,
-        config: Optional[BaseConfig],
-    ) -> Optional[BaseToolOutput]:
+        key: str,  # noqa: ARG003 — required by descriptor protocol
+        inputs: BaseToolInput,  # noqa: ARG003 — required by descriptor protocol
+        config: BaseConfig | None,  # noqa: ARG003 — required by descriptor protocol
+    ) -> BaseToolOutput | None:
         """Extension point for external tool dispatch.
 
         Monkeypatch this classmethod to route tool calls to external
@@ -223,9 +221,9 @@ class ToolRegistry:
         key: str,
         label: str,
         category: str,
-        input_class: Type[BaseToolInput],
-        config_class: Type[BaseConfig],
-        output_class: Type[BaseToolOutput],
+        input_class: type[BaseToolInput],
+        config_class: type[BaseConfig],
+        output_class: type[BaseToolOutput],
         description: str,
         uses_gpu: bool = False,
         device_count: str = "1",
@@ -234,8 +232,7 @@ class ToolRegistry:
         iterable_output_field: str | None = None,
         cacheable: bool = False,
     ):
-        """
-        Decorator to register a tool function and wrap execution with metadata tracking.
+        """Decorator to register a tool function and wrap execution with metadata tracking.
 
         This decorator:
         1. Registers the tool in the registry with its metadata
@@ -344,7 +341,7 @@ class ToolRegistry:
                         # Expand dedup if needed
                         if deduped and len(deduped.unique_items) < len(original_items):
                             cached_list = [cached_list[uid] for _, uid in deduped.index_map]
-                        result = output_class(
+                        return output_class(
                             tool_id=key,
                             execution_time=0.0,
                             success=True,
@@ -352,7 +349,6 @@ class ToolRegistry:
                             metadata={},
                             **{spec.iterable_output_field: cached_list},
                         )
-                        return result
 
                     # Narrow inputs to uncached items only
                     if strip is not None and strip.uncached_items:
@@ -379,19 +375,17 @@ class ToolRegistry:
                     is_pool_executing,
                 )
                 pool = get_active_pool()
-                if pool is not None and not is_pool_executing():
-                    if spec and spec.iterable_input_field is not None:
-                        result = pool._parallel_dispatch(key, func, inputs, config)
-                        result.tool_id = key
-                        result.success = True
-                        result.execution_time = time.time() - start_time
-                        if result.timestamp is None:
-                            result.timestamp = datetime.now()
-                        result = _post_dispatch_cache_and_expand(
-                            key, spec, cacheable, result, strip, deduped,
-                            original_items, whole_cache_key,
-                        )
-                        return result
+                if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
+                    result = pool._parallel_dispatch(key, func, inputs, config)
+                    result.tool_id = key
+                    result.success = True
+                    result.execution_time = time.time() - start_time
+                    if result.timestamp is None:
+                        result.timestamp = datetime.now()
+                    return _post_dispatch_cache_and_expand(
+                        key, spec, cacheable, result, strip, deduped,
+                        original_items, whole_cache_key,
+                    )
 
                 # Extension point: try external dispatch before local execution
                 try:
@@ -407,11 +401,10 @@ class ToolRegistry:
                     dispatched.execution_time = time.time() - start_time
                     if dispatched.timestamp is None:
                         dispatched.timestamp = datetime.now()
-                    result = _post_dispatch_cache_and_expand(
+                    return _post_dispatch_cache_and_expand(
                         key, spec, cacheable, dispatched, strip, deduped,
                         original_items, whole_cache_key,
                     )
-                    return result
 
                 for attempt in range(1 + MAX_RETRIES):
                     try:
@@ -459,7 +452,7 @@ class ToolRegistry:
                             logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
                             return result
 
-                    except _RETRYABLE_EXCEPTIONS as e:
+                    except _RETRYABLE_EXCEPTIONS as e:  # noqa: PERF203 -- retry loop
                         last_exception = e
                         last_traceback = traceback.format_exc()
                         if attempt < MAX_RETRIES:
@@ -517,9 +510,8 @@ class ToolRegistry:
         return decorator
 
     @classmethod
-    def list_all(cls) -> List[ToolSpec]:
-        """
-        List all registered tools as Pydantic models.
+    def list_all(cls) -> list[ToolSpec]:
+        """List all registered tools as Pydantic models.
 
         Returns all registered tools as ToolSpec models.
 
@@ -530,8 +522,7 @@ class ToolRegistry:
 
     @classmethod
     def get(cls, key: str) -> ToolSpec:
-        """
-        Get tool spec by key.
+        """Get tool spec by key.
 
         Args:
             key (str): Tool identifier
@@ -548,19 +539,19 @@ class ToolRegistry:
         return cls._registry[key]
 
     @classmethod
-    def get_input_schema(cls, key: str) -> Dict[str, Any]:
+    def get_input_schema(cls, key: str) -> dict[str, Any]:
         """Get JSON schema for tool inputs."""
         spec = cls.get(key)
         return spec.input_model.model_json_schema()
 
     @classmethod
-    def get_config_schema(cls, key: str) -> Dict[str, Any]:
+    def get_config_schema(cls, key: str) -> dict[str, Any]:
         """Get JSON schema for tool configuration."""
         spec = cls.get(key)
         return spec.config_model.model_json_schema()
 
     @classmethod
-    def get_output_schema(cls, key: str) -> Dict[str, Any]:
+    def get_output_schema(cls, key: str) -> dict[str, Any]:
         """Get JSON schema for tool output.
 
         Uses a lenient schema generator that replaces non-serializable types
@@ -576,7 +567,7 @@ class ToolRegistry:
         )
 
     @classmethod
-    def get_schemas(cls, key: str) -> Dict[str, Dict[str, Any]]:
+    def get_schemas(cls, key: str) -> dict[str, dict[str, Any]]:
         """Get input, config, and output schemas."""
         return {
             "inputs": cls.get_input_schema(key),
@@ -598,19 +589,18 @@ class ToolRegistry:
         return len(cls._registry)
 
     @classmethod
-    def list_gpu_tools(cls) -> List[ToolSpec]:
+    def list_gpu_tools(cls) -> list[ToolSpec]:
         """List all registered tools that require a GPU."""
         return [spec for spec in cls._registry.values() if spec.uses_gpu]
 
     @classmethod
-    def list_cpu_tools(cls) -> List[ToolSpec]:
+    def list_cpu_tools(cls) -> list[ToolSpec]:
         """List all registered tools that do not require a GPU."""
         return [spec for spec in cls._registry.values() if not spec.uses_gpu]
 
     @classmethod
-    def get_tool_categories(cls) -> Dict[str, str]:
-        """
-        Get mapping of tool names to their categories.
+    def get_tool_categories(cls) -> dict[str, str]:
+        """Get mapping of tool names to their categories.
 
         Extracts tool name from registry key (e.g., 'blast-search' -> 'blast')
         and maps to category. Handles multi-word tool names like 'colabfold_search'.
@@ -618,23 +608,18 @@ class ToolRegistry:
         Returns:
             dict[str, str]: Dict mapping tool name to category (e.g., {'blast': 'gene_annotation'})
         """
-        tool_categories: Dict[str, str] = {}
+        tool_categories: dict[str, str] = {}
         for spec in cls._registry.values():
             # Extract tool name from key: 'blast-search' -> 'blast'
             # Handle multi-part names: 'colabfold-search' -> 'colabfold_search'
             key_parts = spec.key.split("-")
-            if len(key_parts) >= 2:
-                # Join all but last part (the action) with underscores
-                tool_name = "_".join(key_parts[:-1])
-            else:
-                tool_name = spec.key
+            tool_name = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
             tool_categories[tool_name] = spec.category
         return tool_categories
 
     @classmethod
     def get_citation(cls, key: str) -> str | None:
-        """
-        Get BibTeX citation for a tool by key.
+        """Get BibTeX citation for a tool by key.
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
@@ -657,8 +642,7 @@ class ToolRegistry:
 
     @classmethod
     def list_citations(cls) -> dict[str, str]:
-        """
-        Get all available citations as {tool_key: bibtex_string}.
+        """Get all available citations as {tool_key: bibtex_string}.
 
         Returns:
             dict[str, str]: Dictionary mapping tool keys to their BibTeX citations.
@@ -672,13 +656,12 @@ class ToolRegistry:
         return citations
 
     @classmethod
-    def _check_duplicate(cls, key: str, attempted_name: str = None) -> None:
-        """
-        Check for duplicate registration.
+    def _check_duplicate(cls, key: str, attempted_name: str | None = None) -> None:
+        """Check for duplicate registration.
 
         Args:
             key (str): Tool registry key to check.
-            attempted_name (str): Name of the function attempting registration.
+            attempted_name (str | None): Name of the function attempting registration.
 
         Raises:
             ValueError: If key already exists in registry
@@ -694,7 +677,7 @@ class ToolRegistry:
 
 
 def _make_error_output(
-    output_class: Type[BaseToolOutput],
+    output_class: type[BaseToolOutput],
     key: str,
     start_time: float,
     exception: Exception,
@@ -764,7 +747,7 @@ def _post_dispatch_cache_and_expand(
     return result
 
 
-def _re_emit_warnings(warning_list: List[Warning]) -> None:
+def _re_emit_warnings(warning_list: list[Warning]) -> None:
     """Re-emit warnings so they still get logged/printed."""
     for w in warning_list:
         warnings.warn_explicit(
@@ -773,8 +756,7 @@ def _re_emit_warnings(warning_list: List[Warning]) -> None:
 
 
 def _find_citation_file(tool_key: str) -> Path | None:
-    """
-    Find cite.bib for a tool by searching tool directories.
+    """Find cite.bib for a tool by searching tool directories.
 
     Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/).
     Handles underscore/hyphen normalization.

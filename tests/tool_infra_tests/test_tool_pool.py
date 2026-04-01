@@ -1,10 +1,10 @@
-"""tests/tool_infra_tests/test_tool_pool.py
+"""tests/tool_infra_tests/test_tool_pool.py.
 
-Tests for ToolPool parallel fan-out across devices."""
+Tests for ToolPool parallel fan-out across devices.
+"""
 from __future__ import annotations
 
 import threading
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,7 +40,7 @@ def clean_registry():
 # ── Mock models ─────────────────────────────────────────────────────────────
 
 class MockInput(BaseToolInput):
-    items: List[str] = Field(description="Items to process")
+    items: list[str] = Field(description="Items to process")
 
 
 class MockConfig(BaseConfig):
@@ -48,7 +48,7 @@ class MockConfig(BaseConfig):
 
 
 class MockOutput(MockToolOutputBase):
-    results: List[str] = Field(description="Processed results")
+    results: list[str] = Field(description="Processed results")
 
 
 class MockNonIterableInput(BaseToolInput):
@@ -256,7 +256,7 @@ def test_contextvar_nesting_raises_error():
 
 def test_dispatch_items_split_across_devices(clean_registry):
     """Items should be split across available devices."""
-    func, call_log = _register_mock_tool(clean_registry)
+    func, _call_log = _register_mock_tool(clean_registry)
 
     pool = ToolPool(devices=["cuda:0", "cuda:1"])
     pool._devices = ["cuda:0", "cuda:1"]
@@ -274,7 +274,7 @@ def test_dispatch_items_split_across_devices(clean_registry):
 
 def test_dispatch_results_reassembled_in_order(clean_registry):
     """Output items must match original input order."""
-    func, call_log = _register_mock_tool(clean_registry)
+    func, _call_log = _register_mock_tool(clean_registry)
 
     pool = ToolPool(devices=["cuda:0", "cuda:1", "cuda:2"])
     pool._devices = ["cuda:0", "cuda:1", "cuda:2"]
@@ -705,7 +705,7 @@ def test_local_partition_failure_preserves_other_results(clean_registry):
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
 
-    with pytest.raises(PartialFailureError, match="1 partition.*failed") as exc_info:
+    with pytest.raises(PartialFailureError, match=r"1 partition.*failed") as exc_info:
         pool._parallel_dispatch("fail-tool", run_fail_tool, inputs, config)
 
     err = exc_info.value
@@ -740,7 +740,7 @@ def test_all_partitions_fail(clean_registry):
     inputs = MockInput(items=["a", "b", "c", "d"])
     config = MockConfig(device="cuda")
 
-    with pytest.raises(PartialFailureError, match="2 partition.*failed") as exc_info:
+    with pytest.raises(PartialFailureError, match=r"2 partition.*failed") as exc_info:
         pool._parallel_dispatch("all-fail-tool", run_all_fail, inputs, config)
 
     err = exc_info.value

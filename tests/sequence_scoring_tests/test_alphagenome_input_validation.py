@@ -1,8 +1,7 @@
-"""tests/sequence_scoring_tests/test_alphagenome_input_validation.py
+"""tests/sequence_scoring_tests/test_alphagenome_input_validation.py.
 
-Tests for AlphaGenome."""
-
-from __future__ import annotations
+Tests for AlphaGenome.
+"""
 
 import pytest
 from pydantic import ValidationError
@@ -241,14 +240,14 @@ def test_score_intervals_rejects_none():
 
 # ── AlphaGenomePredictVariantsInput ──────────────────────────────────────────
 
-_VALID_VARIANT = dict(
-    chromosome="chr1",
-    interval_start=0,
-    interval_end=16_384,
-    variant_position=1024,
-    reference_bases="A",
-    alternate_bases="G",
-)
+_VALID_VARIANT = {
+    "chromosome": "chr1",
+    "interval_start": 0,
+    "interval_end": 16_384,
+    "variant_position": 1024,
+    "reference_bases": "A",
+    "alternate_bases": "G",
+}
 
 
 def test_predict_variants_auto_wraps_single_variant():

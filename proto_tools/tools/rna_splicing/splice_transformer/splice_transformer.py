@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/rna_splicing/splice_transformer/splice_transformer.py
+"""proto_tools/tools/rna_splicing/splice_transformer/splice_transformer.py.
 
 Tissue-specific splice site prediction using SpliceTransformer.
 """
@@ -7,7 +6,10 @@ from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import List, Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import numpy as np
 from pydantic import Field, field_serializer, model_validator
@@ -32,6 +34,8 @@ TARGET_LENGTH = 1000
 
 
 class SpliceTransformerType(Enum):
+    """Splice site classification type (neither, acceptor, or donor)."""
+
     NEITHER = 0
     ACCEPTOR = 1
     DONOR = 2
@@ -111,18 +115,19 @@ class SpliceTransformerInput(BaseToolInput):
         but uses the full context for accurate splice site identification.
     """
 
-    target_seqs: List[str] = InputField(
+    target_seqs: list[str] = InputField(
         description="Sequence(s) on which to make splicing predictions",
     )
-    left_contexts: List[str] = InputField(
+    left_contexts: list[str] = InputField(
         description="Sequence(s) of the left context. Must be the same length as target_seqs",
     )
-    right_contexts: List[str] = InputField(
+    right_contexts: list[str] = InputField(
         description="Sequence(s) of the right context. Must be the same length as target_seqs",
     )
 
     @model_validator(mode="after")
     def validate_input_format(self):
+        """Validate that the input sequence format is correct."""
         if len(self.target_seqs) != len(self.left_contexts):
             raise ValueError(
                 "Number of target sequences must be the same as the number of "
@@ -223,14 +228,17 @@ class SpliceTransformerOutput(BaseToolOutput):
 
     @field_serializer('prediction')
     def serialize_prediction(self, value: np.ndarray) -> list:
+        """Serialize a prediction array to a JSON-compatible list."""
         return value.tolist()
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["npy", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "npy"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -295,6 +303,8 @@ def run_splice_transformer(
             and their left/right context sequences.
         config (SpliceTransformerConfig | None): Validated SpliceTransformer configuration
             specifying context length and device settings.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         SpliceTransformerOutput: Structured output containing:

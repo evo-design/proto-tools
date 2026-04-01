@@ -28,6 +28,7 @@ class TinyModel(nn.Module):
     """Minimal PyTorch model that allocates a realistic amount of GPU memory."""
 
     def __init__(self, input_size: int = 4, hidden_size: int = 128, output_size: int = 4, memory_mb: int = 512):
+        """Initialize TinyModel."""
         super().__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
@@ -37,10 +38,10 @@ class TinyModel(nn.Module):
         self.register_buffer("_memory_buffer", torch.zeros(num_floats))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run the forward pass."""
         x = self.fc1(x)
         x = self.relu(x)
-        x = self.fc2(x)
-        return x
+        return self.fc2(x)
 
 
 # ============================================================================
@@ -89,6 +90,7 @@ class MockPyTorchMultiGPUToolModel:
     """Wrapper managing two tiny PyTorch models on separate devices."""
 
     def __init__(self, hidden_size: int = 128, memory_mb: int = 512, device: str = "cuda:0,cuda:1"):
+        """Initialize MockPyTorchMultiGPUToolModel."""
         self.hidden_size = hidden_size
         self.memory_mb = memory_mb
         self.device_a, self.device_b = _parse_device_pair(device)
@@ -194,8 +196,7 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        return {"success": True, "device": device, "note": "models not loaded yet"}
+    return {"success": True, "device": device, "note": "models not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

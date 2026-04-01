@@ -1,6 +1,7 @@
-"""tests/structure_tests/test_structure.py
+"""tests/structure_tests/test_structure.py.
 
-Tests for the Structure entity."""
+Tests for the Structure entity.
+"""
 
 from pathlib import Path
 
@@ -15,13 +16,13 @@ _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
 
 @pytest.fixture(scope="module")
 def test_pdb_file_content() -> str:
-    with open(_TEST_PDB_FILE, "r") as f:
+    with open(_TEST_PDB_FILE) as f:
         return f.read()
 
 
 @pytest.fixture(scope="module")
 def test_cif_file_content() -> str:
-    with open(_TEST_CIF_FILE, "r") as f:
+    with open(_TEST_CIF_FILE) as f:
         return f.read()
 
 
@@ -226,7 +227,7 @@ def test_get_chain_sequence_specific_chain(protein_from_pdb_file):
 
 
 def test_get_chain_sequence_invalid_chain(protein_from_pdb_file):
-    with pytest.raises(ValueError, match="Chain .* not found"):
+    with pytest.raises(ValueError, match=r"Chain .* not found"):
         protein_from_pdb_file.get_chain_sequence("INVALID_CHAIN_XYZ")
 
 

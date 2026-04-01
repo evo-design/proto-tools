@@ -1,8 +1,7 @@
-"""tests/gene_annotation_tests/test_minced.py
+"""tests/gene_annotation_tests/test_minced.py.
 
-Tests for the MinCED CRISPR array detection tool."""
-
-from __future__ import annotations
+Tests for the MinCED CRISPR array detection tool.
+"""
 
 import pytest
 from pydantic import ValidationError

@@ -1,6 +1,4 @@
-"""
-Local ESM3 inference implementation.
-"""
+"""Local ESM3 inference implementation."""
 from __future__ import annotations
 
 import json
@@ -8,7 +6,7 @@ import logging
 import math
 import sys
 from logging import getLogger
-from typing import Any, Dict, List, Literal, Tuple
+from typing import Any, Literal
 
 import torch
 from tqdm import tqdm
@@ -19,21 +17,19 @@ logger = getLogger(__name__)
 logging.getLogger('esm').setLevel(logging.ERROR)
 logging.getLogger('esm.sdk').setLevel(logging.ERROR)
 
-AMINO_ACIDS_LIST: List[str] = list("ACDEFGHIKLMNPQRSTVWY")
+AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 ESM3_MODEL_CHECKPOINTS = Literal[
     "esm3_sm_open_v1",
 ]
 
 class ESM3Model:
-    """
-    ESM3 model for protein sequence embeddings, logits, and structure prediction.
+    """ESM3 model for protein sequence embeddings, logits, and structure prediction.
 
     Multi-modal protein language model from EvolutionaryScale.
     """
 
     def __init__(self, model_checkpoint: ESM3_MODEL_CHECKPOINTS = "esm3_sm_open_v1"):
-        """
-        Initialize ESM3 model wrapper.
+        """Initialize ESM3 model wrapper.
 
         Args:
             model_checkpoint: ESM3 checkpoint name (e.g., "esm3_sm_open_v1")
@@ -47,14 +43,13 @@ class ESM3Model:
 
     def __call__(
         self,
-        sequences: List[str],
+        sequences: list[str],
         batch_size: int = 128,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = True,
-    ) -> Dict[str, torch.Tensor]:
-        """
-        Run ESM3 inference on protein sequences.
+    ) -> dict[str, torch.Tensor]:
+        """Run ESM3 inference on protein sequences.
 
         Args:
             sequences: Protein sequences
@@ -153,15 +148,79 @@ class ESM3Model:
             "attention_masks": all_attention_masks,
         }
 
+    def predict_structure(
+        self,
+        sequences: list[str],
+        batch_size: int = 40,
+        device: str = "cuda",
+        verbose: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Predict 3D structures for protein sequences.
+
+        Args:
+            sequences: Protein sequences
+            batch_size: Batch size for structure prediction
+            device: Device to run on
+
+            verbose: Whether to enable verbose logging output.
+
+        Returns:
+            List of structure dictionaries
+        """
+        # Lazy import ESM3 dependencies
+        from esm.sdk.api import ESMProtein, GenerationConfig
+
+        # Lazy load on first call or device change
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        # Split the sequences into batches
+        max_batch_size = min(batch_size, len(sequences))
+        batches = [
+            sequences[i : i + max_batch_size]
+            for i in range(0, len(sequences), max_batch_size)
+        ]
+
+        all_structures = []
+
+        # For each batch
+        for batch_sequences in tqdm(batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)):
+            # Create protein and config objects
+            esm3_proteins = [ESMProtein(sequence=seq) for seq in batch_sequences]
+            structure_configs = [GenerationConfig(track="structure")] * len(
+                esm3_proteins
+            )
+
+            # Generate the structures
+            structures = self.model.batch_generate(
+                inputs=esm3_proteins,
+                configs=structure_configs,
+            )
+
+            # Unpack predicted structures
+            all_structures.extend(
+                {
+                    "sequence": struct.sequence,
+                    "pdb_string": struct.to_pdb_string(),
+                    "avg_plddt": struct.plddt.mean().item(),
+                    "ptm": struct.ptm.item(),
+                }
+                for struct in structures
+            )
+
+        return all_structures
+
     def sample(
         self,
-        sequences: List[str],
+        sequences: list[str],
         temperature: float,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Sample amino acids at masked positions ('_') in protein sequences.
 
         Receives sequences with '_' at positions to be sampled, injects
@@ -188,8 +247,8 @@ class ESM3Model:
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
-        mask_positions: List[List[int]] = []
-        tokenizer_sequences: List[str] = []
+        mask_positions: list[list[int]] = []
+        tokenizer_sequences: list[str] = []
         for seq in sequences:
             positions = [i for i, c in enumerate(seq) if c == "_"]
             mask_positions.append(positions)
@@ -201,8 +260,8 @@ class ESM3Model:
             for i in range(0, len(sequences), batch_size)
         ]
 
-        all_sampled: List[str] = []
-        all_logits: List[torch.Tensor] = []
+        all_sampled: list[str] = []
+        all_logits: list[torch.Tensor] = []
 
         for start, end in tqdm(
             batch_ranges, desc="ESM3 sampling", unit="batch",
@@ -230,7 +289,7 @@ class ESM3Model:
 
             # Sample at mask positions for each sequence
             for seq_idx, (orig_seq, positions) in enumerate(
-                zip(batch_originals, batch_masks)
+                zip(batch_originals, batch_masks, strict=False)
             ):
                 if not positions:
                     all_sampled.append(orig_seq)
@@ -242,7 +301,7 @@ class ESM3Model:
                     sampled_idx = torch.multinomial(probs, 1).squeeze(-1)
 
                     chars = list(orig_seq)
-                    for pos, aa_idx in zip(positions, sampled_idx.tolist()):
+                    for pos, aa_idx in zip(positions, sampled_idx.tolist(), strict=False):
                         chars[pos] = AMINO_ACIDS_LIST[aa_idx]
                     all_sampled.append("".join(chars))
 
@@ -257,14 +316,13 @@ class ESM3Model:
 
     def score(
         self,
-        sequences: List[str],
+        sequences: list[str],
         batch_size: int = 32,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = True,
-    ) -> Dict[str, List]:
-        """
-        Score protein sequences using ESM3 with MLM pseudo-perplexity.
+    ) -> dict[str, list]:
+        """Score protein sequences using ESM3 with MLM pseudo-perplexity.
 
         Computes pseudo-perplexity by masking each position individually and
         computing P(x_i | x_{-i}). Uses batching for efficiency. Requires L forward
@@ -326,7 +384,7 @@ class ESM3Model:
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
 
-    def _compute_mlm_score(self, seq: str, batch_size: int) -> Tuple[float, torch.Tensor, int]:
+    def _compute_mlm_score(self, seq: str, batch_size: int) -> tuple[float, torch.Tensor, int]:
         """Compute MLM pseudo-perplexity by masking each position.
 
         This method performs L forward passes (batched) for a sequence of length L,
@@ -489,7 +547,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    elif operation == "sample":
+    if operation == "sample":
         return _model.sample(
             sequences=input_dict.get("sequences", []),
             temperature=input_dict.get("temperature", 1.0),
@@ -498,7 +556,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    elif operation == "score":
+    if operation == "score":
         return _model.score(
             sequences=input_dict.get("sequences", []),
             batch_size=input_dict.get("batch_size", 32),
@@ -506,8 +564,14 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    if operation == "predict_structure":
+        return _model.predict_structure(
+            sequences=input_dict.get("sequences", []),
+            batch_size=input_dict.get("batch_size", 128),
+            device=input_dict.get("device", "cuda"),
+            verbose=input_dict.get("verbose", False),
+        )
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -517,9 +581,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -535,7 +598,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

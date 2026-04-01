@@ -1,16 +1,23 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_ism_variants_batch.py
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_ism_variants_batch.py.
 
-AlphaGenome batched in-silico mutagenesis (ISM) tool."""
+AlphaGenome batched in-silico mutagenesis (ISM) tool.
+"""
 from __future__ import annotations
 
 import csv
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
+from proto_tools.tools.sequence_scoring.alphagenome.alphagenome_score_variants import AlphaGenomeScoreVariantsConfig
+from proto_tools.tools.sequence_scoring.alphagenome.shared_data_models import (
+    AlphaGenomeInterval,
+    AlphaGenomeScoreOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -19,9 +26,6 @@ from proto_tools.utils import (
     ToolInstance,
     require_hf_token,
 )
-
-from .alphagenome_score_variants import AlphaGenomeScoreVariantsConfig
-from .shared_data_models import AlphaGenomeInterval, AlphaGenomeScoreOutput
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +58,23 @@ class AlphaGenomeISM(AlphaGenomeInterval):
         ge=1,
         description="ISM sub-interval end (0-based, exclusive)",
     )
-    variant_position: Optional[int] = InputField(
+    variant_position: int | None = InputField(
         default=None,
         ge=0,
         description="Optional existing variant position for ISM context (0-based)",
     )
-    reference_bases: Optional[str] = InputField(
+    reference_bases: str | None = InputField(
         default=None,
         description="Optional existing variant reference allele",
     )
-    alternate_bases: Optional[str] = InputField(
+    alternate_bases: str | None = InputField(
         default=None,
         description="Optional existing variant alternate allele",
     )
 
     @field_validator("reference_bases", "alternate_bases")
     @classmethod
-    def validate_allele_bases(cls, bases: Optional[str]) -> Optional[str]:
+    def validate_allele_bases(cls, bases: str | None) -> str | None:
         """Validate allele sequence characters if provided."""
         if bases is None:
             return None
@@ -98,9 +102,8 @@ class AlphaGenomeISM(AlphaGenomeInterval):
                 "variant_position, reference_bases, and alternate_bases must all be "
                 "provided together or all omitted"
             )
-        if self.variant_position is not None:
-            if not (self.interval_start <= self.variant_position < self.interval_end):
-                raise ValueError("variant_position must be within [interval_start, interval_end)")
+        if self.variant_position is not None and not (self.interval_start <= self.variant_position < self.interval_end):
+            raise ValueError("variant_position must be within [interval_start, interval_end)")
         return self
 
 
@@ -113,13 +116,14 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
             A single request is auto-wrapped into a list.
     """
 
-    requests: List[AlphaGenomeISM] = InputField(
+    requests: list[AlphaGenomeISM] = InputField(
         description="ISM requests to process",
     )
 
     @field_validator("requests", mode="before")
     @classmethod
     def normalize_requests(cls, value: Any) -> list:
+        """Validate and normalize ISM batch request specifications from raw input."""
         if value is None:
             raise ValueError("requests cannot be None")
         if not isinstance(value, list):
@@ -136,19 +140,21 @@ class AlphaGenomeScoreISMOutput(BaseToolOutput):
         results (list[AlphaGenomeScoreOutput]): Per-request score outputs.
     """
 
-    results: List[AlphaGenomeScoreOutput] = Field(
+    results: list[AlphaGenomeScoreOutput] = Field(
         description="Per-request AlphaGenome ISM score outputs",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json", "csv"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str) -> None:
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":

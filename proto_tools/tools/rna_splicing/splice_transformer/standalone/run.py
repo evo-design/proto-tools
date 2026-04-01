@@ -1,5 +1,4 @@
-"""
-SpliceTransformer standalone runner for ToolInstance venv execution.
+"""SpliceTransformer standalone runner for ToolInstance venv execution.
 
 Handles tissue-specific splice site prediction using the SpliceTransformer model.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -7,8 +6,6 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
-
-from __future__ import annotations
 
 import json
 import sys
@@ -72,7 +69,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_splice_transformer(input_data)

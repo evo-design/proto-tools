@@ -1,11 +1,12 @@
-"""proto_tools/tools/causal_models/evo1/evo1_score.py
+"""proto_tools/tools/causal_models/evo1/evo1_score.py.
 
-Evo1 scoring tool."""
+Evo1 scoring tool.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import field_validator
 
@@ -43,7 +44,7 @@ class Evo1ScoringInput(BaseToolInput):
         sequences (list[str]): DNA sequences to score.
     """
 
-    sequences: List[str] = InputField(description="DNA sequences to score")
+    sequences: list[str] = InputField(description="DNA sequences to score")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -145,6 +146,8 @@ def run_evo1_score(
             to score.
         config (Evo1ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo1ScoringOutput: Contains SequenceScores for each input sequence with:

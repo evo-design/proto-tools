@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_alignment/usalign/usalign.py
+"""proto_tools/tools/structure_alignment/usalign/usalign.py.
 
 Wraps the USalign binary (Zhang et al., 2022) as a ToolInstance-dispatched tool.
 Accepts two PDB text blobs, calls the binary with ``-mm 1 -ter 1`` flags for
@@ -10,7 +9,6 @@ from __future__ import annotations
 
 from logging import getLogger
 from pathlib import Path
-from typing import List, Union
 
 from pydantic import Field
 
@@ -64,14 +62,16 @@ class USalignOutput(BaseToolOutput):
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):  # noqa: ARG002 — required by base class _export_output interface
         import json as json_mod
 
         path = Path(export_path).with_suffix(".json")
@@ -118,7 +118,6 @@ def run_usalign(
     inputs: USalignInput, config: USalignConfig | None = None, instance=None
 ) -> USalignOutput:
     """Run USalign on two PDB structures."""
-
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,
         "pdb_text_2": inputs.pdb_text_2,

@@ -1,5 +1,4 @@
-"""
-CRISPRtracrRNA standalone runner for ToolInstance venv execution.
+"""CRISPRtracrRNA standalone runner for ToolInstance venv execution.
 
 Wraps the CRISPRtracrRNA.py tool from the Backofen Lab to predict
 tracrRNA sequences from nucleotide CRISPR loci.
@@ -23,7 +22,7 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 # =============================================================================
@@ -69,7 +68,7 @@ def _find_crispr_tracr_script() -> str:
     )
 
 
-def _parse_tracr_results(output_dir: Path, sequence_ids: List[str]) -> List[Dict[str, Any]]:
+def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict[str, Any]]:
     """Parse CRISPRtracrRNA output CSV files.
 
     CRISPRtracrRNA writes results to CSV files in the output directory.
@@ -87,7 +86,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: List[str]) -> List[Dict
 
     for csv_file in output_dir.glob("*.csv"):
         try:
-            with open(csv_file, "r") as f:
+            with open(csv_file) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     acc_id = row.get("accession_number", row.get("tracr_id", ""))
@@ -120,7 +119,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: List[str]) -> List[Dict
                                 "intarna_anti_repeat_interaction"
                             ),
                         }
-        except Exception as e:
+        except Exception as e:  # noqa: PERF203 -- per-file error handling
             print(f"Warning: Failed to parse {csv_file}: {e}", file=sys.stderr)
             continue
 
@@ -150,7 +149,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: List[str]) -> List[Dict
     return predictions
 
 
-def _safe_int(val) -> Optional[int]:
+def _safe_int(val) -> int | None:
     """Safely convert to int, returning None on failure."""
     if val is None or val == "" or val == "NA" or val == "nan":
         return None
@@ -160,7 +159,7 @@ def _safe_int(val) -> Optional[int]:
         return None
 
 
-def _safe_float(val) -> Optional[float]:
+def _safe_float(val) -> float | None:
     """Safely convert to float, returning None on failure."""
     if val is None or val == "" or val == "NA" or val == "nan":
         return None
@@ -218,15 +217,15 @@ def _create_worker_cwd(tracr_install_dir: str, worker_dir: Path) -> Path:
 
 
 def _run_tracr_batch(
-    sequences: List[str],
-    sequence_ids: List[str],
+    sequences: list[str],
+    sequence_ids: list[str],
     model_type: str,
     run_type: str,
     crispr_tracr_script: str,
     tracr_install_dir: str,
     run_env: dict,
     batch_idx: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Run CRISPRtracrRNA on a batch of sequences with an isolated CWD.
 
     Args:
@@ -255,7 +254,7 @@ def _run_tracr_batch(
         worker_cwd = _create_worker_cwd(tracr_install_dir, temp_path)
 
         # Write each sequence as a separate FASTA file
-        for seq_id, seq in zip(sequence_ids, sequences):
+        for seq_id, seq in zip(sequence_ids, sequences, strict=False):
             clean_seq = "".join(c for c in seq.upper() if c in "ATCGN")
             fasta_path = input_dir / f"{seq_id}.fasta"
             with open(fasta_path, "w") as f:
@@ -353,12 +352,13 @@ def run_crispr_tracr(input_data: dict) -> dict:
     # Split sequences into batches
     num_workers = min(num_workers, len(sequences))
     batch_size = math.ceil(len(sequences) / num_workers)
-    batches = []
-    for i in range(0, len(sequences), batch_size):
-        batches.append((
+    batches = [
+        (
             sequences[i:i + batch_size],
             sequence_ids[i:i + batch_size],
-        ))
+        )
+        for i in range(0, len(sequences), batch_size)
+    ]
 
     print(
         f"Running CRISPRtracrRNA with {len(batches)} parallel workers "
@@ -449,7 +449,7 @@ if __name__ == "__main__":
     input_json_path = sys.argv[1]
     output_json_path = sys.argv[2]
 
-    with open(input_json_path, "r") as f:
+    with open(input_json_path) as f:
         input_data = json.load(f)
 
     output_data = run_crispr_tracr(input_data)

@@ -1,5 +1,4 @@
-"""
-USalign standalone runner for ToolInstance venv execution.
+"""USalign standalone runner for ToolInstance venv execution.
 
 Universal structure alignment (monomers, multimers, nucleic acids) via TM-score.
 Communicates via JSON input/output files (ToolInstance pattern).
@@ -7,8 +6,6 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
-
-from __future__ import annotations
 
 import json
 import re

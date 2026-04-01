@@ -1,10 +1,11 @@
-"""proto_tools/tools/gene_annotation/blast/create_blast_db.py
+"""proto_tools/tools/gene_annotation/blast/create_blast_db.py.
 
-BLAST database creation tool."""
+BLAST database creation tool.
+"""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -43,7 +44,7 @@ class CreateBlastDbInput(BaseToolInput):
     @field_validator("fasta")
     @classmethod
     def validate_fasta(cls, v: str) -> str:
-        """Validate that FASTA file exists"""
+        """Validate that FASTA file exists."""
         if not Path(v).exists():
             raise ValueError(f"FASTA file not found: {v}")
         return v
@@ -70,16 +71,17 @@ class CreateBlastDbOutput(BaseToolOutput):
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return []
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return ""
 
     def _export_output(self, export_path: str | Path, file_format: str):
         """Export output - No-op for database creation (output IS the DB path)."""
-        pass
 
 
 # Config:
@@ -131,18 +133,18 @@ class CreateBlastDbConfig(BaseConfig):
         default="nucl",
         description="Specifies the type of database to create: Nucleotide or Protein",
     )
-    out_prefix: Optional[str] = ConfigField(
+    # TODO: Determine how to handle this for the client.
+    out_prefix: str | None = ConfigField(
         title="Output Prefix",
         default=None,
         description="File-path prefix for database files (default: FASTA stem)",
-        hidden=True,
     )
-    title: Optional[str] = ConfigField(
+    title: str | None = ConfigField(
         title="Database Title",
         default=None,
         description="Optional name for the database",
     )
-    additional_params: Dict[str, str | int | float | bool] = ConfigField(
+    additional_params: dict[str, str | int | float | bool] = ConfigField(
         title="Additional Parameter Dictionary",
         default_factory=dict,
         description="Extra flags for makeblastdb (e.g., parse_seqids, hash_index)",
@@ -152,7 +154,7 @@ class CreateBlastDbConfig(BaseConfig):
     @field_validator('dbtype')
     @classmethod
     def validate_dbtype(cls, v: str) -> str:
-        """Validate database type"""
+        """Validate database type."""
         if v not in {"nucl", "prot"}:
             raise ValueError('dbtype must be "nucl" or "prot"')
         return v
@@ -163,7 +165,7 @@ class CreateBlastDbConfig(BaseConfig):
 # ============================================================================
 def example_input():
     """Minimal valid input for testing and examples."""
-    return CreateBlastDbInput(fasta=str(Path(__file__).parent / "examples" / "example.fasta"))
+    return CreateBlastDbInput(fasta=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"))
 
 
 @tool(
@@ -180,8 +182,7 @@ def run_create_blast_db(
     inputs: CreateBlastDbInput, config: CreateBlastDbConfig | None = None,
     instance=None,
 ) -> CreateBlastDbOutput:
-    """
-    Create a local BLAST database from a FASTA file.
+    """Create a local BLAST database from a FASTA file.
 
     This is the standardized tool interface following the registry pattern.
     Returns structured output with database path.
@@ -189,6 +190,8 @@ def run_create_blast_db(
     Args:
         inputs (CreateBlastDbInput): Validated BLAST database creation input
         config (CreateBlastDbConfig | None): Validated BLAST database creation configuration
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         CreateBlastDbOutput: Structured output with database path
@@ -206,8 +209,6 @@ def run_create_blast_db(
         >>> result = run_create_blast_db(inputs, config)
         >>> print(f"Database created at: {result.db_path}")
     """
-
-
     fasta_path = Path(inputs.fasta)
 
     # Default prefix is the FASTA stem in the same directory

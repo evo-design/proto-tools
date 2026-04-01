@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/inverse_folding/shared_data_models.py
+"""proto_tools/tools/inverse_folding/shared_data_models.py.
 
 Shared base schemas (configs and io) for inverse folding tools.
 """
@@ -8,8 +7,9 @@ from __future__ import annotations
 
 import json
 from abc import ABC
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -68,11 +68,11 @@ class InverseFoldingStructureInput(BaseModel):
     structure: Structure = Field(
         description="Protein structure (auto-loaded from file path or PDB string)."
     )
-    chain_ids: Optional[List[str]] = Field(
+    chain_ids: list[str] | None = Field(
         default=None,
         description="Chain IDs to design. If None, all chains in the structure are designed.",
     )
-    fixed_positions: Optional[Dict[str, List[int]]] = Field(
+    fixed_positions: dict[str, list[int]] | None = Field(
         default=None,
         description="Dictionary mapping chain IDs to residue positions to keep fixed (1-indexed).",
     )
@@ -171,7 +171,7 @@ class InverseFoldingInput(BaseToolInput):
         ... )
     """
 
-    inputs: List[InverseFoldingStructureInput] = InputField(
+    inputs: list[InverseFoldingStructureInput] = InputField(
         description="List of inverse folding inputs, each containing a structure and constraints."
     )
 
@@ -208,7 +208,7 @@ class InverseFoldingConfig(BaseConfig):
         ge=1,
         description="Total number of sequences to generate per input structure.",
     )
-    batch_size: Optional[int] = ConfigField(
+    batch_size: int | None = ConfigField(
         title="Batch Size",
         default=None,
         ge=1,
@@ -232,7 +232,7 @@ class InverseFoldingConfig(BaseConfig):
         examples=[0.1, 0.5, 1.0],
     )
 
-    excluded_amino_acids: Optional[List[str]] = ConfigField(
+    excluded_amino_acids: list[str] | None = ConfigField(
         title="Unallowed Amino Acids",
         default=None,
         description="List of amino acids that are not allowed in the sequence. If None, no amino acids will be disallowed",
@@ -283,7 +283,7 @@ class DesignedSequences(BaseModel, ABC):
         - Model-specific scores (e.g., ProteinMPNN score)
     """
 
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Designed amino acid sequences from the inverse folding model"
     )
 
@@ -307,17 +307,15 @@ class DesignedSequences(BaseModel, ABC):
         """Get a string representation of the designed sequences."""
         return f"DesignedSequences(with {len(self.sequences)} sequences)"
 
-    def get_sequence_metrics(self, index: int) -> Dict[str, float]:
+    def get_sequence_metrics(self, index: int) -> dict[str, float]:
         """Get the metrics for a designed sequence by index."""
-
         # Get all fields that are not sequences
         fields = self.model_dump()
-        return_dict = {
+        return {
             k: v[index]
             for k, v in fields.items()
             if k != "sequences" and isinstance(v, list)
         }
-        return return_dict
 
 
 class InverseFoldingOutput(BaseToolOutput):
@@ -330,7 +328,7 @@ class InverseFoldingOutput(BaseToolOutput):
             The order matches the input structures order.
     """
 
-    designed_sequences: List[DesignedSequences] = Field(
+    designed_sequences: list[DesignedSequences] = Field(
         description="List of sequences predicted for the input structures"
     )
 
@@ -355,11 +353,13 @@ class InverseFoldingOutput(BaseToolOutput):
         return f"InverseFoldingOutput(with {len(self.designed_sequences)} designed structures)"
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -370,8 +370,7 @@ class InverseFoldingOutput(BaseToolOutput):
             for i, designs in enumerate(self.designed_sequences):
                 out_file = path / f"design_{i}.fasta"
                 with open(out_file, "w") as f:
-                    for j, seq in enumerate(designs.sequences):
-                        f.write(f">design_{i}_seq_{j}\n{seq}\n")
+                    f.writelines(f">design_{i}_seq_{j}\n{seq}\n" for j, seq in enumerate(designs.sequences))
 
         elif file_format == "json":
             path.mkdir(parents=True, exist_ok=True)
@@ -405,15 +404,15 @@ class SequenceScores(BaseModel):
         vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
     """
 
-    metrics: Dict[str, float] = Field(
+    metrics: dict[str, float] = Field(
         default_factory=dict,
         description="Dictionary of scalar scoring metrics",
     )
-    logits: Optional[List[List[float]]] = Field(
+    logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
     )
-    vocab: Optional[List[str]] = Field(
+    vocab: list[str] | None = Field(
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
@@ -447,12 +446,12 @@ class InverseFoldingScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: List[SequenceScores] = Field(
+    scores: list[SequenceScores] = Field(
         description="List of scoring outputs, one per input sequence-structure pair"
     )
 
     @property
-    def vocab(self) -> Optional[List[str]]:
+    def vocab(self) -> list[str] | None:
         """Token ordering for logits; derived from first score."""
         return self.scores[0].vocab if self.scores else None
 
@@ -466,11 +465,13 @@ class InverseFoldingScoringOutput(BaseToolOutput):
         return iter(self.scores)
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):

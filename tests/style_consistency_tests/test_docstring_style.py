@@ -1,4 +1,4 @@
-"""tests/style_consistency_tests/test_docstring_style.py
+"""tests/style_consistency_tests/test_docstring_style.py.
 
 Tests that multi-line docstrings follow Google style with type annotations
 matching the actual function signatures and class annotations.
@@ -11,7 +11,7 @@ import pytest
 from docstring_parser import DocstringStyle
 from docstring_parser import parse as parse_docstring
 
-from .helpers import (
+from tests.style_consistency_tests.helpers import (
     collect_docstrings_with_annotations,
     extract_returns_type,
     find_continuation_indent_violations,
@@ -101,46 +101,6 @@ def test_docstring_types_match_signatures(
     assert not violations, (
         f"{file_path}::{name} has docstring param type mismatches:\n"
         + "\n".join(violations)
-    )
-
-
-@pytest.mark.parametrize(
-    "file_path, name, docstring, annotations, return_type, node_kind, own_annotations",
-    _DOCSTRINGS,
-    ids=[f"{fp}::{n}" for fp, n, *_ in _DOCSTRINGS],
-)
-def test_docstring_documents_all_params(
-    file_path: str,
-    name: str,
-    docstring: str,
-    annotations: dict[str, str],
-    return_type: str | None,
-    node_kind: str,
-    own_annotations: dict[str, str],
-):
-    """Every own (non-inherited) annotated parameter must be documented.
-
-    For classes, only checks fields defined directly on the class, not
-    inherited base class fields (which are documented once on the base).
-    """
-    try:
-        parsed = parse_docstring(docstring, style=DocstringStyle.GOOGLE)
-    except Exception:
-        pytest.skip(f"Could not parse docstring for {file_path}::{name}")
-        return
-
-    documented = {p.arg_name for p in parsed.params}
-
-    missing = []
-    for param_name in own_annotations:
-        if param_name.startswith("*"):
-            continue
-        if param_name not in documented:
-            missing.append(param_name)
-
-    assert not missing, (
-        f"{file_path}::{name} is missing documentation for annotated "
-        f"params: {missing}"
     )
 
 

@@ -1,5 +1,4 @@
-"""
-AlphaFold2 standalone inference implementation via ColabDesign.
+"""AlphaFold2 standalone inference implementation via ColabDesign.
 
 This script runs in an isolated venv with JAX and ColabDesign installed.
 It communicates via JSON files for input/output.
@@ -14,7 +13,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -67,22 +66,21 @@ def _configure_device(device: str):
     """Set JAX device via environment variables. Must be called before importing JAX."""
     if device == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
-    elif device.startswith("cuda"):
-        if ":" in device:
-            gpu_idx = device.split(":")[1]
-            os.environ["CUDA_VISIBLE_DEVICES"] = gpu_idx
+    elif device.startswith("cuda") and ":" in device:
+        gpu_idx = device.split(":")[1]
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_idx
 
 
 def _predict_structure(
-    complex_data: Dict[str, Any],
+    complex_data: dict[str, Any],
     num_recycles: int = 3,
     model_num: int = 1,
     num_ensemble_models: int = 1,
-    seed: Optional[int] = None,
-    msa_a3m_content: Optional[str] = None,
+    seed: int | None = None,
+    msa_a3m_content: str | None = None,
     device: str = "cuda",
     verbose: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run AlphaFold2 prediction on a single complex.
 
     Args:
@@ -251,7 +249,7 @@ if __name__ == "__main__":
             "Usage: python inference.py <input_json_path> <output_json_path>"
         )
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

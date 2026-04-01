@@ -1,11 +1,11 @@
-"""proto_tools/tools/inverse_folding/fampnn/fampnn_sample.py
+"""proto_tools/tools/inverse_folding/fampnn/fampnn_sample.py.
 
-FAMPNN sequence sampling tool with full-atom sidechain co-generation."""
+FAMPNN sequence sampling tool with full-atom sidechain co-generation.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from pydantic import Field, field_validator
 from tqdm import tqdm
@@ -45,7 +45,7 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
             context during sampling/packing. Positions are 1-indexed.
     """
 
-    fixed_sidechain_positions: Optional[Dict[str, List[int]]] = Field(
+    fixed_sidechain_positions: dict[str, list[int]] | None = Field(
         default=None,
         description="Chain IDs to residue positions with known sidechain coordinates to condition on (1-indexed).",
     )
@@ -61,7 +61,7 @@ class FAMPNNSampleInput(BaseToolInput):
             and optional chain_ids/fixed_positions/fixed_sidechain_positions.
     """
 
-    inputs: List[FAMPNNStructureInput] = InputField(
+    inputs: list[FAMPNNStructureInput] = InputField(
         description="List of structure inputs for sequence design."
     )
 
@@ -158,10 +158,10 @@ class FAMPNNSequences(DesignedSequences):
         psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
     """
 
-    output_pdb_strings: List[str] = Field(
+    output_pdb_strings: list[str] = Field(
         description="PDB strings with designed sequences and sidechain coordinates"
     )
-    psce: List[List[float]] = Field(
+    psce: list[list[float]] = Field(
         description="Per-residue predicted sidechain error (Angstroms)"
     )
 

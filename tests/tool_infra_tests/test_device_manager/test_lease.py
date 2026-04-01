@@ -1,6 +1,7 @@
-"""tests/tool_infra_tests/test_device_manager/test_lease.py
+"""tests/tool_infra_tests/test_device_manager/test_lease.py.
 
-Tests for lease-based transient device allocations."""
+Tests for lease-based transient device allocations.
+"""
 
 import threading
 import time
@@ -62,8 +63,7 @@ def test_lease_allocation_is_transient(device_manager):
 
 def test_lease_cleanup_on_exception(device_manager):
     """Lease is released even when exception occurs in block."""
-    with pytest.raises(ValueError, match="test error"):
-        with device_manager.lease("esmfold", device="cuda") as device:
+    with pytest.raises(ValueError, match="test error"), device_manager.lease("esmfold", device="cuda") as device:
             assert device.startswith("cuda:")
             raise ValueError("test error")
 
@@ -74,9 +74,8 @@ def test_lease_cleanup_on_exception(device_manager):
 
 def test_lease_no_gpus_raises(no_gpus_manager):
     """RuntimeError raised when no GPUs available."""
-    with pytest.raises(RuntimeError, match="No GPUs available"):
-        with no_gpus_manager.lease("esmfold", device="cuda"):
-            pass
+    with pytest.raises(RuntimeError, match="No GPUs available"), no_gpus_manager.lease("esmfold", device="cuda"):
+        pass
 
 
 # ── Lease + eviction interaction ──────────────────────────────────────────
@@ -154,11 +153,9 @@ def test_mixed_persistent_and_transient(device_manager, mock_callback):
     time.sleep(0.01)
 
     # Fill cuda:1 with transient lease
-    with device_manager.lease("tool2", device="cuda:1"):
-        # New lease request -- should evict inst1 (persistent), not the other lease
-        with device_manager.lease("tool3", device="cuda") as device:
-            assert device == "cuda:0"
-            assert mock_callback.calls == ["cpu"]
+    with device_manager.lease("tool2", device="cuda:1"), device_manager.lease("tool3", device="cuda") as device:
+        assert device == "cuda:0"
+        assert mock_callback.calls == ["cpu"]
 
 
 # ── Lease wait mechanism ─────────────────────────────────────────────────

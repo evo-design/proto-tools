@@ -1,10 +1,11 @@
-"""proto_tools/tools/causal_models/evo2/evo2_score.py
+"""proto_tools/tools/causal_models/evo2/evo2_score.py.
 
-Evo2 scoring tool."""
+Evo2 scoring tool.
+"""
 from __future__ import annotations
 
 import logging
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import field_validator, model_validator
 
@@ -37,7 +38,6 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input: Evo2ScoringInput
 class Evo2ScoringInput(BaseToolInput):
     """Input for Evo2 DNA sequence scoring.
 
@@ -45,7 +45,7 @@ class Evo2ScoringInput(BaseToolInput):
         sequences (list[str]): DNA sequences to score.
     """
 
-    sequences: List[str] = InputField(description="DNA sequences to score")
+    sequences: list[str] = InputField(description="DNA sequences to score")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -109,7 +109,7 @@ class Evo2ScoringConfig(BaseConfig):
         description="Evo2 model checkpoint to use",
         reload_on_change=True,
     )
-    local_path: Optional[str] = ConfigField(
+    local_path: str | None = ConfigField(
         title="Local Checkpoint Path",
         default=None,
         description="Optional path to local model weights",
@@ -175,6 +175,8 @@ def run_evo2_score(
             to score.
         config (Evo2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo2ScoringOutput: Contains SequenceScores for each input sequence with:

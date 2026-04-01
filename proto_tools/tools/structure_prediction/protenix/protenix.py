@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/protenix/protenix.py
+"""proto_tools/tools/structure_prediction/protenix/protenix.py.
 
 Protein structure prediction using Protenix.
 
@@ -17,7 +16,7 @@ import os
 import string
 import tempfile
 from logging import getLogger
-from typing import List, Literal
+from typing import ClassVar, Literal
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
@@ -70,7 +69,7 @@ class ProtenixInput(StructurePredictionInput):
         CCD codes, similar to AlphaFold3.
     """
 
-    SUPPORTED_ENTITY_TYPES = {"protein", "dna", "rna", "ligand"}
+    SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
     def to_json(self, complex_idx: int, name: str) -> list[dict]:
@@ -223,7 +222,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         reload_on_change=True,
     )
 
-    seeds: List[int] = ConfigField(
+    seeds: list[int] = ConfigField(
         title="Seeds",
         default=[0],
         description=(
@@ -307,6 +306,8 @@ def run_protenix(
         config (ProtenixConfig | None): Validated Protenix configuration specifying model
             variant, MSA settings, diffusion parameters, and execution options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         ProtenixOutput: Structured output containing:
             - ``structures``: List of ``Structure`` instances, one per input complex
@@ -352,7 +353,6 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
-
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")
         os.makedirs(output_dir)
@@ -398,7 +398,7 @@ def run_protenix(
 
     # Parse results for each complex
     results = []
-    for i, job_result in enumerate(output_data):
+    for _i, job_result in enumerate(output_data):
         raw_metrics = job_result.get("metrics", {})
 
         metrics = {
@@ -476,7 +476,7 @@ def _write_msas_to_batch_json(
             continue
 
         msa_paths: dict[str, str] = {}
-        for seq, chain_id in zip(protein_seqs, protein_chain_ids):
+        for seq, chain_id in zip(protein_seqs, protein_chain_ids, strict=False):
             if seq in inputs.msas:
                 a3m_path = os.path.join(msa_dir, f"job_{job_idx}_{chain_id}.a3m")
                 inputs.msas[seq].to_a3m_file(a3m_path, query_index=0)
@@ -492,7 +492,7 @@ def _write_msas_to_batch_json(
         for seq_entry in job["sequences"]:
             if "proteinChain" in seq_entry:
                 chain_seq = seq_entry["proteinChain"]["sequence"]
-                for chain_id, protein_seq in zip(protein_chain_ids, protein_seqs):
+                for chain_id, protein_seq in zip(protein_chain_ids, protein_seqs, strict=False):
                     if protein_seq == chain_seq and chain_id in msa_paths:
                         seq_entry["proteinChain"]["unpairedMsaPath"] = msa_paths[
                             chain_id

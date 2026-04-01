@@ -1,5 +1,4 @@
-"""
-proto_tools/utils/standalone_helpers_source/standalone_helpers.py
+"""proto_tools/utils/standalone_helpers_source/standalone_helpers.py.
 
 copied to each tool's standalone/ directory at runtime. It provides common utilities
 that standalone scripts need but cannot import from the main package
@@ -20,7 +19,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-def _parse_cuda_indices(device: str) -> Optional[List[int]]:
+def _parse_cuda_indices(device: str) -> list[int] | None:
     """Parse a CUDA device string into a list of integer device indices.
 
     Supports formats:
@@ -53,11 +53,10 @@ def _parse_cuda_indices(device: str) -> Optional[List[int]]:
     indices_str = device[5:]  # Remove "cuda:" prefix
     indices = []
 
-    for part in indices_str.split(","):
-        part = part.strip()
+    for raw_part in indices_str.split(","):
+        part = raw_part.strip()
         # Remove nested "cuda:" prefix (handles "cuda:0,cuda:1" format)
-        if part.startswith("cuda:"):
-            part = part[5:]
+        part = part.removeprefix("cuda:")
         try:
             indices.append(int(part))
         except ValueError:
@@ -66,7 +65,7 @@ def _parse_cuda_indices(device: str) -> Optional[List[int]]:
     return indices
 
 
-def _apply_jax_subprocess_env(env: Dict[str, str]) -> Dict[str, str]:
+def _apply_jax_subprocess_env(env: dict[str, str]) -> dict[str, str]:
     """Apply JAX environment settings based on subprocess GPU visibility.
 
     CLI subprocesses are ephemeral (run one job and exit), so JAX preallocation
@@ -93,7 +92,7 @@ def _apply_jax_subprocess_env(env: Dict[str, str]) -> Dict[str, str]:
     return env
 
 
-def get_subprocess_device_env(device: str) -> Dict[str, str]:
+def get_subprocess_device_env(device: str) -> dict[str, str]:
     """Get environment for CLI subprocess with correct device visibility.
 
     When the tool process has CUDA_VISIBLE_DEVICES set, this function maps
@@ -238,7 +237,7 @@ def move_model_to_device(
     model_or_params: Any,
     old_device: str,
     new_device: str,
-    custom_move_fn: Optional[Callable[[Any, str, str], Any]] = None,
+    custom_move_fn: Callable[[Any, str, str], Any] | None = None,
 ) -> Any:
     """Move a model or params to a different device with proper GPU memory cleanup.
 
@@ -315,13 +314,12 @@ def move_model_to_device(
         import torch
 
         # Check if model has PyTorch's .to() method
-        if hasattr(model_or_params, "to") and callable(getattr(model_or_params, "to")):
+        if hasattr(model_or_params, "to") and callable(model_or_params.to):
             model_or_params = model_or_params.to(new_device)
 
             # Free GPU memory when moving off CUDA device
-            if old_device != "cpu" and old_device.startswith("cuda"):
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+            if old_device != "cpu" and old_device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             return model_or_params
     except ImportError:
@@ -370,7 +368,7 @@ def move_model_to_device(
 # ============================================================================
 
 
-def get_pytorch_memory_stats(device: int | str = 0) -> Dict[str, Any]:
+def get_pytorch_memory_stats(device: int | str = 0) -> dict[str, Any]:
     """Helper for PyTorch tools to report GPU memory stats.
 
     Args:
@@ -407,7 +405,7 @@ def get_pytorch_memory_stats(device: int | str = 0) -> Dict[str, Any]:
         return {"available": False, "framework": "pytorch", "reason": str(e)}
 
 
-def get_jax_memory_stats(device_index: int = 0) -> Dict[str, Any]:
+def get_jax_memory_stats(device_index: int = 0) -> dict[str, Any]:
     """Helper for JAX tools to report GPU memory stats.
 
     Args:
@@ -468,7 +466,7 @@ def get_jax_memory_stats(device_index: int = 0) -> Dict[str, Any]:
 # ============================================================================
 
 
-def resolve_weights_dir(tool_name: str) -> Optional[str]:
+def resolve_weights_dir(tool_name: str) -> str | None:
     """Resolve the weights directory for a tool based on PROTO_MODEL_CACHE.
 
     Precedence:
@@ -523,7 +521,7 @@ def resolve_weights_dir(tool_name: str) -> Optional[str]:
         # Explicit path (absolute or relative)
         cache_dir = mode
     else:
-        # Default: PROTO_HOME/proto_model_cache/ directory
+        # Default: PROTO_HOME/proto_model_cache/ directory  # noqa: ERA001 -- path description, not code
         proto_home = os.environ.get("PROTO_HOME", "")
         if not proto_home:
             # Same default as get_proto_home(): ~/.proto/

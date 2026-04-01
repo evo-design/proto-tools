@@ -1,4 +1,6 @@
-from .rfdiffusion3_sample import (
+"""RFdiffusion3 protein structure generation."""
+
+from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import (
     RFdiffusion3Config,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,

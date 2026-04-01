@@ -29,6 +29,7 @@ class MockCLIToolModel:
     """Wrapper that spawns CLI subprocesses for inference."""
 
     def __init__(self):
+        """Initialize MockCLIToolModel."""
         self._loaded = True
         logger.info("MockCLIToolModel initialized")
 
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

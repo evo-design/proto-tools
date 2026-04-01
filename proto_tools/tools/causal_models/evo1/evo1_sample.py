@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/causal_models/evo1/evo1_sample.py
+"""proto_tools/tools/causal_models/evo1/evo1_sample.py.
 
 This module provides a standardized interface for sampling DNA sequences
 using the Evo1 language model, supporting multiple model checkpoints
@@ -11,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field, field_validator
 
@@ -47,7 +46,7 @@ class Evo1SampleInput(BaseToolInput):
             Can be a single prompt string or a list of prompt strings.
     """
 
-    prompts: List[str] = InputField(description="Prompt sequences for generation")
+    prompts: list[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
     @classmethod
@@ -69,17 +68,19 @@ class Evo1SampleOutput(BaseToolOutput):
         scores (list[float] | None): Mean log-probability scores per sequence.
     """
 
-    sequences: List[str] = Field(description="Generated DNA sequences")
-    scores: Optional[List[float]] = Field(
+    sequences: list[str] = Field(description="Generated DNA sequences")
+    scores: list[float] | None = Field(
         default=None, description="Mean log-probability scores per sequence"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "fasta"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -87,12 +88,10 @@ class Evo1SampleOutput(BaseToolOutput):
 
         if file_format == "fasta":
             with open(path, "w") as f:
-                for i, seq in enumerate(self.sequences):
-                    f.write(f">seq_{i}\n{seq}\n")
+                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "txt":
             with open(path, "w") as f:
-                for seq in self.sequences:
-                    f.write(f"{seq}\n")
+                f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
             with open(path, "w") as f:
                 json.dump({"sequences": self.sequences}, f, indent=2)
@@ -205,6 +204,8 @@ def run_evo1_sample(
         config (Evo1SampleConfig | None): Sampling configuration including model
             checkpoint, temperature, and top-k parameters.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         Evo1SampleOutput: Generated DNA sequences with optional scores.
 
@@ -239,7 +240,7 @@ def run_evo1_sample(
     # Prepend prompts if requested
     if config.prepend_prompt:
         sequences = [
-            prompt + seq for prompt, seq in zip(inputs.prompts, sequences)
+            prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)
         ]
 
     return Evo1SampleOutput(

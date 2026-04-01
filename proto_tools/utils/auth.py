@@ -1,6 +1,7 @@
-"""proto_tools/utils/auth.py
+"""proto_tools/utils/auth.py.
 
-Authentication helpers for gated model providers."""
+Authentication helpers for gated model providers.
+"""
 from __future__ import annotations
 
 import os
@@ -29,7 +30,7 @@ def resolve_hf_token() -> str | None:
         try:
             with open(token_file) as f:
                 token = f.read().strip()
-        except Exception:
+        except Exception:  # noqa: S110 -- best-effort token file read
             pass
     if token:
         return token
@@ -44,7 +45,7 @@ def resolve_hf_token() -> str | None:
                     )
                     if m:
                         return m.group(1)
-        except Exception:
+        except Exception:  # noqa: S110 -- best-effort credential file read
             pass
 
     return None
@@ -81,4 +82,4 @@ def require_hf_token(tool_name: str, repo_url: str = "") -> None:
         "  3. Create an access token at: https://huggingface.co/settings/tokens\n"
         "  4. Set it in your environment: export HF_TOKEN=hf_...\n"
     )
-    raise EnvironmentError(msg)
+    raise OSError(msg)

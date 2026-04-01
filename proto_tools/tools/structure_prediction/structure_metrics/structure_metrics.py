@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/structure_prediction/structure_metrics/structure_metrics.py
+"""proto_tools/tools/structure_prediction/structure_metrics/structure_metrics.py.
 
 Computes structural quality metrics including longest alpha helix length
 and gyration radius from PDB files, used to filter out disordered or
@@ -9,7 +8,6 @@ artifactual predicted protein structures.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -46,13 +44,13 @@ class StructureMetricsInput(BaseToolInput):
         pdb_paths (list[str]): List of paths to PDB files to analyze.
     """
 
-    pdb_paths: List[str] = InputField(
+    pdb_paths: list[str] = InputField(
         description="List of PDB file paths to compute structure metrics for"
     )
 
     @field_validator("pdb_paths", mode="before")
     @classmethod
-    def normalize_paths(cls, value) -> List[str]:
+    def normalize_paths(cls, value) -> list[str]:
         """Normalize a single path to a list."""
         if isinstance(value, str):
             return [value]
@@ -68,17 +66,19 @@ class StructureMetricsOutput(BaseToolOutput):
             longest alpha helix length and gyration radius.
     """
 
-    metrics: List[StructureMetrics] = Field(
+    metrics: list[StructureMetrics] = Field(
         default_factory=list,
         description="Per-structure quality metrics",
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["csv", "json"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str):
@@ -138,6 +138,8 @@ def run_structure_metrics(
         inputs (StructureMetricsInput): Validated input containing PDB file paths.
         config (StructureMetricsConfig | None): Configuration (no parameters needed).
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         StructureMetricsOutput: Per-structure metrics.
 
@@ -148,7 +150,6 @@ def run_structure_metrics(
         >>> print(result.metrics[0].longest_alpha_helix)
         >>> print(result.metrics[0].gyration_radius)
     """
-
     input_data = {
         "pdb_paths": inputs.pdb_paths,
     }

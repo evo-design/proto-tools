@@ -1,28 +1,22 @@
-"""
-Shared utilities for proto_tools.
+"""Shared utilities for proto_tools.
 
 Config, helpers, sequence validation, I/O, caching, env management, device, logging.
 """
-from .auth import require_hf_token
-from .base_config import BaseConfig, ConfigField
-from .chemistry import validate_smiles
-from .device import (
+from proto_tools.utils.auth import require_hf_token
+from proto_tools.utils.base_config import BaseConfig, ConfigField
+from proto_tools.utils.chemistry import validate_smiles
+from proto_tools.utils.device import (
     determine_visible_devices,
     display_gpu_memory_usage,
     get_gpu_memory_info,
     get_gpu_process_memory,
     number_of_available_gpus,
 )
-from .device_manager import (
-    SUPPORTED_DEVICE_PREFIXES,
-    AllocationType,
-    DeviceManager,
-    OffloadStrategy,
-)
-from .http_session import build_http_session
-from .logging_config import get_logger, setup_logging
-from .msa import extract_msa_sequences
-from .sequence import (
+from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
+from proto_tools.utils.http_session import build_http_session
+from proto_tools.utils.logging_config import get_logger, setup_logging
+from proto_tools.utils.msa import extract_msa_sequences
+from proto_tools.utils.sequence import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
     RNA_NUCLEOTIDES,
@@ -34,7 +28,7 @@ from .sequence import (
     return_invalid_protein_chars,
     return_invalid_rna_chars,
 )
-from .system_info import (
+from proto_tools.utils.system_info import (
     capture_parent_env,
     capture_subprocess_env,
     clear_captured_env,
@@ -46,16 +40,10 @@ from .system_info import (
     get_platform_id,
     get_platform_info,
 )
-from .tool_cache import (
-    ToolCache,
-    clear_cache,
-    clear_tool_cache,
-    get_cache_info,
-    has_cached_entries,
-)
-from .tool_instance import ToolInstance
-from .tool_io import BaseToolInput, BaseToolOutput, InputField, ToolExecutionError
-from .tool_pool import ToolPool
+from proto_tools.utils.tool_cache import ToolCache, clear_cache, clear_tool_cache, get_cache_info, has_cached_entries
+from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField, ToolExecutionError
+from proto_tools.utils.tool_pool import ToolPool
 
 __all__ = [
     # Config

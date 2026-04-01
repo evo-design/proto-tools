@@ -1,6 +1,7 @@
-"""tests/mutagenesis_tests/test_random_nucleotide_sample.py
+"""tests/mutagenesis_tests/test_random_nucleotide_sample.py.
 
-Tests for random nucleotide sampling tool."""
+Tests for random nucleotide sampling tool.
+"""
 import pytest
 
 from proto_tools.tools.mutagenesis.codons import IUPAC_DNA

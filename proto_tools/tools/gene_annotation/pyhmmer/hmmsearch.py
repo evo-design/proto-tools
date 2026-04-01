@@ -1,21 +1,21 @@
-"""proto_tools/tools/gene_annotation/pyhmmer/hmmsearch.py
+"""proto_tools/tools/gene_annotation/pyhmmer/hmmsearch.py.
 
-PyHMMER hmmsearch tool: search HMM profiles against protein sequences."""
+PyHMMER hmmsearch tool: search HMM profiles against protein sequences.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from pydantic import field_validator
 
-from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import InputField, ToolInstance
-
-from .shared_data_models import (
+from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
     PyHmmerConfig,
     PyHmmerInput,
     PyHmmerOutput,
     _build_dataframes,
 )
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import InputField, ToolInstance
 
 # ============================================================================
 # Data Models
@@ -96,6 +96,8 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
         config (PyHmmsearchConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
+        instance: Optional ToolInstance for subprocess execution.
+
     Returns:
         PyHmmsearchOutput: Structured output containing:
             - ``sequence_hits_df``: DataFrame with sequence-level hits
@@ -127,7 +129,6 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
         ...         result.domain_hits_df['domain_score'] > 50
         ...     ]
     """
-
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

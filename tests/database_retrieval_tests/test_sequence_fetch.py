@@ -1,8 +1,7 @@
-"""tests/database_retrieval_tests/test_sequence_fetch.py
+"""tests/database_retrieval_tests/test_sequence_fetch.py.
 
-Tests for the multi-source sequence fetch tool."""
-
-from __future__ import annotations
+Tests for the multi-source sequence fetch tool.
+"""
 
 import re
 from pathlib import Path
@@ -59,7 +58,6 @@ def test_sequence_fetch_rejects_ncrna_as_protein_request():
 
 def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
     """PDB FASTA with DNA chain first must still return protein chain."""
-
     fake_records = [
         ("1LBG_1|Chain A|Lac operator DNA|Escherichia coli", "GAATTGTGAGCGCTCACAATT"),
         ("1LBG_2|Chain B|Lac repressor|Escherichia coli", "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNR"),
@@ -96,7 +94,6 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
 
 def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
     """PDB FASTA with only DNA/RNA chains must report NOT_FOUND."""
-
     fake_records = [
         ("1ABC_1|Chain A|DNA|organism", "GAATTGTGAGCGCTCACAATT"),
         ("1ABC_2|Chain B|RNA|organism", "GAUUCGAUUCGAUUCG"),

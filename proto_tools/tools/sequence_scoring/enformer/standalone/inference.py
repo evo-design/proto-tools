@@ -1,12 +1,9 @@
-"""
-Enformer standalone inference implementation for venv execution.
-"""
+"""Enformer standalone inference implementation for venv execution."""
 from __future__ import annotations
 
 import json
 import logging
 import sys
-from typing import List
 
 import torch
 
@@ -17,8 +14,7 @@ ENFORMER_OUTPUT = 896
 
 
 class EnformerModel:
-    """
-    Enformer model for regulatory activity and gene expression prediction.
+    """Enformer model for regulatory activity and gene expression prediction.
 
     Uses the EleutherAI/enformer-official-rough model for human and mouse predictions.
     """
@@ -62,13 +58,12 @@ class EnformerModel:
     def __call__(
         self,
         sequence: str,
-        output_tracks: List[int],
+        output_tracks: list[int],
         species: str,
         device: str = "cuda",
         verbose: bool = False,
     ) -> torch.Tensor:
-        """
-        Run Enformer inference on a DNA sequence.
+        """Run Enformer inference on a DNA sequence.
 
         Args:
             sequence: DNA sequence (must be ENFORMER_CONTEXT=196,608 bp)
@@ -147,8 +142,7 @@ def dispatch(input_dict: dict) -> dict:
             "prediction": prediction,
             "applied_species": input_dict.get("species", "human"),
         }
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -158,9 +152,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -176,7 +169,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

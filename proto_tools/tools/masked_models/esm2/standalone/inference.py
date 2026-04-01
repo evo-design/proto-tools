@@ -1,13 +1,11 @@
-"""
-Local ESM2 inference implementation.
-"""
+"""Local ESM2 inference implementation."""
 from __future__ import annotations
 
 import json
 import logging
 import math
 import sys
-from typing import Any, Dict, List, Literal, Tuple
+from typing import Any, Literal
 
 import torch
 from standalone_helpers import move_model_to_device
@@ -15,7 +13,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-AMINO_ACIDS_LIST: List[str] = list("ACDEFGHIKLMNPQRSTVWY")
+AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t6_8M_UR50D",
     "esm2_t12_35M_UR50D",
@@ -26,15 +24,13 @@ ESM2_MODEL_CHECKPOINTS = Literal[
 ]
 
 class ESM2Model:
-    """
-    ESM2 model for protein sequence embeddings and logits.
+    """ESM2 model for protein sequence embeddings and logits.
 
     Supports multiple model sizes from 8M to 15B parameters.
     Returns embeddings and optionally logits as tensors.
     """
     def __init__(self, model_checkpoint: ESM2_MODEL_CHECKPOINTS = "esm2_t33_650M_UR50D"):
-        """
-        Initialize ESM2 model wrapper.
+        """Initialize ESM2 model wrapper.
 
         Args:
             model_checkpoint: ESM2 checkpoint (e.g., "esm2_t33_650M_UR50D")
@@ -48,14 +44,13 @@ class ESM2Model:
 
     def __call__(
         self,
-        sequences: List[str],
+        sequences: list[str],
         batch_size: int = 128,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, torch.Tensor]:
-        """
-        Run ESM2 inference on protein sequences.
+    ) -> dict[str, torch.Tensor]:
+        """Run ESM2 inference on protein sequences.
 
         Args:
             sequences: Protein sequences
@@ -161,13 +156,13 @@ class ESM2Model:
 
     def sample(
         self,
-        sequences: List[str],
+        sequences: list[str],
         temperature: float,
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Sample amino acids at masked positions ('_') in protein sequences.
 
         Receives sequences with '_' at positions to be sampled, injects
@@ -194,8 +189,8 @@ class ESM2Model:
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
-        mask_positions: List[List[int]] = []
-        tokenizer_sequences: List[str] = []
+        mask_positions: list[list[int]] = []
+        tokenizer_sequences: list[str] = []
         for seq in sequences:
             positions = [i for i, c in enumerate(seq) if c == "_"]
             mask_positions.append(positions)
@@ -207,8 +202,8 @@ class ESM2Model:
             for i in range(0, len(sequences), batch_size)
         ]
 
-        all_sampled: List[str] = []
-        all_logits: List[torch.Tensor] = []
+        all_sampled: list[str] = []
+        all_logits: list[torch.Tensor] = []
 
         for start, end in tqdm(
             batch_ranges, desc="ESM2 sampling", unit="batch",
@@ -240,7 +235,7 @@ class ESM2Model:
 
             # Sample at mask positions for each sequence
             for seq_idx, (orig_seq, positions) in enumerate(
-                zip(batch_originals, batch_masks)
+                zip(batch_originals, batch_masks, strict=False)
             ):
                 if not positions:
                     all_sampled.append(orig_seq)
@@ -252,7 +247,7 @@ class ESM2Model:
                     sampled_idx = torch.multinomial(probs, 1).squeeze(-1)
 
                     chars = list(orig_seq)
-                    for pos, aa_idx in zip(positions, sampled_idx.tolist()):
+                    for pos, aa_idx in zip(positions, sampled_idx.tolist(), strict=False):
                         chars[pos] = AMINO_ACIDS_LIST[aa_idx]
                     all_sampled.append("".join(chars))
 
@@ -267,14 +262,13 @@ class ESM2Model:
 
     def score(
         self,
-        sequences: List[str],
+        sequences: list[str],
         batch_size: int = 32,
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
-    ) -> Dict[str, List]:
-        """
-        Score protein sequences using ESM2 with MLM pseudo-perplexity.
+    ) -> dict[str, list]:
+        """Score protein sequences using ESM2 with MLM pseudo-perplexity.
 
         Computes pseudo-perplexity by masking each position individually and
         computing P(x_i | x_{-i}). Uses batching for efficiency. Requires L forward
@@ -336,7 +330,7 @@ class ESM2Model:
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
 
-    def _compute_mlm_score(self, seq: str, batch_size: int) -> Tuple[float, torch.Tensor, int]:
+    def _compute_mlm_score(self, seq: str, batch_size: int) -> tuple[float, torch.Tensor, int]:
         """Compute MLM pseudo-perplexity by masking each position.
 
         This method performs L forward passes (batched) for a sequence of length L,
@@ -496,7 +490,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    elif operation == "sample":
+    if operation == "sample":
         return _model.sample(
             sequences=input_dict.get("sequences", []),
             temperature=input_dict.get("temperature", 1.0),
@@ -505,7 +499,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    elif operation == "score":
+    if operation == "score":
         return _model.score(
             sequences=input_dict.get("sequences", []),
             batch_size=input_dict.get("batch_size", 32),
@@ -513,8 +507,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
         )
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    raise ValueError(f"Unknown operation: {operation}")
 
 
 
@@ -524,9 +517,8 @@ def to_device(device: str) -> dict:
     if _model is not None and _model._loaded:
         _model.to_device(device)
         return {"success": True, "device": device}
-    else:
-        # Model not loaded yet - will use device on next call
-        return {"success": True, "device": device, "note": "model not loaded yet"}
+    # Model not loaded yet - will use device on next call
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict:
@@ -542,7 +534,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
-    with open(sys.argv[1], "r") as f:
+    with open(sys.argv[1]) as f:
         input_data = json.load(f)
 
     result = dispatch(input_data)

@@ -1,11 +1,12 @@
-"""proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_sample.py
+"""proto_tools/tools/inverse_folding/proteinmpnn/proteinmpnn_sample.py.
 
-ProteinMPNN sampling tool."""
+ProteinMPNN sampling tool.
+"""
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, Literal
+from typing import Literal
 
 import numpy as np
 from pydantic import Field
@@ -63,10 +64,10 @@ class ProteinMPNNSequences(DesignedSequences):
         sequence_identity (list[float]): Sequence identity to the PDB prompt sequence.
     """
 
-    perplexity: List[float] = Field(
+    perplexity: list[float] = Field(
         description="Perplexity of the sequence from the ProteinMPNN model"
     )
-    sequence_identity: List[float] = Field(
+    sequence_identity: list[float] = Field(
         description="Sequence identity to the sequence in the PDB prompt"
     )
 
@@ -106,6 +107,8 @@ def run_proteinmpnn_sample(
         inputs (ProteinMPNNSampleInput): ProteinMPNNSampleInput containing a list of structure inputs,
             each with optional chain_ids/fixed_positions constraints.
         config (ProteinMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with designed sequences for each input structure.

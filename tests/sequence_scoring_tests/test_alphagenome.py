@@ -1,8 +1,7 @@
-"""tests/sequence_scoring_tests/test_alphagenome.py
+"""tests/sequence_scoring_tests/test_alphagenome.py.
 
-Tests for AlphaGenome."""
-from __future__ import annotations
-
+Tests for AlphaGenome.
+"""
 import pytest
 
 from tests.conftest import make_persistent_fixture

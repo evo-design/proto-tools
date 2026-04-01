@@ -1,5 +1,7 @@
-from .tmalign import TMalignConfig, TMalignInput, TMalignOutput, run_tmalign
-from .usalign import USalignConfig, USalignInput, USalignOutput, run_usalign
+"""Structure alignment tools."""
+
+from proto_tools.tools.structure_alignment.tmalign import TMalignConfig, TMalignInput, TMalignOutput, run_tmalign
+from proto_tools.tools.structure_alignment.usalign import USalignConfig, USalignInput, USalignOutput, run_usalign
 
 __all__ = [
     # TMalign

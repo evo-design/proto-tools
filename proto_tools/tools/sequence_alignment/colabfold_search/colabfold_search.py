@@ -1,5 +1,4 @@
-"""
-proto_tools/tools/sequence_alignment/colabfold_search/colabfold_search.py
+"""proto_tools/tools/sequence_alignment/colabfold_search/colabfold_search.py.
 
 This module provides a standardized interface for generating Multiple Sequence
 Alignments (MSAs) using ColabFold's local database search with MMSeqs2.
@@ -12,8 +11,9 @@ import logging
 import os
 import shutil
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Literal, Optional, Union
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -67,7 +67,7 @@ class ColabfoldSearchQuery(BaseModel):
     """
 
     sequence: str = Field(description="Protein sequence to search for homologs")
-    sequence_id: Optional[str] = Field(
+    sequence_id: str | None = Field(
         default=None,
         description="Optional sequence identifier (auto-generated if not provided)",
     )
@@ -114,7 +114,7 @@ class ColabfoldSearchInput(BaseToolInput):
         >>> inputs = ColabfoldSearchInput(queries=[query1])
     """
 
-    queries: List[ColabfoldSearchQuery] = InputField(
+    queries: list[ColabfoldSearchQuery] = InputField(
         description="List of protein sequences to search for homologs"
     )
 
@@ -122,7 +122,6 @@ class ColabfoldSearchInput(BaseToolInput):
     @classmethod
     def normalize_queries(cls, value):
         """Normalize various input formats to List[ColabfoldSearchQuery]."""
-
         # If single instance, immediately convert to list
         if not isinstance(value, list):
             value = [value]
@@ -132,14 +131,16 @@ class ColabfoldSearchInput(BaseToolInput):
 
         # Validate each query
         validated_queries = []
-        for query in value:
-            if isinstance(query, str):
-                query = ColabfoldSearchQuery(sequence=query)
-            elif isinstance(query, tuple):
-                query = ColabfoldSearchQuery(sequence=query[0], sequence_id=query[1])
-            elif not isinstance(query, ColabfoldSearchQuery):
+        for raw_query in value:
+            if isinstance(raw_query, str):
+                query = ColabfoldSearchQuery(sequence=raw_query)
+            elif isinstance(raw_query, tuple):
+                query = ColabfoldSearchQuery(sequence=raw_query[0], sequence_id=raw_query[1])
+            elif isinstance(raw_query, ColabfoldSearchQuery):
+                query = raw_query
+            else:
                 raise ValueError(
-                    f"Invalid query input: {query}. Must be a string, tuple, or ColabfoldSearchQuery instance."
+                    f"Invalid query input: {raw_query}. Must be a string, tuple, or ColabfoldSearchQuery instance."
                 )
             validated_queries.append(query)
 
@@ -191,7 +192,7 @@ class ColabfoldSearchResult(BaseModel):
         sequence_id (str): Identifier for the sequence that was searched.
     """
 
-    msa: Optional[MSA] = Field(
+    msa: MSA | None = Field(
         description="Multiple Sequence Alignment containing homologous sequences, or None if no homologs found"
     )
     sequence_id: str = Field(description="Identifier for the searched sequence")
@@ -200,7 +201,8 @@ class ColabfoldSearchResult(BaseModel):
 
     @property
     def num_homologs_found(self) -> int:
-        """Number of homologous sequences found in the MSA (count excludes the query sequence
+        """Number of homologous sequences found in the MSA (count excludes the query sequence.
+
         which will always be the first sequence in the MSA). Returns 0 if msa is None.
         """
         if self.msa is None:
@@ -220,19 +222,21 @@ class ColabfoldSearchOutput(BaseToolOutput):
             and metadata. The order matches the input queries order.
     """
 
-    results: List[ColabfoldSearchResult] = Field(
+    results: list[ColabfoldSearchResult] = Field(
         description="List of MSA search results"
     )
 
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
         return ["a3m", "fasta"]
 
     @property
     def output_format_default(self) -> str:
+        """Return the default output format."""
         return "a3m"
 
-    def _export_output(self, export_path: Union[Path, str], file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str):
         if file_format not in ["a3m", "fasta"]:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -325,7 +329,7 @@ class ColabfoldSearchConfig(BaseConfig):
         description="Whether to include metagenomic database in search",
         advanced=True,
     )
-    output_dir: Optional[str] = ConfigField(
+    output_dir: str | None = ConfigField(
         title="Output Directory",
         default=None,
         description="Directory for output MSA files (default: $PROTO_HOME/colabfold_search)",
@@ -342,7 +346,7 @@ class ColabfoldSearchConfig(BaseConfig):
         description="Name of the database to use.",
         advanced=True,
     )
-    sensitivity: Optional[float] = ConfigField(
+    sensitivity: float | None = ConfigField(
         title="MMseqs2 Sensitivity",
         default=None,
         ge=1.0,
@@ -350,7 +354,7 @@ class ColabfoldSearchConfig(BaseConfig):
         description="MMseqs2 parameter. Higher means more hits but slower search. Default matches ColabFold server.",
         advanced=True,
     )
-    num_threads: Optional[int] = ConfigField(
+    num_threads: int | None = ConfigField(
         title="Number of Threads",
         default=None,
         ge=1,
@@ -383,7 +387,6 @@ class ColabfoldSearchConfig(BaseConfig):
     @model_validator(mode="after")
     def validate_local_database_dir_and_name(self):
         """If the msa_db_dir is specified, ensure the folder exists."""
-
         # This check should only run for local search mode
         if self.search_mode != "local":
             return self
@@ -446,7 +449,8 @@ def run_colabfold_search(
     inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig | None = None,
     instance=None,
 ) -> ColabfoldSearchOutput:
-    """Generate MSAs for protein sequences using ColabFold search, with options
+    """Generate MSAs for protein sequences using ColabFold search, with options.
+
     for online and local execution.
 
     Local Execution:
@@ -460,6 +464,8 @@ def run_colabfold_search(
     Args:
         inputs (ColabfoldSearchInput): Validated input containing sequences to search.
         config (ColabfoldSearchConfig | None): Configuration with database path and search parameters.
+
+        instance: Optional ToolInstance for subprocess execution.
 
     Returns:
         ColabfoldSearchOutput: List of results containing MSA objects.
@@ -482,7 +488,6 @@ def run_colabfold_search(
         >>> for seq in msa:
         ...     print(seq)
     """
-
     if not inputs.queries:
         return ColabfoldSearchOutput(results=[])
 
@@ -500,10 +505,9 @@ def run_colabfold_search(
 
     if config.search_mode == "local":
         return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
-    elif config.search_mode == "remote":
+    if config.search_mode == "remote":
         return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)
-    else:
-        raise ValueError(f"Invalid search mode: {config.search_mode}")
+    raise ValueError(f"Invalid search mode: {config.search_mode}")
 
 
 # ============================================================================
@@ -514,8 +518,7 @@ def run_colabfold_search(
 def _cleanup_default_output_dir_if_cache_empty(
     config: ColabfoldSearchConfig,
 ) -> None:
-    """
-    Clean up default output directory if cache is empty.
+    """Clean up default output directory if cache is empty.
 
     This function removes leftover alignment files from previous runs to avoid
     the accumulation of unused alignment files in the default cache directory.
@@ -556,7 +559,7 @@ def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
         int: Number of sequences in the file
     """
     count = 0
-    with open(a3m_path, "r") as f:
+    with open(a3m_path) as f:
         for line in f:
             if line.startswith(">"):
                 count += 1
@@ -573,7 +576,7 @@ def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
         a3m_path (str | Path): Path to the A3M file to modify.
         seq_id (str): Sequence identifier to set as the query header.
     """
-    with open(a3m_path, "r") as f:
+    with open(a3m_path) as f:
         lines = f.readlines()
     if lines and lines[0].startswith(">"):
         lines[0] = f">{seq_id}\n"
@@ -584,8 +587,7 @@ def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
 def detect_available_local_databases(
     msa_db_dir: str | Path, verbose: bool = False
 ) -> list[str]:
-    """
-    Detect and list all available databases in the MSA database directory.
+    """Detect and list all available databases in the MSA database directory.
 
     This function scans the database directory for ColabFold/MMSeqs2 database files
     and returns a list of the available databases names.
@@ -639,15 +641,13 @@ def detect_available_local_databases(
 
 
 def _local_search(
-    sequences: List[str],
-    sequence_ids: List[str],
+    sequences: list[str],
+    sequence_ids: list[str],
     config: ColabfoldSearchConfig,
     msa_out_dir: str,
     instance=None,
 ) -> ColabfoldSearchOutput:
-    """
-    Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
-    """
+    """Performs local search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
     logger.debug(f"Generating local MSAs for {len(sequences)} sequence(s)...")
 
     # Use ToolInstance to run colabfold_search in isolated environment
@@ -659,10 +659,7 @@ def _local_search(
     with tempfile.TemporaryDirectory() as tmpdir:
         fasta_path = os.path.join(tmpdir, "query.fasta")
         with open(fasta_path, "w") as f:
-            for idx, seq in enumerate(sequences):
-                # Use numeric IDs to ensure colabfold_search outputs
-                # predictably named files (0.a3m, 1.a3m, etc.)
-                f.write(f">{idx}\n{seq}\n")
+            f.writelines(f">{idx}\n{seq}\n" for idx, seq in enumerate(sequences))
 
         # Prepare input data for standalone script
         num_threads = config.num_threads
@@ -714,11 +711,7 @@ def _local_search(
         # If only the query sequence is present, return None instead of creating an MSA
         num_sequences = _count_sequences_in_a3m(named_a3m)
 
-        if num_sequences < 2:
-            # No homologs found, only the query sequence
-            msa = None
-        else:
-            msa = MSA(aligned_sequences_or_filepath=named_a3m)
+        msa = None if num_sequences < 2 else MSA(aligned_sequences_or_filepath=named_a3m)
 
         results.append(
             ColabfoldSearchResult(
@@ -731,15 +724,13 @@ def _local_search(
 
 
 def _remote_search(
-    sequences: List[str],
-    sequence_ids: List[str],
+    sequences: list[str],
+    sequence_ids: list[str],
     config: ColabfoldSearchConfig,
-    msa_out_dir: str,
+    msa_out_dir: str,  # noqa: ARG001 — required by tool interface
     instance=None,
 ) -> ColabfoldSearchOutput:
-    """
-    Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs).
-    """
+    """Performs remote search for homologous sequences and generates Multiple Sequence Alignments (MSAs)."""
     logger.debug(f"Generating remote MSAs for {len(sequences)} sequence(s)...")
 
     # Use ToolInstance to run remote search in isolated environment
@@ -777,15 +768,14 @@ def _remote_search(
             if "errors" in output_data:
                 error_msg += f"\nErrors: {output_data['errors']}"
             raise RuntimeError(error_msg)
-        else:
-            # Partial failure - log warning but continue
-            if config.verbose:
-                logger.warning(
-                    f"Remote MSA search partially failed: {num_successful} succeeded, {num_failed} failed"
-                )
-                if "errors" in output_data:
-                    for seq_id, error in output_data["errors"].items():
-                        logger.warning(f"  {seq_id}: {error}")
+        # Partial failure - log warning but continue
+        if config.verbose:
+            logger.warning(
+                f"Remote MSA search partially failed: {num_successful} succeeded, {num_failed} failed"
+            )
+            if "errors" in output_data:
+                for seq_id, error in output_data["errors"].items():
+                    logger.warning(f"  {seq_id}: {error}")
 
     # Process results
     msa_paths = output_data.get("msa_paths", {})
@@ -798,11 +788,7 @@ def _remote_search(
             # Check if the A3M file contains at least 2 sequences (query + at least one homolog)
             num_sequences = _count_sequences_in_a3m(msa_path)
 
-            if num_sequences < 2:
-                # No homologs found, only the query sequence
-                msa = None
-            else:
-                msa = MSA(aligned_sequences_or_filepath=msa_path)
+            msa = None if num_sequences < 2 else MSA(aligned_sequences_or_filepath=msa_path)
 
             results.append(
                 ColabfoldSearchResult(
