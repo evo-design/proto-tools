@@ -322,8 +322,10 @@ def test_all_links_reachable(readme: Path) -> None:
     if not urls:
         return
 
-    # Skip our own docs site — assume it's up; avoids flaky CI timeouts
-    _SKIP_DOMAINS = {"bio-pro.mintlify.app"}
+    # Skip domains that are known-valid but unreliable for automated checks.
+    # - bio-pro.mintlify.app: our own docs site, assume it's up
+    # - doi.org: permanent academic identifiers, never break but resolver is slow
+    _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org"}
 
     broken = []
     for lineno, url in urls:
