@@ -2,11 +2,13 @@
 
 Tests for structure prediction shared input data models.
 """
+
 from typing import ClassVar
 
 import pytest
 
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    CHAIN_IDS,
     Chain,
     ChainModification,
     StructurePredictionComplex,
@@ -73,21 +75,26 @@ def test_complex_rejects_nonstring_chain():
 # ── StructurePredictionInput normalisation ─────────────────────────────────────
 
 
-@pytest.mark.parametrize("complexes,expected_chain_sequences", [
-    (
-        [StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT]),
-         StructurePredictionComplex(chains=["GSSGSSG"])],
-        [[_PROTEIN_SEQ_SHORT], ["GSSGSSG"]],
-    ),
-    (
-        [_PROTEIN_SEQ_SHORT, "GSSGSSG"],
-        [[_PROTEIN_SEQ_SHORT], ["GSSGSSG"]],
-    ),
-    (
-        [[_PROTEIN_SEQ_SHORT], ["GSSGSSG", _DNA_SEQ]],
-        [[_PROTEIN_SEQ_SHORT], ["GSSGSSG", _DNA_SEQ]],
-    ),
-])
+@pytest.mark.parametrize(
+    "complexes,expected_chain_sequences",
+    [
+        (
+            [
+                StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT]),
+                StructurePredictionComplex(chains=["GSSGSSG"]),
+            ],
+            [[_PROTEIN_SEQ_SHORT], ["GSSGSSG"]],
+        ),
+        (
+            [_PROTEIN_SEQ_SHORT, "GSSGSSG"],
+            [[_PROTEIN_SEQ_SHORT], ["GSSGSSG"]],
+        ),
+        (
+            [[_PROTEIN_SEQ_SHORT], ["GSSGSSG", _DNA_SEQ]],
+            [[_PROTEIN_SEQ_SHORT], ["GSSGSSG", _DNA_SEQ]],
+        ),
+    ],
+)
 def test_input_normalises_complexes(complexes, expected_chain_sequences):
     input_obj = _AllTypesInput(complexes=complexes)
     assert len(input_obj.complexes) == len(expected_chain_sequences)
@@ -114,11 +121,14 @@ def test_all_supported_types_accepted():
     assert len(input_obj.complexes) == 1
 
 
-@pytest.mark.parametrize("chain,expected_type", [
-    (_DNA_SEQ, "dna"),
-    (_RNA_SEQ, "rna"),
-    ("CC(C)C", "ligand"),
-])
+@pytest.mark.parametrize(
+    "chain,expected_type",
+    [
+        (_DNA_SEQ, "dna"),
+        (_RNA_SEQ, "rna"),
+        ("CC(C)C", "ligand"),
+    ],
+)
 def test_protein_only_input_rejects_non_protein(chain, expected_type):
     complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, chain])
     with pytest.raises(ValueError, match=f"unsupported entity types: {expected_type}"):
@@ -198,11 +208,14 @@ def test_chain_modification_strips_whitespace_from_code():
 # ── Chain ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("sequence,expected_type", [
-    ("ACDEFGHIKLMNPQRSTVWY", "protein"),
-    (_DNA_SEQ, "dna"),
-    (_RNA_SEQ, "rna"),
-])
+@pytest.mark.parametrize(
+    "sequence,expected_type",
+    [
+        ("ACDEFGHIKLMNPQRSTVWY", "protein"),
+        (_DNA_SEQ, "dna"),
+        (_RNA_SEQ, "rna"),
+    ],
+)
 def test_chain_auto_infers_entity_type(sequence, expected_type):
     chain = Chain(sequence=sequence)
     assert chain.entity_type == expected_type
@@ -258,10 +271,7 @@ def test_chain_rejects_empty_or_whitespace_sequence(sequence):
 
 
 def test_chain_accepts_tuple_modifications():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        modifications=[(4, "SEP"), (9, "TPO")]
-    )
+    chain = Chain(sequence=_PROTEIN_SEQ, modifications=[(4, "SEP"), (9, "TPO")])
     assert len(chain.modifications) == 2
     assert chain.modifications[0].position == 4
     assert chain.modifications[0].modification_code == "SEP"
@@ -274,8 +284,8 @@ def test_chain_accepts_mixed_tuple_and_object_modifications():
         sequence=_PROTEIN_SEQ,
         modifications=[
             (4, "SEP"),
-            ChainModification(position=9, modification_code="TPO")
-        ]
+            ChainModification(position=9, modification_code="TPO"),
+        ],
     )
     assert len(chain.modifications) == 2
     assert chain.modifications[0].position == 4
@@ -322,12 +332,12 @@ def test_complex_with_multiple_modified_chains():
     chain1 = Chain(
         sequence=_PROTEIN_SEQ,
         entity_type="protein",
-        modifications=[ChainModification(position=4, modification_code="SEP")]
+        modifications=[ChainModification(position=4, modification_code="SEP")],
     )
     chain2 = Chain(
         sequence=_RNA_SEQ,
         entity_type="rna",
-        modifications=[ChainModification(position=3, modification_code="2MG")]
+        modifications=[ChainModification(position=3, modification_code="2MG")],
     )
     complex_obj = StructurePredictionComplex(chains=[chain1, chain2])
     assert complex_obj.chains[0].modifications[0].modification_code == "SEP"
@@ -341,10 +351,40 @@ def test_complex_chain_sequences_property():
     assert complex_obj.chain_sequences == [_PROTEIN_SEQ, _DNA_SEQ]
 
 
-def test_complex_accepts_dictionary_chain():
+def test_extract_protein_chains_filters_by_entity_type():
     complex_obj = StructurePredictionComplex(
-        chains=[{"sequence": _PROTEIN_SEQ, "entity_type": "protein"}]
+        chains=[
+            Chain(sequence=_PROTEIN_SEQ, entity_type="protein"),
+            Chain(sequence=_DNA_SEQ, entity_type="dna"),
+            Chain(sequence=_PROTEIN_SEQ_SHORT, entity_type="protein"),
+        ]
     )
+    seqs, chain_ids = complex_obj.extract_protein_chains()
+    # Returns only proteins; chain IDs reflect original position (A=0, C=2)
+    assert seqs == [_PROTEIN_SEQ, _PROTEIN_SEQ_SHORT]
+    assert chain_ids == ["A", "C"]
+
+
+def test_extract_protein_chains_empty_when_no_proteins():
+    complex_obj = StructurePredictionComplex(chains=[_DNA_SEQ, _RNA_SEQ])
+    assert complex_obj.extract_protein_chains() == ([], [])
+
+
+def test_complex_rejects_more_than_26_chains():
+    with pytest.raises(ValueError, match="more than 26"):
+        StructurePredictionComplex(chains=[Chain(sequence="M", entity_type="protein") for _ in range(27)])
+
+
+def test_extract_protein_chains_succeeds_at_26_chains():
+    chains = [Chain(sequence="M", entity_type="protein") for _ in range(26)]
+    complex_obj = StructurePredictionComplex(chains=chains)
+    seqs, chain_ids = complex_obj.extract_protein_chains()
+    assert seqs == ["M"] * 26
+    assert chain_ids == CHAIN_IDS
+
+
+def test_complex_accepts_dictionary_chain():
+    complex_obj = StructurePredictionComplex(chains=[{"sequence": _PROTEIN_SEQ, "entity_type": "protein"}])
     assert complex_obj.chains[0].sequence == _PROTEIN_SEQ
     assert complex_obj.chains[0].entity_type == "protein"
 
@@ -355,7 +395,7 @@ def test_complex_accepts_dictionary_chain_with_modifications():
             {
                 "sequence": _PROTEIN_SEQ,
                 "entity_type": "protein",
-                "modifications": [(4, "SEP"), (9, "TPO")]
+                "modifications": [(4, "SEP"), (9, "TPO")],
             }
         ]
     )
@@ -511,7 +551,7 @@ def test_complex_clear_all_modifications_returns_self_for_chaining():
 def test_allows_modifications_input_accepts_modified_chains():
     chain = Chain(
         sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")]
+        modifications=[ChainModification(position=4, modification_code="SEP")],
     )
     complex_obj = StructurePredictionComplex(chains=[chain])
     input_obj = _AllTypesInput(complexes=[complex_obj])
@@ -527,7 +567,7 @@ def test_allows_modifications_input_accepts_unmodified_chains():
 def test_no_modifications_input_rejects_modified_chain():
     chain = Chain(
         sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")]
+        modifications=[ChainModification(position=4, modification_code="SEP")],
     )
     complex_obj = StructurePredictionComplex(chains=[chain])
     with pytest.raises(ValueError, match="contains modifications"):
@@ -544,7 +584,7 @@ def test_no_modifications_input_rejects_single_modified_chain_in_multi_chain_com
     chain1 = Chain(sequence=_PROTEIN_SEQ)
     chain2 = Chain(
         sequence=_DNA_SEQ,
-        modifications=[ChainModification(position=1, modification_code="6MA")]
+        modifications=[ChainModification(position=1, modification_code="6MA")],
     )
     complex_obj = StructurePredictionComplex(chains=[chain1, chain2])
     with pytest.raises(ValueError, match="contains modifications"):
@@ -557,7 +597,7 @@ def test_no_modifications_input_error_includes_complex_index():
         chains=[
             Chain(
                 sequence=_DNA_SEQ,
-                modifications=[ChainModification(position=1, modification_code="6MA")]
+                modifications=[ChainModification(position=1, modification_code="6MA")],
             )
         ]
     )
@@ -568,7 +608,7 @@ def test_no_modifications_input_error_includes_complex_index():
 def test_no_modifications_input_error_includes_class_name():
     chain = Chain(
         sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")]
+        modifications=[ChainModification(position=4, modification_code="SEP")],
     )
     complex_obj = StructurePredictionComplex(chains=[chain])
     with pytest.raises(ValueError, match="_NoModificationsInput does not allow"):
@@ -580,8 +620,8 @@ def test_no_modifications_input_rejects_chain_with_multiple_modifications():
         sequence=_PROTEIN_SEQ,
         modifications=[
             ChainModification(position=4, modification_code="SEP"),
-            ChainModification(position=9, modification_code="TPO")
-        ]
+            ChainModification(position=9, modification_code="TPO"),
+        ],
     )
     complex_obj = StructurePredictionComplex(chains=[chain])
     with pytest.raises(ValueError, match="contains modifications"):
@@ -613,7 +653,7 @@ def test_allows_modifications_input_accepts_dictionary_chain_with_modifications(
             {
                 "sequence": _PROTEIN_SEQ,
                 "entity_type": "protein",
-                "modifications": [(4, "SEP")]
+                "modifications": [(4, "SEP")],
             }
         ]
     )
@@ -627,7 +667,7 @@ def test_no_modifications_input_rejects_dictionary_chain_with_modifications():
             {
                 "sequence": _PROTEIN_SEQ,
                 "entity_type": "protein",
-                "modifications": [(4, "SEP")]
+                "modifications": [(4, "SEP")],
             }
         ]
     )
@@ -638,11 +678,14 @@ def test_no_modifications_input_rejects_dictionary_chain_with_modifications():
 # ── Modification compatibility validation ──────────────────────────────────────
 
 
-@pytest.mark.parametrize("sequence,entity_type,position,code", [
-    (_PROTEIN_SEQ, "protein", 4, "SEP"),   # position 4 is 'S' (serine)
-    (_RNA_SEQ, "rna", 3, "2MG"),           # position 3 is 'G' (guanosine)
-    (_DNA_SEQ, "dna", 1, "1AP"),           # position 1 is 'A' (adenine)
-])
+@pytest.mark.parametrize(
+    "sequence,entity_type,position,code",
+    [
+        (_PROTEIN_SEQ, "protein", 4, "SEP"),  # position 4 is 'S' (serine)
+        (_RNA_SEQ, "rna", 3, "2MG"),  # position 3 is 'G' (guanosine)
+        (_DNA_SEQ, "dna", 1, "1AP"),  # position 1 is 'A' (adenine)
+    ],
+)
 def test_valid_modification_accepted(sequence, entity_type, position, code):
     chain = Chain(sequence=sequence, entity_type=entity_type, modifications=[(position, code)])
     assert chain.modifications[0].modification_code == code
@@ -654,7 +697,7 @@ def test_invalid_protein_modification_raises_with_position():
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",
-            modifications=[(5, "SEP")]
+            modifications=[(5, "SEP")],
         )
 
 
@@ -663,7 +706,7 @@ def test_invalid_modification_error_shows_expected_residue():
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",
-            modifications=[(5, "SEP")]
+            modifications=[(5, "SEP")],
         )
 
 
@@ -673,7 +716,7 @@ def test_invalid_modification_error_shows_actual_residue():
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",
-            modifications=[(5, "SEP")]
+            modifications=[(5, "SEP")],
         )
 
 
@@ -683,7 +726,7 @@ def test_invalid_modification_error_lists_allowed_modifications_for_actual_resid
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",
-            modifications=[(5, "SEP")]
+            modifications=[(5, "SEP")],
         )
 
 
@@ -691,7 +734,7 @@ def test_all_valid_modifications_pass_in_batch():
     chain = Chain(
         sequence=_PROTEIN_SEQ,
         entity_type="protein",
-        modifications=[(4, "SEP"), (9, "TPO")]
+        modifications=[(4, "SEP"), (9, "TPO")],
     )
     assert len(chain.modifications) == 2
 
@@ -702,20 +745,16 @@ def test_one_invalid_modification_among_valid_ones_raises():
             sequence=_PROTEIN_SEQ,
             entity_type="protein",
             modifications=[
-                (4, "SEP"),   # Valid: position 4 is 'S'
-                (10, "SEP")   # Invalid: position 10 is 'N', not 'S'
-            ]
+                (4, "SEP"),  # Valid: position 4 is 'S'
+                (10, "SEP"),  # Invalid: position 10 is 'N', not 'S'
+            ],
         )
 
 
 def test_rna_modification_on_wrong_base_raises():
     # 2MG is for guanosine (G), but position 1 is adenosine (A)
     with pytest.raises(ValueError, match="Invalid modification '2MG' at position 1"):
-        Chain(
-            sequence=_RNA_SEQ,
-            entity_type="rna",
-            modifications=[(1, "2MG")]
-        )
+        Chain(sequence=_RNA_SEQ, entity_type="rna", modifications=[(1, "2MG")])
 
 
 def test_rna_modification_rejected_on_dna_same_base():
@@ -724,7 +763,7 @@ def test_rna_modification_rejected_on_dna_same_base():
         Chain(
             sequence=_DNA_SEQ,
             entity_type="dna",
-            modifications=[(7, "2MG")]  # position 7 is 'G' but this is DNA
+            modifications=[(7, "2MG")],  # position 7 is 'G' but this is DNA
         )
 
 
@@ -741,7 +780,7 @@ def test_complex_with_invalid_modification_raises():
                 {
                     "sequence": _PROTEIN_SEQ_TYPED,
                     "entity_type": "protein",
-                    "modifications": [(5, "SEP")]  # position 5 is 'P', not 'S'
+                    "modifications": [(5, "SEP")],  # position 5 is 'P', not 'S'
                 }
             ]
         )

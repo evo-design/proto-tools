@@ -6,10 +6,9 @@ batching complexes and relabeling chains in PDB output.
 
 from __future__ import annotations
 
-import string
 from typing import Any
 
-CHAIN_IDS = list(string.ascii_uppercase)
+from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
 
 
 def split_into_safe_batches(
@@ -71,6 +70,9 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     import io
 
     from Bio import PDB
+
+    if len(chain_lengths) > len(CHAIN_IDS):
+        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
 
     parser = PDB.PDBParser(QUIET=True)
     structure = parser.get_structure("structure", io.StringIO(pdb_str))
