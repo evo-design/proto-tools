@@ -228,17 +228,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 
 ### MCP Server
 
-An MCP server (`proto_tools_mcp/`) exposes the ToolRegistry over the Model Context Protocol. Claude Code auto-discovers it via `.mcp.json`. Use MCP tools to discover available tools, search by keyword, inspect schemas, and read citations without importing Python.
-
-```bash
-# Manual launch (stdio)
-python -m proto_tools_mcp
-
-# HTTP transport
-python -m proto_tools_mcp --transport http --port 9200
-```
-
-Requires `pip install -e ".[mcp]"` (adds `fastmcp>=2.0.0`).
+The MCP server has been migrated to [proto-tools-api](https://github.com/proto-bio/proto-tools-api). See that repo for MCP server setup and usage.
 
 ### Running Tools Directly
 

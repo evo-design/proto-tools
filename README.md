@@ -170,30 +170,11 @@ See `notes/tool_instance_example.ipynb` for a full walkthrough with timing compa
 
 ## MCP Servers
 
-Two MCP servers expose the proto-language ecosystem to AI agents. Both support stdio (Claude Desktop / Claude Code) and HTTP transports.
+### proto-tools — tool discovery & schemas
 
-### proto-tools (this repo) — tool discovery & schemas
+The proto-tools MCP server has been migrated to [proto-tools-api](https://github.com/proto-bio/proto-tools-api). See that repo for setup and usage.
 
-Wraps the ToolRegistry so agents can discover tools, inspect schemas, search by keyword, and read citations.
-
-```bash
-# stdio (auto-discovered by Claude Code via .mcp.json)
-python -m proto_tools_mcp
-
-# HTTP
-python -m proto_tools_mcp --transport http --port 9200
-```
-
-Install: `pip install -e ".[mcp]"`
-
-**Example — find structure prediction tools and inspect one:**
-```
-> list_tools(category="structure_prediction")
-> get_tool_schema(key="esmfold-prediction")
-> search_tools(query="inverse folding")
-```
-
-### proto-language (parent repo) — DSL, constraints, generators
+### proto-language — DSL, constraints, generators
 
 Lives in [`proto-language-api/proto_mcp/`](https://github.com/proto-bio/proto-language-api). Exposes the language layer: constraints, generators, optimizers, program validation, and doc search.
 

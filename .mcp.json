@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "proto-tools": {
-      "type": "stdio",
-      "command": "python",
-      "args": ["-m", "proto_tools_mcp"]
-    }
-  }
-}

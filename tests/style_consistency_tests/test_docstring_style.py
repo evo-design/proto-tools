@@ -21,7 +21,7 @@ from .helpers import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Only scan source code, not tests
-_SOURCE_DIRS = ["proto_tools", "proto_tools_mcp"]
+_SOURCE_DIRS = ["proto_tools"]
 
 _EXCLUDE_PATTERNS = [
     "proto_tools/tools/*/standalone/*",
