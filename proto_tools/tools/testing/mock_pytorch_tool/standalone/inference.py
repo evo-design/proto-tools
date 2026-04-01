@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-class TinyModel(nn.Module):
+class TinyModel(nn.Module):  # type: ignore[misc]
     """Minimal PyTorch model that allocates a realistic amount of GPU memory.
 
     Uses small linear layers for computation and a large buffer tensor to
@@ -95,7 +95,7 @@ _model: MockPyTorchToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -119,7 +119,7 @@ def dispatch(input_dict: dict) -> dict:
     return {"results": results}
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
 
@@ -129,7 +129,7 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Get memory statistics (called by DeviceManager)."""
     global _model
 
@@ -141,7 +141,7 @@ def get_memory_stats() -> dict:
     if isinstance(_model._device, torch.device) and _model._device.type == "cuda" and _model._device.index is not None:
         device_idx = _model._device.index
 
-    return get_pytorch_memory_stats(device_idx)
+    return get_pytorch_memory_stats(device_idx)  # type: ignore[no-any-return]
 
 
 # ============================================================================

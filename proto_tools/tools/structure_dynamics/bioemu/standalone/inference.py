@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class BioEmuModel:
     """BioEmu model wrapper used by the standalone execution path."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize BioEmuModel."""
         self._loaded = False
         self._model_name: str | None = None
@@ -142,7 +142,7 @@ class BioEmuModel:
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model. Call load() first.")
         if self.device != device:
-            self.model = move_model_to_device(self.model, self.device, device)
+            self.model = move_model_to_device(self.model, self.device, device)  # type: ignore[has-type]
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:
@@ -193,7 +193,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     operation = input_dict.get("operation", "sample")
     if operation == "sample":
@@ -202,19 +202,19 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for non-persistent tool - loads on each call."""
     # BioEmu creates a new model instance on each call, so there's no
     # persistent model to move. The device is passed in the input_dict.
     return {"success": True, "device": device, "note": "non-persistent tool, loads on each call"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     # BioEmu doesn't persist models, so just report overall GPU memory state
-    return get_pytorch_memory_stats(device=0)
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

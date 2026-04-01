@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Chai1Model:
     """Chai1 model for multi-modal structure prediction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Chai1 model wrapper."""
         self._loaded = False
         self._chai1_run_inference = None
@@ -66,7 +66,7 @@ class Chai1Model:
         sys.stdout.flush()
 
         # Run the model
-        candidates = self._chai1_run_inference(
+        candidates = self._chai1_run_inference(  # type: ignore[misc]
             fasta_file=Path(fasta_file),
             output_dir=Path(output_dir),
             use_esm_embeddings=use_esm_embeddings,
@@ -114,7 +114,7 @@ class Chai1Model:
             },
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False):  # noqa: ARG002 — required by tool interface
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load Chai1 model components.
 
         Args:
@@ -124,7 +124,7 @@ class Chai1Model:
         logger.debug("Initializing Chai1")
 
         try:
-            from chai_lab.chai1 import run_inference  # type: ignore
+            from chai_lab.chai1 import run_inference  # type: ignore[import-not-found]
 
             self._chai1_run_inference = run_inference
         except ImportError:
@@ -132,7 +132,7 @@ class Chai1Model:
                 "Could not import chai_lab. Make sure Chai1 is installed in the current environment."
             ) from None
 
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         logger.debug("Chai1 initialized successfully")
@@ -144,7 +144,7 @@ class Chai1Model:
 _model: Chai1Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -173,18 +173,18 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

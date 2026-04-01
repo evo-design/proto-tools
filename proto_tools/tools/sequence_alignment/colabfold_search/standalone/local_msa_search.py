@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class ColabFoldSearchWrapper:
     """Wrapper for colabfold_search command execution."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ColabFold search wrapper."""
         self._loaded = False
         self.colabfold_search_executable = None
@@ -146,7 +146,7 @@ class ColabFoldSearchWrapper:
             db_name = database_name
             logger.debug(f"Using specified database: {db_name}")
         else:
-            db_name = self._detect_database_name(msa_db_dir, verbose)
+            db_name = self._detect_database_name(msa_db_dir, verbose)  # type: ignore[assignment]
 
         cmd.extend(["--db1", db_name])
 
@@ -163,12 +163,12 @@ class ColabFoldSearchWrapper:
                 "GPU acceleration is not currently supported for colabfold_search"
             )
 
-        logger.debug(f"Running command: {' '.join(cmd)}")
+        logger.debug(f"Running command: {' '.join(cmd)}")  # type: ignore[arg-type]
 
         # Run the command
         try:
             _ = subprocess.run(
-                cmd,
+                cmd,  # type: ignore[arg-type]
                 check=True,
                 capture_output=not verbose,
                 text=True,
@@ -202,19 +202,19 @@ class ColabFoldSearchWrapper:
                 # Parse FASTA content
                 sequences = []
                 current_id = None
-                current_seq = []
+                current_seq = []  # type: ignore[var-annotated]
 
                 for line in fasta_content.strip().split("\n"):
                     if line.startswith(">"):
                         if current_id is not None:
-                            sequences.append((current_id, "".join(current_seq)))
+                            sequences.append((current_id, "".join(current_seq)))  # type: ignore[arg-type]
                         current_id = line[1:].strip()
                         current_seq = []
                     else:
                         current_seq.append(line.strip())
 
                 if current_id is not None:
-                    sequences.append((current_id, "".join(current_seq)))
+                    sequences.append((current_id, "".join(current_seq)))  # type: ignore[arg-type]
 
                 # Create A3M files ONLY for sequences that don't already have one
                 for idx, (seq_id, seq) in enumerate(sequences):
@@ -243,7 +243,7 @@ class ColabFoldSearchWrapper:
                 "error": error_msg,
             }
 
-    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
+    def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load ColabFold search executable."""
         logger.debug("Initializing ColabFold search")
 
@@ -254,9 +254,9 @@ class ColabFoldSearchWrapper:
         venv_executable = venv_bin_dir / "colabfold_search"
 
         if venv_executable.exists():
-            self.colabfold_search_executable = str(venv_executable)
+            self.colabfold_search_executable = str(venv_executable)  # type: ignore[assignment]
         elif shutil.which("colabfold_search") is not None:
-            self.colabfold_search_executable = shutil.which("colabfold_search")
+            self.colabfold_search_executable = shutil.which("colabfold_search")  # type: ignore[assignment]
         else:
             raise ImportError(
                 "Could not find the 'colabfold_search' executable. "
@@ -266,9 +266,9 @@ class ColabFoldSearchWrapper:
         # Find mmseqs binary (required by colabfold_search)
         venv_mmseqs = venv_bin_dir / "mmseqs"
         if venv_mmseqs.exists():
-            self.mmseqs_executable = str(venv_mmseqs)
+            self.mmseqs_executable = str(venv_mmseqs)  # type: ignore[assignment]
         elif shutil.which("mmseqs") is not None:
-            self.mmseqs_executable = shutil.which("mmseqs")
+            self.mmseqs_executable = shutil.which("mmseqs")  # type: ignore[assignment]
         else:
             raise ImportError(
                 "Could not find the 'mmseqs' executable. "
@@ -283,7 +283,7 @@ class ColabFoldSearchWrapper:
         logger.debug(f"MMseqs2 executable: {self.mmseqs_executable}")
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     wrapper = ColabFoldSearchWrapper()
     return wrapper(

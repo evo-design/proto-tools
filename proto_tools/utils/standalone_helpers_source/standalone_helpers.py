@@ -211,17 +211,17 @@ def resolve_jax_device(device: str) -> Any:
 
     if ":" in device:
         backend, device_idx = device.split(":", 1)
-        device_idx = int(device_idx)
+        device_idx = int(device_idx)  # type: ignore[assignment]
     else:
         backend = device
-        device_idx = 0
+        device_idx = 0  # type: ignore[assignment]
 
     # JAX uses "gpu" not "cuda"
     if backend == "cuda":
         backend = "gpu"
 
     devices = jax.devices(backend)
-    if device_idx >= len(devices):
+    if device_idx >= len(devices):  # type: ignore[operator]
         raise ValueError(
             f"Device {device} not available. Only {len(devices)} {backend} device(s) found."
         )

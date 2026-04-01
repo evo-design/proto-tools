@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -57,7 +57,7 @@ class ProGen2SampleInput(BaseToolInput):
 
     @field_validator("prompts", mode="before")
     @classmethod
-    def validate_prompts(cls, v):
+    def validate_prompts(cls, v: Any) -> Any:
         """Coerce a single string to a list and validate non-empty."""
         if isinstance(v, str):
             v = [v]
@@ -106,7 +106,7 @@ class ProGen2SampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path)
 
         if file_format == "fasta":
@@ -296,7 +296,7 @@ class ProGen2SampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProGen2SampleInput(prompts=["MKTL"])
 
@@ -316,7 +316,7 @@ def example_input():
 )
 def run_progen2_sample(
     inputs: ProGen2SampleInput, config: ProGen2SampleConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ProGen2SampleOutput:
     """Generate protein sequences using ProGen2 autoregressive language model.
 
@@ -332,7 +332,7 @@ def run_progen2_sample(
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and output processing options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProGen2SampleOutput: Structured output containing:
@@ -376,25 +376,25 @@ def run_progen2_sample(
         - ProGen2-finetuning GitHub: https://github.com/hugohrban/ProGen2-finetuning
         - Original ProGen2 GitHub: https://github.com/enijkamp/progen2
     """
-    logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
+    logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
     result = ToolInstance.dispatch(
         "progen2",
         {
             "operation": "sample",
             "prompts": inputs.prompts,
-            "model_checkpoint": config.model_checkpoint,
-            "local_path": config.local_path,
-            "temperature": config.temperature,
-            "top_p": config.top_p,
-            "top_k": config.top_k,
-            "max_length": config.max_length,
-            "truncate_at_stop": config.truncate_at_stop,
-            "strip_special_tokens": config.strip_special_tokens,
-            "prepend_prompt": config.prepend_prompt,
-            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "local_path": config.local_path,  # type: ignore[union-attr]
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "top_p": config.top_p,  # type: ignore[union-attr]
+            "top_k": config.top_k,  # type: ignore[union-attr]
+            "max_length": config.max_length,  # type: ignore[union-attr]
+            "truncate_at_stop": config.truncate_at_stop,  # type: ignore[union-attr]
+            "strip_special_tokens": config.strip_special_tokens,  # type: ignore[union-attr]
+            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
             "device": "cuda",
-            "verbose": config.verbose,
-            "return_logits": config.return_logits,
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -402,9 +402,9 @@ def run_progen2_sample(
 
     return ProGen2SampleOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,
-            "temperature": config.temperature,
-            "max_length": config.max_length,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "max_length": config.max_length,  # type: ignore[union-attr]
         },
         sequences=result["sequences"],
         logits=result.get("logits"),

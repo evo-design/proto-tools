@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
@@ -52,15 +53,15 @@ class ProdigalInput(BaseToolInput):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_sequences(cls, data):
+    def normalize_sequences(cls, data: Any) -> None:
         """Normalize input_sequences from string to list."""
         if isinstance(data.get("input_sequences"), str):
             data["input_sequences"] = [data["input_sequences"]]
-        return data
+        return data  # type: ignore[no-any-return]
 
     @field_validator("input_sequences")
     @classmethod
-    def validate_sequences(cls, sequences):
+    def validate_sequences(cls, sequences: Any) -> None:
         """Validate DNA sequences."""
         if not sequences:
             raise ValueError("At least one sequence is required")
@@ -77,7 +78,7 @@ class ProdigalInput(BaseToolInput):
                 )
             validated.append(seq_upper)
 
-        return validated
+        return validated  # type: ignore[return-value]
 
 
 class ProdigalConfig(BaseConfig):
@@ -182,13 +183,13 @@ class ProdigalOutput(BaseToolOutput):
         description="List of ORF results per input sequence",
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs(self) -> int:
         """Total number of ORFs predicted across all input sequences."""
         return sum(len(result) for result in self.predicted_orfs)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
@@ -204,7 +205,7 @@ class ProdigalOutput(BaseToolOutput):
         """Return the default output format."""
         return "gff"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format in ("csv", "json"):
@@ -262,7 +263,7 @@ class ProdigalOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProdigalInput(input_sequences=["ATGCGTAAATAA"])
 
@@ -281,7 +282,7 @@ def example_input():
     cacheable=True,
 )
 def run_prodigal_prediction(
-    inputs: ProdigalInput, config: ProdigalConfig | None = None, instance=None
+    inputs: ProdigalInput, config: ProdigalConfig | None = None, instance: Any = None
 ) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
@@ -296,7 +297,7 @@ def run_prodigal_prediction(
         config (ProdigalConfig | None): Validated Prodigal configuration specifying
             prediction mode (meta vs. single-genome), genetic code, and threading.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProdigalOutput: Structured output
@@ -330,10 +331,10 @@ def run_prodigal_prediction(
             "device": "cpu",
             "sequences": inputs.input_sequences,
             "config": {
-                "meta_mode": config.meta_mode,
-                "closed_ends": config.closed_ends,
-                "num_threads": config.num_threads,
-                "translation_table": config.translation_table,
+                "meta_mode": config.meta_mode,  # type: ignore[union-attr]
+                "closed_ends": config.closed_ends,  # type: ignore[union-attr]
+                "num_threads": config.num_threads,  # type: ignore[union-attr]
+                "translation_table": config.translation_table,  # type: ignore[union-attr]
             },
         },
         instance=instance,
@@ -348,8 +349,8 @@ def run_prodigal_prediction(
 
     return ProdigalOutput(
         metadata={
-            "meta_mode": config.meta_mode,
-            "num_threads": config.num_threads,
+            "meta_mode": config.meta_mode,  # type: ignore[union-attr]
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
             "num_input_sequences": len(inputs.input_sequences),
         },
         predicted_orfs=predicted_orfs,

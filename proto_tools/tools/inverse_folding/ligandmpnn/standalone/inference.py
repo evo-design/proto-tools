@@ -103,7 +103,7 @@ class LigandMPNNModel:
             input_dict["designed_chains"] = chain_ids
 
         # Run inference
-        results = self._engine.run(input_dicts=[input_dict])
+        results = self._engine.run(input_dicts=[input_dict])  # type: ignore[attr-defined]
 
         # Extract sequences and metrics
         sequences: list[str] = []
@@ -115,7 +115,7 @@ class LigandMPNNModel:
         self.unload()
         return {"sequences": sequences, "metrics": metrics}
 
-    def score(
+    def score(  # type: ignore[empty-body]
         self,
         pdb_structure: str,
         chain_ids: list[str],
@@ -147,7 +147,7 @@ class LigandMPNNModel:
         """
         # TODO: Implement LigandMPNN scoring
 
-    def load(self, device: str = "cuda", verbose: bool = False):
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load the LigandMPNN model via Foundry."""
         if verbose:
             logger.info(f"Loading LigandMPNN model on {device}")
@@ -169,7 +169,7 @@ class LigandMPNNModel:
             write_fasta=False,
             write_structures=False,
         )
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
@@ -190,7 +190,7 @@ class LigandMPNNModel:
             # Foundry engine requires full reload for device change
             self.load(device, verbose=False)
 
-    def unload(self):
+    def unload(self) -> None:
         """Unload the model to free GPU memory."""
         self._engine = None
         self._loaded = False
@@ -226,7 +226,7 @@ def _serialize_output(value: Any) -> Any:
 _model: LigandMPNNModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -247,7 +247,7 @@ def dispatch(input_dict: dict) -> dict:
         operation = input_dict.get("operation", "sample")
         if operation == "sample":
             return _model.sample(
-                pdb_structure=pdb_structure,
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
                 chain_ids=input_dict.get("chain_ids", []),
                 batch_size=input_dict.get("batch_size", 1),
                 temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
@@ -259,9 +259,9 @@ def dispatch(input_dict: dict) -> dict:
             )
         if operation == "score":
             return _model.score(
-                pdb_structure=pdb_structure,
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
                 chain_ids=input_dict.get("chain_ids", []),
-                sequence=input_dict.get("sequence"),
+                sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
                 fixed_positions=input_dict.get("fixed_positions"),
                 seed=input_dict.get("seed", DEFAULT_SEED),
                 device=input_dict.get("device", "cuda"),
@@ -271,7 +271,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -281,13 +281,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

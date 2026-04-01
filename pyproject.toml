@@ -68,6 +68,7 @@ dev = [
     # Code quality
     "ruff",
     "mypy",
+    "types-requests",       # mypy stubs for requests
     "pre-commit",
 
     # Notebooks & interactive
@@ -109,13 +110,60 @@ log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
+plugins = ["pydantic.mypy"]
+strict = true
+warn_unreachable = true
+enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code", "deprecated"]
+
+[[tool.mypy.overrides]]
+module = [
+    # ML frameworks (not in core deps — need CUDA or standalone envs)
+    "torch.*",
+    "jax.*",
+    "esm.*",
+    "transformers.*",
+    "flash_attn.*",
+    # Installed but missing library stubs or py.typed marker
+    "biotite.*",
+    "py3Dmol.*",
+    "pyfaidx.*",
+    "pandas.*",
+    "tqdm.*",
+    "yaml.*",
+    "huggingface_hub.*",
+    "tokenizers.*",
+    # Bioinformatics tools (only used in standalone/ dirs, not pip deps)
+    "pyhmmer.*",
+    "pyrodigal.*",
+    "mdtraj.*",
+    "RNA.*",
+    # Tool-specific model packages (installed in standalone envs, not on PyPI)
+    "standalone_helpers.*",
+    "colabdesign.*",
+    "colabfold.*",
+    "evo.*",
+    "evo2.*",
+    "vortex.*",
+    "fampnn.*",
+    "mpnn.*",
+    "bioemu.*",
+    "enformer_pytorch.*",
+    "borzoi_pytorch.*",
+    "alphagenome.*",
+    "alphagenome_research.*",
+    "axial_positional_embedding.*",
+    "sinkhorn_transformer.*",
+    "cuequivariance_ops_torch_cu12.*",
+    # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
+    "inference.*",
+    "model.*",
+]
 ignore_missing_imports = true
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [tool.ruff]
 target-version = "py310"
@@ -186,7 +234,7 @@ ignore = [
 "proto_tools/entities/ligands/ccd_maps/*.py" = ["T20"]
 # Lazy imports behind conditionals are intentional in these tool files
 "proto_tools/tools/structure_prediction/*/[!s]*.py" = ["E402"]
-"proto_tools/tools/tool_registry.py" = ["E402"]
+"proto_tools/tools/tool_registry.py" = ["E402", "S101"]  # S101: type-narrowing asserts for mypy
 
 [tool.ruff.lint.isort]
 known-first-party = ["proto_tools"]

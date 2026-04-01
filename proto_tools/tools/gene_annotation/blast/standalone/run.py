@@ -6,11 +6,11 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
-
 import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def _find_binary(name: str) -> str:
@@ -24,7 +24,7 @@ def _find_binary(name: str) -> str:
     return str(binary)
 
 
-def run_local_blast(input_data: dict) -> dict:
+def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run a local BLAST search and return raw tabular output.
 
     Args:
@@ -68,7 +68,7 @@ def run_local_blast(input_data: dict) -> dict:
     return {"stdout": proc.stdout}
 
 
-def run_create_blast_db(input_data: dict) -> dict:
+def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
     """Create a local BLAST database from a FASTA file.
 
     Args:
@@ -112,7 +112,7 @@ def run_create_blast_db(input_data: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

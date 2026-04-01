@@ -6,7 +6,7 @@ protein, nuccore, and gene databases.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -70,7 +70,7 @@ class NCBIEsearchOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path, file_format: str):
+    def _export_output(self, export_path: Any, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -90,7 +90,7 @@ NCBIEsearchConfig = NCBIFetchConfig
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return NCBIEsearchInput(db="protein", search_term="insulin")
 
@@ -109,7 +109,7 @@ def example_input():
 def run_ncbi_esearch(
     inputs: NCBIEsearchInput,
     config: NCBIFetchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> NCBIEsearchOutput:
     """Search NCBI Entrez databases by query term.
 
@@ -118,7 +118,7 @@ def run_ncbi_esearch(
             max results.
         config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.
@@ -126,9 +126,9 @@ def run_ncbi_esearch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=config.http_retries,  # type: ignore[union-attr]
+        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
+        user_agent=config.user_agent,  # type: ignore[union-attr]
         allowed_methods=["GET", "POST"],
     )
 
@@ -137,7 +137,7 @@ def run_ncbi_esearch(
             db=inputs.db,
             term=inputs.search_term,
             max_results=inputs.max_results,
-            config=config,
+            config=config,  # type: ignore[arg-type]
             session=session,
         )
         return NCBIEsearchOutput(ids=ids)

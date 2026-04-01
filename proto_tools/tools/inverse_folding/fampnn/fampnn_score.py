@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from tqdm import tqdm
@@ -159,7 +160,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path, file_format):
+    def _export_output(self, export_path: Any, file_format: Any) -> None:
         path = Path(export_path)
 
         if file_format == "csv":
@@ -186,7 +187,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNScoreInput(
         inputs=[MutationInput(
@@ -215,7 +216,7 @@ def example_input():
 def run_fampnn_score(
     inputs: FAMPNNScoreInput,
     config: FAMPNNScoreConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> FAMPNNScoreOutput:
     """Score protein mutations with full-atom sidechain context using FAMPNN.
 
@@ -227,7 +228,7 @@ def run_fampnn_score(
     Args:
         inputs (FAMPNNScoreInput): FAMPNNScoreInput containing structures and mutations to score.
         config (FAMPNNScoreConfig | None): Configuration for scoring.
-        instance: Optional ToolInstance for persistent execution.
+        instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNScoreOutput: FAMPNNScoreOutput with log-likelihood ratio scores for each mutation.
@@ -238,20 +239,20 @@ def run_fampnn_score(
         inputs.inputs,
         desc="FAMPNN scoring",
         unit="structure",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         input_dict = {
             "operation": "score_mutations",
             "pdb_contents": inp.structure.structure_pdb,
             "mutations": inp.mutations,
-            "batch_size": config.batch_size,
-            "seq_only": config.seq_only,
-            "scn_diffusion_steps": config.scn_diffusion_steps,
-            "scn_step_scale": config.scn_step_scale,
-            "seed": config.seed,
-            "model_variant": config.model_variant,
-            "device": config.device,
-            "verbose": config.verbose,
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "seq_only": config.seq_only,  # type: ignore[union-attr]
+            "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
+            "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
+            "seed": config.seed,  # type: ignore[union-attr]
+            "model_variant": config.model_variant,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         }
         result = ToolInstance.dispatch(
             "fampnn",

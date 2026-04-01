@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from tqdm import tqdm
 
@@ -71,7 +71,7 @@ class ESMIF1ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     from proto_tools.entities.structures import Structure
 
@@ -112,7 +112,7 @@ def example_input():
 def run_esm_if1_score(
     inputs: ESMIF1ScoringInput,
     config: ESMIF1ScoringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ESMIF1ScoringOutput:
     """Score protein sequences using ESM-IF1/ProteinDPO.
 
@@ -124,7 +124,7 @@ def run_esm_if1_score(
         inputs (ESMIF1ScoringInput): Sequence-structure pairs to score.
         config (ESMIF1ScoringConfig | None): Configuration including weights variant.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMIF1ScoringOutput: ESMIF1ScoringOutput with scores for each input pair.
@@ -142,9 +142,9 @@ def run_esm_if1_score(
             "pdb_contents": pair.structure.structure_pdb,
             "chain_ids": pair.structure.get_chain_ids(),
             "sequence": pair.sequence,
-            "device": config.device,
-            "weights_variant": config.weights_variant,
-            "verbose": config.verbose,
+            "device": config.device,  # type: ignore[union-attr]
+            "weights_variant": config.weights_variant,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         }
         result = ToolInstance.dispatch(
             "esm_if1",

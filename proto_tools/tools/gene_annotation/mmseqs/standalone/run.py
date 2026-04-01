@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 # ============================================================================
 # Helpers
@@ -31,7 +32,7 @@ def _find_binary(name: str = "mmseqs") -> str:
     return str(binary)
 
 
-def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:
+def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
     """Run a subprocess command and raise on failure."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -58,7 +59,7 @@ def _write_fasta(
 # ============================================================================
 
 
-def run_protein_search(input_data: dict) -> dict:
+def run_protein_search(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MMseqs2 easy-search for protein sequences and return raw m8 output.
 
     Args:
@@ -114,7 +115,7 @@ def run_protein_search(input_data: dict) -> dict:
     return {"stdout": stdout}
 
 
-def run_genome_search(input_data: dict) -> dict:
+def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MMseqs2 genome-to-genome search workflow and return raw m8 output.
 
     Args:
@@ -206,7 +207,7 @@ def run_genome_search(input_data: dict) -> dict:
     return {"stdout": stdout}
 
 
-def run_clustering(input_data: dict) -> dict:
+def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run MMseqs2 clustering workflow and return cluster assignments.
 
     Args:
@@ -298,7 +299,7 @@ def run_clustering(input_data: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

@@ -7,7 +7,7 @@ supporting general ORF prediction and analysis of results.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, computed_field, field_validator
 
@@ -57,11 +57,11 @@ class OrfipyInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize sequences to a list."""
         if isinstance(value, str):
             return [value]
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class OrfipyConfig(BaseConfig):
@@ -224,13 +224,13 @@ class OrfipyOutput(BaseToolOutput):
         description="List of ORF results per input sequence",
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs(self) -> int:
         """Total number of ORFs predicted across all input sequences."""
         return sum(len(result) for result in self.predicted_orfs)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_orfs_per_sequence(self) -> list[int]:
         """Number of ORFs predicted for each input sequence."""
@@ -246,7 +246,7 @@ class OrfipyOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format in ("csv", "json"):
@@ -277,7 +277,7 @@ class OrfipyOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return OrfipyInput(sequences=["ATGTACTATTCATTAA"])
 
@@ -296,7 +296,7 @@ def example_input():
     cacheable=True,
 )
 def run_orfipy_prediction(
-    inputs: OrfipyInput, config: OrfipyConfig | None = None, instance=None
+    inputs: OrfipyInput, config: OrfipyConfig | None = None, instance: Any = None
 ) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
@@ -309,7 +309,7 @@ def run_orfipy_prediction(
         config (OrfipyConfig | None): Validated Orfipy configuration specifying start/stop
             codons, length filters, strand selection, and threading options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         OrfipyOutput: Structured output containing sequence results.
@@ -344,14 +344,14 @@ def run_orfipy_prediction(
             "sequences": inputs.sequences,
             "sequence_ids": sequence_ids,
             "config": {
-                "threads": config.threads,
-                "start_codons": config.start_codons,
-                "stop_codons": config.stop_codons,
-                "strand": config.strand,
-                "min_len": config.min_len,
-                "max_len": config.max_len,
-                "include_stop": config.include_stop,
-                "translation_table": config.translation_table,
+                "threads": config.threads,  # type: ignore[union-attr]
+                "start_codons": config.start_codons,  # type: ignore[union-attr]
+                "stop_codons": config.stop_codons,  # type: ignore[union-attr]
+                "strand": config.strand,  # type: ignore[union-attr]
+                "min_len": config.min_len,  # type: ignore[union-attr]
+                "max_len": config.max_len,  # type: ignore[union-attr]
+                "include_stop": config.include_stop,  # type: ignore[union-attr]
+                "translation_table": config.translation_table,  # type: ignore[union-attr]
             },
         },
         instance=instance,
@@ -366,10 +366,10 @@ def run_orfipy_prediction(
 
     return OrfipyOutput(
         metadata={
-            "threads": config.threads,
-            "min_len": config.min_len,
-            "max_len": config.max_len,
-            "strand": config.strand,
+            "threads": config.threads,  # type: ignore[union-attr]
+            "min_len": config.min_len,  # type: ignore[union-attr]
+            "max_len": config.max_len,  # type: ignore[union-attr]
+            "strand": config.strand,  # type: ignore[union-attr]
         },
         predicted_orfs=predicted_orfs,
     )

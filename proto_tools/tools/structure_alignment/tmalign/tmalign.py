@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from logging import getLogger
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -71,7 +72,7 @@ class TMalignOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str):  # noqa: ARG002 — required by base class _export_output interface
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:  # noqa: ARG002 — required by base class _export_output interface
         import json as json_mod
 
         path = Path(export_path).with_suffix(".json")
@@ -93,7 +94,7 @@ class TMalignOutput(BaseToolOutput):
 _EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "examples" / "example.pdb")
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     _pdb_text = Path(_EXAMPLE_PDB_PATH).read_text()
     return TMalignInput(pdb_text_1=_pdb_text, pdb_text_2=_pdb_text)
@@ -114,7 +115,7 @@ def example_input():
     example_input=example_input,
 )
 def run_tmalign(
-    inputs: TMalignInput, config: TMalignConfig | None = None, instance=None
+    inputs: TMalignInput, config: TMalignConfig | None = None, instance: Any = None
 ) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
     input_data = {

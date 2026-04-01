@@ -62,7 +62,7 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value: Any) -> list:
+    def normalize_sequences(cls, value: Any) -> list[Any]:
         """Validate and normalize sequence specifications from raw input."""
         if value is None:
             raise ValueError("sequences cannot be None")
@@ -70,7 +70,7 @@ class AlphaGenomePredictSequencesInput(BaseToolInput):
             value = [value]
         if not value:
             raise ValueError("sequences cannot be empty")
-        return value
+        return value  # type: ignore[no-any-return]
 
     @field_validator("sequences")
     @classmethod
@@ -112,7 +112,7 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
         if file_format == "npy":
             import numpy as np
 
-            np.save(path, payload)
+            np.save(path, payload)  # type: ignore[arg-type]
             return
 
         raise ValueError(f"Unsupported format: {file_format}")
@@ -123,7 +123,7 @@ class AlphaGenomePredictSequencesOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> AlphaGenomePredictOutput:
         return self.results[index]
 
-    def __iter__(self) -> Iterator[AlphaGenomePredictOutput]:
+    def __iter__(self) -> Iterator[AlphaGenomePredictOutput]:  # type: ignore[override]
         return iter(self.results)
 
 
@@ -133,7 +133,7 @@ AlphaGenomePredictSequencesConfig = AlphaGenomePredictConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomePredictSequencesInput(sequences=["A" * 16384])
 
@@ -155,7 +155,7 @@ def example_input():
 def run_alphagenome_predict_sequences(
     inputs: AlphaGenomePredictSequencesInput,
     config: AlphaGenomePredictSequencesConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaGenomePredictSequencesOutput:
     """Predict genomic features from batched raw DNA sequences using AlphaGenome."""
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
@@ -165,11 +165,11 @@ def run_alphagenome_predict_sequences(
         {
             "operation": "predict_sequences",
             "sequences": inputs.sequences,
-            "requested_outputs": config.requested_outputs,
-            "ontology_terms": config.ontology_terms,
-            "organism": config.organism,
-            "model_version": config.model_version,
-            "device": config.device,
+            "requested_outputs": config.requested_outputs,  # type: ignore[union-attr]
+            "ontology_terms": config.ontology_terms,  # type: ignore[union-attr]
+            "organism": config.organism,  # type: ignore[union-attr]
+            "model_version": config.model_version,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -181,7 +181,7 @@ def run_alphagenome_predict_sequences(
             chromosome="sequence",
             interval_start=0,
             interval_end=len(sequence),
-            requested_outputs=config.requested_outputs,
+            requested_outputs=config.requested_outputs,  # type: ignore[union-attr]
             result={"predictions": prediction},
         )
         for sequence, prediction in zip(inputs.sequences, predictions, strict=True)

@@ -19,7 +19,7 @@ def validate_smiles(smiles: str, verbose: bool = True) -> bool:
         from rdkit import Chem
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            if verbose:
+            if verbose:  # type: ignore[unreachable]
                 warnings.warn(
                     f"RDKit could not parse SMILES: '{smiles}'. "
                     "This may not be a valid molecule.", stacklevel=2

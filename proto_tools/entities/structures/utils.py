@@ -165,20 +165,20 @@ def pairwise_distances(coordinates: np.ndarray) -> np.ndarray:
     assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
     m = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
     distance_matrix = np.linalg.norm(m, axis=-1)
-    return distance_matrix[np.triu_indices(distance_matrix.shape[0], k=1)]
+    return distance_matrix[np.triu_indices(distance_matrix.shape[0], k=1)]  # type: ignore[no-any-return]
 
 
 def adjacent_distances(coordinates: np.ndarray) -> np.ndarray:
     """Calculate distances between adjacent coordinates."""
     assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
     m = coordinates - np.roll(coordinates, shift=1, axis=0)
-    return np.linalg.norm(m, axis=-1)
+    return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
 
 
 def get_centroid(coordinates: np.ndarray) -> np.ndarray:
     """Calculate the centroid of coordinates."""
     assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
-    return coordinates.mean(axis=0).reshape(1, 3)
+    return coordinates.mean(axis=0).reshape(1, 3)  # type: ignore[no-any-return]
 
 
 def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
@@ -189,7 +189,7 @@ def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
     assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
     centroid = get_centroid(coordinates)
     m = coordinates - centroid
-    return np.linalg.norm(m, axis=-1)
+    return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
 
 
 def get_backbone_atoms(atoms: AtomArray) -> AtomArray:
@@ -251,7 +251,7 @@ def convert_cif_str_to_pdb_str(cif_content: str) -> str:
         for block in doc:
             try:
                 structure = gemmi.make_structure_from_block(block)
-                if structure is not None and len(structure) > 0:
+                if structure is not None and len(structure) > 0:  # type: ignore[redundant-expr]
                     break
             except Exception:  # noqa: S112 -- skip unparseable blocks
                 continue

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -80,11 +80,11 @@ class CrisprTracrInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize a single sequence to a list."""
         if isinstance(value, str):
             return [value]
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 # Output:
@@ -115,7 +115,7 @@ class CrisprTracrOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import pandas as pd
 
         path = Path(export_path).with_suffix(f".{file_format}")
@@ -158,7 +158,7 @@ class CrisprTracrConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return CrisprTracrInput(sequences=["ATCGATCG"])
 
@@ -177,7 +177,7 @@ def example_input():
     cacheable=True,
 )
 def run_crispr_tracr(
-    inputs: CrisprTracrInput, config: CrisprTracrConfig | None = None, instance=None,
+    inputs: CrisprTracrInput, config: CrisprTracrConfig | None = None, instance: Any = None,
 ) -> CrisprTracrOutput:
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
 
@@ -190,7 +190,7 @@ def run_crispr_tracr(
         inputs (CrisprTracrInput): Validated input containing nucleotide sequences.
         config (CrisprTracrConfig | None): CRISPRtracrRNA configuration including model type.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         CrisprTracrOutput: Per-sequence tracrRNA predictions.
@@ -203,7 +203,7 @@ def run_crispr_tracr(
     """
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
-    num_workers = config.num_workers
+    num_workers = config.num_workers  # type: ignore[union-attr]
     if num_workers is None:
         slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
         num_workers = int(slurm_cpus) if slurm_cpus else 1
@@ -212,8 +212,8 @@ def run_crispr_tracr(
         "sequences": inputs.sequences,
         "sequence_ids": sequence_ids,
         "config": {
-            "model_type": config.model_type,
-            "run_type": config.run_type,
+            "model_type": config.model_type,  # type: ignore[union-attr]
+            "run_type": config.run_type,  # type: ignore[union-attr]
             "num_workers": num_workers,
         },
     }
@@ -227,8 +227,8 @@ def run_crispr_tracr(
 
     return CrisprTracrOutput(
         metadata={
-            "model_type": config.model_type,
-            "run_type": config.run_type,
+            "model_type": config.model_type,  # type: ignore[union-attr]
+            "run_type": config.run_type,  # type: ignore[union-attr]
             "num_sequences": len(inputs.sequences),
         },
         predictions=predictions,

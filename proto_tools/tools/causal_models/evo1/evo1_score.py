@@ -6,7 +6,7 @@ Evo1 scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import field_validator
 
@@ -48,7 +48,7 @@ class Evo1ScoringInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, v):
+    def normalize_sequences(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -113,7 +113,7 @@ class Evo1ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return Evo1ScoringInput(sequences=["ATCGATCG"])
 
@@ -133,7 +133,7 @@ def example_input():
     cacheable=True,
 )
 def run_evo1_score(
-    inputs: Evo1ScoringInput, config: Evo1ScoringConfig | None = None, instance=None,
+    inputs: Evo1ScoringInput, config: Evo1ScoringConfig | None = None, instance: Any = None,
 ) -> Evo1ScoringOutput:
     """Score DNA sequences using Evo1 autoregressive language model.
 
@@ -147,7 +147,7 @@ def run_evo1_score(
         config (Evo1ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo1ScoringOutput: Contains SequenceScores for each input sequence with:
@@ -171,18 +171,18 @@ def run_evo1_score(
           are needed
         - Evo1 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
+    logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")  # type: ignore[union-attr]
 
     result = ToolInstance.dispatch(
         "evo1",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_name": config.model_name,
-            "device": config.device,
-            "verbose": config.verbose,
-            "batch_size": config.batch_size,
-            "return_logits": config.return_logits,
+            "model_name": config.model_name,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

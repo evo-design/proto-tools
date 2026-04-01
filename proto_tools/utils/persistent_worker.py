@@ -381,7 +381,7 @@ class PersistentWorker:
         self.script_path = script_path
         self.device = device
         self.tool_env_vars = tool_env_vars
-        self._process: subprocess.Popen | None = None
+        self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
         self._stderr_lines: list[str] = []
@@ -589,12 +589,12 @@ class PersistentWorker:
                     f"{response['error']}"
                 )
 
-            return response["result"]
+            return response["result"]  # type: ignore[no-any-return]
 
     def _killpg(self, sig: int) -> None:
         """Send *sig* to the worker's process group, ignoring already-dead."""
         with contextlib.suppress(OSError):
-            os.killpg(self._process.pid, sig)
+            os.killpg(self._process.pid, sig)  # type: ignore[union-attr]
 
     def stop(self) -> None:
         """Terminate the worker and all of its child processes."""

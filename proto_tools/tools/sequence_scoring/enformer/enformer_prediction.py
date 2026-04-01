@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -94,7 +94,7 @@ class EnformerOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: Path | str, file_format: str):
+    def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
             "tool_id", "execution_time", "timestamp", "success",
@@ -152,7 +152,7 @@ class EnformerConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return EnformerInput(sequence="A" * 196608)
 
@@ -168,14 +168,14 @@ def example_input():
     uses_gpu=True,
     example_input=example_input,
 )
-def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, instance=None) -> EnformerOutput:
+def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, instance: Any = None) -> EnformerOutput:
     """Predict regulatory activity with Enformer.
 
     Args:
         inputs (EnformerInput): Validated sequence input.
         config (EnformerConfig | None): Validated runtime and model configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         EnformerOutput: Prediction object with sequence, tracks, and metadata.
@@ -186,10 +186,10 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
         "enformer",
         {
             "sequence": inputs.sequence,
-            "output_tracks": config.output_tracks,
-            "species": config.species,
-            "device": config.device,
-            "verbose": config.verbose,
+            "output_tracks": config.output_tracks,  # type: ignore[union-attr]
+            "species": config.species,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -199,6 +199,6 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
         sequence=inputs.sequence,
         sequence_length=len(inputs.sequence),
         prediction=result["prediction"],
-        output_tracks=config.output_tracks,
-        species=config.species,
+        output_tracks=config.output_tracks,  # type: ignore[union-attr]
+        species=config.species,  # type: ignore[union-attr]
     )

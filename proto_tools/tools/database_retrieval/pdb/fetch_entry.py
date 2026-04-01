@@ -6,6 +6,8 @@ experimental method, and resolution for a PDB accession.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import Field
 
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
@@ -61,7 +63,7 @@ class PdbFetchEntryOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path, file_format: str):
+    def _export_output(self, export_path: Any, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -81,7 +83,7 @@ PdbFetchEntryConfig = PdbFetchConfig
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return PdbFetchEntryInput(pdb_id="1LBG")
 
@@ -100,7 +102,7 @@ def example_input():
 def run_pdb_fetch_entry(
     inputs: PdbFetchEntryInput,
     config: PdbFetchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> PdbFetchEntryOutput:
     """Fetch structure metadata from RCSB PDB.
 
@@ -110,7 +112,7 @@ def run_pdb_fetch_entry(
         inputs (PdbFetchEntryInput): PDB accession to look up.
         config (PdbFetchConfig | None): HTTP timeout and retry settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.
@@ -118,15 +120,15 @@ def run_pdb_fetch_entry(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=config.http_retries,  # type: ignore[union-attr]
+        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
+        user_agent=config.user_agent,  # type: ignore[union-attr]
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
 
     try:
-        meta = _fetch_pdb_entry(pdb_id, config, session)
+        meta = _fetch_pdb_entry(pdb_id, config, session)  # type: ignore[arg-type]
         if meta is None:
             return PdbFetchEntryOutput()
         return PdbFetchEntryOutput(

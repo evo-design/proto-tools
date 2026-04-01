@@ -64,15 +64,15 @@ def test_standalone_protocol_compliance(tool_spec):
     if "def to_device(" not in content:
         violations.append("Missing to_device() function")
     else:
-        # --- 2. Correct signature: def to_device(device: str) -> dict: ---
-        sig_pattern = r'def to_device\(device:\s*str\)\s*->\s*dict:'
+        # --- 2. Correct signature: def to_device(device: str) -> dict[str, Any]: ---
+        sig_pattern = r'def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:'
         if not re.search(sig_pattern, content):
             violations.append(
-                "to_device() has wrong signature (expected: def to_device(device: str) -> dict:)"
+                "to_device() has wrong signature (expected: def to_device(device: str) -> dict[str, Any]:)"
             )
 
         # --- 3. Module-level to_device returns {"success": ...} ---
-        module_pattern = r'^def to_device\(device:\s*str\)\s*->\s*dict:'
+        module_pattern = r'^def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:'
         match = re.search(module_pattern, content, re.MULTILINE)
         if match:
             rest = content[match.end():]

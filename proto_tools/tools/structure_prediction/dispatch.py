@@ -89,23 +89,23 @@ def predict_structures(
 
     # If the tool_config is a dictionary, convert it to the expected config class
     if isinstance(tool_config, dict):
-        tool_config = expected_config_class(**tool_config)
+        tool_config = expected_config_class(**tool_config)  # type: ignore[operator]
     elif tool_config is None:
-        tool_config = expected_config_class()
+        tool_config = expected_config_class()  # type: ignore[operator]
 
     # Ensure that the tool_config is the expected config class
-    if not isinstance(tool_config, expected_config_class):
+    if not isinstance(tool_config, expected_config_class):  # type: ignore[arg-type]
         raise ValueError(
             f"tool_config type {type(tool_config).__name__} doesn't match "
-            f"tool_name '{tool_name}' (expected {expected_config_class.__name__})"
+            f"tool_name '{tool_name}' (expected {expected_config_class.__name__})"  # type: ignore[attr-defined]
         )
 
     # Get the run function for the tool
     run_func = SP_TOOL_MAP[tool_name]["run_func"]
 
     # Wrap the config input in the expected input class
-    inputs = SP_TOOL_MAP[tool_name]["input"](complexes=complexes)
+    inputs = SP_TOOL_MAP[tool_name]["input"](complexes=complexes)  # type: ignore[operator]
 
     # Run the prediction
-    return run_func(inputs, tool_config)
+    return run_func(inputs, tool_config)  # type: ignore[no-any-return, operator]
 

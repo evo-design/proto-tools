@@ -23,7 +23,7 @@ DEFAULT_SEED = 42
 class ESMIF1Model:
     """ESM-IF1/ProteinDPO model for structure-conditioned inverse folding."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ESMIF1Model."""
         self._loaded = False
         self.device = None
@@ -35,7 +35,7 @@ class ESMIF1Model:
         self,
         pdb_structure: str,
         chain_ids: list[str],
-    ):
+    ) -> Any:
         """Load structure and extract coords for the complex.
 
         Returns:
@@ -57,8 +57,8 @@ class ESMIF1Model:
 
     def _sample_with_fixed_positions(
         self,
-        all_coords: dict,
-        all_native_seqs: dict,
+        all_coords: dict[str, Any],
+        all_native_seqs: dict[str, Any],
         target_chain: str,
         fixed_pos: list[int],
         temperature: float,
@@ -105,12 +105,12 @@ class ESMIF1Model:
             all_coords, target_chain
         )
 
-        sampled_seq = self.model.sample(
+        sampled_seq = self.model.sample(  # type: ignore[attr-defined]
             all_coords_concat, partial_seq=partial_seq, temperature=temperature,
         )
         # Extract only target chain portion
         target_len = len(native_seq)
-        return sampled_seq[:target_len]
+        return sampled_seq[:target_len]  # type: ignore[no-any-return]
 
     def sample(
         self,
@@ -143,7 +143,7 @@ class ESMIF1Model:
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)
-        elif self.device != device:
+        elif self.device != device:  # type: ignore[unreachable]
             self.to_device(device)
 
         import esm.inverse_folding.multichain_util
@@ -212,7 +212,7 @@ class ESMIF1Model:
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)
-        elif self.device != device:
+        elif self.device != device:  # type: ignore[unreachable]
             self.to_device(device)
 
         import esm.inverse_folding.multichain_util
@@ -238,7 +238,7 @@ class ESMIF1Model:
         device: str,
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
-    ):
+    ) -> None:
         """Load ESM-IF1 model, optionally with ProteinDPO weights."""
         if verbose:
             logger.info(f"Loading ESM-IF ({weights_variant}) on {device}")
@@ -275,7 +275,7 @@ class ESMIF1Model:
                 state_dict = torch.load(
                     dpo_weights_path, map_location="cpu", weights_only=False
                 )
-                self.model.load_state_dict(state_dict, strict=True)
+                self.model.load_state_dict(state_dict, strict=True)  # type: ignore[attr-defined]
                 if verbose:
                     logger.info(
                         f"Loaded ProteinDPO weights from {dpo_weights_path}"
@@ -286,10 +286,10 @@ class ESMIF1Model:
                     f"Run setup.sh or set PROTO_ESM_IF1_WEIGHTS_DIR."
                 )
 
-        self.model = self.model.to(device)
-        self.model.eval()
-        self.device = device
-        self._weights_variant = weights_variant
+        self.model = self.model.to(device)  # type: ignore[attr-defined]
+        self.model.eval()  # type: ignore[attr-defined]
+        self.device = device  # type: ignore[assignment]
+        self._weights_variant = weights_variant  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
@@ -303,13 +303,13 @@ class ESMIF1Model:
             )
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device
+            self.device = device  # type: ignore[assignment]
 
-    def unload(self):
+    def unload(self) -> None:
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
-            self.model = self.model.to("cpu")
-            self.device = "cpu"
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -340,7 +340,7 @@ def _serialize_output(value: Any) -> Any:
 _model: ESMIF1Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -359,7 +359,7 @@ def dispatch(input_dict: dict) -> dict:
         operation = input_dict.get("operation", "sample")
         if operation == "sample":
             return _model.sample(
-                pdb_structure=pdb_structure,
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
                 chain_ids=input_dict.get("chain_ids", []),
                 batch_size=input_dict.get("batch_size", 1),
                 temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
@@ -371,9 +371,9 @@ def dispatch(input_dict: dict) -> dict:
             )
         if operation == "score":
             return _model.score(
-                pdb_structure=pdb_structure,
+                pdb_structure=pdb_structure,  # type: ignore[arg-type]
                 chain_ids=input_dict.get("chain_ids", []),
-                sequence=input_dict.get("sequence"),
+                sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
                 device=input_dict.get("device", "cuda"),
                 weights_variant=input_dict.get("weights_variant", "protein_dpo"),
                 verbose=input_dict.get("verbose", False),
@@ -381,7 +381,7 @@ def dispatch(input_dict: dict) -> dict:
         raise ValueError(f"Unknown operation: {operation}")
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -390,13 +390,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

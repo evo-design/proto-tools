@@ -89,7 +89,7 @@ class ESM3Model:
         # For each batch
         for batch_sequences in tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)):
             # Tokenize the batch
-            batch_inputs = self.tokenizer(
+            batch_inputs = self.tokenizer(  # type: ignore[misc]
                 batch_sequences,
                 add_special_tokens=True,
                 padding=True,
@@ -101,7 +101,7 @@ class ESM3Model:
 
             # Forward pass
             with torch.inference_mode():
-                batch_outputs = self.model(
+                batch_outputs = self.model(  # type: ignore[misc]
                     sequence_tokens=batch_inputs["input_ids"],
                 )
 
@@ -183,7 +183,7 @@ class ESM3Model:
             for i in range(0, len(sequences), max_batch_size)
         ]
 
-        all_structures = []
+        all_structures = []  # type: ignore[var-annotated]
 
         # For each batch
         for batch_sequences in tqdm(batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)):
@@ -194,7 +194,7 @@ class ESM3Model:
             )
 
             # Generate the structures
-            structures = self.model.batch_generate(
+            structures = self.model.batch_generate(  # type: ignore[attr-defined]
                 inputs=esm3_proteins,
                 configs=structure_configs,
             )
@@ -246,7 +246,7 @@ class ESM3Model:
             self.to_device(device)
 
         # Record mask positions, replace '_' with the model's mask token
-        mask_token = self.tokenizer.mask_token
+        mask_token = self.tokenizer.mask_token  # type: ignore[attr-defined]
         mask_positions: list[list[int]] = []
         tokenizer_sequences: list[str] = []
         for seq in sequences:
@@ -272,7 +272,7 @@ class ESM3Model:
             batch_originals = sequences[start:end]
 
             # Tokenize (mask tokens are handled natively by the tokenizer)
-            batch_inputs = self.tokenizer(
+            batch_inputs = self.tokenizer(  # type: ignore[misc]
                 batch_tok_seqs,
                 add_special_tokens=True,
                 padding=True,
@@ -283,7 +283,7 @@ class ESM3Model:
 
             # Forward pass
             with torch.inference_mode():
-                outputs = self.model(sequence_tokens=input_ids)
+                outputs = self.model(sequence_tokens=input_ids)  # type: ignore[misc]
                 # AA logits: remove BOS/EOS, keep only standard amino acids
                 aa_logits = outputs.sequence_logits[:, 1:-1, :][:, :, self.amino_acid_token_ids]
 
@@ -321,7 +321,7 @@ class ESM3Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = True,
-    ) -> dict[str, list]:
+    ) -> dict[str, list[Any]]:
         """Score protein sequences using ESM3 with MLM pseudo-perplexity.
 
         Computes pseudo-perplexity by masking each position individually and
@@ -379,7 +379,7 @@ class ESM3Model:
             })
 
         return {
-            "logits": all_logits if return_logits else None,
+            "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
             "metrics": all_metrics,
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
@@ -405,13 +405,13 @@ class ESM3Model:
                 - valid_count: Number of standard AA positions (excludes ambiguous)
         """
         # Tokenize once
-        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")
+        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")  # type: ignore[misc]
         original_ids = encoded["input_ids"].to(self.device)
 
         # Create all masked variants (L variants for sequence of length L)
         masked_ids = original_ids.repeat(len(seq), 1)
         for pos in range(len(seq)):
-            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS token
+            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # type: ignore[attr-defined]  # +1 for BOS token
 
         # Get true token IDs directly from tokenized input
         true_token_ids = original_ids[0, 1 : 1 + len(seq)] # Token positions: [BOS] + seq + [EOS]
@@ -430,7 +430,7 @@ class ESM3Model:
             batch_ids = masked_ids[batch_start:batch_end]
 
             with torch.inference_mode():
-                outputs = self.model(sequence_tokens=batch_ids)
+                outputs = self.model(sequence_tokens=batch_ids)  # type: ignore[misc]
 
             # Extract logits at masked positions
             batch_indices = torch.arange(batch_end - batch_start, device=self.device)
@@ -460,7 +460,7 @@ class ESM3Model:
     # ============================================================================
     # Helper Functions
     # ============================================================================
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM3 model and tokenizer to device."""
         # Lazy import ESM3 dependencies
         from esm.models.esm3 import ESM3
@@ -474,34 +474,34 @@ class ESM3Model:
         self.tokenizer = EsmSequenceTokenizer()
 
         self.amino_acid_token_ids = torch.tensor(
-            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],
+            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
             device=device
         )
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
             logger.info("ESM3 model loaded successfully")
 
-    def to_device(self, device: str):
+    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
         """Move model to a different device."""
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device != device:
-            self.model = self.model.to(device)
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
-            self.device = device
+            self.model = self.model.to(device)  # type: ignore[attr-defined]
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)  # type: ignore[attr-defined]
+            self.device = device  # type: ignore[assignment]
 
-    def unload(self, verbose: bool = False):
+    def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
-            self.model = self.model.to("cpu")
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")
-            self.device = "cpu"
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -530,7 +530,7 @@ def _serialize_output(value: Any) -> Any:
 _model: ESM3Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -565,7 +565,7 @@ def dispatch(input_dict: dict) -> dict:
             return_logits=input_dict.get("return_logits", False),
         )
     if operation == "predict_structure":
-        return _model.predict_structure(
+        return _model.predict_structure(  # type: ignore[return-value]
             sequences=input_dict.get("sequences", []),
             batch_size=input_dict.get("batch_size", 128),
             device=input_dict.get("device", "cuda"),
@@ -575,7 +575,7 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -585,13 +585,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

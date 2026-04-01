@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -52,14 +52,14 @@ class RandomNucleotideSampleInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, value) -> list[str]:
+    def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize sequences to a list."""
         if isinstance(value, str):
             return [value]
         for seq in value:
             if seq is None:
                 raise ValueError("Sequence cannot be None")
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class RandomNucleotideSampleOutput(BaseToolOutput):
@@ -84,7 +84,7 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "fasta":
@@ -141,7 +141,7 @@ class RandomNucleotideSampleConfig(BaseConfig):
         include_in_key=False,
     )
 
-    def preprocess(self, inputs):
+    def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
         return apply_masking_strategy(self, inputs)
 
@@ -170,7 +170,7 @@ def _detect_sequence_type(sequences: list[str]) -> str:
 # Tool Implementation
 # ============================================================================
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return RandomNucleotideSampleInput(sequences=["ACGTACGT"])
 
@@ -192,7 +192,7 @@ def example_input():
 def run_random_nucleotide_sample(
     inputs: RandomNucleotideSampleInput,
     config: RandomNucleotideSampleConfig | None = None,
-    instance=None,  # noqa: ARG001 — required by tool interface
+    instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> RandomNucleotideSampleOutput:
     """Fill masked positions with random nucleotides from an IUPAC scheme.
 
@@ -206,16 +206,16 @@ def run_random_nucleotide_sample(
         inputs (RandomNucleotideSampleInput): Nucleotide sequences with ``_`` at designable positions.
         config (RandomNucleotideSampleConfig | None): Sampling configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
-    scheme = config.substitution_scheme
+    rng = random.Random(config.seed) if config.seed is not None else None  # type: ignore[union-attr]  # noqa: S311 -- not cryptographic
+    scheme = config.substitution_scheme  # type: ignore[union-attr]
 
     # Resolve sequence type
-    seq_type = config.sequence_type
+    seq_type = config.sequence_type  # type: ignore[union-attr]
     if seq_type == "auto":
         seq_type = _detect_sequence_type(inputs.sequences)
 

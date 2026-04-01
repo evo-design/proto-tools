@@ -8,7 +8,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -182,7 +182,7 @@ class BlastSearchOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import warnings
 
         import pandas as pd
@@ -617,14 +617,14 @@ class BlastSearchConfig(BaseConfig):
     )
 
     # Fields that only apply to online mode
-    _online_only_fields: tuple = (
+    _online_only_fields: tuple[Any, ...] = (
         "database",
         "entrez_query",
         "hitlist_size",
         "megablast",
     )
     # Fields that only apply to local mode
-    _local_only_fields: tuple = (
+    _local_only_fields: tuple[Any, ...] = (
         "local_db",
         "num_threads",
     )
@@ -671,7 +671,7 @@ class BlastSearchConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return BlastSearchInput(query="MKTLLILAVVAAALA")
 
@@ -690,7 +690,7 @@ def example_input():
 def run_blast_search(
     inputs: BlastSearchInput,
     config: BlastSearchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> BlastSearchOutput:
     """Search sequences against BLAST databases.
 
@@ -701,7 +701,7 @@ def run_blast_search(
         inputs (BlastSearchInput): Validated BLAST search input.
         config (BlastSearchConfig | None): Validated BLAST search configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         BlastSearchOutput: Structured output with BLAST alignment hits.
@@ -718,9 +718,9 @@ def run_blast_search(
         >>> result = run_blast_search(inputs, config)
         >>> print(f"Found {result.num_hits} hits")
     """
-    if config.search_mode == "local":
-        return _local_search(inputs, config, instance=instance)
-    return _online_search(inputs, config)
+    if config.search_mode == "local":  # type: ignore[union-attr]
+        return _local_search(inputs, config, instance=instance)  # type: ignore[arg-type]
+    return _online_search(inputs, config)  # type: ignore[arg-type]
 
 
 # ============================================================================
@@ -735,7 +735,7 @@ def _online_search(
 
     # Resolve query sequence
     if inputs.query_type == "fasta_path":
-        seq_record = next(SeqIO.parse(inputs.query, "fasta"))
+        seq_record = next(SeqIO.parse(inputs.query, "fasta"))  # type: ignore[no-untyped-call]
         query_seq = str(seq_record.seq)
     else:
         query_seq = inputs.query
@@ -759,7 +759,7 @@ def _online_search(
         "query_gencode": "genetic_code",
         "db_gencode": "db_genetic_code",
     }
-    qblast_kwargs: dict = {
+    qblast_kwargs: dict[str, Any] = {
         qblast_key: getattr(config, config_field)
         for config_field, qblast_key in _QBLAST_PARAM_MAP.items()
         if getattr(config, config_field) is not None
@@ -782,7 +782,7 @@ def _online_search(
     raw_xml = handle.read()
     handle.close()
 
-    blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))
+    blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))  # type: ignore[no-untyped-call]
     hits = _blast_results_to_hits(blast_records)
 
     return BlastSearchOutput(
@@ -799,7 +799,7 @@ def _online_search(
 def _local_search(
     inputs: BlastSearchInput,
     config: BlastSearchConfig,
-    instance=None,
+    instance: Any = None,
 ) -> BlastSearchOutput:
     """Run BLAST+ locally against a local database."""
     import tempfile
@@ -850,7 +850,7 @@ def _local_search(
         "xdrop_gap_final",
         "use_sw_tback",
     )
-    cli_params: dict = {
+    cli_params: dict[str, Any] = {
         name: getattr(config, name)
         for name in _CLI_PARAMS
         if getattr(config, name) is not None
@@ -882,12 +882,12 @@ def _local_search(
     import csv
 
     raw_output = output_data["stdout"]
-    hits = []
+    hits: list[BlastHit] = []
     if raw_output.strip():
         reader = csv.DictReader(
             io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields)
         )
-        hits.extend(BlastHit(**row) for row in reader)
+        hits.extend(BlastHit(**row) for row in reader)  # type: ignore[arg-type]
 
     return BlastSearchOutput(
         metadata={
@@ -900,14 +900,14 @@ def _local_search(
     )
 
 
-def _blast_results_to_hits(blast_records) -> list[BlastHit]:
+def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
     """Convert Biopython BLAST records to BlastHit objects.
 
     Produces the same 12-column layout as BLAST+ ``-outfmt 6`` so that
     online and local results are directly comparable.
 
     Args:
-        blast_records: List of Bio.Blast.Record objects from NCBIXML.parse.
+        blast_records (Any): List of Bio.Blast.Record objects from NCBIXML.parse.
 
     Returns:
         list[BlastHit]: List of BLAST alignment hits.

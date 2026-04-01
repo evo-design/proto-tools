@@ -52,7 +52,7 @@ class AlphaGenomeScoreVariantsInput(BaseToolInput):
 
     @field_validator("variants", mode="before")
     @classmethod
-    def normalize_variants(cls, value: Any) -> list:
+    def normalize_variants(cls, value: Any) -> list[Any]:
         """Validate and normalize variant specifications from raw input."""
         if value is None:
             raise ValueError("variants cannot be None")
@@ -60,7 +60,7 @@ class AlphaGenomeScoreVariantsInput(BaseToolInput):
             value = [value]
         if not value:
             raise ValueError("variants cannot be empty")
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class AlphaGenomeScoreVariantsOutput(BaseToolOutput):
@@ -113,7 +113,7 @@ class AlphaGenomeScoreVariantsOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> AlphaGenomeScoreOutput:
         return self.results[index]
 
-    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:
+    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:  # type: ignore[override]
         return iter(self.results)
 
 
@@ -158,7 +158,7 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomeScoreVariantsInput(
         variants=[AlphaGenomeVariant(
@@ -185,7 +185,7 @@ def example_input():
 def run_alphagenome_score_variants(
     inputs: AlphaGenomeScoreVariantsInput,
     config: AlphaGenomeScoreVariantsConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaGenomeScoreVariantsOutput:
     """Score variant effects in batch using AlphaGenome variant scorers."""
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
@@ -211,10 +211,10 @@ def run_alphagenome_score_variants(
                 }
                 for v in inputs.variants
             ],
-            "variant_scorers": config.variant_scorers,
-            "organism": config.organism,
-            "model_version": config.model_version,
-            "device": config.device,
+            "variant_scorers": config.variant_scorers,  # type: ignore[union-attr]
+            "organism": config.organism,  # type: ignore[union-attr]
+            "model_version": config.model_version,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

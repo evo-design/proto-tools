@@ -41,8 +41,9 @@ Assume `proto_tools` is already installed in the current Python environment. Do 
 pip install -e ".[dev]"
 pre-commit install
 
-# Formatting
+# Linting & type checking
 ruff check proto_tools
+mypy proto_tools/
 ```
 
 ## Keeping Docs in Sync
@@ -214,6 +215,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - Python >=3.10, Pydantic >=2.0
 - Do **not** auto-format; formatting is handled manually
 - Ruff (line length 120, 22 rule groups with Google-convention pydocstyle — see `pyproject.toml [tool.ruff.lint]` for full config). No auto-formatting.
+- Mypy (strict mode with Pydantic plugin). All code must pass `mypy proto_tools/` with zero errors. Use `# type: ignore[error-code]` only when third-party types are genuinely unfixable — every ignore must include the error code. Third-party deps without stubs are listed in `[[tool.mypy.overrides]]`.
 - Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `exhaustive`
 - Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`
 - **Generally use `--all` when running tests** to include integration and GPU tests

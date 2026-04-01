@@ -5,7 +5,7 @@ ESM2 scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
@@ -100,7 +100,7 @@ class ESM2ScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ESM2ScoringInput(sequences=["MKTL"])
 
@@ -121,7 +121,7 @@ def example_input():
 )
 def run_esm2_score(
     inputs: ESM2ScoringInput, config: ESM2ScoringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ESM2ScoringOutput:
     """Score protein sequences using ESM2 language model.
 
@@ -139,7 +139,7 @@ def run_esm2_score(
         config (ESM2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM2ScoringOutput: Contains SequenceScores for each input sequence with:
@@ -174,17 +174,17 @@ def run_esm2_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    logger.debug(f"Using local for ESM2 scoring: {config.model_checkpoint}")
+    logger.debug(f"Using local for ESM2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
     result = ToolInstance.dispatch(
         "esm2",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "batch_size": config.batch_size,
-            "model_checkpoint": config.model_checkpoint,
-            "device": config.device,
-            "verbose": config.verbose,
-            "return_logits": config.return_logits,
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

@@ -53,7 +53,7 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
 
     @field_validator("intervals", mode="before")
     @classmethod
-    def normalize_intervals(cls, value: Any) -> list:
+    def normalize_intervals(cls, value: Any) -> list[Any]:
         """Validate and normalize interval specifications from raw input."""
         if value is None:
             raise ValueError("intervals cannot be None")
@@ -61,7 +61,7 @@ class AlphaGenomeScoreIntervalsInput(BaseToolInput):
             value = [value]
         if not value:
             raise ValueError("intervals cannot be empty")
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class AlphaGenomeScoreIntervalsOutput(BaseToolOutput):
@@ -114,7 +114,7 @@ class AlphaGenomeScoreIntervalsOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> AlphaGenomeScoreOutput:
         return self.results[index]
 
-    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:
+    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:  # type: ignore[override]
         return iter(self.results)
 
 
@@ -159,7 +159,7 @@ class AlphaGenomeScoreIntervalsConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomeScoreIntervalsInput(
         intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=196608)]
@@ -183,7 +183,7 @@ def example_input():
 def run_alphagenome_score_intervals(
     inputs: AlphaGenomeScoreIntervalsInput,
     config: AlphaGenomeScoreIntervalsConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaGenomeScoreIntervalsOutput:
     """Score genomic intervals in batch using AlphaGenome interval scorers."""
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
@@ -200,10 +200,10 @@ def run_alphagenome_score_intervals(
                 }
                 for item in inputs.intervals
             ],
-            "interval_scorers": config.interval_scorers,
-            "organism": config.organism,
-            "model_version": config.model_version,
-            "device": config.device,
+            "interval_scorers": config.interval_scorers,  # type: ignore[union-attr]
+            "organism": config.organism,  # type: ignore[union-attr]
+            "model_version": config.model_version,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

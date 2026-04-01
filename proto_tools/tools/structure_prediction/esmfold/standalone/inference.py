@@ -25,7 +25,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 class ESMFoldModel:
     """ESMFold model for protein structure prediction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ESMFold model wrapper."""
         self._loaded = False
         self.tokenizer = None
@@ -69,12 +69,12 @@ class ESMFoldModel:
         if max_seq_len > 1200:
             if verbose:
                 logger.info(f"Long sequence detected ({max_seq_len} residues), enabling trunk chunking (chunk_size=64)")
-            self.model.trunk.set_chunk_size(64)
+            self.model.trunk.set_chunk_size(64)  # type: ignore[attr-defined]
 
         # Use progress bar for batch processing
         with torch.inference_mode(), _allow_tf32():
             # Tokenize all sequences
-            tokenized_inputs = self.tokenizer(
+            tokenized_inputs = self.tokenizer(  # type: ignore[misc]
                 linked_sequences,
                 return_tensors="pt",
                 padding=True,
@@ -91,7 +91,7 @@ class ESMFoldModel:
             tokenized_inputs["position_ids"] = position_ids
 
             # Forward pass
-            outputs = self.model(**tokenized_inputs)
+            outputs = self.model(**tokenized_inputs)  # type: ignore[misc]
 
             # Apply linker masking
             outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
@@ -206,7 +206,7 @@ class ESMFoldModel:
                 complex_output[key] = value
 
         # Convert to PDB
-        pdb_output = self.model.output_to_pdb(complex_output)[0]
+        pdb_output = self.model.output_to_pdb(complex_output)[0]  # type: ignore[attr-defined]
 
         # Calculate average pLDDT
         atom_exists = complex_output["atom37_atom_exists"]
@@ -238,7 +238,7 @@ class ESMFoldModel:
     # ============================================================================
     # Helper Functions
     # ============================================================================
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load ESMFold model and tokenizer to device."""
         try:
             from transformers import AutoTokenizer, EsmForProteinFolding
@@ -255,10 +255,10 @@ class ESMFoldModel:
             "facebook/esmfold_v1", trust_remote_code=True
         )
 
-        self.model = self.model.to(device)
-        self.model.esm = self.model.esm.half()  # Convert to half precision for faster inference
+        self.model = self.model.to(device)  # type: ignore[attr-defined]
+        self.model.esm = self.model.esm.half()  # type: ignore[attr-defined]
         self.tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
@@ -271,7 +271,7 @@ class ESMFoldModel:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device
+            self.device = device  # type: ignore[assignment]
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
@@ -279,14 +279,14 @@ class ESMFoldModel:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
-            self.model = self.model.to("cpu")
-            self.device = "cpu"
+            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
 
-@contextmanager
-def _allow_tf32():
+@contextmanager  # type: ignore[arg-type]
+def _allow_tf32() -> None:  # type: ignore[misc]
     """Temporarily enable TF32 for matmul operations."""
     previous = torch.backends.cuda.matmul.allow_tf32
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -302,7 +302,7 @@ def _allow_tf32():
 _model: ESMFoldModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -321,7 +321,7 @@ def dispatch(input_dict: dict) -> dict:
     raise ValueError(f"Unknown operation: {operation}")
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -331,13 +331,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 # ============================================================================

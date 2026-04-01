@@ -28,8 +28,8 @@ def is_smiles_valid(smiles: str) -> bool:
 def is_mol_valid(mol: Chem.Mol) -> bool:
     """Check if a RDKit Mol object is valid."""
     if mol is None:
-        return False
-    return mol.GetNumAtoms() > 0
+        return False  # type: ignore[unreachable]
+    return bool(mol.GetNumAtoms() > 0)
 
 # ===============================
 # PubChem Retrieval
@@ -56,7 +56,8 @@ def fetch_pubchem_txt(url: str) -> str | None:
         try:
             resp = requests.get(url, timeout=TIMEOUT)
             if resp.status_code == 200 and resp.text.strip():
-                return resp.text.strip()
+                result: str = resp.text.strip()
+                return result
             if resp.status_code == 429:  # rate limited
                 time.sleep(2 ** attempt)
                 continue

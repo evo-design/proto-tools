@@ -6,16 +6,16 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
-
 import json
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 
-def run_usalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict:
+def run_usalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
     """Run USalign on two PDB text blobs and parse TM-scores.
 
     Calls USalign with ``-mm 1 -ter 1`` for multimer support.
@@ -69,7 +69,7 @@ def run_usalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict:
     }
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_usalign_alignment(
         pdb_text_1=input_dict["pdb_text_1"],

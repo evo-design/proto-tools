@@ -5,7 +5,7 @@ ProteinMPNN scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from tqdm import tqdm
 
@@ -119,7 +119,7 @@ class ProteinMPNNScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     from pathlib import Path
 
@@ -147,7 +147,7 @@ def example_input():
 def run_proteinmpnn_score(
     inputs: ProteinMPNNScoringInput,
     config: ProteinMPNNScoringConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ProteinMPNNScoringOutput:
     """Score protein sequences using ProteinMPNN structure-conditioned model.
 
@@ -161,7 +161,7 @@ def run_proteinmpnn_score(
         config (ProteinMPNNScoringConfig | None): Scoring configuration specifying fixed
             positions, device settings, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProteinMPNNScoringOutput: Contains SequenceScores for each input pair with:
@@ -201,19 +201,19 @@ def run_proteinmpnn_score(
         inputs.sequence_structure_pairs,
         desc="ProteinMPNN scoring",
         unit="pair",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         input_dict = {
             "operation": "score",
             "pdb_contents": sequence_structure_pair.structure.structure_pdb,
             "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
             "sequence": sequence_structure_pair.sequence,
-            "seed": config.seed,
-            "fixed_positions": config.fixed_positions,
-            "device": config.device,
-            "model_choice": config.model_choice,
-            "return_logits": config.return_logits,
-            "verbose": config.verbose,
+            "seed": config.seed,  # type: ignore[union-attr]
+            "fixed_positions": config.fixed_positions,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "model_choice": config.model_choice,  # type: ignore[union-attr]
+            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         }
         result = ToolInstance.dispatch(
             "proteinmpnn",

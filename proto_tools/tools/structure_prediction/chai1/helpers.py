@@ -7,6 +7,7 @@ sequence hashing, MSA Parquet file writing, and FASTA generation.
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 
 
 def hash_sequence(seq: str) -> str:
@@ -25,10 +26,10 @@ def hash_sequence(seq: str) -> str:
 
 
 def write_msa_pqt(
-    aligned_sequences: list,
+    aligned_sequences: list[Any],
     pqt_path: str,
     source_database: str = "uniref90",
-    comments: list | None = None,
+    comments: list[Any] | None = None,
 ) -> None:
     """Write aligned sequences as Chai1-format Parquet (.aligned.pqt).
 
@@ -36,13 +37,13 @@ def write_msa_pqt(
     Query sequence (index 0) gets source_database="query".
 
     Args:
-        aligned_sequences (list): List of aligned sequence strings. The first
+        aligned_sequences (list[Any]): List of aligned sequence strings. The first
             sequence is treated as the query.
         pqt_path (str): Path where the .pqt file will be written.
         source_database (str): Name of the source database for non-query sequences
             (default: "uniref90"). Valid values: "query", "uniref90", "uniprot",
             "bfd_uniclust", "mgnify".
-        comments (list | None): Optional list of comment strings (e.g., sequence IDs from
+        comments (list[Any] | None): Optional list of comment strings (e.g., sequence IDs from
             the original MSA). If None, uses synthetic ``seq_0``, ``seq_1``, etc.
     """
     import pandas as pd
@@ -61,11 +62,11 @@ def write_msa_pqt(
     df.to_parquet(pqt_path, engine="pyarrow", index=False)
 
 
-def complex_to_fasta(chains: list[dict]) -> str:
+def complex_to_fasta(chains: list[dict[str, Any]]) -> str:
     """Convert a list of chain dicts to FASTA format for Chai1.
 
     Args:
-        chains (list[dict]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
+        chains (list[dict[str, Any]]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
 
     Returns:
         str: FASTA-formatted string

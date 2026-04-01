@@ -122,7 +122,7 @@ class SequenceFetchRequest(BaseModel):
 
     @field_validator("sequence_types", mode="before")
     @classmethod
-    def normalize_sequence_types(cls, value):
+    def normalize_sequence_types(cls, value: Any) -> Any:
         """Normalize a single string to a list and remove duplicates."""
         if isinstance(value, str):
             value = [value]
@@ -149,7 +149,7 @@ class SequenceFetchInput(BaseToolInput):
 
     @field_validator("requests", mode="before")
     @classmethod
-    def normalize_requests(cls, value):
+    def normalize_requests(cls, value: Any) -> Any:
         """Accept a single request object or a list."""
         if isinstance(value, dict):
             return [value]
@@ -272,31 +272,31 @@ class SequenceFetchOutput(BaseToolOutput):
         description="Per-request retrieval outcomes",
     )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_requests(self) -> int:
         """Total number of requests."""
         return len(self.results)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_success(self) -> int:
         """Number of successful results."""
         return sum(1 for r in self.results if r.status == "success")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_warning(self) -> int:
         """Number of warning results."""
         return sum(1 for r in self.results if r.status == "warning")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_completed(self) -> int:
         """Number of completed results including warnings."""
         return sum(1 for r in self.results if r.status in {"success", "warning"})
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def num_failed(self) -> int:
         """Number of failed results."""
@@ -312,7 +312,7 @@ class SequenceFetchOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         if file_format == "json":
             path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as handle:
@@ -498,7 +498,7 @@ def _ncbi_fetch_first_fasta(
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return SequenceFetchInput(requests=[
         SequenceFetchRequest(target_name="TP53", organism="Homo sapiens", sequence_types=["protein"])
@@ -522,7 +522,7 @@ def example_input():
 def run_sequence_fetch(
     inputs: SequenceFetchInput,
     config: SequenceFetchConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> SequenceFetchOutput:
     """Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB.
 
@@ -533,7 +533,7 @@ def run_sequence_fetch(
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
         config (SequenceFetchConfig | None): Timeout and validation settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         SequenceFetchOutput: Per-request retrieval status, sequences, and metadata.
@@ -554,11 +554,11 @@ def run_sequence_fetch(
     """
     del instance  # unused; kept for tool API consistency
 
-    ncfg = _ncbi_config(config)
+    ncfg = _ncbi_config(config)  # type: ignore[arg-type]
     session = build_http_session(
         http_retries=ncfg.http_retries,
         backoff_seconds=ncfg.backoff_seconds,
-        user_agent=config.user_agent,
+        user_agent=config.user_agent,  # type: ignore[union-attr]
         allowed_methods=["GET", "POST"],
     )
 
@@ -567,7 +567,7 @@ def run_sequence_fetch(
             _process_single_request(
                 request=request,
                 request_index=i,
-                config=config,
+                config=config,  # type: ignore[arg-type]
                 session=session,
             )
             for i, request in enumerate(inputs.requests)
@@ -632,17 +632,17 @@ def _process_single_request(
                 )
             else:
                 fetcher = sequence_fetchers[sequence_type]
-                result = fetcher(request, config, session)
+                result = fetcher(request, config, session)  # type: ignore[assignment]
 
             if isinstance(result, str):
-                errors.append(f"NOT_FOUND[{sequence_type}]: {result}")
+                errors.append(f"NOT_FOUND[{sequence_type}]: {result}")  # type: ignore[unreachable]
                 continue
 
-            fetched, ids, local_warnings = result
+            fetched, ids, local_warnings = result  # type: ignore[misc]
             if sequence_type == "structure":
                 structures.append(fetched)
             else:
-                sequences.append(fetched)
+                sequences.append(fetched)  # type: ignore[arg-type]
             resolved_ids.update(ids)
             warnings.extend(local_warnings)
 
@@ -714,10 +714,10 @@ def _fetch_protein(
     if request.uniprot_id:
         entry = _fetch_uniprot_entry(request.uniprot_id, ucfg, session)
         if entry is None:
-            return f"UniProt ID '{request.uniprot_id}' not found"
+            return f"UniProt ID '{request.uniprot_id}' not found"  # type: ignore[return-value]
         sequence = entry.get("sequence", {}).get("value")
         if not sequence:
-            return f"No sequence found for UniProt ID '{request.uniprot_id}'"
+            return f"No sequence found for UniProt ID '{request.uniprot_id}'"  # type: ignore[return-value]
 
         accession = entry.get("primaryAccession", request.uniprot_id)
         ids = {"uniprot_id": accession}
@@ -752,7 +752,7 @@ def _fetch_protein(
             rettype="fasta",
         )
         if result is None:
-            return f"Protein accession '{protein_accession}' not found in NCBI"
+            return f"Protein accession '{protein_accession}' not found in NCBI"  # type: ignore[return-value]
         header, sequence, url = result
         accession = _accession_from_header(header) or protein_accession
         return (
@@ -772,13 +772,13 @@ def _fetch_protein(
     if request.pdb_id:
         fasta_records = _fetch_pdb_fasta(request.pdb_id.upper(), pcfg, session)
         if not fasta_records:
-            return f"PDB ID '{request.pdb_id}' returned no FASTA records"
+            return f"PDB ID '{request.pdb_id}' returned no FASTA records"  # type: ignore[return-value]
         protein_records = [
             (h, s) for h, s in fasta_records if _is_protein_sequence(s)
         ]
         if not protein_records:
             return (
-                f"PDB ID '{request.pdb_id}' has no protein chains "
+                f"PDB ID '{request.pdb_id}' has no protein chains "  # type: ignore[return-value]
                 f"(found {len(fasta_records)} non-protein chain(s))"
             )
         header, sequence = protein_records[0]
@@ -830,27 +830,27 @@ def _fetch_protein(
             )
 
     term = _ncbi_term_for_request(request)
-    ids = _ncbi_esearch(db="protein", term=term, config=ncfg, session=session,
+    ids = _ncbi_esearch(db="protein", term=term, config=ncfg, session=session,  # type: ignore[assignment]
                         max_results=config.max_candidates_per_source)
     if not ids:
-        return f"No protein found for '{request.target_name}' in '{request.organism}'"
+        return f"No protein found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     if len(ids) > 1:
         warnings.append(
-            f"Multiple NCBI protein candidates found ({len(ids)}); using top hit {ids[0]}"
+            f"Multiple NCBI protein candidates found ({len(ids)}); using top hit {ids[0]}"  # type: ignore[index]
         )
 
     result = _ncbi_fetch_first_fasta(
         db="protein",
-        identifier=ids[0],
+        identifier=ids[0],  # type: ignore[index]
         config=ncfg,
         session=session,
         rettype="fasta",
     )
     if result is None:
-        return f"NCBI protein efetch returned no data for ID '{ids[0]}'"
+        return f"NCBI protein efetch returned no data for ID '{ids[0]}'"  # type: ignore[index, return-value]
     header, sequence, url = result
-    accession = _accession_from_header(header) or ids[0]
+    accession = _accession_from_header(header) or ids[0]  # type: ignore[index]
 
     return (
         _sequence_record(
@@ -882,7 +882,7 @@ def _fetch_dna_genomic(
     if coords is not None:
         coord_accession = coords[0] or accession_hint
         if coord_accession is None:
-            return "Genomic coordinates provided but no accession to anchor them"
+            return "Genomic coordinates provided but no accession to anchor them"  # type: ignore[return-value]
 
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
@@ -895,7 +895,7 @@ def _fetch_dna_genomic(
             strand=coords[3],
         )
         if result is None:
-            return f"Coordinate-based genomic fetch failed for '{coord_accession}'"
+            return f"Coordinate-based genomic fetch failed for '{coord_accession}'"  # type: ignore[return-value]
         header, sequence, url = result
         accession = _accession_from_header(header) or coord_accession
         return (
@@ -922,7 +922,7 @@ def _fetch_dna_genomic(
             rettype="fasta",
         )
         if result is None:
-            return f"Genomic accession '{direct_accession}' not found in NCBI nuccore"
+            return f"Genomic accession '{direct_accession}' not found in NCBI nuccore"  # type: ignore[return-value]
         header, sequence, url = result
         accession = _accession_from_header(header) or direct_accession
         return (
@@ -954,7 +954,7 @@ def _fetch_dna_genomic(
             max_results=config.max_candidates_per_source,
         )
     if not ids:
-        return f"No genomic DNA found for '{request.target_name}' in '{request.organism}'"
+        return f"No genomic DNA found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     attempted_not_found: list[str] = []
     selected_id: str | None = None
@@ -983,8 +983,8 @@ def _fetch_dna_genomic(
             session=session,
         )
         if isinstance(gene_result, str):
-            return gene_result
-        gene_record, gene_ids, gene_warnings = gene_result
+            return gene_result  # type: ignore[unreachable]
+        gene_record, gene_ids, gene_warnings = gene_result  # type: ignore[misc]
         warnings.append(
             "Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback"
         )
@@ -1034,7 +1034,7 @@ def _fetch_dna_genomic_from_gene_locus(
             max_results=config.max_candidates_per_source,
         )
     if not gene_ids:
-        return f"No gene IDs found for '{request.target_name}' in '{request.organism}'"
+        return f"No gene IDs found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     selected_gene_id = gene_ids[0]
     if len(gene_ids) > 1:
@@ -1049,13 +1049,13 @@ def _fetch_dna_genomic_from_gene_locus(
         session=session,
     )
     if summary_result is None:
-        return f"Gene summary not found for gene ID '{selected_gene_id}'"
+        return f"Gene summary not found for gene ID '{selected_gene_id}'"  # type: ignore[return-value]
     summary, _url = summary_result
 
     gene_payload = summary.get(selected_gene_id, {})
     genomic_info = gene_payload.get("genomicinfo", [])
     if not genomic_info:
-        return f"Gene record '{selected_gene_id}' lacks genomic coordinates in esummary"
+        return f"Gene record '{selected_gene_id}' lacks genomic coordinates in esummary"  # type: ignore[return-value]
 
     selected_region = None
     for region in genomic_info:
@@ -1063,7 +1063,7 @@ def _fetch_dna_genomic_from_gene_locus(
             selected_region = region
             break
     if selected_region is None:
-        return f"Gene record '{selected_gene_id}' has genomic info but no chromosome accession"
+        return f"Gene record '{selected_gene_id}' has genomic info but no chromosome accession"  # type: ignore[return-value]
 
     chr_accession = selected_region["chraccver"]
     chr_start = int(selected_region["chrstart"])
@@ -1083,7 +1083,7 @@ def _fetch_dna_genomic_from_gene_locus(
         strand=strand,
     )
     if result is None:
-        return f"Genomic fetch failed for locus '{chr_accession}:{seq_start}-{seq_stop}'"
+        return f"Genomic fetch failed for locus '{chr_accession}:{seq_start}-{seq_stop}'"  # type: ignore[return-value]
     header, sequence, url = result
 
     accession = _accession_from_header(header) or chr_accession
@@ -1125,12 +1125,12 @@ def _fetch_dna_cds(
             rettype="fasta_cds_na",
         )
         if efetch_result is None:
-            return f"CDS efetch failed for accession '{accession}'"
+            return f"CDS efetch failed for accession '{accession}'"  # type: ignore[return-value]
         text, url = efetch_result
         records = _parse_fasta_records(text)
         selected = _select_best_record(records, request.target_name)
         if selected is None:
-            return f"No CDS sequence found for accession '{accession}'"
+            return f"No CDS sequence found for accession '{accession}'"  # type: ignore[return-value]
 
         cds_acc = selected.accession or accession
         return (
@@ -1185,7 +1185,7 @@ def _fetch_dna_cds(
     ids = _ncbi_esearch(db="nuccore", term=term, config=ncfg, session=session,
                         max_results=config.max_candidates_per_source)
     if not ids:
-        return f"No CDS found for '{request.target_name}' in '{request.organism}'"
+        return f"No CDS found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     if len(ids) > 1:
         warnings.append(f"Multiple CDS candidates found ({len(ids)}); using top hit {ids[0]}")
@@ -1198,12 +1198,12 @@ def _fetch_dna_cds(
         rettype="fasta_cds_na",
     )
     if efetch_result is None:
-        return f"CDS efetch failed for NCBI ID '{ids[0]}'"
+        return f"CDS efetch failed for NCBI ID '{ids[0]}'"  # type: ignore[return-value]
     text, url = efetch_result
     records = _parse_fasta_records(text)
     selected = _select_best_record(records, request.target_name)
     if selected is None:
-        return f"No CDS sequence found in fasta_cds_na response for NCBI ID '{ids[0]}'"
+        return f"No CDS sequence found in fasta_cds_na response for NCBI ID '{ids[0]}'"  # type: ignore[return-value]
 
     cds_acc = selected.accession or ids[0]
 
@@ -1241,7 +1241,7 @@ def _fetch_rna_transcript(
             rettype="fasta",
         )
         if result is None:
-            return f"Transcript '{transcript_accession}' not found in NCBI nuccore"
+            return f"Transcript '{transcript_accession}' not found in NCBI nuccore"  # type: ignore[return-value]
         header, sequence, url = result
         accession = _accession_from_header(header) or transcript_accession
         return (
@@ -1249,7 +1249,7 @@ def _fetch_rna_transcript(
                 sequence_type="rna_transcript",
                 source_database="ncbi",
                 accession=accession,
-                sequence=transcribe(sequence.upper()),
+                sequence=transcribe(sequence.upper()),  # type: ignore[no-untyped-call]
                 source_url=url,
                 config=config,
                 inferred=True,
@@ -1265,7 +1265,7 @@ def _fetch_rna_transcript(
     ids = _ncbi_esearch(db="nuccore", term=term, config=ncfg, session=session,
                         max_results=config.max_candidates_per_source)
     if not ids:
-        return f"No transcript found for '{request.target_name}' in '{request.organism}'"
+        return f"No transcript found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     if len(ids) > 1:
         warnings.append(
@@ -1280,7 +1280,7 @@ def _fetch_rna_transcript(
         rettype="fasta",
     )
     if result is None:
-        return f"Transcript efetch failed for NCBI ID '{ids[0]}'"
+        return f"Transcript efetch failed for NCBI ID '{ids[0]}'"  # type: ignore[return-value]
     header, sequence, url = result
     accession = _accession_from_header(header) or ids[0]
 
@@ -1289,7 +1289,7 @@ def _fetch_rna_transcript(
             sequence_type="rna_transcript",
             source_database="ncbi",
             accession=accession,
-            sequence=transcribe(sequence.upper()),
+            sequence=transcribe(sequence.upper()),  # type: ignore[no-untyped-call]
             source_url=url,
             config=config,
             inferred=True,
@@ -1307,9 +1307,9 @@ def _fetch_rna_premrna(
     """Fetch or infer pre-mRNA sequence from genomic sequence."""
     genomic_result = _fetch_dna_genomic(request, config, session)
     if isinstance(genomic_result, str):
-        return f"pre-mRNA inference failed: {genomic_result}"
+        return f"pre-mRNA inference failed: {genomic_result}"  # type: ignore[unreachable]
 
-    genomic_record, ids, warnings = genomic_result
+    genomic_record, ids, warnings = genomic_result  # type: ignore[misc]
     premrna = genomic_record.sequence
 
     warnings.append(
@@ -1321,7 +1321,7 @@ def _fetch_rna_premrna(
             sequence_type="rna_premrna",
             source_database=genomic_record.source_database,
             accession=genomic_record.accession,
-            sequence=transcribe(premrna.upper()),
+            sequence=transcribe(premrna.upper()),  # type: ignore[no-untyped-call]
             source_url=genomic_record.source_url,
             config=config,
             inferred=True,
@@ -1373,7 +1373,7 @@ def _fetch_structure(
         if entry is None:
             entry = _fetch_uniprot_entry(uniprot_id, ucfg, session)
         if entry is None:
-            return f"UniProt entry '{uniprot_id}' not found"
+            return f"UniProt entry '{uniprot_id}' not found"  # type: ignore[return-value]
         pdb_ids = _extract_pdb_crossrefs(entry)
         if pdb_ids:
             pdb_id = pdb_ids[0]
@@ -1381,15 +1381,15 @@ def _fetch_structure(
                 f"Using first UniProt-linked PDB ID '{pdb_id}' from cross references"
             )
         else:
-            return f"UniProt ID '{uniprot_id}' has no linked PDB cross-references"
+            return f"UniProt ID '{uniprot_id}' has no linked PDB cross-references"  # type: ignore[return-value]
 
     if not pdb_id:
-        return f"No PDB ID resolved for '{request.target_name}' in '{request.organism}'"
+        return f"No PDB ID resolved for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     pdb_id = pdb_id.upper()
     meta = _fetch_pdb_entry(pdb_id, pcfg, session)
     if meta is None:
-        return f"PDB ID '{pdb_id}' not found"
+        return f"PDB ID '{pdb_id}' not found"  # type: ignore[return-value]
 
     return (
         FetchedStructure(

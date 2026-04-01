@@ -400,7 +400,7 @@ def get_canonical_component(ccd_code: str) -> str | None:
     if len(result) == 0:
         return None
 
-    return result.iloc[0]['parent_1letter']
+    return result.iloc[0]['parent_1letter']  # type: ignore[no-any-return]
 
 
 def get_modifications_for_component(entity_type: str, canonical_letter: str) -> list[str]:
@@ -470,4 +470,4 @@ def get_modifications_for_component(entity_type: str, canonical_letter: str) -> 
         # RNA: single letter (A, C, G, U)
         df = df[df['parent_3letter'].str.len() == 1]
 
-    return df['ccd_code'].tolist()
+    return df['ccd_code'].tolist()  # type: ignore[no-any-return]

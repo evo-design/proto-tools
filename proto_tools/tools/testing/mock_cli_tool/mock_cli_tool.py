@@ -7,6 +7,7 @@ It uses get_subprocess_device_env() for device routing.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -92,7 +93,7 @@ class MockCLIToolOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -123,7 +124,7 @@ class MockCLIToolOutput(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MockCLIToolInput()
 
@@ -143,15 +144,15 @@ def example_input():
 def run_mock_cli_tool(
     inputs: MockCLIToolInput,
     config: MockCLIToolConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MockCLIToolOutput:
     """Run mock CLI tool (subprocess-based for testing device routing)."""
     result = ToolInstance.dispatch(
         "mock_cli_tool",
         {
             "data": inputs.data,
-            "device": config.device,
-            "scale_factor": config.scale_factor,
+            "device": config.device,  # type: ignore[union-attr]
+            "scale_factor": config.scale_factor,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

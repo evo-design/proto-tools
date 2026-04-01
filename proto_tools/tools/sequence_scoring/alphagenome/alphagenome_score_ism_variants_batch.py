@@ -122,7 +122,7 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
 
     @field_validator("requests", mode="before")
     @classmethod
-    def normalize_requests(cls, value: Any) -> list:
+    def normalize_requests(cls, value: Any) -> list[Any]:
         """Validate and normalize ISM batch request specifications from raw input."""
         if value is None:
             raise ValueError("requests cannot be None")
@@ -130,7 +130,7 @@ class AlphaGenomeScoreISMInput(BaseToolInput):
             value = [value]
         if not value:
             raise ValueError("requests cannot be empty")
-        return value
+        return value  # type: ignore[no-any-return]
 
 
 class AlphaGenomeScoreISMOutput(BaseToolOutput):
@@ -183,7 +183,7 @@ class AlphaGenomeScoreISMOutput(BaseToolOutput):
     def __getitem__(self, index: int) -> AlphaGenomeScoreOutput:
         return self.results[index]
 
-    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:
+    def __iter__(self) -> Iterator[AlphaGenomeScoreOutput]:  # type: ignore[override]
         return iter(self.results)
 
 
@@ -193,7 +193,7 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomeScoreISMInput(
         requests=[AlphaGenomeISM(
@@ -220,7 +220,7 @@ def example_input():
 def run_alphagenome_score_ism_variants_batch(
     inputs: AlphaGenomeScoreISMInput,
     config: AlphaGenomeScoreISMConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run batched in-silico mutagenesis using AlphaGenome variant scorers."""
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
@@ -245,10 +245,10 @@ def run_alphagenome_score_ism_variants_batch(
         {
             "operation": "score_ism_variants_batch",
             "requests": serialized_requests,
-            "variant_scorers": config.variant_scorers,
-            "organism": config.organism,
-            "model_version": config.model_version,
-            "device": config.device,
+            "variant_scorers": config.variant_scorers,  # type: ignore[union-attr]
+            "organism": config.organism,  # type: ignore[union-attr]
+            "model_version": config.model_version,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

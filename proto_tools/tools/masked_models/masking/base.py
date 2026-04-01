@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import warnings
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
@@ -132,7 +132,7 @@ def weighted_sample(
     return [eligible[i] for i in chosen_idx]
 
 
-def apply_masking_strategy(config, inputs, position_score_fn=None):
+def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = None) -> Any:
     """Apply a masking strategy to tool inputs, skipping if already masked.
 
     Intended to be called from a sample config's ``preprocess()`` hook.
@@ -144,15 +144,15 @@ def apply_masking_strategy(config, inputs, position_score_fn=None):
     was explicitly provided.
 
     Args:
-        config: The tool's config object (has ``.masking_strategy``).
-        inputs: A ``BaseToolInput``-like object with a ``sequences`` field
+        config (Any): The tool's config object (has ``.masking_strategy``).
+        inputs (Any): A ``BaseToolInput``-like object with a ``sequences`` field
             and a ``model_copy(update=...)`` method (Pydantic model).
-        position_score_fn: Optional callable that takes sequences and returns
+        position_score_fn (Any): Optional callable that takes sequences and returns
             per-position scores. Built by ``build_position_score_fn()`` in
             the tool's ``preprocess()`` hook.
 
     Returns:
-        The (possibly updated) inputs object.
+        Any: The (possibly updated) inputs object.
     """
     strategy = config.masking_strategy
 
@@ -289,13 +289,13 @@ class MaskingStrategy(BaseModel):
     # -- Validators ------------------------------------------------------------
 
     @model_validator(mode="after")
-    def _validate_mutation_spec(self):
+    def _validate_mutation_spec(self) -> Any:
         """Ensure num_mutations and mask_fraction aren't both set."""
         _validate_mutation_spec(self.num_mutations, self.mask_fraction)
         return self
 
     @model_validator(mode="after")
-    def _validate_method_fields(self):
+    def _validate_method_fields(self) -> Any:
         """Validate model fields against the masker class."""
         masker_cls = MASKERS[self.method]
         if masker_cls.supported_models is None:
@@ -321,7 +321,7 @@ class MaskingStrategy(BaseModel):
     def mask(
         self,
         sequences: list[str],
-        position_score_fn: Callable | None = None,
+        position_score_fn: Callable[..., Any] | None = None,
     ) -> list[str]:
         """Apply the masking strategy to a batch of sequences.
 
@@ -330,7 +330,7 @@ class MaskingStrategy(BaseModel):
 
         Args:
             sequences (list[str]): Protein sequences to mask.
-            position_score_fn (Callable | None): Callable that takes sequences and returns
+            position_score_fn (Callable[..., Any] | None): Callable that takes sequences and returns
                 per-position scores. Required for model-based methods
                 (entropy, max-logit). When called from a tool's
                 ``preprocess()``, this is built by
@@ -360,7 +360,7 @@ class MaskingStrategy(BaseModel):
             device = "cuda" if number_of_visible_gpus() > 0 else "cpu"
             position_score_fn = build_position_score_fn(self.model_name, self, device=device)
 
-        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)
+        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)  # type: ignore[union-attr]
 
         results = []
         for i, seq in enumerate(sequences):
@@ -385,7 +385,7 @@ def build_position_score_fn(
     sampling_model: str,
     masking_strategy: MaskingStrategy,
     device: str,
-) -> Callable | None:
+) -> Callable[..., Any] | None:
     """Build a position_score_fn callable for model-based masking methods.
 
     Called from a sampling tool's ``preprocess()`` to create a function
@@ -402,7 +402,7 @@ def build_position_score_fn(
             ``"cuda:1"``). Passed through to the embeddings tool.
 
     Returns:
-        Callable | None: A callable ``(sequences: list[str]) -> list[list[list[float]]]``
+        Callable[..., Any] | None: A callable ``(sequences: list[str]) -> list[list[list[float]]]``
             that returns per-position logits, or ``None`` if the masking
             method doesn't need logits (e.g. random).
     """
@@ -411,7 +411,7 @@ def build_position_score_fn(
         return None
 
     model_name = masking_strategy.model_name or sampling_model
-    config_kwargs: dict = {"device": device, "return_logits": True}
+    config_kwargs: dict[str, Any] = {"device": device, "return_logits": True}
     if masking_strategy.model_checkpoint is not None:
         config_kwargs["model_checkpoint"] = masking_strategy.model_checkpoint
 
@@ -426,7 +426,7 @@ def build_position_score_fn(
                 ESM2EmbeddingsInput(sequences=sequences),
                 ESM2EmbeddingsConfig(**config_kwargs),
             )
-            return [r.logits for r in result.results]
+            return [r.logits for r in result.results]  # type: ignore[attr-defined]
         return position_score_fn
 
     if model_name == "esm3":
@@ -440,7 +440,7 @@ def build_position_score_fn(
                 ESM3EmbeddingsInput(sequences=sequences),
                 ESM3EmbeddingsConfig(**config_kwargs),
             )
-            return [r.logits for r in result.results]
+            return [r.logits for r in result.results]  # type: ignore[attr-defined]
         return position_score_fn
 
     raise ValueError(f"Unknown model: {model_name}")

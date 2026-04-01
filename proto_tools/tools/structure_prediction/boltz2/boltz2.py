@@ -15,7 +15,7 @@ import os
 import tempfile
 import warnings
 from logging import getLogger
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from tqdm import tqdm
 
@@ -154,9 +154,9 @@ class Boltz2Config(MSAStructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return Boltz2Input(complexes=["MKTL"])
+    return Boltz2Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -174,7 +174,7 @@ def example_input():
     iterable_output_field="structures",
     cacheable=True,
 )
-def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance=None) -> Boltz2Output:
+def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance: Any = None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.
 
     Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures
@@ -187,7 +187,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         config (Boltz2Config | None): Validated Boltz2 configuration specifying MSA settings,
             refinement parameters, and execution options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Boltz2Output: Structured output containing:
@@ -268,7 +268,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     """
     results = [
         run_boltz2_on_complex(
-            config=config,
+            config=config,  # type: ignore[arg-type]
             sp_complex=comp,
             msas=inputs.msas,
             instance=instance,
@@ -280,7 +280,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     return Boltz2Output(structures=results)
 
 
-def _msa_to_csv_file(msa, csv_path: str, query_index: int = 0) -> None:
+def _msa_to_csv_file(msa: Any, csv_path: str, query_index: int = 0) -> None:
     """Write an MSA object to Boltz's CSV format with pairing keys."""
     sequences, _ids = extract_msa_sequences(msa, query_index)
     write_msa_csv(sequences, csv_path)
@@ -288,9 +288,9 @@ def _msa_to_csv_file(msa, csv_path: str, query_index: int = 0) -> None:
 
 def run_boltz2_on_complex(
     config: Boltz2Config,
-    sp_complex,
-    msas: dict | None = None,
-    instance=None,
+    sp_complex: Any,
+    msas: dict[str, Any] | None = None,
+    instance: Any = None,
 ) -> Structure:
     """Run Boltz2 structure prediction on a single complex. This function is wrapped.
 
@@ -298,9 +298,9 @@ def run_boltz2_on_complex(
 
     Args:
         config (Boltz2Config): Boltz2 configuration
-        sp_complex: StructurePredictionComplex instance containing chain information
-        msas (dict | None): Pre-computed MSAs keyed by protein sequence
-        instance: Optional ToolInstance for persistent execution
+        sp_complex (Any): StructurePredictionComplex instance containing chain information
+        msas (dict[str, Any] | None): Pre-computed MSAs keyed by protein sequence
+        instance (Any): Optional ToolInstance for persistent execution
     """
     if config.verbose:
         logger.info("Using local GPU for Boltz2 structure prediction...")

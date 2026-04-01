@@ -74,7 +74,7 @@ class ToolSpec(BaseModel):
             and schema generation.
         input_model (type[BaseToolInput]): Pydantic model class for primary input validation.
         output_model (type[BaseToolOutput]): Pydantic model class for tool output validation.
-        function (Callable): The wrapped tool function.
+        function (Callable[..., Any]): The wrapped tool function.
         source_file (Path): Path to the source file where the tool function is defined.
         example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal
             valid input for testing.
@@ -105,7 +105,7 @@ class ToolSpec(BaseModel):
     # Private fields - excluded from serialization
     input_model: type[BaseToolInput] = Field(exclude=True)
     output_model: type[BaseToolOutput] = Field(exclude=True)
-    function: Callable = Field(exclude=True)
+    function: Callable[..., Any] = Field(exclude=True)
     source_file: Path = Field(exclude=True, description="Path to the source file where the tool function is defined")
     example_input: Callable[[], BaseToolInput] | None = Field(
         default=None, exclude=True,
@@ -194,7 +194,8 @@ class ToolRegistry:
             BaseToolOutput | None: Tool output if handled, or ``None``
                 to fall through to local execution.
         """
-        return None
+        result: BaseToolOutput | None = None
+        return result
 
     @classmethod
     def register(
@@ -212,7 +213,7 @@ class ToolRegistry:
         iterable_input_field: str | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
-    ):
+    ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
 
         This decorator:
@@ -243,9 +244,10 @@ class ToolRegistry:
                 program-scoped cache.
 
         Returns:
-            Decorator that wraps the function with metadata tracking
+            Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]: Decorator
+                that wraps the function with metadata tracking.
         """
-        def decorator(func: Callable):
+        def decorator(func: Callable[..., BaseToolOutput]) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
 
             if (iterable_input_field is None) != (iterable_output_field is None):
@@ -302,6 +304,7 @@ class ToolRegistry:
                 spec = cls._registry.get(key)
 
                 if cacheable and spec and spec.iterable_input_field:
+                    assert spec.iterable_output_field is not None  # validated at registration
                     # Iterable path: dedup then strip cached items
                     original_items = list(getattr(inputs, spec.iterable_input_field))
                     if len(original_items) > 1:
@@ -322,14 +325,17 @@ class ToolRegistry:
                         # Expand dedup if needed
                         if deduped and len(deduped.unique_items) < len(original_items):
                             cached_list = [cached_list[uid] for _, uid in deduped.index_map]
-                        return output_class(
-                            tool_id=key,
-                            execution_time=0.0,
-                            success=True,
-                            warnings=[],
-                            metadata={},
-                            **{spec.iterable_output_field: cached_list},
-                        )
+                        cache_kwargs: dict[str, Any] = {
+                            "tool_id": key,
+                            "execution_time": 0.0,
+                            "success": True,
+                            "timestamp": datetime.now(),
+                            "warnings": [],
+                            "errors": [],
+                            "metadata": {},
+                            spec.iterable_output_field: cached_list,
+                        }
+                        return output_class.model_construct(**cache_kwargs)
 
                     # Narrow inputs to uncached items only
                     if strip is not None and strip.uncached_items:
@@ -340,7 +346,7 @@ class ToolRegistry:
                     cache = _program_tool_cache.get()
                     if cache is not None:
                         whole_cache_key = _generate_cache_key(key, inputs, config)
-                        cached = cache.get(key, whole_cache_key)
+                        cached: BaseToolOutput | None = cache.get(key, whole_cache_key)
                         if cached is not None:
                             logger.debug("[Cache Hit] %s: using cached result", key)
                             return cached
@@ -361,8 +367,6 @@ class ToolRegistry:
                     result.tool_id = key
                     result.success = True
                     result.execution_time = time.time() - start_time
-                    if result.timestamp is None:
-                        result.timestamp = datetime.now()
                     return _post_dispatch_cache_and_expand(
                         key, spec, cacheable, result, strip, deduped,
                         original_items, whole_cache_key,
@@ -380,8 +384,6 @@ class ToolRegistry:
                     dispatched.tool_id = key
                     dispatched.success = True
                     dispatched.execution_time = time.time() - start_time
-                    if dispatched.timestamp is None:
-                        dispatched.timestamp = datetime.now()
                     return _post_dispatch_cache_and_expand(
                         key, spec, cacheable, dispatched, strip, deduped,
                         original_items, whole_cache_key,
@@ -404,8 +406,6 @@ class ToolRegistry:
                             result.tool_id = key
                             result.execution_time = time.time() - start_time
                             result.success = True
-                            if result.timestamp is None:
-                                result.timestamp = datetime.now()
 
                             # Add captured warnings to the result (filtered)
                             if warning_list:
@@ -460,6 +460,7 @@ class ToolRegistry:
                         )
 
                 # All retries exhausted for a retryable exception
+                assert last_exception is not None  # set on first retry iteration
                 logger.error(
                     f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
                     f"{type(last_exception).__name__}: {last_exception}"
@@ -678,7 +679,7 @@ def _post_dispatch_cache_and_expand(
     result: BaseToolOutput,
     strip: CacheStripResult | None,
     deduped: Any | None,
-    original_items: list | None,
+    original_items: list[Any] | None,
     whole_cache_key: str | None,
 ) -> BaseToolOutput:
     """Store results in cache and expand deduped items back to original positions.
@@ -693,26 +694,28 @@ def _post_dispatch_cache_and_expand(
         result (BaseToolOutput): Tool output to post-process.
         strip (CacheStripResult | None): Cache strip result with cached/uncached item info.
         deduped (Any | None): Deduplication result mapping original to unique indices.
-        original_items (list | None): Original input items before dedup/strip.
+        original_items (list[Any] | None): Original input items before dedup/strip.
         whole_cache_key (str | None): Cache key for whole-output caching path.
     """
     if is_cacheable and spec and spec.iterable_input_field:
+        assert spec.iterable_output_field is not None  # validated at registration
+        output_field = spec.iterable_output_field
         # Iterable cache store + stitch
-        computed_items = getattr(result, spec.iterable_output_field, [])
+        computed_items = getattr(result, output_field, [])
         if strip is not None and strip.cached_results:
             cache_store_items(key, strip.cache_keys, computed_items)
             total = len(strip.cached_results) + len(strip.uncached_items)
             stitched = cache_stitch_items(strip, computed_items, total)
-            setattr(result, spec.iterable_output_field, stitched)
+            setattr(result, output_field, stitched)
         elif strip is not None:
             # No cached items existed, but we still store the new ones
             cache_store_items(key, strip.cache_keys, computed_items)
 
         # Expand deduped results back to original positions
         if deduped and original_items and len(deduped.unique_items) < len(original_items):
-            unique_results = getattr(result, spec.iterable_output_field)
+            unique_results = getattr(result, output_field)
             expanded = [unique_results[uid] for _, uid in deduped.index_map]
-            setattr(result, spec.iterable_output_field, expanded)
+            setattr(result, output_field, expanded)
 
     elif is_cacheable and whole_cache_key is not None:
         # Whole-output cache store
@@ -723,11 +726,11 @@ def _post_dispatch_cache_and_expand(
     return result
 
 
-def _re_emit_warnings(warning_list: list[Warning]) -> None:
+def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
     """Re-emit warnings so they still get logged/printed."""
     for w in warning_list:
         warnings.warn_explicit(
-            w.message, w.category, w.filename, w.lineno, w.file, w.line
+            w.message, w.category, w.filename, w.lineno, w.file, w.line  # type: ignore[arg-type]
         )
 
 

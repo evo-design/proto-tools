@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import Any
 
 import pyhmmer
 import pyhmmer.easel
@@ -55,7 +56,7 @@ def _create_sequences_from_strings(
     return digital_sequences
 
 
-def _convert_query_field(field) -> str:
+def _convert_query_field(field: Any) -> str:
     """Convert a query field to a string."""
     if field is None:
         return "-"
@@ -67,9 +68,9 @@ def _convert_query_field(field) -> str:
 
 
 def _convert_hits_to_dicts(
-    hits: list,
-    queries: list,
-) -> tuple[list[dict], list[dict]]:
+    hits: list[Any],
+    queries: list[Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Convert PyHMMER Hit objects to lists of dicts (JSON-serializable).
 
     Args:
@@ -157,7 +158,7 @@ def _convert_hits_to_dicts(
 # ============================================================================
 
 
-def run_hmmsearch(input_data: dict) -> dict:
+def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER hmmsearch (HMM profiles vs sequences).
 
     Args:
@@ -197,7 +198,7 @@ def run_hmmsearch(input_data: dict) -> dict:
     }
 
 
-def run_hmmscan(input_data: dict) -> dict:
+def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER hmmscan (sequences vs HMM database).
 
     Args:
@@ -237,7 +238,7 @@ def run_hmmscan(input_data: dict) -> dict:
     }
 
 
-def run_phmmer(input_data: dict) -> dict:
+def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER phmmer (sequences vs sequences).
 
     Args:
@@ -279,7 +280,7 @@ def run_phmmer(input_data: dict) -> dict:
     }
 
 
-def run_nhmmer(input_data: dict) -> dict:
+def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER nhmmer (nucleotide sequences vs nucleotide sequences)."""
     query_sequences = _create_sequences_from_strings(
         input_data["sequences"], alphabet="dna"
@@ -312,7 +313,7 @@ def run_nhmmer(input_data: dict) -> dict:
     }
 
 
-def run_jackhmmer(input_data: dict) -> dict:
+def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER jackhmmer (iterative protein sequence search)."""
     query_sequences = _create_sequences_from_strings(
         input_data["sequences"], alphabet="amino"
@@ -354,7 +355,7 @@ def run_jackhmmer(input_data: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 

@@ -38,7 +38,7 @@ def _init_params(
     output_size: int = 4,
     memory_mb: int = 512,
     device: jax.Device | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Initialize model params as a dict pytree (Flax/Haiku convention)."""
     key = jax.random.PRNGKey(0)
     k1, k2 = jax.random.split(key)
@@ -61,7 +61,7 @@ def _init_params(
     return params
 
 
-def _apply(params: dict, x: jax.Array) -> jax.Array:
+def _apply(params: dict[str, Any], x: jax.Array) -> jax.Array:
     """Forward pass using params pytree (pure function, no model state)."""
     h = jnp.maximum(0, x @ params["layer1"]["weights"] + params["layer1"]["bias"])
     return h @ params["layer2"]["weights"] + params["layer2"]["bias"]
@@ -161,7 +161,7 @@ _model: MockJAXMultiGPUToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -180,7 +180,7 @@ def dispatch(input_dict: dict) -> dict:
     return _model.run(data)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move both param sets to specified devices (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -189,12 +189,12 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "models not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Get memory statistics from both devices."""
     global _model
     if _model is None:
         return {"available": False, "framework": "jax", "reason": "Models not loaded"}
-    return get_jax_memory_stats(device_index=0)
+    return get_jax_memory_stats(device_index=0)  # type: ignore[no-any-return]
 
 
 # ============================================================================

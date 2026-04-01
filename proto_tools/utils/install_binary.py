@@ -21,6 +21,7 @@ import time
 import urllib.request
 import warnings
 from pathlib import Path
+from typing import Any
 
 _MAX_DOWNLOAD_RETRIES = 3
 _RETRY_DELAY_SECONDS = 5
@@ -62,11 +63,11 @@ def _find_tool_config(tool_name: str) -> Path:
     )
 
 
-def _load_tool_config(config_path: Path):
+def _load_tool_config(config_path: Path) -> Any:
     """Dynamically load a tool's binary_config module."""
     spec = importlib.util.spec_from_file_location("binary_config", config_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
 
     # Validate the module has required attributes
     if not hasattr(mod, "URLS"):
@@ -107,7 +108,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
                 pbar.update(len(chunk))
     except ImportError:
         # Fallback: simple percentage-based progress
-        def _reporthook(block_num, block_size, total_size):
+        def _reporthook(block_num: Any, block_size: Any, total_size: Any) -> None:
             dl = block_num * block_size
             if total_size > 0:
                 pct = min(100, dl * 100 / total_size)

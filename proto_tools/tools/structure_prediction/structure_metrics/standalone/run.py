@@ -74,7 +74,7 @@ def _compute_metrics(pdb_path: str) -> dict[str, Any]:
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_structure_metrics(input_data: dict) -> dict:
+def run_structure_metrics(input_data: dict[str, Any]) -> dict[str, Any]:
     """Compute structure metrics for one or more PDB files.
 
     Args:
@@ -93,7 +93,7 @@ def run_structure_metrics(input_data: dict) -> dict:
     return {"metrics": metrics}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_structure_metrics(input_dict)
 
@@ -102,7 +102,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 

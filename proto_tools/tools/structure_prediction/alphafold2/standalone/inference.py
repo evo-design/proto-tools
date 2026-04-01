@@ -62,7 +62,7 @@ def _resolve_params_dir() -> str:
     return _params_dir
 
 
-def _configure_device(device: str):
+def _configure_device(device: str) -> None:
     """Set JAX device via environment variables. Must be called before importing JAX."""
     if device == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
@@ -173,7 +173,7 @@ def _predict_structure(
     if num_ensemble_models > 1:
         predict_kwargs["num_models"] = num_ensemble_models
     else:
-        predict_kwargs["models"] = [model_num - 1]
+        predict_kwargs["models"] = [model_num - 1]  # type: ignore[assignment]
 
     af_model.predict(**predict_kwargs)
 
@@ -211,7 +211,7 @@ def _predict_structure(
 # ============================================================================
 # Dispatch
 # ============================================================================
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for ToolInstance one-shot execution."""
     # Configure device before any JAX imports
     _configure_device(input_dict.get("device", "cuda"))
@@ -228,16 +228,16 @@ def dispatch(input_dict: dict) -> dict:
     )
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_jax_memory_stats
 
-    return get_jax_memory_stats(device_index=0)
+    return get_jax_memory_stats(device_index=0)  # type: ignore[no-any-return]
 
 
 # ============================================================================

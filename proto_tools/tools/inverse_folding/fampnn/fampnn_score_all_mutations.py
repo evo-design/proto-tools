@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from tqdm import tqdm
@@ -113,7 +114,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path, file_format):
+    def _export_output(self, export_path: Any, file_format: Any) -> None:
         path = Path(export_path)
         path.mkdir(parents=True, exist_ok=True)
 
@@ -144,7 +145,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNScoreAllMutationsInput(
         inputs=[Structure(
@@ -172,7 +173,7 @@ def example_input():
 def run_fampnn_score_all_mutations(
     inputs: FAMPNNScoreAllMutationsInput,
     config: FAMPNNScoreAllMutationsConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> FAMPNNScoreAllMutationsOutput:
     """Score every possible single amino acid substitution at every position.
 
@@ -183,7 +184,7 @@ def run_fampnn_score_all_mutations(
     Args:
         inputs (FAMPNNScoreAllMutationsInput): FAMPNNScoreAllMutationsInput containing structures.
         config (FAMPNNScoreAllMutationsConfig | None): Configuration for scoring.
-        instance: Optional ToolInstance for persistent execution.
+        instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNScoreAllMutationsOutput: FAMPNNScoreAllMutationsOutput with per-position mutation scores.
@@ -194,16 +195,16 @@ def run_fampnn_score_all_mutations(
         inputs.inputs,
         desc="FAMPNN scoring all mutations",
         unit="structure",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         input_dict = {
             "operation": "score_all_mutations",
             "pdb_contents": structure.structure_pdb,
-            "batch_size": config.batch_size,
-            "seed": config.seed,
-            "model_variant": config.model_variant,
-            "device": config.device,
-            "verbose": config.verbose,
+            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "seed": config.seed,  # type: ignore[union-attr]
+            "model_variant": config.model_variant,  # type: ignore[union-attr]
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         }
         result = ToolInstance.dispatch(
             "fampnn",

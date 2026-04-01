@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class MockCLIMultiGPUToolModel:
     """Wrapper that spawns CLI subprocesses with multi-GPU device routing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize MockCLIMultiGPUToolModel."""
         self._loaded = True
         logger.info("MockCLIMultiGPUToolModel initialized")
@@ -65,7 +65,7 @@ class MockCLIMultiGPUToolModel:
 
         output = json.loads(proc.stdout.strip())
         output["device_used"] = device
-        return output
+        return output  # type: ignore[no-any-return]
 
 
 # ============================================================================
@@ -80,7 +80,7 @@ _model: MockCLIMultiGPUToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -94,12 +94,12 @@ def dispatch(input_dict: dict) -> dict:
     return _model(data=data, scale_factor=scale_factor, device=device)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool; automatically unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     return {"available": False, "framework": "pytorch", "reason": "CLI tool, no persistent model"}
 

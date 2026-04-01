@@ -147,7 +147,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_has_design_params(self):
+    def validate_has_design_params(self) -> Any:
         """Validate that at least one design parameter is provided."""
         has_params = any(
             [
@@ -243,7 +243,7 @@ class RFdiffusion3Input(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def validate_has_input(self):
+    def validate_has_input(self) -> Any:
         """Validate that either design_specs or raw_json is provided."""
         if not self.design_specs and not self.raw_json:
             raise ValueError(
@@ -458,7 +458,7 @@ class RFdiffusion3Output(BaseToolOutput):
         """Get a designed structure by index."""
         return self.output_structures[index]
 
-    def __iter__(self) -> Iterator[RFdiffusion3Structure]:
+    def __iter__(self) -> Iterator[RFdiffusion3Structure]:  # type: ignore[override]
         """Iterate over designed structures."""
         return iter(self.output_structures)
 
@@ -480,7 +480,7 @@ class RFdiffusion3Output(BaseToolOutput):
         """Return the default output format."""
         return "pdb"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         if file_format not in ["pdb", "cif"]:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -499,7 +499,7 @@ class RFdiffusion3Output(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
 
@@ -518,7 +518,7 @@ def example_input():
     iterable_output_field="output_structures",
     cacheable=True,
 )
-def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance=None) -> RFdiffusion3Output:
+def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance: Any = None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
     Uses RFdiffusion3, a diffusion-based generative model, to design novel
@@ -539,7 +539,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
         config (RFdiffusion3Config | None): Validated configuration specifying diffusion
             parameters and execution options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RFdiffusion3Output: Structured output containing:
@@ -579,9 +579,9 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        input_dir = Path(config.input_dir) if config.input_dir else temp_dir
+        input_dir = Path(config.input_dir) if config.input_dir else temp_dir  # type: ignore[union-attr]
         output_dir = (
-            Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"
+            Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"  # type: ignore[union-attr]
         )
         input_dir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -593,9 +593,9 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
         input_data = {
             "input_json_path": str(input_json_path),
             "output_dir": str(output_dir),
-            "device": config.device,
-            "verbose": config.verbose,
-            **config.get_cli_kwargs(),
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
+            **config.get_cli_kwargs(),  # type: ignore[union-attr]
         }
         output_data = ToolInstance.dispatch(
             "rfdiffusion3",

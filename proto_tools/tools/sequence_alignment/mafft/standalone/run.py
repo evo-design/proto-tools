@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -73,7 +74,7 @@ def run_mafft_alignment(
     align_method: str = "auto",
     max_iterations: int = 0,
     threads: int = 1,
-) -> dict:
+) -> dict[str, Any]:
     """Run MAFFT alignment on the given sequences.
 
     Args:
@@ -156,7 +157,7 @@ def run_mafft_alignment(
 
         # Parse aligned sequences (keyed by sequence ID)
         aligned_by_id = {}
-        for record in SeqIO.parse(output_fasta, "fasta"):
+        for record in SeqIO.parse(output_fasta, "fasta"):  # type: ignore[no-untyped-call]
             aligned_by_id[record.id] = str(record.seq)
 
     # Build output in original input order
@@ -170,7 +171,7 @@ def run_mafft_alignment(
     }
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     sequences = input_dict["sequences"]
     sequence_ids = input_dict.get(
@@ -185,7 +186,7 @@ def dispatch(input_dict: dict) -> dict:
     )
 
 
-def main():
+def main() -> None:
     """Main entry point for standalone MAFFT runner."""
     if len(sys.argv) != 3:
         print("Usage: python run.py <input.json> <output.json>", file=sys.stderr)
@@ -225,7 +226,7 @@ def main():
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

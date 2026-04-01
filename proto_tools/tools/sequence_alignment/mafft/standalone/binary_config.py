@@ -67,24 +67,24 @@ def _extract_prebuilt(archive_path: Path, bin_dir: Path) -> None:
                         dest.chmod(dest.stat().st_mode | stat.S_IEXEC)
     else:
         with tarfile.open(archive_path, "r:gz") as tar:
-            for member in tar.getmembers():
-                parts = Path(member.name).parts
+            for member in tar.getmembers():  # type: ignore[assignment]
+                parts = Path(member.name).parts  # type: ignore[attr-defined]
                 if len(parts) < 2:
                     continue
 
-                if parts[-2] == "bin" and member.isfile():
+                if parts[-2] == "bin" and member.isfile():  # type: ignore[attr-defined]
                     binary_name = parts[-1]
                     tar.extract(member, path=bin_dir.parent)
-                    src = bin_dir.parent / member.name
+                    src = bin_dir.parent / member.name  # type: ignore[attr-defined]
                     dest = bin_dir / binary_name
                     src.replace(dest)
                     dest.chmod(dest.stat().st_mode | stat.S_IEXEC)
                     print(f"  Installed bin/{binary_name}")
 
-                elif parts[-2] == "libexec" and member.isfile():
+                elif parts[-2] == "libexec" and member.isfile():  # type: ignore[attr-defined]
                     binary_name = parts[-1]
                     tar.extract(member, path=bin_dir.parent)
-                    src = bin_dir.parent / member.name
+                    src = bin_dir.parent / member.name  # type: ignore[attr-defined]
                     dest = libexec_dir / binary_name
                     src.replace(dest)
                     if not binary_name.endswith((".fa", ".1", ".pl")):

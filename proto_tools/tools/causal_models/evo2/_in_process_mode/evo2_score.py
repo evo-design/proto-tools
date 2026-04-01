@@ -5,7 +5,7 @@ Evo2 scoring tool.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import field_validator
 
@@ -49,7 +49,7 @@ class Evo2ScoringInput(BaseToolInput):
 
     @field_validator("sequences", mode="before")
     @classmethod
-    def normalize_sequences(cls, v):
+    def normalize_sequences(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -151,7 +151,7 @@ class Evo2ScoringConfig(BaseConfig):
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
-    instance=None,  # noqa: ARG001 — required by tool interface
+    instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.
 
@@ -165,7 +165,7 @@ def run_evo2_score(
         config (Evo2ScoringConfig | None): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo2ScoringOutput: Contains SequenceScores for each input sequence with:
@@ -195,22 +195,22 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
+    logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
 
     model = get_cached_evo2_model(
-        model_checkpoint=config.model_checkpoint,
-        local_path=config.local_path,
+        model_checkpoint=config.model_checkpoint,  # type: ignore[arg-type, union-attr]
+        local_path=config.local_path,  # type: ignore[union-attr]
     )
 
     result = model.score(
         sequences=inputs.sequences,
-        device=config.device,
-        verbose=config.verbose,
-        batch_size=config.batch_size,
-        return_logits=config.return_logits,
+        device=config.device,  # type: ignore[union-attr]
+        verbose=config.verbose,  # type: ignore[union-attr]
+        batch_size=config.batch_size,  # type: ignore[union-attr]
+        return_logits=config.return_logits,  # type: ignore[union-attr]
     )
 
-    if not config.keep_on_gpu:
+    if not config.keep_on_gpu:  # type: ignore[union-attr]
         model.unload()
 
     # Serialize tensors to nested lists at tool boundary

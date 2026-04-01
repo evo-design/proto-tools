@@ -5,6 +5,7 @@ PyHMMER hmmscan tool: search protein sequences against an HMM database.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import field_validator
 
@@ -63,7 +64,7 @@ PyHmmscanConfig = PyHmmerConfig
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return PyHmmscanInput(
         sequences=["MKTL"],
@@ -82,7 +83,7 @@ def example_input():
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance=None) -> PyHmmscanOutput:
+def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance: Any = None) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
     This function implements the hmmscan algorithm, searching protein sequences
@@ -96,7 +97,7 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         config (PyHmmscanConfig | None): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PyHmmscanOutput: Structured output containing:
@@ -137,11 +138,11 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
             "operation": "hmmscan",
             "hmm_db_path": str(inputs.hmm_db),
             "sequences": inputs.sequences,
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -156,11 +157,11 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
         metadata={
             "num_hmms": output_data.get("num_hmms", 0),
             "num_queries": output_data.get("num_queries", 0),
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

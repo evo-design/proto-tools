@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
@@ -74,11 +74,11 @@ class ProteinMPNNSequences(DesignedSequences):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProteinMPNNSampleInput(
         inputs=[InverseFoldingStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
+            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
         )]
     )
 
@@ -99,7 +99,7 @@ def example_input():
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
     config: ProteinMPNNSampleConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ProteinMPNNSampleOutput:
     """Sample protein sequences using ProteinMPNN.
 
@@ -108,7 +108,7 @@ def run_proteinmpnn_sample(
             each with optional chain_ids/fixed_positions constraints.
         config (ProteinMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ProteinMPNNSampleOutput: ProteinMPNNSampleOutput with designed sequences for each input structure.
@@ -125,25 +125,25 @@ def run_proteinmpnn_sample(
         inputs.inputs,
         desc="ProteinMPNN sampling",
         unit="structure",
-        disable=not config.verbose,
+        disable=not config.verbose,  # type: ignore[union-attr]
     ):
         all_seqs, all_perp, all_seqid = [], [], []
-        remaining = config.num_sequences_per_structure
+        remaining = config.num_sequences_per_structure  # type: ignore[union-attr]
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)
+            chunk = min(config.batch_size, remaining)  # type: ignore[type-var, union-attr]
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
-                "temperature": config.temperature,
+                "temperature": config.temperature,  # type: ignore[union-attr]
                 "fixed_positions": inp.fixed_positions,
-                "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": config.seed + chunk_idx,
-                "device": config.device,
-                "model_choice": config.model_choice,
-                "verbose": config.verbose,
+                "excluded_amino_acids": config.excluded_amino_acids,  # type: ignore[union-attr]
+                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
+                "device": config.device,  # type: ignore[union-attr]
+                "model_choice": config.model_choice,  # type: ignore[union-attr]
+                "verbose": config.verbose,  # type: ignore[union-attr]
             }
             result = ToolInstance.dispatch(
                 "proteinmpnn",
@@ -155,7 +155,7 @@ def run_proteinmpnn_sample(
             all_perp.extend(np.exp(result["score"]).tolist())
             all_seqid.extend(result["seqid"])
             chunk_idx += 1
-            remaining -= chunk
+            remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             ProteinMPNNSequences(
                 sequences=all_seqs,
@@ -163,4 +163,4 @@ def run_proteinmpnn_sample(
                 sequence_identity=all_seqid,
             )
         )
-    return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)
+    return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]

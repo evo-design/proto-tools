@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
@@ -57,7 +57,7 @@ class Evo2SampleInput(BaseToolInput):
 
     @field_validator("prompts", mode="before")
     @classmethod
-    def normalize_prompts(cls, v):
+    def normalize_prompts(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
@@ -77,7 +77,7 @@ class Evo2SampleOutput(BaseToolOutput):
             include both the input prompt and newly generated tokens. If ``False``,
             only the newly generated tokens are returned.
 
-        logits (list | None): Per-token logits for each generated sequence.
+        logits (list[Any] | None): Per-token logits for each generated sequence.
             Shape: ``[num_sequences, num_generated_tokens, vocab_size]``. Higher
             logit values indicate higher model confidence for that token. Useful for:
 
@@ -87,7 +87,7 @@ class Evo2SampleOutput(BaseToolOutput):
 
             Returns ``None`` if logits were not computed or stored.
 
-        kv_caches (list[dict] | None): List of KV cache dictionaries, one per
+        kv_caches (list[dict[str, Any]] | None): List of KV cache dictionaries, one per
             sequence. Each cache contains the intermediate attention states from
             generation. Can be passed as ``old_kv_cache`` in a subsequent generation
             call to continue generation from the cached state. Useful for:
@@ -103,11 +103,11 @@ class Evo2SampleOutput(BaseToolOutput):
         include Evo2's special tokens depending on the prompt format.
     """
     sequences: list[str] = Field(description="Generated DNA sequences")
-    logits: list | None = Field(
+    logits: list[Any] | None = Field(
         default=None,
         description="Per-token logits for each sequence",
     )
-    kv_caches: list[dict] | None = Field(
+    kv_caches: list[dict[str, Any]] | None = Field(
         default=None,
         description="List of KV caches for each sequence",
     )
@@ -120,7 +120,7 @@ class Evo2SampleOutput(BaseToolOutput):
     def output_format_default(self) -> str:
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "fasta":
@@ -219,7 +219,7 @@ class Evo2SampleConfig(BaseConfig):
             for sequences that naturally end. If ``False``, always generates exactly
             ``num_tokens`` tokens. Default: ``True``.
 
-        old_kv_cache (dict | None): Dictionary of inference parameters containing
+        old_kv_cache (dict[str, Any] | None): Dictionary of inference parameters containing
             a pre-computed KV cache from a previous generation run. Used for
             continuing generation from a cached state. Default: ``None``.
 
@@ -313,7 +313,7 @@ class Evo2SampleConfig(BaseConfig):
         description="Whether to stop at end-of-sequence token",
         advanced=True,
     )
-    old_kv_cache: dict | None = ConfigField(
+    old_kv_cache: dict[str, Any] | None = ConfigField(
         title="Old KV Cache",
         default=None,
         description="Dictionary of inference parameters to use for cached sampling (KV cache)",
@@ -358,7 +358,7 @@ class Evo2SampleConfig(BaseConfig):
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput, config: Evo2SampleConfig | None = None,
-    instance=None,  # noqa: ARG001 — required by tool interface
+    instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
 
@@ -373,7 +373,7 @@ def run_evo2_sample(
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and caching options.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         Evo2SampleOutput: Structured output containing:
@@ -402,20 +402,20 @@ def run_evo2_sample(
         - Evo2 Website: https://arcinstitute.org/tools/evo
     """
     # Local GPU
-    logger.debug(f"Using local GPU for Evo2 sampling: {config.model_checkpoint}")
+    logger.debug(f"Using local GPU for Evo2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
 
     model = get_cached_evo2_model(
-        model_checkpoint=config.model_checkpoint,
-        local_path=config.local_path,
+        model_checkpoint=config.model_checkpoint,  # type: ignore[arg-type, union-attr]
+        local_path=config.local_path,  # type: ignore[union-attr]
     )
 
     # Check if old_kv_cache has sufficient capacity for continued generation
     # Vortex doesn't support dynamically expanding the cache, so if the cache
     # is too small, we must discard it and let vortex create a new one
-    old_kv_cache = config.old_kv_cache
-    max_seqlen = config.max_seqlen
+    old_kv_cache = config.old_kv_cache  # type: ignore[union-attr]
+    max_seqlen = config.max_seqlen  # type: ignore[union-attr]
     if old_kv_cache is not None:
-        required_seqlen = len(inputs.prompts[0]) + config.num_tokens
+        required_seqlen = len(inputs.prompts[0]) + config.num_tokens  # type: ignore[union-attr]
         cache_max_seqlen = old_kv_cache["mha"].max_seqlen
         if cache_max_seqlen < required_seqlen:
             logger.warning(
@@ -430,20 +430,20 @@ def run_evo2_sample(
     # Pass batch_size to inference layer for internal batching
     batch_result = model.sample(
         prompts=inputs.prompts,
-        top_k=config.top_k,
-        top_p=config.top_p,
-        temperature=config.temperature,
-        device=config.device,
-        num_tokens=config.num_tokens,
-        cached_generation=config.cached_generation,
-        force_prompt_threshold=config.force_prompt_threshold,
+        top_k=config.top_k,  # type: ignore[union-attr]
+        top_p=config.top_p,  # type: ignore[union-attr]
+        temperature=config.temperature,  # type: ignore[union-attr]
+        device=config.device,  # type: ignore[union-attr]
+        num_tokens=config.num_tokens,  # type: ignore[union-attr]
+        cached_generation=config.cached_generation,  # type: ignore[union-attr]
+        force_prompt_threshold=config.force_prompt_threshold,  # type: ignore[union-attr]
         max_seqlen=max_seqlen,
-        print_generation=config.print_generation,
-        verbose=config.verbose,
-        stop_at_eos=config.stop_at_eos,
+        print_generation=config.print_generation,  # type: ignore[union-attr]
+        verbose=config.verbose,  # type: ignore[union-attr]
+        stop_at_eos=config.stop_at_eos,  # type: ignore[union-attr]
         old_kv_cache=old_kv_cache,
-        batch_size=config.batch_size,
-        return_logits=config.return_logits,
+        batch_size=config.batch_size,  # type: ignore[union-attr]
+        return_logits=config.return_logits,  # type: ignore[union-attr]
     )
 
     result = {
@@ -460,7 +460,7 @@ def run_evo2_sample(
         logits = logits.cpu().tolist()
 
     # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
-    if config.prepend_prompt:
+    if config.prepend_prompt:  # type: ignore[union-attr]
         result["sequences"] = [
             prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)
         ]
@@ -468,14 +468,14 @@ def run_evo2_sample(
     return Evo2SampleOutput(
         metadata={
             "prompts": inputs.prompts,
-            "model_checkpoint": config.model_checkpoint,
-            "local_path": config.local_path,
-            "top_k": config.top_k,
-            "top_p": config.top_p,
-            "temperature": config.temperature,
-            "num_tokens": config.num_tokens,
-            "cached_generation": config.cached_generation,
-            "prepend_prompt": config.prepend_prompt,
+            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "local_path": config.local_path,  # type: ignore[union-attr]
+            "top_k": config.top_k,  # type: ignore[union-attr]
+            "top_p": config.top_p,  # type: ignore[union-attr]
+            "temperature": config.temperature,  # type: ignore[union-attr]
+            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
+            "cached_generation": config.cached_generation,  # type: ignore[union-attr]
+            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
         },
         sequences=result["sequences"],
         kv_caches=result["kv_caches"],

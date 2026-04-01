@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -114,7 +115,7 @@ class ViennaRNAOutput(BaseToolOutput):
         """Return the default output format."""
         return "csv"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "csv":
@@ -182,7 +183,7 @@ class ViennaRNAConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ViennaRNAInput(sequences=["AUCGAUCG"])
 
@@ -200,7 +201,7 @@ def example_input():
 def run_viennarna(
     inputs: ViennaRNAInput,
     config: ViennaRNAConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> ViennaRNAOutput:
     """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
 
@@ -212,7 +213,7 @@ def run_viennarna(
         inputs (ViennaRNAInput): Input containing RNA sequences to fold.
         config (ViennaRNAConfig | None): Configuration parameters for ViennaRNA.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ViennaRNAOutput: Contains:
@@ -250,10 +251,10 @@ def run_viennarna(
     # Prepare input data for inference script
     input_data = {
         "sequences": inputs.sequences,
-        "temperature": config.temperature,
-        "use_dna_params": config.use_dna_params,
-        "no_lonely_pairs": config.no_lonely_pairs,
-        "verbose": config.verbose,
+        "temperature": config.temperature,  # type: ignore[union-attr]
+        "use_dna_params": config.use_dna_params,  # type: ignore[union-attr]
+        "no_lonely_pairs": config.no_lonely_pairs,  # type: ignore[union-attr]
+        "verbose": config.verbose,  # type: ignore[union-attr]
     }
 
     # Call the inference script in the isolated venv

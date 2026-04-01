@@ -24,7 +24,7 @@ def split_into_safe_batches(
         list[list[dict[str, Any]]]: List of sub-batches, where each sub-batch is a list of complexes
     """
     batches = []
-    current_batch = []
+    current_batch = []  # type: ignore[var-annotated]
     current_residues = 0
 
     for item in complexes:
@@ -71,8 +71,8 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
 
     from Bio import PDB
 
-    parser = PDB.PDBParser(QUIET=True)
-    structure = parser.get_structure("structure", io.StringIO(pdb_str))
+    parser = PDB.PDBParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]
+    structure = parser.get_structure("structure", io.StringIO(pdb_str))  # type: ignore[no-untyped-call]
     model = structure[0]
 
     original_chain = next(iter(model.get_chains()))
@@ -82,7 +82,7 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     start = 0
 
     for idx, length in enumerate(chain_lengths):
-        new_chain = PDB.Chain.Chain(CHAIN_IDS[idx])
+        new_chain = PDB.Chain.Chain(CHAIN_IDS[idx])  # type: ignore[no-untyped-call]
         for residue in all_residues[start : start + length]:
             new_chain.add(residue)
         new_chains.append(new_chain)
@@ -93,8 +93,8 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
         model.add(chain)
 
     output = io.StringIO()
-    pdb_io = PDB.PDBIO()
-    pdb_io.set_structure(structure)
-    pdb_io.save(output)
+    pdb_io = PDB.PDBIO()  # type: ignore[attr-defined, no-untyped-call]
+    pdb_io.set_structure(structure)  # type: ignore[no-untyped-call]
+    pdb_io.save(output)  # type: ignore[no-untyped-call]
 
     return output.getvalue()

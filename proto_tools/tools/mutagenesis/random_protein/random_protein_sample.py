@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import random
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -57,7 +57,7 @@ class RandomProteinSampleOutput(BaseToolOutput):
         """Return the default output format."""
         return "fasta"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "fasta":
@@ -106,7 +106,7 @@ class RandomProteinSampleConfig(BaseConfig):
         include_in_key=False,
     )
 
-    def preprocess(self, inputs):
+    def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
         return apply_masking_strategy(self, inputs)
 
@@ -115,7 +115,7 @@ class RandomProteinSampleConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return RandomProteinSampleInput(sequences=["MKTL"])
 
@@ -137,7 +137,7 @@ def example_input():
 def run_random_protein_sample(
     inputs: RandomProteinSampleInput,
     config: RandomProteinSampleConfig | None = None,
-    instance=None,  # noqa: ARG001 — required by tool interface
+    instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> RandomProteinSampleOutput:
     """Fill masked positions with random amino acids from a codon scheme.
 
@@ -149,13 +149,13 @@ def run_random_protein_sample(
         inputs (RandomProteinSampleInput): Protein sequences with ``_`` at designable positions.
         config (RandomProteinSampleConfig | None): Sampling configuration.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
-    scheme = config.codon_scheme
+    rng = random.Random(config.seed) if config.seed is not None else None  # type: ignore[union-attr]  # noqa: S311 -- not cryptographic
+    scheme = config.codon_scheme  # type: ignore[union-attr]
 
     sampled = []
     for seq in inputs.sequences:

@@ -58,6 +58,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, ClassVar
@@ -305,7 +306,7 @@ class ToolInstance:
         tool_name: str,
         *,
         instance_name: str | None = None,
-    ):
+    ) -> Generator[ToolInstance, None, None]:
         """Context manager that caches a persistent worker for its duration.
 
         Tool wrappers called inside the block will find the cached
@@ -365,7 +366,7 @@ class ToolInstance:
 
     @classmethod
     @contextmanager
-    def scope(cls):
+    def scope(cls) -> Generator[None, None, None]:
         """Context manager that provides an isolated ToolInstance cache.
 
         Uses a ``contextvars.ContextVar`` so only the current
@@ -388,7 +389,7 @@ class ToolInstance:
 
     @classmethod
     @contextmanager
-    def persist(cls):
+    def persist(cls) -> Generator[None, None, None]:
         """Context manager that auto-caches tools on first dispatch.
 
         Any tool called inside the block via :meth:`dispatch` is
@@ -568,7 +569,7 @@ class ToolInstance:
             worker.stop()
 
         # Release device from DeviceManager
-        cache_keys = getattr(self, "_cache_keys", set())
+        cache_keys = getattr(self, "_cache_keys", set())  # type: ignore[var-annotated]
         if cache_keys:
             instance_name = next(iter(cache_keys))
             device_manager = DeviceManager.get_instance()
@@ -927,7 +928,7 @@ class ToolInstance:
         """
         self._ensure_env()
         sp = script_path or self.script_path
-        copy_standalone_helpers(sp)
+        copy_standalone_helpers(sp)  # type: ignore[arg-type]
         device = input_dict.get("device", self.device)
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / "input.json"
@@ -980,7 +981,7 @@ class ToolInstance:
             with open(output_path) as f:
                 result = json.load(f)
                 self._mark_warmup_complete({})
-                return result
+                return result  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Venv management

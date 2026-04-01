@@ -190,7 +190,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
     )
 
     @model_validator(mode="after")
-    def validate_model_selection(self):
+    def validate_model_selection(self) -> Any:
         """Validate model_num and num_ensemble_models are not both set."""
         if self.model_num != 1 and self.num_ensemble_models > 1:
             raise ValueError(
@@ -204,9 +204,9 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return AlphaFold2Input(complexes=["MKTL"])
+    return AlphaFold2Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
 @tool(
@@ -226,7 +226,7 @@ def example_input():
 def run_alphafold2(
     inputs: AlphaFold2Input,
     config: AlphaFold2Config | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> AlphaFold2Output:
     """Predict protein 3D structures using AlphaFold2.
 
@@ -239,7 +239,7 @@ def run_alphafold2(
             complexes to predict structures for.
         config (AlphaFold2Config | None): Validated AlphaFold2 configuration specifying
             MSA settings, recycling, and model parameters.
-        instance: Optional tool instance name for persistent workers.
+        instance (Any): Optional tool instance name for persistent workers.
 
     Returns:
         AlphaFold2Output: Structured output containing:
@@ -289,7 +289,7 @@ def run_alphafold2(
                 msa = inputs.msas.get(protein_seq)
                 if msa is not None:
                     msa_a3m_content = msa.to_a3m_string()
-                    if config.verbose:
+                    if config.verbose:  # type: ignore[union-attr]
                         logger.info(
                             f"Loaded MSA for complex {complex_data['complex_idx']} "
                             f"({len(msa)} sequences)"
@@ -298,13 +298,13 @@ def run_alphafold2(
         # Prepare input data for standalone dispatch
         input_data = {
             "complex_data": complex_data,
-            "num_recycles": config.num_recycles,
-            "model_num": config.model_num,
-            "num_ensemble_models": config.num_ensemble_models,
-            "seed": config.seed,
+            "num_recycles": config.num_recycles,  # type: ignore[union-attr]
+            "model_num": config.model_num,  # type: ignore[union-attr]
+            "num_ensemble_models": config.num_ensemble_models,  # type: ignore[union-attr]
+            "seed": config.seed,  # type: ignore[union-attr]
             "msa_a3m_content": msa_a3m_content,
-            "device": config.device,
-            "verbose": config.verbose,
+            "device": config.device,  # type: ignore[union-attr]
+            "verbose": config.verbose,  # type: ignore[union-attr]
         }
 
         # Dispatch to standalone subprocess

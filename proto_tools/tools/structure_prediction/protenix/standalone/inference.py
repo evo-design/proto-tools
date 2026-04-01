@@ -128,7 +128,7 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
 class ProtenixModel:
     """Protenix model for biomolecular structure prediction."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Protenix model wrapper."""
         self._loaded = False
         self.protenix_executable = None
@@ -202,7 +202,7 @@ class ProtenixModel:
         if not use_msa:
             cmd.append("--use_msa=false")
 
-        logger.debug(f"Running Protenix command: {' '.join(cmd)}")
+        logger.debug(f"Running Protenix command: {' '.join(cmd)}")  # type: ignore[arg-type]
 
         # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
         from standalone_helpers import get_subprocess_device_env
@@ -214,7 +214,7 @@ class ProtenixModel:
         working_dir = str(Path(output_dir).parent)
 
         subprocess.run(
-            cmd,
+            cmd,  # type: ignore[arg-type]
             check=True,
             text=True,
             env=env,
@@ -315,14 +315,14 @@ class ProtenixModel:
             "metrics": best_metrics or {},
         }
 
-    def load(self):
+    def load(self) -> None:
         """Find and validate the Protenix executable."""
         logger.debug("Initializing Protenix")
 
         # First try to find protenix in the current venv's bin directory
         venv_protenix = Path(sys.executable).parent / "protenix"
         self.protenix_executable = (
-            str(venv_protenix)
+            str(venv_protenix)  # type: ignore[assignment]
             if venv_protenix.exists()
             else shutil.which("protenix")
         )
@@ -332,7 +332,7 @@ class ProtenixModel:
                 "Please make sure Protenix is installed in the current environment."
             )
 
-        self._loaded = True
+        self._loaded = True  # type: ignore[unreachable]
         logger.debug(
             f"Protenix initialized. Using executable: {self.protenix_executable}"
         )
@@ -344,7 +344,7 @@ class ProtenixModel:
 _model: ProtenixModel | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -365,7 +365,7 @@ def dispatch(input_dict: dict) -> dict:
 
     operation = input_dict.get("operation", "predict")
     if operation == "predict":
-        return _model(
+        return _model(  # type: ignore[return-value]
             input_json_path=input_dict["input_json_path"],
             output_dir=input_dict["output_dir"],
             device=input_dict.get("device", "cuda"),
@@ -381,12 +381,12 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - Protenix naturally unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """CLI tool, no persistent GPU state to report."""
     return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 

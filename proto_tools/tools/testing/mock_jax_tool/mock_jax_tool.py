@@ -7,6 +7,7 @@ get_jax_memory_stats() reporting.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import Field
 
@@ -96,7 +97,7 @@ class MockJAXToolOutput(BaseToolOutput):
         """Return the default output format."""
         return "json"
 
-    def _export_output(self, export_path: str | Path, file_format: str):
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import json
         from pathlib import Path
 
@@ -118,7 +119,7 @@ class MockJAXToolOutput(BaseToolOutput):
 # ============================================================================
 
 
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return MockJAXToolInput()
 
@@ -138,16 +139,16 @@ def example_input():
 def run_mock_jax_tool(
     inputs: MockJAXToolInput,
     config: MockJAXToolConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> MockJAXToolOutput:
     """Run mock JAX tool (minimal model with JAX device semantics)."""
     result = ToolInstance.dispatch(
         "mock_jax_tool",
         {
             "data": inputs.data,
-            "device": config.device,
-            "hidden_size": config.hidden_size,
-            "memory_mb": config.memory_mb,
+            "device": config.device,  # type: ignore[union-attr]
+            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
+            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,

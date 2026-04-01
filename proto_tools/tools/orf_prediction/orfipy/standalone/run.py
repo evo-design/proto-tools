@@ -77,7 +77,7 @@ DNA_NUCLEOTIDES = {"A", "T", "C", "G"}
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_orfipy(input_data: dict) -> dict:
+def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run Orfipy ORF prediction on one or more sequences.
 
     Args:
@@ -146,8 +146,8 @@ def run_orfipy(input_data: dict) -> dict:
         # Parse all results and group by parent sequence
         from Bio import SeqIO
 
-        aa_records = list(SeqIO.parse(str(aa_path), "fasta")) if aa_path.exists() else []
-        nt_records = list(SeqIO.parse(str(nt_path), "fasta")) if nt_path.exists() else []
+        aa_records = list(SeqIO.parse(str(aa_path), "fasta")) if aa_path.exists() else []  # type: ignore[no-untyped-call]
+        nt_records = list(SeqIO.parse(str(nt_path), "fasta")) if nt_path.exists() else []  # type: ignore[no-untyped-call]
 
         if len(aa_records) != len(nt_records):
             raise ValueError(
@@ -187,7 +187,7 @@ def run_orfipy(input_data: dict) -> dict:
     return {"predicted_orfs": predicted_orfs}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_orfipy(input_dict)
 
@@ -196,7 +196,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools

@@ -4,6 +4,8 @@ PyHMMER jackhmmer tool: iterative protein sequence search.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import field_validator
 
 from proto_tools.tools.gene_annotation.pyhmmer.shared_data_models import (
@@ -39,7 +41,7 @@ class PyJackhmmerInput(PyHmmerInput):
 
     @field_validator("target_sequences", mode="before")
     @classmethod
-    def normalize_target_sequences(cls, value) -> list[str]:
+    def normalize_target_sequences(cls, value: Any) -> list[str]:
         """Normalize target sequences to list of strings."""
         return PyHmmerInput.normalize_sequences(value)
 
@@ -78,7 +80,7 @@ PyJackhmmerOutput = PyHmmerOutput
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def example_input():
+def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return PyJackhmmerInput(
         sequences=["MKTL"],
@@ -99,7 +101,7 @@ def example_input():
 )
 def run_pyhmmer_jackhmmer(
     inputs: PyJackhmmerInput, config: PyJackhmmerConfig | None = None,
-    instance=None,
+    instance: Any = None,
 ) -> PyJackhmmerOutput:
     """Iteratively search protein sequences against protein database using PyHMMER.
 
@@ -109,7 +111,7 @@ def run_pyhmmer_jackhmmer(
         config (PyJackhmmerConfig | None): Validated configuration including
             ``max_iterations`` and threshold settings.
 
-        instance: Optional ToolInstance for subprocess execution.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
@@ -121,12 +123,12 @@ def run_pyhmmer_jackhmmer(
             "operation": "jackhmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,
-            "max_iterations": config.max_iterations,
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         instance=instance,
         config=config,
@@ -140,14 +142,14 @@ def run_pyhmmer_jackhmmer(
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "max_iterations": config.max_iterations,
+            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
             "iterations_per_query": output_data.get("iterations_per_query", []),
             "converged_per_query": output_data.get("converged_per_query", []),
-            "num_threads": config.num_threads,
-            "evalue_threshold": config.evalue_threshold,
-            "score_threshold": config.score_threshold,
-            "domain_evalue_threshold": config.domain_evalue_threshold,
-            "domain_score_threshold": config.domain_score_threshold,
+            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
+            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
+            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
+            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

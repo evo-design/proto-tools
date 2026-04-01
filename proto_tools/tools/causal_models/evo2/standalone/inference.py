@@ -96,7 +96,7 @@ class Evo2Model:
         print_generation: bool = True,
         verbose: bool = False,
         stop_at_eos: bool = True,
-        old_kv_cache: dict | None = None,
+        old_kv_cache: dict[str, Any] | None = None,
         batch_size: int = 1,
         return_logits: bool = False,
     ) -> dict[str, Any]:
@@ -134,12 +134,12 @@ class Evo2Model:
         elif self.device != device:
             self.to_device(device)
 
-        if isinstance(prompts, str):
-            prompts = [prompts]
+        if isinstance(prompts, str):  # type: ignore[unreachable]
+            prompts = [prompts]  # type: ignore[unreachable]
 
         # Create vortex inference generator
         gen = VortexGenerator(
-            self.model.model,
+            self.model.model,  # type: ignore[attr-defined]
             self.tokenizer,
             top_k=top_k,
             top_p=top_p,
@@ -194,7 +194,7 @@ class Evo2Model:
                     logger.info(f'logits.shape: {logits.shape}')
 
                 # Detokenize batch
-                batch_sequences = list(self.tokenizer.detokenize_batch(output_ids))
+                batch_sequences = list(self.tokenizer.detokenize_batch(output_ids))  # type: ignore[attr-defined]
                 assert len(batch_sequences) == current_batch_size
 
                 # Collect sequences, logits, and inference params dicts
@@ -203,7 +203,7 @@ class Evo2Model:
                 if new_kv_cache:
                     all_inference_params_dicts.extend(_split_cache(new_kv_cache))
                 else:
-                    all_inference_params_dicts.extend([None] * current_batch_size) # no cache generated
+                    all_inference_params_dicts.extend([None] * current_batch_size)  # type: ignore[list-item]  # no cache generated
 
         assert len(prompts) == len(all_sequences) == len(all_logits)
         return {
@@ -222,7 +222,7 @@ class Evo2Model:
             raise ValueError("Cannot prepare empty batch")
 
         # Tokenize sequences and convert to tensors
-        tokens = [self.tokenizer.tokenize(seq) for seq in sequences]
+        tokens = [self.tokenizer.tokenize(seq) for seq in sequences]  # type: ignore[attr-defined]
         if isinstance(tokens[0], list):
             tokens = [torch.tensor(t, dtype=torch.long) for t in tokens]
 
@@ -286,7 +286,7 @@ class Evo2Model:
 
                 input_ids, lengths = self._prepare_batch(batch_sequences, pad_left=False)
 
-                output = self.model.model(input_ids)
+                output = self.model.model(input_ids)  # type: ignore[attr-defined]
                 # Model returns tuple (logits,)
                 logits = output[0] if isinstance(output, tuple) else output
 
@@ -319,7 +319,7 @@ class Evo2Model:
     # ============================================================================
     # Helper Functions
     # ============================================================================
-    def load(self, device: str, verbose: bool = False):
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load Evo2 model and tokenizer to device.
 
         Restricts CUDA_VISIBLE_DEVICES before loading so that vortex's
@@ -342,16 +342,16 @@ class Evo2Model:
         from evo2 import Evo2
         _cleanup_vortex_debug_log()
         self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
-        self.tokenizer = self.model.tokenizer
-        self.model.model = self.model.model.eval()
+        self.tokenizer = self.model.tokenizer  # type: ignore[attr-defined]
+        self.model.model = self.model.model.eval()  # type: ignore[attr-defined]
 
-        self.device = device
+        self.device = device  # type: ignore[assignment]
         self._loaded = True
 
         if verbose:
             logger.info("Evo2 model loaded successfully")
 
-    def _reload_to_device(self, model, old_device: str, new_device: str):  # noqa: ARG002 — required by device transition callback signature
+    def _reload_to_device(self, model: Any, old_device: str, new_device: str) -> Any:  # noqa: ARG002 — required by device transition callback signature
         """Custom move function: reload the model onto the target GPU.
 
         Vortex auto-shards based on CUDA_VISIBLE_DEVICES at construction
@@ -360,9 +360,9 @@ class Evo2Model:
         before constructing the model.
         """
         self.load(new_device)
-        return self.model.model
+        return self.model.model  # type: ignore[attr-defined]
 
-    def to_device(self, device: str) -> None:
+    def to_device(self, device: str) -> Any:
         """Move model to a different device.
 
         GPU → CPU uses standard PyTorch ``.to("cpu")``.
@@ -373,18 +373,18 @@ class Evo2Model:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device == device:
-            return
+            return  # type: ignore[unreachable]
 
         if device == "cpu":
             # Standard offload, no reload needed
-            self.model.model = move_model_to_device(
-                self.model.model, self.device, device,
+            self.model.model = move_model_to_device(  # type: ignore[attr-defined]
+                self.model.model, self.device, device,  # type: ignore[attr-defined]
             )
-            self.device = device
+            self.device = device  # type: ignore[assignment]
         else:
             # Moving to GPU requires full reload (vortex auto-sharding)
-            self.model.model = move_model_to_device(
-                self.model.model, self.device, device,
+            self.model.model = move_model_to_device(  # type: ignore[attr-defined]
+                self.model.model, self.device, device,  # type: ignore[attr-defined]
                 custom_move_fn=self._reload_to_device,
             )
 
@@ -393,12 +393,12 @@ class Evo2Model:
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
-            self.model.model = self.model.model.to("cpu")
-            self.device = "cpu"
+            self.model.model = self.model.model.to("cpu")  # type: ignore[attr-defined]
+            self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-def _slice_cache(cache: dict, start: int, end: int) -> dict:
+def _slice_cache(cache: dict[str, Any], start: int, end: int) -> dict[str, Any]:
     """Slice a batched cache from index start to end.
 
     Args:
@@ -478,7 +478,7 @@ def _slice_cache(cache: dict, start: int, end: int) -> dict:
     }
 
 
-def _split_cache(cache: dict) -> list[dict]:
+def _split_cache(cache: dict[str, Any]) -> list[dict[str, Any]]:
     """Split batched cache into per-sample caches.
 
     Args:
@@ -515,7 +515,7 @@ def _serialize_output(value: Any) -> Any:
 _model: Evo2Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -540,7 +540,7 @@ def dispatch(input_dict: dict) -> dict:
             verbose=input_dict.get("verbose", False),
             stop_at_eos=input_dict.get("stop_at_eos", True),
             old_kv_cache=None,  # KV caching not supported in venv mode
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
         )
         # KV caches are vortex GPU objects, not JSON-serializable
@@ -551,13 +551,13 @@ def dispatch(input_dict: dict) -> dict:
             sequences=input_dict.get("sequences", []),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),
+            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
 
 
-def _cleanup_vortex_debug_log():
+def _cleanup_vortex_debug_log() -> None:
     """Remove activations_debug.log created by vortex.logging at import time.
 
     The vortex library unconditionally creates a FileHandler for
@@ -574,7 +574,7 @@ def _cleanup_vortex_debug_log():
         debug_log.unlink()
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -584,13 +584,13 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
-    return get_pytorch_memory_stats(device)
+    return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

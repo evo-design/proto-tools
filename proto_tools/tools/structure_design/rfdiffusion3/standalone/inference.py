@@ -37,7 +37,7 @@ class RFdiffusion3Model:
         "SER": "S", "THR": "T", "VAL": "V", "TRP": "W", "TYR": "Y",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize RFdiffusion3 model wrapper."""
         self._loaded = False
         self.rfd3_executable = None
@@ -57,7 +57,7 @@ class RFdiffusion3Model:
         ckpt_path: str = "rfd3",
         verbose: bool = False,
         # All other CLI args pass through to rfd3
-        **cli_kwargs,
+        **cli_kwargs: Any,
     ) -> dict[str, Any]:
         """Run RFdiffusion3 structure design.
 
@@ -126,7 +126,7 @@ class RFdiffusion3Model:
             else:
                 cmd.append(f"{key}={value}")
 
-        logger.debug(f"Running RFdiffusion3 command: {' '.join(cmd)}")
+        logger.debug(f"Running RFdiffusion3 command: {' '.join(cmd)}")  # type: ignore[arg-type]
 
         # Get subprocess environment with correct CUDA_VISIBLE_DEVICES
         from standalone_helpers import get_subprocess_device_env
@@ -135,7 +135,7 @@ class RFdiffusion3Model:
 
         # Run the command
         result = subprocess.run(
-            cmd,
+            cmd,  # type: ignore[arg-type]
             check=True,
             text=True,
             env=env,
@@ -148,7 +148,7 @@ class RFdiffusion3Model:
         # Extract the outputs
         return self._extract_rfd3_outputs(output_dir)
 
-    def load(self, verbose: bool = False):  # noqa: ARG002 — required by tool interface
+    def load(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Load RFdiffusion3 model components."""
         logger.debug("Initializing RFdiffusion3")
 
@@ -161,10 +161,10 @@ class RFdiffusion3Model:
 
         # Try venv bin directory first, then PATH
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"
-        self.rfd3_executable = str(venv_rfdiffusion3) if venv_rfdiffusion3.exists() else shutil.which("rfd3")
+        self.rfd3_executable = str(venv_rfdiffusion3) if venv_rfdiffusion3.exists() else shutil.which("rfd3")  # type: ignore[assignment]
         if not self.rfd3_executable:
             raise ImportError("Could not find 'rfd3' executable. rc-foundry[rfd3] must be installed.")
-        self._loaded = True
+        self._loaded = True  # type: ignore[unreachable]
 
         logger.debug(f"RFdiffusion3 initialized. Executable: {self.rfd3_executable}")
 
@@ -178,9 +178,9 @@ class RFdiffusion3Model:
 
         See: https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/intro_inference_calculations.md
         """
-        output_dir = Path(output_dir)
+        output_dir = Path(output_dir)  # type: ignore[assignment]
         structure_files = sorted(
-            f for f in output_dir.iterdir()
+            f for f in output_dir.iterdir()  # type: ignore[attr-defined]
             if f.name.endswith(self._STRUCTURE_EXTENSIONS)
         )
 
@@ -238,7 +238,7 @@ class RFdiffusion3Model:
         json_path = structure_file.parent / f"{self._strip_ext(structure_file.name)}.json"
         if json_path.exists():
             with open(json_path) as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
         return {}
 
     def _read_structure_file(self, file_path: Path) -> str:
@@ -254,7 +254,7 @@ class RFdiffusion3Model:
 _model: RFdiffusion3Model | None = None
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
@@ -276,18 +276,18 @@ def dispatch(input_dict: dict) -> dict:
 
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=0)
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ def _init_params(
     output_size: int = 4,
     memory_mb: int = 512,
     device: jax.Device | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Initialize model params as a dict pytree (Flax/Haiku convention).
 
     Returns a nested dict of jax arrays, placed on the target device.
@@ -68,7 +68,7 @@ def _init_params(
     return params
 
 
-def _apply(params: dict, x: jax.Array) -> jax.Array:
+def _apply(params: dict[str, Any], x: jax.Array) -> jax.Array:
     """Forward pass using params pytree (pure function, no model state)."""
     h = jnp.maximum(0, x @ params["layer1"]["weights"] + params["layer1"]["bias"])
     return h @ params["layer2"]["weights"] + params["layer2"]["bias"]
@@ -135,7 +135,7 @@ _model: MockJAXToolModel | None = None
 # ============================================================================
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
@@ -154,7 +154,7 @@ def dispatch(input_dict: dict) -> dict:
     return _model.run(data)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
     if _model is not None and _model._loaded:
@@ -163,7 +163,7 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Get memory statistics (called by DeviceManager)."""
     global _model
     if _model is None:
@@ -174,7 +174,7 @@ def get_memory_stats() -> dict:
     if _model._jax_device is not None and _model._jax_device.platform == "gpu":
         device_idx = _model._jax_device.id
 
-    return get_jax_memory_stats(device_idx)
+    return get_jax_memory_stats(device_idx)  # type: ignore[no-any-return]
 
 
 # ============================================================================

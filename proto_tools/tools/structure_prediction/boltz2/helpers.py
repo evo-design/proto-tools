@@ -7,18 +7,19 @@ MSA CSV file writing and YAML input generation.
 from __future__ import annotations
 
 import csv
+from typing import Any
 
 from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
 
 
-def write_msa_csv(aligned_sequences: list, csv_path: str) -> None:
+def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:
     """Write aligned sequences as Boltz2-format CSV (sequence + key columns).
 
     Query sequence must be first (key=0). Boltz uses the key column
     for cross-chain MSA pairing.
 
     Args:
-        aligned_sequences (list): List of aligned sequence strings. The first
+        aligned_sequences (list[Any]): List of aligned sequence strings. The first
             sequence is treated as the query.
         csv_path (str): Path where the CSV file will be written.
     """
@@ -30,14 +31,14 @@ def write_msa_csv(aligned_sequences: list, csv_path: str) -> None:
 
 
 def complex_to_yaml(
-    chains: list[dict],
-    chain_msa_paths: dict | None = None,
+    chains: list[dict[str, Any]],
+    chain_msa_paths: dict[str, Any] | None = None,
 ) -> str:
     """Convert a list of chain dicts to Boltz2 YAML input format.
 
     Args:
-        chains (list[dict]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
-        chain_msa_paths (dict | None): Optional dict mapping chain IDs (A, B, C, ...) to
+        chains (list[dict[str, Any]]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
+        chain_msa_paths (dict[str, Any] | None): Optional dict mapping chain IDs (A, B, C, ...) to
             MSA CSV file paths. Protein chains without a path get msa="empty"
             (single-sequence mode). If None, all protein chains get msa="empty".
 
@@ -68,7 +69,7 @@ def complex_to_yaml(
 
         yaml_entries.append({e_type: entry})
 
-    return yaml.dump(
+    return yaml.dump(  # type: ignore[no-any-return]
         {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}},
         sort_keys=False,
         default_flow_style=False,

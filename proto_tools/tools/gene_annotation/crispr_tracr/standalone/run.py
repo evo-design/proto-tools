@@ -149,7 +149,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
     return predictions
 
 
-def _safe_int(val) -> int | None:
+def _safe_int(val: Any) -> int | None:
     """Safely convert to int, returning None on failure."""
     if val is None or val == "" or val == "NA" or val == "nan":
         return None
@@ -159,7 +159,7 @@ def _safe_int(val) -> int | None:
         return None
 
 
-def _safe_float(val) -> float | None:
+def _safe_float(val: Any) -> float | None:
     """Safely convert to float, returning None on failure."""
     if val is None or val == "" or val == "NA" or val == "nan":
         return None
@@ -172,7 +172,7 @@ def _safe_float(val) -> float | None:
 # =============================================================================
 # Per-batch execution
 # =============================================================================
-def _prepare_run_env() -> dict:
+def _prepare_run_env() -> dict[str, Any]:
     """Prepare environment variables for CRISPRtracrRNA subprocess.
 
     Prepends conda_deps/bin to PATH so bioinformatics tools
@@ -223,7 +223,7 @@ def _run_tracr_batch(
     run_type: str,
     crispr_tracr_script: str,
     tracr_install_dir: str,
-    run_env: dict,
+    run_env: dict[str, Any],
     batch_idx: int,
 ) -> list[dict[str, Any]]:
     """Run CRISPRtracrRNA on a batch of sequences with an isolated CWD.
@@ -314,7 +314,7 @@ def _run_tracr_batch(
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_crispr_tracr(input_data: dict) -> dict:
+def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run CRISPRtracrRNA prediction on one or more sequences.
 
     Splits sequences into batches and runs them in parallel, each in an
@@ -385,7 +385,7 @@ def run_crispr_tracr(input_data: dict) -> dict:
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             try:
-                all_predictions[idx] = future.result()
+                all_predictions[idx] = future.result()  # type: ignore[call-overload]
             except Exception as e:
                 print(
                     f"ERROR: Batch {idx} failed: {e}",
@@ -394,7 +394,7 @@ def run_crispr_tracr(input_data: dict) -> dict:
                 batch_errors.append(idx)
                 # Fill with empty predictions for this batch
                 _, batch_ids = batches[idx]
-                all_predictions[idx] = [
+                all_predictions[idx] = [  # type: ignore[call-overload]
                     {
                         "sequence_id": seq_id,
                         "tracr_start": None,
@@ -417,12 +417,12 @@ def run_crispr_tracr(input_data: dict) -> dict:
     # Flatten predictions in original order
     predictions = []
     for batch_preds in all_predictions:
-        predictions.extend(batch_preds)
+        predictions.extend(batch_preds)  # type: ignore[arg-type]
 
     return {"predictions": predictions}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     return run_crispr_tracr(input_dict)
 
@@ -431,7 +431,7 @@ def dispatch(input_dict: dict) -> dict:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""
     # CLI tool that spawns subprocesses and naturally unloads after each call
     # This is a passthrough for standardization with other tools
