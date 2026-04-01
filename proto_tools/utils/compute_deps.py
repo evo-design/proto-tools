@@ -57,11 +57,11 @@ logger = logging.getLogger(__name__)
 #   Driver → CUDA mapping: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/
 #   Available wheel indices: https://download.pytorch.org/whl/
 _TORCH_COMPATIBILITY = {
-    570: ("2.8", "3", "cu128"),      # Driver 570+ (CUDA 12.8): torch 2.8+
-    550: ("2.5", "3", "cu126"),      # Driver 550-569 (CUDA 12.4+): torch 2.5+ (cu126 via CUDA forward compat)
-    535: ("2.4", "3", "cu126"),      # Driver 535-549 (CUDA 12.2): cu126 works via CUDA forward compat
-    525: ("2.4", "3", "cu126"),      # Driver 525-534 (CUDA 12.0-12.1): cu126 works via CUDA forward compat
-    0: ("2.1", "2.4", "cu118"),      # Fallback for older drivers (CUDA 11.x era)
+    570: ("2.8", "3", "cu128"),  # Driver 570+ (CUDA 12.8): torch 2.8+
+    550: ("2.5", "3", "cu126"),  # Driver 550-569 (CUDA 12.4+): torch 2.5+ (cu126 via CUDA forward compat)
+    535: ("2.4", "3", "cu126"),  # Driver 535-549 (CUDA 12.2): cu126 works via CUDA forward compat
+    525: ("2.4", "3", "cu126"),  # Driver 525-534 (CUDA 12.0-12.1): cu126 works via CUDA forward compat
+    0: ("2.1", "2.4", "cu118"),  # Fallback for older drivers (CUDA 11.x era)
 }
 
 _TORCH_INDEX_BASE = "https://download.pytorch.org/whl"
@@ -71,8 +71,8 @@ _TORCH_INDEX_BASE = "https://download.pytorch.org/whl"
 # JAX cuda12 requires driver >= 525, JAX cuda13 requires driver >= 580
 # Format: {min_driver_major: (min_jax_version, max_jax_version_exclusive)}  # noqa: ERA001 -- format docs
 _JAX_COMPATIBILITY = {
-    525: ("0.4.20", "1"),    # Driver 525+ supports jax[cuda12] (all modern versions)
-    0: ("0.4.20", "1"),      # Fallback (same as above, JAX requires modern drivers)
+    525: ("0.4.20", "1"),  # Driver 525+ supports jax[cuda12] (all modern versions)
+    0: ("0.4.20", "1"),  # Fallback (same as above, JAX requires modern drivers)
 }
 
 
@@ -197,19 +197,13 @@ def detect_compute_environment() -> dict[str, str]:
     try:
         driver_major = int(driver_version.split(".")[0])
     except (ValueError, IndexError):
-        logger.warning(
-            f"Could not parse driver version '{driver_version}', "
-            "using fallback compatibility range"
-        )
+        logger.warning(f"Could not parse driver version '{driver_version}', using fallback compatibility range")
         driver_major = 0
 
     try:
         cuda_major = int(cuda_version.split(".")[0])
     except (ValueError, IndexError):
-        logger.warning(
-            f"Could not parse CUDA version '{cuda_version}', "
-            "defaulting to CUDA 12"
-        )
+        logger.warning(f"Could not parse CUDA version '{cuda_version}', defaulting to CUDA 12")
         cuda_major = 12
 
     # Get recommended specs
@@ -222,9 +216,7 @@ def detect_compute_environment() -> dict[str, str]:
         f"driver={driver_version} (major={driver_major}), "
         f"cuda={cuda_version} (major={cuda_major})"
     )
-    logger.info(
-        f"Recommended: PyTorch {torch_spec} (index: {torch_index}), JAX {jax_spec}"
-    )
+    logger.info(f"Recommended: PyTorch {torch_spec} (index: {torch_index}), JAX {jax_spec}")
 
     env = {
         "DETECTED_COMPUTE_PLATFORM": "cuda",

@@ -93,9 +93,7 @@ class ColabFoldRemoteSearchWrapper:
                 parent_dir = Path(output_dir)
                 if parent_dir.exists():
                     all_items = list(parent_dir.iterdir())
-                    logger.debug(
-                        f"  Files/dirs in parent: {[item.name for item in all_items]}"
-                    )
+                    logger.debug(f"  Files/dirs in parent: {[item.name for item in all_items]}")
 
                 if temp_results_path.exists():
                     all_files = list(temp_results_path.rglob("*"))
@@ -104,11 +102,7 @@ class ColabFoldRemoteSearchWrapper:
                     )
 
                 # Look for .a3m files in the results directory and subdirectories
-                a3m_files = (
-                    list(temp_results_path.rglob("*.a3m"))
-                    if temp_results_path.exists()
-                    else []
-                )
+                a3m_files = list(temp_results_path.rglob("*.a3m")) if temp_results_path.exists() else []
 
                 if not a3m_files:
                     error_msg = f"Remote MSA generation completed but no .a3m files found in {temp_results_dir}"
@@ -123,9 +117,7 @@ class ColabFoldRemoteSearchWrapper:
                 # Use the first (or only) .a3m file found
                 old_msa_path = a3m_files[0]
 
-                logger.debug(
-                    f"Found MSA file: {old_msa_path.relative_to(temp_results_path)}"
-                )
+                logger.debug(f"Found MSA file: {old_msa_path.relative_to(temp_results_path)}")
 
                 # Move to clean 'msas/' sub-directory
                 new_msa_path = msas_dir / f"{seq_id}.a3m"
@@ -167,8 +159,7 @@ class ColabFoldRemoteSearchWrapper:
             self.run_mmseqs2 = run_mmseqs2
         except ImportError as e:
             raise ImportError(
-                "Error: The 'colabfold' module is missing.\n"
-                "Please install it using 'pip install colabfold[alphafold]'"
+                "Error: The 'colabfold' module is missing.\nPlease install it using 'pip install colabfold[alphafold]'"
             ) from e
 
         self._loaded = True
@@ -191,9 +182,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python remote_msa_search.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python remote_msa_search.py <input_json_path> <output_json_path>")
 
     # Get the input and output json paths
     input_json_path = sys.argv[1]

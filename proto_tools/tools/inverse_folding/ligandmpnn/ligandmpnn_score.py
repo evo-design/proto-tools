@@ -2,6 +2,7 @@
 
 LigandMPNN scoring tool.
 """
+
 from __future__ import annotations
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
@@ -35,6 +36,7 @@ class LigandMPNNScoringInput(BaseToolInput):
 
 # Output:
 LigandMPNNScoringOutput = InverseFoldingScoringOutput
+
 
 # Config:
 class LigandMPNNScoringConfig(BaseConfig):
@@ -108,9 +110,7 @@ def run_ligandmpnn_score(  # type: ignore[return]
         >>> from proto_tools.entities.structures import Structure
         >>> structure = Structure.from_pdb_file("protein.pdb")
         >>> inputs = LigandMPNNScoringInput(
-        ...     sequence_structure_pairs=[
-        ...         SequenceStructurePair(sequence="MVLSPADKTN", structure=structure)
-        ...     ]
+        ...     sequence_structure_pairs=[SequenceStructurePair(sequence="MVLSPADKTN", structure=structure)]
         ... )
         >>> config = LigandMPNNScoringConfig()
         >>> result = run_ligandmpnn_score(inputs, config)

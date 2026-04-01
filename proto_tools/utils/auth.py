@@ -2,6 +2,7 @@
 
 Authentication helpers for gated model providers.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,9 +20,7 @@ def resolve_hf_token() -> str | None:
 
     Returns the token string, or ``None`` if no token is found.
     """
-    token = os.environ.get("HF_TOKEN", "") or os.environ.get(
-        "HUGGING_FACE_HUB_TOKEN", ""
-    )
+    token = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
     if token:
         return token
 
@@ -40,9 +39,7 @@ def resolve_hf_token() -> str | None:
         try:
             with open(git_creds) as f:
                 for line in f:
-                    m = re.search(
-                        r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line
-                    )
+                    m = re.search(r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line)
                     if m:
                         return m.group(1)
         except Exception:  # noqa: S110 -- best-effort credential file read

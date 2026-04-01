@@ -2,6 +2,7 @@
 
 Contains base class for representing a protein structure.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -27,10 +28,26 @@ VISUALIZE_STYLE_OPTIONS = ["cartoon", "line", "stick", "sphere", "licorice"]
 
 # Color palette for chain coloring (supports up to 20 chains with distinct colors)
 CHAIN_COLORS = [
-    'red', 'blue', 'green', 'yellow', 'orange', 'purple',
-    'cyan', 'magenta', 'lime', 'pink', 'brown', 'gray',
-    'darkred', 'darkblue', 'darkgreen', 'gold', 'coral', 'indigo',
-    'turquoise', 'salmon'
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "orange",
+    "purple",
+    "cyan",
+    "magenta",
+    "lime",
+    "pink",
+    "brown",
+    "gray",
+    "darkred",
+    "darkblue",
+    "darkgreen",
+    "gold",
+    "coral",
+    "indigo",
+    "turquoise",
+    "salmon",
 ]
 
 
@@ -61,7 +78,7 @@ def _create_bfactor_legend_html(b_factor_type: BFactorType, range_max: float) ->
                 </div>
                 <div style="display: flex; align-items: center; height: 0;">
                     <div style="width: 8px; height: 1px; background-color: #333;"></div>
-                    <span style="font-size: 10px; margin-left: 4px;">{range_max/2:.1f}</span>
+                    <span style="font-size: 10px; margin-left: 4px;">{range_max / 2:.1f}</span>
                 </div>
                 <div style="display: flex; align-items: center; height: 0;">
                     <div style="width: 8px; height: 1px; background-color: #333;"></div>
@@ -91,11 +108,11 @@ def _create_chain_legend_html(chain_color_map: dict[str, str]) -> str:
             f'<div style="display: flex; align-items: center; gap: 6px; margin: 4px 0;">'
             f'<div style="width: 16px; height: 16px; background-color: {color}; '
             f'border: 1px solid #ccc; border-radius: 2px;"></div>'
-            f'<span>{chain_id}</span>'
-            f'</div>'
+            f"<span>{chain_id}</span>"
+            f"</div>"
         )
 
-    items_html = ''.join(chain_items)
+    items_html = "".join(chain_items)
 
     return f"""
     <div style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.9);
@@ -110,12 +127,14 @@ def _create_chain_legend_html(chain_color_map: dict[str, str]) -> str:
 
 class BFactorType(str, Enum):
     """What the B-factor column contains."""
+
     TEMPERATURE_FACTOR = "temperature_factor"
     PLDDT = "pLDDT"
     NORMALIZED_PLDDT = "normalized_pLDDT"
     CONFIDENCE = "confidence"
     UNKNOWN = "unknown"
     UNSPECIFIED = "unspecified"
+
 
 class Structure:
     """Base class for representing macromolecular structures.
@@ -256,9 +275,7 @@ class Structure:
     # ===============================
     # Chain Related
     # ===============================
-    def get_chain_sequence(
-        self, chain_id: str | None = None, remove_non_standard: bool = False
-    ) -> str:
+    def get_chain_sequence(self, chain_id: str | None = None, remove_non_standard: bool = False) -> str:
         """Extract the sequence of a specific chain from the structure.
 
         Args:
@@ -275,9 +292,9 @@ class Structure:
         Examples:
             >>> protein.get_chain_sequence()  # First chain, all residues
             'MVLSE-GEWQX'
-            >>> protein.get_chain_sequence('A')  # Chain A specifically
+            >>> protein.get_chain_sequence("A")  # Chain A specifically
             'MVLSE-GEWQX'
-            >>> protein.get_chain_sequence('A', remove_non_standard=True)  # Only standard residues
+            >>> protein.get_chain_sequence("A", remove_non_standard=True)  # Only standard residues
             'MVLSEGEWQ'
         """
         sequences = self.get_chain_sequences(remove_non_standard=remove_non_standard)
@@ -287,9 +304,7 @@ class Structure:
 
         if chain_id is not None:
             if chain_id not in sequences:
-                raise ValueError(
-                    f"Chain '{chain_id}' not found. Available chains: {list(sequences.keys())}"
-                )
+                raise ValueError(f"Chain '{chain_id}' not found. Available chains: {list(sequences.keys())}")
             return sequences[chain_id]
 
         # Return first chain
@@ -361,12 +376,12 @@ class Structure:
 
                 # Classify based on what the chain contains
                 if polymer.length() > 0:
-                    chain_types[chain.name] = 'polymer'
+                    chain_types[chain.name] = "polymer"
                 elif ligands.length() > 0:
-                    chain_types[chain.name] = 'ligand'
+                    chain_types[chain.name] = "ligand"
                 # If neither (e.g., only waters), default to polymer style
                 else:
-                    chain_types[chain.name] = 'polymer'
+                    chain_types[chain.name] = "polymer"
 
         return chain_types
 
@@ -390,9 +405,7 @@ class Structure:
                 chain_id = chain.name
                 position_map[chain_id] = []
                 chain_sequence = chain.whole()
-                residue_id_list = gemmi.one_letter_code(
-                    [residue.name for residue in chain_sequence]
-                )
+                residue_id_list = gemmi.one_letter_code([residue.name for residue in chain_sequence])
                 position_list = [residue.seqid.num for residue in chain_sequence]
                 position_map[chain_id] = list(zip(residue_id_list, position_list, strict=False))
         return position_map
@@ -411,10 +424,7 @@ class Structure:
         """
         residue_map = self.get_residue_position_map()
         if chain_id not in residue_map:
-            raise ValueError(
-                f"Chain '{chain_id}' not found in structure. "
-                f"Available chains: {list(residue_map.keys())}"
-            )
+            raise ValueError(f"Chain '{chain_id}' not found in structure. Available chains: {list(residue_map.keys())}")
         return [pos for _, pos in residue_map[chain_id]]
 
     @property
@@ -435,7 +445,7 @@ class Structure:
         show_legend: bool = True,
         width: int = 400,
         height: int = 400,
-        ligand_style: Literal["stick", "sphere", "line", "licorice"] = "stick"
+        ligand_style: Literal["stick", "sphere", "line", "licorice"] = "stick",
     ) -> None:
         """Visualize the structure using py3Dmol with optional coloring modes and legends.
 
@@ -492,10 +502,7 @@ class Structure:
         # Validate color_by parameter
         valid_color_modes = ["bfactor", "chain"]
         if color_by not in valid_color_modes:
-            raise ValueError(
-                f"Invalid color_by value: '{color_by}'. "
-                f"Must be one of: {', '.join(valid_color_modes)}"
-            )
+            raise ValueError(f"Invalid color_by value: '{color_by}'. Must be one of: {', '.join(valid_color_modes)}")
 
         # Create a new py3Dmol viewer
         viewer = py3Dmol.view(width=width, height=height)
@@ -515,9 +522,9 @@ class Structure:
 
             # Apply styles based on chain type
             for chain_id, chain_type in chain_types.items():
-                chain_style = ligand_style if chain_type == 'ligand' else style
+                chain_style = ligand_style if chain_type == "ligand" else style
                 viewer.setStyle(
-                    {'chain': chain_id},
+                    {"chain": chain_id},
                     {
                         chain_style: {
                             "colorscheme": {
@@ -527,7 +534,7 @@ class Structure:
                                 "max": range_max,
                             }
                         }
-                    }
+                    },
                 )
 
             # Prepare B-factor legend HTML
@@ -545,8 +552,8 @@ class Structure:
                 chain_color_map[chain_id] = color
 
                 # Use appropriate style based on chain type
-                chain_style = ligand_style if chain_types.get(chain_id) == 'ligand' else style
-                viewer.setStyle({'chain': chain_id}, {chain_style: {'color': color}})
+                chain_style = ligand_style if chain_types.get(chain_id) == "ligand" else style
+                viewer.setStyle({"chain": chain_id}, {chain_style: {"color": color}})
 
             # Prepare chain legend HTML
             if show_legend:
@@ -600,9 +607,7 @@ class Structure:
         )
 
     @classmethod
-    def _validate_from_dict(
-        cls, value: dict[str, Any] | Structure
-    ) -> Structure:
+    def _validate_from_dict(cls, value: dict[str, Any] | Structure) -> Structure:
         """Create a Structure from a dictionary (used during deserialization)."""
         if isinstance(value, cls):
             return value

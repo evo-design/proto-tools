@@ -13,6 +13,7 @@ auto-selects the strategy:
 Each Program instance maintains its own isolated cache using Python's
 contextvars.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,9 +30,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # Context variable for program-scoped cache
-_program_tool_cache: ContextVar[ToolCache | None] = ContextVar(
-    "_program_tool_cache", default=None
-)
+_program_tool_cache: ContextVar[ToolCache | None] = ContextVar("_program_tool_cache", default=None)
 
 
 def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
@@ -60,9 +59,7 @@ def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
         return 0
 
     if isinstance(obj, dict):
-        size += sum(
-            _get_obj_size(k, seen) + _get_obj_size(v, seen) for k, v in obj.items()
-        )
+        size += sum(_get_obj_size(k, seen) + _get_obj_size(v, seen) for k, v in obj.items())
     elif isinstance(obj, (list, tuple, set)):
         size += sum(_get_obj_size(i, seen) for i in obj)
 
@@ -247,10 +244,7 @@ def _generate_cache_key(tool_name: str, *args: Any, **kwargs: Any) -> str:
     key_parts.extend(_serialize_for_cache_key(arg) for arg in args)
 
     # Add keyword arguments in sorted order
-    key_parts.extend(
-        f"{key}={_serialize_for_cache_key(kwargs[key])}"
-        for key in sorted(kwargs.keys())
-    )
+    key_parts.extend(f"{key}={_serialize_for_cache_key(kwargs[key])}" for key in sorted(kwargs.keys()))
 
     # Generate MD5 hash of the combined key parts
     combined = "|".join(key_parts)
@@ -268,6 +262,7 @@ class DeduplicatedItems:
             ``index_map[i]`` is ``(i, unique_idx)`` where ``unique_idx``
             indexes into ``unique_items``.
     """
+
     unique_items: list[Any]
     unique_keys: list[str]
     index_map: list[tuple[int, int]]
@@ -314,6 +309,7 @@ def deduplicate_items(
 # Per-item cache helpers (used by @tool wrapper for iterable cacheable tools)
 # ============================================================================
 
+
 @dataclass
 class CacheStripResult:
     """Result of stripping cached items from an iterable input.
@@ -324,6 +320,7 @@ class CacheStripResult:
         cached_results (dict[int, Any]): Mapping from original index to cached result item.
         cache_keys (list[str]): Cache keys for uncached items (1:1 with uncached_items).
     """
+
     uncached_items: list[Any] = field(default_factory=list)
     uncached_indices: list[int] = field(default_factory=list)
     cached_results: dict[int, Any] = field(default_factory=dict)
@@ -357,9 +354,7 @@ def cache_strip_items(
     result = CacheStripResult()
 
     for idx, item in enumerate(items):
-        cache_key = _generate_cache_key(
-            tool_name, input_item=item, config=config
-        )
+        cache_key = _generate_cache_key(tool_name, input_item=item, config=config)
         cached = cache.get(tool_name, cache_key)
         if cached is not None:
             result.cached_results[idx] = cached
@@ -372,7 +367,10 @@ def cache_strip_items(
     total = len(items)
     logger.debug(
         "[Iterable Cache Stats] %s: %d cache hits, %d misses out of %d items",
-        tool_name, num_hits, total - num_hits, total,
+        tool_name,
+        num_hits,
+        total - num_hits,
+        total,
     )
 
     return result
@@ -423,6 +421,7 @@ def cache_stitch_items(
 # ============================================================================
 # Module-level cache management functions
 # ============================================================================
+
 
 def clear_cache() -> None:
     """Clear all cached results from the program-scoped cache.

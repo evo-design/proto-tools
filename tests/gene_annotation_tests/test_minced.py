@@ -27,8 +27,9 @@ _CRISPR_SEQUENCE = (
     "ATCGATCGATCGATCGATCGATCGATCG"  # Leader
     + (
         "GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC"  # Repeat (36nt)
-        + "AAAAAAAACCCCCCCCTTTTTTTTGGGGGGGG"      # Spacer (31nt)
-    ) * 5  # 5 repeat-spacer units
+        + "AAAAAAAACCCCCCCCTTTTTTTTGGGGGGGG"  # Spacer (31nt)
+    )
+    * 5  # 5 repeat-spacer units
     + "GTTTTAGAGCTATGCTGTTTTGAATGGTCCCAAAAC"  # Final repeat
     + "ATCGATCGATCGATCGATCGATCGATCG"  # Trailer
 )
@@ -132,32 +133,30 @@ def test_num_sequences_with_crispr_empty():
 @pytest.fixture
 def sample_output():
     rs1 = CrisprRepeatSpacer(
-        position=100, repeat="ATCGATCG", spacer="GCTAGCTA",
-        repeat_length=8, spacer_length=8,
+        position=100,
+        repeat="ATCGATCG",
+        spacer="GCTAGCTA",
+        repeat_length=8,
+        spacer_length=8,
     )
     rs2 = CrisprRepeatSpacer(
-        position=200, repeat="ATCGATCG",
+        position=200,
+        repeat="ATCGATCG",
         repeat_length=8,
     )
     array = CrisprArray(repeats_and_spacers=[rs1, rs2])
-    result = MincedSequenceResult(
-        sequence_id="test_seq", crispr_arrays=[array]
-    )
+    result = MincedSequenceResult(sequence_id="test_seq", crispr_arrays=[array])
     return MincedOutput(results=[result])
 
 
 def test_export_csv(sample_output, tmp_path):
-    sample_output.export(
-        name="minced", export_path=str(tmp_path), file_format="csv"
-    )
+    sample_output.export(name="minced", export_path=str(tmp_path), file_format="csv")
     csv_path = tmp_path / "minced.csv"
     assert validate_export_output(csv_path)
 
 
 def test_export_json(sample_output, tmp_path):
-    sample_output.export(
-        name="minced", export_path=str(tmp_path), file_format="json"
-    )
+    sample_output.export(name="minced", export_path=str(tmp_path), file_format="json")
     json_path = tmp_path / "minced.json"
     assert validate_export_output(json_path)
 

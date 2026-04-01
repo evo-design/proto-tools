@@ -2,6 +2,7 @@
 
 Tests for AlphaGenome.
 """
+
 import pytest
 
 from tests.conftest import make_persistent_fixture

@@ -2,6 +2,7 @@
 
 AlphaGenome batched in-silico mutagenesis (ISM) tool.
 """
+
 from __future__ import annotations
 
 import csv
@@ -99,13 +100,11 @@ class AlphaGenomeISM(AlphaGenomeInterval):
         ]
         if any(f is not None for f in variant_fields) and not all(f is not None for f in variant_fields):
             raise ValueError(
-                "variant_position, reference_bases, and alternate_bases must all be "
-                "provided together or all omitted"
+                "variant_position, reference_bases, and alternate_bases must all be provided together or all omitted"
             )
         if self.variant_position is not None and not (self.interval_start <= self.variant_position < self.interval_end):
             raise ValueError("variant_position must be within [interval_start, interval_end)")
         return self
-
 
 
 class AlphaGenomeScoreISMInput(BaseToolInput):
@@ -196,10 +195,15 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomeScoreISMInput(
-        requests=[AlphaGenomeISM(
-            chromosome="chr1", interval_start=0, interval_end=196608,
-            ism_interval_start=100000, ism_interval_end=100010,
-        )]
+        requests=[
+            AlphaGenomeISM(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=196608,
+                ism_interval_start=100000,
+                ism_interval_end=100010,
+            )
+        ]
     )
 
 
@@ -255,8 +259,5 @@ def run_alphagenome_score_ism_variants_batch(
     )
 
     scores = dispatch_result["scores"]
-    outputs = [
-        AlphaGenomeScoreOutput(scores=score_list)
-        for score_list in scores
-    ]
+    outputs = [AlphaGenomeScoreOutput(scores=score_list) for score_list in scores]
     return AlphaGenomeScoreISMOutput(results=outputs)

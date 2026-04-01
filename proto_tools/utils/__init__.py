@@ -2,6 +2,7 @@
 
 Config, helpers, sequence validation, I/O, caching, env management, device, logging.
 """
+
 from proto_tools.utils.auth import require_hf_token
 from proto_tools.utils.base_config import BaseConfig, ConfigField
 from proto_tools.utils.chemistry import validate_smiles

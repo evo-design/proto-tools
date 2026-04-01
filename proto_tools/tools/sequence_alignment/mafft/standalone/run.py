@@ -60,10 +60,7 @@ def find_mafft_binary() -> Path:
     mafft_path = bin_dir / "mafft"
 
     if not mafft_path.exists():
-        raise FileNotFoundError(
-            f"MAFFT binary not found at {mafft_path}. "
-            "The venv may not be set up correctly."
-        )
+        raise FileNotFoundError(f"MAFFT binary not found at {mafft_path}. The venv may not be set up correctly.")
 
     return mafft_path
 
@@ -97,8 +94,7 @@ def run_mafft_alignment(
         # Create input FASTA file
         input_fasta = tmp_path / "input.fasta"
         records = [
-            SeqRecord(Seq(seq), id=seq_id, description="")
-            for seq, seq_id in zip(sequences, sequence_ids, strict=False)
+            SeqRecord(Seq(seq), id=seq_id, description="") for seq, seq_id in zip(sequences, sequence_ids, strict=False)
         ]
         SeqIO.write(records, input_fasta, "fasta")
 
@@ -174,9 +170,7 @@ def run_mafft_alignment(
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     sequences = input_dict["sequences"]
-    sequence_ids = input_dict.get(
-        "sequence_ids", [f"seq_{i}" for i in range(len(sequences))]
-    )
+    sequence_ids = input_dict.get("sequence_ids", [f"seq_{i}" for i in range(len(sequences))])
     return run_mafft_alignment(
         sequences=sequences,
         sequence_ids=sequence_ids,
@@ -223,7 +217,6 @@ def main() -> None:
     # Write output JSON
     with open(output_path, "w") as f:
         json.dump(output_data, f, indent=2)
-
 
 
 def to_device(device: str) -> dict[str, Any]:

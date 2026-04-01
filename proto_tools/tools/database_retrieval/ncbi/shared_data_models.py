@@ -38,9 +38,7 @@ class NCBIFastaRecord(BaseModel):
 
     header: str = Field(description="FASTA header line")
     sequence: str = Field(description="Sequence string")
-    accession: str | None = Field(
-        default=None, description="Accession extracted from header"
-    )
+    accession: str | None = Field(default=None, description="Accession extracted from header")
 
 
 class NCBIFetchConfig(BaseConfig):

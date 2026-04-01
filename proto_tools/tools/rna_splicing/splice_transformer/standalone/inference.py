@@ -28,9 +28,7 @@ def _resolve_local_checkpoint_path() -> Path | None:
         checkpoint_path = Path(explicit_path).expanduser().resolve()
         if checkpoint_path.exists():
             return checkpoint_path
-        raise FileNotFoundError(
-            f"SPLICE_TRANSFORMER_CHECKPOINT is set but file does not exist: {checkpoint_path}"
-        )
+        raise FileNotFoundError(f"SPLICE_TRANSFORMER_CHECKPOINT is set but file does not exist: {checkpoint_path}")
 
     return None
 
@@ -71,40 +69,33 @@ class SpliceTransformerModel:
         elif self.device != device:
             self.to_device(device)
 
-        assert len(target_seqs) == len(left_contexts) == len(right_contexts), \
+        assert len(target_seqs) == len(left_contexts) == len(right_contexts), (
             "Number of targets must be the same as the number of left and right contexts"
+        )
 
         seqs_tokenized = []
         for target, left, right in zip(target_seqs, left_contexts, right_contexts, strict=False):
-            assert len(left) == len(right) == self.context_length, \
+            assert len(left) == len(right) == self.context_length, (
                 f"Length of left and right contexts must be {self.context_length}, got {len(left)} and {len(right)}"
+            )
             seq = left + target + right
             seqs_tokenized.append(self._one_hot_encode(seq))
         seqs_tokenized = np.stack(seqs_tokenized)  # type: ignore[assignment]
 
         return self._calc_batched_sequence(seqs_tokenized)  # type: ignore[arg-type]  # (batch, target_length, 18)
 
-
     def _one_hot_encode(self, seq: str) -> Any:
         """Parse input RNA sequence into one-hot-encoding format."""
-        IN_MAP = np.asarray(
-            [[0, 0, 0, 0],
-             [1, 0, 0, 0],
-             [0, 1, 0, 0],
-             [0, 0, 1, 0],
-             [0, 0, 0, 1]]
-        )
-        seq = seq.upper().replace('A', '1').replace('C', '2')
-        seq = seq.replace('G', '3').replace('T', '4').replace('U', '4').replace('N', '0')
+        IN_MAP = np.asarray([[0, 0, 0, 0], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+        seq = seq.upper().replace("A", "1").replace("C", "2")
+        seq = seq.replace("G", "3").replace("T", "4").replace("U", "4").replace("N", "0")
         seq = np.asarray(list(map(int, list(seq))))  # type: ignore[assignment]
-        return IN_MAP[seq.astype('int8')]  # type: ignore[attr-defined]
-
+        return IN_MAP[seq.astype("int8")]  # type: ignore[attr-defined]
 
     def _post_decorate(self, outputs: torch.Tensor) -> Any:
         outputs[:, :3, :] = torch.nn.functional.softmax(outputs[:, :3, :], dim=1)
         outputs[:, 3:, :] = torch.sigmoid(outputs[:, 3:, :])
         return outputs
-
 
     def _step(self, inputs: torch.Tensor) -> torch.Tensor:
         """Run model forward pass.
@@ -120,7 +111,6 @@ class SpliceTransformerModel:
             out = self.model(inputs).cpu().detach()  # type: ignore[misc]
             return self._post_decorate(out)
 
-
     def _calc_single_sequence(self, seq: np.ndarray) -> np.ndarray:
         """Calculate model output for a single sequence.
 
@@ -134,7 +124,6 @@ class SpliceTransformerModel:
         seq = seq.unsqueeze(0).transpose(1, 2)  # type: ignore[attr-defined]
         res = self._step(seq.float())  # type: ignore[attr-defined]
         return res[0].transpose(0, 1).numpy()  # type: ignore[no-any-return]
-
 
     def _calc_batched_sequence(self, seq: np.ndarray) -> np.ndarray:
         """Calculate model output for multiple sequences.
@@ -156,8 +145,7 @@ class SpliceTransformerModel:
     def _fix_state_dict_keys(self, state_dict: dict[str, Any]) -> dict[str, Any]:
         """Fix mismatched weight keys in checkpoint."""
         return {
-            key.replace("attn.pos_emb.weights_", "attn.pos_emb.weights."): value
-            for key, value in state_dict.items()
+            key.replace("attn.pos_emb.weights_", "attn.pos_emb.weights."): value for key, value in state_dict.items()
         }
 
     def load(self, device: str = "cuda", verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
@@ -166,14 +154,18 @@ class SpliceTransformerModel:
 
         from model import SpTransformer
 
-        self.model = SpTransformer(
-            128,
-            context_len=self.context_length,
-            tissue_num=15,
-            max_seq_len=8192,
-            attn_depth=8,
-            training=False,
-        ).to(device).eval()
+        self.model = (
+            SpTransformer(
+                128,
+                context_len=self.context_length,
+                tissue_num=15,
+                max_seq_len=8192,
+                attn_depth=8,
+                training=False,
+            )
+            .to(device)
+            .eval()
+        )
 
         # Prefer a local checkpoint if available, then fallback to HuggingFace Hub.
         local_model_path = _resolve_local_checkpoint_path()
@@ -183,6 +175,7 @@ class SpliceTransformerModel:
         else:
             logger.debug("Downloading SpliceTransformer checkpoint from HuggingFace Hub...")
             from huggingface_hub import hf_hub_download
+
             model_path = hf_hub_download(
                 repo_id="brianhie/SpTransformer",
                 filename="SpTransformer_pytorch.ckpt",
@@ -262,7 +255,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return {"prediction": prediction}
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

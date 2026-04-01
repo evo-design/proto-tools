@@ -7,6 +7,7 @@ CUDA_VISIBLE_DEVICES routing and subprocess.run for the actual "CLI" call.
 The subprocess is a simple Python one-liner that scales input data, lightweight
 but exercises the full subprocess device routing path.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,13 +44,14 @@ class MockCLIToolModel:
         # Build a simple CLI command that scales data
         data_json = json.dumps(data)
         cmd = [
-            sys.executable, "-c",
+            sys.executable,
+            "-c",
             f"import json, os; "
             f"data = {data_json}; "
             f"scale = {scale_factor}; "
             f"result = [x * scale for x in data]; "
             f"cvd = os.environ.get('CUDA_VISIBLE_DEVICES', ''); "
-            f"print(json.dumps({{'result': result, 'cuda_visible_devices': cvd}}))"
+            f"print(json.dumps({{'result': result, 'cuda_visible_devices': cvd}}))",
         ]
 
         # Get subprocess environment with correct CUDA_VISIBLE_DEVICES mapping

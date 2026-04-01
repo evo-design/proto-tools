@@ -20,6 +20,7 @@ _persistent_tool = make_persistent_fixture("rfdiffusion3")
 
 # ── Validation tests ────────────────────────────────────────────────────────
 
+
 def test_rfdiffusion3_input_rejects_empty():
     """Must provide either design_specs or raw_json."""
     with pytest.raises(ValueError, match=r"Either 'design_specs'.*or 'raw_json'"):
@@ -33,6 +34,7 @@ def test_rfdiffusion3_design_spec_rejects_empty():
 
 
 # ── JSON spec generation ────────────────────────────────────────────────────
+
 
 def test_rfdiffusion3_json_spec_generation():
     """Multiple design specs produce keyed JSON with correct fields."""
@@ -55,12 +57,11 @@ def test_rfdiffusion3_json_spec_generation():
 # Integration tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_unconditional_design():
     """Basic unconditional design produces a valid structure."""
-    inputs = RFdiffusion3Input(
-        design_specs=[RFdiffusion3DesignSpec(length="40")]
-    )
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")])
     config = RFdiffusion3Config(
         n_batches=1,
         diffusion_batch_size=1,

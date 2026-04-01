@@ -12,20 +12,24 @@ from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 
 # ── Configuration tests ────────────────────────────────────────────────────
 
+
 def test_env_var_overrides():
     """Test environment variable configuration overrides."""
     DeviceManager.reset_instance()
 
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=3,
-    ), patch.dict(
-        os.environ,
-        {
-            "BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2",
-            "BIO_TOOLS_OFFLOAD_STRATEGY": "restart",
-            "BIO_TOOLS_ALLOW_MULTI_DEVICE": "true",
-        },
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=3,
+        ),
+        patch.dict(
+            os.environ,
+            {
+                "BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2",
+                "BIO_TOOLS_OFFLOAD_STRATEGY": "restart",
+                "BIO_TOOLS_ALLOW_MULTI_DEVICE": "true",
+            },
+        ),
     ):
         dm = DeviceManager.get_instance()
 
@@ -34,9 +38,7 @@ def test_env_var_overrides():
         "cuda:1",
         "cuda:2",
     ], "Should parse managed devices from env"
-    assert (
-        dm._offload_strategy == OffloadStrategy.RESTART
-    ), "Should parse offload strategy from env"
+    assert dm._offload_strategy == OffloadStrategy.RESTART, "Should parse offload strategy from env"
     assert dm._allow_multiple_per_device is True, "Should parse allow_multiple from env"
 
     DeviceManager.reset_instance()
@@ -46,10 +48,13 @@ def test_env_var_managed_devices_number_format():
     """Test that BIO_TOOLS_MANAGED_DEVICES accepts number format (same as CUDA_VISIBLE_DEVICES)."""
     DeviceManager.reset_instance()
 
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=3,
-    ), patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=3,
+        ),
+        patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}),
+    ):
         dm = DeviceManager.get_instance()
 
     # Number format should be normalized to cuda:N format internally
@@ -86,6 +91,7 @@ def test_env_var_managed_devices_mixed_format():
 
 
 # ── Device pool discovery tests ────────────────────────────────────────────
+
 
 def test_auto_detect_devices(device_manager):
     """Test automatic GPU detection (2 GPUs mocked)."""
@@ -126,9 +132,7 @@ def test_managed_devices_validation_invalid_device(mock_2_gpus):
     # Try to configure more devices than available (only 2 GPUs exist: cuda:0, cuda:1)
     with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "cuda:0,cuda:1,cuda:2"}):
         dm = DeviceManager.get_instance()
-        with pytest.raises(
-            ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"
-        ):
+        with pytest.raises(ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"):
             dm._get_available_devices()
 
     DeviceManager.reset_instance()
@@ -141,9 +145,7 @@ def test_managed_devices_validation_invalid_device_number_format(mock_2_gpus):
     # Try to configure device index 2 with only 2 GPUs (0 and 1 valid)
     with patch.dict(os.environ, {"BIO_TOOLS_MANAGED_DEVICES": "0,1,2"}):
         dm = DeviceManager.get_instance()
-        with pytest.raises(
-            ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"
-        ):
+        with pytest.raises(ValueError, match="BIO_TOOLS_MANAGED_DEVICES specifies invalid device"):
             dm._get_available_devices()
 
     DeviceManager.reset_instance()
@@ -179,10 +181,13 @@ def test_cuda_visible_devices_one_visible():
 
     # Simulate parent process with CUDA_VISIBLE_DEVICES=5
     # This means only physical GPU 5 is visible, appearing as logical cuda:0
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=1,
-    ), patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "5"}):
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=1,
+        ),
+        patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "5"}),
+    ):
         dm = DeviceManager.get_instance()
         devices = dm._get_available_devices()
         # Should return cuda:0 (the logical device, not physical GPU 5)

@@ -1,4 +1,5 @@
 """Local ESM2 inference implementation."""
+
 from __future__ import annotations
 
 import json
@@ -23,12 +24,14 @@ ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t48_15B_UR50D",
 ]
 
+
 class ESM2Model:
     """ESM2 model for protein sequence embeddings and logits.
 
     Supports multiple model sizes from 8M to 15B parameters.
     Returns embeddings and optionally logits as tensors.
     """
+
     def __init__(self, model_checkpoint: ESM2_MODEL_CHECKPOINTS = "esm2_t33_650M_UR50D"):
         """Initialize ESM2 model wrapper.
 
@@ -79,9 +82,7 @@ class ESM2Model:
         max_seq_len = max(len(seq) for seq in sequences)
 
         # Split the sequences into batches
-        batches = [
-            sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)
-        ]
+        batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
 
         all_mean_embeddings = []
         all_logits = []
@@ -110,7 +111,7 @@ class ESM2Model:
                 )
 
                 # Extract embeddings
-                embeddings = batch_outputs["hidden_states"][-1][:, 1:-1, :] # Remove special tokens
+                embeddings = batch_outputs["hidden_states"][-1][:, 1:-1, :]  # Remove special tokens
 
                 # Extract attention mask
                 attention_mask = batch_inputs["attention_mask"][:, 1:-1]
@@ -131,13 +132,9 @@ class ESM2Model:
 
                 if additional_padding_len > 0:
                     # Pad attention_mask
-                    attention_mask = torch.nn.functional.pad(
-                        attention_mask, (0, additional_padding_len), value=0
-                    )
+                    attention_mask = torch.nn.functional.pad(attention_mask, (0, additional_padding_len), value=0)
                     # Pad logits
-                    logits = torch.nn.functional.pad(
-                        logits, (0, 0, 0, additional_padding_len), value=0.0
-                    )
+                    logits = torch.nn.functional.pad(logits, (0, 0, 0, additional_padding_len), value=0.0)
 
                 # Save attention mask and logits
                 all_attention_masks.append(attention_mask)
@@ -197,16 +194,15 @@ class ESM2Model:
             tokenizer_sequences.append(seq.replace("_", mask_token))
 
         # Batch the forward passes
-        batch_ranges = [
-            (i, min(i + batch_size, len(sequences)))
-            for i in range(0, len(sequences), batch_size)
-        ]
+        batch_ranges = [(i, min(i + batch_size, len(sequences))) for i in range(0, len(sequences), batch_size)]
 
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
         for start, end in tqdm(
-            batch_ranges, desc="ESM2 sampling", unit="batch",
+            batch_ranges,
+            desc="ESM2 sampling",
+            unit="batch",
             disable=not verbose,
         ):
             batch_tok_seqs = tokenizer_sequences[start:end]
@@ -234,9 +230,7 @@ class ESM2Model:
                 aa_logits = outputs["logits"][:, 1:-1, :][:, :, self.amino_acid_token_ids]
 
             # Sample at mask positions for each sequence
-            for seq_idx, (orig_seq, positions) in enumerate(
-                zip(batch_originals, batch_masks, strict=False)
-            ):
+            for seq_idx, (orig_seq, positions) in enumerate(zip(batch_originals, batch_masks, strict=False)):
                 if not positions:
                     all_sampled.append(orig_seq)
                 else:
@@ -253,7 +247,7 @@ class ESM2Model:
 
             if return_logits:
                 for seq_idx, orig_seq in enumerate(batch_originals):
-                    all_logits.append(aa_logits[seq_idx, :len(orig_seq)])
+                    all_logits.append(aa_logits[seq_idx, : len(orig_seq)])
 
         return {
             "sequences": all_sampled,
@@ -318,11 +312,13 @@ class ESM2Model:
             avg_ll = log_prob / valid_count
 
             all_logits.append(logits)
-            all_metrics.append({
-                "log_likelihood": log_prob,
-                "avg_log_likelihood": avg_ll,
-                "perplexity": math.exp(-avg_ll),
-            })
+            all_metrics.append(
+                {
+                    "log_likelihood": log_prob,
+                    "avg_log_likelihood": avg_ll,
+                    "perplexity": math.exp(-avg_ll),
+                }
+            )
 
         return {
             "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
@@ -360,7 +356,7 @@ class ESM2Model:
             masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # type: ignore[attr-defined]  # +1 for BOS token
 
         # Get true token IDs directly from tokenized input
-        true_token_ids = original_ids[0, 1 : 1 + len(seq)] # Token positions: [BOS] + seq + [EOS]
+        true_token_ids = original_ids[0, 1 : 1 + len(seq)]  # Token positions: [BOS] + seq + [EOS]
 
         # Create mask for valid (standard AA) positions - exclusion strategy
         valid_mask = torch.tensor([aa in AMINO_ACIDS_LIST for aa in seq], device=self.device)
@@ -414,13 +410,14 @@ class ESM2Model:
         # Load model and tokenizer
         # Uses flash attention enabled version: https://huggingface.co/fredzzp/esm2_t33_650M_UR50D
         from transformers import AutoModelForMaskedLM, AutoTokenizer
+
         self.model = AutoModelForMaskedLM.from_pretrained("fredzzp/" + self.model_checkpoint).to(device).eval()
         self.tokenizer = AutoTokenizer.from_pretrained("fredzzp/" + self.model_checkpoint)
 
         # Create amino acid token IDs and keep them on the same device as model
         self.amino_acid_token_ids = torch.tensor(
             [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
-            device=device
+            device=device,
         )
         self.device = device  # type: ignore[assignment]
         self._loaded = True
@@ -508,7 +505,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict.get("return_logits", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

@@ -601,6 +601,7 @@ def _get_git_commit_short(length: int = 7) -> str | None:
     # Not in a git repo (e.g., non-editable pip install); use package version
     try:
         from proto_tools import __version__
+
         return f"v{__version__}"
     except ImportError:
         return None
@@ -625,6 +626,7 @@ def get_git_info() -> dict[str, Any]:
     # Always include package version
     try:
         from proto_tools import __version__
+
         info["version"] = __version__
     except ImportError:
         pass

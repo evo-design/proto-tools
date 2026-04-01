@@ -5,6 +5,7 @@ Tool registry for managing tool discovery and schema generation.
 Provides a decorator-based API for registering tools with metadata and
 automatic schema generation for API/frontend integration.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -93,8 +94,7 @@ class ToolSpec(BaseModel):
     description: str = Field(description="Detailed description of tool functionality")
     uses_gpu: bool = Field(default=False, description="Whether this tool requires a GPU")
     device_count: str = Field(
-        default="1",
-        description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')"
+        default="1", description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')"
     )
 
     # Configuration model - serialized as JSON Schema
@@ -108,19 +108,23 @@ class ToolSpec(BaseModel):
     function: Callable[..., Any] = Field(exclude=True)
     source_file: Path = Field(exclude=True, description="Path to the source file where the tool function is defined")
     example_input: Callable[[], BaseToolInput] | None = Field(
-        default=None, exclude=True,
+        default=None,
+        exclude=True,
         description="Factory returning a minimal valid input for testing",
     )
     iterable_input_field: str | None = Field(
-        default=None, exclude=True,
+        default=None,
+        exclude=True,
         description="Input field name containing the iterable list of items (for ToolPool fan-out)",
     )
     iterable_output_field: str | None = Field(
-        default=None, exclude=True,
+        default=None,
+        exclude=True,
         description="Output field name containing the iterable list of results (for ToolPool fan-out)",
     )
     cacheable: bool = Field(
-        default=False, exclude=True,
+        default=False,
+        exclude=True,
         description="Whether this tool's results should be cached in the program-scoped cache",
     )
 
@@ -128,7 +132,7 @@ class ToolSpec(BaseModel):
         "arbitrary_types_allowed": True,
     }
 
-    @field_serializer('config_model')
+    @field_serializer("config_model")
     def serialize_config_model(self, config_model: type[BaseModel]) -> dict[str, Any]:
         """Serialize config_model as standard JSON Schema."""
         return config_model.model_json_schema()
@@ -247,13 +251,13 @@ class ToolRegistry:
             Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]: Decorator
                 that wraps the function with metadata tracking.
         """
+
         def decorator(func: Callable[..., BaseToolOutput]) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
 
             if (iterable_input_field is None) != (iterable_output_field is None):
                 raise ValueError(
-                    f"Tool '{key}': iterable_input_field and iterable_output_field "
-                    f"must both be set or both be None"
+                    f"Tool '{key}': iterable_input_field and iterable_output_field must both be set or both be None"
                 )
 
             # Capture source file from call stack (find first frame in tools directory)
@@ -262,7 +266,7 @@ class ToolRegistry:
             for frame_info in stack:
                 filename = frame_info.filename
                 # Look for the first frame in the tools directory (skip this registry file)
-                if '/tools/' in filename and 'tool_registry.py' not in filename:
+                if "/tools/" in filename and "tool_registry.py" not in filename:
                     source_file = Path(filename)
                     break
 
@@ -271,7 +275,9 @@ class ToolRegistry:
                 source_file = Path(func.__code__.co_filename)
 
             @wraps(func)
-            def wrapper(inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None) -> BaseToolOutput:
+            def wrapper(
+                inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None
+            ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
                 # If config is None, instantiate default config
                 if config is None:
@@ -284,13 +290,14 @@ class ToolRegistry:
                 warning_list = []
 
                 # Validate device allocation against tool requirements
-                if hasattr(config, 'device'):
+                if hasattr(config, "device"):
                     device_str = str(config.device)
                     if device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
                             "the tool will run on CPU regardless",
-                            key, device_str,
+                            key,
+                            device_str,
                         )
                     elif device_str != "cpu":
                         device_spec = parse_device_string(device_str)
@@ -313,7 +320,9 @@ class ToolRegistry:
                             inputs = inputs.model_copy(update={spec.iterable_input_field: deduped.unique_items})
                             logger.debug(
                                 "Tool %s: dedup %d → %d unique items",
-                                key, len(original_items), len(deduped.unique_items),
+                                key,
+                                len(original_items),
+                                len(deduped.unique_items),
                             )
 
                     # Strip cached items from the (possibly deduped) input
@@ -361,6 +370,7 @@ class ToolRegistry:
                     get_active_pool,
                     is_pool_executing,
                 )
+
                 pool = get_active_pool()
                 if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
                     result = pool._parallel_dispatch(key, func, inputs, config)
@@ -368,8 +378,14 @@ class ToolRegistry:
                     result.success = True
                     result.execution_time = time.time() - start_time
                     return _post_dispatch_cache_and_expand(
-                        key, spec, cacheable, result, strip, deduped,
-                        original_items, whole_cache_key,
+                        key,
+                        spec,
+                        cacheable,
+                        result,
+                        strip,
+                        deduped,
+                        original_items,
+                        whole_cache_key,
                     )
 
                 # Extension point: try external dispatch before local execution
@@ -378,15 +394,25 @@ class ToolRegistry:
                 except Exception as e:
                     logger.error("Tool %s: _try_dispatch raised %s: %s", key, type(e).__name__, e)
                     return _make_error_output(
-                        output_class, key, start_time, e, traceback.format_exc(),
+                        output_class,
+                        key,
+                        start_time,
+                        e,
+                        traceback.format_exc(),
                     )
                 if dispatched is not None:
                     dispatched.tool_id = key
                     dispatched.success = True
                     dispatched.execution_time = time.time() - start_time
                     return _post_dispatch_cache_and_expand(
-                        key, spec, cacheable, dispatched, strip, deduped,
-                        original_items, whole_cache_key,
+                        key,
+                        spec,
+                        cacheable,
+                        dispatched,
+                        strip,
+                        deduped,
+                        original_items,
+                        whole_cache_key,
                     )
 
                 for attempt in range(1 + MAX_RETRIES):
@@ -411,7 +437,8 @@ class ToolRegistry:
                             if warning_list:
                                 # Filter out ignored warnings
                                 filtered_warnings = [
-                                    w for w in warning_list
+                                    w
+                                    for w in warning_list
                                     if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
                                 ]
 
@@ -426,8 +453,14 @@ class ToolRegistry:
 
                             # Post-dispatch: cache store, stitch, dedup expand
                             result = _post_dispatch_cache_and_expand(
-                                key, spec, cacheable, result, strip, deduped,
-                                original_items, whole_cache_key,
+                                key,
+                                spec,
+                                cacheable,
+                                result,
+                                strip,
+                                deduped,
+                                original_items,
+                                whole_cache_key,
                             )
 
                             logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
@@ -437,7 +470,7 @@ class ToolRegistry:
                         last_exception = e
                         last_traceback = traceback.format_exc()
                         if attempt < MAX_RETRIES:
-                            delay = RETRY_DELAY * (2 ** attempt)
+                            delay = RETRY_DELAY * (2**attempt)
                             logger.warning(
                                 f"Tool {key}: transient {type(e).__name__} on attempt "
                                 f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
@@ -447,7 +480,8 @@ class ToolRegistry:
                     except Exception as e:
                         # Non-retryable error; return immediately
                         filtered_warnings = [
-                            w for w in warning_list
+                            w
+                            for w in warning_list
                             if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
                         ]
                         captured_warnings = [str(w.message) for w in filtered_warnings]
@@ -455,8 +489,12 @@ class ToolRegistry:
 
                         logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
                         return _make_error_output(
-                            output_class, key, start_time, e,
-                            traceback.format_exc(), captured_warnings,
+                            output_class,
+                            key,
+                            start_time,
+                            e,
+                            traceback.format_exc(),
+                            captured_warnings,
                         )
 
                 # All retries exhausted for a retryable exception
@@ -466,8 +504,11 @@ class ToolRegistry:
                     f"{type(last_exception).__name__}: {last_exception}"
                 )
                 return _make_error_output(
-                    output_class, key, start_time,
-                    last_exception, last_traceback,
+                    output_class,
+                    key,
+                    start_time,
+                    last_exception,
+                    last_traceback,
                 )
 
             # Register the tool spec with the captured source file
@@ -489,6 +530,7 @@ class ToolRegistry:
                 cacheable=cacheable,
             )
             return wrapper
+
         return decorator
 
     @classmethod
@@ -730,7 +772,12 @@ def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
     """Re-emit warnings so they still get logged/printed."""
     for w in warning_list:
         warnings.warn_explicit(
-            w.message, w.category, w.filename, w.lineno, w.file, w.line  # type: ignore[arg-type]
+            w.message,  # type: ignore[arg-type]
+            w.category,
+            w.filename,
+            w.lineno,
+            w.file,  # type: ignore[arg-type]
+            w.line,  # type: ignore[arg-type]
         )
 
 

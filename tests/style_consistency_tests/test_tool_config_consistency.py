@@ -25,6 +25,7 @@ def _list_of_all_tool_config_models():
 
 # ── Config field consistency ────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
 def test_tool_config_consistency(config_model):
     """Test if tool config models are defined consistently."""
@@ -44,13 +45,12 @@ def test_tool_config_consistency(config_model):
 
     # Ensure all fields are defined consistently
     for field_name, field_info in config_model.model_fields.items():
-
         # TITLE: Ensure title is explicitly provided and is under limit
         title = field_info.title
         assert title is not None, f"{config_model.__name__}.{field_name} is missing title. "
-        assert (
-            len(title) <= _MAX_FIELD_TITLE_LENGTH
-        ), f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {_MAX_FIELD_TITLE_LENGTH} characters). "
+        assert len(title) <= _MAX_FIELD_TITLE_LENGTH, (
+            f"{config_model.__name__}.{field_name} title is too long (currently {len(title)} characters, must be under {_MAX_FIELD_TITLE_LENGTH} characters). "
+        )
 
         # DESCRIPTION: Must exist and be concise (~15 words / ~90 chars for tooltip)
         description_error = field_description_is_valid(field_info.description, _MAX_FIELD_DESCRIPTION_LENGTH)
@@ -67,9 +67,7 @@ def test_tool_config_consistency(config_model):
             ann_args = get_args(annotation)
 
             # Optional[...] is Union[..., None]; X | None is types.UnionType
-            is_optional = (
-                origin in (Union, types.UnionType) and type(None) in ann_args
-            )
+            is_optional = origin in (Union, types.UnionType) and type(None) in ann_args
 
             if not is_optional:
                 raise TypeError(
@@ -99,9 +97,7 @@ def test_tool_config_consistency(config_model):
 
     # Every field must appear in the config's own docstring (excluding
     # BaseConfig fields, which are documented once at the base level).
-    missing_fields = find_missing_fields_in_docstring(
-        docstring, config_model.model_fields.keys()
-    )
+    missing_fields = find_missing_fields_in_docstring(docstring, config_model.model_fields.keys())
     missing_fields = [f for f in missing_fields if f not in _BASE_CONFIG_FIELDS]
     assert len(missing_fields) == 0, (
         f"{config_model.__name__} is missing the following fields in its docstring: "
@@ -111,6 +107,7 @@ def test_tool_config_consistency(config_model):
 
 
 # ── Default config instantiation ────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
 def test_tool_config_accepts_none(config_model):
@@ -125,10 +122,7 @@ def test_tool_config_accepts_none(config_model):
     # Verify every field explicitly has a default value or default_factory
     fields_missing_defaults = []
     for field_name, field_info in config_model.model_fields.items():
-        has_default = (
-            field_info.default is not PydanticUndefined
-            or field_info.default_factory is not None
-        )
+        has_default = field_info.default is not PydanticUndefined or field_info.default_factory is not None
         if not has_default:
             fields_missing_defaults.append(field_name)
 
@@ -141,5 +135,3 @@ def test_tool_config_accepts_none(config_model):
     # Verify the config model can actually be instantiated with no args
     default_config = config_model()
     assert isinstance(default_config, config_model)
-
-

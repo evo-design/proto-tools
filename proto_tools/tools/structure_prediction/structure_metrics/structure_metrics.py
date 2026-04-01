@@ -29,12 +29,8 @@ class StructureMetrics(BaseModel):
     """Metrics for a single predicted structure."""
 
     pdb_path: str = Field(description="Path to the PDB file analyzed")
-    longest_alpha_helix: int = Field(
-        description="Length of the longest alpha helix (in residues)"
-    )
-    gyration_radius: float = Field(
-        description="Radius of gyration of the structure (in Angstroms)"
-    )
+    longest_alpha_helix: int = Field(description="Length of the longest alpha helix (in residues)")
+    gyration_radius: float = Field(description="Radius of gyration of the structure (in Angstroms)")
 
 
 # Input:
@@ -45,9 +41,7 @@ class StructureMetricsInput(BaseToolInput):
         pdb_paths (list[str]): List of paths to PDB files to analyze.
     """
 
-    pdb_paths: list[str] = InputField(
-        description="List of PDB file paths to compute structure metrics for"
-    )
+    pdb_paths: list[str] = InputField(description="List of PDB file paths to compute structure metrics for")
 
     @field_validator("pdb_paths", mode="before")
     @classmethod
@@ -126,7 +120,9 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_structure_metrics(
-    inputs: StructureMetricsInput, config: StructureMetricsConfig | None = None, instance: Any = None,
+    inputs: StructureMetricsInput,
+    config: StructureMetricsConfig | None = None,
+    instance: Any = None,
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
 

@@ -2,6 +2,7 @@
 
 BLAST database creation tool.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -66,9 +67,8 @@ class CreateBlastDbOutput(BaseToolOutput):
             ``"/data/mydb.nsq"`` (for nucleotide databases) or similar extensions
             for protein databases.
     """
-    db_path: str = Field(
-        description="Path to the generated BLAST database"
-    )
+
+    db_path: str = Field(description="Path to the generated BLAST database")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -128,6 +128,7 @@ class CreateBlastDbConfig(BaseConfig):
     Raises:
         ValueError: If ``dbtype`` is not ``"nucl"`` or ``"prot"``.
     """
+
     dbtype: Literal["nucl", "prot"] = ConfigField(
         title="Database Type",
         default="nucl",
@@ -151,7 +152,7 @@ class CreateBlastDbConfig(BaseConfig):
         advanced=True,
     )
 
-    @field_validator('dbtype')
+    @field_validator("dbtype")
     @classmethod
     def validate_dbtype(cls, v: str) -> str:
         """Validate database type."""
@@ -165,7 +166,11 @@ class CreateBlastDbConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return CreateBlastDbInput(fasta=str(Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"))
+    return CreateBlastDbInput(
+        fasta=str(
+            Path(__file__).parents[4] / "tests" / "dummy_data" / "structure_prediction_test_examples" / "gfp.fasta"
+        )
+    )
 
 
 @tool(
@@ -179,7 +184,8 @@ def example_input() -> Any:
     example_input=example_input,
 )
 def run_create_blast_db(
-    inputs: CreateBlastDbInput, config: CreateBlastDbConfig | None = None,
+    inputs: CreateBlastDbInput,
+    config: CreateBlastDbConfig | None = None,
     instance: Any = None,
 ) -> CreateBlastDbOutput:
     """Create a local BLAST database from a FASTA file.
@@ -202,10 +208,7 @@ def run_create_blast_db(
     Examples:
         >>> from proto_tools.tools.gene_annotation import run_create_blast_db, CreateBlastDbConfig, CreateBlastDbInput
         >>> inputs = CreateBlastDbInput(fasta="sequences.fasta")
-        >>> config = CreateBlastDbConfig(
-        ...     dbtype="nucl",
-        ...     title="My Database"
-        ... )
+        >>> config = CreateBlastDbConfig(dbtype="nucl", title="My Database")
         >>> result = run_create_blast_db(inputs, config)
         >>> print(f"Database created at: {result.db_path}")
     """

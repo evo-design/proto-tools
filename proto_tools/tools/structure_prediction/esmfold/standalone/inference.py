@@ -6,6 +6,7 @@ dependencies installed. It communicates via JSON files for input/output.
 Usage:
     python inference.py <input_json_path> <output_json_path>
 """
+
 from __future__ import annotations
 
 import json
@@ -75,19 +76,12 @@ class ESMFoldModel:
         with torch.inference_mode(), _allow_tf32():
             # Tokenize all sequences
             tokenized_inputs = self.tokenizer(  # type: ignore[misc]
-                linked_sequences,
-                return_tensors="pt",
-                padding=True,
-                add_special_tokens=False
+                linked_sequences, return_tensors="pt", padding=True, add_special_tokens=False
             )
             tokenized_inputs = {k: v.to(self.device) for k, v in tokenized_inputs.items()}
 
             # Build position_ids and linker_masks
-            position_ids, linker_masks = self._build_batch_tensors(
-                batch_data,
-                residue_idx_offset,
-                chain_linker
-            )
+            position_ids, linker_masks = self._build_batch_tensors(batch_data, residue_idx_offset, chain_linker)
             tokenized_inputs["position_ids"] = position_ids
 
             # Forward pass
@@ -99,12 +93,8 @@ class ESMFoldModel:
         # Extract per-complex results
         return [self._extract_result(outputs, idx) for idx in range(len(batch_data))]
 
-
     def _build_batch_tensors(
-        self,
-        batch_data: list[dict[str, Any]],
-        residue_idx_offset: int,
-        chain_linker: str
+        self, batch_data: list[dict[str, Any]], residue_idx_offset: int, chain_linker: str
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build position_ids and linker_masks for entire batch.
 
@@ -122,11 +112,7 @@ class ESMFoldModel:
             seq_len = len(item["linked_seq"])
 
             # Build tensors for this complex
-            pos_ids, mask = self._build_single_tensors(
-                item["chains"],
-                residue_idx_offset,
-                chain_linker
-            )
+            pos_ids, mask = self._build_single_tensors(item["chains"], residue_idx_offset, chain_linker)
 
             # Fill batch tensors (rest stays 0/1 for padding)
             position_ids[batch_idx, :seq_len] = pos_ids
@@ -135,10 +121,7 @@ class ESMFoldModel:
         return position_ids, linker_masks
 
     def _build_single_tensors(
-        self,
-        chains: list[str],
-        residue_idx_offset: int,
-        chain_linker: str
+        self, chains: list[str], residue_idx_offset: int, chain_linker: str
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Build position_ids and linker_mask for a single complex.
 
@@ -177,11 +160,7 @@ class ESMFoldModel:
 
         return position_ids, linker_mask
 
-    def _extract_result(
-        self,
-        outputs: dict[str, torch.Tensor],
-        batch_idx: int
-    ) -> dict[str, Any]:
+    def _extract_result(self, outputs: dict[str, torch.Tensor], batch_idx: int) -> dict[str, Any]:
         """Extract results for a single complex from batched outputs.
 
         Returns:
@@ -190,8 +169,13 @@ class ESMFoldModel:
         # Structure module tensors have shape (num_blocks, batch, ...) - batch is dim 1.
         # All other tensors have shape (batch, ...) - batch is dim 0.
         structure_module_tensors = {
-            "positions", "frames", "sidechain_frames",
-            "unnormalized_angles", "angles", "states", "lddt_head",
+            "positions",
+            "frames",
+            "sidechain_frames",
+            "unnormalized_angles",
+            "angles",
+            "states",
+            "lddt_head",
         }
         complex_output = {}
         for key, value in outputs.items():
@@ -199,9 +183,11 @@ class ESMFoldModel:
                 if value.ndim == 0:  # Scalar
                     complex_output[key] = value
                 elif key in structure_module_tensors:
-                    complex_output[key] = value[:, batch_idx:batch_idx + 1, ...] # structure module tensors have batch as dim 1
+                    complex_output[key] = value[
+                        :, batch_idx : batch_idx + 1, ...
+                    ]  # structure module tensors have batch as dim 1
                 else:
-                    complex_output[key] = value[batch_idx:batch_idx + 1] # all other tensors have batch as dim 0
+                    complex_output[key] = value[batch_idx : batch_idx + 1]  # all other tensors have batch as dim 0
             else:
                 complex_output[key] = value
 
@@ -251,9 +237,7 @@ class ESMFoldModel:
         if verbose:
             logger.info(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
 
-        self.model = EsmForProteinFolding.from_pretrained(
-            "facebook/esmfold_v1", trust_remote_code=True
-        )
+        self.model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1", trust_remote_code=True)
 
         self.model = self.model.to(device)  # type: ignore[attr-defined]
         self.model.esm = self.model.esm.half()  # type: ignore[attr-defined]

@@ -2,6 +2,7 @@
 
 Tests for masking strategies.
 """
+
 import logging
 import warnings
 
@@ -32,6 +33,7 @@ CPU_STRATEGIES = [
 
 
 # ── Shared invariants (parameterized over strategies) ─────────────────────────
+
 
 def test_fixed_positions_never_violated():
     """No strategy should ever mutate a fixed position."""
@@ -84,17 +86,22 @@ def test_existing_masks_never_unmasked(strategy):
 
 # ── Mask-all behavior ───────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("seq, fixed, expected", [
-    pytest.param("ABCDE", None, "_____", id="no_fixed"),
-    pytest.param("ABCDE", [1, 3, 5], "A_C_E", id="some_fixed"),
-    pytest.param("ABCDEF", [], "______", id="empty_fixed"),
-    pytest.param("ABC", [1, 2, 3], "ABC", id="all_fixed"),
-    pytest.param("A_C", None, "___", id="existing_masks"),
-])
+
+@pytest.mark.parametrize(
+    "seq, fixed, expected",
+    [
+        pytest.param("ABCDE", None, "_____", id="no_fixed"),
+        pytest.param("ABCDE", [1, 3, 5], "A_C_E", id="some_fixed"),
+        pytest.param("ABCDEF", [], "______", id="empty_fixed"),
+        pytest.param("ABC", [1, 2, 3], "ABC", id="all_fixed"),
+        pytest.param("A_C", None, "___", id="existing_masks"),
+    ],
+)
 def test_mask_all(seq, fixed, expected):
     """mask_fraction=1.0 masks every designable position."""
     result = MaskingStrategy(
-        mask_fraction=1.0, fixed_positions=fixed,
+        mask_fraction=1.0,
+        fixed_positions=fixed,
     ).mask([seq])
     assert result[0] == expected
 
@@ -108,7 +115,8 @@ def test_no_designable_positions_returns_unchanged():
 def test_mask_all_batch():
     """Batch masking applies the same fixed_positions uniformly to all sequences."""
     result = MaskingStrategy(
-        mask_fraction=1.0, fixed_positions=[1],
+        mask_fraction=1.0,
+        fixed_positions=[1],
     ).mask(["ABC", "DEFGH"])
     assert result[0] == "A__"
     assert result[1] == "D____"
@@ -116,12 +124,16 @@ def test_mask_all_batch():
 
 # ── mutable_mask helper ──────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("seq, fixed, expected", [
-    pytest.param("ABCDE", None, [True, True, True, True, True], id="all_mutable"),
-    pytest.param("A_C_E", None, [True, False, True, False, True], id="existing_masks"),
-    pytest.param("ABCDE", [2, 4], [True, False, True, False, True], id="fixed_only"),
-    pytest.param("A_CDE", [4], [True, False, True, False, True], id="masks_and_fixed"),
-])
+
+@pytest.mark.parametrize(
+    "seq, fixed, expected",
+    [
+        pytest.param("ABCDE", None, [True, True, True, True, True], id="all_mutable"),
+        pytest.param("A_C_E", None, [True, False, True, False, True], id="existing_masks"),
+        pytest.param("ABCDE", [2, 4], [True, False, True, False, True], id="fixed_only"),
+        pytest.param("A_CDE", [4], [True, False, True, False, True], id="masks_and_fixed"),
+    ],
+)
 def test_mutable_mask(seq, fixed, expected):
     """mutable_mask returns True for positions that are designable (not '_' and not fixed)."""
     assert mutable_mask(seq, fixed) == expected
@@ -129,13 +141,17 @@ def test_mutable_mask(seq, fixed, expected):
 
 # ── Count resolution ──────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("num_mutations, mask_fraction, n_designable, expected", [
-    pytest.param(None, None, 100, 30, id="default_30pct"),
-    pytest.param(5, None, 100, 5, id="exact"),
-    pytest.param(None, 0.15, 100, 15, id="fraction_15pct"),
-    pytest.param(None, 0.15, 3, 1, id="fraction_rounds_to_min_1"),
-    pytest.param(None, 0.01, 10, 1, id="tiny_fraction_clamps_to_1"),
-])
+
+@pytest.mark.parametrize(
+    "num_mutations, mask_fraction, n_designable, expected",
+    [
+        pytest.param(None, None, 100, 30, id="default_30pct"),
+        pytest.param(5, None, 100, 5, id="exact"),
+        pytest.param(None, 0.15, 100, 15, id="fraction_15pct"),
+        pytest.param(None, 0.15, 3, 1, id="fraction_rounds_to_min_1"),
+        pytest.param(None, 0.01, 10, 1, id="tiny_fraction_clamps_to_1"),
+    ],
+)
 def test_resolve_count(num_mutations, mask_fraction, n_designable, expected):
     """_resolve_count picks num_mutations > mask_fraction > default(30%)."""
     assert _resolve_count(num_mutations, mask_fraction, n_designable) == expected
@@ -150,7 +166,8 @@ def test_num_mutations_and_mask_fraction_mutually_exclusive():
 def test_mask_fraction_applies_to_designable_not_full_length():
     """mask_fraction scales by designable count, not total sequence length."""
     result = MaskingStrategy(
-        mask_fraction=0.5, fixed_positions=[1, 2, 3, 4],
+        mask_fraction=0.5,
+        fixed_positions=[1, 2, 3, 4],
     ).mask(["ABCDEFGHIJ"])
     # 10 chars, 4 fixed -> 6 designable -> round(6 * 0.5) = 3 masks
     assert result[0].count("_") == 3
@@ -159,11 +176,15 @@ def test_mask_fraction_applies_to_designable_not_full_length():
 
 # ── MaskingStrategy count behavior ──────────────────────────────────────────
 
-@pytest.mark.parametrize("kwargs, seq, expected_count", [
-    pytest.param({}, "ABCDEFGHIJ", 3, id="default_30pct"),
-    pytest.param({"num_mutations": 3}, "ABCDEFGHIJ", 3, id="num_mutations"),
-    pytest.param({"mask_fraction": 0.5}, "ABCDEFGHIJ", 5, id="mask_fraction"),
-])
+
+@pytest.mark.parametrize(
+    "kwargs, seq, expected_count",
+    [
+        pytest.param({}, "ABCDEFGHIJ", 3, id="default_30pct"),
+        pytest.param({"num_mutations": 3}, "ABCDEFGHIJ", 3, id="num_mutations"),
+        pytest.param({"mask_fraction": 0.5}, "ABCDEFGHIJ", 5, id="mask_fraction"),
+    ],
+)
 def test_masking_count(kwargs, seq, expected_count):
     """MaskingStrategy produces the correct number of '_' tokens."""
     result = MaskingStrategy(**kwargs).mask([seq])
@@ -171,26 +192,31 @@ def test_masking_count(kwargs, seq, expected_count):
     assert len(result[0]) == len(seq)
 
 
-@pytest.mark.parametrize("num_mutations, seq, fixed", [
-    pytest.param(10, "ABC", None, id="exceeds_length"),
-    pytest.param(4, "ABCDE", [1, 2], id="exceeds_designable"),
-])
+@pytest.mark.parametrize(
+    "num_mutations, seq, fixed",
+    [
+        pytest.param(10, "ABC", None, id="exceeds_length"),
+        pytest.param(4, "ABCDE", [1, 2], id="exceeds_designable"),
+    ],
+)
 def test_too_many_mutations_raises(num_mutations, seq, fixed):
     """Requesting more mutations than designable positions raises ValueError."""
     with pytest.raises(ValueError, match="mutable positions"):
         MaskingStrategy(
-            num_mutations=num_mutations, fixed_positions=fixed,
+            num_mutations=num_mutations,
+            fixed_positions=fixed,
         ).mask([seq])
 
 
 def test_variable_length_batch_with_fraction():
     """mask_fraction adapts to each sequence's designable count independently."""
     result = MaskingStrategy(mask_fraction=0.5).mask(["ABCD", "ABCDEFGHIJ"])
-    assert result[0].count("_") == 2   # round(4 * 0.5) = 2
-    assert result[1].count("_") == 5   # round(10 * 0.5) = 5
+    assert result[0].count("_") == 2  # round(4 * 0.5) = 2
+    assert result[1].count("_") == 5  # round(10 * 0.5) = 5
 
 
 # ── Sampling helpers ─────────────────────────────────────────────────────────
+
 
 def test_weighted_sample_basic():
     """Uniform weights produce k unique samples from the eligible set."""
@@ -213,8 +239,10 @@ def test_weighted_sample_heavily_weighted():
 
 # ── apply_masking_strategy helper ────────────────────────────────────────────
 
+
 class _MockConfig:
     """Minimal config-like object for testing apply_masking_strategy."""
+
     def __init__(self, masking_strategy, device="cuda"):
         self.masking_strategy = masking_strategy
         self.device = device
@@ -266,6 +294,7 @@ def test_apply_masking_strategy_does_not_mutate_original():
 
 # ── Method field and validation ──────────────────────────────────────────────
 
+
 def test_method_field_default():
     """Default method is 'random'."""
     assert MaskingStrategy().method == "random"
@@ -305,6 +334,7 @@ def test_model_fields_ignored_for_random():
 
 # ── Temperature ───────────────────────────────────────────────────────────────
 
+
 def test_temperature_default():
     """Default temperature is 1.0."""
     assert MaskingStrategy().temperature == 1.0
@@ -322,13 +352,13 @@ def test_temperature_low_is_greedy():
 
     class GreedyTestMasker(Masker):
         supported_models = None
+
         def score(self, sequences, position_score_fn=None):
             # Position 0 gets score 2, rest get score 1
             return [[2.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
     strategy = MaskingStrategy(method="random", num_mutations=1, temperature=0.01)
-    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS",
-                    {"random": GreedyTestMasker}):
+    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS", {"random": GreedyTestMasker}):
         results = [strategy.mask(["ABCDEFGHIJ"])[0] for _ in range(20)]
     # Position 0 (A) should be masked in all runs with very low temperature
     assert all(r[0] == "_" for r in results)
@@ -346,13 +376,13 @@ def test_temperature_high_is_uniform():
 
     class BiasedTestMasker(Masker):
         supported_models = None
+
         def score(self, sequences, position_score_fn=None):
             # Position 0 gets a much higher score
             return [[100.0] + [1.0] * (len(seq) - 1) for seq in sequences]
 
     strategy = MaskingStrategy(method="random", num_mutations=1, temperature=1000.0)
-    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS",
-                    {"random": BiasedTestMasker}):
+    with patch.dict("proto_tools.tools.masked_models.masking.maskers.MASKERS", {"random": BiasedTestMasker}):
         masked_positions = []
         for _ in range(100):
             result = strategy.mask(["ABCDEFGHIJ"])[0]
@@ -372,6 +402,7 @@ def test_temperature_serialization_roundtrip():
 
 
 # ── Masker persistence ────────────────────────────────────────────────────────
+
 
 def test_masker_is_reused_across_calls():
     """The masker instance persists across multiple .mask() calls."""
@@ -424,9 +455,7 @@ def _validate_masked_output(original, masked, num_mutations, fixed_positions=Non
     # Fixed positions (1-indexed) must never be masked
     if fixed_positions:
         for pos in fixed_positions:
-            assert masked[pos - 1] == original[pos - 1], (
-                f"Fixed position {pos} was masked: '{masked[pos - 1]}'"
-            )
+            assert masked[pos - 1] == original[pos - 1], f"Fixed position {pos} was masked: '{masked[pos - 1]}'"
 
 
 @pytest.mark.parametrize("method", _ALL_METHODS)
@@ -445,7 +474,9 @@ def test_method_num_mutations(method):
     assert len(result) == len(sequences)
     for orig, masked in zip(sequences, result, strict=False):
         _validate_masked_output(
-            orig, masked, _E2E_NUM_MUTATIONS,
+            orig,
+            masked,
+            _E2E_NUM_MUTATIONS,
             fixed_positions=_E2E_FIXED_POSITIONS,
         )
 
@@ -471,6 +502,8 @@ def test_method_mask_fraction(method):
         n_designable = len(orig) - n_fixed
         expected_masks = max(1, round(n_designable * fraction))
         _validate_masked_output(
-            orig, masked, expected_masks,
+            orig,
+            masked,
+            expected_masks,
             fixed_positions=_E2E_FIXED_POSITIONS,
         )

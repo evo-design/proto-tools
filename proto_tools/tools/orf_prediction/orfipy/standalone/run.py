@@ -139,9 +139,7 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(
-                f"Orfipy failed with code {proc.returncode}: {proc.stderr}"
-            )
+            raise RuntimeError(f"Orfipy failed with code {proc.returncode}: {proc.stderr}")
 
         # Parse all results and group by parent sequence
         from Bio import SeqIO
@@ -195,6 +193,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

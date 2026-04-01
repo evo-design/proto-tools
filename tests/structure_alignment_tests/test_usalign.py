@@ -2,6 +2,7 @@
 
 Tests for USalign structure alignment tool.
 """
+
 from pathlib import Path
 
 import pytest

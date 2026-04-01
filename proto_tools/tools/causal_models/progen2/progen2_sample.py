@@ -2,6 +2,7 @@
 
 ProGen2 sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,7 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-xlarge",
 ]
 
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -53,6 +55,7 @@ class ProGen2SampleInput(BaseToolInput):
 
             The model will autoregressively generate proteins continuing from these prompts.
     """
+
     prompts: list[str] = InputField(description="Prompt sequences for generation")
 
     @field_validator("prompts", mode="before")
@@ -64,6 +67,7 @@ class ProGen2SampleInput(BaseToolInput):
         if not v:
             raise ValueError("prompts must not be empty")
         return v
+
 
 class ProGen2SampleOutput(BaseToolOutput):
     """Output from ProGen2 protein sequence generation.
@@ -125,10 +129,12 @@ class ProGen2SampleOutput(BaseToolOutput):
             if path.is_dir():
                 path = path / "progen2_sequences.json"
             import json
+
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
+
 
 # Config:
 class ProGen2SampleConfig(BaseConfig):
@@ -315,7 +321,8 @@ def example_input() -> Any:
     iterable_output_field="sequences",
 )
 def run_progen2_sample(
-    inputs: ProGen2SampleInput, config: ProGen2SampleConfig | None = None,
+    inputs: ProGen2SampleInput,
+    config: ProGen2SampleConfig | None = None,
     instance: Any = None,
 ) -> ProGen2SampleOutput:
     """Generate protein sequences using ProGen2 autoregressive language model.
@@ -342,11 +349,7 @@ def run_progen2_sample(
     Examples:
         >>> # Basic protein sequence generation with explicit start token
         >>> inputs = ProGen2SampleInput(prompts=["1MKTL"])
-        >>> config = ProGen2SampleConfig(
-        ...     max_length=100,
-        ...     temperature=0.2,
-        ...     top_p=0.95
-        ... )
+        >>> config = ProGen2SampleConfig(max_length=100, temperature=0.2, top_p=0.95)
         >>> result = run_progen2_sample(inputs, config)
         >>> print(f"Generated: {result.sequences[0]}")
 
@@ -360,10 +363,7 @@ def run_progen2_sample(
         >>> print(f"Generated {len(result.sequences)} sequences")
 
         >>> # Using antibody-specific model
-        >>> config = ProGen2SampleConfig(
-        ...     model_checkpoint="progen2-oas",
-        ...     temperature=0.3
-        ... )
+        >>> config = ProGen2SampleConfig(model_checkpoint="progen2-oas", temperature=0.3)
         >>> result = run_progen2_sample(inputs, config)
 
     Note:

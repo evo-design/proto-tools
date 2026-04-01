@@ -2,6 +2,7 @@
 
 Tests for random protein sampling tool.
 """
+
 import pytest
 
 from proto_tools.tools.mutagenesis.codons import get_codon_scheme
@@ -14,6 +15,7 @@ from proto_tools.tools.mutagenesis.random_protein import (
 # ============================================================================
 # Codon scheme variations
 # ============================================================================
+
 
 @pytest.mark.parametrize("scheme", ["UNIFORM", "NNK", "NNS", "NDT", "DBK", "NRT"])
 def test_codon_scheme(scheme):
@@ -32,6 +34,7 @@ def test_codon_scheme(scheme):
 # Reproducibility
 # ============================================================================
 
+
 def test_seed_reproducibility():
     inp = RandomProteinSampleInput(sequences=["____"])
     config = RandomProteinSampleConfig(seed=42)
@@ -43,6 +46,7 @@ def test_seed_reproducibility():
 # ============================================================================
 # Output export
 # ============================================================================
+
 
 def test_export_fasta(tmp_path):
     result = run_random_protein_sample(

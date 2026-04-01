@@ -48,6 +48,7 @@ def _make_mock_scoring_output():
 
 # ── Sample input validation ───────────────────────────────────────────────────
 
+
 def test_evo1_sample_input_normalizes_single_string():
     inp = Evo1SampleInput(prompts="ATCGATCG")
     assert isinstance(inp.prompts, list)
@@ -67,6 +68,7 @@ def test_evo1_sample_input_rejects_empty():
 
 # ── Sample config validation ─────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "config_kwargs,match",
     [
@@ -83,10 +85,9 @@ def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
 
 # ── Sample output export ─────────────────────────────────────────────────────
 
+
 def test_evo1_sample_export_fasta(tmp_path):
-    output = Evo1SampleOutput(
-        sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
-    )
+    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5])
     output.export(name="test", export_path=tmp_path, file_format="fasta")
     fasta_file = tmp_path / "test.fasta"
     assert fasta_file.exists()
@@ -108,9 +109,7 @@ def test_evo1_sample_export_json(tmp_path):
 
 
 def test_evo1_sample_export_txt(tmp_path):
-    output = Evo1SampleOutput(
-        sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5]
-    )
+    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5])
     output.export(name="test", export_path=tmp_path, file_format="txt")
     txt_file = tmp_path / "test.txt"
     assert txt_file.exists()
@@ -121,6 +120,7 @@ def test_evo1_sample_export_txt(tmp_path):
 
 
 # ── Scoring input validation ─────────────────────────────────────────────────
+
 
 def test_evo1_scoring_input_normalizes_single_string():
     inp = Evo1ScoringInput(sequences="ATCGATCG")
@@ -140,6 +140,7 @@ def test_evo1_scoring_input_rejects_empty():
 
 
 # ── Scoring output export ────────────────────────────────────────────────────
+
 
 def test_evo1_scoring_export_csv(tmp_path):
     output = _make_mock_scoring_output()
@@ -166,6 +167,7 @@ def test_evo1_scoring_export_json(tmp_path):
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.uses_gpu
 def test_evo1_sample_tool():
@@ -281,8 +283,7 @@ def test_evo1_score_tool():
 @pytest.mark.uses_gpu
 def test_evo1_score_batched():
     """Test batched scoring with batch_size=2 on 6 sequences."""
-    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA", "AAAACCCCGGGG",
-                  "TTTTGGGGCCCC", "CCCCAAAATTTT", "GGGGTTTTAAAA"]
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA", "AAAACCCCGGGG", "TTTTGGGGCCCC", "CCCCAAAATTTT", "GGGGTTTTAAAA"]
     inputs = Evo1ScoringInput(sequences=sequences)
     config = Evo1ScoringConfig(
         model_name="evo-1-8k-base",

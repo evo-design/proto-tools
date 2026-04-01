@@ -5,6 +5,7 @@ models for testing multi-device management. Each model lives on a separate GPU.
 It's designed to be fast (<1s) while exercising multi-device allocation,
 movement, and eviction code paths.
 """
+
 from __future__ import annotations
 
 import json
@@ -69,9 +70,7 @@ def _parse_device_pair(device_str: str) -> tuple[str, str]:
     if "," in device_str:
         parts = device_str.split(",")
         if len(parts) != 2:
-            raise ValueError(
-                f"Expected exactly 2 devices for multi-GPU tool, got {len(parts)}: {device_str}"
-            )
+            raise ValueError(f"Expected exactly 2 devices for multi-GPU tool, got {len(parts)}: {device_str}")
 
         device_a = parts[0].strip()
         device_b = parts[1].strip()

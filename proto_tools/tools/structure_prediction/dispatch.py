@@ -55,7 +55,14 @@ SP_TOOL_MAP = {
 def predict_structures(
     complexes: StructurePredictionComplex | list[StructurePredictionComplex],
     tool_name: str,
-    tool_config: ESMFoldConfig | AlphaFold2Config | AlphaFold3Config | Boltz2Config | Chai1Config | ProtenixConfig | dict[str, Any] | None = None,
+    tool_config: ESMFoldConfig
+    | AlphaFold2Config
+    | AlphaFold3Config
+    | Boltz2Config
+    | Chai1Config
+    | ProtenixConfig
+    | dict[str, Any]
+    | None = None,
 ) -> StructurePredictionOutput:
     """Dispatch structure prediction to the specified tool.
 
@@ -80,8 +87,7 @@ def predict_structures(
 
     if tool_name not in SP_TOOL_MAP:
         raise ValueError(
-            f"Unknown structure prediction tool: '{tool_name}'. "
-            f"Supported tools: {', '.join(SP_TOOL_MAP.keys())}"
+            f"Unknown structure prediction tool: '{tool_name}'. Supported tools: {', '.join(SP_TOOL_MAP.keys())}"
         )
 
     # Collect the expected config class for the tool
@@ -108,4 +114,3 @@ def predict_structures(
 
     # Run the prediction
     return run_func(inputs, tool_config)  # type: ignore[no-any-return, operator]
-

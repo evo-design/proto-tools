@@ -2,6 +2,7 @@
 
 Random nucleotide sampling with IUPAC degenerate base support.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,7 +30,17 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 SubstitutionScheme = Literal[
-    "N", "R", "Y", "S", "W", "K", "M", "B", "D", "H", "V",
+    "N",
+    "R",
+    "Y",
+    "S",
+    "W",
+    "K",
+    "M",
+    "B",
+    "D",
+    "H",
+    "V",
 ]
 
 # ============================================================================
@@ -150,6 +161,7 @@ class RandomNucleotideSampleConfig(BaseConfig):
 # Helper
 # ============================================================================
 
+
 def _detect_sequence_type(sequences: list[str]) -> str:
     """Detect whether sequences are DNA or RNA.
 
@@ -169,6 +181,7 @@ def _detect_sequence_type(sequences: list[str]) -> str:
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""

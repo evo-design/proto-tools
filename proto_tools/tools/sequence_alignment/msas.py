@@ -59,9 +59,7 @@ class MSA:
             if not self._aligned_sequences:
                 raise ValueError("MSA must contain at least two sequences")
 
-            self._sequence_ids = sequence_ids or [
-                f"seq_{i}" for i in range(len(self._aligned_sequences))
-            ]
+            self._sequence_ids = sequence_ids or [f"seq_{i}" for i in range(len(self._aligned_sequences))]
 
             self._alignment_length = len(self._aligned_sequences[0])
             self._num_sequences = len(self._aligned_sequences)
@@ -106,15 +104,11 @@ class MSA:
             # Convert to in-memory representation if small enough
             if self._num_sequences < MAX_SEQS_IN_MEMORY:
                 self._in_memory = True
-                self._aligned_sequences = [
-                    self._fasta[seq_id][:] for seq_id in self._sequence_ids
-                ]
+                self._aligned_sequences = [self._fasta[seq_id][:] for seq_id in self._sequence_ids]
 
                 self.rm_temp_files()
         else:
-            raise ValueError(
-                f"Invalid input type: {type(aligned_sequences_or_filepath)}"
-            )
+            raise ValueError(f"Invalid input type: {type(aligned_sequences_or_filepath)}")
 
         # Validate the MSA
         if self.alignment_length == 0:
@@ -124,9 +118,7 @@ class MSA:
                 if not isinstance(seq, str):
                     raise ValueError(f"Sequence {seq} is not a string")
                 if len(seq) != self._alignment_length:
-                    raise ValueError(
-                        f"Sequence {seq} is not the same length as the MSA ({self._alignment_length})"
-                    )
+                    raise ValueError(f"Sequence {seq} is not the same length as the MSA ({self._alignment_length})")
 
         # Cache for original sequences
         self._original_sequences = None
@@ -150,9 +142,7 @@ class MSA:
         """Deletes the temporary FASTA file and its index file if they exist."""
         if self._temp_fasta_path and self._temp_fasta_path.exists():
             os.remove(self._temp_fasta_path)
-            fai = self._temp_fasta_path.with_suffix(
-                self._temp_fasta_path.suffix + ".fai"
-            )
+            fai = self._temp_fasta_path.with_suffix(self._temp_fasta_path.suffix + ".fai")
             if fai.exists():
                 os.remove(fai)
 
@@ -209,12 +199,8 @@ class MSA:
         """
         if self._in_memory:
             return self._aligned_sequences
-        warnings.warn(
-            "Converting to in-memory representation from file. This may be slow.", stacklevel=2
-        )
-        self._aligned_sequences = [
-            self._fasta[seq_id][:] for seq_id in self._sequence_ids
-        ]
+        warnings.warn("Converting to in-memory representation from file. This may be slow.", stacklevel=2)
+        self._aligned_sequences = [self._fasta[seq_id][:] for seq_id in self._sequence_ids]
         self._in_memory = True
         self.rm_temp_files()
         return self._aligned_sequences
@@ -255,9 +241,7 @@ class MSA:
         """Returns the total number of gaps in the MSA."""
         if self._in_memory:
             return sum(seq.count("-") for seq in self._aligned_sequences)
-        return sum(
-            self._fasta[seq_id][:].count("-") for seq_id in self._sequence_ids
-        )
+        return sum(self._fasta[seq_id][:].count("-") for seq_id in self._sequence_ids)
 
     @property
     def average_gap_fraction(self) -> float:
@@ -266,18 +250,9 @@ class MSA:
             return 0.0
 
         if self._in_memory:
-            return (
-                sum(
-                    seq.count("-") / self.alignment_length
-                    for seq in self._aligned_sequences
-                )
-                / self.num_sequences
-            )
+            return sum(seq.count("-") / self.alignment_length for seq in self._aligned_sequences) / self.num_sequences
         return (  # type: ignore[no-any-return]
-            sum(
-                self._fasta[seq_id][:].count("-") / self.alignment_length
-                for seq_id in self._sequence_ids
-            )
+            sum(self._fasta[seq_id][:].count("-") / self.alignment_length for seq_id in self._sequence_ids)
             / self.num_sequences
         )
 
@@ -288,9 +263,7 @@ class MSA:
     def get_column(self, position: int) -> list[str]:
         """Returns the characters at the given position in the MSA."""
         if position < 0 or position >= self._alignment_length:
-            raise IndexError(
-                f"Position {position} out of range [0, {self._alignment_length})"
-            )
+            raise IndexError(f"Position {position} out of range [0, {self._alignment_length})")
 
         if self._in_memory:
             return [seq[position] for seq in self._aligned_sequences]
@@ -305,14 +278,10 @@ class MSA:
         counts = Counter(chars)
         return counts.most_common(1)[0][1] / len(chars)
 
-    def get_position_frequencies(
-        self, position: int, include_gaps: bool = False
-    ) -> dict[str, float]:
+    def get_position_frequencies(self, position: int, include_gaps: bool = False) -> dict[str, float]:
         """Returns the character frequencies at the given position in the MSA."""
         column = self.get_column(position)
-        counts = (
-            Counter(column) if include_gaps else Counter(c for c in column if c != "-")
-        )
+        counts = Counter(column) if include_gaps else Counter(c for c in column if c != "-")
         total = sum(counts.values())
         return {char: count / total for char, count in counts.items()} if total else {}
 
@@ -358,9 +327,7 @@ class MSA:
             IndexError: If query_index is out of range.
         """
         if query_index < 0 or query_index >= self.num_sequences:
-            raise IndexError(
-                f"Query index {query_index} out of range [0, {self.num_sequences})"
-            )
+            raise IndexError(f"Query index {query_index} out of range [0, {self.num_sequences})")
 
         query_seq = self[query_index]
 
@@ -401,9 +368,7 @@ class MSA:
             IndexError: If query_index is out of range.
         """
         if query_index < 0 or query_index >= self.num_sequences:
-            raise IndexError(
-                f"Query index {query_index} out of range [0, {self.num_sequences})"
-            )
+            raise IndexError(f"Query index {query_index} out of range [0, {self.num_sequences})")
 
         query_seq = self[query_index]
 
@@ -447,9 +412,7 @@ class MSA:
                 return cls(v)
             if isinstance(v, str):
                 return cls(v)
-            raise TypeError(
-                "MSA must be an MSA instance, a list of aligned sequences, or a file path"
-            )
+            raise TypeError("MSA must be an MSA instance, a list of aligned sequences, or a file path")
 
         def serialize(instance: Any) -> Any:
             """Serialize MSA instance to list of aligned sequences."""

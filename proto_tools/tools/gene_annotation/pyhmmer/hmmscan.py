@@ -2,6 +2,7 @@
 
 PyHMMER hmmscan tool: search protein sequences against an HMM database.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,7 +84,9 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance: Any = None) -> PyHmmscanOutput:
+def run_pyhmmer_hmmscan(
+    inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance: Any = None
+) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
     This function implements the hmmscan algorithm, searching protein sequences
@@ -113,20 +116,15 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
 
     Examples:
         >>> # Scan proteins against Pfam database
-        >>> inputs = PyHmmscanInput(
-        ...     hmm_db="/path/to/Pfam-A.hmm",
-        ...     sequences=["MVLSPADKTN", "ATCGATCGAT"]
-        ... )
-        >>> config = PyHmmscanConfig(
-        ...     evalue_threshold=1.0,
-        ...     domain_evalue_threshold=1.0
-        ... )
+        >>> inputs = PyHmmscanInput(hmm_db="/path/to/Pfam-A.hmm", sequences=["MVLSPADKTN", "ATCGATCGAT"])
+        >>> config = PyHmmscanConfig(evalue_threshold=1.0, domain_evalue_threshold=1.0)
         >>> result = run_pyhmmer_hmmscan(inputs, config)
         >>> print(f"Found {result.num_domain_hits} domains")
         >>>
         >>> # Get domain architecture for each sequence
         >>> if result.domain_hits:
         ...     from itertools import groupby
+        ...
         ...     for seq_name, hits in groupby(result.domain_hits, key=lambda h: h.target_name):
         ...         domains = [h.query_name for h in hits]
         ...         print(f"{seq_name}: {' + '.join(domains)}")
@@ -149,9 +147,7 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig | None =
     )
 
     # Convert results to typed hit models
-    sequence_hits, domain_hits = _build_hit_models(
-        output_data["sequence_hits"], output_data["domain_hits"]
-    )
+    sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyHmmscanOutput(
         metadata={

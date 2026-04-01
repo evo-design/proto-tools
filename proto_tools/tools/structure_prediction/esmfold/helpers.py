@@ -11,9 +11,7 @@ from typing import Any
 from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
 
 
-def split_into_safe_batches(
-    complexes: list[dict[str, Any]], max_residues: int
-) -> list[list[dict[str, Any]]]:
+def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) -> list[list[dict[str, Any]]]:
     """Split complexes into sub-batches respecting GPU memory limits.
 
     Args:

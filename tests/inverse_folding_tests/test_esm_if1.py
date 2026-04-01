@@ -41,11 +41,11 @@ def pdb_structure():
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_simple(pdb_structure: Structure):
     """Basic sampling with default ProteinDPO config."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ESMIF1SampleConfig(
-        num_sequences_per_structure=1, temperature=0.1, seed=42,
+        num_sequences_per_structure=1,
+        temperature=0.1,
+        seed=42,
     )
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
@@ -65,11 +65,11 @@ def test_esm_if1_sample_simple(pdb_structure: Structure):
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_multiple(pdb_structure: Structure):
     """Sampling multiple sequences per structure."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ESMIF1SampleConfig(
-        num_sequences_per_structure=3, temperature=0.1, seed=42,
+        num_sequences_per_structure=3,
+        temperature=0.1,
+        seed=42,
     )
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
@@ -86,9 +86,7 @@ def test_esm_if1_sample_multiple(pdb_structure: Structure):
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_chunked_batching(pdb_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ESMIF1SampleConfig(
         num_sequences_per_structure=4,
         batch_size=2,
@@ -134,17 +132,14 @@ def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
     for seq in designed.sequences:
         for pos in fixed_pos:
             assert seq[pos - 1] == native_seq[pos - 1], (
-                f"Position {pos}: expected '{native_seq[pos - 1]}', "
-                f"got '{seq[pos - 1]}'"
+                f"Position {pos}: expected '{native_seq[pos - 1]}', got '{seq[pos - 1]}'"
             )
 
 
 @pytest.mark.uses_gpu
 def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
     """Sampling with explicit ProteinDPO weights."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ESMIF1SampleConfig(
         num_sequences_per_structure=1,
         temperature=0.1,
@@ -170,9 +165,7 @@ def test_esm_if1_score(pdb_structure: Structure):
 
     inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ESMIF1ScoringConfig()
@@ -192,9 +185,7 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
 
     inp = ESMIF1ScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ESMIF1ScoringConfig()

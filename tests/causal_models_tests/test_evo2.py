@@ -24,25 +24,33 @@ _EVO2_TEST_CHECKPOINTS = ["evo2_7b", "evo2_20b"]
 
 # ── Sample input/config validation ────────────────────────────────────────────
 
-@pytest.mark.parametrize("input_kwargs,match", [
-    ({"prompts": []}, "prompts must not be empty"),
-])
+
+@pytest.mark.parametrize(
+    "input_kwargs,match",
+    [
+        ({"prompts": []}, "prompts must not be empty"),
+    ],
+)
 def test_evo2_sample_input_validation(input_kwargs, match):
     with pytest.raises(ValueError, match=match):
         Evo2SampleInput(**input_kwargs)
 
 
-@pytest.mark.parametrize("config_kwargs,match", [
-    ({"temperature": 0.0}, "greater than 0"),
-    ({"top_p": 1.5}, "less than or equal to 1"),
-    ({"num_tokens": 0}, "greater than or equal to 1"),
-])
+@pytest.mark.parametrize(
+    "config_kwargs,match",
+    [
+        ({"temperature": 0.0}, "greater than 0"),
+        ({"top_p": 1.5}, "less than or equal to 1"),
+        ({"num_tokens": 0}, "greater than or equal to 1"),
+    ],
+)
 def test_evo2_sample_config_validation(config_kwargs, match):
     with pytest.raises(ValueError, match=match):
         Evo2SampleConfig(**config_kwargs)
 
 
 # ── Scoring input validation ─────────────────────────────────────────────────
+
 
 def test_evo2_score_input_validation():
     """Test Evo2ScoringInput validation and normalization."""
@@ -59,6 +67,7 @@ def test_evo2_score_input_validation():
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.uses_gpu
 def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
@@ -94,11 +103,14 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-@pytest.mark.parametrize("prompt", [
-    "ATCGATCG",
-    "GCTAGCTA",
-    "AAAACCCC",
-])
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "ATCGATCG",
+        "GCTAGCTA",
+        "AAAACCCC",
+    ],
+)
 def test_evo2_sample_prompt_handling(prompt, model_checkpoint):
     """Test evo2 sampling with various prompt formats."""
     inputs = Evo2SampleInput(prompts=prompt)
@@ -153,6 +165,7 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
 
 # ── Batched sampling tests ────────────────────────────────────────────────────
 
+
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
 def test_evo2_sample_batched_tool(model_checkpoint):
@@ -179,6 +192,7 @@ def test_evo2_sample_batched_tool(model_checkpoint):
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
@@ -217,6 +231,7 @@ def test_evo2_score_metrics_consistency(model_checkpoint):
 
 
 # ── Batched scoring tests ────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
@@ -284,7 +299,7 @@ def test_evo2_score_variable_length_sequences(model_checkpoint):
 
     result = run_evo2_score(inputs=inputs, config=config)
 
-    for (seq, score) in zip(sequences, result.scores, strict=False):
+    for seq, score in zip(sequences, result.scores, strict=False):
         assert score.logits is not None, "Logits should be present when return_logits=True"
         assert len(score.logits) > 0, (
             f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"
@@ -342,6 +357,7 @@ def test_evo2_score_single_sequence(model_checkpoint):
 
 
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)

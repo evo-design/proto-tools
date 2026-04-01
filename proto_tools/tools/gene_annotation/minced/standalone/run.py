@@ -62,18 +62,24 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
                 spacer = " ".join(spacer_parts).strip() or None
                 length_str = line[spacer_index:].strip("[]")
                 length_parts = length_str.split(", ")
-                repeat_length = int(length_parts[0]) if len(length_parts) > 0 and length_parts[0].strip().isdigit() else None
-                spacer_length = int(length_parts[1]) if len(length_parts) > 1 and length_parts[1].strip().isdigit() else None
+                repeat_length = (
+                    int(length_parts[0]) if len(length_parts) > 0 and length_parts[0].strip().isdigit() else None
+                )
+                spacer_length = (
+                    int(length_parts[1]) if len(length_parts) > 1 and length_parts[1].strip().isdigit() else None
+                )
             else:
                 spacer = " ".join(parts[2:]) if len(parts) > 2 else None
 
-            current_array.append({
-                "position": position,
-                "repeat": repeat,
-                "spacer": spacer,
-                "repeat_length": repeat_length,
-                "spacer_length": spacer_length,
-            })
+            current_array.append(
+                {
+                    "position": position,
+                    "repeat": repeat,
+                    "spacer": spacer,
+                    "repeat_length": repeat_length,
+                    "spacer_length": spacer_length,
+                }
+            )
 
     if current_array:
         all_arrays.append(current_array)
@@ -81,9 +87,7 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
     return all_arrays
 
 
-def _run_single_minced(
-    sequence: str, seq_id: str, config: dict[str, Any]
-) -> dict[str, Any]:
+def _run_single_minced(sequence: str, seq_id: str, config: dict[str, Any]) -> dict[str, Any]:
     """Run MinCED on a single nucleotide sequence.
 
     Args:
@@ -108,15 +112,15 @@ def _run_single_minced(
         minced_bin = str(Path(sys.prefix) / "bin" / "minced")
         cmd = [
             minced_bin,
-            "-minNR", str(min_nr),
-            "-minRL", str(min_rl),
+            "-minNR",
+            str(min_nr),
+            "-minRL",
+            str(min_rl),
             str(input_fasta),
         ]
 
         try:
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120
-            )
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired:
             return {
                 "sequence_id": seq_id,
@@ -130,9 +134,7 @@ def _run_single_minced(
             }
 
         arrays_data = _process_minced_output(proc.stdout)
-        crispr_arrays = [
-            {"repeats_and_spacers": array} for array in arrays_data
-        ]
+        crispr_arrays = [{"repeats_and_spacers": array} for array in arrays_data]
 
         return {
             "sequence_id": seq_id,
@@ -172,6 +174,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

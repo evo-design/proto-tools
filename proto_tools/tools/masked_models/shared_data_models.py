@@ -3,6 +3,7 @@
 Contains base schemas for embeddings, scoring, and sampling operations
 shared across all masked/bidirectional protein language models.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -49,7 +50,7 @@ class MaskedModelInput(BaseToolInput):
         ],
     )
 
-    @field_validator('sequences', mode='before')
+    @field_validator("sequences", mode="before")
     @classmethod
     def normalize_sequences(cls, value: Any) -> list[str]:
         """Normalize sequences to a list.
@@ -140,9 +141,7 @@ class MaskedModelOutput(BaseToolOutput):
         description="Per-sequence embedding results",
     )
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True
-    )
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -157,14 +156,14 @@ class MaskedModelOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         if not self.results:
             import warnings
+
             warnings.warn(
-                "No embeddings to export. The model output contains no embedding data.",
-                UserWarning,
-                stacklevel=2
+                "No embeddings to export. The model output contains no embedding data.", UserWarning, stacklevel=2
             )
             return
 
         import numpy as np
+
         embeddings = [r.mean_embedding for r in self.results]
         data = np.array(embeddings)
         path = Path(export_path).with_suffix(f".{file_format}")
@@ -173,6 +172,7 @@ class MaskedModelOutput(BaseToolOutput):
             np.savetxt(path, data, delimiter=",")
         elif file_format == "json":
             import json
+
             with open(path, "w") as f:
                 json.dump(embeddings, f)
         elif file_format == "npy":
@@ -180,6 +180,7 @@ class MaskedModelOutput(BaseToolOutput):
         elif file_format == "pt":
             try:
                 import torch
+
                 torch.save(torch.tensor(embeddings), path)
             except ImportError:
                 raise ImportError("PyTorch ('torch') is required for .pt export. Please install it.") from None
@@ -297,9 +298,7 @@ class MaskedModelScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: list[SequenceScores] = Field(
-        description="List of scoring outputs, one per input sequence"
-    )
+    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence")
 
     @property
     def vocab(self) -> list[str] | None:

@@ -2,6 +2,7 @@
 
 Tests for structure prediction tools.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -62,13 +63,14 @@ _CHIMERA_ONLY_PREDICTORS = ["alphafold3"]
 # Short sequences used by batched-inference tests, kept at module level so they
 # are visible to all flat functions that share this fixture data.
 _BATCHED_TEST_SEQUENCES = [
-    "MARFLGL",   # Short sequence
+    "MARFLGL",  # Short sequence
     "GARYTWMK",  # Medium sequence
     "YTWHKLAR",  # Another medium sequence
 ]
 
 
 # ── File loading ───────────────────────────────────────────────────────────────
+
 
 def _parse_modifications_from_header(description: str) -> list[tuple]:
     """Parse modifications from FASTA header.
@@ -130,10 +132,7 @@ def _parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionCompl
     else:
         # For two_complex.fasta, treat each sequence as a separate complex to test
         # multi-complex prediction.
-        complexes = [
-            StructurePredictionComplex(chains=[chain_dict])
-            for chain_dict in chains_data
-        ]
+        complexes = [StructurePredictionComplex(chains=[chain_dict]) for chain_dict in chains_data]
 
     return complexes
 
@@ -152,6 +151,7 @@ _TEST_COMPLEXES = _load_all_test_complexes()
 
 
 # ── Test parameterization helpers ──────────────────────────────────────────────
+
 
 def _supports_msa(config_class) -> bool:
     """Check if a config class supports MSA."""
@@ -216,8 +216,8 @@ def _generate_test_params() -> list:
                     pytest.param(
                         test_name,
                         predictor_name,
-                        True,       # use_msa
-                        "remote",   # msa_search_mode
+                        True,  # use_msa
+                        "remote",  # msa_search_mode
                         id=f"{test_name}-{predictor_name}-with_msa-remote",
                         marks=tuple(marks) if marks else (),
                     )
@@ -235,7 +235,7 @@ def _generate_test_params() -> list:
                     test_name,
                     predictor_name,
                     False,  # use_msa
-                    None,   # msa_search_mode
+                    None,  # msa_search_mode
                     id=f"{test_name}-{predictor_name}-without_msa",
                     marks=tuple(marks) if marks else (),
                 )
@@ -245,6 +245,7 @@ def _generate_test_params() -> list:
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _persistent_tool_instances(request):
@@ -284,6 +285,7 @@ def _release_between_predictors(request):
 
 # ── Validation tests (no GPU required) ────────────────────────────────────────
 
+
 def test_esmfold_input_rejects_invalid_amino_acid():
     with pytest.raises(ValidationError, match="unsupported entity types"):
         ESMFoldInput(complexes=["MKTL!"])
@@ -296,11 +298,7 @@ def test_esmfold_input_rejects_sequence_too_long():
 
 def test_esmfold_input_rejects_non_protein_entity():
     with pytest.raises(ValidationError, match=r"unsupported entity types|only supports"):
-        ESMFoldInput(
-            complexes=[StructurePredictionComplex(
-                chains=[{"sequence": "ATCG", "entity_type": "dna"}]
-            )]
-        )
+        ESMFoldInput(complexes=[StructurePredictionComplex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])
 
 
 def test_structure_prediction_complex_rejects_empty_sequence():
@@ -314,6 +312,7 @@ def test_structure_prediction_complex_rejects_entity_types_param():
 
 
 # ── Primary folding test (GPU) ─────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.usefixtures("_release_between_predictors")
@@ -338,9 +337,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
                 ColabfoldSearchConfig,
             )
 
-            config.colabfold_search_config = ColabfoldSearchConfig(
-                search_mode=msa_search_mode, verbose=True
-            )
+            config.colabfold_search_config = ColabfoldSearchConfig(search_mode=msa_search_mode, verbose=True)
     else:
         config = config_class(verbose=True)
 
@@ -348,9 +345,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     validate_output(output)
 
-    assert isinstance(output, StructurePredictionOutput), (
-        f"Output is not a StructurePredictionOutput: {output}"
-    )
+    assert isinstance(output, StructurePredictionOutput), f"Output is not a StructurePredictionOutput: {output}"
 
     num_predicted_structures = len(output.structures)
     assert num_predicted_structures == len(complexes), (
@@ -360,30 +355,20 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     for i, structure in enumerate(output.structures):
         if not is_valid_structure(structure.structure_cif):
-            pytest.fail(
-                f"Predicted structure {i} is not valid: {structure.structure_cif}"
-            )
+            pytest.fail(f"Predicted structure {i} is not valid: {structure.structure_cif}")
 
         metrics = structure.metrics
 
         # pLDDT
-        assert "avg_plddt" in metrics, (
-            f"'avg_plddt' not found in {predictor_name} metrics"
-        )
+        assert "avg_plddt" in metrics, f"'avg_plddt' not found in {predictor_name} metrics"
         if predictor_name == "alphafold3":
-            assert 0 <= metrics["avg_plddt"] <= 100, (
-                f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
-            )
+            assert 0 <= metrics["avg_plddt"] <= 100, f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
         else:
-            assert 0 <= metrics["avg_plddt"] <= 1.0, (
-                f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
-            )
+            assert 0 <= metrics["avg_plddt"] <= 1.0, f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
 
         # pTM
         assert "ptm" in metrics, f"'ptm' not found in {predictor_name} metrics"
-        assert 0 <= metrics["ptm"] <= 1.0, (
-            f"'ptm' has invalid value of {metrics['ptm']}"
-        )
+        assert 0 <= metrics["ptm"] <= 1.0, f"'ptm' has invalid value of {metrics['ptm']}"
 
         # iPTM
         if predictor_name != "esmfold":
@@ -395,19 +380,14 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         # PAE / GPDE
         if predictor_name == "protenix":
             assert "gpde" in metrics, f"'gpde' not found in {predictor_name} metrics"
-            assert metrics["gpde"] >= 0, (
-                f"'gpde' has invalid value of {metrics['gpde']}"
-            )
+            assert metrics["gpde"] >= 0, f"'gpde' has invalid value of {metrics['gpde']}"
         else:
-            assert "avg_pae" in metrics, (
-                f"'avg_pae' not found in {predictor_name} metrics"
-            )
-            assert 0 <= metrics["avg_pae"] <= 31.75, (
-                f"'avg_pae' has invalid value of {metrics['avg_pae']}"
-            )
+            assert "avg_pae" in metrics, f"'avg_pae' not found in {predictor_name} metrics"
+            assert 0 <= metrics["avg_pae"] <= 31.75, f"'avg_pae' has invalid value of {metrics['avg_pae']}"
 
 
 # ── Cache test (GPU) ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_folding_cache():
@@ -425,9 +405,7 @@ def test_folding_cache():
     _program_tool_cache.set(cache)
 
     try:
-        complexes = [
-            StructurePredictionComplex(chains=chain) for chain in complexes_first_pass
-        ]
+        complexes = [StructurePredictionComplex(chains=chain) for chain in complexes_first_pass]
         inputs = ESMFoldInput(complexes=complexes)
         output_first_pass = run_esmfold(inputs=inputs, config=ESMFoldConfig())
 
@@ -440,9 +418,7 @@ def test_folding_cache():
         assert cache_info["total_entries"] == 3
 
         # Run the second pass with overlapping complexes
-        complexes = [
-            StructurePredictionComplex(chains=chain) for chain in complexes_second_pass
-        ]
+        complexes = [StructurePredictionComplex(chains=chain) for chain in complexes_second_pass]
         inputs = ESMFoldInput(complexes=complexes)
         output_second_pass = run_esmfold(inputs, ESMFoldConfig())
 
@@ -455,18 +431,9 @@ def test_folding_cache():
         assert cache_info["total_entries"] == 4
 
         # Verify structures are consistent; first three should match exactly
-        assert (
-            output_second_pass.structures[0].structure_cif
-            == output_first_pass.structures[0].structure_cif
-        )
-        assert (
-            output_second_pass.structures[1].structure_cif
-            == output_first_pass.structures[1].structure_cif
-        )
-        assert (
-            output_second_pass.structures[2].structure_cif
-            == output_first_pass.structures[2].structure_cif
-        )
+        assert output_second_pass.structures[0].structure_cif == output_first_pass.structures[0].structure_cif
+        assert output_second_pass.structures[1].structure_cif == output_first_pass.structures[1].structure_cif
+        assert output_second_pass.structures[2].structure_cif == output_first_pass.structures[2].structure_cif
 
     finally:
         _program_tool_cache.set(None)
@@ -475,6 +442,7 @@ def test_folding_cache():
 # ---------------------------------------------------------------------------
 # Batched ESMFold inference tests (GPU)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.uses_gpu
 def test_batched_vs_individual_inference_consistency():
@@ -486,9 +454,7 @@ def test_batched_vs_individual_inference_consistency():
     bugs such as wrong dimension slicing (which would produce completely wrong
     values).
     """
-    complexes = [
-        StructurePredictionComplex(chains=[seq]) for seq in _BATCHED_TEST_SEQUENCES
-    ]
+    complexes = [StructurePredictionComplex(chains=[seq]) for seq in _BATCHED_TEST_SEQUENCES]
 
     # Run batched inference (all sequences in one call)
     batched_input = ESMFoldInput(complexes=complexes)
@@ -517,51 +483,37 @@ def test_batched_vs_individual_inference_consistency():
         batched_metrics = batched_struct.metrics
         individual_metrics = individual_struct.metrics
 
-        assert batched_metrics["avg_plddt"] == pytest.approx(
-            individual_metrics["avg_plddt"], rel=0.10, abs=0.05
-        ), (
+        assert batched_metrics["avg_plddt"] == pytest.approx(individual_metrics["avg_plddt"], rel=0.10, abs=0.05), (
             f"Sequence {i}: avg_plddt mismatch "
             f"(batched={batched_metrics['avg_plddt']}, "
             f"individual={individual_metrics['avg_plddt']})"
         )
 
-        assert batched_metrics["ptm"] == pytest.approx(
-            individual_metrics["ptm"], rel=0.10, abs=0.02
-        ), (
-            f"Sequence {i}: ptm mismatch "
-            f"(batched={batched_metrics['ptm']}, "
-            f"individual={individual_metrics['ptm']})"
+        assert batched_metrics["ptm"] == pytest.approx(individual_metrics["ptm"], rel=0.10, abs=0.02), (
+            f"Sequence {i}: ptm mismatch (batched={batched_metrics['ptm']}, individual={individual_metrics['ptm']})"
         )
 
         if batched_metrics["avg_pae"] is not None:
-            assert batched_metrics["avg_pae"] == pytest.approx(
-                individual_metrics["avg_pae"], rel=0.10, abs=0.05
-            ), (
+            assert batched_metrics["avg_pae"] == pytest.approx(individual_metrics["avg_pae"], rel=0.10, abs=0.05), (
                 f"Sequence {i}: avg_pae mismatch "
                 f"(batched={batched_metrics['avg_pae']}, "
                 f"individual={individual_metrics['avg_pae']})"
             )
 
-        assert is_valid_structure(batched_struct.structure_cif), (
-            f"Sequence {i}: Batched structure is invalid"
-        )
-        assert is_valid_structure(individual_struct.structure_cif), (
-            f"Sequence {i}: Individual structure is invalid"
-        )
+        assert is_valid_structure(batched_struct.structure_cif), f"Sequence {i}: Batched structure is invalid"
+        assert is_valid_structure(individual_struct.structure_cif), f"Sequence {i}: Individual structure is invalid"
 
 
 @pytest.mark.uses_gpu
 def test_batched_inference_varying_lengths():
     """Batched ESMFold handles sequences of varying lengths correctly."""
     varying_length_sequences = [
-        "MAR",                    # 3 residues
-        "GARYTWMKL",              # 9 residues
-        "YTWHKLARFGMVLSPADKTN",   # 20 residues
+        "MAR",  # 3 residues
+        "GARYTWMKL",  # 9 residues
+        "YTWHKLARFGMVLSPADKTN",  # 20 residues
     ]
 
-    complexes = [
-        StructurePredictionComplex(chains=[seq]) for seq in varying_length_sequences
-    ]
+    complexes = [StructurePredictionComplex(chains=[seq]) for seq in varying_length_sequences]
 
     batched_input = ESMFoldInput(complexes=complexes)
     batched_config = ESMFoldConfig(max_batch_residues=10000)
@@ -572,14 +524,10 @@ def test_batched_inference_varying_lengths():
     assert len(batched_output.structures) == len(varying_length_sequences)
 
     for i, structure in enumerate(batched_output.structures):
-        assert is_valid_structure(structure.structure_cif), (
-            f"Structure {i} is invalid"
-        )
+        assert is_valid_structure(structure.structure_cif), f"Structure {i} is invalid"
 
         metrics = structure.metrics
-        assert 0 <= metrics["avg_plddt"] <= 1.0, (
-            f"Invalid avg_plddt for structure {i}"
-        )
+        assert 0 <= metrics["avg_plddt"] <= 1.0, f"Invalid avg_plddt for structure {i}"
         assert 0 <= metrics["ptm"] <= 1.0, f"Invalid ptm for structure {i}"
 
 
@@ -588,8 +536,8 @@ def test_batched_multichain_complexes():
     """Batched ESMFold correctly handles multi-chain complexes."""
     multichain_complexes = [
         StructurePredictionComplex(chains=["MARFGL", "GARYTWM"]),  # 2 chains
-        StructurePredictionComplex(chains=["YTWHK"]),               # 1 chain
-        StructurePredictionComplex(chains=["LAR", "FGM", "VLS"]),   # 3 chains
+        StructurePredictionComplex(chains=["YTWHK"]),  # 1 chain
+        StructurePredictionComplex(chains=["LAR", "FGM", "VLS"]),  # 3 chains
     ]
 
     batched_input = ESMFoldInput(complexes=multichain_complexes)
@@ -604,9 +552,7 @@ def test_batched_multichain_complexes():
     for i, (structure, expected_chains) in enumerate(
         zip(batched_output.structures, expected_chain_counts, strict=False)
     ):
-        assert is_valid_structure(structure.structure_cif), (
-            f"Structure {i} is invalid"
-        )
+        assert is_valid_structure(structure.structure_cif), f"Structure {i} is invalid"
         assert structure.num_chains == expected_chains, (
             f"Structure {i}: expected {expected_chains} chains, got {structure.num_chains}"
         )

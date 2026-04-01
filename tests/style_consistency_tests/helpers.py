@@ -2,6 +2,7 @@
 
 Shared helpers for style-consistency tests.
 """
+
 from __future__ import annotations
 
 import ast
@@ -13,9 +14,7 @@ from pathlib import Path
 # ── Existing helpers ────────────────────────────────────────────────────────
 
 
-def find_missing_fields_in_docstring(
-    docstring: str, field_names: Iterable[str]
-) -> list[str]:
+def find_missing_fields_in_docstring(docstring: str, field_names: Iterable[str]) -> list[str]:
     """Return field names not mentioned in the docstring."""
     return [name for name in field_names if name not in docstring]
 
@@ -25,10 +24,7 @@ def field_description_is_valid(description: str | None, max_length: int = 100) -
     if description is None:
         return "is None"
     if len(description) > max_length:
-        return (
-            f"is too long (currently {len(description)} characters, "
-            f"must be under {max_length} characters)"
-        )
+        return f"is too long (currently {len(description)} characters, must be under {max_length} characters)"
     if not description.strip():
         return "description is empty or just whitespace"
     if "\n" in description:
@@ -138,14 +134,10 @@ def _normalize_ast(node: ast.expr) -> ast.expr:
         return node
 
     if isinstance(node, ast.List):
-        return ast.List(
-            elts=[_normalize_ast(e) for e in node.elts], ctx=ast.Load()
-        )
+        return ast.List(elts=[_normalize_ast(e) for e in node.elts], ctx=ast.Load())
 
     if isinstance(node, ast.Tuple):
-        return ast.Tuple(
-            elts=[_normalize_ast(e) for e in node.elts], ctx=ast.Load()
-        )
+        return ast.Tuple(elts=[_normalize_ast(e) for e in node.elts], ctx=ast.Load())
 
     return node
 
@@ -335,18 +327,14 @@ _RAISES_SECTIONS = {"Raises"}
 _ALL_SECTION_NAMES = _NAMED_SECTIONS | _TYPED_SECTIONS | _RAISES_SECTIONS
 
 # Matches a section header like "    Args:" or "    Returns:"
-_SECTION_HEADER_RE = re.compile(
-    r"^(\s*)(" + "|".join(_ALL_SECTION_NAMES) + r")\s*:\s*$"
-)
+_SECTION_HEADER_RE = re.compile(r"^(\s*)(" + "|".join(_ALL_SECTION_NAMES) + r")\s*:\s*$")
 
 # Named entry: "name (type): desc" or "name: desc"
 _NAMED_ENTRY_RE = re.compile(r"^\w[\w\d_]*\s*(?:\(.*?\))?\s*:")
 
 # Typed entry (Returns/Yields): a type expression followed by ": desc"
 # Type can include brackets, pipes, commas, dots, spaces within brackets
-_TYPED_ENTRY_RE = re.compile(
-    r"^[^\s:]+(?:\[.*?\])?(?:\s*\|\s*[^\s:]+(?:\[.*?\])?)*\s*:"
-)
+_TYPED_ENTRY_RE = re.compile(r"^[^\s:]+(?:\[.*?\])?(?:\s*\|\s*[^\s:]+(?:\[.*?\])?)*\s*:")
 
 # Raises entry: "ExceptionName: desc"
 _RAISES_ENTRY_RE = re.compile(r"^\w[\w\d_]*\s*:")

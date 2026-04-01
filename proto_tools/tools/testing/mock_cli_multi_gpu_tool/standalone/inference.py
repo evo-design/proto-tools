@@ -4,6 +4,7 @@ This script mimics multi-GPU CLI-based tools that spawn subprocesses with
 multiple GPUs visible. It uses get_subprocess_device_env() for correct
 CUDA_VISIBLE_DEVICES routing with comma-separated device strings.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,13 +40,14 @@ class MockCLIMultiGPUToolModel:
         """Run inference via CLI subprocess with multi-GPU routing."""
         data_json = json.dumps(data)
         cmd = [
-            sys.executable, "-c",
+            sys.executable,
+            "-c",
             f"import json, os; "
             f"data = {data_json}; "
             f"scale = {scale_factor}; "
             f"result = [x * scale for x in data]; "
             f"cvd = os.environ.get('CUDA_VISIBLE_DEVICES', ''); "
-            f"print(json.dumps({{'result': result, 'cuda_visible_devices': cvd}}))"
+            f"print(json.dumps({{'result': result, 'cuda_visible_devices': cvd}}))",
         ]
 
         # Get subprocess environment with correct CUDA_VISIBLE_DEVICES for multi-GPU

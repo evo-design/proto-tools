@@ -3,7 +3,6 @@
 Tests for tool_cache.
 """
 
-
 from __future__ import annotations
 
 import pytest
@@ -24,6 +23,7 @@ from proto_tools.utils.tool_cache import (
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def _setup_cache():
     """Set up cache in contextvar before each test, clear after."""
@@ -39,6 +39,7 @@ def empty_cache():
 
 
 # ── CacheStripResult tests ──────────────────────────────────────────────────
+
 
 def test_cache_strip_result_all_cached():
     """all_cached property returns True when uncached_items is empty."""
@@ -69,6 +70,7 @@ def test_cache_strip_result_empty():
 
 
 # ── cache_strip_items tests ──────────────────────────────────────────────────
+
 
 def test_cache_strip_items_no_cache():
     """Returns None when no active cache exists."""
@@ -128,6 +130,7 @@ def test_cache_strip_items_partial_hit(_setup_cache):
 
 # ── cache_store_items tests ──────────────────────────────────────────────────
 
+
 def test_cache_store_items_no_cache():
     """Does nothing when no active cache exists."""
     _program_tool_cache.set(None)
@@ -148,6 +151,7 @@ def test_cache_store_items_populates_cache(_setup_cache):
 
 
 # ── cache_stitch_items tests ─────────────────────────────────────────────────
+
 
 def test_cache_stitch_items_all_cached():
     """Stitching with no computed items returns cached items in order."""
@@ -187,6 +191,7 @@ def test_cache_stitch_items_mixed():
 
 # ── Roundtrip: strip → store → stitch ────────────────────────────────────────
 
+
 def test_strip_store_stitch_roundtrip(_setup_cache):
     """Full roundtrip: strip cached, store computed, stitch back."""
     config = None
@@ -213,6 +218,7 @@ def test_strip_store_stitch_roundtrip(_setup_cache):
 
 def test_strip_different_configs_separate_cache(_setup_cache):
     """Different configs produce different cache entries."""
+
     class Cfg(BaseConfig):
         multiplier: int = 2
 
@@ -233,8 +239,10 @@ def test_strip_different_configs_separate_cache(_setup_cache):
 
 # ── Clear configuration logic tests ─────────────────────────────────────────
 
+
 class _MockOptimizer:
     """Mock class to test the configuration logic."""
+
     def __init__(self, clear_config: bool | list[str] | int):
         self.clear_tool_cache = clear_config
         self.tool_cache = ToolCache()
@@ -338,6 +346,7 @@ def test_config_int_prunes_lru():
 
 # ── ToolCache internals tests ──────────────────────────────────────────────
 
+
 def test_initial_state(empty_cache):
     assert empty_cache.current_size == 0
     assert empty_cache.get("tool", "key") is None
@@ -401,7 +410,7 @@ def test_circular_reference_safety():
     cache = ToolCache()
 
     d = {}
-    d['self'] = d  # Circular reference.
+    d["self"] = d  # Circular reference.
 
     try:
         cache.set("tool", "circ", d)
@@ -412,6 +421,7 @@ def test_circular_reference_safety():
 
 
 # ── deduplicate_items unit tests ─────────────────────────────────────────────
+
 
 def test_deduplicate_items_all_unique():
     """All unique items should be returned unchanged."""

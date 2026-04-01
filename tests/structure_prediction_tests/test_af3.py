@@ -19,10 +19,7 @@ from proto_tools.tools.structure_prediction import (
 # ── Module-level constants ────────────────────────────────────────────────────
 
 _EPINEPHRINE_SMILES = "CNC[C@@H](c1ccc(c(c1)O)O)O"  # L-epinephrine → ALE
-_ATP_SMILES = (
-    "c1nc(c2c(n1)n(cn2)[C@H]3[C@@H]([C@@H]([C@H](O3)CO[P@@](=O)(O)"
-    "O[P@](=O)(O)OP(=O)(O)O)O)O)N"
-)  # ATP → ATP
+_ATP_SMILES = "c1nc(c2c(n1)n(cn2)[C@H]3[C@@H]([C@@H]([C@H](O3)CO[P@@](=O)(O)O[P@](=O)(O)OP(=O)(O)O)O)O)N"  # ATP → ATP
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -37,9 +34,7 @@ def mock_af3_inference(tmp_path):
     """
     dummy_pdb_file = tmp_path / "dummy.pdb"
     dummy_pdb_file.write_text(
-        "HEADER    DUMMY PDB\n"
-        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.95           C\n"
-        "END\n"
+        "HEADER    DUMMY PDB\nATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.95           C\nEND\n"
     )
     dummy_pdb_path = str(dummy_pdb_file)
     mock_metrics = {"avg_plddt": 0.95, "ptm": 0.8}
@@ -54,9 +49,7 @@ def mock_af3_inference(tmp_path):
             "metrics": mock_metrics,
         }
 
-    with patch(
-        "proto_tools.tools.structure_prediction.alphafold3.alphafold3.ToolInstance"
-    ) as mock_ti:
+    with patch("proto_tools.tools.structure_prediction.alphafold3.alphafold3.ToolInstance") as mock_ti:
         mock_ti.dispatch = mock_dispatch
         yield captured_data
 
@@ -181,5 +174,3 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
 
     assert sequences[1]["ligand"]["id"] == "B"
     assert sequences[1]["ligand"]["ccdCodes"] == ["ATP"]
-
-

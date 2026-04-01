@@ -2,6 +2,7 @@
 
 Tests for codon tables, IUPAC codes, and sampling utilities.
 """
+
 import random
 
 import pytest
@@ -21,6 +22,7 @@ from proto_tools.tools.mutagenesis.codons import (
 # Codon table
 # ============================================================================
 
+
 def test_codon_table_has_64_entries():
     assert len(CODON_TO_AA) == 64
 
@@ -39,6 +41,7 @@ def test_codon_table_has_three_stop_codons():
 # IUPAC codes
 # ============================================================================
 
+
 def test_iupac_single_bases():
     for base in "ACGT":
         assert IUPAC_DNA[base] == base
@@ -47,6 +50,7 @@ def test_iupac_single_bases():
 # ============================================================================
 # get_codon_scheme
 # ============================================================================
+
 
 def test_uniform_scheme_equal_weights():
     info = get_codon_scheme("UNIFORM")
@@ -86,6 +90,7 @@ def test_case_insensitive():
 # sample_amino_acid
 # ============================================================================
 
+
 def test_sample_amino_acid_nnk_no_stops():
     rng = random.Random(42)
     for _ in range(100):
@@ -104,13 +109,17 @@ def test_sample_amino_acid_reproducible():
 # get_substitution_pool
 # ============================================================================
 
-@pytest.mark.parametrize("code, expected", [
-    ("N", {"A", "C", "G", "T"}),
-    ("R", {"A", "G"}),
-    ("Y", {"C", "T"}),
-    ("S", {"G", "C"}),
-    ("W", {"A", "T"}),
-])
+
+@pytest.mark.parametrize(
+    "code, expected",
+    [
+        ("N", {"A", "C", "G", "T"}),
+        ("R", {"A", "G"}),
+        ("Y", {"C", "T"}),
+        ("S", {"G", "C"}),
+        ("W", {"A", "T"}),
+    ],
+)
 def test_substitution_pool(code, expected):
     assert set(get_substitution_pool(code)) == expected
 
@@ -123,6 +132,7 @@ def test_substitution_pool_invalid():
 # ============================================================================
 # sample_nucleotide
 # ============================================================================
+
 
 def test_sample_nucleotide_reproducible():
     b1 = sample_nucleotide("N", rng=random.Random(99))

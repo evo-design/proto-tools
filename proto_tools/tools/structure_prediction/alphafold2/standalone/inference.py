@@ -6,6 +6,7 @@ It communicates via JSON files for input/output.
 Usage:
     python inference.py <input_json_path> <output_json_path>
 """
+
 from __future__ import annotations
 
 import json
@@ -47,9 +48,7 @@ def _resolve_params_dir() -> str:
         # NONE mode or no venv: use venv-local default
         venv_path = os.environ.get("TOOL_VENV_PATH")
         if not venv_path:
-            raise RuntimeError(
-                "TOOL_VENV_PATH not set. AlphaFold2 must be run via ToolInstance."
-            )
+            raise RuntimeError("TOOL_VENV_PATH not set. AlphaFold2 must be run via ToolInstance.")
         params_dir = Path(venv_path) / "data" / "params"
 
     if not params_dir.exists() or not any(params_dir.glob("*.npz")):
@@ -143,15 +142,13 @@ def _predict_structure(
     # Set sequence or MSA
     if use_msa:
         from colabdesign.shared.parsers import parse_a3m
+
         msa, deletion_matrix = parse_a3m(a3m_string=msa_a3m_content)
         af_model.set_msa(msa, deletion_matrix)
         # ColabDesign stores raw MSA in _inputs["msa"]
         msa_input = af_model._inputs.get("msa")
         if msa_input is not None:
-            logger.debug(
-                f"MSA injected: {msa_input.shape[0]} sequences, "
-                f"length={msa_input.shape[1]}"
-            )
+            logger.debug(f"MSA injected: {msa_input.shape[0]} sequences, length={msa_input.shape[1]}")
         else:
             logger.warning("MSA not found in model inputs after set_msa")
     elif is_homooligomer:
@@ -195,9 +192,7 @@ def _predict_structure(
     pae = aux.get("pae")
     avg_pae = float(np.mean(pae)) if pae is not None else None
 
-    logger.debug(
-        f"Prediction complete: avg_plddt={avg_plddt:.4f}, ptm={ptm:.4f}"
-    )
+    logger.debug(f"Prediction complete: avg_plddt={avg_plddt:.4f}, ptm={ptm:.4f}")
 
     return {
         "pdb": pdb_output,
@@ -245,9 +240,7 @@ def get_memory_stats() -> dict[str, Any]:
 # ============================================================================
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

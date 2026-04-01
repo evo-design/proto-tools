@@ -2,6 +2,7 @@
 
 AlphaGenome batched variant scoring tool.
 """
+
 from __future__ import annotations
 
 import csv
@@ -161,10 +162,16 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomeScoreVariantsInput(
-        variants=[AlphaGenomeVariant(
-            chromosome="chr1", interval_start=0, interval_end=196608,
-            variant_position=100000, reference_bases="A", alternate_bases="G",
-        )]
+        variants=[
+            AlphaGenomeVariant(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=196608,
+                variant_position=100000,
+                reference_bases="A",
+                alternate_bases="G",
+            )
+        ]
     )
 
 
@@ -221,8 +228,5 @@ def run_alphagenome_score_variants(
     )
 
     scores = dispatch_result["scores"]
-    outputs = [
-        AlphaGenomeScoreOutput(scores=score_list)
-        for score_list in scores
-    ]
+    outputs = [AlphaGenomeScoreOutput(scores=score_list) for score_list in scores]
     return AlphaGenomeScoreVariantsOutput(results=outputs)

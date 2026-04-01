@@ -55,12 +55,8 @@ class USalignOutput(BaseToolOutput):
         tm_score_structure_2 (float): TM-score normalized by the length of Structure 2 (reference).
     """
 
-    tm_score_structure_1: float = Field(
-        description="TM-score normalized by length of Structure 1 (query)"
-    )
-    tm_score_structure_2: float = Field(
-        description="TM-score normalized by length of Structure 2 (reference)"
-    )
+    tm_score_structure_1: float = Field(description="TM-score normalized by length of Structure 1 (query)")
+    tm_score_structure_2: float = Field(description="TM-score normalized by length of Structure 2 (reference)")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -115,9 +111,7 @@ def example_input() -> Any:
     ),
     example_input=example_input,
 )
-def run_usalign(
-    inputs: USalignInput, config: USalignConfig | None = None, instance: Any = None
-) -> USalignOutput:
+def run_usalign(inputs: USalignInput, config: USalignConfig | None = None, instance: Any = None) -> USalignOutput:
     """Run USalign on two PDB structures."""
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,

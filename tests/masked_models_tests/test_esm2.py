@@ -2,6 +2,7 @@
 
 Tests for ESM2.
 """
+
 import numpy as np
 import pytest
 
@@ -21,6 +22,7 @@ _persistent_tool = make_persistent_fixture("esm2")
 
 # ── Input validation ─────────────────────────────────────────────────────────
 
+
 def test_esm2_scoring_input_normalizes_single_string():
     inp = ESM2ScoringInput(sequences="MKTAYIAKQR")
     assert isinstance(inp.sequences, list)
@@ -38,6 +40,7 @@ def test_esm2_embeddings_input_normalizes_single_string():
 # ---------------------------------------------------------------------------
 
 # ── Embedding tests ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm2_forward_pass():
@@ -60,6 +63,7 @@ def test_esm2_forward_pass():
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm2_score_tool():
@@ -188,6 +192,7 @@ def test_esm2_score_single_sequence():
 
 
 # ── Logits-specific tests ─────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm2_score_logits_disabled_by_default():

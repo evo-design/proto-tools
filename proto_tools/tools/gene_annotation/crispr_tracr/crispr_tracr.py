@@ -32,15 +32,9 @@ class TracrPrediction(BaseModel):
     """A single tracrRNA prediction for a sequence."""
 
     sequence_id: str = Field(description="ID of the input sequence")
-    tracr_start: int | None = Field(
-        default=None, description="Start position of predicted tracrRNA"
-    )
-    tracr_end: int | None = Field(
-        default=None, description="End position of predicted tracrRNA"
-    )
-    tracr_hit: str | None = Field(
-        default=None, description="tracrRNA hit description"
-    )
+    tracr_start: int | None = Field(default=None, description="Start position of predicted tracrRNA")
+    tracr_end: int | None = Field(default=None, description="End position of predicted tracrRNA")
+    tracr_hit: str | None = Field(default=None, description="tracrRNA hit description")
     interaction_energy: float | None = Field(
         default=None,
         description="IntaRNA interaction energy in kcal/mol, more negative = stronger (complete_run mode)",
@@ -70,9 +64,7 @@ class CrisprTracrInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(
-        description="Nucleotide sequence(s) to predict tracrRNA from"
-    )
+    sequences: list[str] = InputField(description="Nucleotide sequence(s) to predict tracrRNA from")
     sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
@@ -177,7 +169,9 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_crispr_tracr(
-    inputs: CrisprTracrInput, config: CrisprTracrConfig | None = None, instance: Any = None,
+    inputs: CrisprTracrInput,
+    config: CrisprTracrConfig | None = None,
+    instance: Any = None,
 ) -> CrisprTracrOutput:
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
 
@@ -220,7 +214,10 @@ def run_crispr_tracr(
 
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
-        "crispr_tracr", input_data, instance=instance, config=config,
+        "crispr_tracr",
+        input_data,
+        instance=instance,
+        config=config,
     )
 
     predictions = [TracrPrediction(**p) for p in output_data["predictions"]]

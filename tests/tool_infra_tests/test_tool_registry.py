@@ -21,6 +21,7 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 # ── example_input completeness ───────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "tool_spec",
     ToolRegistry.list_all(),
@@ -28,13 +29,10 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 )
 def test_all_tools_have_example_input(tool_spec):
     """Every tool must define example_input for parametrized testing."""
-    assert tool_spec.example_input is not None, (
-        f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
-    )
+    assert tool_spec.example_input is not None, f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
     example = tool_spec.example_input()
     assert isinstance(example, tool_spec.input_model), (
-        f"example_input() returned {type(example).__name__}, "
-        f"expected {tool_spec.input_model.__name__}"
+        f"example_input() returned {type(example).__name__}, expected {tool_spec.input_model.__name__}"
     )
 
 
@@ -47,12 +45,14 @@ class MockToolInput(BaseToolInput):
 
 class MockToolConfig(BaseConfig):
     """Mock configuration for testing."""
+
     param1: str = ConfigField(description="Parameter 1")
     param2: int = ConfigField(default=10, ge=0, description="Parameter 2")
 
 
 class MockToolOutput(MockToolOutputBase):
     """Mock output for testing."""
+
     result: str = Field(description="Result string")
 
 
@@ -64,11 +64,13 @@ class AnotherMockToolInput(BaseToolInput):
 
 class AnotherMockToolConfig(BaseConfig):
     """Another mock configuration for testing."""
+
     threshold: float = ConfigField(default=0.5, ge=0.0, le=1.0, description="Threshold")
 
 
 class AnotherMockToolOutput(MockToolOutputBase):
     """Another mock output for testing."""
+
     processed_data: list[str] = Field(description="Processed data")
     count: int = Field(description="Data count")
 
@@ -133,12 +135,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
         description="First registration",
     )
     def first_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
-        return MockToolOutput(
-            tool_id="duplicate-tool",
-            execution_time=0.1,
-            success=True,
-            result="first"
-        )
+        return MockToolOutput(tool_id="duplicate-tool", execution_time=0.1, success=True, result="first")
 
     # Attempt to register with same key should fail
     with pytest.raises(ValueError, match=r"(?i)already registered"):
@@ -152,9 +149,7 @@ def test_tool_registry_prevent_duplicate_registration(clean_registry):
             output_class=AnotherMockToolOutput,
             description="Second registration",
         )
-        def second_tool(
-            inputs: AnotherMockToolInput, config: AnotherMockToolConfig
-        ) -> AnotherMockToolOutput:
+        def second_tool(inputs: AnotherMockToolInput, config: AnotherMockToolConfig) -> AnotherMockToolOutput:
             return AnotherMockToolOutput(
                 tool_id="duplicate-tool",
                 execution_time=0.1,
@@ -193,9 +188,7 @@ def test_tool_registry_list_all(clean_registry):
         output_class=AnotherMockToolOutput,
         description="Tool 2",
     )
-    def tool_2(
-        inputs: AnotherMockToolInput, config: AnotherMockToolConfig
-    ) -> AnotherMockToolOutput:
+    def tool_2(inputs: AnotherMockToolInput, config: AnotherMockToolConfig) -> AnotherMockToolOutput:
         return AnotherMockToolOutput(
             tool_id="tool-2",
             execution_time=10.0,
@@ -300,12 +293,8 @@ def test_tool_registry_decorator_populates_metadata(clean_registry):
 
     # Verify metadata was populated by decorator
     assert result.tool_id == "metadata-tool", "Tool ID should be populated by decorator"
-    assert (
-        result.execution_time is not None
-    ), "Execution time should be populated by decorator"
-    assert (
-        result.execution_time > 0.0
-    ), "Execution time should be positive for successful execution"
+    assert result.execution_time is not None, "Execution time should be populated by decorator"
+    assert result.execution_time > 0.0, "Execution time should be positive for successful execution"
     assert result.success is True, "Success should be True"
     assert result.timestamp is not None, "Timestamp should be populated by decorator"
     assert result.result == "Processed test"
@@ -385,9 +374,7 @@ def test_tool_output_error_access_raises_exception(clean_registry):
         output_class=MockToolOutput,
         description="Tool that fails and tests error access",
     )
-    def error_access_tool(
-        inputs: MockToolInput, config: MockToolConfig, instance=None
-    ) -> MockToolOutput:
+    def error_access_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         raise RuntimeError("Tool execution failed")
 
     # Get the registered function and call it
@@ -425,9 +412,7 @@ def test_tool_output_successful_access_works(clean_registry):
         output_class=MockToolOutput,
         description="Tool that succeeds and tests field access",
     )
-    def success_access_tool(
-        inputs: MockToolInput, config: MockToolConfig, instance=None
-    ) -> MockToolOutput:
+    def success_access_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
         return MockToolOutput(result="Success!")
 
     # Get the registered function and call it
@@ -524,8 +509,12 @@ def test_cpu_tools_are_not_marked_gpu():
 def _register_and_run(registry, key, func):
     """Register a tool with mock types and run it with default inputs."""
     registry.register(
-        key=key, label=key, category="test",
-        input_class=MockToolInput, config_class=MockToolConfig, output_class=MockToolOutput,
+        key=key,
+        label=key,
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
         description=key,
     )(func)
     spec = registry.get(key)
@@ -536,6 +525,7 @@ def _register_and_run(registry, key, func):
 def fast_retry(monkeypatch):
     """Zero out retry delay for tests."""
     import proto_tools.tools.tool_registry as reg_module
+
     monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.01)
 
 
@@ -578,7 +568,8 @@ def test_try_dispatch_intercepts_tool_call(clean_registry):
     )
     try:
         result = _register_and_run(
-            clean_registry, "dispatch-test",
+            clean_registry,
+            "dispatch-test",
             lambda inputs, config, instance=None: MockToolOutput(result="local"),
         )
         assert result.success is True
@@ -591,12 +582,11 @@ def test_try_dispatch_none_falls_through(clean_registry):
     """_try_dispatch returning None falls through to local execution."""
     original = ToolRegistry._try_dispatch
 
-    ToolRegistry._try_dispatch = classmethod(
-        lambda cls, key, inputs, config: None
-    )
+    ToolRegistry._try_dispatch = classmethod(lambda cls, key, inputs, config: None)
     try:
         result = _register_and_run(
-            clean_registry, "dispatch-fallthrough",
+            clean_registry,
+            "dispatch-fallthrough",
             lambda inputs, config, instance=None: MockToolOutput(result="local ok"),
         )
         assert result.success is True
@@ -614,7 +604,8 @@ def test_try_dispatch_exception_returns_error_output(clean_registry):
     )
     try:
         result = _register_and_run(
-            clean_registry, "dispatch-error",
+            clean_registry,
+            "dispatch-error",
             lambda inputs, config, instance=None: MockToolOutput(result="local"),
         )
         assert result.success is False
@@ -662,6 +653,7 @@ def test_timeout_error_not_retried(clean_registry, fast_retry):
 
 class MockConfigWithDevice(BaseConfig):
     """Mock config with device field for testing device validation."""
+
     device: str = ConfigField(default="cpu", description="Device to use")
 
 
@@ -832,11 +824,13 @@ def test_tool_registry_open_ended_device_count_validation_passes(clean_registry)
 
 class MockIterableInput(BaseToolInput):
     """Input with an iterable field for dedup tests."""
+
     items: list[str] = Field(description="Items to process")
 
 
 class MockIterableOutput(MockToolOutputBase):
     """Output with an iterable field for dedup tests."""
+
     results: list[str] = Field(description="Processed results")
 
 
@@ -930,6 +924,7 @@ def test_tool_wrapper_dedup_skipped_without_cacheable(clean_registry):
 def _setup_cache():
     """Set up cache in contextvar before each test, clear after."""
     from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
+
     cache = ToolCache()
     _program_tool_cache.set(cache)
     yield cache
@@ -1148,9 +1143,7 @@ class PreprocessConfig(BaseConfig):
     prefix: str = ConfigField(default="PRE", description="Prefix to add")
 
     def preprocess(self, inputs):
-        return inputs.model_copy(
-            update={"input_data": f"{self.prefix}_{inputs.input_data}"}
-        )
+        return inputs.model_copy(update={"input_data": f"{self.prefix}_{inputs.input_data}"})
 
 
 def test_preprocess_hook_called_by_wrapper(clean_registry):

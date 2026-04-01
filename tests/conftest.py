@@ -216,9 +216,7 @@ class EnvReportCollector:
         if not path.exists():
             return []
         text = path.read_text()
-        match = re.search(
-            r"<!-- env-report-data\n(.*?)\n-->", text, re.DOTALL
-        )
+        match = re.search(r"<!-- env-report-data\n(.*?)\n-->", text, re.DOTALL)
         if not match:
             return []
         try:
@@ -231,11 +229,7 @@ class EnvReportCollector:
     def _serialize_embedded_data(results: list[ToolTestResult]) -> str:
         """Serialize results as an HTML comment block."""
         data = [asdict(r) for r in results]
-        return (
-            "<!-- env-report-data\n"
-            + json.dumps(data, indent=2)
-            + "\n-->"
-        )
+        return "<!-- env-report-data\n" + json.dumps(data, indent=2) + "\n-->"
 
     def finalize_and_write(self) -> Path | None:
         """Write the report to disk and return the path.
@@ -302,7 +296,7 @@ class EnvReportCollector:
         cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
         if cluster_name == "arc-slurm":
             env_name = "Chimera"
-        elif "dgx" in platform['hostname'].lower() or "spark" in platform['hostname'].lower():
+        elif "dgx" in platform["hostname"].lower() or "spark" in platform["hostname"].lower():
             env_name = "DGX Spark"
         else:
             env_name = f"{platform['os']} {platform['architecture']}"
@@ -455,10 +449,7 @@ class EnvReportCollector:
 
         # Footer
         lines.append("---")
-        lines.append(
-            f"*Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
-            f"by `pytest --env-report`*"
-        )
+        lines.append(f"*Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} by `pytest --env-report`*")
         lines.append("")
 
         # Embedded data block (source of truth for merging)
@@ -551,9 +542,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
     config.addinivalue_line(
-        "markers", "include_in_env_report: Include test in --env-report. "
+        "markers",
+        "include_in_env_report: Include test in --env-report. "
         "Requires kwargs: tool='tool-key', category='category_name'. "
-        "Applied automatically by test_env_report.py parametrize"
+        "Applied automatically by test_env_report.py parametrize",
     )
 
     # Set environment variable to indicate we're in pytest
@@ -733,9 +725,7 @@ def pytest_collection_modifyitems(config, items):
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
-        skip_not_chimera = pytest.mark.skip(
-            reason="--env-report: requires Chimera cluster"
-        )
+        skip_not_chimera = pytest.mark.skip(reason="--env-report: requires Chimera cluster")
         gpu_available = _gpu_available()
         visible_gpus = number_of_visible_gpus() if gpu_available else 0
         on_chimera = is_on_chimera()
@@ -757,9 +747,11 @@ def pytest_collection_modifyitems(config, items):
                 for marker in item.iter_markers("uses_gpu"):
                     required = marker.args[0] if marker.args else 1
                     if visible_gpus < required:
-                        item.add_marker(pytest.mark.skip(
-                            reason=f"--env-report: requires {required} GPUs, only {visible_gpus} visible"
-                        ))
+                        item.add_marker(
+                            pytest.mark.skip(
+                                reason=f"--env-report: requires {required} GPUs, only {visible_gpus} visible"
+                            )
+                        )
                         break
                 selected.append(item)
         items[:] = selected
@@ -795,9 +787,7 @@ def pytest_collection_modifyitems(config, items):
 
     # Skip tests marked with skip_ci when running in GitHub Actions or --skip-ci is specified
     if os.getenv("GITHUB_ACTIONS") == "true" or config.getoption("--skip-ci"):
-        skip_ci = pytest.mark.skip(
-            reason="Skipped in CI environment (GitHub Actions or --skip-ci)"
-        )
+        skip_ci = pytest.mark.skip(reason="Skipped in CI environment (GitHub Actions or --skip-ci)")
         for item in items:
             if "skip_ci" in item.keywords:
                 item.add_marker(skip_ci)
@@ -817,13 +807,8 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_cpu)
 
     # Default: skip GPU tests unless --integration (with GPU available) or --all
-    elif not (
-        config.getoption("--all")
-        or (config.getoption("--integration") and _gpu_available())
-    ):
-        skip_gpu = pytest.mark.skip(
-            reason="GPU test (use --gpu, --integration with GPU, or --all to run)"
-        )
+    elif not (config.getoption("--all") or (config.getoption("--integration") and _gpu_available())):
+        skip_gpu = pytest.mark.skip(reason="GPU test (use --gpu, --integration with GPU, or --all to run)")
         for item in items:
             if "uses_gpu" in item.keywords:
                 item.add_marker(skip_gpu)
@@ -834,17 +819,13 @@ def pytest_collection_modifyitems(config, items):
 
     if run_slow_only:
         # When --slow is specified, skip tests NOT marked as slow
-        skip_non_slow = pytest.mark.skip(
-            reason="--slow specified, skipping non-slow tests"
-        )
+        skip_non_slow = pytest.mark.skip(reason="--slow specified, skipping non-slow tests")
         for item in items:
             if "slow" not in item.keywords:
                 item.add_marker(skip_non_slow)
     elif not run_all and not config.getoption("--exhaustive"):
         # By default, skip slow tests (--all or --exhaustive bypass this)
-        skip_slow = pytest.mark.skip(
-            reason="slow test (use --all to run, or --slow to run only slow tests)"
-        )
+        skip_slow = pytest.mark.skip(reason="slow test (use --all to run, or --slow to run only slow tests)")
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
@@ -860,18 +841,14 @@ def pytest_collection_modifyitems(config, items):
 
     # Skip exhaustive tests unless --exhaustive is specified
     if not config.getoption("--exhaustive"):
-        skip_exhaustive = pytest.mark.skip(
-            reason="exhaustive test (use --exhaustive to run)"
-        )
+        skip_exhaustive = pytest.mark.skip(reason="exhaustive test (use --exhaustive to run)")
         for item in items:
             if "exhaustive" in item.keywords:
                 item.add_marker(skip_exhaustive)
 
     # Skip only_chimera tests when not on Chimera cluster
     if not is_on_chimera():
-        skip_not_chimera = pytest.mark.skip(
-            reason="Test requires Chimera cluster (SLURM_CLUSTER_NAME != 'arc-slurm')"
-        )
+        skip_not_chimera = pytest.mark.skip(reason="Test requires Chimera cluster (SLURM_CLUSTER_NAME != 'arc-slurm')")
         for item in items:
             if "only_chimera" in item.keywords:
                 item.add_marker(skip_not_chimera)
@@ -882,11 +859,7 @@ def pytest_collection_modifyitems(config, items):
         for marker in item.iter_markers("uses_gpu"):
             required = marker.args[0] if marker.args else 1
             if visible_gpus < required:
-                item.add_marker(
-                    pytest.mark.skip(
-                        reason=f"Requires {required} GPUs, only {visible_gpus} visible"
-                    )
-                )
+                item.add_marker(pytest.mark.skip(reason=f"Requires {required} GPUs, only {visible_gpus} visible"))
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -894,9 +867,7 @@ def setup_test_logging(request):
     """Set up logging for the test session. Runs early to prevent timestamped log files."""
     # Use same log directory as application logs (logs/ in project root)
     project_root = Path(__file__).parent.parent
-    log_dir = os.environ.get(
-        "PROTO_LOG_DIR", str(project_root / "logs")
-    )
+    log_dir = os.environ.get("PROTO_LOG_DIR", str(project_root / "logs"))
 
     # Get options from command line
     no_log_console = request.config.getoption("--no-log-console")
@@ -921,9 +892,7 @@ def setup_test_logging(request):
     elif k_expression:
         # Sanitize the -k expression to make it filename-safe
         # Replace spaces with underscores, remove special characters
-        sanitized = re.sub(
-            r"[^\w\s-]", "", k_expression
-        )  # Remove special chars except spaces, hyphens, underscores
+        sanitized = re.sub(r"[^\w\s-]", "", k_expression)  # Remove special chars except spaces, hyphens, underscores
         sanitized = re.sub(r"\s+", "_", sanitized)  # Replace spaces with underscores
         sanitized = sanitized.strip("_")  # Remove leading/trailing underscores
         log_filename = f"pytest_{sanitized}.log"
@@ -974,9 +943,7 @@ def _env_report_clean_envs(request, setup_test_logging):
             tool = marker.kwargs.get("tool")
             if tool:
                 _env_report_collector.selected_tools.add(tool)
-    _env_report_collector.expected_count = len(
-        _env_report_collector.selected_tools
-    )
+    _env_report_collector.expected_count = len(_env_report_collector.selected_tools)
 
     logger = logging.getLogger("proto_tools.tests")
     venvs_dir = ToolInstance._get_tool_envs_root()
@@ -1003,8 +970,7 @@ def _env_report_clean_envs(request, setup_test_logging):
     else:
         # Full run: clean everything
         logger.warning(
-            f"Cleaning {venvs_dir} for fresh environment rebuilds "
-            "(this may take a while on network filesystems)..."
+            f"Cleaning {venvs_dir} for fresh environment rebuilds (this may take a while on network filesystems)..."
         )
         subprocess.run(
             ["rm", "-rf", str(venvs_dir)],

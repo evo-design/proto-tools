@@ -1,4 +1,5 @@
 """Pluggable masking strategies for masked language model sampling tools."""
+
 from proto_tools.tools.masked_models.masking.base import (
     MASK_TOKEN,
     MaskingStrategy,

@@ -3,6 +3,7 @@
 Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
 constants, and helper functions used by all MMseqs2 search tools.
 """
+
 from __future__ import annotations
 
 import io
@@ -54,6 +55,7 @@ class MmseqsHit(BaseModel):
         pident (float): Percentage of identical matches (0-100).
         evalue (float): Expected value (E-value) - statistical significance.
     """
+
     target_id: str = Field(description="Target sequence identifier from the database")
     pident: float = Field(description="Percentage identity (0-100)")
     evalue: float = Field(description="E-value (expected number of chance matches)")
@@ -70,6 +72,7 @@ class MmseqsSequenceSearchResult(BaseModel):
         query_sequence (str): The input query sequence.
         hits (list[MmseqsHit]): All hits found for this query, sorted by pident descending.
     """
+
     query_id: str = Field(description="Query sequence identifier")
     query_sequence: str = Field(description="The input query sequence")
     hits: list[MmseqsHit] = Field(default_factory=list, description="List of hits for this query")
@@ -114,9 +117,7 @@ class MmseqsSearchProteinsInput(BaseToolInput):
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
     )
-    mmseqs_db: str = InputField(
-        description="Path to target database (FASTA file or MMseqs2 database)"
-    )
+    mmseqs_db: str = InputField(description="Path to target database (FASTA file or MMseqs2 database)")
 
     @field_validator("query_sequences", mode="before")
     @classmethod
@@ -149,9 +150,8 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input sequence. The order matches the input sequences order.
     """
-    results: list[MmseqsSequenceSearchResult] = Field(
-        description="List of search results, one per input sequence"
-    )
+
+    results: list[MmseqsSequenceSearchResult] = Field(description="List of search results, one per input sequence")
 
     def __len__(self) -> int:
         """Get the number of results."""
@@ -195,7 +195,11 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
             for hit in result.hits
         ]
 
-        df = pd.DataFrame(data, columns=["query", "target", "pident", "evalue"]) if data else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
+        df = (
+            pd.DataFrame(data, columns=["query", "target", "pident", "evalue"])
+            if data
+            else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
+        )
 
         if file_format in ["m8", "csv"]:
             sep = "\t" if file_format == "m8" else ","
@@ -228,6 +232,7 @@ class MmseqsSearchProteinsConfig(BaseConfig):
         sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
         only_top_hits (bool): If True, keep only the best hit per query sequence.
     """
+
     threads: int = ConfigField(
         title="Number of Threads",
         default=DEFAULT_THREADS,
@@ -282,7 +287,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_mmseqs_search_proteins(
-    inputs: MmseqsSearchProteinsInput, config: MmseqsSearchProteinsConfig | None = None,
+    inputs: MmseqsSearchProteinsInput,
+    config: MmseqsSearchProteinsConfig | None = None,
     instance: Any = None,
 ) -> MmseqsSearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
@@ -306,8 +312,7 @@ def run_mmseqs_search_proteins(
 
     Examples:
         >>> inputs = MmseqsSearchProteinsInput(
-        ...     query_sequences=["MSKGEELFT", "MVLSPADKTN"],
-        ...     mmseqs_db="/path/to/protein_db"
+        ...     query_sequences=["MSKGEELFT", "MVLSPADKTN"], mmseqs_db="/path/to/protein_db"
         ... )
         >>> config = MmseqsSearchProteinsConfig()
         >>> result = run_mmseqs_search_proteins(inputs, config)
@@ -431,10 +436,12 @@ def _build_sequence_search_results(
         else:
             hits = []
 
-        results.append(MmseqsSequenceSearchResult(
-            query_id=seq_id,
-            query_sequence=seq,
-            hits=hits,
-        ))
+        results.append(
+            MmseqsSequenceSearchResult(
+                query_id=seq_id,
+                query_sequence=seq,
+                hits=hits,
+            )
+        )
 
     return results

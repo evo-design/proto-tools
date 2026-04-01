@@ -2,6 +2,7 @@
 
 FAMPNN mutation scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,9 +41,7 @@ class MutationInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    structure: Structure = Field(
-        description="Protein structure to evaluate mutations against"
-    )
+    structure: Structure = Field(description="Protein structure to evaluate mutations against")
     mutations: list[str] = Field(
         description="List of mutation strings (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)"
     )
@@ -131,12 +130,8 @@ class MutationScoreResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mutations: list[str] = Field(
-        description="Mutation strings that were scored"
-    )
-    scores: list[float] = Field(
-        description="Log-likelihood ratio scores (positive = favored over wild-type)"
-    )
+    mutations: list[str] = Field(description="Mutation strings that were scored")
+    scores: list[float] = Field(description="Log-likelihood ratio scores (positive = favored over wild-type)")
 
 
 class FAMPNNScoreOutput(BaseToolOutput):
@@ -146,9 +141,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
         results (list[MutationScoreResult]): List of MutationScoreResult objects, one per input structure.
     """
 
-    results: list[MutationScoreResult] = Field(
-        description="Scoring results, one per input structure"
-    )
+    results: list[MutationScoreResult] = Field(description="Scoring results, one per input structure")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -165,6 +158,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
 
         if file_format == "csv":
             import csv
+
             path.mkdir(parents=True, exist_ok=True)
             for i, result in enumerate(self.results):
                 out_file = path / f"scores_{i}.csv"
@@ -175,6 +169,7 @@ class FAMPNNScoreOutput(BaseToolOutput):
                         writer.writerow([mut, score])
         elif file_format == "json":
             import json
+
             path.mkdir(parents=True, exist_ok=True)
             for i, result in enumerate(self.results):
                 out_file = path / f"scores_{i}.json"
@@ -190,12 +185,14 @@ class FAMPNNScoreOutput(BaseToolOutput):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNScoreInput(
-        inputs=[MutationInput(
-            structure=Structure(structure_filepath_or_content=str(
-                Path(__file__).parents[1] / "examples" / "example.pdb"
-            )),
-            mutations=["A1V"],
-        )]
+        inputs=[
+            MutationInput(
+                structure=Structure(
+                    structure_filepath_or_content=str(Path(__file__).parents[1] / "examples" / "example.pdb")
+                ),
+                mutations=["A1V"],
+            )
+        ]
     )
 
 

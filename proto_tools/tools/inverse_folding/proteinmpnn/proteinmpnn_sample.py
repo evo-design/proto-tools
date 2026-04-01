@@ -2,6 +2,7 @@
 
 ProteinMPNN sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 ProteinMPNNSampleInput = InverseFoldingInput
 # Output:
 ProteinMPNNSampleOutput = InverseFoldingOutput
+
+
 # Config:
 class ProteinMPNNSampleConfig(InverseFoldingConfig):
     """Configuration for ProteinMPNN sampling.
@@ -55,6 +58,7 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         examples=["proteinmpnn", "abmpnn"],
     )
 
+
 class ProteinMPNNSequences(DesignedSequences):
     """Represents a designed sequence from the ProteinMPNN model.
 
@@ -64,12 +68,9 @@ class ProteinMPNNSequences(DesignedSequences):
         sequence_identity (list[float]): Sequence identity to the PDB prompt sequence.
     """
 
-    perplexity: list[float] = Field(
-        description="Perplexity of the sequence from the ProteinMPNN model"
-    )
-    sequence_identity: list[float] = Field(
-        description="Sequence identity to the sequence in the PDB prompt"
-    )
+    perplexity: list[float] = Field(description="Perplexity of the sequence from the ProteinMPNN model")
+    sequence_identity: list[float] = Field(description="Sequence identity to the sequence in the PDB prompt")
+
 
 # ============================================================================
 # Tool Implementation
@@ -77,9 +78,11 @@ class ProteinMPNNSequences(DesignedSequences):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return ProteinMPNNSampleInput(
-        inputs=[InverseFoldingStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
-        )]
+        inputs=[
+            InverseFoldingStructureInput(
+                structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
+            )
+        ]
     )
 
 

@@ -2,6 +2,7 @@
 
 ProteinMPNN scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ from proto_tools.utils import (
 
 logger = logging.getLogger(__name__)
 
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -41,8 +43,10 @@ class ProteinMPNNScoringInput(BaseToolInput):
         description="List of sequence-structure pairs to score"
     )
 
+
 # Output:
 ProteinMPNNScoringOutput = InverseFoldingScoringOutput
+
 
 # Config:
 class ProteinMPNNScoringConfig(BaseConfig):
@@ -124,9 +128,12 @@ def example_input() -> Any:
     from pathlib import Path
 
     from proto_tools.entities.structures import Structure
+
     _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
     return ProteinMPNNScoringInput(
-        sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))]
+        sequence_structure_pairs=[
+            SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))
+        ]
     )
 
 

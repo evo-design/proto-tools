@@ -1,4 +1,5 @@
 """AlphaGenome standalone inference implementation for venv execution."""
+
 from __future__ import annotations
 
 import json
@@ -32,6 +33,7 @@ def _safe_tidy_scores(scores: Any) -> list[Any]:
     if df is None or df.empty:
         return []
     return json.loads(df.to_json(orient="records"))  # type: ignore[no-any-return]
+
 
 _SUPPORTED_CONTEXT_LENGTHS = [1_048_576, 524_288, 131_072, 16_384]
 
@@ -71,8 +73,6 @@ _ORGANISM_ENUMS = {
 }
 
 
-
-
 def _resolve_checkpoint_path(model_version: str) -> Path | None:
     """Resolve AlphaGenome checkpoint path for offline-friendly loading."""
     env_checkpoint = os.environ.get("ALPHAGENOME_CHECKPOINT_PATH", "").strip()
@@ -80,9 +80,7 @@ def _resolve_checkpoint_path(model_version: str) -> Path | None:
         checkpoint_path = Path(env_checkpoint).expanduser()
         if checkpoint_path.exists():
             return checkpoint_path
-        raise FileNotFoundError(
-            f"ALPHAGENOME_CHECKPOINT_PATH does not exist: {checkpoint_path}"
-        )
+        raise FileNotFoundError(f"ALPHAGENOME_CHECKPOINT_PATH does not exist: {checkpoint_path}")
 
     repo_id = f"google/alphagenome-{model_version.replace('_', '-').lower()}"
     try:
@@ -149,7 +147,9 @@ class AlphaGenomeModel:
         device: str = "cuda",
     ) -> dict[str, Any]:
         """Run variant-effect predictions through DnaClient.predict_variants."""
-        parsed_intervals = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
+        parsed_intervals = [
+            _resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals
+        ]
         parsed_variants = [
             genome.Variant(
                 chromosome=v["chromosome"],
@@ -208,12 +208,14 @@ class AlphaGenomeModel:
             width = i["interval_end"] - i["interval_start"]
             _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_variants")
             parsed_intervals.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
-            parsed_variants.append(genome.Variant(
-                chromosome=v["chromosome"],
-                position=v["variant_position"],
-                reference_bases=v["reference_bases"],
-                alternate_bases=v["alternate_bases"],
-            ))
+            parsed_variants.append(
+                genome.Variant(
+                    chromosome=v["chromosome"],
+                    position=v["variant_position"],
+                    reference_bases=v["reference_bases"],
+                    alternate_bases=v["alternate_bases"],
+                )
+            )
         self._ensure_loaded(device)
 
         scores_per_variant = self.model.score_variants(  # type: ignore[attr-defined]
@@ -372,6 +374,7 @@ class AlphaGenomeModel:
         self._loaded = False
 
         import gc
+
         if clear_jax_caches:
             jax.clear_caches()
         gc.collect()
@@ -392,9 +395,7 @@ def _serialize_data(value: Any) -> Any:
         return value
     if type(value).__name__ in ("DataFrame", "Series"):
         return _serialize_data(
-            value.to_dict(orient="records")
-            if type(value).__name__ == "DataFrame"
-            else value.to_dict()
+            value.to_dict(orient="records") if type(value).__name__ == "DataFrame" else value.to_dict()
         )
     if isinstance(value, dict):
         return {str(key): _serialize_data(val) for key, val in value.items()}
@@ -411,6 +412,7 @@ def _serialize_data(value: Any) -> Any:
         return _serialize_data(vars(value))
     return str(value)
 
+
 def _resolve_variant_scorers(
     scorer_names: list[str] | None,
     organism: str,
@@ -418,10 +420,8 @@ def _resolve_variant_scorers(
     """Resolve variant scorer names to scorer objects."""
     if scorer_names is None:
         return variant_scorers_lib.get_recommended_scorers(_ORGANISM_PROTOS[organism])  # type: ignore[no-any-return]
-    return [
-        variant_scorers_lib.RECOMMENDED_VARIANT_SCORERS[name]
-        for name in scorer_names
-    ]
+    return [variant_scorers_lib.RECOMMENDED_VARIANT_SCORERS[name] for name in scorer_names]
+
 
 def _resolve_interval_scorers(scorer_names: list[str] | None) -> list[Any]:
     """Resolve interval scorer names to scorer objects."""
@@ -429,6 +429,7 @@ def _resolve_interval_scorers(scorer_names: list[str] | None) -> list[Any]:
     if scorer_names is None:
         return list(recommended.values())
     return [recommended[name] for name in scorer_names]
+
 
 def _validate_min_scorer_width(
     interval_width: int,
@@ -466,13 +467,14 @@ def _validate_sequence_length(sequence_length: int, operation: str) -> None:
 
     supported = ", ".join(f"{length:,}" for length in sorted(_SUPPORTED_CONTEXT_LENGTHS))
     raise ValueError(
-        f"{operation}: sequence length ({sequence_length:,} bp) is unsupported. "
-        f"Supported lengths: {supported} bp."
+        f"{operation}: sequence length ({sequence_length:,} bp) is unsupported. Supported lengths: {supported} bp."
     )
 
 
 def _resize_interval(
-    chromosome: str, interval_start: int, interval_end: int,
+    chromosome: str,
+    interval_start: int,
+    interval_end: int,
 ) -> genome.Interval:
     """Build a ``genome.Interval``, auto-resizing to a supported context length."""
     interval = genome.Interval(chromosome=chromosome, start=interval_start, end=interval_end)
@@ -486,10 +488,10 @@ def _resize_interval(
         )
     logger.warning(
         "Context length %s bp not supported; auto-resizing to %s bp.",
-        f"{interval.width:,}", f"{target:,}",
+        f"{interval.width:,}",
+        f"{target:,}",
     )
     return interval.resize(target)
-
 
 
 # ============================================================================

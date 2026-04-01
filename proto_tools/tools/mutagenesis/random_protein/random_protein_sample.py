@@ -2,6 +2,7 @@
 
 Random protein sampling with codon scheme-biased amino acid selection.
 """
+
 from __future__ import annotations
 
 import logging
@@ -114,6 +115,7 @@ class RandomProteinSampleConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
+
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""

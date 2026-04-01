@@ -41,9 +41,7 @@ def test_structure_from_pdb_content(pdb_file_content: str):
 
 
 def test_structure_with_chain_ids():
-    structure = InverseFoldingStructureInput(
-        structure=TEST_PDB_FILE, chain_ids=["A"]
-    )
+    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, chain_ids=["A"])
     assert structure.chain_ids == ["A"]
 
 
@@ -57,9 +55,7 @@ def test_structure_without_chain_ids_defaults_to_all():
 
 
 def test_structure_with_fixed_positions():
-    structure = InverseFoldingStructureInput(
-        structure=TEST_PDB_FILE, fixed_positions={"A": [1, 2, 3]}
-    )
+    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [1, 2, 3]})
     assert structure.fixed_positions == {"A": [1, 2, 3]}
 
 
@@ -104,22 +100,16 @@ def test_input_from_pdb_content(pdb_file_content: str):
 
 
 class _MockDesignedSequences(DesignedSequences):
-    custom_metric: list[float] = Field(
-        description="Custom metric for the designed sequences"
-    )
+    custom_metric: list[float] = Field(description="Custom metric for the designed sequences")
 
 
 def test_designed_sequences_len():
-    sequences = _MockDesignedSequences(
-        sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2]
-    )
+    sequences = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
     assert len(sequences) == 2
 
 
 def test_designed_sequences_getitem_and_metrics():
-    sequences = _MockDesignedSequences(
-        sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2]
-    )
+    sequences = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
     assert sequences[0] == "MVLSP"
     assert sequences[1] == "GGGS"
     assert sequences.get_sequence_metrics(0) == {"custom_metric": 0.1}
@@ -130,21 +120,15 @@ def test_designed_sequences_getitem_and_metrics():
 
 
 def test_output_len():
-    output = InverseFoldingOutput(
-        designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])]
-    )
+    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
     assert len(output) == 1
 
 
 def test_output_getitem():
-    output = InverseFoldingOutput(
-        designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])]
-    )
+    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
     assert output[0] == DesignedSequences(sequences=["MVLSP", "GGGS"])
 
 
 def test_output_iter():
-    output = InverseFoldingOutput(
-        designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])]
-    )
+    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
     assert list(output) == [DesignedSequences(sequences=["MVLSP", "GGGS"])]

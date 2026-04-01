@@ -2,6 +2,7 @@
 
 Tests for TMalign structure alignment tool.
 """
+
 from pathlib import Path
 
 import pytest

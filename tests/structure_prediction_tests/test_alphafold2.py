@@ -19,6 +19,7 @@ _HOMOOLIGOMER_SEQ = "MARFLGLYTWHK"
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module", autouse=True)
 def _persistent_worker(request):
     if request.config.getoption("--cpu"):
@@ -29,6 +30,7 @@ def _persistent_worker(request):
 
 
 # ── Input validation ──────────────────────────────────────────────────────────
+
 
 def test_alphafold2_input_rejects_non_protein_sequence():
     """AlphaFold2 validator rejects sequences that aren't valid protein."""
@@ -45,24 +47,23 @@ def test_alphafold2_input_accepts_x_for_unknown_residue():
 def test_alphafold2_input_rejects_dna_entity_type():
     """AlphaFold2 only supports protein chains; DNA must be rejected."""
     with pytest.raises(ValidationError, match="unsupported entity types"):
-        AlphaFold2Input(
-            complexes=[StructurePredictionComplex(
-                chains=[{"sequence": "ATCG", "entity_type": "dna"}]
-            )]
-        )
+        AlphaFold2Input(complexes=[StructurePredictionComplex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])
 
 
 def test_alphafold2_input_rejects_chain_modifications():
     """AlphaFold2 does not allow chain modifications (ALLOWS_CHAIN_MODIFICATIONS=False)."""
     with pytest.raises(ValidationError, match="does not allow chain modifications"):
         AlphaFold2Input(
-            complexes=[StructurePredictionComplex(
-                chains=[{"sequence": "MVLSPADKTN", "entity_type": "protein", "modifications": [(4, "SEP")]}]
-            )]
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[{"sequence": "MVLSPADKTN", "entity_type": "protein", "modifications": [(4, "SEP")]}]
+                )
+            ]
         )
 
 
 # ── Config validation ─────────────────────────────────────────────────────────
+
 
 def test_alphafold2_config_rejects_model_num_and_ensemble_together():
     """model_num != 1 combined with num_ensemble_models > 1 must raise."""
@@ -92,6 +93,7 @@ def test_alphafold2_config_rejects_model_num_out_of_range():
 
 # ---------------------------------------------------------------------------
 # Integration tests
+
 
 @pytest.mark.uses_gpu
 def test_homooligomer():

@@ -57,9 +57,8 @@ class ToolExecutionError(Exception):
         self.message = message
         # Extract the last line and append to the top
         last_line = self.message.splitlines()[-1]
-        super().__init__(
-            f"Attempt to access field of tool output after failure: {last_line}\n{self.message}"
-        )
+        super().__init__(f"Attempt to access field of tool output after failure: {last_line}\n{self.message}")
+
 
 class BaseToolInput(BaseModel):
     """Base class for primary tool inputs.
@@ -88,9 +87,7 @@ class BaseToolInput(BaseModel):
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields."""
-        model_dict = self.model_dump(
-            exclude_none=True, exclude=self.cache_exclude_fields()
-        )
+        model_dict = self.model_dump(exclude_none=True, exclude=self.cache_exclude_fields())
         return json.dumps(model_dict, sort_keys=True, default=str)
 
     @classmethod
@@ -104,6 +101,7 @@ class BaseToolInput(BaseModel):
             item (Any): A single item from the iterable input field.
         """
         return 1.0
+
 
 class BaseToolOutput(BaseModel, ABC):
     """Base class for all tool outputs with standardized metadata.
@@ -127,16 +125,11 @@ class BaseToolOutput(BaseModel, ABC):
     Example:
         >>> class BLASTOutput(BaseToolOutput):
         ...     hits: List[Dict[str, Any]]
-        ...
         >>> # Within a tool function (metadata populated by decorator):
-        >>> result = BLASTOutput(
-        ...     hits=[{"accession": "P12345", "evalue": 1e-50}]
-        ... )
+        >>> result = BLASTOutput(hits=[{"accession": "P12345", "evalue": 1e-50}])
         >>>
         >>> # Direct construction (testing/manual use):
-        >>> result = BLASTOutput(
-        ...     hits=[{"accession": "P12345", "evalue": 1e-50}]
-        ... )
+        >>> result = BLASTOutput(hits=[{"accession": "P12345", "evalue": 1e-50}])
     """
 
     # Universal metadata fields (optional during construction, populated by decorator)
@@ -144,12 +137,8 @@ class BaseToolOutput(BaseModel, ABC):
         default=None,
         description="Unique tool identifier (e.g., 'blast-search', 'esm3-embedding')",
     )
-    execution_time: float | None = Field(
-        default=None, description="Execution time in seconds", ge=0.0
-    )
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Execution timestamp"
-    )
+    execution_time: float | None = Field(default=None, description="Execution time in seconds", ge=0.0)
+    timestamp: datetime = Field(default_factory=datetime.now, description="Execution timestamp")
     success: bool | None = Field(default=None, description="Whether execution succeeded")
 
     # Optional metadata fields
@@ -161,9 +150,7 @@ class BaseToolOutput(BaseModel, ABC):
         default_factory=list,
         description="Fatal error messages generated during execution",
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Additional tool-specific metadata"
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional tool-specific metadata")
 
     model_config = ConfigDict(
         extra="forbid",
@@ -273,9 +260,7 @@ class BaseToolOutput(BaseModel, ABC):
         if file_format is None:
             file_format = self.output_format_default
         elif file_format not in self.output_format_options:
-            raise ValueError(
-                f"Invalid file format: {file_format}. Must be one of: {self.output_format_options}"
-            )
+            raise ValueError(f"Invalid file format: {file_format}. Must be one of: {self.output_format_options}")
 
         export_path = Path(export_path) / f"{str(name).lower()}"
         self._export_output(export_path, file_format)

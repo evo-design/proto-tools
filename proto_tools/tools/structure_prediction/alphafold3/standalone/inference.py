@@ -5,6 +5,7 @@ via Singularity containers, with support for MSA generation via ColabFold search
 
 Worker protocol implementation for ToolInstance integration.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,6 @@ from standalone_helpers import get_subprocess_device_env
 
 class AlphaFold3ExecutionError(Exception):
     """Raised when AlphaFold3 execution fails."""
-
 
 
 AlphaFold3JSON = dict[str, Any]
@@ -58,9 +58,7 @@ def _extract_structure_and_scores(
     io.save(pdb_path)  # type: ignore[no-untyped-call]
 
     # Extract confidence scores from AlphaFold3 JSON output files.
-    summary_confidences_path = os.path.join(
-        alphafold3_results_folder, f"{name}_summary_confidences.json"
-    )
+    summary_confidences_path = os.path.join(alphafold3_results_folder, f"{name}_summary_confidences.json")
     full_confidences_path = os.path.join(alphafold3_results_folder, f"{name}_confidences.json")
 
     with open(summary_confidences_path) as f:

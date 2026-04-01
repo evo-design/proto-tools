@@ -1,4 +1,5 @@
 """ProteinMPNN standalone inference implementation for venv execution."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,9 @@ DEFAULT_TEMPERATURE = 1.0
 DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation
-ALPHAFOLD_VOCAB: list[str] = list("ARNDCQEGHILKMFPSTWYVX")  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
+ALPHAFOLD_VOCAB: list[str] = list(
+    "ARNDCQEGHILKMFPSTWYVX"
+)  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
 
 # Maps model_choice to ColabDesign's model_name parameter
 _MODEL_NAME_MAP = {
@@ -80,11 +83,7 @@ class ProteinMPNNModel:
             self.to_device(device)
 
         fix_pos = (
-            ",".join(
-                f"{chain}{idx}"
-                for chain, positions in fixed_positions.items()
-                for idx in positions
-            )
+            ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
             if fixed_positions is not None
             else None
         )
@@ -148,11 +147,7 @@ class ProteinMPNNModel:
             self.to_device(device)
 
         fix_pos = (
-            ",".join(
-                f"{chain}{idx}"
-                for chain, positions in fixed_positions.items()
-                for idx in positions
-            )
+            ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
             if fixed_positions is not None
             else None
         )
@@ -199,6 +194,7 @@ class ProteinMPNNModel:
             logger.info(f"Loading {model_choice} (model_name={model_name}) on {device}")
 
         import jax
+
         self.jax = jax
 
         # Lazy import ProteinMPNN from ColabDesign
@@ -317,7 +313,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 return_logits=input_dict.get("return_logits", False),
             )
         raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

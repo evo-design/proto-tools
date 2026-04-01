@@ -23,5 +23,4 @@ __all__ = [
     "ColabfoldSearchInput",
     "ColabfoldSearchConfig",
     "ColabfoldSearchOutput",
-
 ]

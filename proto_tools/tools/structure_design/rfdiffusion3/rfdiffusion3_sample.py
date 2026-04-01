@@ -1,7 +1,12 @@
 """proto_tools/tools/structure_design/rfdiffusion3/rfdiffusion3_sample.py.
 
 Example:
-    >>> from proto_tools.tools.structure_design.rfdiffusion3 import run_rfdiffusion3, RFdiffusion3Input, RFdiffusion3Config, RFdiffusion3DesignSpec
+    >>> from proto_tools.tools.structure_design.rfdiffusion3 import (
+    ...     run_rfdiffusion3,
+    ...     RFdiffusion3Input,
+    ...     RFdiffusion3Config,
+    ...     RFdiffusion3DesignSpec,
+    ... )
     >>> # Simple unconditional design
     >>> inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
     >>> config = RFdiffusion3Config(diffusion_batch_size=4)
@@ -157,9 +162,7 @@ class RFdiffusion3DesignSpec(BaseModel):
             ]
         )
         if not has_params:
-            raise ValueError(
-                "At least one of 'contig', 'length', or other design parameters must be provided"
-            )
+            raise ValueError("At least one of 'contig', 'length', or other design parameters must be provided")
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -215,22 +218,20 @@ class RFdiffusion3Input(BaseToolInput):
 
     Examples:
         >>> # Simple unconditional design
-        >>> inputs = RFdiffusion3Input(
-        ...     design_specs=[RFdiffusion3DesignSpec(length="100-150")]
-        ... )
+        >>> inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100-150")])
         >>>
         >>> # Motif scaffolding
         >>> inputs = RFdiffusion3Input(
-        ...     design_specs=[RFdiffusion3DesignSpec(
-        ...         input_structure="path/to/motif.pdb",
-        ...         contig="50-80,A10-25,30-50",
-        ...     )]
+        ...     design_specs=[
+        ...         RFdiffusion3DesignSpec(
+        ...             input_structure="path/to/motif.pdb",
+        ...             contig="50-80,A10-25,30-50",
+        ...         )
+        ...     ]
         ... )
         >>>
         >>> # Raw JSON for advanced use
-        >>> inputs = RFdiffusion3Input(
-        ...     raw_json='{"spec-1": {"length": "100", "is_non_loopy": true}}'
-        ... )
+        >>> inputs = RFdiffusion3Input(raw_json='{"spec-1": {"length": "100", "is_non_loopy": true}}')
     """
 
     design_specs: list[RFdiffusion3DesignSpec] = InputField(
@@ -246,9 +247,7 @@ class RFdiffusion3Input(BaseToolInput):
     def validate_has_input(self) -> Any:
         """Validate that either design_specs or raw_json is provided."""
         if not self.design_specs and not self.raw_json:
-            raise ValueError(
-                "Either 'design_specs' (non-empty) or 'raw_json' must be provided"
-            )
+            raise ValueError("Either 'design_specs' (non-empty) or 'raw_json' must be provided")
         return self
 
     def to_json_spec(self) -> str:
@@ -417,9 +416,7 @@ class RFdiffusion3Structure(BaseModel):
 
     structure: Structure = Field(description="The designed 3D structure")
     sequence: str = Field(description="The designed amino acid sequence")
-    spec_key: str = Field(
-        description="Identifier of the input spec that produced this design"
-    )
+    spec_key: str = Field(description="Identifier of the input spec that produced this design")
     design_index: int = Field(ge=0, description="Index of this design within its batch")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -518,7 +515,9 @@ def example_input() -> Any:
     iterable_output_field="output_structures",
     cacheable=True,
 )
-def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance: Any = None) -> RFdiffusion3Output:
+def run_rfdiffusion3(
+    inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance: Any = None
+) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
     Uses RFdiffusion3, a diffusion-based generative model, to design novel
@@ -555,14 +554,8 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
 
     Example:
         >>> # Unconditional design of 100-residue protein
-        >>> inputs = RFdiffusion3Input(
-        ...     design_specs=[RFdiffusion3DesignSpec(length="100")]
-        ... )
-        >>> config = RFdiffusion3Config(
-        ...     diffusion_batch_size=4,
-        ...     num_timesteps=200,
-        ...     verbose=True
-        ... )
+        >>> inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="100")])
+        >>> config = RFdiffusion3Config(diffusion_batch_size=4, num_timesteps=200, verbose=True)
         >>> result = run_rfdiffusion3(inputs, config)
         >>> print(f"Designed {len(result)} structures")
         >>> print(f"First sequence: {result[0].sequence}")
@@ -575,7 +568,6 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config | Non
     json_spec = inputs.to_json_spec()
 
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
-
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)

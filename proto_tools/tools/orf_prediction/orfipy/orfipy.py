@@ -47,9 +47,7 @@ class OrfipyInput(BaseToolInput):
             These IDs are used as ``parent_id`` in the output ORFs.
     """
 
-    sequences: list[str] = InputField(
-        description="DNA sequence(s) to analyze for open reading frames"
-    )
+    sequences: list[str] = InputField(description="DNA sequence(s) to analyze for open reading frames")
     sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
@@ -195,9 +193,7 @@ class OrfipyConfig(BaseConfig):
         """Validate strand parameter."""
         valid_strands = {"f", "r", "b"}
         if v not in valid_strands:
-            raise ValueError(
-                f"Invalid strand '{v}'. Must be one of: {', '.join(valid_strands)}"
-            )
+            raise ValueError(f"Invalid strand '{v}'. Must be one of: {', '.join(valid_strands)}")
         return v
 
 
@@ -264,11 +260,7 @@ class OrfipyOutput(BaseToolOutput):
                 for seq_results in self.predicted_orfs:
                     for orf in seq_results:
                         header = f">{orf.parent_id}_{orf.orf_id} [{orf.nucleotide_start}-{orf.nucleotide_end}]({orf.strand}) frame:{orf.frame}"
-                        seq = (
-                            orf.amino_acid_sequence
-                            if file_format == "faa"
-                            else orf.nucleotide_sequence
-                        )
+                        seq = orf.amino_acid_sequence if file_format == "faa" else orf.nucleotide_sequence
                         f.write(f"{header}\n{seq}\n")
         else:
             raise ValueError(f"Unsupported format: {file_format}")
@@ -322,12 +314,8 @@ def run_orfipy_prediction(
 
     Examples:
         >>> # Basic ORF prediction (in-memory)
-        >>> inputs = OrfipyInput(
-        ...     sequences=["ATGTACTATTCATTAA"]
-        ... )
-        >>> config = OrfipyConfig(
-        ...     min_len=12
-        ... )
+        >>> inputs = OrfipyInput(sequences=["ATGTACTATTCATTAA"])
+        >>> config = OrfipyConfig(min_len=12)
         >>> result = run_orfipy_prediction(inputs, config)
         >>> print(f"Found {result.num_orfs} ORFs")
 

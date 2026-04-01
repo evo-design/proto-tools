@@ -29,9 +29,7 @@ SAMPLE_PROTEIN_SEQ = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"
 @pytest.mark.integration
 def test_remote_colabfold_search_no_metagenomic_db(tmp_path):
     """Test remote search with use_metagenomic_db=False."""
-    inputs = ColabfoldSearchInput(
-        queries=[(SAMPLE_PROTEIN_SEQ, "test_no_meta")]
-    )
+    inputs = ColabfoldSearchInput(queries=[(SAMPLE_PROTEIN_SEQ, "test_no_meta")])
 
     config = ColabfoldSearchConfig(
         search_mode="remote",
@@ -50,9 +48,7 @@ def test_remote_colabfold_search_no_metagenomic_db(tmp_path):
     assert result.results[0].sequence_id == "test_no_meta"
     # Should find homologs for this sequence
     msa = result.results[0].msa
-    assert (
-        msa is not None
-    ), f"MSA is None for sequence {result.results[0].sequence_id}"
+    assert msa is not None, f"MSA is None for sequence {result.results[0].sequence_id}"
     assert msa.num_sequences > 100
     assert msa.alignment_length == 40
 
@@ -62,9 +58,7 @@ def test_remote_colabfold_search_no_metagenomic_db(tmp_path):
 @pytest.mark.integration
 def test_remote_colabfold_search_with_metagenomic_db(tmp_path):
     """Test remote search with use_metagenomic_db=True."""
-    inputs = ColabfoldSearchInput(
-        queries=[(SAMPLE_PROTEIN_SEQ, "test_with_meta")]
-    )
+    inputs = ColabfoldSearchInput(queries=[(SAMPLE_PROTEIN_SEQ, "test_with_meta")])
 
     config = ColabfoldSearchConfig(
         search_mode="remote",

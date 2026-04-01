@@ -18,6 +18,7 @@ from typing import Any
 
 class BioToolsOnlyFilter(logging.Filter):
     """Filter to only allow logs from proto_tools project packages."""
+
     def filter(self, record: Any) -> Any:
         """Filter log records to exclude noisy third-party messages."""
         # Include logs from proto_tools and tests
@@ -62,10 +63,7 @@ def _parse_log_level(level: int | str) -> int:
         level_upper = level.upper()
         if hasattr(logging, level_upper):
             return getattr(logging, level_upper)  # type: ignore[no-any-return]
-        raise ValueError(
-            f"Unknown log level: '{level}'. "
-            f"Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL"
-        )
+        raise ValueError(f"Unknown log level: '{level}'. Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL")
     raise TypeError(f"level must be int or str, got {type(level)}")
 
 
@@ -119,8 +117,7 @@ def setup_logging(
         else:
             # Enable file logging only in a dev repo (pyproject.toml present)
             log_to_file = any(
-                (parent / "pyproject.toml").exists()
-                for parent in [Path.cwd(), *list(Path.cwd().parents)]
+                (parent / "pyproject.toml").exists() for parent in [Path.cwd(), *list(Path.cwd().parents)]
             )
 
     # Determine log directory
@@ -131,10 +128,7 @@ def setup_logging(
             if (parent / "pyproject.toml").exists():
                 project_root = parent
                 break
-        log_dir = os.environ.get(
-            "PROTO_LOG_DIR",
-            str(project_root / "logs")
-        )
+        log_dir = os.environ.get("PROTO_LOG_DIR", str(project_root / "logs"))
     log_path = Path(log_dir)
 
     # Create log directory if needed
@@ -179,13 +173,13 @@ def setup_logging(
 
         # Write header to log file if provided
         if log_file_header:
-            with open(log_file, 'w') as f:
+            with open(log_file, "w") as f:
                 f.write(log_file_header)
             # Use append mode for FileHandler so we don't overwrite the header
-            file_handler = logging.FileHandler(log_file, mode='a')
+            file_handler = logging.FileHandler(log_file, mode="a")
         else:
             # Use write mode as before
-            file_handler = logging.FileHandler(log_file, mode='w')
+            file_handler = logging.FileHandler(log_file, mode="w")
 
         file_handler.setLevel(file_level or logging.DEBUG)
         file_handler.setFormatter(file_formatter)

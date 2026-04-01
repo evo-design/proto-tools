@@ -44,8 +44,7 @@ class Boltz2Model:
                 self.cache_dir = Path(hf_home) / "boltz"
             else:
                 raise RuntimeError(
-                    "Cannot determine Boltz2 cache directory. "
-                    "Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
+                    "Cannot determine Boltz2 cache directory. Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
                 )
         self.boltz_executable = None
 
@@ -143,12 +142,7 @@ class Boltz2Model:
             Dictionary containing structure_cif_output and metrics
         """
         input_name = Path(input_path).stem
-        prediction_dir = (
-            Path(output_dir)
-            / f"boltz_results_{input_name}"
-            / "predictions"
-            / input_name
-        )
+        prediction_dir = Path(output_dir) / f"boltz_results_{input_name}" / "predictions" / input_name
 
         if not prediction_dir.is_dir():
             raise FileNotFoundError(f"Prediction directory not found: {prediction_dir}")
@@ -160,9 +154,7 @@ class Boltz2Model:
 
         with open(confidence_file) as f:
             confidence_data = json.load(f)
-        metrics = {
-            key: _prepare_output_values(value) for key, value in confidence_data.items()
-        }
+        metrics = {key: _prepare_output_values(value) for key, value in confidence_data.items()}
 
         # Read structure
         cif_file = prediction_dir / f"{input_name}_model_0.cif"
@@ -191,9 +183,7 @@ class Boltz2Model:
         self.cache_dir.mkdir(parents=True, exist_ok=True)  # type: ignore[unreachable]
         self._loaded = True
 
-        logger.debug(
-            f"Boltz2 initialized successfully. Using executable: {self.boltz_executable}"
-        )
+        logger.debug(f"Boltz2 initialized successfully. Using executable: {self.boltz_executable}")
 
 
 # ============================================================================

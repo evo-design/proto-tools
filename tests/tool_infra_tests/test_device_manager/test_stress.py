@@ -32,12 +32,14 @@ _GPU_MEMORY_TOLERANCE_MB = 3072
 # Each entry: (tool_name, InputClass, ConfigClass, run_fn)
 # Populated lazily so imports don't fail on environments without JAX/torch.
 
+
 def _pytorch_tool():
     from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,
         MockPyTorchToolInput,
         run_mock_pytorch_tool,
     )
+
     return "mock_pytorch_tool", MockPyTorchToolInput, MockPyTorchToolConfig, run_mock_pytorch_tool
 
 
@@ -47,6 +49,7 @@ def _jax_tool():
         MockJAXToolInput,
         run_mock_jax_tool,
     )
+
     return "mock_jax_tool", MockJAXToolInput, MockJAXToolConfig, run_mock_jax_tool
 
 
@@ -56,6 +59,7 @@ def _cli_tool():
         MockCLIToolInput,
         run_mock_cli_tool,
     )
+
     return "mock_cli_tool", MockCLIToolInput, MockCLIToolConfig, run_mock_cli_tool
 
 
@@ -65,7 +69,13 @@ def _pytorch_multi_gpu_tool():
         MockPyTorchMultiGPUToolInput,
         run_mock_pytorch_multi_gpu_tool,
     )
-    return "mock_pytorch_multi_gpu_tool", MockPyTorchMultiGPUToolInput, MockPyTorchMultiGPUToolConfig, run_mock_pytorch_multi_gpu_tool
+
+    return (
+        "mock_pytorch_multi_gpu_tool",
+        MockPyTorchMultiGPUToolInput,
+        MockPyTorchMultiGPUToolConfig,
+        run_mock_pytorch_multi_gpu_tool,
+    )
 
 
 def _jax_multi_gpu_tool():
@@ -74,6 +84,7 @@ def _jax_multi_gpu_tool():
         MockJAXMultiGPUToolInput,
         run_mock_jax_multi_gpu_tool,
     )
+
     return "mock_jax_multi_gpu_tool", MockJAXMultiGPUToolInput, MockJAXMultiGPUToolConfig, run_mock_jax_multi_gpu_tool
 
 
@@ -130,6 +141,7 @@ def _teardown():
 
 
 # ── GPU memory snapshot helpers ─────────────────────────────────────────
+
 
 def _snapshot_gpu_memory(dm: DeviceManager) -> dict[str, float]:
     """Capture memory usage (MB) for managed CUDA devices only.
@@ -210,16 +222,20 @@ def _assert_gpu_memory(
 
 # ── Mixed-framework eviction ────────────────────────────────────────────
 
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-@pytest.mark.parametrize("tool_a_factory,tool_b_factory", [
-    pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
-    pytest.param(_pytorch_tool, _cli_tool, id="pytorch-evicts-cli"),
-    pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
-    pytest.param(_jax_tool, _cli_tool, id="jax-evicts-cli"),
-    pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
-    pytest.param(_cli_tool, _jax_tool, id="cli-evicts-jax"),
-])
+@pytest.mark.parametrize(
+    "tool_a_factory,tool_b_factory",
+    [
+        pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
+        pytest.param(_pytorch_tool, _cli_tool, id="pytorch-evicts-cli"),
+        pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
+        pytest.param(_jax_tool, _cli_tool, id="jax-evicts-cli"),
+        pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
+        pytest.param(_cli_tool, _jax_tool, id="cli-evicts-jax"),
+    ],
+)
 def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
     """Tool B should evict tool A when only 1 GPU is available.
 
@@ -243,8 +259,7 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
             assert status["allocations"]["inst_a"]["device_id"] == "cuda:0"
 
             if is_a_persistent:
-                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                   label="after loading tool A")
+                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
 
             time.sleep(0.01)
 
@@ -254,17 +269,15 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
 
                 status = dm.get_device_status()
                 if exclusive:
-                    assert "inst_a" not in status["allocations"], \
+                    assert "inst_a" not in status["allocations"], (
                         "Tool A should be removed (RESTART on Exclusive_Process)"
+                    )
                 else:
-                    assert status["allocations"]["inst_a"]["device_id"] == "cpu", \
-                        "Tool A should be evicted to CPU"
-                assert status["allocations"]["inst_b"]["device_id"] == "cuda:0", \
-                    "Tool B should be on GPU"
+                    assert status["allocations"]["inst_a"]["device_id"] == "cpu", "Tool A should be evicted to CPU"
+                assert status["allocations"]["inst_b"]["device_id"] == "cuda:0", "Tool B should be on GPU"
 
                 if is_b_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                       label="after eviction, tool B on GPU")
+                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after eviction, tool B on GPU")
 
                 time.sleep(0.01)
 
@@ -273,29 +286,32 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
                 assert result_a2.success, "Tool A should reload after eviction"
 
                 status = dm.get_device_status()
-                assert status["allocations"]["inst_a"]["device_id"] == "cuda:0", \
+                assert status["allocations"]["inst_a"]["device_id"] == "cuda:0", (
                     "Tool A should be back on GPU after reload"
+                )
                 if exclusive:
-                    assert "inst_b" not in status["allocations"], \
+                    assert "inst_b" not in status["allocations"], (
                         "Tool B should be removed (RESTART on Exclusive_Process)"
+                    )
                 else:
-                    assert status["allocations"]["inst_b"]["device_id"] == "cpu", \
-                        "Tool B should be evicted to CPU"
+                    assert status["allocations"]["inst_b"]["device_id"] == "cpu", "Tool B should be evicted to CPU"
 
                 if is_a_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                       label="after tool A round-trip reload")
+                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A round-trip reload")
     finally:
         _teardown()
 
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-@pytest.mark.parametrize("tool_a_factory,tool_b_factory", [
-    pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
-    pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
-    pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
-])
+@pytest.mark.parametrize(
+    "tool_a_factory,tool_b_factory",
+    [
+        pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
+        pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
+        pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
+    ],
+)
 def test_cross_framework_eviction_restart(tool_a_factory, tool_b_factory):
     """Tool B should shut down tool A when using RESTART strategy."""
     dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.RESTART)
@@ -319,14 +335,12 @@ def test_cross_framework_eviction_restart(tool_a_factory, tool_b_factory):
 
                 # RESTART should fully remove tool A from allocations
                 status = dm.get_device_status()
-                assert "inst_a" not in status["allocations"], \
-                    "Tool A should be removed with RESTART strategy"
+                assert "inst_a" not in status["allocations"], "Tool A should be removed with RESTART strategy"
                 assert status["allocations"]["inst_b"]["device_id"] == "cuda:0"
 
                 # Tool B on GPU (if persistent), tool A fully removed
                 if is_b_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                       label="after RESTART eviction")
+                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after RESTART eviction")
 
                 time.sleep(0.01)
 
@@ -337,14 +351,13 @@ def test_cross_framework_eviction_restart(tool_a_factory, tool_b_factory):
                 assert result_a2.success, "Evicted tool should auto-restart"
 
                 status = dm.get_device_status()
-                assert status["allocations"]["inst_a"]["device_id"] == "cuda:0", \
+                assert status["allocations"]["inst_a"]["device_id"] == "cuda:0", (
                     "Tool A should be back on GPU after restart"
-                assert "inst_b" not in status["allocations"], \
-                    "Tool B should be removed with RESTART strategy"
+                )
+                assert "inst_b" not in status["allocations"], "Tool B should be removed with RESTART strategy"
 
                 if is_a_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                       label="after tool A round-trip restart")
+                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A round-trip restart")
     finally:
         _teardown()
 
@@ -366,8 +379,7 @@ def test_three_tool_eviction_chain():
             result = _run_tool(_pytorch_tool, "pt")
             assert result.success
             assert dm.get_device_status()["allocations"]["pt"]["device_id"] == "cuda:0"
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                               label="PyTorch loaded")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="PyTorch loaded")
 
             time.sleep(0.01)
 
@@ -381,8 +393,7 @@ def test_three_tool_eviction_chain():
                 else:
                     assert status["allocations"]["pt"]["device_id"] == "cpu"
                 assert status["allocations"]["jx"]["device_id"] == "cuda:0"
-                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                                   label="JAX replaced PyTorch")
+                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="JAX replaced PyTorch")
 
                 time.sleep(0.01)
 
@@ -409,6 +420,7 @@ def test_three_tool_eviction_chain():
 
 # ── Config-driven device movement ──────────────────────────────────────
 
+
 @pytest.mark.uses_gpu(2)
 @pytest.mark.slow
 @pytest.mark.parametrize("tool_factory", _PERSISTENT_GPU_TOOLS)
@@ -425,15 +437,13 @@ def test_config_moves_between_gpus(tool_factory):
             assert result.success
 
             assert dm.get_device_status()["allocations"]["mover"]["device_id"] == "cuda:0"
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                               label="after loading on cuda:0")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading on cuda:0")
 
             # Re-run with device=cuda:1; mismatch detection should move it
             result2 = _run_tool(tool_factory, "mover", device="cuda:1")
             assert result2.success, "Should work after config-driven move"
             assert dm.get_device_status()["allocations"]["mover"]["device_id"] == "cuda:1"
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:1"], freed=["cuda:0"],
-                               label="after move to cuda:1")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:1"], freed=["cuda:0"], label="after move to cuda:1")
     finally:
         _teardown()
 
@@ -456,15 +466,13 @@ def test_config_gpu_cpu_gpu_multi_gpu(tool_factory):
             status = dm.get_device_status()
             assert "cuda:0" in status["allocations"]["bouncer"]["device_id"]
             assert "cuda:1" in status["allocations"]["bouncer"]["device_id"]
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                               label="after loading on both GPUs")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"], label="after loading on both GPUs")
 
             # Run with device=cpu; mismatch detection should move to CPU
             result2 = _run_tool(tool_factory, "bouncer", device="cpu")
             assert result2.success, "Should work on CPU"
             assert dm.get_device_status()["allocations"]["bouncer"]["device_id"] == "cpu"
-            _assert_gpu_memory(dm, baseline, freed=["cuda:0", "cuda:1"],
-                               label="after move to CPU")
+            _assert_gpu_memory(dm, baseline, freed=["cuda:0", "cuda:1"], label="after move to CPU")
 
             # Run with device back on GPUs; should move back
             result3 = _run_tool(tool_factory, "bouncer", device="cuda:0,cuda:1")
@@ -472,13 +480,13 @@ def test_config_gpu_cpu_gpu_multi_gpu(tool_factory):
             status = dm.get_device_status()
             assert "cuda:0" in status["allocations"]["bouncer"]["device_id"]
             assert "cuda:1" in status["allocations"]["bouncer"]["device_id"]
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                               label="after move back to GPUs")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"], label="after move back to GPUs")
     finally:
         _teardown()
 
 
 # ── Worker lifecycle ────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
@@ -495,22 +503,19 @@ def test_shutdown_and_auto_restart(tool_factory):
         result = _run_tool(tool_factory, "restarter")
         assert result.success
         assert inst._worker is not None
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                           label="after loading")
+        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading")
 
         # Kill the worker; GPU memory should return to baseline
         inst.shutdown(remove_from_cache=False)
         assert inst._worker is None
-        _assert_gpu_memory(dm, baseline, freed=["cuda:0"],
-                           label="after shutdown")
+        _assert_gpu_memory(dm, baseline, freed=["cuda:0"], label="after shutdown")
 
         # Next call should auto-restart; GPU memory should rise again
         result2 = _run_tool(tool_factory, "restarter")
         assert result2.success, "Should auto-restart after shutdown"
         assert inst._worker is not None, "Worker should be back"
         assert "restarter" in dm.get_device_status()["allocations"]
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                           label="after auto-restart")
+        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after auto-restart")
     finally:
         _teardown()
 
@@ -528,8 +533,7 @@ def test_evict_then_restart_preserves_correctness():
         result1 = _run_tool(_pytorch_tool, "a")
         assert result1.success
         first_output = result1.results  # Save for comparison
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                           label="after loading tool A")
+        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
 
         time.sleep(0.01)
 
@@ -541,21 +545,19 @@ def test_evict_then_restart_preserves_correctness():
             assert "a" not in dm.get_device_status()["allocations"]
 
             # Tool B now occupies cuda:0 (tool A fully gone)
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                               label="after RESTART eviction, tool B loaded")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after RESTART eviction, tool B loaded")
 
         # Re-run A; should restart and produce same-shape output
         result2 = _run_tool(_pytorch_tool, "a")
         assert result2.success
-        assert len(result2.results) == len(first_output), \
-            "Restarted tool should produce same-shape output"
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                           label="after tool A restart")
+        assert len(result2.results) == len(first_output), "Restarted tool should produce same-shape output"
+        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A restart")
     finally:
         _teardown()
 
 
 # ── Multi-GPU stress ────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu(2)
 @pytest.mark.slow
@@ -580,8 +582,7 @@ def test_multi_gpu_tool_evicts_two_single_gpu_tools():
                 status = dm.get_device_status()
                 assert status["allocations"]["pt"]["device_id"] == "cuda:0"
                 assert status["allocations"]["jx"]["device_id"] == "cuda:1"
-                _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                                   label="both GPUs occupied")
+                _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"], label="both GPUs occupied")
 
                 time.sleep(0.01)
 
@@ -599,8 +600,7 @@ def test_multi_gpu_tool_evicts_two_single_gpu_tools():
                         assert status["allocations"]["jx"]["device_id"] == "cpu"
                     assert "cuda:0" in status["allocations"]["mg"]["device_id"]
                     assert "cuda:1" in status["allocations"]["mg"]["device_id"]
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                                       label="multi-GPU tool replaced both")
+                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"], label="multi-GPU tool replaced both")
 
                     # Evicted tools still work (auto-restart if needed)
                     assert _run_tool(_pytorch_tool, "pt").success
@@ -627,8 +627,7 @@ def test_single_gpu_tool_evicts_multi_gpu_tool():
             status = dm.get_device_status()
             assert "cuda:0" in status["allocations"]["mg"]["device_id"]
             assert "cuda:1" in status["allocations"]["mg"]["device_id"]
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                               label="multi-GPU tool on both GPUs")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"], label="multi-GPU tool on both GPUs")
 
             time.sleep(0.01)
 
@@ -652,8 +651,9 @@ def test_single_gpu_tool_evicts_multi_gpu_tool():
                         status["allocations"]["jx1"]["device_id"],
                     }
                     assert single_devices == {"cuda:0", "cuda:1"}
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0", "cuda:1"],
-                                       label="single-GPU tools replaced multi-GPU")
+                    _assert_gpu_memory(
+                        dm, baseline, loaded=["cuda:0", "cuda:1"], label="single-GPU tools replaced multi-GPU"
+                    )
     finally:
         _teardown()
 
@@ -690,8 +690,7 @@ def test_rapid_eviction_cycle():
         for cycle in range(2):
             for _, factory, inst_name in tools:
                 result = _run_tool(factory, inst_name)
-                assert result.success, \
-                    f"Cycle {cycle}, {inst_name} failed: {result.errors}"
+                assert result.success, f"Cycle {cycle}, {inst_name} failed: {result.errors}"
                 time.sleep(0.01)
 
         status = dm.get_device_status()
@@ -704,44 +703,35 @@ def test_rapid_eviction_cycle():
                 for name, alloc in status["allocations"].items()
                 if alloc["device_id"].startswith("cuda:")
             }
-            assert len(gpu_allocs) == 2, (
-                f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
-            )
+            assert len(gpu_allocs) == 2, f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
         else:
             # CPU: all tools still tracked, 1 on CPU
             for _, _, inst_name in tools:
-                assert inst_name in status["allocations"], \
-                    f"{inst_name} should still be tracked after rapid cycling"
+                assert inst_name in status["allocations"], f"{inst_name} should still be tracked after rapid cycling"
 
             gpu_allocs = {
                 name: alloc["device_id"]
                 for name, alloc in status["allocations"].items()
                 if alloc["device_id"].startswith("cuda:")
             }
-            cpu_allocs = [
-                name for name, alloc in status["allocations"].items()
-                if alloc["device_id"] == "cpu"
-            ]
-            assert len(gpu_allocs) == 2, (
-                f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
-            )
-            assert len(cpu_allocs) == 1, (
-                f"Exactly 1 tool should be on CPU (got {len(cpu_allocs)}: {cpu_allocs})"
-            )
+            cpu_allocs = [name for name, alloc in status["allocations"].items() if alloc["device_id"] == "cpu"]
+            assert len(gpu_allocs) == 2, f"Exactly 2 tools should be on GPUs (got {len(gpu_allocs)}: {gpu_allocs})"
+            assert len(cpu_allocs) == 1, f"Exactly 1 tool should be on CPU (got {len(cpu_allocs)}: {cpu_allocs})"
 
         # Assert memory on devices with persistent (non-CLI) tools.
         # CLI tools auto-unload so their device won't show model memory.
         persistent_gpu_devices = [
-            alloc["device_id"] for name, alloc in status["allocations"].items()
+            alloc["device_id"]
+            for name, alloc in status["allocations"].items()
             if alloc["device_id"].startswith("cuda:") and name not in cli_instances
         ]
-        _assert_gpu_memory(dm, baseline, loaded=persistent_gpu_devices,
-                           label="after rapid cycling")
+        _assert_gpu_memory(dm, baseline, loaded=persistent_gpu_devices, label="after rapid cycling")
     finally:
         _teardown()
 
 
 # ── Multiple tools per device ───────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu(1)
 @pytest.mark.slow
@@ -763,8 +753,7 @@ def test_two_tools_share_one_gpu():
 
             status = dm.get_device_status()
             assert status["allocations"]["pt"]["device_id"] == "cuda:0"
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"],
-                               label="first tool on cuda:0")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="first tool on cuda:0")
 
             # Snapshot after first tool is loaded
             after_one = _snapshot_gpu_memory(dm)
@@ -778,7 +767,6 @@ def test_two_tools_share_one_gpu():
                 assert status["allocations"]["jx"]["device_id"] == "cuda:0"
 
                 # Memory should be roughly double; second tool added more
-                _assert_gpu_memory(dm, after_one, loaded=["cuda:0"],
-                                   label="second tool also on cuda:0")
+                _assert_gpu_memory(dm, after_one, loaded=["cuda:0"], label="second tool also on cuda:0")
     finally:
         _teardown()

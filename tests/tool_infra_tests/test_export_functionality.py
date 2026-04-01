@@ -65,7 +65,9 @@ def validate_export_output(export_path: Path) -> bool:
             logger.warning("Export path exists and is a directory, but no non-empty files found")
             return False
 
-        logger.debug(f"Valid export output directory found at {export_path} with {len(non_empty_files)} non-empty files")
+        logger.debug(
+            f"Valid export output directory found at {export_path} with {len(non_empty_files)} non-empty files"
+        )
         return True
 
     logger.warning(f"Export path exists, but is not a file or directory: {export_path}")
@@ -115,10 +117,7 @@ def validate_output(output: BaseToolOutput, check_export: bool = True):
 
             # Pattern 3: Sibling-file export (multiple files in parent dir with name prefix)
             parent_dir = export_path.parent
-            sibling_files = [
-                f for f in parent_dir.glob(f"{export_path.stem}*")
-                if f.is_file() and f.stat().st_size > 0
-            ]
+            sibling_files = [f for f in parent_dir.glob(f"{export_path.stem}*") if f.is_file() and f.stat().st_size > 0]
             if sibling_files:
                 return
 
@@ -154,10 +153,7 @@ class MockToolOutputBase(BaseToolOutput):
 class MockToolOutput(BaseToolOutput):
     """Mock tool output for testing export functionality."""
 
-    data: list[str] = Field(
-        default_factory=list,
-        description="Mock data for testing"
-    )
+    data: list[str] = Field(default_factory=list, description="Mock data for testing")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -191,10 +187,7 @@ class MockToolOutput(BaseToolOutput):
 
 def test_validate_output_successful():
     """Test validate_output with successful tool output."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1", "item2", "item3"]
-    )
+    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
 
     # Should not raise any assertions
     validate_output(output)
@@ -202,10 +195,7 @@ def test_validate_output_successful():
 
 def test_validate_output_failed_execution():
     """Test validate_output fails when tool execution failed."""
-    output = MockToolOutput(
-        success=False,
-        data=[]
-    )
+    output = MockToolOutput(success=False, data=[])
 
     with pytest.raises(AssertionError, match="Tool execution failed"):
         validate_output(output)
@@ -213,6 +203,7 @@ def test_validate_output_failed_execution():
 
 def test_validate_output_with_empty_export():
     """Test validate_output fails when export creates empty output."""
+
     class _EmptyExportOutput(BaseToolOutput):
         @property
         def output_format_options(self) -> list[str]:
@@ -305,10 +296,7 @@ def test_validate_nested_directory_structure(tmp_path):
 
 def test_export_with_default_format(tmp_path):
     """Test exporting with default format."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1", "item2", "item3"]
-    )
+    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
 
     output.export(name="test_output", export_path=tmp_path)
 
@@ -319,10 +307,7 @@ def test_export_with_default_format(tmp_path):
 
 def test_export_with_custom_format(tmp_path):
     """Test exporting with specific format."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1", "item2", "item3"]
-    )
+    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
 
     output.export(name="test_output", export_path=tmp_path, file_format="json")
 
@@ -338,10 +323,7 @@ def test_export_with_custom_format(tmp_path):
 
 def test_export_all_supported_formats(tmp_path):
     """Test exporting with all supported formats."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1", "item2"]
-    )
+    output = MockToolOutput(success=True, data=["item1", "item2"])
 
     for fmt in output.output_format_options:
         export_dir = tmp_path / fmt
@@ -354,10 +336,7 @@ def test_export_all_supported_formats(tmp_path):
 
 def test_export_invalid_format_raises_error(tmp_path):
     """Test that invalid format raises ValueError."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1"]
-    )
+    output = MockToolOutput(success=True, data=["item1"])
 
     with pytest.raises(ValueError, match="Invalid file format"):
         output.export(name="test_output", export_path=tmp_path, file_format="invalid")
@@ -365,10 +344,7 @@ def test_export_invalid_format_raises_error(tmp_path):
 
 def test_export_without_export_path(tmp_path):
     """Test export without specifying export_path uses cwd."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1"]
-    )
+    output = MockToolOutput(success=True, data=["item1"])
 
     original_cwd = os.getcwd()
     try:
@@ -383,10 +359,7 @@ def test_export_without_export_path(tmp_path):
 
 def test_export_creates_parent_directories(tmp_path):
     """Test that export creates parent directories if they don't exist."""
-    output = MockToolOutput(
-        success=True,
-        data=["item1"]
-    )
+    output = MockToolOutput(success=True, data=["item1"])
 
     nested_path = tmp_path / "parent" / "child"
     # Don't create the directory - export should handle it
@@ -399,10 +372,7 @@ def test_export_creates_parent_directories(tmp_path):
 
 def test_export_empty_data(tmp_path):
     """Test exporting with empty data still creates output."""
-    output = MockToolOutput(
-        success=True,
-        data=[]
-    )
+    output = MockToolOutput(success=True, data=[])
 
     output.export(name="test_output", export_path=tmp_path)
 
@@ -439,12 +409,7 @@ class _MultiFileOutput(BaseToolOutput):
 def test_multi_file_export(tmp_path):
     """Test validation works with multi-file exports."""
     output = _MultiFileOutput(
-        success=True,
-        files={
-            "file1.txt": "content1",
-            "file2.txt": "content2",
-            "file3.txt": "content3"
-        }
+        success=True, files={"file1.txt": "content1", "file2.txt": "content2", "file3.txt": "content3"}
     )
 
     output.export(name="test_output", export_path=tmp_path)

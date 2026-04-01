@@ -1,4 +1,5 @@
 """Mutagenesis tools: CPU-based random sampling for proteins and nucleotides."""
+
 from proto_tools.tools.mutagenesis.codons import (
     CODON_TO_AA,
     COMMON_CODON_SCHEMES,

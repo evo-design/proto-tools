@@ -48,18 +48,13 @@ def _find_tool_config(tool_name: str) -> Path:
     tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> proto_tools/ -> tools/
 
     for item in tools_dir.rglob("*"):
-        if (
-            item.is_dir()
-            and item.name == tool_name
-            and (item / "standalone").exists()
-        ):
+        if item.is_dir() and item.name == tool_name and (item / "standalone").exists():
             config_path = item / "standalone" / "binary_config.py"
             if config_path.exists():
                 return config_path
 
     raise ValueError(
-        f"No binary_config.py found for tool: {tool_name}. "
-        f"Expected at: <tool_dir>/standalone/binary_config.py"
+        f"No binary_config.py found for tool: {tool_name}. Expected at: <tool_dir>/standalone/binary_config.py"
     )
 
 
@@ -123,10 +118,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
 
     # Validate download integrity
     if total > 0 and downloaded != total:
-        raise OSError(
-            f"Download incomplete: got {downloaded} bytes, "
-            f"expected {total} bytes from {url}"
-        )
+        raise OSError(f"Download incomplete: got {downloaded} bytes, expected {total} bytes from {url}")
 
 
 def install_binary(tool_name: str) -> None:
@@ -156,8 +148,7 @@ def install_binary(tool_name: str) -> None:
         if os_matches:
             fallback_key = next(iter(os_matches))
             warnings.warn(
-                f"No native {machine} binary for {tool_name}, "
-                f"falling back to {fallback_key[1]}.", stacklevel=2
+                f"No native {machine} binary for {tool_name}, falling back to {fallback_key[1]}.", stacklevel=2
             )
             key = fallback_key
             url = os_matches[fallback_key]
@@ -201,8 +192,7 @@ def install_binary(tool_name: str) -> None:
                 print(f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}")
 
     raise RuntimeError(
-        f"Failed to download {tool_name} after {_MAX_DOWNLOAD_RETRIES} attempts. "
-        f"Last error: {last_error}"
+        f"Failed to download {tool_name} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}"
     )
 
 

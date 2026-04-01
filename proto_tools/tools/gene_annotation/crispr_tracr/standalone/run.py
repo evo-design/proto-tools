@@ -58,6 +58,7 @@ def _find_crispr_tracr_script() -> str:
 
     # Try to find it on PATH
     import shutil
+
     which_result = shutil.which("CRISPRtracrRNA.py")
     if which_result:
         return which_result
@@ -93,19 +94,10 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
                     if acc_id and acc_id not in results_by_id:
                         # CRISPRtracrRNA complete_run mode uses anti_repeat_start/end
                         # and tracr_rna_sequence columns, not tracr_start/end/hit.
-                        tracr_start = _safe_int(
-                            row.get("anti_repeat_start", row.get("tracr_start"))
-                        )
-                        tracr_end = _safe_int(
-                            row.get("anti_repeat_end", row.get("tracr_end"))
-                        )
-                        tracr_hit = (
-                            row.get("tracr_rna_sequence")
-                            or row.get("tracr_hit")
-                        )
-                        interaction_energy = _safe_float(
-                            row.get("interaction_energy")
-                        )
+                        tracr_start = _safe_int(row.get("anti_repeat_start", row.get("tracr_start")))
+                        tracr_end = _safe_int(row.get("anti_repeat_end", row.get("tracr_end")))
+                        tracr_hit = row.get("tracr_rna_sequence") or row.get("tracr_hit")
+                        interaction_energy = _safe_float(row.get("interaction_energy"))
                         results_by_id[acc_id] = {
                             "sequence_id": acc_id,
                             "tracr_start": tracr_start,
@@ -115,9 +107,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
                             "anti_repeat_similarity_coverage_multiplication": _safe_float(
                                 row.get("anti_repeat_similarity_coverage_multiplication")
                             ),
-                            "intarna_anti_repeat_interaction": row.get(
-                                "intarna_anti_repeat_interaction"
-                            ),
+                            "intarna_anti_repeat_interaction": row.get("intarna_anti_repeat_interaction"),
                         }
         except Exception as e:  # noqa: PERF203 -- per-file error handling
             print(f"Warning: Failed to parse {csv_file}: {e}", file=sys.stderr)
@@ -125,8 +115,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
 
     if not results_by_id and sequence_ids:
         print(
-            f"Warning: No tracrRNA CSV output files found in {output_dir} "
-            f"for {len(sequence_ids)} input sequences",
+            f"Warning: No tracrRNA CSV output files found in {output_dir} for {len(sequence_ids)} input sequences",
             file=sys.stderr,
         )
 
@@ -136,15 +125,17 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
         if seq_id in results_by_id:
             predictions.append(results_by_id[seq_id])
         else:
-            predictions.append({
-                "sequence_id": seq_id,
-                "tracr_start": None,
-                "tracr_end": None,
-                "tracr_hit": None,
-                "interaction_energy": None,
-                "anti_repeat_similarity_coverage_multiplication": None,
-                "intarna_anti_repeat_interaction": None,
-            })
+            predictions.append(
+                {
+                    "sequence_id": seq_id,
+                    "tracr_start": None,
+                    "tracr_end": None,
+                    "tracr_hit": None,
+                    "interaction_energy": None,
+                    "anti_repeat_similarity_coverage_multiplication": None,
+                    "intarna_anti_repeat_interaction": None,
+                }
+            )
 
     return predictions
 
@@ -263,11 +254,16 @@ def _run_tracr_batch(
         cmd = [
             sys.executable,
             crispr_tracr_script,
-            "--input_folder", str(input_dir),
-            "--output_folder", str(output_dir),
-            "--temp_folder_path", str(tmp_dir),
-            "--model_type", model_type,
-            "--run_type", run_type,
+            "--input_folder",
+            str(input_dir),
+            "--output_folder",
+            str(output_dir),
+            "--temp_folder_path",
+            str(tmp_dir),
+            "--model_type",
+            model_type,
+            "--run_type",
+            run_type,
         ]
 
         try:
@@ -281,23 +277,19 @@ def _run_tracr_batch(
             )
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(
-                f"CRISPRtracrRNA.py batch {batch_idx} timed out after "
-                f"{max(600, len(sequences) * 120)} seconds"
+                f"CRISPRtracrRNA.py batch {batch_idx} timed out after {max(600, len(sequences) * 120)} seconds"
             ) from e
 
         if proc.returncode != 0:
             print(
-                f"Batch {batch_idx}: CRISPRtracrRNA.py exited with code "
-                f"{proc.returncode}",
+                f"Batch {batch_idx}: CRISPRtracrRNA.py exited with code {proc.returncode}",
                 file=sys.stderr,
             )
             print(proc.stderr, file=sys.stderr)
 
         predictions = _parse_tracr_results(output_dir, sequence_ids)
 
-        if proc.returncode != 0 and not any(
-            p.get("tracr_start") is not None for p in predictions
-        ):
+        if proc.returncode != 0 and not any(p.get("tracr_start") is not None for p in predictions):
             # CRISPRtracrRNA can crash on sequences where fasta36 finds no
             # anti-repeat hits (IndexError in anti_repeat_search.py).  This
             # is expected for some generated sequences. Treat as "no
@@ -343,8 +335,13 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
     # Single-worker fast path
     if num_workers <= 1 or len(sequences) <= 1:
         predictions = _run_tracr_batch(
-            sequences, sequence_ids, model_type, run_type,
-            crispr_tracr_script, tracr_install_dir, run_env,
+            sequences,
+            sequence_ids,
+            model_type,
+            run_type,
+            crispr_tracr_script,
+            tracr_install_dir,
+            run_env,
             batch_idx=0,
         )
         return {"predictions": predictions}
@@ -354,15 +351,14 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
     batch_size = math.ceil(len(sequences) / num_workers)
     batches = [
         (
-            sequences[i:i + batch_size],
-            sequence_ids[i:i + batch_size],
+            sequences[i : i + batch_size],
+            sequence_ids[i : i + batch_size],
         )
         for i in range(0, len(sequences), batch_size)
     ]
 
     print(
-        f"Running CRISPRtracrRNA with {len(batches)} parallel workers "
-        f"({batch_size} sequences/batch)",
+        f"Running CRISPRtracrRNA with {len(batches)} parallel workers ({batch_size} sequences/batch)",
         file=sys.stderr,
     )
 
@@ -376,8 +372,13 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
         for idx, (batch_seqs, batch_ids) in enumerate(batches):
             future = executor.submit(
                 _run_tracr_batch,
-                batch_seqs, batch_ids, model_type, run_type,
-                crispr_tracr_script, tracr_install_dir, run_env,
+                batch_seqs,
+                batch_ids,
+                model_type,
+                run_type,
+                crispr_tracr_script,
+                tracr_install_dir,
+                run_env,
                 batch_idx=idx,
             )
             future_to_idx[future] = idx
@@ -409,8 +410,7 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
 
     if batch_errors:
         print(
-            f"WARNING: {len(batch_errors)}/{len(batches)} batches failed: "
-            f"{batch_errors}",
+            f"WARNING: {len(batch_errors)}/{len(batches)} batches failed: {batch_errors}",
             file=sys.stderr,
         )
 
@@ -430,6 +430,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

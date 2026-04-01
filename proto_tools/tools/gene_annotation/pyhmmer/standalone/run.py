@@ -99,12 +99,8 @@ def _convert_hits_to_dicts(
                 "query_description": query_description,
                 "query_idx": query_idx,
                 "target_name": _convert_query_field(hit.name),
-                "target_accession": (
-                    _convert_query_field(hit.accession) if hit.accession else "-"
-                ),
-                "target_description": (
-                    _convert_query_field(hit.description) if hit.description else "-"
-                ),
+                "target_accession": (_convert_query_field(hit.accession) if hit.accession else "-"),
+                "target_description": (_convert_query_field(hit.description) if hit.description else "-"),
                 "evalue": float(hit.evalue),
                 "score": float(hit.score),
                 "bias": float(hit.bias),
@@ -124,12 +120,8 @@ def _convert_hits_to_dicts(
                     "query_description": query_description,
                     "query_idx": query_idx,
                     "target_name": _convert_query_field(hit.name),
-                    "target_accession": (
-                        _convert_query_field(hit.accession) if hit.accession else "-"
-                    ),
-                    "target_description": (
-                        _convert_query_field(hit.description) if hit.description else "-"
-                    ),
+                    "target_accession": (_convert_query_field(hit.accession) if hit.accession else "-"),
+                    "target_description": (_convert_query_field(hit.description) if hit.description else "-"),
                     "hmm_length": int(domain.alignment.hmm_length),
                     "hmm_from": int(domain.alignment.hmm_from),
                     "hmm_to": int(domain.alignment.hmm_to),
@@ -170,9 +162,7 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
         Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
     """
     hmms = _create_hmms_from_file(input_data["hmm_path"])
-    sequences = _create_sequences_from_strings(
-        input_data["sequences"], alphabet="amino"
-    )
+    sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
 
     query_hits = list(
         pyhmmer.hmmsearch(
@@ -186,9 +176,7 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    sequence_hits, domain_hits = _convert_hits_to_dicts(
-        hits=query_hits, queries=hmms
-    )
+    sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=hmms)
 
     return {
         "sequence_hits": sequence_hits,
@@ -210,9 +198,7 @@ def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
         Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
     """
     hmms = _create_hmms_from_file(input_data["hmm_db_path"])
-    sequences = _create_sequences_from_strings(
-        input_data["sequences"], alphabet="amino"
-    )
+    sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
 
     query_hits = list(
         pyhmmer.hmmscan(
@@ -226,9 +212,7 @@ def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    sequence_hits, domain_hits = _convert_hits_to_dicts(
-        hits=query_hits, queries=sequences
-    )
+    sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=sequences)
 
     return {
         "sequence_hits": sequence_hits,
@@ -249,12 +233,8 @@ def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dict with keys: sequence_hits (list of dicts), domain_hits (list of dicts)
     """
-    query_sequences = _create_sequences_from_strings(
-        input_data["sequences"], alphabet="amino"
-    )
-    target_sequences = _create_sequences_from_strings(
-        input_data["target_sequences"], alphabet="amino"
-    )
+    query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
+    target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
     query_hits = list(
         pyhmmer.phmmer(
@@ -268,9 +248,7 @@ def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    sequence_hits, domain_hits = _convert_hits_to_dicts(
-        hits=query_hits, queries=query_sequences
-    )
+    sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
     return {
         "sequence_hits": sequence_hits,
@@ -282,12 +260,8 @@ def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER nhmmer (nucleotide sequences vs nucleotide sequences)."""
-    query_sequences = _create_sequences_from_strings(
-        input_data["sequences"], alphabet="dna"
-    )
-    target_sequences = _create_sequences_from_strings(
-        input_data["target_sequences"], alphabet="dna"
-    )
+    query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="dna")
+    target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="dna")
 
     query_hits = list(
         pyhmmer.nhmmer(
@@ -301,9 +275,7 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    sequence_hits, domain_hits = _convert_hits_to_dicts(
-        hits=query_hits, queries=query_sequences
-    )
+    sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
     return {
         "sequence_hits": sequence_hits,
@@ -315,12 +287,8 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER jackhmmer (iterative protein sequence search)."""
-    query_sequences = _create_sequences_from_strings(
-        input_data["sequences"], alphabet="amino"
-    )
-    target_sequences = _create_sequences_from_strings(
-        input_data["target_sequences"], alphabet="amino"
-    )
+    query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
+    target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
     iteration_results = list(
         pyhmmer.jackhmmer(
@@ -337,9 +305,7 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     )
 
     final_hits = [result.hits for result in iteration_results]
-    sequence_hits, domain_hits = _convert_hits_to_dicts(
-        hits=final_hits, queries=query_sequences
-    )
+    sequence_hits, domain_hits = _convert_hits_to_dicts(hits=final_hits, queries=query_sequences)
 
     return {
         "sequence_hits": sequence_hits,
@@ -354,6 +320,7 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""

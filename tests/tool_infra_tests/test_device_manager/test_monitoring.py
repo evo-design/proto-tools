@@ -9,6 +9,7 @@ from proto_tools.utils.device_manager import DeviceManager
 
 # ── Status monitoring tests ──────────────────────────────────────────────
 
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_get_device_status_with_tools():
@@ -60,6 +61,7 @@ def test_get_device_status_with_tools():
 
 
 # ── Memory tracking tests ────────────────────────────────────────────────
+
 
 def test_get_gpu_memory_used_cpu_device(device_manager):
     """Test get_gpu_memory_used returns 0 for CPU devices."""

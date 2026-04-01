@@ -63,9 +63,7 @@ def _process_sequence(
             "strand": "+" if gene.strand == 1 else "-",
             # Forward (+): translation starts at gene.begin
             # Reverse (-): translation starts at gene.end (reads backward)
-            "frame": ((gene.begin - 1) % 3) + 1
-            if gene.strand == 1
-            else ((gene.end - 1) % 3) + 1,
+            "frame": ((gene.begin - 1) % 3) + 1 if gene.strand == 1 else ((gene.end - 1) % 3) + 1,
             "amino_acid_sequence": protein_seq,
             "nucleotide_sequence": nucleotide_seq,
             "amino_acid_length": len(protein_seq),
@@ -126,10 +124,7 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
         all_results = [orfs for _, orfs in results]
     else:
         # Sequential
-        all_results = [
-            _process_sequence(gene_finder, (i, seq))[1]
-            for i, seq in enumerate(sequences)
-        ]
+        all_results = [_process_sequence(gene_finder, (i, seq))[1] for i, seq in enumerate(sequences)]
 
     return {"predicted_orfs": all_results}
 
@@ -142,6 +137,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""

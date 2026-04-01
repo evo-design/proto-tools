@@ -2,6 +2,7 @@
 
 AlphaGenome batched interval scoring tool.
 """
+
 from __future__ import annotations
 
 import csv
@@ -210,8 +211,5 @@ def run_alphagenome_score_intervals(
     )
 
     scores = dispatch_result["scores"]
-    outputs = [
-        AlphaGenomeScoreOutput(scores=score_list)
-        for score_list in scores
-    ]
+    outputs = [AlphaGenomeScoreOutput(scores=score_list) for score_list in scores]
     return AlphaGenomeScoreIntervalsOutput(results=outputs)

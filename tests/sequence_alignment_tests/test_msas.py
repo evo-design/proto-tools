@@ -38,7 +38,9 @@ def sample_fasta_file(tmp_path, sample_aligned_sequences, sample_sequence_ids):
     """Create a temporary FASTA file with sample sequences."""
     fasta_path = tmp_path / "test_msa.fasta"
     with open(fasta_path, "w") as f:
-        f.writelines(f">{seq_id}\n{seq}\n" for seq_id, seq in zip(sample_sequence_ids, sample_aligned_sequences, strict=False))
+        f.writelines(
+            f">{seq_id}\n{seq}\n" for seq_id, seq in zip(sample_sequence_ids, sample_aligned_sequences, strict=False)
+        )
     return fasta_path
 
 
@@ -64,6 +66,7 @@ def sample_a3m_file(tmp_path):
 
 
 # -- Init with sequences --
+
 
 def test_msa_init_with_sequences(sample_aligned_sequences):
     """Test initialization with a list of aligned sequences."""
@@ -96,6 +99,7 @@ def test_msa_init_with_single_sequence():
 
 
 # -- Init with files --
+
 
 def test_msa_init_with_fasta_file(sample_fasta_file, sample_aligned_sequences):
     """Test initialization with a FASTA file."""
@@ -139,6 +143,7 @@ def test_msa_init_with_single_sequence_file(tmp_path):
 
 # -- Memory strategy on init --
 
+
 def test_msa_init_small_file_converts_to_memory(sample_fasta_file):
     """Test that small files are loaded into memory."""
     msa = MSA(str(sample_fasta_file))
@@ -163,6 +168,7 @@ def test_msa_init_large_file_stays_file_backed(sample_fasta_file, monkeypatch):
 
 # -- __iter__ --
 
+
 def test_msa_iter_in_memory(sample_aligned_sequences):
     """Test __iter__ with in-memory MSA."""
     msa = MSA(sample_aligned_sequences)
@@ -185,6 +191,7 @@ def test_msa_iter_file_backed(sample_fasta_file, sample_aligned_sequences, monke
 
 # -- iter_with_ids --
 
+
 def test_msa_iter_with_ids_in_memory(sample_aligned_sequences, sample_sequence_ids):
     """Test iter_with_ids with in-memory MSA."""
     msa = MSA(sample_aligned_sequences, sequence_ids=sample_sequence_ids)
@@ -198,9 +205,7 @@ def test_msa_iter_with_ids_in_memory(sample_aligned_sequences, sample_sequence_i
         assert seq == expected_seq
 
 
-def test_msa_iter_with_ids_file_backed(
-    sample_fasta_file, sample_sequence_ids, sample_aligned_sequences, monkeypatch
-):
+def test_msa_iter_with_ids_file_backed(sample_fasta_file, sample_sequence_ids, sample_aligned_sequences, monkeypatch):
     """Test iter_with_ids with file-backed MSA."""
     # Mock MAX_SEQS_IN_MEMORY to be smaller than our file (4 sequences)
     monkeypatch.setattr(msas_module, "MAX_SEQS_IN_MEMORY", 2)
@@ -222,6 +227,7 @@ def test_msa_iter_with_ids_file_backed(
 
 # -- __getitem__ and __len__ --
 
+
 def test_msa_getitem(sample_aligned_sequences):
     """Test __getitem__ indexing."""
     msa = MSA(sample_aligned_sequences)
@@ -231,9 +237,7 @@ def test_msa_getitem(sample_aligned_sequences):
     assert msa[-1] == sample_aligned_sequences[-1]
 
 
-def test_msa_getitem_file_backed(
-    sample_fasta_file, sample_aligned_sequences, monkeypatch
-):
+def test_msa_getitem_file_backed(sample_fasta_file, sample_aligned_sequences, monkeypatch):
     """Test __getitem__ with file-backed MSA."""
     # Mock MAX_SEQS_IN_MEMORY to be smaller than our file (4 sequences)
     monkeypatch.setattr(msas_module, "MAX_SEQS_IN_MEMORY", 2)
@@ -258,6 +262,7 @@ def test_msa_len(sample_aligned_sequences):
 
 # -- aligned_sequences --
 
+
 def test_msa_aligned_sequences_in_memory(sample_aligned_sequences):
     """Test aligned_sequences property with in-memory MSA."""
     msa = MSA(sample_aligned_sequences)
@@ -277,6 +282,7 @@ def test_msa_aligned_sequences_file_backed_conversion(sample_fasta_file):
 
 # -- original_sequences --
 
+
 def test_msa_original_sequences(sample_aligned_sequences):
     """Test original_sequences property removes gaps."""
     msa = MSA(sample_aligned_sequences)
@@ -287,6 +293,7 @@ def test_msa_original_sequences(sample_aligned_sequences):
 
 
 # -- alignment_length and num_sequences --
+
 
 def test_msa_alignment_length(sample_aligned_sequences):
     """Test alignment_length property."""
@@ -302,6 +309,7 @@ def test_msa_num_sequences(sample_aligned_sequences):
 
 # -- gap statistics --
 
+
 def test_msa_total_gaps_in_memory(sample_aligned_sequences):
     """Test total_gaps property with in-memory MSA."""
     msa = MSA(sample_aligned_sequences)
@@ -309,9 +317,7 @@ def test_msa_total_gaps_in_memory(sample_aligned_sequences):
     assert msa.total_gaps == expected_gaps
 
 
-def test_msa_total_gaps_file_backed(
-    sample_fasta_file, sample_aligned_sequences, monkeypatch
-):
+def test_msa_total_gaps_file_backed(sample_fasta_file, sample_aligned_sequences, monkeypatch):
     """Test total_gaps property with file-backed MSA."""
     # Mock MAX_SEQS_IN_MEMORY to be smaller than our file (4 sequences)
     monkeypatch.setattr(msas_module, "MAX_SEQS_IN_MEMORY", 2)
@@ -354,6 +360,7 @@ def test_msa_average_gap_fraction_all_gaps():
 
 # -- get_column --
 
+
 def test_msa_get_column():
     """Test get_column method."""
     sequences = [
@@ -390,6 +397,7 @@ def test_msa_get_column_out_of_range(sample_aligned_sequences):
 
 
 # -- get_conservation --
+
 
 def test_msa_get_conservation_fully_conserved():
     """Test get_conservation with fully conserved position."""
@@ -439,6 +447,7 @@ def test_msa_get_conservation_all_gaps():
 
 
 # -- get_position_frequencies --
+
 
 def test_msa_get_position_frequencies():
     """Test get_position_frequencies method."""
@@ -497,6 +506,7 @@ def test_msa_get_position_frequencies_mixed():
 
 # -- FASTA output --
 
+
 def test_msa_to_fasta_string(sample_aligned_sequences, sample_sequence_ids):
     """Test to_fasta_string method."""
     msa = MSA(sample_aligned_sequences, sequence_ids=sample_sequence_ids)
@@ -549,6 +559,7 @@ def test_msa_to_fasta_file_from_file_backed(sample_fasta_file, tmp_path, monkeyp
 
 
 # -- A3M output --
+
 
 def test_msa_to_a3m_string(sample_sequence_ids):
     """Test to_a3m_string method."""
@@ -654,6 +665,7 @@ def test_msa_to_a3m_invalid_query_index():
 
 # -- Roundtrip tests --
 
+
 def test_msa_fasta_to_a3m_roundtrip(tmp_path):
     """Test converting FASTA -> A3M -> FASTA preserves alignment."""
     # Create original sequences with gaps
@@ -685,9 +697,9 @@ def test_msa_fasta_to_a3m_roundtrip(tmp_path):
     # The alignment should be preserved (gaps in query removed for all)
     # Expected after A3M conversion: positions where query has gaps are removed
     expected_sequences = [
-        "ACGTAAA",   # query gaps removed
+        "ACGTAAA",  # query gaps removed
         "ACGTGGAAA",  # insertions preserved
-        "ACGTAAA",   # gaps at insertion positions removed
+        "ACGTAAA",  # gaps at insertion positions removed
         "ACGTTTAAA",  # insertions preserved
     ]
 

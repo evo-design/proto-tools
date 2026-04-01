@@ -6,6 +6,7 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
+
 import json
 import re
 import subprocess
@@ -42,9 +43,7 @@ def run_usalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
             text=True,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"USalign failed with code {result.returncode}: {result.stderr}"
-            )
+            raise RuntimeError(f"USalign failed with code {result.returncode}: {result.stderr}")
 
     output = result.stdout
 

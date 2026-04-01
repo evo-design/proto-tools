@@ -48,6 +48,7 @@ class ViennaRNAInput(BaseToolInput):
         (containing T) will be converted to RNA (T -> U) before folding
         unless DNA parameters are explicitly loaded.
     """
+
     sequences: list[str] = InputField(description="List of input RNA sequences")
 
     @field_validator("sequences")
@@ -71,11 +72,11 @@ class ViennaRNAInput(BaseToolInput):
             invalid_chars = set(seq) - valid_chars
             if invalid_chars:
                 raise ValueError(
-                    f"Invalid nucleotide characters in sequence {seq_idx}: "
-                    f"{', '.join(sorted(invalid_chars))}"
+                    f"Invalid nucleotide characters in sequence {seq_idx}: {', '.join(sorted(invalid_chars))}"
                 )
 
         return sequences
+
 
 # Output:
 class ViennaRNAResult(BaseModel):
@@ -89,9 +90,11 @@ class ViennaRNAResult(BaseModel):
         structure (str | None): Predicted secondary structure in dot-bracket notation.
         mfe (float | None): Minimum free energy in kcal/mol.
     """
+
     sequence: str
     structure: str | None = None
     mfe: float | None = None
+
 
 # Output:
 class ViennaRNAOutput(BaseToolOutput):
@@ -103,6 +106,7 @@ class ViennaRNAOutput(BaseToolOutput):
             in dot-bracket notation, and the minimum free energy.
         metadata (dict[str, Any]): Additional information about the prediction run.
     """
+
     results: list[ViennaRNAResult] = Field(description="List of ViennaRNA results")
 
     @property
@@ -120,6 +124,7 @@ class ViennaRNAOutput(BaseToolOutput):
 
         if file_format == "csv":
             import csv
+
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(["sequence", "structure", "mfe"])
@@ -127,20 +132,22 @@ class ViennaRNAOutput(BaseToolOutput):
                     writer.writerow([r.sequence, r.structure, r.mfe])
 
         elif file_format == "json":
-             import json
-             data = [r.model_dump() for r in self.results]
-             with open(path, "w") as f:
-                 json.dump(data, f, indent=2)
+            import json
+
+            data = [r.model_dump() for r in self.results]
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
 
         elif file_format == "fasta":
-             with open(path, "w") as f:
-                 for i, r in enumerate(self.results):
-                     f.write(f">seq_{i} mfe={r.mfe}\n")
-                     f.write(f"{r.sequence}\n")
-                     if r.structure:
+            with open(path, "w") as f:
+                for i, r in enumerate(self.results):
+                    f.write(f">seq_{i} mfe={r.mfe}\n")
+                    f.write(f"{r.sequence}\n")
+                    if r.structure:
                         f.write(f"{r.structure}\n")
         else:
-             raise ValueError(f"Unsupported format: {file_format}")
+            raise ValueError(f"Unsupported format: {file_format}")
+
 
 # Config:
 class ViennaRNAConfig(BaseConfig):
@@ -162,6 +169,7 @@ class ViennaRNAConfig(BaseConfig):
             This can reduce artifacts in structure prediction. Default: False.
 
     """
+
     temperature: float = ConfigField(
         title="Temperature",
         default=37.0,
@@ -179,6 +187,7 @@ class ViennaRNAConfig(BaseConfig):
         description="Disallow lonely base pairs (helices of length 1)",
         advanced=True,
     )
+
 
 # ============================================================================
 # Tool Implementation
@@ -246,7 +255,6 @@ def run_viennarna(
           use_dna_params is True.
     """
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
-
 
     # Prepare input data for inference script
     input_data = {

@@ -175,9 +175,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         FileNotFoundError: If MAFFT is not installed.
 
     Examples:
-        >>> inputs = MafftInput(
-        ...     sequences=["MVLSPADKTN", "MVLSAADKTN", "MVLTPADKTN"]
-        ... )
+        >>> inputs = MafftInput(sequences=["MVLSPADKTN", "MVLSAADKTN", "MVLTPADKTN"])
         >>> config = MafftConfig(align_method="auto")
         >>> result = run_mafft_align(inputs, config)
         >>> print(f"Alignment length: {result.msa.alignment_length}")

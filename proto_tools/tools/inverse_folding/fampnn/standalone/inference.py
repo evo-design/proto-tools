@@ -6,6 +6,7 @@ Handles all four FAMPNN operations:
   - score_all_mutations: Score every possible single mutation
   - score_mutations: Score specific mutations from a list
 """
+
 from __future__ import annotations
 
 import json
@@ -71,20 +72,33 @@ class FAMPNNModel:
 
         # Build timestep schedules
         t_seq = sampling_utils.get_timesteps_from_schedule(
-            num_steps=num_steps, mode="linear", t_start=0.0, t_end=1.0,
+            num_steps=num_steps,
+            mode="linear",
+            t_start=0.0,
+            t_end=1.0,
         )
         t_scd = sampling_utils.get_timesteps_from_schedule(
-            num_steps=scn_diffusion_steps, mode="linear", t_start=0.0, t_end=1.0,
+            num_steps=scn_diffusion_steps,
+            mode="linear",
+            t_start=0.0,
+            t_end=1.0,
         )
         scd_inputs_template = {
             "num_steps": scn_diffusion_steps,
             "timesteps": None,
             "step_scale": scn_step_scale,
-            "churn_cfg": {"s_churn": 0, "s_noise": 1.0, "s_t_min": 0.01, "s_t_max": 50.0, "num_steps": scn_diffusion_steps},
+            "churn_cfg": {
+                "s_churn": 0,
+                "s_noise": 1.0,
+                "s_t_min": 0.01,
+                "s_t_max": 50.0,
+                "num_steps": scn_diffusion_steps,
+            },
         }
 
         # Build fixed position CSV dataframe if needed
         import pandas as pd
+
         fixed_pos_df = pd.DataFrame(columns=["fixed_pos_seq", "fixed_pos_scn"])
 
         pdb_name = Path(pdb_path).stem
@@ -93,17 +107,11 @@ class FAMPNNModel:
             scn_str = ""
             if fixed_positions:
                 # Convert {chain: [1-indexed positions]} to "A1-5,A10-20" format
-                parts = [
-                    f"{chain_id}{pos}"
-                    for chain_id, positions in fixed_positions.items()
-                    for pos in positions
-                ]
+                parts = [f"{chain_id}{pos}" for chain_id, positions in fixed_positions.items() for pos in positions]
                 seq_str = ",".join(parts)
             if fixed_sidechain_positions:
                 parts = [
-                    f"{chain_id}{pos}"
-                    for chain_id, positions in fixed_sidechain_positions.items()
-                    for pos in positions
+                    f"{chain_id}{pos}" for chain_id, positions in fixed_sidechain_positions.items() for pos in positions
                 ]
                 scn_str = ",".join(parts)
             fixed_pos_df = pd.DataFrame(
@@ -116,7 +124,15 @@ class FAMPNNModel:
         single = process_single_pdb(data)
         chain_id_mapping = data["chain_id_mapping"]
 
-        model_input_keys = ["x", "aatype", "seq_mask", "missing_atom_mask", "residue_index", "chain_index", "interface_residue_mask"]
+        model_input_keys = [
+            "x",
+            "aatype",
+            "seq_mask",
+            "missing_atom_mask",
+            "residue_index",
+            "chain_index",
+            "interface_residue_mask",
+        ]
 
         all_sequences = []
         all_pdb_strings = []  # type: ignore[var-annotated]
@@ -129,8 +145,7 @@ class FAMPNNModel:
 
         max_len = max(b["x"].shape[0] for b in batch_list)
         batch_list_padded = [
-            pad_to_max_len({k: b[k].unsqueeze(0) for k in model_input_keys}, max_len)
-            for b in batch_list
+            pad_to_max_len({k: b[k].unsqueeze(0) for k in model_input_keys}, max_len) for b in batch_list
         ]
         batch = {k: torch.cat([b[k] for b in batch_list_padded], dim=0) for k in model_input_keys}
         batch = {k: batch[k].to(self.device) for k in model_input_keys}
@@ -144,8 +159,12 @@ class FAMPNNModel:
         batch_chain_id_mapping = [chain_id_mapping] * B
 
         aatype_override_mask, scn_override_mask = sampling_utils.get_override_masks(
-            batch, pdb_names, batch_chain_id_mapping, fixed_pos_df,
-            verbose=False, mode="seq_design",
+            batch,
+            pdb_names,
+            batch_chain_id_mapping,
+            fixed_pos_df,
+            verbose=False,
+            mode="seq_design",
         )
 
         with torch.no_grad():
@@ -192,10 +211,7 @@ class FAMPNNModel:
         # Save PDB strings via temp files
         # Detach tensors to avoid "Can't call numpy() on Tensor that
         # requires grad" in upstream pdb_utils (PyTorch >=2.x compat)
-        detached_samples = {
-            k: v.detach() if isinstance(v, torch.Tensor) else v
-            for k, v in samples.items()
-        }
+        detached_samples = {k: v.detach() if isinstance(v, torch.Tensor) else v for k, v in samples.items()}
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/sample_{j}.pdb" for j in range(B)]
             SeqDenoiser.save_samples_to_pdb(detached_samples, pdb_paths_out)
@@ -239,13 +255,22 @@ class FAMPNNModel:
         sampling_utils.seed_everything(seed)
 
         t_scd = sampling_utils.get_timesteps_from_schedule(
-            num_steps=scn_diffusion_steps, mode="linear", t_start=0.0, t_end=1.0,
+            num_steps=scn_diffusion_steps,
+            mode="linear",
+            t_start=0.0,
+            t_end=1.0,
         )
         scd_inputs_template = {
             "num_steps": scn_diffusion_steps,
             "timesteps": None,
             "step_scale": scn_step_scale,
-            "churn_cfg": {"s_churn": 0, "s_noise": 1.0, "s_t_min": 0.01, "s_t_max": 50.0, "num_steps": scn_diffusion_steps},
+            "churn_cfg": {
+                "s_churn": 0,
+                "s_noise": 1.0,
+                "s_t_min": 0.01,
+                "s_t_max": 50.0,
+                "num_steps": scn_diffusion_steps,
+            },
         }
 
         # Build fixed positions
@@ -255,17 +280,11 @@ class FAMPNNModel:
             seq_str = ""
             scn_str = ""
             if fixed_positions:
-                parts = [
-                    f"{chain_id}{pos}"
-                    for chain_id, positions in fixed_positions.items()
-                    for pos in positions
-                ]
+                parts = [f"{chain_id}{pos}" for chain_id, positions in fixed_positions.items() for pos in positions]
                 seq_str = ",".join(parts)
             if fixed_sidechain_positions:
                 parts = [
-                    f"{chain_id}{pos}"
-                    for chain_id, positions in fixed_sidechain_positions.items()
-                    for pos in positions
+                    f"{chain_id}{pos}" for chain_id, positions in fixed_sidechain_positions.items() for pos in positions
                 ]
                 scn_str = ",".join(parts)
             fixed_pos_df = pd.DataFrame(
@@ -277,7 +296,15 @@ class FAMPNNModel:
         single = process_single_pdb(data)
         chain_id_mapping = data["chain_id_mapping"]
 
-        model_input_keys = ["x", "aatype", "seq_mask", "missing_atom_mask", "residue_index", "chain_index", "interface_residue_mask"]
+        model_input_keys = [
+            "x",
+            "aatype",
+            "seq_mask",
+            "missing_atom_mask",
+            "residue_index",
+            "chain_index",
+            "interface_residue_mask",
+        ]
 
         all_pdb_strings = []  # type: ignore[var-annotated]
         all_psce = []
@@ -287,8 +314,7 @@ class FAMPNNModel:
         batch_list = [single] * B
         max_len = max(b["x"].shape[0] for b in batch_list)
         batch_list_padded = [
-            pad_to_max_len({k: b[k].unsqueeze(0) for k in model_input_keys}, max_len)
-            for b in batch_list
+            pad_to_max_len({k: b[k].unsqueeze(0) for k in model_input_keys}, max_len) for b in batch_list
         ]
         batch = {k: torch.cat([b[k] for b in batch_list_padded], dim=0) for k in model_input_keys}
         batch = {k: batch[k].to(self.device) for k in model_input_keys}
@@ -300,8 +326,12 @@ class FAMPNNModel:
         batch_chain_id_mapping = [chain_id_mapping] * B
 
         aatype_override_mask, scn_override_mask = sampling_utils.get_override_masks(
-            batch, pdb_names, batch_chain_id_mapping, fixed_pos_df,
-            verbose=False, mode="packing",
+            batch,
+            pdb_names,
+            batch_chain_id_mapping,
+            fixed_pos_df,
+            verbose=False,
+            mode="packing",
         )
 
         with torch.no_grad():
@@ -333,10 +363,7 @@ class FAMPNNModel:
             psce_j = psce_j[seq_mask_j.bool()]
             all_psce.append(psce_j.mean(dim=-1).tolist())
 
-        detached_samples = {
-            k: v.detach() if isinstance(v, torch.Tensor) else v
-            for k, v in samples.items()
-        }
+        detached_samples = {k: v.detach() if isinstance(v, torch.Tensor) else v for k, v in samples.items()}
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/packed_{j}.pdb" for j in range(B)]
             SeqDenoiser.save_samples_to_pdb(detached_samples, pdb_paths_out)
@@ -377,8 +404,10 @@ class FAMPNNModel:
         model_inputs = {k: batch[k].to(self.device) for k in model_input_keys}
 
         B = batch_size
+
         def repeat_fn(x: Any) -> Any:
             return x[None, ...].repeat(B, *([1] * len(x.shape)))
+
         model_inputs = {k: repeat_fn(v) for k, v in model_inputs.items()}
 
         num_positions = int(torch.sum(model_inputs["seq_mask"][0]).item())
@@ -388,11 +417,15 @@ class FAMPNNModel:
         scores_dict = {}
         for positions in batched_positions:
             x, aatype, seq_mask, missing_atom_mask, residue_index, chain_index = [
-                model_inputs[k][:len(positions), ...].clone() for k in model_input_keys
+                model_inputs[k][: len(positions), ...].clone() for k in model_input_keys
             ]
 
             x_masked, aatype_masked, missing_atom_mask_masked, scn_mlm_mask = scoring_utils.mask_positions(
-                x, aatype, seq_mask, missing_atom_mask, positions,
+                x,
+                aatype,
+                seq_mask,
+                missing_atom_mask,
+                positions,
             )
 
             with torch.no_grad():
@@ -415,8 +448,7 @@ class FAMPNNModel:
                 # Key format: "1A" = 1-indexed position + wild-type residue
                 key = f"{position.item() + 1}{rc.idx_to_restype_with_x[wt_res.item()]}"
                 scores_dict[key] = {
-                    rc.restypes_with_x[res_num]: score[res_num].item()
-                    for res_num in range(rc.restype_num)
+                    rc.restypes_with_x[res_num]: score[res_num].item() for res_num in range(rc.restype_num)
                 }
 
         return {"scores": scores_dict}
@@ -434,6 +466,7 @@ class FAMPNNModel:
             return mutation_str
 
         import re
+
         parts = mutation_str.split(":")
         converted = []
         for part in parts:
@@ -470,9 +503,7 @@ class FAMPNNModel:
         sampling_utils.seed_everything(seed)
 
         # Convert 1-indexed mutations to 0-indexed for FAMPNN internals
-        internal_mutations = [
-            self._convert_mutation_1indexed_to_0indexed(m) for m in mutations
-        ]
+        internal_mutations = [self._convert_mutation_1indexed_to_0indexed(m) for m in mutations]
 
         data = load_feats_from_pdb(pdb_path)
         batch = process_single_pdb(data)
@@ -481,18 +512,29 @@ class FAMPNNModel:
         model_inputs = {k: batch[k].to(self.device) for k in model_input_keys}
 
         B = batch_size
+
         def repeat_fn(x: Any) -> Any:
             return x[None, ...].repeat(B, *([1] * len(x.shape)))
+
         model_inputs = {k: repeat_fn(v) for k, v in model_inputs.items()}
 
         t_scd = sampling_utils.get_timesteps_from_schedule(
-            num_steps=scn_diffusion_steps, mode="linear", t_start=0.0, t_end=1.0,
+            num_steps=scn_diffusion_steps,
+            mode="linear",
+            t_start=0.0,
+            t_end=1.0,
         )
         scd_inputs = {
             "num_steps": scn_diffusion_steps,
             "timesteps": None,
             "step_scale": scn_step_scale,
-            "churn_cfg": {"s_churn": 0, "s_noise": 1.0, "s_t_min": 0.01, "s_t_max": 50.0, "num_steps": scn_diffusion_steps},
+            "churn_cfg": {
+                "s_churn": 0,
+                "s_noise": 1.0,
+                "s_t_min": 0.01,
+                "s_t_max": 50.0,
+                "num_steps": scn_diffusion_steps,
+            },
         }
 
         num_mutations = len(internal_mutations)
@@ -502,23 +544,27 @@ class FAMPNNModel:
         scores_all = []
         for mutation_batch in batched_mutations:
             x, aatype, seq_mask, missing_atom_mask, residue_index, chain_index = [
-                model_inputs[k][:len(mutation_batch), ...].clone() for k in model_input_keys
+                model_inputs[k][: len(mutation_batch), ...].clone() for k in model_input_keys
             ]
 
             scd_inputs["timesteps"] = t_scd[None].expand(x.shape[0], -1).to(self.device)
-            scores = scoring_utils.score_seq(
-                model=self.model,
-                x=x,
-                aatype=aatype,
-                seq_mask=seq_mask,
-                residue_index=residue_index,
-                missing_atom_mask=missing_atom_mask,
-                chain_index=chain_index,
-                mutations=mutation_batch.tolist(),
-                scd_inputs=scd_inputs,
-                method="multiple",
-                seq_only=seq_only,
-            ).cpu().tolist()
+            scores = (
+                scoring_utils.score_seq(
+                    model=self.model,
+                    x=x,
+                    aatype=aatype,
+                    seq_mask=seq_mask,
+                    residue_index=residue_index,
+                    missing_atom_mask=missing_atom_mask,
+                    chain_index=chain_index,
+                    mutations=mutation_batch.tolist(),
+                    scd_inputs=scd_inputs,
+                    method="multiple",
+                    seq_only=seq_only,
+                )
+                .cpu()
+                .tolist()
+            )
 
             scores_all += scores
 
@@ -559,6 +605,7 @@ class FAMPNNModel:
             search_paths.append(Path(venv) / "weights")
         try:
             import fampnn as fampnn_pkg
+
             pkg_dir = Path(fampnn_pkg.__file__).parent.parent
             search_paths.append(pkg_dir / "weights")
         except Exception:
@@ -618,6 +665,7 @@ class FAMPNNModel:
         gc.collect()
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
@@ -734,6 +782,7 @@ def to_device(device: str) -> dict[str, Any]:
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
+
     global _model
     device = _model.device if _model and hasattr(_model, "device") else 0
     return get_pytorch_memory_stats(device)  # type: ignore[no-any-return]

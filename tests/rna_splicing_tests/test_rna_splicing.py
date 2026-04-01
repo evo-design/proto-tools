@@ -15,6 +15,7 @@ from proto_tools.tools.rna_splicing.splice_transformer import (
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _run_splice_transformer_and_check(device: str) -> None:
     """Run SpliceTransformer on a poly-A sequence and verify output shape."""
     inp = SpliceTransformerInput(

@@ -6,6 +6,7 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
+
 import json
 import re
 import subprocess
@@ -58,9 +59,7 @@ def run_tmalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
     )
 
     if not m1 or not m2:
-        raise RuntimeError(
-            f"Could not parse TM-scores from TMalign output:\n{output}"
-        )
+        raise RuntimeError(f"Could not parse TM-scores from TMalign output:\n{output}")
 
     return {
         "tm_score_chain_1": float(m1.group(1)),

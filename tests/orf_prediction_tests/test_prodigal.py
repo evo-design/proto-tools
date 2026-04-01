@@ -281,9 +281,7 @@ def test_caching_behavior():
 
         real_dispatch = ToolInstance.dispatch
 
-        with patch.object(
-            ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True
-        ) as mock_call:
+        with patch.object(ToolInstance, "dispatch", side_effect=real_dispatch, autospec=True) as mock_call:
             result1 = run_prodigal_prediction(inp, config)
             assert result1.success is True
             assert mock_call.call_count == 1

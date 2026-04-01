@@ -2,6 +2,7 @@
 
 ProGen2 scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +34,7 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
     "progen2-xlarge",
 ]
 
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -55,8 +57,11 @@ class ProGen2ScoringInput(BaseToolInput):
         if not v:
             raise ValueError("sequences must not be empty")
         return v
+
+
 # Output:
 ProGen2ScoringOutput = CausalModelScoringOutput
+
 
 # Config:
 class ProGen2ScoringConfig(BaseConfig):
@@ -152,7 +157,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_progen2_score(
-    inputs: ProGen2ScoringInput, config: ProGen2ScoringConfig | None = None,
+    inputs: ProGen2ScoringInput,
+    config: ProGen2ScoringConfig | None = None,
     instance: Any = None,
 ) -> ProGen2ScoringOutput:
     """Score protein sequences using ProGen2 autoregressive language model.

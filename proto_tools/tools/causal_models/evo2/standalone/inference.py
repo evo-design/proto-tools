@@ -1,4 +1,5 @@
 """Local Evo2 inference implementation."""
+
 from __future__ import annotations
 
 import json
@@ -15,8 +16,8 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 # Suppress vortex library INFO logs
-logging.getLogger('vortex').setLevel(logging.ERROR)
-logging.getLogger('StripedHyena').setLevel(logging.ERROR)
+logging.getLogger("vortex").setLevel(logging.ERROR)
+logging.getLogger("StripedHyena").setLevel(logging.ERROR)
 
 
 # Evo2 uses 1 as padding token: https://github.com/Zymrael/vortex/blob/3e2511427794d02f46e464bc34a8895c9b911e76/vortex/model/tokenizer.py#L140
@@ -81,12 +82,10 @@ class Evo2Model:
         self,
         # input arguments
         prompts: list[str],
-
         # vortex model arguments
         top_k: int = 4,
         top_p: float = 1,
         temperature: float = 1.0,
-
         # vortex generation arguments
         device: str = "cuda",
         num_tokens: int = 32,
@@ -189,9 +188,9 @@ class Evo2Model:
                 )
 
                 if verbose:
-                    logger.info(f'input_ids.shape: {input_ids.shape}')
-                    logger.info(f'output_ids.shape: {output_ids.shape}')
-                    logger.info(f'logits.shape: {logits.shape}')
+                    logger.info(f"input_ids.shape: {input_ids.shape}")
+                    logger.info(f"output_ids.shape: {output_ids.shape}")
+                    logger.info(f"logits.shape: {logits.shape}")
 
                 # Detokenize batch
                 batch_sequences = list(self.tokenizer.detokenize_batch(output_ids))  # type: ignore[attr-defined]
@@ -233,7 +232,7 @@ class Evo2Model:
         input_ids = torch.full((len(sequences), max_len), EVO2_PAD_TOKEN_ID, dtype=torch.long)
         for i, (t, length) in enumerate(zip(tokens, lengths, strict=False)):
             if pad_left:
-                input_ids[i, max_len - length:] = t
+                input_ids[i, max_len - length :] = t
             else:
                 input_ids[i, :length] = t
 
@@ -274,13 +273,12 @@ class Evo2Model:
         # Batch processing logic
         all_logits = []
         all_metrics = []
-        batches = [
-            sequences[i:i + batch_size]
-            for i in range(0, len(sequences), batch_size)
-        ]
+        batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
 
         with torch.inference_mode():
-            for batch_idx, batch_sequences in enumerate(tqdm(batches, desc="Evo2 Sequence Scoring", unit="batch", total=len(batches))):
+            for batch_idx, batch_sequences in enumerate(
+                tqdm(batches, desc="Evo2 Sequence Scoring", unit="batch", total=len(batches))
+            ):
                 if verbose:
                     logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_sequences)} sequences)")
 
@@ -294,20 +292,22 @@ class Evo2Model:
                     logger.info(f"Scored batch of {input_ids.shape[0]}, logits shape: {logits.shape}")
 
                 # Shift for autoregressive scoring: predict position i from positions 0..i-1
-                shifted_logits = logits[:, :-1, :].float() # [batch, seq_len - 1, vocab_size]
-                shifted_targets = input_ids[:, 1:] # [batch, seq_len - 1]
+                shifted_logits = logits[:, :-1, :].float()  # [batch, seq_len - 1, vocab_size]
+                shifted_targets = input_ids[:, 1:]  # [batch, seq_len - 1]
 
                 # Compute log probabilities
-                log_probs = torch.log_softmax(shifted_logits, dim=-1) # [batch, seq_len - 1, vocab_size]
-                batch_log_probs = log_probs.gather(2, shifted_targets.unsqueeze(2)).squeeze(2) # [batch, seq_len - 1]
+                log_probs = torch.log_softmax(shifted_logits, dim=-1)  # [batch, seq_len - 1, vocab_size]
+                batch_log_probs = log_probs.gather(2, shifted_targets.unsqueeze(2)).squeeze(2)  # [batch, seq_len - 1]
 
                 for i, length in enumerate(lengths):
-                    seq_log_probs = batch_log_probs[i, :length - 1] # [seq_len - 1]
-                    all_metrics.append({
-                        "log_likelihood": seq_log_probs.sum().item(),
-                        "avg_log_likelihood": seq_log_probs.mean().item(),
-                        "perplexity": torch.exp(-seq_log_probs.mean()).item(),
-                    })
+                    seq_log_probs = batch_log_probs[i, : length - 1]  # [seq_len - 1]
+                    all_metrics.append(
+                        {
+                            "log_likelihood": seq_log_probs.sum().item(),
+                            "avg_log_likelihood": seq_log_probs.mean().item(),
+                            "perplexity": torch.exp(-seq_log_probs.mean()).item(),
+                        }
+                    )
                     all_logits.append(logits[i, :length, :].cpu())
 
         return {
@@ -332,14 +332,13 @@ class Evo2Model:
         # Vortex auto-shards across all visible GPUs via torch.cuda.device_count().
         # Restrict visibility to the allocated device(s) before model construction.
         from standalone_helpers import get_subprocess_device_env
+
         restricted_env = get_subprocess_device_env(device)
         os.environ["CUDA_VISIBLE_DEVICES"] = restricted_env["CUDA_VISIBLE_DEVICES"]
-        logger.info(
-            f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} "
-            f"for device {device}"
-        )
+        logger.info(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
 
         from evo2 import Evo2
+
         _cleanup_vortex_debug_log()
         self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
         self.tokenizer = self.model.tokenizer  # type: ignore[attr-defined]
@@ -378,13 +377,17 @@ class Evo2Model:
         if device == "cpu":
             # Standard offload, no reload needed
             self.model.model = move_model_to_device(  # type: ignore[attr-defined]
-                self.model.model, self.device, device,  # type: ignore[attr-defined]
+                self.model.model,  # type: ignore[attr-defined]
+                self.device,
+                device,
             )
             self.device = device  # type: ignore[assignment]
         else:
             # Moving to GPU requires full reload (vortex auto-sharding)
             self.model.model = move_model_to_device(  # type: ignore[attr-defined]
-                self.model.model, self.device, device,  # type: ignore[attr-defined]
+                self.model.model,  # type: ignore[attr-defined]
+                self.device,
+                device,
                 custom_move_fn=self._reload_to_device,
             )
 
@@ -397,6 +400,7 @@ class Evo2Model:
             self.device = "cpu"  # type: ignore[assignment]
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
 
 def _slice_cache(cache: dict[str, Any], start: int, end: int) -> dict[str, Any]:
     """Slice a batched cache from index start to end.
@@ -415,65 +419,38 @@ def _slice_cache(cache: dict[str, Any], start: int, end: int) -> dict[str, Any]:
         InferenceParams,
     )
 
-    mha, hcl, hcm, hcs = cache['mha'], cache['hcl'], cache['hcm'], cache['hcs']
+    mha, hcl, hcm, hcs = cache["mha"], cache["hcl"], cache["hcm"], cache["hcs"]
 
     return {
-        'mha': InferenceParams(
+        "mha": InferenceParams(
             max_seqlen=mha.max_seqlen,
             max_batch_size=mha.max_batch_size,
             seqlen_offset=mha.seqlen_offset,
             batch_size_offset=mha.batch_size_offset,
-            key_value_memory_dict={
-                key: data[start:end]
-                for key, data in mha.key_value_memory_dict.items()
-            },
+            key_value_memory_dict={key: data[start:end] for key, data in mha.key_value_memory_dict.items()},
         ),
-        'hcl': HyenaCascadeIIRInferenceParams(
+        "hcl": HyenaCascadeIIRInferenceParams(
             fir_filter_length=hcl.fir_filter_length,
             state_dim=hcl.state_dim,
             seqlen_offset=hcl.seqlen_offset,
-            fir_state_dict={
-                key: data[start:end]
-                for key, data in hcl.fir_state_dict.items()
-            },
-            state_dict={
-                key: data[start:end]
-                for key, data in hcl.state_dict.items()
-            },
+            fir_state_dict={key: data[start:end] for key, data in hcl.fir_state_dict.items()},
+            state_dict={key: data[start:end] for key, data in hcl.state_dict.items()},
         ),
-        'hcm': HyenaCascadeFIRInferenceParams(
+        "hcm": HyenaCascadeFIRInferenceParams(
             fir_filter_length=hcm.fir_filter_length,
             seqlen_offset=hcm.seqlen_offset,
             fir_inner_filter_length=hcm.fir_inner_filter_length,
-            fir_state_dict={
-                key: data[start:end]
-                for key, data in hcm.fir_state_dict.items()
-            },
-            fir_inner_state_dict={
-                key: data[start:end]
-                for key, data in hcm.fir_inner_state_dict.items()
-            },
-            state_dict={
-                key: data[start:end]
-                for key, data in hcm.state_dict.items()
-            },
+            fir_state_dict={key: data[start:end] for key, data in hcm.fir_state_dict.items()},
+            fir_inner_state_dict={key: data[start:end] for key, data in hcm.fir_inner_state_dict.items()},
+            state_dict={key: data[start:end] for key, data in hcm.state_dict.items()},
         ),
-        'hcs': HyenaCascadeFIRInferenceParams(
+        "hcs": HyenaCascadeFIRInferenceParams(
             fir_filter_length=hcs.fir_filter_length,
             seqlen_offset=hcs.seqlen_offset,
             fir_inner_filter_length=hcs.fir_inner_filter_length,
-            fir_state_dict={
-                key: data[start:end]
-                for key, data in hcs.fir_state_dict.items()
-            },
-            fir_inner_state_dict={
-                key: data[start:end]
-                for key, data in hcs.fir_inner_state_dict.items()
-            },
-            state_dict={
-                key: data[start:end]
-                for key, data in hcs.state_dict.items()
-            },
+            fir_state_dict={key: data[start:end] for key, data in hcs.fir_state_dict.items()},
+            fir_inner_state_dict={key: data[start:end] for key, data in hcs.fir_inner_state_dict.items()},
+            state_dict={key: data[start:end] for key, data in hcs.state_dict.items()},
         ),
     }
 
@@ -487,7 +464,7 @@ def _split_cache(cache: dict[str, Any]) -> list[dict[str, Any]]:
     Returns:
         List of individual cache dictionaries, one per sample in the batch
     """
-    kv = next(iter(cache['mha'].key_value_memory_dict.values()))
+    kv = next(iter(cache["mha"].key_value_memory_dict.values()))
     n_samples = kv.shape[0]
     return [_slice_cache(cache, i, i + 1) for i in range(n_samples)]
 

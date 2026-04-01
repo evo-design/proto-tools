@@ -50,9 +50,7 @@ def main():
 
     resolved = get_proto_home()
     print(f"    get_proto_home() = {resolved}")
-    assert str(resolved) == os.path.realpath(os.path.expanduser(proto_home)), (
-        f"Expected {proto_home}, got {resolved}"
-    )
+    assert str(resolved) == os.path.realpath(os.path.expanduser(proto_home)), f"Expected {proto_home}, got {resolved}"
     print("    PASS: Matches PROTO_HOME env var")
     print()
 
@@ -117,6 +115,7 @@ def main():
 
     # Clean up the test directory we just created
     import shutil
+
     if weights and os.path.exists(weights):
         shutil.rmtree(weights)
 

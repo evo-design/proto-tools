@@ -2,6 +2,7 @@
 
 PyHMMER phmmer tool: search protein sequences against protein sequences.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -81,7 +82,9 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance: Any = None) -> PyPhmmerOutput:
+def run_pyhmmer_phmmer(
+    inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance: Any = None
+) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
     This function implements the phmmer algorithm, which performs iterative
@@ -111,13 +114,9 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
     Examples:
         >>> # Search for similar sequences to of query proteins
         >>> inputs = PyPhmmerInput(
-        ...     sequences=["MVLSPADKTNVKAAW"],
-        ...     target_sequences=["MVLSPADKTN", "ATCGATCGAT", "MVLSPADKTNVK"]
+        ...     sequences=["MVLSPADKTNVKAAW"], target_sequences=["MVLSPADKTN", "ATCGATCGAT", "MVLSPADKTNVK"]
         ... )
-        >>> config = PyPhmmerConfig(
-        ...     evalue_threshold=1.0,
-        ...     domain_evalue_threshold=1.0
-        ... )
+        >>> config = PyPhmmerConfig(evalue_threshold=1.0, domain_evalue_threshold=1.0)
         >>> result = run_pyhmmer_phmmer(inputs, config)
         >>> print(f"Found {result.num_sequence_hits} similar sequences")
         >>>
@@ -143,9 +142,7 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig | None = No
     )
 
     # Convert results to typed hit models
-    sequence_hits, domain_hits = _build_hit_models(
-        output_data["sequence_hits"], output_data["domain_hits"]
-    )
+    sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyPhmmerOutput(
         metadata={

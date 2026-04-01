@@ -58,7 +58,7 @@ def _copy_standalone_helpers(script_path: str) -> None:
         return
 
     standalone_idx = script.parts.index("standalone")
-    standalone_dir = Path(*script.parts[:standalone_idx + 1])
+    standalone_dir = Path(*script.parts[: standalone_idx + 1])
 
     # Source directory: utils/standalone_helpers_source/
     helpers_dir = Path(__file__).parent / "standalone_helpers_source"
@@ -71,9 +71,7 @@ def _copy_standalone_helpers(script_path: str) -> None:
         try:
             shutil.copy2(source, target)
         except Exception as exc:
-            sys.stderr.write(
-                f"[worker] Warning: Failed to copy {filename}: {exc}\n"
-            )
+            sys.stderr.write(f"[worker] Warning: Failed to copy {filename}: {exc}\n")
 
 
 def _load_module(script_path: str) -> Any:
@@ -126,8 +124,7 @@ def _build_legacy_dispatch(module: Any) -> Any:
             if func is not None:
                 return func(input_dict)  # type: ignore[no-any-return]
             raise ValueError(
-                f"Cannot dispatch operation '{operation}': no function "
-                f"'{func_name}' found in {module.__name__}"
+                f"Cannot dispatch operation '{operation}': no function '{func_name}' found in {module.__name__}"
             )
 
         # No operation key; auto-route if there's exactly one run_* function.
@@ -195,9 +192,7 @@ def _send_response(json_out: Any, response_json: str) -> None:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        sys.stderr.write(
-            f"Usage: {sys.argv[0]} <standalone_script_path>\n"
-        )
+        sys.stderr.write(f"Usage: {sys.argv[0]} <standalone_script_path>\n")
         sys.exit(1)
 
     # Redirect stdout to stderr so tool output doesn't pollute the JSON protocol pipe
@@ -248,9 +243,7 @@ def main() -> None:
                         result = module.to_device(device)
                     else:
                         # Graceful fallback if tool doesn't support to_device
-                        sys.stderr.write(
-                            f"[worker] Warning: {script_path} does not have to_device() function\n"
-                        )
+                        sys.stderr.write(f"[worker] Warning: {script_path} does not have to_device() function\n")
                         result = {"success": False, "error": "to_device not supported"}
                     result = _serialize(result)
                     response = {"id": request_id, "result": result}
@@ -260,9 +253,7 @@ def main() -> None:
                         result = module.get_memory_stats()
                     else:
                         # Graceful fallback if tool doesn't support get_memory_stats
-                        sys.stderr.write(
-                            f"[worker] Warning: {script_path} does not have get_memory_stats() function\n"
-                        )
+                        sys.stderr.write(f"[worker] Warning: {script_path} does not have get_memory_stats() function\n")
                         result = {"available": False, "error": "get_memory_stats not supported"}
                     result = _serialize(result)
                     response = {"id": request_id, "result": result}

@@ -133,7 +133,9 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_evo1_score(
-    inputs: Evo1ScoringInput, config: Evo1ScoringConfig | None = None, instance: Any = None,
+    inputs: Evo1ScoringInput,
+    config: Evo1ScoringConfig | None = None,
+    instance: Any = None,
 ) -> Evo1ScoringOutput:
     """Score DNA sequences using Evo1 autoregressive language model.
 

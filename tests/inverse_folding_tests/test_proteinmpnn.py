@@ -50,7 +50,9 @@ def test_proteinmpnn_sample_simple(pdb_structure: Structure):
         ]
     )
     config = ProteinMPNNSampleConfig(
-        num_sequences_per_structure=10, temperature=1.0, seed=42,
+        num_sequences_per_structure=10,
+        temperature=1.0,
+        seed=42,
     )
     output = run_proteinmpnn_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
@@ -60,25 +62,15 @@ def test_proteinmpnn_sample_simple(pdb_structure: Structure):
 
     for designed_sequences in output.designed_sequences:
         assert len(designed_sequences) == 10
-        assert all(
-            isinstance(sequence, str) for sequence in designed_sequences.sequences
-        )
-        assert all(
-            isinstance(perplexity, float)
-            for perplexity in designed_sequences.perplexity
-        )
-        assert all(
-            isinstance(identity, float)
-            for identity in designed_sequences.sequence_identity
-        )
+        assert all(isinstance(sequence, str) for sequence in designed_sequences.sequences)
+        assert all(isinstance(perplexity, float) for perplexity in designed_sequences.perplexity)
+        assert all(isinstance(identity, float) for identity in designed_sequences.sequence_identity)
 
 
 @pytest.mark.uses_gpu
 def test_proteinmpnn_sample_chunked_batching(pdb_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=6,
         batch_size=2,
@@ -107,18 +99,12 @@ def test_proteinmpnn_sample_advanced_args(pdb_structure: Structure):
     c_positions = [i + 1 for i, aa in enumerate(chain_A) if aa == "C"]
 
     # Make a list of fixed indices that do not contain the "C" positions
-    fixed_positions = random.sample(
-        list(set(np.arange(len(chain_A)) + 1) - set(c_positions)), 200
-    )
+    fixed_positions = random.sample(list(set(np.arange(len(chain_A)) + 1) - set(c_positions)), 200)
 
     inp = InverseFoldingInput(
         inputs=[
-            InverseFoldingStructureInput(
-                structure=pdb_structure, fixed_positions={"A": fixed_positions}
-            ),
-            InverseFoldingStructureInput(
-                structure=pdb_structure, fixed_positions={"A": fixed_positions}
-            ),
+            InverseFoldingStructureInput(structure=pdb_structure, fixed_positions={"A": fixed_positions}),
+            InverseFoldingStructureInput(structure=pdb_structure, fixed_positions={"A": fixed_positions}),
         ]
     )
     config = ProteinMPNNSampleConfig(
@@ -138,9 +124,9 @@ def test_proteinmpnn_sample_advanced_args(pdb_structure: Structure):
             assert "C" not in sequence, f"Sequence contains excluded 'C': {sequence}"
 
             for position in fixed_positions:
-                assert (
-                    sequence[position - 1] == chain_A[position - 1]
-                ), f"Position {position}: {sequence[position-1]} != {chain_A[position-1]}"
+                assert sequence[position - 1] == chain_A[position - 1], (
+                    f"Position {position}: {sequence[position - 1]} != {chain_A[position - 1]}"
+                )
 
 
 @pytest.mark.uses_gpu
@@ -159,17 +145,11 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
-            SequenceStructurePair(
-                sequence=modified_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+            SequenceStructurePair(sequence=modified_sequence, structure=pdb_structure),
         ]
     )
-    config = ProteinMPNNScoringConfig(
-        fixed_positions=fixed_positions, seed=42, return_logits=True
-    )
+    config = ProteinMPNNScoringConfig(fixed_positions=fixed_positions, seed=42, return_logits=True)
     output = run_proteinmpnn_score(inp, config)
     assert output.success, f"Failed to score: {output}"
 
@@ -192,9 +172,7 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
@@ -221,14 +199,10 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     assert logits_arr.shape == (seq_len, len(ALPHAFOLD_VOCAB))
 
     # log_likelihood = avg_log_likelihood * seq_len
-    assert np.isclose(
-        score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5
-    )
+    assert np.isclose(score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5)
 
     # perplexity = exp(-avg_log_likelihood)
-    assert np.isclose(
-        score.perplexity, np.exp(-score.avg_log_likelihood), rtol=1e-5
-    )
+    assert np.isclose(score.perplexity, np.exp(-score.avg_log_likelihood), rtol=1e-5)
 
     assert score.avg_log_likelihood <= 0
     assert score.perplexity >= 1.0
@@ -241,9 +215,7 @@ def test_proteinmpnn_score_vocab(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42)
@@ -263,9 +235,7 @@ def test_proteinmpnn_score_single_pair(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
@@ -294,15 +264,9 @@ def test_proteinmpnn_score_batched(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
-            SequenceStructurePair(
-                sequence=modified_1, structure=pdb_structure
-            ),
-            SequenceStructurePair(
-                sequence=modified_2, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+            SequenceStructurePair(sequence=modified_1, structure=pdb_structure),
+            SequenceStructurePair(sequence=modified_2, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
@@ -352,15 +316,9 @@ def test_proteinmpnn_score_cache(pdb_structure: Structure):
         # First pass: score original and first two modified sequences
         input_first_pass = ProteinMPNNScoringInput(
             sequence_structure_pairs=[
-                SequenceStructurePair(
-                    sequence=original_sequence, structure=pdb_structure
-                ),
-                SequenceStructurePair(
-                    sequence=modified_sequence_1, structure=pdb_structure
-                ),
-                SequenceStructurePair(
-                    sequence=modified_sequence_2, structure=pdb_structure
-                ),
+                SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+                SequenceStructurePair(sequence=modified_sequence_1, structure=pdb_structure),
+                SequenceStructurePair(sequence=modified_sequence_2, structure=pdb_structure),
             ]
         )
         config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
@@ -376,18 +334,10 @@ def test_proteinmpnn_score_cache(pdb_structure: Structure):
         # Second pass: overlapping sequences plus one new
         input_second_pass = ProteinMPNNScoringInput(
             sequence_structure_pairs=[
-                SequenceStructurePair(
-                    sequence=original_sequence, structure=pdb_structure
-                ),
-                SequenceStructurePair(
-                    sequence=modified_sequence_1, structure=pdb_structure
-                ),
-                SequenceStructurePair(
-                    sequence=modified_sequence_2, structure=pdb_structure
-                ),
-                SequenceStructurePair(
-                    sequence=modified_sequence_3, structure=pdb_structure
-                ),
+                SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
+                SequenceStructurePair(sequence=modified_sequence_1, structure=pdb_structure),
+                SequenceStructurePair(sequence=modified_sequence_2, structure=pdb_structure),
+                SequenceStructurePair(sequence=modified_sequence_3, structure=pdb_structure),
             ]
         )
         output_second_pass = run_proteinmpnn_score(input_second_pass, config)
@@ -400,29 +350,14 @@ def test_proteinmpnn_score_cache(pdb_structure: Structure):
         assert cache_info["total_entries"] == 4
 
         # First three scores should match exactly
-        assert (
-            output_second_pass.scores[0].perplexity
-            == output_first_pass.scores[0].perplexity
-        )
-        assert (
-            output_second_pass.scores[1].perplexity
-            == output_first_pass.scores[1].perplexity
-        )
-        assert (
-            output_second_pass.scores[2].perplexity
-            == output_first_pass.scores[2].perplexity
-        )
+        assert output_second_pass.scores[0].perplexity == output_first_pass.scores[0].perplexity
+        assert output_second_pass.scores[1].perplexity == output_first_pass.scores[1].perplexity
+        assert output_second_pass.scores[2].perplexity == output_first_pass.scores[2].perplexity
 
         # Logits arrays should be identical for cached results
-        assert np.allclose(
-            output_second_pass.scores[0].logits, output_first_pass.scores[0].logits
-        )
-        assert np.allclose(
-            output_second_pass.scores[1].logits, output_first_pass.scores[1].logits
-        )
-        assert np.allclose(
-            output_second_pass.scores[2].logits, output_first_pass.scores[2].logits
-        )
+        assert np.allclose(output_second_pass.scores[0].logits, output_first_pass.scores[0].logits)
+        assert np.allclose(output_second_pass.scores[1].logits, output_first_pass.scores[1].logits)
+        assert np.allclose(output_second_pass.scores[2].logits, output_first_pass.scores[2].logits)
 
     finally:
         _program_tool_cache.set(None)
@@ -435,9 +370,7 @@ def test_proteinmpnn_score_logits_disabled_by_default(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42)
@@ -457,9 +390,7 @@ def test_proteinmpnn_score_logits_serialization(pdb_structure: Structure):
 
     inp = ProteinMPNNScoringInput(
         sequence_structure_pairs=[
-            SequenceStructurePair(
-                sequence=original_sequence, structure=pdb_structure
-            ),
+            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
         ]
     )
     config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
@@ -491,9 +422,7 @@ def test_proteinmpnn_score_logits_serialization(pdb_structure: Structure):
 @pytest.mark.uses_gpu
 def test_abmpnn_sample(pdb_structure: Structure):
     """AbMPNN weights load and produce valid samples."""
-    inp = InverseFoldingInput(
-        inputs=[InverseFoldingStructureInput(structure=pdb_structure)]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
     config = ProteinMPNNSampleConfig(
         num_sequences_per_structure=2,
         temperature=0.1,

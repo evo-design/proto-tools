@@ -33,9 +33,8 @@ def _find_standalone_script(tool_spec):
 
 # ── Standalone protocol compliance ──────────────────────────────────────
 
-@pytest.mark.parametrize(
-    "tool_spec", _all_gpu_specs, ids=lambda spec: spec.key
-)
+
+@pytest.mark.parametrize("tool_spec", _all_gpu_specs, ids=lambda spec: spec.key)
 def test_standalone_protocol_compliance(tool_spec):
     """Verify that a GPU tool's standalone script follows all DeviceManager protocols.
 
@@ -65,45 +64,39 @@ def test_standalone_protocol_compliance(tool_spec):
         violations.append("Missing to_device() function")
     else:
         # --- 2. Correct signature: def to_device(device: str) -> dict[str, Any]: ---
-        sig_pattern = r'def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:'
+        sig_pattern = r"def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:"
         if not re.search(sig_pattern, content):
             violations.append(
                 "to_device() has wrong signature (expected: def to_device(device: str) -> dict[str, Any]:)"
             )
 
         # --- 3. Module-level to_device returns {"success": ...} ---
-        module_pattern = r'^def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:'
+        module_pattern = r"^def to_device\(device:\s*str\)\s*->\s*dict(\[str,\s*Any\])?:"
         match = re.search(module_pattern, content, re.MULTILINE)
         if match:
-            rest = content[match.end():]
-            next_fn = re.search(r'\ndef |^def ', rest, re.MULTILINE)
-            section = rest[:next_fn.start()] if next_fn else rest
+            rest = content[match.end() :]
+            next_fn = re.search(r"\ndef |^def ", rest, re.MULTILINE)
+            section = rest[: next_fn.start()] if next_fn else rest
             if '"success"' not in section and "'success'" not in section:
                 violations.append("to_device() return value missing 'success' key")
 
         # --- 4. If global to_device() calls _model.to_device(), model class must have it ---
         if "_model.to_device(" in content:
-            class_method = re.search(
-                r'class\s+\w+.*?^[ \t]+def\s+to_device\s*\(',
-                content, re.MULTILINE | re.DOTALL
-            )
+            class_method = re.search(r"class\s+\w+.*?^[ \t]+def\s+to_device\s*\(", content, re.MULTILINE | re.DOTALL)
             if not class_method:
-                violations.append(
-                    "to_device() calls _model.to_device() but no model class has that method"
-                )
+                violations.append("to_device() calls _model.to_device() but no model class has that method")
 
     # --- 5. Model class to_device() must use move_model_to_device() helper
     #         OR a clean unload->reload cycle (for opaque models like AlphaGenome
     #         that cannot be moved via jax.device_put or model.to()) ---
     class_to_device = re.search(
-        r'class\s+\w+.*?^\s+def\s+to_device\s*\(self,\s*device:\s*str\)\s*->\s*None:',
-        content, re.MULTILINE | re.DOTALL
+        r"class\s+\w+.*?^\s+def\s+to_device\s*\(self,\s*device:\s*str\)\s*->\s*None:", content, re.MULTILINE | re.DOTALL
     )
     if class_to_device:
-        has_move_helper = bool(re.search(
-            r'from \.?standalone_helpers import\s.*move_model_to_device', content, re.DOTALL
-        )) and bool(re.search(r'move_model_to_device\s*\(', content))
-        has_unload_reload = bool(re.search(r'self\.unload\s*\(', content))
+        has_move_helper = bool(
+            re.search(r"from \.?standalone_helpers import\s.*move_model_to_device", content, re.DOTALL)
+        ) and bool(re.search(r"move_model_to_device\s*\(", content))
+        has_unload_reload = bool(re.search(r"self\.unload\s*\(", content))
         if not has_move_helper and not has_unload_reload:
             violations.append(
                 "Model class has to_device() but doesn't use move_model_to_device() helper "
@@ -111,53 +104,35 @@ def test_standalone_protocol_compliance(tool_spec):
             )
 
     # --- 6. CLI tools with subprocess must use get_subprocess_device_env() ---
-    has_subprocess = bool(re.search(
-        r"\bsubprocess\.(run|Popen|call|check_output)\s*\(", content
-    ))
+    has_subprocess = bool(re.search(r"\bsubprocess\.(run|Popen|call|check_output)\s*\(", content))
     if has_subprocess:
-        has_env_import = bool(re.search(
-            r"from \.?standalone_helpers import .*get_subprocess_device_env", content
-        ))
+        has_env_import = bool(re.search(r"from \.?standalone_helpers import .*get_subprocess_device_env", content))
         has_env_usage = bool(re.search(r"get_subprocess_device_env\s*\(", content))
         has_env_param = bool(re.search(r"subprocess\.\w+\([^)]*env\s*=", content))
         if not has_env_import or not has_env_usage:
-            violations.append(
-                "Uses subprocess calls but doesn't use get_subprocess_device_env() helper"
-            )
+            violations.append("Uses subprocess calls but doesn't use get_subprocess_device_env() helper")
         elif not has_env_param:
-            violations.append(
-                "Calls get_subprocess_device_env() but doesn't pass env= to subprocess"
-            )
+            violations.append("Calls get_subprocess_device_env() but doesn't pass env= to subprocess")
 
     # --- 7. JAX tools must use centralized resolve_jax_device() ---
-    is_jax = bool(re.search(r'^import jax\b|^from jax\b', content, re.MULTILINE))
+    is_jax = bool(re.search(r"^import jax\b|^from jax\b", content, re.MULTILINE))
     if is_jax:
-        has_jax_import = bool(re.search(
-            r'from \.?standalone_helpers import\s.*resolve_jax_device', content, re.DOTALL
-        ))
+        has_jax_import = bool(re.search(r"from \.?standalone_helpers import\s.*resolve_jax_device", content, re.DOTALL))
         if not has_jax_import:
-            violations.append(
-                "JAX tool doesn't import resolve_jax_device from standalone_helpers"
-            )
-        has_local_def = bool(re.search(
-            r'^def _?resolve_jax_device\s*\(', content, re.MULTILINE
-        ))
+            violations.append("JAX tool doesn't import resolve_jax_device from standalone_helpers")
+        has_local_def = bool(re.search(r"^def _?resolve_jax_device\s*\(", content, re.MULTILINE))
         if has_local_def:
-            violations.append(
-                "JAX tool defines its own resolve_jax_device() instead of using standalone_helpers"
-            )
+            violations.append("JAX tool defines its own resolve_jax_device() instead of using standalone_helpers")
 
-    assert not violations, (
-        f"Tool {tool_key} has protocol violations in {standalone_script}:\n"
-        + "\n".join(f"  - {v}" for v in violations)
+    assert not violations, f"Tool {tool_key} has protocol violations in {standalone_script}:\n" + "\n".join(
+        f"  - {v}" for v in violations
     )
 
 
 # ── Config-level checks ────────────────────────────────────────────────
 
-@pytest.mark.parametrize(
-    "tool_spec", _all_gpu_specs, ids=lambda spec: spec.key
-)
+
+@pytest.mark.parametrize("tool_spec", _all_gpu_specs, ids=lambda spec: spec.key)
 def test_gpu_tools_default_to_generic_cuda(tool_spec):
     """Test that GPU-enabled tool defaults to 'cuda' (not 'cuda:0' or specific GPUs).
 
@@ -169,23 +144,15 @@ def test_gpu_tools_default_to_generic_cuda(tool_spec):
     config_model = tool_spec.config_model
     device_field_info = config_model.model_fields.get("device")
 
-    assert device_field_info is not None, (
-        f"{tool_key}: missing device field"
-    )
+    assert device_field_info is not None, f"{tool_key}: missing device field"
 
     default_device = device_field_info.default
 
-    assert default_device != "cpu", (
-        f"{tool_key}: GPU tool defaults to 'cpu' (should be 'cuda' or 'cudaxN')"
-    )
+    assert default_device != "cpu", f"{tool_key}: GPU tool defaults to 'cpu' (should be 'cuda' or 'cudaxN')"
 
-    is_generic_cuda = (
-        default_device == "cuda"
-        or re.match(r"^cudax\d+$", default_device)
-    )
+    is_generic_cuda = default_device == "cuda" or re.match(r"^cudax\d+$", default_device)
     assert is_generic_cuda, (
-        f"{tool_key}: defaults to '{default_device}' "
-        f"(should be 'cuda' for single-GPU or 'cudaxN' for multi-GPU)"
+        f"{tool_key}: defaults to '{default_device}' (should be 'cuda' for single-GPU or 'cudaxN' for multi-GPU)"
     )
 
 
@@ -193,10 +160,13 @@ def test_gpu_tools_default_to_generic_cuda(tool_spec):
 # Integration tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.uses_gpu
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "tool_spec", _all_gpu_specs, ids=lambda spec: spec.key,
+    "tool_spec",
+    _all_gpu_specs,
+    ids=lambda spec: spec.key,
 )
 def test_get_memory_stats_via_worker(tool_spec):
     """Test that get_memory_stats() actually works when called via worker subprocess.
@@ -239,43 +209,32 @@ def test_get_memory_stats_via_worker(tool_spec):
             else:
                 raise
 
-        assert isinstance(
-            result, dict
-        ), f"Tool {tool_key}: get_memory_stats() returned {type(result)}, expected dict"
+        assert isinstance(result, dict), f"Tool {tool_key}: get_memory_stats() returned {type(result)}, expected dict"
 
         assert "available" in result, (
-            f"Tool {tool_key}: get_memory_stats() response missing 'available' key. "
-            f"Got: {result.keys()}"
+            f"Tool {tool_key}: get_memory_stats() response missing 'available' key. Got: {result.keys()}"
         )
 
         assert "framework" in result, (
-            f"Tool {tool_key}: get_memory_stats() response missing 'framework' key. "
-            f"Got: {result.keys()}"
+            f"Tool {tool_key}: get_memory_stats() response missing 'framework' key. Got: {result.keys()}"
         )
 
         if result["available"]:
             assert result["framework"] in ["pytorch", "jax"], (
-                f"Tool {tool_key}: unexpected framework '{result['framework']}', "
-                f"expected 'pytorch' or 'jax'"
+                f"Tool {tool_key}: unexpected framework '{result['framework']}', expected 'pytorch' or 'jax'"
             )
 
             if result["framework"] == "pytorch":
-                assert (
-                    "allocated_bytes" in result
-                ), f"Tool {tool_key}: PyTorch memory stats missing 'allocated_bytes'"
-                assert isinstance(
-                    result["allocated_bytes"], (int, float)
-                ), f"Tool {tool_key}: allocated_bytes should be numeric, got {type(result['allocated_bytes'])}"
+                assert "allocated_bytes" in result, f"Tool {tool_key}: PyTorch memory stats missing 'allocated_bytes'"
+                assert isinstance(result["allocated_bytes"], (int, float)), (
+                    f"Tool {tool_key}: allocated_bytes should be numeric, got {type(result['allocated_bytes'])}"
+                )
 
             elif result["framework"] == "jax":
-                assert (
-                    "bytes_in_use" in result
-                ), f"Tool {tool_key}: JAX memory stats missing 'bytes_in_use'"
-                assert isinstance(
-                    result["bytes_in_use"], (int, float)
-                ), f"Tool {tool_key}: bytes_in_use should be numeric, got {type(result['bytes_in_use'])}"
+                assert "bytes_in_use" in result, f"Tool {tool_key}: JAX memory stats missing 'bytes_in_use'"
+                assert isinstance(result["bytes_in_use"], (int, float)), (
+                    f"Tool {tool_key}: bytes_in_use should be numeric, got {type(result['bytes_in_use'])}"
+                )
 
         else:
-            assert (
-                "reason" in result
-            ), f"Tool {tool_key}: get_memory_stats() returned available=False but no 'reason'"
+            assert "reason" in result, f"Tool {tool_key}: get_memory_stats() returned available=False but no 'reason'"

@@ -20,8 +20,9 @@ def test_get_subprocess_device_env_matches_determine_visible_devices_cpu():
     env = get_subprocess_device_env("cpu")
     expected = determine_visible_devices("cpu")
 
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, (
         "get_subprocess_device_env('cpu') should match determine_visible_devices('cpu')"
+    )
 
 
 @pytest.mark.uses_gpu
@@ -33,8 +34,9 @@ def test_get_subprocess_device_env_matches_determine_visible_devices_single(monk
     env = get_subprocess_device_env("cuda:0")
     expected = determine_visible_devices("cuda:0")
 
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, (
         "get_subprocess_device_env should match determine_visible_devices for cuda:0"
+    )
 
 
 def test_get_subprocess_device_env_matches_determine_visible_devices_with_parent(monkeypatch):
@@ -44,18 +46,15 @@ def test_get_subprocess_device_env_matches_determine_visible_devices_with_parent
     # Test single device mapping
     env = get_subprocess_device_env("cuda:0")
     expected = determine_visible_devices("cuda:0")
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
-        "Logical cuda:0 should map to physical GPU 3"
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, "Logical cuda:0 should map to physical GPU 3"
 
     env = get_subprocess_device_env("cuda:1")
     expected = determine_visible_devices("cuda:1")
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
-        "Logical cuda:1 should map to physical GPU 5"
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, "Logical cuda:1 should map to physical GPU 5"
 
     env = get_subprocess_device_env("cuda:2")
     expected = determine_visible_devices("cuda:2")
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
-        "Logical cuda:2 should map to physical GPU 7"
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, "Logical cuda:2 should map to physical GPU 7"
 
 
 def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
@@ -65,14 +64,12 @@ def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
     # Test multi-device shorthand: cuda:2,3
     env = get_subprocess_device_env("cuda:2,3")
     expected = determine_visible_devices("cuda:2,3")
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
-        "cuda:2,3 should map to physical GPUs 5,7"
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, "cuda:2,3 should map to physical GPUs 5,7"
 
     # Test multi-device verbose: cuda:0,cuda:1
     env = get_subprocess_device_env("cuda:0,cuda:1")
     expected = determine_visible_devices("cuda:0,cuda:1")
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, \
-        "cuda:0,cuda:1 should map to physical GPUs 0,1"
+    assert env["CUDA_VISIBLE_DEVICES"] == expected, "cuda:0,cuda:1 should map to physical GPUs 0,1"
 
 
 # ── Standalone helpers specific tests ─────────────────────────────────────────

@@ -4,6 +4,7 @@ This is a minimal 2-GPU PyTorch tool designed for testing multi-device allocatio
 movement, and eviction. It loads two tiny models (one per GPU) while exercising
 all DeviceManager multi-device code paths.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -80,17 +81,11 @@ class MockPyTorchMultiGPUToolOutput(BaseToolOutput):
         devices_used (list[str]): Devices each model ran on.
     """
 
-    result_model_a: list[float] = Field(
-        description="Output from model A (first GPU)"
-    )
+    result_model_a: list[float] = Field(description="Output from model A (first GPU)")
 
-    result_model_b: list[float] = Field(
-        description="Output from model B (second GPU)"
-    )
+    result_model_b: list[float] = Field(description="Output from model B (second GPU)")
 
-    devices_used: list[str] = Field(
-        description="Devices each model ran on [device_a, device_b]"
-    )
+    devices_used: list[str] = Field(description="Devices each model ran on [device_a, device_b]")
 
     @property
     def output_format_options(self) -> list[str]:

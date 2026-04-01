@@ -23,31 +23,39 @@ _persistent_tool = make_persistent_fixture("progen2")
 
 # ── Sample input/config validation ────────────────────────────────────────────
 
+
 def test_progen2_sample_input_normalizes_single_string():
     inp = ProGen2SampleInput(prompts="MKTLV")
     assert isinstance(inp.prompts, list)
     assert inp.prompts == ["MKTLV"]
 
 
-@pytest.mark.parametrize("input_kwargs,match", [
-    ({"prompts": []}, "prompts must not be empty"),
-])
+@pytest.mark.parametrize(
+    "input_kwargs,match",
+    [
+        ({"prompts": []}, "prompts must not be empty"),
+    ],
+)
 def test_progen2_sample_input_validation(input_kwargs, match):
     with pytest.raises(ValueError, match=match):
         ProGen2SampleInput(**input_kwargs)
 
 
-@pytest.mark.parametrize("config_kwargs,match", [
-    ({"temperature": 0.0}, "greater than 0"),
-    ({"top_p": 1.5}, "less than or equal to 1"),
-    ({"max_length": 0}, "greater than or equal to 1"),
-])
+@pytest.mark.parametrize(
+    "config_kwargs,match",
+    [
+        ({"temperature": 0.0}, "greater than 0"),
+        ({"top_p": 1.5}, "less than or equal to 1"),
+        ({"max_length": 0}, "greater than or equal to 1"),
+    ],
+)
 def test_progen2_sample_config_validation(config_kwargs, match):
     with pytest.raises(ValueError, match=match):
         ProGen2SampleConfig(**config_kwargs)
 
 
 # ── Scoring input validation ─────────────────────────────────────────────────
+
 
 def test_progen2_score_input_validation():
     """Test ProGen2ScoringInput validation and normalization."""
@@ -66,6 +74,7 @@ def test_progen2_score_input_validation():
 # ---------------------------------------------------------------------------
 
 # ── Sampling tests ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_progen2_sample_basic():
@@ -106,11 +115,14 @@ def test_progen2_sample_basic():
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("prompt,expected_prefix", [
-    ("1MKTLV", "MKTLV"),
-    ("MKTLV", "MKTLV"),
-    ("<|pf03668|>1MEVVIVTGMSGAGK", "MEVVIVTGMSGAGK"),
-])
+@pytest.mark.parametrize(
+    "prompt,expected_prefix",
+    [
+        ("1MKTLV", "MKTLV"),
+        ("MKTLV", "MKTLV"),
+        ("<|pf03668|>1MEVVIVTGMSGAGK", "MEVVIVTGMSGAGK"),
+    ],
+)
 def test_progen2_sample_prompt_handling(prompt, expected_prefix):
     """Test progen2 sampling with various prompt formats."""
     inputs = ProGen2SampleInput(prompts=prompt)
@@ -170,12 +182,15 @@ def test_progen2_sample_special_token_stripping():
     )
 
     assert not result_stripped.sequences[0].startswith("1"), "Stripped sequence should not start with '1'"
-    assert set(result_stripped.sequences[0]).issubset(set(PROTEIN_AMINO_ACIDS)), "Stripped should only contain amino acids"
+    assert set(result_stripped.sequences[0]).issubset(set(PROTEIN_AMINO_ACIDS)), (
+        "Stripped should only contain amino acids"
+    )
 
     assert result_unstripped.sequences[0].startswith("1"), "Unstripped sequence should start with '1'"
 
 
 # ── Batched sampling tests ────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_progen2_sample_batched():
@@ -225,6 +240,7 @@ def test_progen2_sample_batched_many():
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_progen2_score_tool():
@@ -324,6 +340,7 @@ def test_progen2_score_auto_prepends_start_token():
 
 # ── Batched scoring tests ────────────────────────────────────────────────────
 
+
 @pytest.mark.uses_gpu
 def test_progen2_score_batched():
     """Test batched scoring via run_progen2_score with batch_size."""
@@ -382,7 +399,7 @@ def test_progen2_score_variable_length_sequences():
 
     result = run_progen2_score(inputs=inputs, config=config)
 
-    for (seq, score) in zip(sequences, result.scores, strict=False):
+    for seq, score in zip(sequences, result.scores, strict=False):
         expected_len = len(seq) + 1  # +1 for start token
         assert len(score.logits) == expected_len, (
             f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {len(score.logits)}"
@@ -394,6 +411,7 @@ def test_progen2_score_variable_length_sequences():
 
 
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_progen2_score_logits_disabled_by_default():
@@ -439,6 +457,7 @@ def test_progen2_score_logits_serialization():
 
 
 # ── Logits-specific tests (sampling) ─────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_progen2_sample_logits_returned():

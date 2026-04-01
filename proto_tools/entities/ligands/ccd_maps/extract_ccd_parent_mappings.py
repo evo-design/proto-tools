@@ -23,6 +23,7 @@ Example entries:
     2MG,G,G      # 2'-O-methylguanosine -> Guanosine (RNA modification)
     6MA,DA,A     # N6-methyladenine -> Adenine (DNA modification)
 """
+
 from __future__ import annotations
 
 import gzip
@@ -37,7 +38,7 @@ def extract_parent_mappings(cif_path: Path, output_path: Path) -> int:
         output_path (Path): Path to output CSV file
     """
     # Open file (handle both gzipped and uncompressed)
-    f = gzip.open(cif_path, 'rt') if cif_path.suffix == '.gz' else open(cif_path)  # noqa: SIM115 -- conditional open
+    f = gzip.open(cif_path, "rt") if cif_path.suffix == ".gz" else open(cif_path)  # noqa: SIM115 -- conditional open
 
     try:
         # Parse CIF format
@@ -52,10 +53,14 @@ def extract_parent_mappings(cif_path: Path, output_path: Path) -> int:
             # New component entry
             if line.startswith("data_"):
                 # Save previous entry if it has a parent and is a single residue (not a peptide)
-                if (current_id and
-                    current_parent and current_parent != "?" and
-                    current_one_letter and current_one_letter != "?" and
-                    len(current_one_letter) == 1):  # Only single-letter codes (not peptides)
+                if (
+                    current_id
+                    and current_parent
+                    and current_parent != "?"
+                    and current_one_letter
+                    and current_one_letter != "?"
+                    and len(current_one_letter) == 1
+                ):  # Only single-letter codes (not peptides)
                     results.append((current_id, current_parent, current_one_letter))  # type: ignore[arg-type]
 
                 # Start new entry
@@ -76,17 +81,21 @@ def extract_parent_mappings(cif_path: Path, output_path: Path) -> int:
                     current_one_letter = parts[-1]  # Last field is the value
 
         # Save last entry if it has a parent and is a single residue (not a peptide)
-        if (current_id and
-            current_parent and current_parent != "?" and
-            current_one_letter and current_one_letter != "?" and
-            len(current_one_letter) == 1):  # Only single-letter codes (not peptides)
+        if (
+            current_id
+            and current_parent
+            and current_parent != "?"
+            and current_one_letter
+            and current_one_letter != "?"
+            and len(current_one_letter) == 1
+        ):  # Only single-letter codes (not peptides)
             results.append((current_id, current_parent, current_one_letter))  # type: ignore[arg-type]
 
     finally:
         f.close()
 
     # Write results to CSV
-    with open(output_path, 'w') as out:
+    with open(output_path, "w") as out:
         # Write header
         out.write("# CCD Code to Parent Residue/Base Mapping\n")
         out.write("# Extracted from wwPDB Chemical Component Dictionary\n")
@@ -103,7 +112,9 @@ def extract_parent_mappings(cif_path: Path, output_path: Path) -> int:
         out.write("ccd_code,parent_3letter,parent_1letter\n")
 
         # Write data sorted by CCD code
-        out.writelines(f"{ccd_code},{parent_3letter},{one_letter}\n" for ccd_code, parent_3letter, one_letter in sorted(results))
+        out.writelines(
+            f"{ccd_code},{parent_3letter},{one_letter}\n" for ccd_code, parent_3letter, one_letter in sorted(results)
+        )
 
     return len(results)
 
@@ -136,7 +147,11 @@ def main() -> int:
     # Show some examples
     print("\nExample mappings:")
     with open(output_path) as f:
-        lines = [line for line in f if not line.startswith('#') and line.strip() and line != 'ccd_code,parent_3letter,parent_1letter\n']
+        lines = [
+            line
+            for line in f
+            if not line.startswith("#") and line.strip() and line != "ccd_code,parent_3letter,parent_1letter\n"
+        ]
         for line in lines[:10]:
             print(f"  {line.strip()}")
 

@@ -2,6 +2,7 @@
 
 AlphaGenome batched variant-effect prediction tool.
 """
+
 from __future__ import annotations
 
 import json
@@ -116,10 +117,16 @@ AlphaGenomePredictVariantsConfig = AlphaGenomePredictConfig
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaGenomePredictVariantsInput(
-        variants=[AlphaGenomeVariant(
-            chromosome="chr1", interval_start=0, interval_end=196608,
-            variant_position=100000, reference_bases="A", alternate_bases="G",
-        )]
+        variants=[
+            AlphaGenomeVariant(
+                chromosome="chr1",
+                interval_start=0,
+                interval_end=196608,
+                variant_position=100000,
+                reference_bases="A",
+                alternate_bases="G",
+            )
+        ]
     )
 
 

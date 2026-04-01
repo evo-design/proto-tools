@@ -39,9 +39,7 @@ class SegmaskerInput(BaseToolInput):
             sequences are handled gracefully (assigned 0.0 low-complexity fraction).
     """
 
-    sequences: list[str] = InputField(
-        description="Protein sequence(s) to analyze for low-complexity regions"
-    )
+    sequences: list[str] = InputField(description="Protein sequence(s) to analyze for low-complexity regions")
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -131,9 +129,7 @@ class SegmaskerOutput(BaseToolOutput):
     low_complexity_fractions: list[float] = Field(
         description="Fraction of low-complexity regions for each sequence (0.0-1.0)"
     )
-    low_complexity_counts: list[int] = Field(
-        description="Number of low-complexity positions for each sequence"
-    )
+    low_complexity_counts: list[int] = Field(description="Number of low-complexity positions for each sequence")
     sequence_lengths: list[int] = Field(description="Length of each input sequence")
 
     @property
@@ -147,7 +143,9 @@ class SegmaskerOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(
-        self, export_path: str | os.PathLike, file_format: str  # type: ignore[type-arg]
+        self,
+        export_path: str | os.PathLike,  # type: ignore[type-arg]
+        file_format: str,
     ) -> None:
         import pandas as pd
 
@@ -221,9 +219,7 @@ def run_segmasker(
         - Segmasker documentation: https://www.ncbi.nlm.nih.gov/IEB/ToolBox/CPP_DOC/lxr/source/src/app/segmasker/
 
     Example:
-        >>> inputs = SegmaskerInput(
-        ...     sequences=["AAAAAAAA", "MVLSPADKTN"]
-        ... )
+        >>> inputs = SegmaskerInput(sequences=["AAAAAAAA", "MVLSPADKTN"])
         >>> config = SegmaskerConfig()
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")

@@ -2,6 +2,7 @@
 
 Sequence validation, detection, and ID resolution utilities.
 """
+
 from __future__ import annotations
 
 # ============================================================================
@@ -46,11 +47,10 @@ def resolve_sequence_ids(sequences: list[str], ids: list[str] | None) -> list[st
     """
     if ids is not None:
         if len(ids) != len(sequences):
-            raise ValueError(
-                f"sequence_ids length ({len(ids)}) must match sequences length ({len(sequences)})"
-            )
+            raise ValueError(f"sequence_ids length ({len(ids)}) must match sequences length ({len(sequences)})")
         return ids
     return [f"seq_{i}" for i in range(len(sequences))]
+
 
 # ============================================================================
 # Sequence Validation
@@ -183,6 +183,7 @@ def detect_sequence_type(sequence: str) -> str:
 
     # Ligand/SMILES
     from proto_tools.utils.chemistry import validate_smiles
+
     if validate_smiles(sequence, verbose=False):
         return "ligand"
 

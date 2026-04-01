@@ -16,6 +16,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def two_seq_output():
     return MafftOutput(
@@ -39,6 +40,7 @@ def gapped_output():
 
 
 # ── MafftOutput tests ────────────────────────────────────────────────────────
+
 
 def test_mafft_output_basic_properties(two_seq_output):
     assert two_seq_output.msa.num_sequences == 2
@@ -109,6 +111,7 @@ def test_mafft_output_msa_directly_accessible(two_seq_output):
 
 # ── Input validation tests ───────────────────────────────────────────────────
 
+
 def test_mafft_input_valid():
     inputs = MafftInput(sequences=["MVLSPADKTN", "MKLLVVAAAA"])
     assert len(inputs.sequences) == 2
@@ -143,6 +146,7 @@ def test_mafft_input_invalid(sequences, error_match):
 
 
 # ── Config validation tests ──────────────────────────────────────────────────
+
 
 def test_mafft_config_defaults():
     config = MafftConfig()
@@ -214,6 +218,7 @@ DNA_WITH_GAP_SHORT = "ATGCGATCGTGAAA"  # 14 bp
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 def test_mafft_protein_alignment_with_internal_gap():
@@ -335,9 +340,7 @@ def test_mafft_config_options_passed_to_mafft():
 @pytest.mark.integration
 def test_mafft_conservation_scores():
     """Test conservation score calculation with known values."""
-    inputs = MafftInput(
-        sequences=[PROTEIN_CONSERVED_A, PROTEIN_CONSERVED_B, PROTEIN_CONSERVED_C]
-    )
+    inputs = MafftInput(sequences=[PROTEIN_CONSERVED_A, PROTEIN_CONSERVED_B, PROTEIN_CONSERVED_C])
     result = run_mafft_align(inputs, MafftConfig())
 
     # Validate output and export functionality

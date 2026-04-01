@@ -26,11 +26,7 @@ def test_dispatch_function_exists(script_path: Path):
     source = script_path.read_text()
     tree = ast.parse(source, filename=str(script_path))
 
-    top_level_functions = {
-        node.name
-        for node in ast.iter_child_nodes(tree)
-        if isinstance(node, ast.FunctionDef)
-    }
+    top_level_functions = {node.name for node in ast.iter_child_nodes(tree) if isinstance(node, ast.FunctionDef)}
 
     assert "dispatch" in top_level_functions, (
         f"{script_path.relative_to(_TOOLS_ROOT)} is missing a top-level dispatch() function"

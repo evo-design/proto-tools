@@ -3,6 +3,7 @@
 Uses Hugging Face models from https://huggingface.co/hugohrban/
 Based on the ProGen2-finetuning repository: https://github.com/hugohrban/ProGen2-finetuning
 """
+
 from __future__ import annotations
 
 import json
@@ -18,23 +19,30 @@ logger = getLogger(__name__)
 
 HUGGINGFACE_REPO_PREFIX = "hugohrban"
 # Tokenizer: 0=pad, 1=bos, 2=eos, 3='1', 4='2', 5-29=A..Z (no J). logits[t,j] -> PROGEN2_VOCAB[j].
-PROGEN2_PAD_TOKEN = "<|pad|>"      # ID 0
-PROGEN2_BOS_TOKEN = "<|bos|>"      # ID 1
-PROGEN2_EOS_TOKEN = "<|eos|>"      # ID 2
-PROGEN2_START_TOKEN = "1"          # ID 3
-PROGEN2_END_TOKEN = "2"            # ID 4
-PROGEN2_VOCAB: list[str] = [PROGEN2_PAD_TOKEN, PROGEN2_BOS_TOKEN, PROGEN2_EOS_TOKEN, PROGEN2_START_TOKEN, PROGEN2_END_TOKEN, *list("ABCDEFGHIKLMNOPQRSTUVWXYZ")]
+PROGEN2_PAD_TOKEN = "<|pad|>"  # ID 0
+PROGEN2_BOS_TOKEN = "<|bos|>"  # ID 1
+PROGEN2_EOS_TOKEN = "<|eos|>"  # ID 2
+PROGEN2_START_TOKEN = "1"  # ID 3
+PROGEN2_END_TOKEN = "2"  # ID 4
+PROGEN2_VOCAB: list[str] = [
+    PROGEN2_PAD_TOKEN,
+    PROGEN2_BOS_TOKEN,
+    PROGEN2_EOS_TOKEN,
+    PROGEN2_START_TOKEN,
+    PROGEN2_END_TOKEN,
+    *list("ABCDEFGHIKLMNOPQRSTUVWXYZ"),
+]
 PROGEN2_FIRST_AA_TOKEN = 5
 PROGEN2_LAST_AA_TOKEN = 29
 PROGEN2_SEQUENCE_CHARS = PROGEN2_VOCAB[PROGEN2_FIRST_AA_TOKEN : PROGEN2_LAST_AA_TOKEN + 1]  # Amino acid chars only
 
 PROGEN2_MODEL_CHECKPOINTS = Literal[
-    "progen2-small",    # 151M parameters
-    "progen2-medium",   # 754M parameters
-    "progen2-oas",      # 754M parameters, trained on OAS antibody sequences
-    "progen2-large",    # 2B parameters
-    "progen2-BFD90",    # 2B parameters, trained on BFD90
-    "progen2-xlarge",   # 6B parameters
+    "progen2-small",  # 151M parameters
+    "progen2-medium",  # 754M parameters
+    "progen2-oas",  # 754M parameters, trained on OAS antibody sequences
+    "progen2-large",  # 2B parameters
+    "progen2-BFD90",  # 2B parameters, trained on BFD90
+    "progen2-xlarge",  # 6B parameters
 ]
 
 
@@ -73,11 +81,15 @@ class ProGen2Model:
 
         model_path = self.local_path or f"{HUGGINGFACE_REPO_PREFIX}/{self.model_checkpoint}"
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            trust_remote_code=True,
-            torch_dtype="auto",
-        ).to(device).eval()
+        self.model = (
+            AutoModelForCausalLM.from_pretrained(
+                model_path,
+                trust_remote_code=True,
+                torch_dtype="auto",
+            )
+            .to(device)
+            .eval()
+        )
 
         self.tokenizer = Tokenizer.from_pretrained(model_path)
         self.device = device  # type: ignore[assignment]
@@ -123,8 +135,8 @@ class ProGen2Model:
 
         for i, (tokens, length) in enumerate(zip(token_lists, lengths, strict=False)):
             if pad_left:
-                input_ids[i, max_len - length:] = torch.tensor(tokens, dtype=torch.long)
-                attention_mask[i, max_len - length:] = 1
+                input_ids[i, max_len - length :] = torch.tensor(tokens, dtype=torch.long)
+                attention_mask[i, max_len - length :] = 1
             else:
                 input_ids[i, :length] = torch.tensor(tokens, dtype=torch.long)
                 attention_mask[i, :length] = 1
@@ -138,7 +150,7 @@ class ProGen2Model:
         indices = [sequence.find(t, 1) for t in terminals]
         valid_indices = [i for i in indices if i != -1]
         if valid_indices:
-            return sequence[:min(valid_indices) + 1]
+            return sequence[: min(valid_indices) + 1]
         return sequence
 
     def sample(
@@ -192,10 +204,7 @@ class ProGen2Model:
         # Batch processing logic
         all_sequences = []
         all_logits = []
-        batches = [
-            prompts[i:i + batch_size]
-            for i in range(0, len(prompts), batch_size)
-        ]
+        batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
         with torch.no_grad():
             for batch_prompts in tqdm(batches, desc="ProGen2 Sequence Generation", unit="batch", disable=not verbose):
@@ -236,7 +245,7 @@ class ProGen2Model:
 
                         # Be careful removing prompt if generation modified it or if special tokens overlap
                         if not prepend_prompt and seq.startswith(prompt):
-                            seq = seq[len(prompt):]
+                            seq = seq[len(prompt) :]
 
                         if strip_special_tokens:
                             seq = seq.lstrip(PROGEN2_START_TOKEN).rstrip(PROGEN2_END_TOKEN)
@@ -246,7 +255,7 @@ class ProGen2Model:
                         # Collect logits for this sequence
                         # Note: model outputs 32 logits but tokenizer has 30 tokens
                         if stacked_logits is not None:
-                            all_logits.append(stacked_logits[flat_idx, :, :len(PROGEN2_VOCAB)].float().cpu())
+                            all_logits.append(stacked_logits[flat_idx, :, : len(PROGEN2_VOCAB)].float().cpu())
                         else:
                             all_logits.append(None)
 
@@ -293,19 +302,20 @@ class ProGen2Model:
             raise ValueError("Cannot score empty sequence list")
 
         # Ensure sequences have start token
-        normalized_seqs = [seq if seq.startswith(PROGEN2_START_TOKEN) else PROGEN2_START_TOKEN + seq for seq in sequences]
+        normalized_seqs = [
+            seq if seq.startswith(PROGEN2_START_TOKEN) else PROGEN2_START_TOKEN + seq for seq in sequences
+        ]
 
         # Batch processing logic
         all_logits = []
         all_metrics = []
-        batches = [
-            normalized_seqs[i:i + batch_size]
-            for i in range(0, len(normalized_seqs), batch_size)
-        ]
+        batches = [normalized_seqs[i : i + batch_size] for i in range(0, len(normalized_seqs), batch_size)]
 
         # Run inference
         with torch.inference_mode():
-            for batch_idx, batch_sequences in enumerate(tqdm(batches, desc="ProGen2 Sequence Scoring", unit="batch", total=len(batches))):
+            for batch_idx, batch_sequences in enumerate(
+                tqdm(batches, desc="ProGen2 Sequence Scoring", unit="batch", total=len(batches))
+            ):
                 if verbose:
                     logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_sequences)} sequences)")
 
@@ -325,7 +335,7 @@ class ProGen2Model:
                 batch_log_probs = log_probs.gather(2, shifted_targets.unsqueeze(2)).squeeze(2)  # [batch, seq_len - 1]
 
                 for i, length in enumerate(lengths):
-                    seq_log_probs = batch_log_probs[i, :length-1]  # [seq_len - 1]
+                    seq_log_probs = batch_log_probs[i, : length - 1]  # [seq_len - 1]
 
                     # Only count amino acid tokens (indices 5-29), not special tokens
                     # This matches the original ProGen2 paper's perplexity calculation
@@ -333,14 +343,16 @@ class ProGen2Model:
                     aa_mask = (seq_targets >= PROGEN2_FIRST_AA_TOKEN) & (seq_targets <= PROGEN2_LAST_AA_TOKEN)
                     seq_log_probs = seq_log_probs[aa_mask]
 
-                    all_metrics.append({
-                        "log_likelihood": seq_log_probs.sum().item(),
-                        "avg_log_likelihood": seq_log_probs.mean().item(),
-                        "perplexity": torch.exp(-seq_log_probs.mean()).item(),
-                    })
+                    all_metrics.append(
+                        {
+                            "log_likelihood": seq_log_probs.sum().item(),
+                            "avg_log_likelihood": seq_log_probs.mean().item(),
+                            "perplexity": torch.exp(-seq_log_probs.mean()).item(),
+                        }
+                    )
                     # Return unpadded logits (full vocabulary)
                     # Note: model outputs 32 logits but tokenizer has 30 tokens
-                    all_logits.append(logits[i, :length, :len(PROGEN2_VOCAB)].cpu())
+                    all_logits.append(logits[i, :length, : len(PROGEN2_VOCAB)].cpu())
 
         return {
             "logits": all_logits if return_logits else None,
@@ -406,7 +418,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict.get("return_logits", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

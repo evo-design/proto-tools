@@ -3,6 +3,7 @@
 Self-contained codon infrastructure for random mutagenesis tools.
 No BioPython dependency.
 """
+
 from __future__ import annotations
 
 import functools
@@ -13,22 +14,70 @@ import random
 # ============================================================================
 
 CODON_TO_AA: dict[str, str] = {
-    "TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L",
-    "CTT": "L", "CTC": "L", "CTA": "L", "CTG": "L",
-    "ATT": "I", "ATC": "I", "ATA": "I", "ATG": "M",
-    "GTT": "V", "GTC": "V", "GTA": "V", "GTG": "V",
-    "TCT": "S", "TCC": "S", "TCA": "S", "TCG": "S",
-    "CCT": "P", "CCC": "P", "CCA": "P", "CCG": "P",
-    "ACT": "T", "ACC": "T", "ACA": "T", "ACG": "T",
-    "GCT": "A", "GCC": "A", "GCA": "A", "GCG": "A",
-    "TAT": "Y", "TAC": "Y", "TAA": "*", "TAG": "*",
-    "CAT": "H", "CAC": "H", "CAA": "Q", "CAG": "Q",
-    "AAT": "N", "AAC": "N", "AAA": "K", "AAG": "K",
-    "GAT": "D", "GAC": "D", "GAA": "E", "GAG": "E",
-    "TGT": "C", "TGC": "C", "TGA": "*", "TGG": "W",
-    "CGT": "R", "CGC": "R", "CGA": "R", "CGG": "R",
-    "AGT": "S", "AGC": "S", "AGA": "R", "AGG": "R",
-    "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G",
+    "TTT": "F",
+    "TTC": "F",
+    "TTA": "L",
+    "TTG": "L",
+    "CTT": "L",
+    "CTC": "L",
+    "CTA": "L",
+    "CTG": "L",
+    "ATT": "I",
+    "ATC": "I",
+    "ATA": "I",
+    "ATG": "M",
+    "GTT": "V",
+    "GTC": "V",
+    "GTA": "V",
+    "GTG": "V",
+    "TCT": "S",
+    "TCC": "S",
+    "TCA": "S",
+    "TCG": "S",
+    "CCT": "P",
+    "CCC": "P",
+    "CCA": "P",
+    "CCG": "P",
+    "ACT": "T",
+    "ACC": "T",
+    "ACA": "T",
+    "ACG": "T",
+    "GCT": "A",
+    "GCC": "A",
+    "GCA": "A",
+    "GCG": "A",
+    "TAT": "Y",
+    "TAC": "Y",
+    "TAA": "*",
+    "TAG": "*",
+    "CAT": "H",
+    "CAC": "H",
+    "CAA": "Q",
+    "CAG": "Q",
+    "AAT": "N",
+    "AAC": "N",
+    "AAA": "K",
+    "AAG": "K",
+    "GAT": "D",
+    "GAC": "D",
+    "GAA": "E",
+    "GAG": "E",
+    "TGT": "C",
+    "TGC": "C",
+    "TGA": "*",
+    "TGG": "W",
+    "CGT": "R",
+    "CGC": "R",
+    "CGA": "R",
+    "CGG": "R",
+    "AGT": "S",
+    "AGC": "S",
+    "AGA": "R",
+    "AGG": "R",
+    "GGT": "G",
+    "GGC": "G",
+    "GGA": "G",
+    "GGG": "G",
 }
 
 # ============================================================================
@@ -57,13 +106,20 @@ STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 # Named codon schemes supported by the protein sampler
 COMMON_CODON_SCHEMES: list[str] = [
-    "UNIFORM", "NNN", "NNK", "NNS", "NDT", "DBK", "NRT",
+    "UNIFORM",
+    "NNN",
+    "NNK",
+    "NNS",
+    "NDT",
+    "DBK",
+    "NRT",
 ]
 
 
 # ============================================================================
 # Codon scheme expansion
 # ============================================================================
+
 
 def _expand_degenerate_codon(codon: str) -> list[str]:
     """Expand a 3-letter degenerate codon into all concrete codons."""
@@ -108,9 +164,7 @@ def get_codon_scheme(name: str) -> dict[str, list[str] | dict[str, float]]:
         weights[aa] = weights.get(aa, 0.0) + 1.0
 
     if not weights:
-        raise ValueError(
-            f"Codon scheme '{name}' produces no amino acids (all stop codons)."
-        )
+        raise ValueError(f"Codon scheme '{name}' produces no amino acids (all stop codons).")
 
     return {
         "codons": codons,
@@ -133,15 +187,13 @@ def sample_amino_acid(scheme: str, rng: random.Random | None = None) -> str:
 # IUPAC nucleotide expansion and sampling
 # ============================================================================
 
+
 @functools.cache
 def get_substitution_pool(iupac: str) -> list[str]:
     """Expand an IUPAC ambiguity code into a list of concrete nucleotides."""
     iupac = iupac.upper()
     if iupac not in IUPAC_DNA:
-        raise ValueError(
-            f"Unknown IUPAC code '{iupac}'. "
-            f"Valid codes: {', '.join(sorted(IUPAC_DNA))}"
-        )
+        raise ValueError(f"Unknown IUPAC code '{iupac}'. Valid codes: {', '.join(sorted(IUPAC_DNA))}")
     return list(IUPAC_DNA[iupac])
 
 

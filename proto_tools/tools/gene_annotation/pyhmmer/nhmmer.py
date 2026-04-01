@@ -2,6 +2,7 @@
 
 PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -81,7 +82,9 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance: Any = None) -> PyNhmmerOutput:
+def run_pyhmmer_nhmmer(
+    inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance: Any = None
+) -> PyNhmmerOutput:
     """Search nucleotide sequences against nucleotide database using PyHMMER.
 
     Args:
@@ -112,9 +115,7 @@ def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig | None = No
         config=config,
     )
 
-    sequence_hits, domain_hits = _build_hit_models(
-        output_data["sequence_hits"], output_data["domain_hits"]
-    )
+    sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyNhmmerOutput(
         metadata={

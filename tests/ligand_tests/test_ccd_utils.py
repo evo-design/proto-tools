@@ -99,9 +99,9 @@ def test_empty_ccd_code_returns_false():
 
 def test_all_common_modifications_are_valid():
     for mod_code in COMMON_MODIFICATIONS:
-        assert (
-            map_ccd_code_to_smiles(mod_code) is not None
-        ), f"{mod_code.upper()} modification not found in CCD database"
+        assert map_ccd_code_to_smiles(mod_code) is not None, (
+            f"{mod_code.upper()} modification not found in CCD database"
+        )
 
 
 # ── Canonical component mapping ─────────────────────────────────────────
@@ -152,9 +152,31 @@ def test_canonical_unknown_code_returns_none():
 
 def test_all_common_modifications_have_canonical_forms():
     modifications_with_parents = {
-        "SEP", "TPO", "PTR", "HYP", "HY3", "MLY", "MLZ", "M3L",
-        "ALY", "MEA", "CSD", "CSO", "2MG", "5MC", "PSU", "7MG",
-        "H2U", "M2G", "OMC", "OMG", "1MA", "6OG", "6MA", "5CM", "8OG"
+        "SEP",
+        "TPO",
+        "PTR",
+        "HYP",
+        "HY3",
+        "MLY",
+        "MLZ",
+        "M3L",
+        "ALY",
+        "MEA",
+        "CSD",
+        "CSO",
+        "2MG",
+        "5MC",
+        "PSU",
+        "7MG",
+        "H2U",
+        "M2G",
+        "OMC",
+        "OMG",
+        "1MA",
+        "6OG",
+        "6MA",
+        "5CM",
+        "8OG",
     }
 
     for mod_code in COMMON_MODIFICATIONS:

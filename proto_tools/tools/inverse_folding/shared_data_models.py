@@ -65,9 +65,7 @@ class InverseFoldingStructureInput(BaseModel):
         ... )
     """
 
-    structure: Structure = Field(
-        description="Protein structure (auto-loaded from file path or PDB string)."
-    )
+    structure: Structure = Field(description="Protein structure (auto-loaded from file path or PDB string).")
     chain_ids: list[str] | None = Field(
         default=None,
         description="Chain IDs to design. If None, all chains in the structure are designed.",
@@ -97,9 +95,7 @@ class InverseFoldingStructureInput(BaseModel):
         if isinstance(structure, Structure):
             resolved_structure = structure
         elif isinstance(structure, (str, Path)):
-            resolved_structure = Structure(
-                structure_filepath_or_content=structure
-            )
+            resolved_structure = Structure(structure_filepath_or_content=structure)
         else:
             raise ValueError(f"Unsupported structure type: {type(structure)}")
 
@@ -114,25 +110,20 @@ class InverseFoldingStructureInput(BaseModel):
             requested_chains = set(resolved_chain_ids)
             if not requested_chains.issubset(available_chains):
                 missing = requested_chains - available_chains
-                raise ValueError(
-                    f"Chain IDs {missing} not found in structure. "
-                    f"Available chains: {available_chains}"
-                )
+                raise ValueError(f"Chain IDs {missing} not found in structure. Available chains: {available_chains}")
 
         # 3. Validate fixed_positions if provided
         if fixed_positions is not None:
             for chain_id, positions in fixed_positions.items():
                 if chain_id not in available_chains:
                     raise ValueError(
-                        f"Fixed positions chain '{chain_id}' not in structure. "
-                        f"Available chains: {available_chains}"
+                        f"Fixed positions chain '{chain_id}' not in structure. Available chains: {available_chains}"
                     )
                 chain_positions = resolved_structure.get_chain_positions(chain_id)
                 invalid = set(positions) - set(chain_positions)
                 if invalid:
                     raise ValueError(
-                        f"Invalid fixed positions {invalid} for chain '{chain_id}'. "
-                        f"Valid positions: {chain_positions}"
+                        f"Invalid fixed positions {invalid} for chain '{chain_id}'. Valid positions: {chain_positions}"
                     )
 
         result = {
@@ -257,7 +248,6 @@ class InverseFoldingConfig(BaseConfig):
     )
 
 
-
 class DesignedSequences(BaseModel, ABC):
     """Represents the output of an inverse folding model produced from a single input structure.
 
@@ -283,9 +273,7 @@ class DesignedSequences(BaseModel, ABC):
         - Model-specific scores (e.g., ProteinMPNN score)
     """
 
-    sequences: list[str] = Field(
-        description="Designed amino acid sequences from the inverse folding model"
-    )
+    sequences: list[str] = Field(description="Designed amino acid sequences from the inverse folding model")
 
     def __len__(self) -> int:
         """Get the number of designed sequences."""
@@ -311,11 +299,7 @@ class DesignedSequences(BaseModel, ABC):
         """Get the metrics for a designed sequence by index."""
         # Get all fields that are not sequences
         fields = self.model_dump()
-        return {
-            k: v[index]
-            for k, v in fields.items()
-            if k != "sequences" and isinstance(v, list)
-        }
+        return {k: v[index] for k, v in fields.items() if k != "sequences" and isinstance(v, list)}
 
 
 class InverseFoldingOutput(BaseToolOutput):
@@ -446,9 +430,7 @@ class InverseFoldingScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: list[SequenceScores] = Field(
-        description="List of scoring outputs, one per input sequence-structure pair"
-    )
+    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence-structure pair")
 
     @property
     def vocab(self) -> list[str] | None:

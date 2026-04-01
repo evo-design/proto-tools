@@ -176,10 +176,7 @@ def get_subprocess_device_env(device: str) -> dict[str, str]:
     physical_devices = [parent_devices[idx] for idx in indices]
     env["CUDA_VISIBLE_DEVICES"] = ",".join(physical_devices)
 
-    logger.debug(
-        f"Mapped device '{device}' to physical GPUs: {env['CUDA_VISIBLE_DEVICES']} "
-        f"(parent: {parent_visible})"
-    )
+    logger.debug(f"Mapped device '{device}' to physical GPUs: {env['CUDA_VISIBLE_DEVICES']} (parent: {parent_visible})")
 
     return _apply_jax_subprocess_env(env)
 
@@ -222,9 +219,7 @@ def resolve_jax_device(device: str) -> Any:
 
     devices = jax.devices(backend)
     if device_idx >= len(devices):  # type: ignore[operator]
-        raise ValueError(
-            f"Device {device} not available. Only {len(devices)} {backend} device(s) found."
-        )
+        raise ValueError(f"Device {device} not available. Only {len(devices)} {backend} device(s) found.")
     return devices[device_idx]
 
 
@@ -286,9 +281,7 @@ def move_model_to_device(
     Example:
         >>> def _reload(model, old, new):
         ...     return None  # Model will be recreated by self.load()
-        >>> self.model = move_model_to_device(
-        ...     self.model, self.device, device, custom_move_fn=_reload
-        ... )
+        >>> self.model = move_model_to_device(self.model, self.device, device, custom_move_fn=_reload)
         >>> self.load(device)
 
     Note:
@@ -303,6 +296,7 @@ def move_model_to_device(
         if old_device != "cpu" and old_device.startswith("cuda"):
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except ImportError:
@@ -527,8 +521,7 @@ def resolve_weights_dir(tool_name: str) -> str | None:
             # Same default as get_proto_home(): ~/.proto/
             proto_home = os.path.join(os.path.expanduser("~"), ".proto")
             logger.warning(
-                "PROTO_HOME not set in subprocess environment. "
-                "Falling back to %s. Set PROTO_HOME to customize.",
+                "PROTO_HOME not set in subprocess environment. Falling back to %s. Set PROTO_HOME to customize.",
                 proto_home,
             )
         cache_dir = os.path.join(proto_home, "proto_model_cache")

@@ -2,6 +2,7 @@
 
 MMseqs2 sequence clustering tool.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -39,6 +40,7 @@ class MmseqsClusterMember(BaseModel):
         sequence (str): The actual sequence string.
         is_representative (bool): Whether this sequence is the cluster representative.
     """
+
     sequence_id: str = Field(description="Sequence identifier")
     sequence: str = Field(description="The sequence string")
     is_representative: bool = Field(default=False, description="Whether this is the cluster representative")
@@ -56,6 +58,7 @@ class MmseqsClusterResult(BaseModel):
         cluster_id (str): Identifier of the cluster (usually the representative's ID).
         is_representative (bool): Whether this sequence is the cluster representative.
     """
+
     sequence_id: str = Field(description="Input sequence identifier")
     input_sequence: str = Field(description="The original input sequence")
     cluster_id: str = Field(description="Cluster identifier (representative sequence ID)")
@@ -104,9 +107,8 @@ class MmseqsClusteringOutput(BaseToolOutput):
         results (list[MmseqsClusterResult]): List of clustering results, one per
             input sequence. The order matches the input sequences order.
     """
-    results: list[MmseqsClusterResult] = Field(
-        description="List of clustering results, one per input sequence"
-    )
+
+    results: list[MmseqsClusterResult] = Field(description="List of clustering results, one per input sequence")
 
     def __len__(self) -> int:
         """Get the number of results."""
@@ -144,13 +146,18 @@ class MmseqsClusteringOutput(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         data = [r.model_dump() for r in self.results]
-        df = pd.DataFrame(data) if data else pd.DataFrame(columns=["sequence_id", "input_sequence", "cluster_id", "is_representative"])
+        df = (
+            pd.DataFrame(data)
+            if data
+            else pd.DataFrame(columns=["sequence_id", "input_sequence", "cluster_id", "is_representative"])
+        )
 
         if file_format == "csv":
             df.to_csv(path, index=False)
 
         elif file_format == "json":
             import json
+
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         else:
@@ -165,6 +172,7 @@ class MmseqsClusteringConfig(BaseConfig):
         min_seq_id (float): Minimum sequence identity threshold (0.0-1.0) for
             grouping sequences into the same cluster.
     """
+
     min_seq_id: float = ConfigField(
         title="Minimum Sequence Identity",
         default=DEFAULT_MIN_SEQ_ID,
@@ -194,7 +202,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_mmseqs_clustering(
-    inputs: MmseqsClusteringInput, config: MmseqsClusteringConfig | None = None,
+    inputs: MmseqsClusteringInput,
+    config: MmseqsClusteringConfig | None = None,
     instance: Any = None,
 ) -> MmseqsClusteringOutput:
     """Perform sequence clustering using MMseqs2.
@@ -216,9 +225,7 @@ def run_mmseqs_clustering(
         RuntimeError: If any MMseqs2 command fails during execution.
 
     Examples:
-        >>> inputs = MmseqsClusteringInput(
-        ...     input_sequences=["MVLSPADKTN...", "MVLSPADKTN...", "MKLLVVAAAA..."]
-        ... )
+        >>> inputs = MmseqsClusteringInput(input_sequences=["MVLSPADKTN...", "MVLSPADKTN...", "MKLLVVAAAA..."])
         >>> config = MmseqsClusteringConfig(min_seq_id=0.95)
         >>> result = run_mmseqs_clustering(inputs, config)
         >>> print(f"Found {result.num_clusters} clusters")
@@ -249,13 +256,15 @@ def run_mmseqs_clustering(
     results = []
     for seq, seq_id in zip(sequences, sequence_ids, strict=False):
         cluster_id = cluster_assignments.get(seq_id, seq_id)
-        is_rep = (seq_id == cluster_id)
-        results.append(MmseqsClusterResult(
-            sequence_id=seq_id,
-            input_sequence=seq,
-            cluster_id=cluster_id,
-            is_representative=is_rep,
-        ))
+        is_rep = seq_id == cluster_id
+        results.append(
+            MmseqsClusterResult(
+                sequence_id=seq_id,
+                input_sequence=seq,
+                cluster_id=cluster_id,
+                is_representative=is_rep,
+            )
+        )
 
     return MmseqsClusteringOutput(
         metadata={

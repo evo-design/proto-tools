@@ -8,6 +8,7 @@ Each masker has:
 The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
 truth for valid method names.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,6 +30,7 @@ MaskingMethod = Literal["random", "entropy", "max-logit"]
 # ============================================================================
 # Masker ABC
 # ============================================================================
+
 
 class Masker(ABC):
     """Abstract base class for masking strategies.
@@ -61,8 +63,7 @@ class Masker(ABC):
 
             def score(self, sequences, position_score_fn=None):
                 # Return higher scores for positions you want masked
-                return [[1.0 if c == "A" else 0.0 for c in seq]
-                        for seq in sequences]
+                return [[1.0 if c == "A" else 0.0 for c in seq] for seq in sequences]
     """
 
     supported_models: list[str] | None = None
@@ -94,6 +95,7 @@ class Masker(ABC):
 # ============================================================================
 # Masker implementations
 # ============================================================================
+
 
 class RandomMasker(Masker):
     """Uniform random selection; all positions scored equally."""
@@ -166,6 +168,5 @@ MASKERS: dict[str, type[Masker]] = {
 }
 
 assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (  # noqa: S101
-    f"MASKERS keys {set(MASKERS.keys())} don't match "
-    f"MaskingMethod values {set(get_args(MaskingMethod))}"
+    f"MASKERS keys {set(MASKERS.keys())} don't match MaskingMethod values {set(get_args(MaskingMethod))}"
 )

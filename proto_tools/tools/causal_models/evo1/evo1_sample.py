@@ -69,9 +69,7 @@ class Evo1SampleOutput(BaseToolOutput):
     """
 
     sequences: list[str] = Field(description="Generated DNA sequences")
-    scores: list[float] | None = Field(
-        default=None, description="Mean log-probability scores per sequence"
-    )
+    scores: list[float] | None = Field(default=None, description="Mean log-probability scores per sequence")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -191,7 +189,9 @@ def example_input() -> Any:
     iterable_output_field="sequences",
 )
 def run_evo1_sample(
-    inputs: Evo1SampleInput, config: Evo1SampleConfig | None = None, instance: Any = None,
+    inputs: Evo1SampleInput,
+    config: Evo1SampleConfig | None = None,
+    instance: Any = None,
 ) -> Evo1SampleOutput:
     """Sample DNA sequences using the Evo1 language model.
 
@@ -239,9 +239,7 @@ def run_evo1_sample(
 
     # Prepend prompts if requested
     if config.prepend_prompt:  # type: ignore[union-attr]
-        sequences = [
-            prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)
-        ]
+        sequences = [prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)]
 
     return Evo1SampleOutput(
         metadata={

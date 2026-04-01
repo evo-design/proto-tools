@@ -79,12 +79,10 @@ DEVICE_MOVE_TIMEOUT = 200
 _lock = threading.Lock()  # protects _instances dict
 _instances: dict[str, ToolInstance] = {}
 
-_scope_override: contextvars.ContextVar[dict[str, ToolInstance] | None] = (
-    contextvars.ContextVar("_scope_override", default=None)
+_scope_override: contextvars.ContextVar[dict[str, ToolInstance] | None] = contextvars.ContextVar(
+    "_scope_override", default=None
 )
-_persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "_persist_mode", default=False
-)
+_persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_mode", default=False)
 
 
 def _active_cache() -> dict[str, ToolInstance]:
@@ -220,9 +218,7 @@ class ToolInstance:
         with _lock:
             cached = _active_cache().get(key)
         if cached is not None:
-            logger.debug(
-                "dispatch(%s): reusing cached instance (key=%r)", tool_name, key
-            )
+            logger.debug("dispatch(%s): reusing cached instance (key=%r)", tool_name, key)
             return cached.run(
                 input_dict,
                 script_path=script_path,
@@ -234,7 +230,8 @@ class ToolInstance:
         if _persist_mode.get():
             logger.debug(
                 "dispatch(%s): persist mode, auto-caching instance (key=%r)",
-                tool_name, key,
+                tool_name,
+                key,
             )
             inst = cls.get(tool_name, instance_name=key)
             return inst.run(
@@ -401,9 +398,9 @@ class ToolInstance:
         instances never pollute the global cache::
 
             with ToolInstance.persist():
-                run_esmfold(inputs, config)       # auto-cached
+                run_esmfold(inputs, config)  # auto-cached
                 run_esm2_score(inputs2, config2)  # also auto-cached
-                run_esmfold(inputs3, config)      # reuses cached
+                run_esmfold(inputs3, config)  # reuses cached
             # everything cleaned up on exit
 
         Nestable — each ``persist()`` block gets its own scope.
@@ -430,9 +427,7 @@ class ToolInstance:
         self.env_path = env_root / f"{tool_name}_env"
         self.setup_script = self._find_setup_script(tool_name)
         self.script_path = self._find_script(tool_name)
-        self._tool_env_vars = _parse_env_vars_file(
-            self.setup_script.parent / "env_vars.txt"
-        )
+        self._tool_env_vars = _parse_env_vars_file(self.setup_script.parent / "env_vars.txt")
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
@@ -458,11 +453,11 @@ class ToolInstance:
             tail = self._build_failures[self.tool_name]
             hint = f"\n{tail}" if tail else ""
             raise RuntimeError(
-                f"'{self.tool_name}' may not be compatible with your "
-                f"system. Check logs for details.{hint}"
+                f"'{self.tool_name}' may not be compatible with your system. Check logs for details.{hint}"
             )
         # Show one-time notice if using default storage locations
         from proto_tools.utils.proto_home import show_first_run_notice
+
         show_first_run_notice()
 
         if not self.env_path.exists() or not self._is_env_ok():
@@ -602,9 +597,7 @@ class ToolInstance:
         """
         with self._instance_lock:
             # Get instance name for DeviceManager
-            instance_name = (
-                next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
-            )
+            instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
 
             # If no worker exists yet, just update internal device tracking
             if self._worker is None:
@@ -623,9 +616,7 @@ class ToolInstance:
                     try:
                         result = self._worker.send(command, timeout=DEVICE_MOVE_TIMEOUT)
                         if not result.get("success", False):
-                            logger.warning(
-                                "Worker to_device returned success=False: %s", result
-                            )
+                            logger.warning("Worker to_device returned success=False: %s", result)
                     except Exception as e:
                         logger.error("Failed to move worker to %s: %s", target_device, e)
                         raise
@@ -696,9 +687,7 @@ class ToolInstance:
         Each unique set of reload_on_change values (e.g., model_name) gets its
         own marker, so switching to a new checkpoint triggers the warmup timeout.
         """
-        key = hashlib.sha256(
-            json.dumps(reload_params, sort_keys=True, default=str).encode()
-        ).hexdigest()[:12]
+        key = hashlib.sha256(json.dumps(reload_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
         return self.env_path / f".warmup_complete_{key}"
 
     def _needs_warmup(self, reload_params: dict[str, Any]) -> bool:
@@ -744,12 +733,9 @@ class ToolInstance:
             if timeout is None or effective_timeout > timeout:
                 config_desc = ""
                 if params:
-                    config_desc = " (config: {})".format(", ".join(
-                        f"{k}={v!r}" for k, v in sorted(params.items())
-                    ))
+                    config_desc = " (config: {})".format(", ".join(f"{k}={v!r}" for k, v in sorted(params.items())))
                 logger.info(
-                    "First run of %s%s detected, using extended warm-up timeout: "
-                    "%ds (configured: %s)",
+                    "First run of %s%s detected, using extended warm-up timeout: %ds (configured: %s)",
                     self.tool_name,
                     config_desc,
                     effective_timeout,
@@ -794,16 +780,11 @@ class ToolInstance:
             params_changed = reload_params != self._reload_params
             if script_changed or params_changed:
                 if params_changed:
-                    changed = {
-                        k
-                        for k in reload_keys
-                        if self._reload_params.get(k) != reload_params.get(k)
-                    }
+                    changed = {k for k in reload_keys if self._reload_params.get(k) != reload_params.get(k)}
                     logger.info(
                         "Config changed (%s) for %s, restarting worker",
                         ", ".join(
-                            f"{k}: {self._reload_params.get(k)!r} → {reload_params[k]!r}"
-                            for k in sorted(changed)
+                            f"{k}: {self._reload_params.get(k)!r} → {reload_params[k]!r}" for k in sorted(changed)
                         ),
                         self.tool_name,
                     )
@@ -813,9 +794,7 @@ class ToolInstance:
         self._reload_params = reload_params
 
         # Get instance name for DeviceManager (use first cache key if available)
-        instance_name = (
-            next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
-        )
+        instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
 
         if self._worker is None:
             # Request device from DeviceManager
@@ -847,9 +826,7 @@ class ToolInstance:
                         try:
                             worker.stop()
                         except Exception as e:
-                            logger.error(
-                                "Failed to stop worker during RESTART eviction: %s", e
-                            )
+                            logger.error("Failed to stop worker during RESTART eviction: %s", e)
 
             allocated_device = device_manager.request_device(
                 tool_name=self.tool_name,
@@ -970,13 +947,13 @@ class ToolInstance:
                 tail = self._stderr_tail(e.stderr or e.stdout or "")
                 logger.error(
                     "Tool %s failed (exit %d):\n%s",
-                    self.tool_name, e.returncode, tail,
+                    self.tool_name,
+                    e.returncode,
+                    tail,
                 )
                 raise
             except subprocess.TimeoutExpired:
-                raise TimeoutError(
-                    f"Tool {self.tool_name} timed out after {effective_timeout}s"
-                ) from None
+                raise TimeoutError(f"Tool {self.tool_name} timed out after {effective_timeout}s") from None
 
             with open(output_path) as f:
                 result = json.load(f)
@@ -1037,6 +1014,7 @@ class ToolInstance:
             logger.info("Downloading micromamba to %s...", mamba_root)
 
             import platform
+
             system = platform.system()
             arch = platform.machine()
 
@@ -1055,9 +1033,7 @@ class ToolInstance:
                 else:
                     raise RuntimeError(f"Unsupported macOS architecture: {arch}")
             else:
-                raise RuntimeError(
-                    f"Unsupported operating system: {system} (arch: {arch})"
-                )
+                raise RuntimeError(f"Unsupported operating system: {system} (arch: {arch})")
 
             urls = [
                 f"https://micro.mamba.pm/api/micromamba/{platform_id}/latest",
@@ -1084,9 +1060,7 @@ class ToolInstance:
                     last_err = e
                     logger.warning("Failed to download micromamba from %s: %s", url, e)
                     continue
-            raise RuntimeError(
-                f"Failed to download/extract micromamba from all sources: {last_err}"
-            )
+            raise RuntimeError(f"Failed to download/extract micromamba from all sources: {last_err}")
 
     def _get_python_version(self) -> str:
         """Get Python version for this tool from python_version.txt.
@@ -1105,15 +1079,12 @@ class ToolInstance:
         try:
             version_str = version_file.read_text().strip()
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to read {version_file} for tool '{self.tool_name}': {e}"
-            ) from e
+            raise RuntimeError(f"Failed to read {version_file} for tool '{self.tool_name}': {e}") from e
 
         # Validate format
         if not version_str:
             raise ValueError(
-                f"python_version.txt for tool '{self.tool_name}' is empty. "
-                f"Expected format: '3.11' or '3.11.5'"
+                f"python_version.txt for tool '{self.tool_name}' is empty. Expected format: '3.11' or '3.11.5'"
             )
 
         parts = version_str.split(".")
@@ -1130,15 +1101,13 @@ class ToolInstance:
                 _ = int(parts[2])  # Validate patch is numeric
         except ValueError:
             raise ValueError(
-                f"Invalid Python version in {version_file}: '{version_str}'. "
-                f"Version components must be integers."
+                f"Invalid Python version in {version_file}: '{version_str}'. Version components must be integers."
             ) from None
 
         # Check reasonable bounds
         if major != 3 or minor < 8:
             raise ValueError(
-                f"Unsupported Python version in {version_file}: '{version_str}'. "
-                f"Requires Python 3.8 or higher."
+                f"Unsupported Python version in {version_file}: '{version_str}'. Requires Python 3.8 or higher."
             )
 
         return version_str
@@ -1154,9 +1123,7 @@ class ToolInstance:
             return cls._tool_dir_cache
         tools_dir = Path(__file__).parent.parent / "tools"
         cls._tool_dir_cache = {
-            item.name: item
-            for item in tools_dir.rglob("*")
-            if item.is_dir() and (item / "standalone").exists()
+            item.name: item for item in tools_dir.rglob("*") if item.is_dir() and (item / "standalone").exists()
         }
         return cls._tool_dir_cache
 
@@ -1166,10 +1133,7 @@ class ToolInstance:
         tool_dirs = cls._get_tool_dirs()
         if tool_name in tool_dirs:
             return tool_name
-        raise ValueError(
-            f"Invalid tool name: {tool_name!r}. "
-            f"Available tools with standalone dirs: {sorted(tool_dirs)}"
-        )
+        raise ValueError(f"Invalid tool name: {tool_name!r}. Available tools with standalone dirs: {sorted(tool_dirs)}")
 
     @classmethod
     def _find_setup_script(cls, tool_name: str) -> Path:
@@ -1227,8 +1191,12 @@ class ToolInstance:
         if not status_file.exists():
             return ""
         skip = (
-            "FAILED", "Return code:", "Command:",
-            "Setup hash:", "Timestamp:", "STDERR:",
+            "FAILED",
+            "Return code:",
+            "Command:",
+            "Setup hash:",
+            "Timestamp:",
+            "STDERR:",
         )
         for raw_line in status_file.read_text().splitlines():
             line = raw_line.strip()
@@ -1283,21 +1251,23 @@ class ToolInstance:
         python_version = self._get_python_version()
 
         # Create fresh micromamba environment
-        logger.info(
-            "Setting up environment for %s (Python %s)...",
-            self.tool_name,
-            python_version
-        )
+        logger.info("Setting up environment for %s (Python %s)...", self.tool_name, python_version)
         # Set MAMBA_ROOT_PREFIX to the .micromamba dir (same filesystem as
         # tool_envs/) so the package cache lives alongside the envs and
         # micromamba can hardlink instead of copying.
         mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_bin.parent.parent)}
         subprocess.run(
             [
-                str(mamba_bin), "create", "-y", "-p", str(self.env_path),
+                str(mamba_bin),
+                "create",
+                "-y",
+                "-p",
+                str(self.env_path),
                 f"python={python_version}",
-                "pip", "uv",
-                "-c", "conda-forge"
+                "pip",
+                "uv",
+                "-c",
+                "conda-forge",
             ],
             check=True,
             capture_output=True,
@@ -1336,15 +1306,15 @@ class ToolInstance:
         combined_output = raw_output.decode("utf-8", errors="replace") if raw_output else ""
 
         if proc.returncode == 0:
-            status_file.write_text(
-                f"SUCCESS\nSetup hash: {self._setup_hash()}\n"
-            )
+            status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.tool_name)
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(
                 "Environment setup failed for %s (exit %d):\n%s",
-                self.tool_name, proc.returncode, tail,
+                self.tool_name,
+                proc.returncode,
+                tail,
             )
             if combined_output:
                 logger.debug("Full setup output for %s:\n%s", self.tool_name, combined_output)

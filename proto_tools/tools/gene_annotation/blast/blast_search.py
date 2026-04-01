@@ -2,6 +2,7 @@
 
 Unified BLAST search tool supporting both online (NCBI) and local modes.
 """
+
 from __future__ import annotations
 
 import io
@@ -119,16 +120,11 @@ class BlastSearchInput(BaseToolInput):
     """
 
     query: str = InputField(
-        description=(
-            "Query sequence string or path to a FASTA file containing query sequence(s)"
-        ),
+        description=("Query sequence string or path to a FASTA file containing query sequence(s)"),
     )
     query_type: Literal["sequence", "fasta_path"] = InputField(
         default="sequence",
-        description=(
-            "Auto-inferred query type: 'sequence' for raw string, "
-            "'fasta_path' for a file path."
-        ),
+        description=("Auto-inferred query type: 'sequence' for raw string, 'fasta_path' for a file path."),
     )
 
     @model_validator(mode="after")
@@ -263,10 +259,7 @@ class BlastSearchConfig(BaseConfig):
     search_mode: Literal["online", "local"] = ConfigField(
         default="online",
         title="Search Mode",
-        description=(
-            'Search mode: "online" queries NCBI servers, '
-            '"local" runs BLAST+ against a local database'
-        ),
+        description=('Search mode: "online" queries NCBI servers, "local" runs BLAST+ against a local database'),
     )
     program: BLAST_PROGRAMS = ConfigField(
         default="blastn",
@@ -278,30 +271,21 @@ class BlastSearchConfig(BaseConfig):
     database: BLAST_DATABASES = ConfigField(
         default="nt",
         title="NCBI Database",
-        description=(
-            "NCBI database to search against (online mode only). "
-            "Ignored when search_mode is 'local'."
-        ),
+        description=("NCBI database to search against (online mode only). Ignored when search_mode is 'local'."),
         advanced=True,
         depends_on={"search_mode": ["online"]},
     )
     entrez_query: str | None = ConfigField(
         default=None,
         title="Entrez Query",
-        description=(
-            "Restrict online search with an Entrez query "
-            "(e.g. 'Homo sapiens[Organism]'). Online only."
-        ),
+        description=("Restrict online search with an Entrez query (e.g. 'Homo sapiens[Organism]'). Online only."),
         advanced=True,
         depends_on={"search_mode": ["online"]},
     )
     hitlist_size: int | None = ConfigField(
         default=None,
         title="Hit List Size",
-        description=(
-            "Number of database sequences to return. "
-            "Defaults to 50 on NCBI. Online mode only."
-        ),
+        description=("Number of database sequences to return. Defaults to 50 on NCBI. Online mode only."),
         ge=1,
         advanced=True,
         depends_on={"search_mode": ["online"]},
@@ -310,8 +294,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Use MegaBLAST",
         description=(
-            "Use MegaBLAST algorithm for blastn searches (online mode only). "
-            "Ignored when search_mode is 'local'."
+            "Use MegaBLAST algorithm for blastn searches (online mode only). Ignored when search_mode is 'local'."
         ),
         advanced=True,
         depends_on={"search_mode": ["online"]},
@@ -321,10 +304,7 @@ class BlastSearchConfig(BaseConfig):
     local_db: str | None = ConfigField(
         default=None,
         title="Local BLAST Database",
-        description=(
-            "Path to a local BLAST database (no file extensions). "
-            "Required for local mode."
-        ),
+        description=("Path to a local BLAST database (no file extensions). Required for local mode."),
         depends_on={"search_mode": ["local"]},
     )
     num_threads: int = ConfigField(
@@ -340,28 +320,20 @@ class BlastSearchConfig(BaseConfig):
     evalue: float | None = ConfigField(
         default=None,
         title="E-value Threshold",
-        description=(
-            "Expectation value threshold for reporting hits. "
-            "Default is 10.0 in both online and local BLAST."
-        ),
+        description=("Expectation value threshold for reporting hits. Default is 10.0 in both online and local BLAST."),
         gt=0,
     )
     word_size: int | None = ConfigField(
         default=None,
         title="Word Size",
-        description=(
-            "Length of initial exact match. "
-            "Defaults: 28 (megablast), 11 (blastn), 3 (protein)."
-        ),
+        description=("Length of initial exact match. Defaults: 28 (megablast), 11 (blastn), 3 (protein)."),
         ge=2,
         advanced=True,
     )
     gapopen: int | None = ConfigField(
         default=None,
         title="Gap Open Cost",
-        description=(
-            "Cost to open a gap. Defaults: 5 (blastn), 11 (protein programs)."
-        ),
+        description=("Cost to open a gap. Defaults: 5 (blastn), 11 (protein programs)."),
         ge=0,
         advanced=True,
     )
@@ -369,8 +341,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Gap Extend Cost",
         description=(
-            "Cost to extend a gap. Not supported for tblastx. "
-            "Defaults: 2 (blastn), 1 (blastp/blastx/tblastn)."
+            "Cost to extend a gap. Not supported for tblastx. Defaults: 2 (blastn), 1 (blastp/blastx/tblastn)."
         ),
         ge=0,
         advanced=True,
@@ -378,39 +349,27 @@ class BlastSearchConfig(BaseConfig):
     matrix: SCORING_MATRICES | None = ConfigField(
         default=None,
         title="Scoring Matrix",
-        description=(
-            "Substitution matrix for protein alignments. "
-            "Not applicable to blastn. Default: BLOSUM62."
-        ),
+        description=("Substitution matrix for protein alignments. Not applicable to blastn. Default: BLOSUM62."),
         advanced=True,
     )
     reward: int | None = ConfigField(
         default=None,
         title="Nucleotide Match Reward",
-        description=(
-            "Reward for a nucleotide match (blastn only). "
-            "Default: 1 (megablast), 2 (blastn/dc-megablast)."
-        ),
+        description=("Reward for a nucleotide match (blastn only). Default: 1 (megablast), 2 (blastn/dc-megablast)."),
         ge=0,
         advanced=True,
     )
     penalty: int | None = ConfigField(
         default=None,
         title="Nucleotide Mismatch Penalty",
-        description=(
-            "Penalty for nucleotide mismatch (blastn only). "
-            "Must be negative. Default: -2 or -3."
-        ),
+        description=("Penalty for nucleotide mismatch (blastn only). Must be negative. Default: -2 or -3."),
         le=0,
         advanced=True,
     )
     threshold: int | None = ConfigField(
         default=None,
         title="Word Score Threshold",
-        description=(
-            "Minimum word score for BLAST lookup table (protein only). "
-            "Default: 11-13 depending on program."
-        ),
+        description=("Minimum word score for BLAST lookup table (protein only). Default: 11-13 depending on program."),
         ge=1,
         advanced=True,
     )
@@ -418,8 +377,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Composition-Based Statistics",
         description=(
-            "Composition-based score adjustment (protein). "
-            "0=off, 1=stats, 2=adjust (default), 3=unconditional."
+            "Composition-based score adjustment (protein). 0=off, 1=stats, 2=adjust (default), 3=unconditional."
         ),
         advanced=True,
     )
@@ -428,29 +386,21 @@ class BlastSearchConfig(BaseConfig):
     max_target_seqs: int | None = ConfigField(
         default=None,
         title="Max Target Sequences",
-        description=(
-            "Maximum number of aligned sequences to keep. Default: 500 (local mode)."
-        ),
+        description=("Maximum number of aligned sequences to keep. Default: 500 (local mode)."),
         ge=1,
         advanced=True,
     )
     max_hsps: int | None = ConfigField(
         default=None,
         title="Max HSPs",
-        description=(
-            "Maximum number of HSPs (high-scoring segment pairs) per "
-            "query-subject pair. Default: no limit."
-        ),
+        description=("Maximum number of HSPs (high-scoring segment pairs) per query-subject pair. Default: no limit."),
         ge=1,
         advanced=True,
     )
     perc_identity: float | None = ConfigField(
         default=None,
         title="Percent Identity Cutoff",
-        description=(
-            "Minimum percent identity for reported alignments (0-100). "
-            "Most useful for blastn."
-        ),
+        description=("Minimum percent identity for reported alignments (0-100). Most useful for blastn."),
         ge=0,
         le=100,
         advanced=True,
@@ -466,19 +416,14 @@ class BlastSearchConfig(BaseConfig):
     culling_limit: int | None = ConfigField(
         default=None,
         title="Culling Limit",
-        description=(
-            "Delete hits enveloped by at least this many higher-scoring hits."
-        ),
+        description=("Delete hits enveloped by at least this many higher-scoring hits."),
         ge=0,
         advanced=True,
     )
     best_hit_overhang: float | None = ConfigField(
         default=None,
         title="Best Hit Overhang",
-        description=(
-            "Best Hit algorithm overhang value (>0 and <0.5). "
-            "Incompatible with culling_limit."
-        ),
+        description=("Best Hit algorithm overhang value (>0 and <0.5). Incompatible with culling_limit."),
         gt=0,
         lt=0.5,
         advanced=True,
@@ -486,10 +431,7 @@ class BlastSearchConfig(BaseConfig):
     best_hit_score_edge: float | None = ConfigField(
         default=None,
         title="Best Hit Score Edge",
-        description=(
-            "Best Hit algorithm score edge value (>0 and <0.5). "
-            "Incompatible with culling_limit."
-        ),
+        description=("Best Hit algorithm score edge value (>0 and <0.5). Incompatible with culling_limit."),
         gt=0,
         lt=0.5,
         advanced=True,
@@ -506,8 +448,7 @@ class BlastSearchConfig(BaseConfig):
         default=None,
         title="Soft Masking",
         description=(
-            "Apply filtering as soft masks (for seeding only). "
-            "Default: true (blastn), false (protein programs)."
+            "Apply filtering as soft masks (for seeding only). Default: true (blastn), false (protein programs)."
         ),
         advanced=True,
     )
@@ -520,19 +461,13 @@ class BlastSearchConfig(BaseConfig):
     dust: str | None = ConfigField(
         default=None,
         title="DUST Filter",
-        description=(
-            "Low-complexity filter for nucleotide queries. "
-            "Values: 'yes', 'no', or 'level window linker'."
-        ),
+        description=("Low-complexity filter for nucleotide queries. Values: 'yes', 'no', or 'level window linker'."),
         advanced=True,
     )
     seg: str | None = ConfigField(
         default=None,
         title="SEG Filter",
-        description=(
-            "Low-complexity filter for protein queries. "
-            "Values: 'yes', 'no', or 'window locut hicut'."
-        ),
+        description=("Low-complexity filter for protein queries. Values: 'yes', 'no', or 'window locut hicut'."),
         advanced=True,
     )
 
@@ -540,10 +475,7 @@ class BlastSearchConfig(BaseConfig):
     task: BLAST_TASKS | None = ConfigField(
         default=None,
         title="BLAST Task",
-        description=(
-            "Task preset that sets optimized default parameters "
-            "(e.g. megablast, blastp-fast, blastx-fast)."
-        ),
+        description=("Task preset that sets optimized default parameters (e.g. megablast, blastp-fast, blastx-fast)."),
         advanced=True,
     )
     ungapped: bool | None = ConfigField(
@@ -555,18 +487,14 @@ class BlastSearchConfig(BaseConfig):
     strand: Literal["both", "plus", "minus"] | None = ConfigField(
         default=None,
         title="Query Strand",
-        description=(
-            "Query strand(s) to search: 'both', 'plus', or 'minus'. "
-            "Only for blastn, blastx, tblastx."
-        ),
+        description=("Query strand(s) to search: 'both', 'plus', or 'minus'. Only for blastn, blastx, tblastx."),
         advanced=True,
     )
     query_gencode: int | None = ConfigField(
         default=None,
         title="Query Genetic Code",
         description=(
-            "Genetic code for translating the query sequence. "
-            "Only for blastx and tblastx. Default: 1 (Standard)."
+            "Genetic code for translating the query sequence. Only for blastx and tblastx. Default: 1 (Standard)."
         ),
         ge=1,
         advanced=True,
@@ -574,10 +502,7 @@ class BlastSearchConfig(BaseConfig):
     db_gencode: int | None = ConfigField(
         default=None,
         title="Database Genetic Code",
-        description=(
-            "Genetic code for translating database sequences. "
-            "Only for tblastn/tblastx. Default: 1."
-        ),
+        description=("Genetic code for translating database sequences. Only for tblastn/tblastx. Default: 1."),
         ge=1,
         advanced=True,
     )
@@ -609,10 +534,7 @@ class BlastSearchConfig(BaseConfig):
     use_sw_tback: bool | None = ConfigField(
         default=None,
         title="Smith-Waterman Traceback",
-        description=(
-            "Compute locally optimal Smith-Waterman alignments. "
-            "Only for blastp, blastx, tblastn."
-        ),
+        description=("Compute locally optimal Smith-Waterman alignments. Only for blastp, blastx, tblastn."),
         advanced=True,
     )
 
@@ -648,8 +570,7 @@ class BlastSearchConfig(BaseConfig):
                 default = BlastSearchConfig.model_fields[field_name].default
                 if value != default:
                     logger.warning(
-                        "Config field '%s' is online-only and will be "
-                        "ignored in local search mode.",
+                        "Config field '%s' is online-only and will be ignored in local search mode.",
                         field_name,
                     )
 
@@ -660,8 +581,7 @@ class BlastSearchConfig(BaseConfig):
                 default = BlastSearchConfig.model_fields[field_name].default
                 if value != default:
                     logger.warning(
-                        "Config field '%s' is local-only and will be "
-                        "ignored in online search mode.",
+                        "Config field '%s' is local-only and will be ignored in online search mode.",
                         field_name,
                     )
 
@@ -710,9 +630,7 @@ def run_blast_search(
         RuntimeError: If the BLAST search fails.
 
     Examples:
-        >>> from proto_tools.tools.gene_annotation import (
-        ...     run_blast_search, BlastSearchInput, BlastSearchConfig
-        ... )
+        >>> from proto_tools.tools.gene_annotation import run_blast_search, BlastSearchInput, BlastSearchConfig
         >>> inputs = BlastSearchInput(query="ATGCGTAAA")
         >>> config = BlastSearchConfig(program="blastn", database="nt")
         >>> result = run_blast_search(inputs, config)
@@ -726,9 +644,7 @@ def run_blast_search(
 # ============================================================================
 # Helper Functions
 # ============================================================================
-def _online_search(
-    inputs: BlastSearchInput, config: BlastSearchConfig
-) -> BlastSearchOutput:
+def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> BlastSearchOutput:
     """Submit query to NCBI QBLAST and return results."""
     from Bio import SeqIO
     from Bio.Blast import NCBIWWW, NCBIXML
@@ -851,9 +767,7 @@ def _local_search(
         "use_sw_tback",
     )
     cli_params: dict[str, Any] = {
-        name: getattr(config, name)
-        for name in _CLI_PARAMS
-        if getattr(config, name) is not None
+        name: getattr(config, name) for name in _CLI_PARAMS if getattr(config, name) is not None
     }
 
     input_data = {
@@ -884,9 +798,7 @@ def _local_search(
     raw_output = output_data["stdout"]
     hits: list[BlastHit] = []
     if raw_output.strip():
-        reader = csv.DictReader(
-            io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields)
-        )
+        reader = csv.DictReader(io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields))
         hits.extend(BlastHit(**row) for row in reader)  # type: ignore[arg-type]
 
     return BlastSearchOutput(
@@ -921,9 +833,7 @@ def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
                 ident = hsp.identities if isinstance(hsp.identities, int) else 0
                 gaps = getattr(hsp, "gaps", 0)
                 gaps = gaps if isinstance(gaps, int) else 0
-                gap_opens = sum(
-                    len(re.findall(r"-+", seq)) for seq in (hsp.query, hsp.sbjct)
-                )
+                gap_opens = sum(len(re.findall(r"-+", seq)) for seq in (hsp.query, hsp.sbjct))
                 hits.append(
                     BlastHit(
                         qseqid=query_id,

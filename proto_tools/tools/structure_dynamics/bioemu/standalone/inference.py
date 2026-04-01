@@ -1,4 +1,5 @@
 """Standalone BioEmu inference implementation."""
+
 from __future__ import annotations
 
 import json
@@ -53,9 +54,7 @@ class BioEmuModel:
             from bioemu.sample import main as bioemu_sample
 
             if verbose:
-                logger.info(
-                    f"Sampling {num_samples} conformations for sequence of length {len(sequence)}"
-                )
+                logger.info(f"Sampling {num_samples} conformations for sequence of length {len(sequence)}")
                 logger.info(f"Using model: {self._model_name}, device: {self.device}")
 
             bioemu_sample(
@@ -67,9 +66,7 @@ class BioEmuModel:
                 filter_samples=filter_samples,
             )
 
-            pdb_frames, num_frames, num_residues = self.extract_pdb_frames(
-                working_dir, verbose
-            )
+            pdb_frames, num_frames, num_residues = self.extract_pdb_frames(working_dir, verbose)
             return {
                 "pdb_frames": pdb_frames,
                 "num_frames": num_frames,
@@ -97,16 +94,12 @@ class BioEmuModel:
         traj = md.load(str(xtc_path), top=str(top_path)) if xtc_path.exists() else md.load(str(top_path))
 
         if verbose:
-            logger.info(
-                f"Loaded ensemble: {traj.n_frames} frames, {traj.n_residues} residues"
-            )
+            logger.info(f"Loaded ensemble: {traj.n_frames} frames, {traj.n_residues} residues")
 
         pdb_frames: list[str] = []
         for frame_idx in range(traj.n_frames):
             frame = traj.slice(frame_idx)
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".pdb", delete=False
-            ) as handle:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".pdb", delete=False) as handle:
                 tmp_path = handle.name
             try:
                 frame.save_pdb(tmp_path)
@@ -116,9 +109,7 @@ class BioEmuModel:
                 try:
                     os.unlink(tmp_path)
                 except OSError as exc:
-                    logger.warning(
-                        f"Failed to clean up temporary file {tmp_path}: {exc}"
-                    )
+                    logger.warning(f"Failed to clean up temporary file {tmp_path}: {exc}")
 
         return pdb_frames, traj.n_frames, traj.n_residues
 
@@ -167,9 +158,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
         per_sequence_output_dir = None
         if output_dir:
             per_sequence_output_dir = (
-                output_dir
-                if len(sequences) == 1
-                else str(Path(output_dir) / f"complex_{seq_idx}")
+                output_dir if len(sequences) == 1 else str(Path(output_dir) / f"complex_{seq_idx}")
             )
 
         result = model(
@@ -199,7 +188,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         return run_bioemu_batch(input_dict)
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

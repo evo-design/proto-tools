@@ -26,8 +26,7 @@ def _find_binary(name: str = "mmseqs") -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"MMseqs2 binary '{name}' not found at {binary}. "
-            f"The standalone environment may need to be recreated."
+            f"MMseqs2 binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
         )
     return str(binary)
 
@@ -36,9 +35,7 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
     """Run a subprocess command and raise on failure."""
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"{description} failed with code {proc.returncode}: {proc.stderr}"
-        )
+        raise RuntimeError(f"{description} failed with code {proc.returncode}: {proc.stderr}")
     return proc
 
 
@@ -172,9 +169,14 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         # Step 2: Create index
         _run_cmd(
             [
-                mmseqs, "createindex", target_db, mmseqs_tmp,
-                "--search-type", search_type,
-                "--threads", threads,
+                mmseqs,
+                "createindex",
+                target_db,
+                mmseqs_tmp,
+                "--search-type",
+                search_type,
+                "--threads",
+                threads,
             ],
             "mmseqs createindex",
         )
@@ -182,10 +184,18 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         # Step 3: Search
         _run_cmd(
             [
-                mmseqs, "search", query_db, target_db, res_dir, mmseqs_tmp,
-                "--search-type", search_type,
-                "--threads", threads,
-                "-s", sensitivity,
+                mmseqs,
+                "search",
+                query_db,
+                target_db,
+                res_dir,
+                mmseqs_tmp,
+                "--search-type",
+                search_type,
+                "--threads",
+                threads,
+                "-s",
+                sensitivity,
             ],
             "mmseqs search",
         )
@@ -194,8 +204,14 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         m8_columns = input_data.get("m8_columns", ["query", "target", "pident", "evalue"])
         _run_cmd(
             [
-                mmseqs, "convertalis", query_db, target_db, res_dir, results_m8,
-                "--format-output", ",".join(m8_columns),
+                mmseqs,
+                "convertalis",
+                query_db,
+                target_db,
+                res_dir,
+                results_m8,
+                "--format-output",
+                ",".join(m8_columns),
             ],
             "mmseqs convertalis",
         )
@@ -248,11 +264,13 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         # Step 2: Cluster
         _run_cmd(
             [
-                mmseqs, "cluster",
+                mmseqs,
+                "cluster",
                 str(db_dir / "seqs"),
                 str(res_dir / "clusters"),
                 str(mmseqs_tmp),
-                "--min-seq-id", min_seq_id,
+                "--min-seq-id",
+                min_seq_id,
             ],
             "mmseqs cluster",
         )
@@ -260,7 +278,8 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         # Step 3: Create sub-database of representatives
         _run_cmd(
             [
-                mmseqs, "createsubdb",
+                mmseqs,
+                "createsubdb",
                 str(res_dir / "clusters"),
                 str(db_dir / "seqs"),
                 str(res_dir / "rep_seqs"),
@@ -272,7 +291,8 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         clusters_tsv = str(res_dir / "clusters.tsv")
         _run_cmd(
             [
-                mmseqs, "createtsv",
+                mmseqs,
+                "createtsv",
                 str(db_dir / "seqs"),
                 str(db_dir / "seqs"),
                 str(res_dir / "clusters"),
@@ -298,6 +318,7 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

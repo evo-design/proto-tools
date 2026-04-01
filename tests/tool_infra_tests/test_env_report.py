@@ -6,6 +6,7 @@ One test per tool directory (standalone environment). Tools in the same
 directory share an environment, so testing one proves the env works.
 Only runs with ``pytest --env-report``; deselected during normal test runs.
 """
+
 from __future__ import annotations
 
 import pytest

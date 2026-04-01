@@ -1,4 +1,5 @@
 """LigandMPNN inference implementation using Foundry."""
+
 from __future__ import annotations
 
 import gc
@@ -21,6 +22,7 @@ DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation (standard MPNN)
 MPNN_VOCAB = "ACDEFGHIKLMNPQRSTVWYX"
+
 
 class LigandMPNNModel:
     """LigandMPNN model for ligand-aware protein sequence design using Foundry."""
@@ -70,11 +72,7 @@ class LigandMPNNModel:
         # Build fixed_residues list from fixed_positions dict
         fixed_residues = None
         if fixed_positions:
-            fixed_residues = [
-                f"{chain}{pos}"
-                for chain, positions in fixed_positions.items()
-                for pos in positions
-            ]
+            fixed_residues = [f"{chain}{pos}" for chain, positions in fixed_positions.items() for pos in positions]
 
         # Build input dict for Foundry engine
         # NOTE: Cannot mix residue-based (fixed_residues) and chain-based (designed_chains)
@@ -268,7 +266,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 verbose=input_dict.get("verbose", False),
             )
         raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

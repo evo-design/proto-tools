@@ -9,16 +9,18 @@ from pathlib import Path
 
 import pytest
 
-_TOOLS_DIR = (
-    Path(__file__).resolve().parent.parent.parent
-    / "proto_tools"
-    / "tools"
-)
+_TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
 
 # Directories that are not tool categories
-_EXCLUDED_DIRS = frozenset({
-    "__pycache__", "infra", "utils", "testing", "mutagenesis",
-})
+_EXCLUDED_DIRS = frozenset(
+    {
+        "__pycache__",
+        "infra",
+        "utils",
+        "testing",
+        "mutagenesis",
+    }
+)
 
 # Every tool README must contain these exact H2 sections.
 _REQUIRED_SECTIONS = [
@@ -33,16 +35,18 @@ _REQUIRED_SECTIONS = [
 ]
 
 # Optional H2 sections that are allowed but not required.
-_OPTIONAL_SECTIONS = frozenset({
-    "Tool Catalog",
-    "Model Variants",
-    "Execution Modes",
-    "Input Parameters",
-    "Configuration",
-    "Output Specification",
-    "Interpreting Results",
-    "Important Parameters",
-})
+_OPTIONAL_SECTIONS = frozenset(
+    {
+        "Tool Catalog",
+        "Model Variants",
+        "Execution Modes",
+        "Input Parameters",
+        "Configuration",
+        "Output Specification",
+        "Interpreting Results",
+        "Important Parameters",
+    }
+)
 
 
 def _slugify(text: str) -> str:
@@ -115,9 +119,8 @@ def test_no_bare_math_notation(readme: Path) -> None:
         cleaned = _strip_inline_math(cleaned)
         if re.search(r"[_^]\{", cleaned):
             violations.append(f"  line {lineno}: {line.strip()}")
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md has bare math notation (wrap in $...$):\n"
-        + "\n".join(violations)
+    assert not violations, f"{_tool_id(readme)}/README.md has bare math notation (wrap in $...$):\n" + "\n".join(
+        violations
     )
 
 
@@ -132,9 +135,8 @@ def test_no_trailing_space_in_bold(readme: Path) -> None:
         # actually an opening ** for the next bold span, not a closing one).
         if re.search(r"\*\*\S[^*]*\s\*\*(?![\w`])", line):
             violations.append(f"  line {lineno}: {line.strip()}")
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md has trailing space inside bold markers:\n"
-        + "\n".join(violations)
+    assert not violations, f"{_tool_id(readme)}/README.md has trailing space inside bold markers:\n" + "\n".join(
+        violations
     )
 
 
@@ -149,9 +151,8 @@ def test_code_blocks_have_language(readme: Path) -> None:
             if not in_fence and re.match(r"^\s*```\s*$", line):
                 violations.append(f"  line {i}")
             in_fence = not in_fence
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md has code blocks without language specifiers:\n"
-        + "\n".join(violations)
+    assert not violations, f"{_tool_id(readme)}/README.md has code blocks without language specifiers:\n" + "\n".join(
+        violations
     )
 
 
@@ -160,9 +161,7 @@ def test_no_unclosed_code_fences(readme: Path) -> None:
     """Code fences must come in pairs (even count of ```)."""
     text = readme.read_text()
     fence_count = len(re.findall(r"^\s*```", text, re.MULTILINE))
-    assert fence_count % 2 == 0, (
-        f"{_tool_id(readme)}/README.md has {fence_count} code fences (odd = unclosed)"
-    )
+    assert fence_count % 2 == 0, f"{_tool_id(readme)}/README.md has {fence_count} code fences (odd = unclosed)"
 
 
 # ── Structure ─────────────────────────────────────────────────────────────
@@ -190,15 +189,11 @@ def test_has_doc_badge(readme: Path) -> None:
     expected_path = f"/tools/{_slugify(category)}/{_slugify(tool_name)}"
 
     text = readme.read_text()
-    assert 'img.shields.io/badge/View_in_Proto_Docs' in text, (
+    assert "img.shields.io/badge/View_in_Proto_Docs" in text, (
         f"{_tool_id(readme)}/README.md is missing the Proto Docs badge"
     )
-    assert 'align="right"' in text, (
-        f"{_tool_id(readme)}/README.md badge must use align=\"right\""
-    )
-    assert expected_path in text, (
-        f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
-    )
+    assert 'align="right"' in text, f'{_tool_id(readme)}/README.md badge must use align="right"'
+    assert expected_path in text, f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
@@ -215,9 +210,7 @@ def test_has_required_sections(readme: Path) -> None:
                 missing.append(req)
         elif req not in h2_headings:
             missing.append(req)
-    assert not missing, (
-        f"{_tool_id(readme)}/README.md is missing required sections: {missing}"
-    )
+    assert not missing, f"{_tool_id(readme)}/README.md is missing required sections: {missing}"
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
@@ -226,9 +219,7 @@ def test_only_recognized_sections(readme: Path) -> None:
     text = readme.read_text()
     h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
 
-    allowed = _OPTIONAL_SECTIONS | {
-        s for s in _REQUIRED_SECTIONS if s != "When to Use"
-    }
+    allowed = _OPTIONAL_SECTIONS | {s for s in _REQUIRED_SECTIONS if s != "When to Use"}
     unrecognized = []
     for h2 in h2_headings:
         if h2 in allowed:
@@ -250,9 +241,7 @@ def test_no_duplicate_h2(readme: Path) -> None:
 
     seen: set[str] = set()
     duplicates = [h2 for h2 in h2_headings if h2 in seen or seen.add(h2)]  # type: ignore[func-returns-value]
-    assert not duplicates, (
-        f"{_tool_id(readme)}/README.md has duplicate H2 sections: {duplicates}"
-    )
+    assert not duplicates, f"{_tool_id(readme)}/README.md has duplicate H2 sections: {duplicates}"
 
 
 # ── Links ─────────────────────────────────────────────────────────────────
@@ -272,10 +261,7 @@ def test_no_http_urls(readme: Path) -> None:
             domain = match.group(1).split("/")[0]
             if domain not in _HTTP_ONLY_DOMAINS:
                 violations.append(f"  line {lineno}: {match.group()}")
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md uses http:// instead of https://:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, f"{_tool_id(readme)}/README.md uses http:// instead of https://:\n" + "\n".join(violations)
 
 
 def _extract_urls(text: str) -> list[tuple[int, str]]:
@@ -289,9 +275,7 @@ def _extract_urls(text: str) -> list[tuple[int, str]]:
     for lineno, line in _lines_outside_code_blocks(text):
         # First extract from markdown links [text](url) which may have parens
         # (e.g., Wikipedia URLs like BLAST_(biotechnology)#Algorithm)
-        for match in re.finditer(
-            r"\[(?:[^\]]*)\]\((https?://[^()\s]*(?:\([^)]*\)[^()\s]*)*)\)", line
-        ):
+        for match in re.finditer(r"\[(?:[^\]]*)\]\((https?://[^()\s]*(?:\([^)]*\)[^()\s]*)*)\)", line):
             url = match.group(1).rstrip(".,;:")
             if url not in seen and "img.shields.io" not in url:
                 seen.add(url)
@@ -359,10 +343,7 @@ def test_all_links_reachable(readme: Path) -> None:
         except (urllib.error.URLError, OSError) as exc:
             broken.append(f"  line {lineno}: {url} ({exc})")
 
-    assert not broken, (
-        f"{_tool_id(readme)}/README.md has broken links:\n"
-        + "\n".join(broken)
-    )
+    assert not broken, f"{_tool_id(readme)}/README.md has broken links:\n" + "\n".join(broken)
 
 
 # ── Markdown hygiene ──────────────────────────────────────────────────────
@@ -373,9 +354,7 @@ def test_no_excessive_blank_lines(readme: Path) -> None:
     """No more than 2 consecutive blank lines."""
     text = readme.read_text()
     # 4+ newlines in a row = 3+ consecutive blank lines
-    assert not re.search(r"\n{4,}", text), (
-        f"{_tool_id(readme)}/README.md has more than 2 consecutive blank lines"
-    )
+    assert not re.search(r"\n{4,}", text), f"{_tool_id(readme)}/README.md has more than 2 consecutive blank lines"
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
@@ -402,17 +381,13 @@ def test_table_column_consistency(readme: Path) -> None:
                 table_cols = col_count
             elif col_count != table_cols:
                 violations.append(
-                    f"  line {i}: expected {table_cols} columns "
-                    f"(from line {table_start}), got {col_count}"
+                    f"  line {i}: expected {table_cols} columns (from line {table_start}), got {col_count}"
                 )
         else:
             table_start = None
             table_cols = None
 
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md has inconsistent table columns:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, f"{_tool_id(readme)}/README.md has inconsistent table columns:\n" + "\n".join(violations)
 
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
@@ -426,7 +401,4 @@ def test_no_trailing_whitespace(readme: Path) -> None:
             if len(violations) >= 5:
                 break
 
-    assert not violations, (
-        f"{_tool_id(readme)}/README.md has trailing whitespace on lines:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, f"{_tool_id(readme)}/README.md has trailing whitespace on lines:\n" + "\n".join(violations)

@@ -2,6 +2,7 @@
 
 Shared data models and helpers for PyHMMER tools.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -45,20 +46,12 @@ class SequenceHit(BaseModel):
     """
 
     query_name: str = Field(description="Name of the query HMM")
-    query_accession: str = Field(
-        description="Accession of the query HMM. If not available, set to '-'."
-    )
-    query_description: str = Field(
-        description="Description of the query HMM. If not available, set to '-'."
-    )
+    query_accession: str = Field(description="Accession of the query HMM. If not available, set to '-'.")
+    query_description: str = Field(description="Description of the query HMM. If not available, set to '-'.")
     query_idx: int = Field(description="Index of the query (0-indexed)")
     target_name: str = Field(description="Name of the target sequence")
-    target_accession: str = Field(
-        description="Accession of the target sequence. If not available, set to '-'."
-    )
-    target_description: str = Field(
-        description="Description of the target sequence. If not available, set to '-'."
-    )
+    target_accession: str = Field(description="Accession of the target sequence. If not available, set to '-'.")
+    target_description: str = Field(description="Description of the target sequence. If not available, set to '-'.")
     evalue: float = Field(description="E-value of the hit")
     score: float = Field(description="Score of the full sequence")
     bias: float = Field(description="Bias of the full sequence")
@@ -100,54 +93,28 @@ class DomainHit(BaseModel):
     """
 
     query_name: str = Field(description="Name of the query HMM")
-    query_accession: str = Field(
-        description="Accession of the query HMM. If not available, set to '-'."
-    )
-    query_description: str = Field(
-        description="Description of the query HMM. If not available, set to '-'."
-    )
+    query_accession: str = Field(description="Accession of the query HMM. If not available, set to '-'.")
+    query_description: str = Field(description="Description of the query HMM. If not available, set to '-'.")
     query_idx: int = Field(description="Index of the query (0-indexed)")
     target_name: str = Field(description="Name of the target sequence")
-    target_accession: str = Field(
-        description="Accession of the target sequence. If not available, set to '-'."
-    )
-    target_description: str = Field(
-        description="Description of the target sequence. If not available, set to '-'."
-    )
+    target_accession: str = Field(description="Accession of the target sequence. If not available, set to '-'.")
+    target_description: str = Field(description="Description of the target sequence. If not available, set to '-'.")
     hmm_length: int = Field(description="Length of the HMM profile")
-    hmm_from: int = Field(
-        description="Start position of the domain match in the HMM (1-indexed)"
-    )
-    hmm_to: int = Field(
-        description="End position of the domain match in the HMM (1-indexed)"
-    )
-    target_from: int = Field(
-        description="Start position of the domain match in the target sequence (1-indexed)"
-    )
-    target_to: int = Field(
-        description="End position of the domain match in the target sequence (1-indexed)"
-    )
+    hmm_from: int = Field(description="Start position of the domain match in the HMM (1-indexed)")
+    hmm_to: int = Field(description="End position of the domain match in the HMM (1-indexed)")
+    target_from: int = Field(description="Start position of the domain match in the target sequence (1-indexed)")
+    target_to: int = Field(description="End position of the domain match in the target sequence (1-indexed)")
     target_length: int = Field(description="Length of the target sequence")
     c_evalue: float = Field(description="Conditional E-value of the domain")
     i_evalue: float = Field(description="Independent E-value of the domain")
     domain_score: float = Field(description="Bit score of the domain")
     domain_bias: float = Field(description="Bias correction of the domain score")
-    domain_idx: int = Field(
-        description="Index of the domain within the hit (0-indexed)"
-    )
-    env_from: int = Field(
-        description="Start position of the domain envelope in the target sequence (1-indexed)"
-    )
-    env_to: int = Field(
-        description="End position of the domain envelope in the target sequence (1-indexed)"
-    )
+    domain_idx: int = Field(description="Index of the domain within the hit (0-indexed)")
+    env_from: int = Field(description="Start position of the domain envelope in the target sequence (1-indexed)")
+    env_to: int = Field(description="End position of the domain envelope in the target sequence (1-indexed)")
     envelope_score: float = Field(description="Bit score of the domain envelope")
-    domain_included: bool = Field(
-        description="Whether the domain passes inclusion thresholds"
-    )
-    domain_reported: bool = Field(
-        description="Whether the domain passes reporting thresholds"
-    )
+    domain_included: bool = Field(description="Whether the domain passes inclusion thresholds")
+    domain_reported: bool = Field(description="Whether the domain passes reporting thresholds")
     domain_pvalue: float = Field(description="P-value of the domain")
 
 
@@ -267,12 +234,9 @@ class PyHmmerOutput(BaseToolOutput):
         num_sequence_hits: Total number of sequence-level hits found.
         num_domain_hits: Total number of domain-level hits found.
     """
-    sequence_hits: list[SequenceHit] = Field(
-        default_factory=list, description="Sequence-level hits from the search"
-    )
-    domain_hits: list[DomainHit] = Field(
-        default_factory=list, description="Domain-level hits from the search"
-    )
+
+    sequence_hits: list[SequenceHit] = Field(default_factory=list, description="Sequence-level hits from the search")
+    domain_hits: list[DomainHit] = Field(default_factory=list, description="Domain-level hits from the search")
 
     @property
     def num_sequence_hits(self) -> int:

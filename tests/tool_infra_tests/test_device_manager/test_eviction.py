@@ -12,6 +12,7 @@ from proto_tools.utils.device_manager import OffloadStrategy
 
 # ── LRU eviction tests ────────────────────────────────────────────────────
 
+
 def test_lru_eviction_cpu_strategy(device_manager, mock_callback):
     """Test LRU eviction with CPU offload strategy."""
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
@@ -22,20 +23,12 @@ def test_lru_eviction_cpu_strategy(device_manager, mock_callback):
     device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=mock_callback)
 
     # Request third device - should evict tool1 (LRU) to CPU
-    device3 = device_manager.request_device(
-        "tool3", "instance3", device="cuda", eviction_callback=mock_callback
-    )
+    device3 = device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=mock_callback)
 
     assert device3 == "cuda:0", "New instance should reuse evicted device"
-    assert (
-        device_manager._allocations["instance1"].device_ids[0] == "cpu"
-    ), "LRU instance should be offloaded to CPU"
-    assert (
-        device_manager._allocations["instance2"].device_ids[0] == "cuda:1"
-    ), "Recent instance should stay on GPU"
-    assert (
-        device_manager._allocations["instance3"].device_ids[0] == "cuda:0"
-    ), "New instance should get cuda:0"
+    assert device_manager._allocations["instance1"].device_ids[0] == "cpu", "LRU instance should be offloaded to CPU"
+    assert device_manager._allocations["instance2"].device_ids[0] == "cuda:1", "Recent instance should stay on GPU"
+    assert device_manager._allocations["instance3"].device_ids[0] == "cuda:0", "New instance should get cuda:0"
 
 
 def test_lru_eviction_restart_strategy(device_manager, mock_callback):
@@ -48,20 +41,12 @@ def test_lru_eviction_restart_strategy(device_manager, mock_callback):
     device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=mock_callback)
 
     # Request third device - should restart tool1 (LRU)
-    device3 = device_manager.request_device(
-        "tool3", "instance3", device="cuda", eviction_callback=mock_callback
-    )
+    device3 = device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=mock_callback)
 
     assert device3 == "cuda:0", "New instance should reuse evicted device"
-    assert (
-        "instance1" not in device_manager._allocations
-    ), "LRU instance should be removed with RESTART"
-    assert (
-        device_manager._allocations["instance2"].device_ids[0] == "cuda:1"
-    ), "Recent instance should stay on GPU"
-    assert (
-        device_manager._allocations["instance3"].device_ids[0] == "cuda:0"
-    ), "New instance should get cuda:0"
+    assert "instance1" not in device_manager._allocations, "LRU instance should be removed with RESTART"
+    assert device_manager._allocations["instance2"].device_ids[0] == "cuda:1", "Recent instance should stay on GPU"
+    assert device_manager._allocations["instance3"].device_ids[0] == "cuda:0", "New instance should get cuda:0"
 
 
 def test_lru_eviction_respects_last_used_update(device_manager, mock_callback):
@@ -79,33 +64,33 @@ def test_lru_eviction_respects_last_used_update(device_manager, mock_callback):
     device_manager.update_last_used("instance1")
 
     # Request third device - should evict instance2 (now LRU) instead of instance1
-    device3 = device_manager.request_device(
-        "tool3", "instance3", device="cuda", eviction_callback=mock_callback
-    )
+    device3 = device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=mock_callback)
 
     assert device3 == "cuda:1", "New instance should reuse instance2's device"
-    assert (
-        device_manager._allocations["instance1"].device_ids[0] == "cuda:0"
-    ), "instance1 should stay on cuda:0 (recently used)"
-    assert (
-        device_manager._allocations["instance2"].device_ids[0] == "cpu"
-    ), "instance2 should be evicted to CPU (now LRU)"
-    assert (
-        device_manager._allocations["instance3"].device_ids[0] == "cuda:1"
-    ), "instance3 should get cuda:1"
+    assert device_manager._allocations["instance1"].device_ids[0] == "cuda:0", (
+        "instance1 should stay on cuda:0 (recently used)"
+    )
+    assert device_manager._allocations["instance2"].device_ids[0] == "cpu", (
+        "instance2 should be evicted to CPU (now LRU)"
+    )
+    assert device_manager._allocations["instance3"].device_ids[0] == "cuda:1", "instance3 should get cuda:1"
 
 
 # ── Eviction callback tests ──────────────────────────────────────────────
+
 
 def test_cpu_eviction_calls_callback_with_cpu(device_manager):
     """Test CPU eviction strategy calls callback with 'cpu' action."""
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1, calls2, calls3 = [], [], []
+
     def cb1(action):
         return calls1.append(action)
+
     def cb2(action):
         return calls2.append(action)
+
     def cb3(action):
         return calls3.append(action)
 
@@ -127,10 +112,13 @@ def test_restart_eviction_calls_callback_with_shutdown(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.RESTART)
 
     calls1, calls2, calls3 = [], [], []
+
     def cb1(action):
         return calls1.append(action)
+
     def cb2(action):
         return calls2.append(action)
+
     def cb3(action):
         return calls3.append(action)
 
@@ -176,9 +164,7 @@ def test_restart_eviction_callback_failure_logs_but_continues(device_manager):
     device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=lambda x: None)
 
     with patch("proto_tools.utils.device_manager.logger.warning") as mock_warning:
-        device3 = device_manager.request_device(
-            "tool3", "instance3", device="cuda", eviction_callback=lambda x: None
-        )
+        device3 = device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=lambda x: None)
 
     assert device3 == "cuda:0"
     assert mock_warning.called
@@ -190,8 +176,10 @@ def test_cpu_eviction_preserves_lru_ordering(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1, calls2 = [], []
+
     def cb1(action):
         return calls1.append(action)
+
     def cb2(action):
         return calls2.append(action)
 
@@ -240,9 +228,7 @@ def test_gpu_request_raises_without_gpus(no_gpus_manager, mock_callback):
 
 def test_cpu_request_works_without_gpus(no_gpus_manager, mock_callback):
     """Test explicit CPU request works when no GPUs available."""
-    device = no_gpus_manager.request_device(
-        "tool1", "instance1", device="cpu", eviction_callback=mock_callback
-    )
+    device = no_gpus_manager.request_device("tool1", "instance1", device="cpu", eviction_callback=mock_callback)
     assert device == "cpu"
 
 
@@ -274,22 +260,16 @@ def test_eviction_callback_does_not_update_last_used(device_manager):
             # Simulate: self.device = "cpu"
             fake.device = "cpu"
 
-    device_manager.request_device(
-        "tool1", "instance1", device="cuda", eviction_callback=production_like_callback
-    )
+    device_manager.request_device("tool1", "instance1", device="cuda", eviction_callback=production_like_callback)
     time.sleep(0.01)
-    device_manager.request_device(
-        "tool2", "instance2", device="cuda", eviction_callback=lambda x: None
-    )
+    device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=lambda x: None)
 
     # Record tool1's last_used before eviction
     last_used_before = device_manager._allocations["instance1"].last_used
 
     # Request third device -- evicts tool1 (LRU)
     time.sleep(0.01)
-    device_manager.request_device(
-        "tool3", "instance3", device="cuda", eviction_callback=lambda x: None
-    )
+    device_manager.request_device("tool3", "instance3", device="cuda", eviction_callback=lambda x: None)
 
     # Callback was invoked
     assert worker_commands == ["to_device:cpu"]
@@ -305,12 +285,11 @@ def test_multi_gpu_eviction_calls_callback_once(device_manager):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
 
     calls1 = []
+
     def cb1(action):
         return calls1.append(action)
 
-    device_manager.request_device(
-        "tool1", "instance1", device="cudax2", eviction_callback=cb1
-    )
+    device_manager.request_device("tool1", "instance1", device="cudax2", eviction_callback=cb1)
     time.sleep(0.01)
 
     device_manager.request_device("tool2", "instance2", device="cuda", eviction_callback=lambda x: None)
@@ -322,6 +301,7 @@ def test_multi_gpu_eviction_calls_callback_once(device_manager):
 
 # ── Transient allocation eviction tests ───────────────────────────────────
 
+
 def test_transient_allocation_not_evicted(device_manager, mock_callback):
     """TRANSIENT allocations are skipped during LRU eviction."""
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
@@ -330,13 +310,18 @@ def test_transient_allocation_not_evicted(device_manager, mock_callback):
     with device_manager.lease("tool1", device="cuda:0"):
         # Fill cuda:1 with persistent
         device_manager.request_device(
-            "tool2", "inst2", device="cuda:1",
+            "tool2",
+            "inst2",
+            device="cuda:1",
             eviction_callback=mock_callback,
         )
 
         # Request a third device -- should evict inst2 (persistent), not the lease
         device3 = device_manager.request_device(
-            "tool3", "inst3", device="cuda", eviction_callback=mock_callback,
+            "tool3",
+            "inst3",
+            device="cuda",
+            eviction_callback=mock_callback,
         )
         assert device3 == "cuda:1"
         assert mock_callback.calls == ["cpu"]
@@ -348,7 +333,10 @@ def test_persistent_evicted_before_transient(device_manager, mock_callback):
 
     # Put persistent on cuda:0 (oldest)
     device_manager.request_device(
-        "tool1", "inst1", device="cuda", eviction_callback=mock_callback,
+        "tool1",
+        "inst1",
+        device="cuda",
+        eviction_callback=mock_callback,
     )
     time.sleep(0.01)
 
@@ -356,7 +344,10 @@ def test_persistent_evicted_before_transient(device_manager, mock_callback):
     with device_manager.lease("tool2", device="cuda:1"):
         # Request another device
         device = device_manager.request_device(
-            "tool3", "inst3", device="cuda", eviction_callback=mock_callback,
+            "tool3",
+            "inst3",
+            device="cuda",
+            eviction_callback=mock_callback,
         )
         # Should evict inst1 (persistent) even though it's on cuda:0
         assert device == "cuda:0"

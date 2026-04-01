@@ -187,9 +187,7 @@ class FetchedSequence(BaseModel):
         "rna_transcript",
         "rna_premrna",
     ] = Field(description="Requested type for this sequence")
-    source_database: Literal["ncbi", "uniprot", "pdb"] = Field(
-        description="Source database for this sequence"
-    )
+    source_database: Literal["ncbi", "uniprot", "pdb"] = Field(description="Source database for this sequence")
     accession: str | None = Field(default=None, description="Source accession identifier")
     sequence: str = Field(description="Retrieved sequence")
     length: int = Field(ge=0, description="Sequence length")
@@ -500,9 +498,9 @@ def _ncbi_fetch_first_fasta(
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return SequenceFetchInput(requests=[
-        SequenceFetchRequest(target_name="TP53", organism="Homo sapiens", sequence_types=["protein"])
-    ])
+    return SequenceFetchInput(
+        requests=[SequenceFetchRequest(target_name="TP53", organism="Homo sapiens", sequence_types=["protein"])]
+    )
 
 
 @tool(
@@ -603,18 +601,14 @@ def _process_single_request(
         warnings.append(f"TYPE_MISMATCH: {type_error}")
 
     if "protein" in request.sequence_types and request.genomic_coordinates:
-        warnings.append(
-            "Protein from genomic coordinates is inferred and may be ambiguous due to introns."
-        )
+        warnings.append("Protein from genomic coordinates is inferred and may be ambiguous due to introns.")
 
     if (
         "protein" in request.sequence_types
         and "dna_genomic" in request.sequence_types
         and _organism_likely_has_introns(request.organism)
     ):
-        warnings.append(
-            "Genomic DNA includes introns in many organisms; DNA to protein mapping may be indirect."
-        )
+        warnings.append("Genomic DNA includes introns in many organisms; DNA to protein mapping may be indirect.")
 
     sequence_fetchers = {
         "protein": _fetch_protein,
@@ -627,9 +621,7 @@ def _process_single_request(
     for sequence_type in request.sequence_types:
         try:
             if sequence_type == "structure":
-                result = _fetch_structure(
-                    request, config, session, resolved_ids
-                )
+                result = _fetch_structure(request, config, session, resolved_ids)
             else:
                 fetcher = sequence_fetchers[sequence_type]
                 result = fetcher(request, config, session)  # type: ignore[assignment]
@@ -724,9 +716,7 @@ def _fetch_protein(
 
         pdb_xrefs = _extract_pdb_crossrefs(entry)
         if pdb_xrefs and not request.pdb_id and "structure" not in request.sequence_types:
-            warnings.append(
-                f"UniProt entry maps to PDB IDs {', '.join(pdb_xrefs[:3])}; use structure type to fetch"
-            )
+            warnings.append(f"UniProt entry maps to PDB IDs {', '.join(pdb_xrefs[:3])}; use structure type to fetch")
 
         return (
             _sequence_record(
@@ -773,9 +763,7 @@ def _fetch_protein(
         fasta_records = _fetch_pdb_fasta(request.pdb_id.upper(), pcfg, session)
         if not fasta_records:
             return f"PDB ID '{request.pdb_id}' returned no FASTA records"  # type: ignore[return-value]
-        protein_records = [
-            (h, s) for h, s in fasta_records if _is_protein_sequence(s)
-        ]
+        protein_records = [(h, s) for h, s in fasta_records if _is_protein_sequence(s)]
         if not protein_records:
             return (
                 f"PDB ID '{request.pdb_id}' has no protein chains "  # type: ignore[return-value]
@@ -785,8 +773,7 @@ def _fetch_protein(
         accession = request.pdb_id.upper()
         if len(protein_records) > 1:
             warnings.append(
-                f"Using first protein chain from PDB FASTA; "
-                f"{len(protein_records)} protein chains available."
+                f"Using first protein chain from PDB FASTA; {len(protein_records)} protein chains available."
             )
         return (
             _sequence_record(
@@ -830,8 +817,13 @@ def _fetch_protein(
             )
 
     term = _ncbi_term_for_request(request)
-    ids = _ncbi_esearch(db="protein", term=term, config=ncfg, session=session,  # type: ignore[assignment]
-                        max_results=config.max_candidates_per_source)
+    ids = _ncbi_esearch(
+        db="protein",
+        term=term,
+        config=ncfg,
+        session=session,  # type: ignore[assignment]
+        max_results=config.max_candidates_per_source,
+    )
     if not ids:
         return f"No protein found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
@@ -939,12 +931,10 @@ def _fetch_dna_genomic(
             warnings,
         )
 
-    term = (
-        f"({_ncbi_term_for_request(request)}) "
-        "AND biomol_genomic[PROP]"
+    term = f"({_ncbi_term_for_request(request)}) AND biomol_genomic[PROP]"
+    ids = _ncbi_esearch(
+        db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
-    ids = _ncbi_esearch(db="nuccore", term=term, config=ncfg, session=session,
-                        max_results=config.max_candidates_per_source)
     if not ids:
         ids = _ncbi_esearch(
             db="nuccore",
@@ -985,17 +975,12 @@ def _fetch_dna_genomic(
         if isinstance(gene_result, str):
             return gene_result  # type: ignore[unreachable]
         gene_record, gene_ids, gene_warnings = gene_result  # type: ignore[misc]
-        warnings.append(
-            "Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback"
-        )
+        warnings.append("Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback")
         warnings.extend(gene_warnings)
         return gene_record, gene_ids, warnings
 
     if attempted_not_found:
-        warnings.append(
-            "Primary genomic candidate(s) had no FASTA records; "
-            f"used fallback candidate {selected_id}"
-        )
+        warnings.append(f"Primary genomic candidate(s) had no FASTA records; used fallback candidate {selected_id}")
 
     accession = _accession_from_header(header) or selected_id
 
@@ -1038,9 +1023,7 @@ def _fetch_dna_genomic_from_gene_locus(
 
     selected_gene_id = gene_ids[0]
     if len(gene_ids) > 1:
-        warnings.append(
-            f"Multiple gene candidates found ({len(gene_ids)}); using top hit {selected_gene_id}"
-        )
+        warnings.append(f"Multiple gene candidates found ({len(gene_ids)}); using top hit {selected_gene_id}")
 
     summary_result = _ncbi_esummary(
         db="gene",
@@ -1087,9 +1070,7 @@ def _fetch_dna_genomic_from_gene_locus(
     header, sequence, url = result
 
     accession = _accession_from_header(header) or chr_accession
-    warnings.append(
-        f"Fetched gene-locus genomic interval {chr_accession}:{seq_start}-{seq_stop}:{strand}"
-    )
+    warnings.append(f"Fetched gene-locus genomic interval {chr_accession}:{seq_start}-{seq_stop}:{strand}")
 
     return (
         _sequence_record(
@@ -1178,12 +1159,10 @@ def _fetch_dna_cds(
                 )
 
     # Name-based fallback through nuccore
-    term = (
-        f"({_ncbi_term_for_request(request)}) "
-        "AND (mRNA[Title] OR CDS[Title] OR coding[Title])"
+    term = f"({_ncbi_term_for_request(request)}) AND (mRNA[Title] OR CDS[Title] OR coding[Title])"
+    ids = _ncbi_esearch(
+        db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
-    ids = _ncbi_esearch(db="nuccore", term=term, config=ncfg, session=session,
-                        max_results=config.max_candidates_per_source)
     if not ids:
         return f"No CDS found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
@@ -1258,19 +1237,15 @@ def _fetch_rna_transcript(
             warnings,
         )
 
-    term = (
-        f"({_ncbi_term_for_request(request)}) "
-        "AND (biomol_mrna[PROP] OR biomol_rna[PROP])"
+    term = f"({_ncbi_term_for_request(request)}) AND (biomol_mrna[PROP] OR biomol_rna[PROP])"
+    ids = _ncbi_esearch(
+        db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
-    ids = _ncbi_esearch(db="nuccore", term=term, config=ncfg, session=session,
-                        max_results=config.max_candidates_per_source)
     if not ids:
         return f"No transcript found for '{request.target_name}' in '{request.organism}'"  # type: ignore[return-value]
 
     if len(ids) > 1:
-        warnings.append(
-            f"Multiple transcript candidates found ({len(ids)}); using top hit {ids[0]}"
-        )
+        warnings.append(f"Multiple transcript candidates found ({len(ids)}); using top hit {ids[0]}")
 
     result = _ncbi_fetch_first_fasta(
         db="nuccore",
@@ -1312,9 +1287,7 @@ def _fetch_rna_premrna(
     genomic_record, ids, warnings = genomic_result  # type: ignore[misc]
     premrna = genomic_record.sequence
 
-    warnings.append(
-        "pre-mRNA sequence is inferred from genomic DNA and includes introns where present."
-    )
+    warnings.append("pre-mRNA sequence is inferred from genomic DNA and includes introns where present.")
 
     return (
         _sequence_record(
@@ -1349,9 +1322,7 @@ def _fetch_structure(
     if not pdb_id and not uniprot_id and resolved_ids:
         uniprot_id = resolved_ids.get("uniprot_id")
         if uniprot_id:
-            warnings.append(
-                f"Using resolved UniProt ID '{uniprot_id}' from protein fetch for structure lookup"
-            )
+            warnings.append(f"Using resolved UniProt ID '{uniprot_id}' from protein fetch for structure lookup")
 
     if not pdb_id and not uniprot_id:
         entry = _search_uniprot_entry(
@@ -1365,9 +1336,7 @@ def _fetch_structure(
         if entry is not None:
             uniprot_id = entry.get("primaryAccession")
             if uniprot_id:
-                warnings.append(
-                    f"Resolved UniProt ID '{uniprot_id}' from name+organism for structure lookup"
-                )
+                warnings.append(f"Resolved UniProt ID '{uniprot_id}' from name+organism for structure lookup")
 
     if not pdb_id and uniprot_id:
         if entry is None:
@@ -1377,9 +1346,7 @@ def _fetch_structure(
         pdb_ids = _extract_pdb_crossrefs(entry)
         if pdb_ids:
             pdb_id = pdb_ids[0]
-            warnings.append(
-                f"Using first UniProt-linked PDB ID '{pdb_id}' from cross references"
-            )
+            warnings.append(f"Using first UniProt-linked PDB ID '{pdb_id}' from cross references")
         else:
             return f"UniProt ID '{uniprot_id}' has no linked PDB cross-references"  # type: ignore[return-value]
 
@@ -1411,18 +1378,14 @@ def _fetch_structure(
 
 def _preferred_accession(request: SequenceFetchRequest) -> str | None:
     """Return the best available accession override."""
-    return (
-        request.genbank_accession
-        or request.refseq_accession
-        or request.additional_ids.get("accession")
-    )
+    return request.genbank_accession or request.refseq_accession or request.additional_ids.get("accession")
 
 
 def _ncbi_term_for_request(request: SequenceFetchRequest) -> str:
     """Compose an Entrez term with optional gene_id preference."""
     base_term = _ncbi_term(request.target_name, request.organism)
     if request.gene_id:
-        return f'({request.gene_id}[Gene ID] OR {base_term})'
+        return f"({request.gene_id}[Gene ID] OR {base_term})"
     return base_term
 
 
@@ -1516,20 +1479,14 @@ def _ncbi_term(target_name: str, organism: str) -> str:
     """Build an Entrez search term for protein/nucleotide databases."""
     escaped_target = target_name.replace('"', "")
     escaped_organism = organism.replace('"', "")
-    return (
-        f'("{escaped_target}"[Gene] OR "{escaped_target}"[Title]) '
-        f'AND "{escaped_organism}"[Organism]'
-    )
+    return f'("{escaped_target}"[Gene] OR "{escaped_target}"[Title]) AND "{escaped_organism}"[Organism]'
 
 
 def _ncbi_gene_term(target_name: str, organism: str) -> str:
     """Build an Entrez search term for the gene database."""
     escaped_target = target_name.replace('"', "")
     escaped_organism = organism.replace('"', "")
-    return (
-        f'("{escaped_target}"[Gene Name] OR "{escaped_target}"[Title]) '
-        f'AND "{escaped_organism}"[Organism]'
-    )
+    return f'("{escaped_target}"[Gene Name] OR "{escaped_target}"[Title]) AND "{escaped_organism}"[Organism]'
 
 
 def _select_best_record(

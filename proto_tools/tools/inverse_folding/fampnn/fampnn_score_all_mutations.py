@@ -2,6 +2,7 @@
 
 FAMPNN exhaustive single-mutation scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,9 +36,7 @@ class FAMPNNScoreAllMutationsInput(BaseToolInput):
         inputs (list[Structure]): List of structures to score all mutations for.
     """
 
-    inputs: list[Structure] = InputField(
-        description="List of structures to score all possible single mutations."
-    )
+    inputs: list[Structure] = InputField(description="List of structures to score all possible single mutations.")
 
 
 class FAMPNNScoreAllMutationsConfig(BaseConfig):
@@ -100,9 +99,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         results (list[AllMutationsScoreResult]): List of AllMutationsScoreResult objects, one per input structure.
     """
 
-    results: list[AllMutationsScoreResult] = Field(
-        description="All-mutations scoring results, one per input structure"
-    )
+    results: list[AllMutationsScoreResult] = Field(description="All-mutations scoring results, one per input structure")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -120,6 +117,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
 
         if file_format == "csv":
             import csv
+
             for i, result in enumerate(self.results):
                 out_file = path / f"all_scores_{i}.csv"
                 if not result.scores:
@@ -134,6 +132,7 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
                         writer.writerow(row)
         elif file_format == "json":
             import json
+
             for i, result in enumerate(self.results):
                 out_file = path / f"all_scores_{i}.json"
                 with open(out_file, "w") as f:
@@ -148,11 +147,11 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNScoreAllMutationsInput(
-        inputs=[Structure(
-            structure_filepath_or_content=str(
-                Path(__file__).parents[1] / "examples" / "example.pdb"
-            ),
-        )]
+        inputs=[
+            Structure(
+                structure_filepath_or_content=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
+            )
+        ]
     )
 
 
@@ -212,8 +211,6 @@ def run_fampnn_score_all_mutations(
             instance=instance,
             config=config,
         )
-        results.append(
-            AllMutationsScoreResult(scores=result["scores"])
-        )
+        results.append(AllMutationsScoreResult(scores=result["scores"]))
 
     return FAMPNNScoreAllMutationsOutput(results=results)

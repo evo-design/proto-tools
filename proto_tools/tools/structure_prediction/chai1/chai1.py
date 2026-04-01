@@ -34,6 +34,7 @@ from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -67,19 +68,17 @@ class Chai1Input(StructurePredictionInput):
 
     @field_validator("complexes")
     @classmethod
-    def validate_sequence_length(
-        cls, complexes: list[StructurePredictionComplex]
-    ) -> list[StructurePredictionComplex]:
+    def validate_sequence_length(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
         """Validate total sequence length doesn't exceed Chai1 limit (2048 residues)."""
         for comp_idx, comp in enumerate(complexes):
             if comp.sum_of_chain_lengths() > 2048:
-                raise ValueError(
-                    f"Complex {comp_idx} too long ({comp.sum_of_chain_lengths()} positions, max 2048)"
-                )
+                raise ValueError(f"Complex {comp_idx} too long ({comp.sum_of_chain_lengths()} positions, max 2048)")
         return complexes
+
 
 # Output:
 Chai1Output = StructurePredictionOutput
+
 
 # Config:
 class Chai1Config(MSAStructurePredictionConfig):
@@ -267,14 +266,8 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: A
         - Chai1 paper: https://www.biorxiv.org/content/10.1101/2024.10.10.615955
 
     Example:
-        >>> inputs = Chai1Input(
-        ...     complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]]
-        ... )
-        >>> config = Chai1Config(
-        ...     use_esm_embeddings=True,
-        ...     num_trunk_recycles=3,
-        ...     verbose=True
-        ... )
+        >>> inputs = Chai1Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
+        >>> config = Chai1Config(use_esm_embeddings=True, num_trunk_recycles=3, verbose=True)
         >>> result = run_chai1(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
 
@@ -285,16 +278,16 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: A
     """
     results = [
         run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)  # type: ignore[arg-type]
-        for comp in tqdm(inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes))
+        for comp in tqdm(
+            inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)
+        )
     ]
     return Chai1Output(
         structures=results,
     )
 
 
-def _msa_to_pqt_file(
-    msa: Any, pqt_path: str, query_index: int = 0, source_database: str = "uniref90"
-) -> None:
+def _msa_to_pqt_file(msa: Any, pqt_path: str, query_index: int = 0, source_database: str = "uniref90") -> None:
     """Write an MSA object to Chai1's .aligned.pqt Parquet format."""
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
     write_msa_pqt(sequences, pqt_path, source_database=source_database, comments=seq_ids)
@@ -302,10 +295,7 @@ def _msa_to_pqt_file(
 
 def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
     """Generate FASTA content from a typed StructurePredictionComplex."""
-    chain_dicts = [
-        {"entity_type": chain.entity_type, "sequence": chain.sequence}
-        for chain in comp.chains
-    ]
+    chain_dicts = [{"entity_type": chain.entity_type, "sequence": chain.sequence} for chain in comp.chains]
     return complex_to_fasta(chain_dicts)
 
 
@@ -350,10 +340,7 @@ def run_chai1_on_complex(
                         query_index=0,
                     )
                     if config.verbose:
-                        logger.info(
-                            f"Assigned MSA to protein chain "
-                            f"({len(msas[chain.sequence])} sequences)"
-                        )
+                        logger.info(f"Assigned MSA to protein chain ({len(msas[chain.sequence])} sequences)")
             if os.listdir(pqt_dir):
                 msa_directory = pqt_dir
 

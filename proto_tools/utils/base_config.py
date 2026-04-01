@@ -32,10 +32,7 @@ def _normalize_depends_on(depends_on: dict[str, Any]) -> dict[str, Any]:
     # Shorthand: single key-value pair like {"search_mode": ["online"]}
     keys = [k for k in depends_on if k not in ("value", "not_null")]
     if len(keys) != 1:
-        msg = (
-            "Shorthand depends_on must have exactly one field key, "
-            f"got {list(depends_on.keys())}"
-        )
+        msg = f"Shorthand depends_on must have exactly one field key, got {list(depends_on.keys())}"
         raise ValueError(msg)
     field_name = keys[0]
     return {"field": field_name, "value": depends_on[field_name]}
@@ -166,9 +163,7 @@ class BaseConfig(BaseModel):
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields."""
-        model_dict = self.model_dump(
-            exclude_none=True, exclude=self.cache_exclude_fields()
-        )
+        model_dict = self.model_dump(exclude_none=True, exclude=self.cache_exclude_fields())
         return json.dumps(model_dict, sort_keys=True, default=str)
 
     device: str = ConfigField(

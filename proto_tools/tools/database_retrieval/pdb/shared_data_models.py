@@ -40,9 +40,7 @@ class PdbChain(BaseModel):
         is_protein (bool): True if chain is protein, False if nucleic acid.
     """
 
-    chain_id: str | None = Field(
-        default=None, description="Chain identifier from header"
-    )
+    chain_id: str | None = Field(default=None, description="Chain identifier from header")
     header: str = Field(description="FASTA header")
     sequence: str = Field(description="Chain sequence")
     is_protein: bool = Field(description="True if chain is protein, False if nucleic acid")
@@ -123,9 +121,7 @@ def _fetch_pdb_entry(
     session: requests.Session,
 ) -> dict[str, Any] | None:
     """Fetch PDB entry metadata (title, method, resolution), or None on 404."""
-    response = _request_pdb(
-        session, f"{_PDB_ENTRY_BASE}/{pdb_id}", config, "pdb-entry"
-    )
+    response = _request_pdb(session, f"{_PDB_ENTRY_BASE}/{pdb_id}", config, "pdb-entry")
     if response is None:
         return None
     data = response.json()
@@ -156,9 +152,7 @@ def _fetch_pdb_fasta(
     session: requests.Session,
 ) -> list[tuple[str, str]] | None:
     """Fetch PDB FASTA chains as (header, sequence) tuples, or None on 404."""
-    response = _request_pdb(
-        session, f"{_PDB_FASTA_BASE}/{pdb_id}", config, "pdb-fasta"
-    )
+    response = _request_pdb(session, f"{_PDB_FASTA_BASE}/{pdb_id}", config, "pdb-fasta")
     if response is None:
         return None
     text = response.text

@@ -2,6 +2,7 @@
 
 PyHMMER jackhmmer tool: iterative protein sequence search.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -100,7 +101,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_pyhmmer_jackhmmer(
-    inputs: PyJackhmmerInput, config: PyJackhmmerConfig | None = None,
+    inputs: PyJackhmmerInput,
+    config: PyJackhmmerConfig | None = None,
     instance: Any = None,
 ) -> PyJackhmmerOutput:
     """Iteratively search protein sequences against protein database using PyHMMER.
@@ -134,9 +136,7 @@ def run_pyhmmer_jackhmmer(
         config=config,
     )
 
-    sequence_hits, domain_hits = _build_hit_models(
-        output_data["sequence_hits"], output_data["domain_hits"]
-    )
+    sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyJackhmmerOutput(
         metadata={

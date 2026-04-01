@@ -15,11 +15,13 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 class _SimpleToolOutput(MockToolOutputBase):
     """Example tool output for testing."""
+
     result: str = Field(description="Simple result string")
 
 
 class _ComplexToolOutput(MockToolOutputBase):
     """Example complex tool output for testing."""
+
     sequences: list[str] = Field(description="Output sequences")
     scores: list[float] = Field(description="Quality scores")
     count: int = Field(description="Number of results")
@@ -31,22 +33,12 @@ class _ComplexToolOutput(MockToolOutputBase):
 def test_execution_time_rejects_negative():
     """execution_time must be non-negative."""
     with pytest.raises(ValidationError, match="execution_time"):
-        _SimpleToolOutput(
-            tool_id="test",
-            execution_time=-1.0,
-            success=True,
-            result="test"
-        )
+        _SimpleToolOutput(tool_id="test", execution_time=-1.0, success=True, result="test")
 
 
 def test_execution_time_allows_zero():
     """Zero execution time is valid."""
-    output = _SimpleToolOutput(
-        tool_id="test",
-        execution_time=0.0,
-        success=True,
-        result="test"
-    )
+    output = _SimpleToolOutput(tool_id="test", execution_time=0.0, success=True, result="test")
     assert output.execution_time == 0.0
 
 
@@ -64,12 +56,7 @@ def test_extra_fields_forbidden():
 
 def test_validate_assignment_rejects_negative_execution_time():
     """Validation occurs on field assignment too."""
-    output = _SimpleToolOutput(
-        tool_id="test-tool",
-        execution_time=1.0,
-        success=True,
-        result="test"
-    )
+    output = _SimpleToolOutput(tool_id="test-tool", execution_time=1.0, success=True, result="test")
     output.execution_time = 2.0
     assert output.execution_time == 2.0
 
@@ -83,12 +70,7 @@ def test_validate_assignment_rejects_negative_execution_time():
 def test_timestamp_auto_generated():
     """Timestamp is auto-generated when not provided."""
     before = datetime.now()
-    output = _SimpleToolOutput(
-        tool_id="test-tool",
-        execution_time=1.0,
-        success=True,
-        result="test"
-    )
+    output = _SimpleToolOutput(tool_id="test-tool", execution_time=1.0, success=True, result="test")
     after = datetime.now()
 
     assert before <= output.timestamp <= after
@@ -105,7 +87,7 @@ def test_json_round_trip():
         success=True,
         warnings=["test warning"],
         metadata={"key": "value"},
-        result="test result"
+        result="test result",
     )
 
     json_str = output.model_dump_json()
@@ -143,7 +125,7 @@ def test_complex_subclass_preserves_typed_fields():
         success=True,
         sequences=["ATCG", "GCTA"],
         scores=[0.95, 0.87],
-        count=2
+        count=2,
     )
 
     assert output.sequences == ["ATCG", "GCTA"]

@@ -47,7 +47,9 @@ def test_sequence_search_result_properties():
         MmseqsHit(target_id="db_2", pident=85.0, evalue=1e-30),
     ]
     result = MmseqsSequenceSearchResult(
-        query_id="seq_0", query_sequence="MVLSPADKTN", hits=hits,
+        query_id="seq_0",
+        query_sequence="MVLSPADKTN",
+        hits=hits,
     )
     assert result.num_hits == 2
     assert result.has_hits is True
@@ -56,7 +58,9 @@ def test_sequence_search_result_properties():
 
 def test_sequence_search_result_no_hits():
     result = MmseqsSequenceSearchResult(
-        query_id="seq_0", query_sequence="MVLSPADKTN", hits=[],
+        query_id="seq_0",
+        query_sequence="MVLSPADKTN",
+        hits=[],
     )
     assert result.num_hits == 0
     assert result.has_hits is False
@@ -143,14 +147,24 @@ def test_filter_top_hits_empty_dataframe():
 
 
 def test_filter_top_hits_single_hit_per_query():
-    data = {"query": ["q1", "q2", "q3"], "target": ["t1", "t2", "t3"], "pident": [90.0, 85.0, 95.0], "evalue": [1e-10, 1e-15, 1e-20]}
+    data = {
+        "query": ["q1", "q2", "q3"],
+        "target": ["t1", "t2", "t3"],
+        "pident": [90.0, 85.0, 95.0],
+        "evalue": [1e-10, 1e-15, 1e-20],
+    }
     df = pd.DataFrame(data)
     filtered_df = _filter_top_hits(df)
     assert len(filtered_df) == 3
 
 
 def test_filter_top_hits_ties_in_pident():
-    data = {"query": ["q1", "q1", "q1"], "target": ["t1", "t2", "t3"], "pident": [90.0, 90.0, 85.0], "evalue": [1e-10, 1e-15, 1e-20]}
+    data = {
+        "query": ["q1", "q1", "q1"],
+        "target": ["t1", "t2", "t3"],
+        "pident": [90.0, 90.0, 85.0],
+        "evalue": [1e-10, 1e-15, 1e-20],
+    }
     df = pd.DataFrame(data)
     filtered_df = _filter_top_hits(df)
     # Should keep one of the 90.0% hits (first by pandas default)
@@ -161,12 +175,14 @@ def test_filter_top_hits_ties_in_pident():
 def test_build_results_with_hits():
     sequences = ["MVLSPADKTN", "MKLLVVAAAA"]
     sequence_ids = ["seq_0", "seq_1"]
-    df = pd.DataFrame({
-        "query": ["seq_0", "seq_0", "seq_1"],
-        "target": ["db_1", "db_2", "db_3"],
-        "pident": [95.0, 85.0, 90.0],
-        "evalue": [1e-50, 1e-30, 1e-40],
-    })
+    df = pd.DataFrame(
+        {
+            "query": ["seq_0", "seq_0", "seq_1"],
+            "target": ["db_1", "db_2", "db_3"],
+            "pident": [95.0, 85.0, 90.0],
+            "evalue": [1e-50, 1e-30, 1e-40],
+        }
+    )
 
     results = _build_sequence_search_results(sequences, sequence_ids, df)
 
@@ -196,12 +212,14 @@ def test_build_results_partial_hits():
     """Only some sequences have hits; missing ones get empty results."""
     sequences = ["SEQ1", "SEQ2", "SEQ3"]
     sequence_ids = ["seq_0", "seq_1", "seq_2"]
-    df = pd.DataFrame({
-        "query": ["seq_0", "seq_2"],
-        "target": ["db_1", "db_2"],
-        "pident": [95.0, 90.0],
-        "evalue": [1e-50, 1e-40],
-    })
+    df = pd.DataFrame(
+        {
+            "query": ["seq_0", "seq_2"],
+            "target": ["db_1", "db_2"],
+            "pident": [95.0, 90.0],
+            "evalue": [1e-50, 1e-40],
+        }
+    )
 
     results = _build_sequence_search_results(sequences, sequence_ids, df)
 
@@ -214,12 +232,14 @@ def test_build_results_partial_hits():
 def test_build_results_with_custom_ids():
     sequences = ["MVLSPADKTN", "MKLLVVAAAA"]
     sequence_ids = ["protein_a", "protein_b"]
-    df = pd.DataFrame({
-        "query": ["protein_a", "protein_b"],
-        "target": ["db_1", "db_2"],
-        "pident": [95.0, 90.0],
-        "evalue": [1e-50, 1e-40],
-    })
+    df = pd.DataFrame(
+        {
+            "query": ["protein_a", "protein_b"],
+            "target": ["db_1", "db_2"],
+            "pident": [95.0, 90.0],
+            "evalue": [1e-50, 1e-40],
+        }
+    )
 
     results = _build_sequence_search_results(sequences, sequence_ids, df)
 
@@ -275,7 +295,8 @@ def test_search_proteins_input_rejects_empty(tmp_path):
 
     with pytest.raises(ValueError, match="query_sequences list cannot be empty"):
         MmseqsSearchProteinsInput(
-            query_sequences=[], mmseqs_db=str(db_file),
+            query_sequences=[],
+            mmseqs_db=str(db_file),
         )
 
 
@@ -285,7 +306,8 @@ def test_search_proteins_input_rejects_non_list(tmp_path):
 
     with pytest.raises(ValueError, match="query_sequences must be a list"):
         MmseqsSearchProteinsInput(
-            query_sequences="single_string", mmseqs_db=str(db_file),
+            query_sequences="single_string",
+            mmseqs_db=str(db_file),
         )
 
 

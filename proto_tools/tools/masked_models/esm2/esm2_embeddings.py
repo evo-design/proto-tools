@@ -2,6 +2,7 @@
 
 ESM2 embeddings tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +34,7 @@ ESM2_MODEL_CHECKPOINTS = Literal[
 # Input:
 ESM2EmbeddingsInput = MaskedModelInput
 
+
 # Output:
 class ESM2EmbeddingsOutput(MaskedModelOutput):
     """Output from ESM2 protein language model inference.
@@ -56,6 +58,7 @@ class ESM2EmbeddingsOutput(MaskedModelOutput):
         All outputs are returned as nested Python lists (moved to CPU) for
         serialization and downstream processing.
     """
+
 
 # Config:
 class ESM2EmbeddingsConfig(MaskedModelConfig):
@@ -101,6 +104,7 @@ class ESM2EmbeddingsConfig(MaskedModelConfig):
     Note:
         The model is loaded on-demand for each call.
     """
+
     model_checkpoint: Literal[ESM2_MODEL_CHECKPOINTS] = ConfigField(
         title="ESM2 Model Checkpoint",
         default="esm2_t33_650M_UR50D",
@@ -138,7 +142,9 @@ def example_input() -> Any:
     iterable_output_field="results",
     cacheable=True,
 )
-def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig | None = None, instance: Any = None) -> ESM2EmbeddingsOutput:
+def run_esm2_embeddings(
+    inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig | None = None, instance: Any = None
+) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.
 
     Uses ESM2 from Meta AI to extract contextualized embeddings and per-position
@@ -162,14 +168,8 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
 
     Examples:
         >>> # Basic embedding extraction
-        >>> inputs = MaskedModelInput(
-        ...     sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"]
-        ... )
-        >>> config = ESM2EmbeddingsConfig(
-        ...     model_checkpoint="esm2_t33_650M_UR50D",
-        ...     batch_size=2,
-        ...     verbose=True
-        ... )
+        >>> inputs = MaskedModelInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
+        >>> config = ESM2EmbeddingsConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=2, verbose=True)
         >>> result = run_esm2_embeddings(inputs, config)
         >>> print(f"Processed {len(result.results)} sequences")
         >>> print(f"Embedding dimension: {len(result.results[0].mean_embedding)}")
@@ -180,10 +180,7 @@ def run_esm2_embeddings(inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfi
         >>> predicted_tokens = np.argmax(logits_array, axis=-1)
         >>>
         >>> # Extract embeddings using smaller model on CPU
-        >>> config = ESM2EmbeddingsConfig(
-        ...     model_checkpoint="esm2_t6_8M_UR50D",
-        ...     device="cpu"
-        ... )
+        >>> config = ESM2EmbeddingsConfig(model_checkpoint="esm2_t6_8M_UR50D", device="cpu")
         >>> result = run_esm2_embeddings(inputs, config)
         >>>
         >>> # Process large batch efficiently

@@ -2,6 +2,7 @@
 
 Tests for LigandMPNN sampling.
 """
+
 from pathlib import Path
 
 import pytest
@@ -17,9 +18,7 @@ from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
-DEFAULT_CHECKPOINT = (
-    Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
-)
+DEFAULT_CHECKPOINT = Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
 
 
 _persistent_tool = make_persistent_fixture("ligandmpnn")
@@ -33,11 +32,7 @@ def cif_structure():
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_simple(cif_structure: Structure):
     """Basic LigandMPNN sampling with a single structure."""
-    inp = InverseFoldingInput(
-        inputs=[
-            InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])
-        ]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
     config = InverseFoldingConfig(num_sequences_per_structure=2, temperature=0.1, seed=42)
 
     output = run_ligandmpnn_sample(inp, config)
@@ -55,11 +50,7 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
 @pytest.mark.uses_gpu
 def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     """Chunked batching produces the correct number of sequences."""
-    inp = InverseFoldingInput(
-        inputs=[
-            InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])
-        ]
-    )
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
     config = InverseFoldingConfig(
         num_sequences_per_structure=6,
         batch_size=2,

@@ -2,6 +2,7 @@
 
 ESM2 scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,6 +34,7 @@ ESM2_MODEL_CHECKPOINTS = Literal[
 ESM2ScoringInput = MaskedModelInput
 # Output:
 ESM2ScoringOutput = MaskedModelScoringOutput
+
 
 # Config:
 class ESM2ScoringConfig(BaseConfig):
@@ -120,7 +122,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_esm2_score(
-    inputs: ESM2ScoringInput, config: ESM2ScoringConfig | None = None,
+    inputs: ESM2ScoringInput,
+    config: ESM2ScoringConfig | None = None,
     instance: Any = None,
 ) -> ESM2ScoringOutput:
     """Score protein sequences using ESM2 language model.

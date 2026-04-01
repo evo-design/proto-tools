@@ -2,6 +2,7 @@
 
 Tissue-specific splice site prediction using SpliceTransformer.
 """
+
 from __future__ import annotations
 
 import logging
@@ -129,15 +130,9 @@ class SpliceTransformerInput(BaseToolInput):
     def validate_input_format(self) -> Any:
         """Validate that the input sequence format is correct."""
         if len(self.target_seqs) != len(self.left_contexts):
-            raise ValueError(
-                "Number of target sequences must be the same as the number of "
-                "left context sequences"
-            )
+            raise ValueError("Number of target sequences must be the same as the number of left context sequences")
         if len(self.target_seqs) != len(self.right_contexts):
-            raise ValueError(
-                "Number of target sequences must be the same as the number of "
-                "right context sequences"
-            )
+            raise ValueError("Number of target sequences must be the same as the number of right context sequences")
         return self
 
 
@@ -169,13 +164,11 @@ class SpliceTransformerConfig(BaseConfig):
         description="Context length on both left and right of target sequence.",  # All sequences in left_contexts and right_contexts must be this length
         reload_on_change=True,
     )
-    device: str = (
-        ConfigField(
-            default="cuda",
-            title="Device",
-            description="Device to run the model on (e.g., 'cuda', 'cpu')",
-            hidden=True,
-        )
+    device: str = ConfigField(
+        default="cuda",
+        title="Device",
+        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        hidden=True,
     )
 
 
@@ -226,7 +219,7 @@ class SpliceTransformerOutput(BaseToolOutput):
         description="Matrix of (batch, target_length, 18)",
     )
 
-    @field_serializer('prediction')
+    @field_serializer("prediction")
     def serialize_prediction(self, value: np.ndarray) -> list[Any]:
         """Serialize a prediction array to a JSON-compatible list."""
         return value.tolist()  # type: ignore[no-any-return]
@@ -319,12 +312,9 @@ def run_splice_transformer(
         >>> inputs = SpliceTransformerInput(
         ...     target_seqs=["ATGC" * 250],  # 1000bp
         ...     left_contexts=["CGTA" * 1000],  # 4000bp
-        ...     right_contexts=["TACG" * 1000]  # 4000bp
+        ...     right_contexts=["TACG" * 1000],  # 4000bp
         ... )
-        >>> config = SpliceTransformerConfig(
-        ...     context_length=4000,
-        ...     verbose=True
-        ... )
+        >>> config = SpliceTransformerConfig(context_length=4000, verbose=True)
         >>> result = run_splice_transformer(inputs, config)
         >>> # Extract donor sites (channel 2)
         >>> donor_probs = result.prediction[0, :, 2]

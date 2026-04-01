@@ -2,6 +2,7 @@
 
 Evo2 scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,6 +36,7 @@ EVO2_MODEL_CHECKPOINTS = Literal[
     "evo2_7b_microviridae",
 ]
 
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -56,8 +58,11 @@ class Evo2ScoringInput(BaseToolInput):
         if not v:
             raise ValueError("sequences must not be empty")
         return v
+
+
 # Output:
 Evo2ScoringOutput = CausalModelScoringOutput
+
 
 # Config:
 class Evo2ScoringConfig(BaseConfig):
@@ -150,7 +155,8 @@ class Evo2ScoringConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo2_score(
-    inputs: Evo2ScoringInput, config: Evo2ScoringConfig | None = None,
+    inputs: Evo2ScoringInput,
+    config: Evo2ScoringConfig | None = None,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.

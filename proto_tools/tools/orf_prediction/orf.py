@@ -1,4 +1,5 @@
 """proto_tools/tools/orf_prediction/orf.py."""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -68,34 +69,24 @@ class ORF:
         """Access metrics as attributes."""
         if name in self.metrics:
             return self.metrics[name]
-        raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'"
-        )
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def _validate(self) -> None:
         """Validate ORF fields after construction."""
         # Validate strand
         if self.strand not in ("+", "-"):
-            raise ValueError(
-                f"Invalid strand '{self.strand}'. Must be '+' or '-'."
-            )
+            raise ValueError(f"Invalid strand '{self.strand}'. Must be '+' or '-'.")
 
         # Validate frame
         if self.frame not in (1, 2, 3):
-            raise ValueError(
-                f"Invalid frame {self.frame}. Must be 1, 2, or 3."
-            )
+            raise ValueError(f"Invalid frame {self.frame}. Must be 1, 2, or 3.")
 
         # Validate coordinates
         if self.nucleotide_start <= 0:
-            raise ValueError(
-                f"Invalid nucleotide_start {self.nucleotide_start}. Must be > 0 (1-indexed)."
-            )
+            raise ValueError(f"Invalid nucleotide_start {self.nucleotide_start}. Must be > 0 (1-indexed).")
 
         if self.nucleotide_end <= 0:
-            raise ValueError(
-                f"Invalid nucleotide_end {self.nucleotide_end}. Must be > 0 (1-indexed)."
-            )
+            raise ValueError(f"Invalid nucleotide_end {self.nucleotide_end}. Must be > 0 (1-indexed).")
 
         if self.nucleotide_start >= self.nucleotide_end:
             raise ValueError(
@@ -118,10 +109,7 @@ class ORF:
         return f"{self.parent_id}_{self.orf_id}"
 
     def __repr__(self) -> str:
-        return (
-            f"ORF(id='{self.id}', start={self.nucleotide_start}, "
-            f"end={self.nucleotide_end}, strand='{self.strand}')"
-        )
+        return f"ORF(id='{self.id}', start={self.nucleotide_start}, end={self.nucleotide_end}, strand='{self.strand}')"
 
     def __str__(self) -> str:
         return self.__repr__()

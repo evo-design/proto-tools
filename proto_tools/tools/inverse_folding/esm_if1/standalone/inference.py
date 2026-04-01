@@ -1,4 +1,5 @@
 """ESM-IF/ProteinDPO inference implementation for standalone venv execution."""
+
 from __future__ import annotations
 
 import gc
@@ -46,12 +47,8 @@ class ESMIF1Model:
         import esm.inverse_folding.util
 
         structure = esm.inverse_folding.util.load_structure(pdb_structure)
-        structure = biotite.structure.array(
-            [atom for atom in structure if not atom.hetero]
-        )
-        all_coords, all_native_seqs = (
-            esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
-        )
+        structure = biotite.structure.array([atom for atom in structure if not atom.hetero])
+        all_coords, all_native_seqs = esm.inverse_folding.multichain_util.extract_coords_from_complex(structure)
         target_chain = chain_ids[0] if chain_ids else next(iter(all_coords.keys()))
         return all_coords, all_native_seqs, target_chain
 
@@ -96,17 +93,17 @@ class ESMIF1Model:
                     if i in fixed_indices:
                         partial_seq.append(res)
                     else:
-                        partial_seq.append('<mask>')
+                        partial_seq.append("<mask>")
             else:
-                partial_seq.extend(['<pad>'] * len(chain_seq))
+                partial_seq.extend(["<pad>"] * len(chain_seq))
 
         # Build coords tensor matching multichain_util._concatenate_coords
-        all_coords_concat = esm.inverse_folding.multichain_util._concatenate_coords(
-            all_coords, target_chain
-        )
+        all_coords_concat = esm.inverse_folding.multichain_util._concatenate_coords(all_coords, target_chain)
 
         sampled_seq = self.model.sample(  # type: ignore[attr-defined]
-            all_coords_concat, partial_seq=partial_seq, temperature=temperature,
+            all_coords_concat,
+            partial_seq=partial_seq,
+            temperature=temperature,
         )
         # Extract only target chain portion
         target_len = len(native_seq)
@@ -148,9 +145,7 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, all_native_seqs, target_chain = self._load_structure(
-            pdb_structure, chain_ids
-        )
+        all_coords, all_native_seqs, target_chain = self._load_structure(pdb_structure, chain_ids)
 
         sequences = []
         log_likelihoods = []
@@ -159,23 +154,28 @@ class ESMIF1Model:
         for _ in range(batch_size):
             if fixed_positions and target_chain in fixed_positions:
                 sampled_seq = self._sample_with_fixed_positions(
-                    all_coords, all_native_seqs, target_chain,
-                    fixed_positions[target_chain], temperature,
+                    all_coords,
+                    all_native_seqs,
+                    target_chain,
+                    fixed_positions[target_chain],
+                    temperature,
                 )
             else:
-                sampled_seq = (
-                    esm.inverse_folding.multichain_util.sample_sequence_in_complex(
-                        self.model, all_coords, target_chain, temperature=temperature,
-                    )
+                sampled_seq = esm.inverse_folding.multichain_util.sample_sequence_in_complex(
+                    self.model,
+                    all_coords,
+                    target_chain,
+                    temperature=temperature,
                 )
             sequences.append(sampled_seq)
 
             # Score sampled sequence to get log-likelihood
-            avg_ll, _ = (
-                esm.inverse_folding.multichain_util.score_sequence_in_complex(
-                    self.model, self.alphabet, all_coords,
-                    target_chain, sampled_seq,
-                )
+            avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
+                self.model,
+                self.alphabet,
+                all_coords,
+                target_chain,
+                sampled_seq,
             )
             log_likelihoods.append(float(avg_ll))
 
@@ -217,13 +217,15 @@ class ESMIF1Model:
 
         import esm.inverse_folding.multichain_util
 
-        all_coords, _all_native_seqs, target_chain = self._load_structure(
-            pdb_structure, chain_ids
-        )
+        all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_structure, chain_ids)
 
         # Score the sequence in the complex context
         avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
-            self.model, self.alphabet, all_coords, target_chain, sequence,
+            self.model,
+            self.alphabet,
+            all_coords,
+            target_chain,
+            sequence,
         )
 
         metrics = {
@@ -253,33 +255,23 @@ class ESMIF1Model:
         if not weights_dir:
             venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH", ".")
             weights_dir = os.path.join(venv, "weights")
-        base_weights_path = os.path.join(
-            weights_dir, "esm_if1_gvp4_t16_142M_UR50.pt"
-        )
+        base_weights_path = os.path.join(weights_dir, "esm_if1_gvp4_t16_142M_UR50.pt")
 
         # Load with weights_only=False for PyTorch 2.6+ compatibility
         # (ESM-IF checkpoint contains argparse.Namespace objects)
-        model_data = torch.load(
-            base_weights_path, map_location="cpu", weights_only=False
-        )
-        self.model, self.alphabet = (
-            esm.pretrained.load_model_and_alphabet_core(
-                "esm_if1_gvp4_t16_142M_UR50", model_data
-            )
+        model_data = torch.load(base_weights_path, map_location="cpu", weights_only=False)
+        self.model, self.alphabet = esm.pretrained.load_model_and_alphabet_core(
+            "esm_if1_gvp4_t16_142M_UR50", model_data
         )
 
         # Apply ProteinDPO weights if requested
         if weights_variant == "protein_dpo":
             dpo_weights_path = os.path.join(weights_dir, "paired_weights.pt")
             if os.path.exists(dpo_weights_path):
-                state_dict = torch.load(
-                    dpo_weights_path, map_location="cpu", weights_only=False
-                )
+                state_dict = torch.load(dpo_weights_path, map_location="cpu", weights_only=False)
                 self.model.load_state_dict(state_dict, strict=True)  # type: ignore[attr-defined]
                 if verbose:
-                    logger.info(
-                        f"Loaded ProteinDPO weights from {dpo_weights_path}"
-                    )
+                    logger.info(f"Loaded ProteinDPO weights from {dpo_weights_path}")
             else:
                 raise FileNotFoundError(
                     f"ProteinDPO weights not found at {dpo_weights_path}. "
@@ -298,9 +290,7 @@ class ESMIF1Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
-            raise RuntimeError(
-                "Cannot move unloaded model to device. Call load() first."
-            )
+            raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device  # type: ignore[assignment]
@@ -401,9 +391,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python inference.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python inference.py <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

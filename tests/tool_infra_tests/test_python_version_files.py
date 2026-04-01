@@ -83,14 +83,17 @@ def test_multiple_lines_raises_error(tmp_path):
         tool._get_python_version()
 
 
-@pytest.mark.parametrize("invalid", [
-    "3",           # Only major
-    "python3.11",  # Text prefix
-    "v3.11",       # Version prefix
-    "3.11.5.2",    # Too many parts
-    "3.x",         # Non-numeric
-    "latest",      # Non-version string
-])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "3",  # Only major
+        "python3.11",  # Text prefix
+        "v3.11",  # Version prefix
+        "3.11.5.2",  # Too many parts
+        "3.x",  # Non-numeric
+        "latest",  # Non-version string
+    ],
+)
 def test_invalid_format_raises_error(tmp_path, invalid):
     """Invalid version formats are rejected."""
     (tmp_path / "python_version.txt").write_text(invalid)

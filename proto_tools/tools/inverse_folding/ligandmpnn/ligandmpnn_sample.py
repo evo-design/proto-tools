@@ -2,6 +2,7 @@
 
 LigandMPNN sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,9 +56,11 @@ class LigandMPNNSequences(DesignedSequences):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return LigandMPNNSampleInput(
-        inputs=[InverseFoldingStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
-        )]
+        inputs=[
+            InverseFoldingStructureInput(
+                structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
+            )
+        ]
     )
 
 

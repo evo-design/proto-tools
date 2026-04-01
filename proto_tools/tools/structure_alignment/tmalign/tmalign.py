@@ -55,12 +55,8 @@ class TMalignOutput(BaseToolOutput):
         tm_score_chain_2 (float): TM-score normalized by the length of Chain 2 (reference).
     """
 
-    tm_score_chain_1: float = Field(
-        description="TM-score normalized by length of Chain 1 (query)"
-    )
-    tm_score_chain_2: float = Field(
-        description="TM-score normalized by length of Chain 2 (reference)"
-    )
+    tm_score_chain_1: float = Field(description="TM-score normalized by length of Chain 1 (query)")
+    tm_score_chain_2: float = Field(description="TM-score normalized by length of Chain 2 (reference)")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -114,9 +110,7 @@ def example_input() -> Any:
     ),
     example_input=example_input,
 )
-def run_tmalign(
-    inputs: TMalignInput, config: TMalignConfig | None = None, instance: Any = None
-) -> TMalignOutput:
+def run_tmalign(inputs: TMalignInput, config: TMalignConfig | None = None, instance: Any = None) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,

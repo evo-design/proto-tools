@@ -59,10 +59,9 @@ _TEST_DB_SETUP_SCRIPT = Path(__file__).parent.parent / "dummy_data" / "create_mi
 
 # ── ColabfoldSearchQuery tests ─────────────────────────────────────────────
 
+
 def test_colabfold_query_valid():
-    query = ColabfoldSearchQuery(
-        sequence=SAMPLE_PROTEIN_SEQ_1, sequence_id="test_seq"
-    )
+    query = ColabfoldSearchQuery(sequence=SAMPLE_PROTEIN_SEQ_1, sequence_id="test_seq")
     assert query.sequence == SAMPLE_PROTEIN_SEQ_1
     assert query.sequence_id == "test_seq"
 
@@ -90,6 +89,7 @@ def test_colabfold_query_sequence_strips_whitespace():
 
 # ── ColabfoldSearchInput tests ─────────────────────────────────────────────
 
+
 def test_colabfold_input_single_sequence_string():
     """Test input with single sequence string."""
     inputs = ColabfoldSearchInput(queries=SAMPLE_PROTEIN_SEQ_1)
@@ -100,9 +100,7 @@ def test_colabfold_input_single_sequence_string():
 
 def test_colabfold_input_list_of_sequence_strings():
     """Test input with list of sequence strings."""
-    inputs = ColabfoldSearchInput(
-        queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]
-    )
+    inputs = ColabfoldSearchInput(queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
     assert len(inputs.queries) == 2
     assert inputs.queries[0].sequence == SAMPLE_PROTEIN_SEQ_1
     assert inputs.queries[1].sequence == SAMPLE_PROTEIN_SEQ_2
@@ -153,9 +151,7 @@ def test_colabfold_input_single_query_object():
 
 def test_colabfold_input_mixed_format_list():
     """Test input with mixed formats in list."""
-    query1 = ColabfoldSearchQuery(
-        sequence=SAMPLE_PROTEIN_SEQ_1, sequence_id="explicit"
-    )
+    query1 = ColabfoldSearchQuery(sequence=SAMPLE_PROTEIN_SEQ_1, sequence_id="explicit")
     inputs = ColabfoldSearchInput(
         queries=[
             query1,
@@ -188,9 +184,7 @@ def test_colabfold_input_duplicate_sequence_ids_fails():
 
 def test_colabfold_input_auto_generated_ids_are_unique():
     """Test that auto-generated IDs are unique."""
-    inputs = ColabfoldSearchInput(
-        queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]
-    )
+    inputs = ColabfoldSearchInput(queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
     ids = {q.sequence_id for q in inputs.queries}
     assert len(ids) == 2  # All unique
 
@@ -204,9 +198,7 @@ def test_colabfold_input_auto_generated_ids_deterministic():
 
 def test_colabfold_input_list_like_interface():
     """Test list-like operations on input."""
-    inputs = ColabfoldSearchInput(
-        queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2]
-    )
+    inputs = ColabfoldSearchInput(queries=[SAMPLE_PROTEIN_SEQ_1, SAMPLE_PROTEIN_SEQ_2])
     assert len(inputs) == 2
     assert inputs[0].sequence == SAMPLE_PROTEIN_SEQ_1
     assert inputs[1].sequence == SAMPLE_PROTEIN_SEQ_2
@@ -239,10 +231,7 @@ def setup_mini_database():
                 logger.info("Output: %s", result.stdout)
         except subprocess.CalledProcessError as e:
             pytest.fail(
-                f"Failed to setup mini database:\n"
-                f"Exit code: {e.returncode}\n"
-                f"Stdout: {e.stdout}\n"
-                f"Stderr: {e.stderr}"
+                f"Failed to setup mini database:\nExit code: {e.returncode}\nStdout: {e.stdout}\nStderr: {e.stderr}"
             )
         except subprocess.TimeoutExpired:
             pytest.fail("Database setup timed out after 10 minutes")
@@ -285,9 +274,7 @@ def test_finding_self_in_database(setup_mini_database, tmp_path):
     validate_output(result)
 
     # Verify results
-    assert len(result) == len(
-        inputs.queries
-    ), "Expected number of results to be equal to the number of queries"
+    assert len(result) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
     assert result.results[0].sequence_id == "test_query"
 
     # Verify MSA was created
@@ -325,9 +312,7 @@ def test_finding_homologs(setup_mini_database, tmp_path):
         verbose=False,
     )
 
-    inputs = ColabfoldSearchInput(
-        queries=[(srs, "small_ribosomal_subunit_query")]
-    )
+    inputs = ColabfoldSearchInput(queries=[(srs, "small_ribosomal_subunit_query")])
 
     # Execute the search
     result = run_colabfold_search(inputs, config)
@@ -335,9 +320,7 @@ def test_finding_homologs(setup_mini_database, tmp_path):
     # Validate output and export functionality
     validate_output(result)
 
-    assert len(result) == len(
-        inputs.queries
-    ), "Expected number of results to be equal to the number of queries"
+    assert len(result) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
     msa = result.results[0].msa
     assert len(msa) == 439
@@ -385,9 +368,7 @@ def test_multiple_sequences_search(setup_mini_database, tmp_path):
     validate_output(result)
 
     # Verify results
-    assert len(result.results) == len(
-        inputs.queries
-    ), "Expected number of results to be equal to the number of queries"
+    assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
     # First two MSAs should have a lot of homologs
     assert len(result.results[0].msa) == 439
@@ -434,9 +415,7 @@ def test_with_sensitivity(setup_mini_database, tmp_path):
     validate_output(result)
 
     # Verify results
-    assert len(result.results) == len(
-        inputs.queries
-    ), "Expected number of results to be equal to the number of queries"
+    assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
     assert len(result.results[0].msa) == 425
 
@@ -477,6 +456,4 @@ def test_full_database_search(tmp_path):
 
     # Verify results
     assert result.success, f"Search failed with errors: {result.errors}"
-    assert len(result.results) == len(
-        inputs.queries
-    ), "Expected number of results to be equal to the number of queries"
+    assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"

@@ -21,6 +21,7 @@ from tests.tool_infra_tests.test_export_functionality import (
 
 # ── Input validation ─────────────────────────────────────────────────────────
 
+
 def test_input_single_path_normalized_to_list():
     inp = StructureMetricsInput(pdb_paths="/path/to/structure.pdb")
     assert isinstance(inp.pdb_paths, list)
@@ -40,6 +41,7 @@ def test_input_path_objects_converted_to_strings():
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
+
 def test_config_extra_fields_ignored():
     config = StructureMetricsConfig(extra_field="should_be_ignored")
     assert "extra_field" not in config.model_dump()
@@ -47,11 +49,15 @@ def test_config_extra_fields_ignored():
 
 # ── StructureMetrics data model ───────────────────────────────────────────────
 
-@pytest.mark.parametrize("longest_alpha_helix,gyration_radius", [
-    (0, 0.0),
-    (25, 30.5),
-    (100, 99.9),
-])
+
+@pytest.mark.parametrize(
+    "longest_alpha_helix,gyration_radius",
+    [
+        (0, 0.0),
+        (25, 30.5),
+        (100, 99.9),
+    ],
+)
 def test_structure_metrics_model_dump(longest_alpha_helix, gyration_radius):
     m = StructureMetrics(
         pdb_path="/path/test.pdb",
@@ -65,6 +71,7 @@ def test_structure_metrics_model_dump(longest_alpha_helix, gyration_radius):
 
 
 # ── Export ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def sample_output():
@@ -86,16 +93,12 @@ def sample_output():
 
 
 def test_export_csv(sample_output, tmp_path):
-    sample_output.export(
-        name="metrics", export_path=str(tmp_path), file_format="csv"
-    )
+    sample_output.export(name="metrics", export_path=str(tmp_path), file_format="csv")
     assert validate_export_output(tmp_path / "metrics.csv")
 
 
 def test_export_json(sample_output, tmp_path):
-    sample_output.export(
-        name="metrics", export_path=str(tmp_path), file_format="json"
-    )
+    sample_output.export(name="metrics", export_path=str(tmp_path), file_format="json")
     json_path = tmp_path / "metrics.json"
     assert validate_export_output(json_path)
     data = json.loads(json_path.read_text())
@@ -111,6 +114,7 @@ def test_output_format_options(sample_output):
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 def test_run_structure_metrics_on_pdb(tmp_path):
@@ -129,9 +133,7 @@ END
     pdb_path = tmp_path / "test.pdb"
     pdb_path.write_text(pdb_content)
 
-    result = run_structure_metrics(
-        StructureMetricsInput(pdb_paths=[str(pdb_path)])
-    )
+    result = run_structure_metrics(StructureMetricsInput(pdb_paths=[str(pdb_path)]))
 
     assert isinstance(result, StructureMetricsOutput)
     assert len(result.metrics) == 1

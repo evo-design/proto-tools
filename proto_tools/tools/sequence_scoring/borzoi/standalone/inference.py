@@ -1,4 +1,5 @@
 """Borzoi standalone inference implementation for venv execution."""
+
 from __future__ import annotations
 
 import json
@@ -35,8 +36,7 @@ class BorzoiModel:
         """
         if species == "mouse" and use_flash_attn:
             raise ValueError(
-                "FlashAttention (flashzoi) is not available for mouse models. "
-                "Please set use_flash_attn=False."
+                "FlashAttention (flashzoi) is not available for mouse models. Please set use_flash_attn=False."
             )
 
         self.species = species
@@ -99,7 +99,9 @@ class BorzoiModel:
         if self.device == "cpu" and device.startswith("cuda"):
             # CPU→GPU: reload needed for flash-attn/Triton
             self.model = move_model_to_device(
-                self.model, self.device, device,
+                self.model,
+                self.device,
+                device,
                 custom_move_fn=self._reload_to_device,
             )
         else:
@@ -190,10 +192,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             try:
                 import flash_attn  # noqa: F401
             except ImportError:
-                logger.warning(
-                    "flash-attn not installed, falling back to "
-                    "use_flash_attn=False (standard borzoi model)"
-                )
+                logger.warning("flash-attn not installed, falling back to use_flash_attn=False (standard borzoi model)")
                 use_flash_attn = False
 
         _model = BorzoiModel(
@@ -217,7 +216,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "applied_replicate": _model.replicate,
         }
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

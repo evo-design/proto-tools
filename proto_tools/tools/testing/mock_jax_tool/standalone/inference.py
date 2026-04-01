@@ -6,6 +6,7 @@ conventions: params are a dict pytree separated from the model function,
 and device movement uses jax.device_put() on the params pytree (matching
 ProteinMPNN, Flax, Haiku, etc.).
 """
+
 from __future__ import annotations
 
 import json
@@ -93,13 +94,18 @@ class MockJAXToolModel:
         self.device_str = device
         self._jax_device = resolve_jax_device(device)
         self.params = _init_params(
-            input_size=4, hidden_size=hidden_size, output_size=4,
-            memory_mb=memory_mb, device=self._jax_device,
+            input_size=4,
+            hidden_size=hidden_size,
+            output_size=4,
+            memory_mb=memory_mb,
+            device=self._jax_device,
         )
         self._loaded = True
         logger.info(
             "Loaded mock JAX model on %s (hidden_size=%d, memory_mb=%d)",
-            device, hidden_size, memory_mb,
+            device,
+            hidden_size,
+            memory_mb,
         )
 
     def to_device(self, device: str) -> None:

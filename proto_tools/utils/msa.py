@@ -2,6 +2,7 @@
 
 Shared MSA utilities for structure prediction tools.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,9 +19,7 @@ def extract_msa_sequences(msa: Any, query_index: int = 0) -> tuple[list[str], li
         tuple[list[str], list[str]]: Tuple of (sequences, seq_ids), both with query at index 0
     """
     if query_index < 0 or query_index >= msa.num_sequences:
-        raise IndexError(
-            f"Query index {query_index} out of range [0, {msa.num_sequences})"
-        )
+        raise IndexError(f"Query index {query_index} out of range [0, {msa.num_sequences})")
     seq_ids = []
     sequences = []
     for seq_id, seq in msa.iter_with_ids():

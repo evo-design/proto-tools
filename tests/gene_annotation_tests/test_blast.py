@@ -2,6 +2,7 @@
 
 Tests for BLAST tools.
 """
+
 import warnings
 from pathlib import Path
 

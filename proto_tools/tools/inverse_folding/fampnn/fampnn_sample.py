@@ -2,6 +2,7 @@
 
 FAMPNN sequence sampling tool with full-atom sidechain co-generation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,6 +52,7 @@ class FAMPNNStructureInput(InverseFoldingStructureInput):
         description="Chain IDs to residue positions with known sidechain coordinates to condition on (1-indexed).",
     )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,9 +64,7 @@ class FAMPNNSampleInput(BaseToolInput):
             and optional chain_ids/fixed_positions/fixed_sidechain_positions.
     """
 
-    inputs: list[FAMPNNStructureInput] = InputField(
-        description="List of structure inputs for sequence design."
-    )
+    inputs: list[FAMPNNStructureInput] = InputField(description="List of structure inputs for sequence design.")
 
 
 class FAMPNNSampleConfig(InverseFoldingConfig):
@@ -159,12 +159,8 @@ class FAMPNNSequences(DesignedSequences):
         psce (list[list[float]]): Per-residue predicted sidechain error (mean over atoms) in Angstroms.
     """
 
-    output_pdb_strings: list[str] = Field(
-        description="PDB strings with designed sequences and sidechain coordinates"
-    )
-    psce: list[list[float]] = Field(
-        description="Per-residue predicted sidechain error (Angstroms)"
-    )
+    output_pdb_strings: list[str] = Field(description="PDB strings with designed sequences and sidechain coordinates")
+    psce: list[list[float]] = Field(description="Per-residue predicted sidechain error (Angstroms)")
 
 
 FAMPNNSampleOutput = InverseFoldingOutput
@@ -176,9 +172,11 @@ FAMPNNSampleOutput = InverseFoldingOutput
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
-        )]
+        inputs=[
+            FAMPNNStructureInput(
+                structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
+            )
+        ]
     )
 
 

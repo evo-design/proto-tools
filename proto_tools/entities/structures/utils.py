@@ -2,6 +2,7 @@
 
 Utility functions for working with protein structures.
 """
+
 from __future__ import annotations
 
 from io import StringIO
@@ -45,7 +46,7 @@ def load_structure_file(filepath: Path | str) -> str:
         )
 
     # Read the structure file
-    return filepath.read_text(encoding='utf-8')
+    return filepath.read_text(encoding="utf-8")
 
 
 def detect_structure_format(structure_content: str) -> str:
@@ -58,7 +59,7 @@ def detect_structure_format(structure_content: str) -> str:
         str: "cif" or "pdb"
     """
     # Strip leading whitespace and get first meaningful lines
-    lines = [line.strip() for line in structure_content.split('\n') if line.strip()]
+    lines = [line.strip() for line in structure_content.split("\n") if line.strip()]
 
     if not lines:
         raise ValueError("Empty structure content. Must be PDB or CIF format.")
@@ -66,27 +67,27 @@ def detect_structure_format(structure_content: str) -> str:
     first_line = lines[0]
 
     # CIF files start with specific markers
-    if first_line.startswith('data_'):
+    if first_line.startswith("data_"):
         return "cif"
 
     # Check for CIF loop_ or category markers in first few lines
     for line in lines[:10]:
-        if line.startswith(('loop_', '_')):
+        if line.startswith(("loop_", "_")):
             return "cif"
 
     # PDB files typically start with specific record types
-    pdb_keywords = ['HEADER', 'TITLE', 'ATOM', 'HETATM', 'MODEL', 'CRYST1']
+    pdb_keywords = ["HEADER", "TITLE", "ATOM", "HETATM", "MODEL", "CRYST1"]
     for line in lines[:20]:
         if any(line.startswith(keyword) for keyword in pdb_keywords):
             return "pdb"
 
     # If still unsure, check for CIF-style underscore fields anywhere
-    if any('_atom_site' in line or '_entity' in line for line in lines[:50]):
+    if any("_atom_site" in line or "_entity" in line for line in lines[:50]):
         return "cif"
 
     # Default to PDB if we see ATOM/HETATM anywhere in first 100 lines
     for line in lines[:100]:
-        if line.startswith(('ATOM', 'HETATM')):
+        if line.startswith(("ATOM", "HETATM")):
             return "pdb"
 
     raise ValueError("Could not determine structure format (CIF or PDB).")
@@ -145,6 +146,7 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
 # Geometry
 # ===============================
 
+
 def pdb_file_to_atomarray(pdb_path: str | StringIO) -> AtomArray:
     """Convert a PDB file to a Biotite AtomArray."""
     return PDBFile.read(pdb_path).get_structure(model=1)
@@ -194,9 +196,7 @@ def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
 
 def get_backbone_atoms(atoms: AtomArray) -> AtomArray:
     """Extract backbone atoms (CA, N, C) from an AtomArray."""
-    return atoms[
-        (atoms.atom_name == "CA") | (atoms.atom_name == "N") | (atoms.atom_name == "C")
-    ]
+    return atoms[(atoms.atom_name == "CA") | (atoms.atom_name == "N") | (atoms.atom_name == "C")]
 
 
 # ===============================

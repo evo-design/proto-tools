@@ -102,6 +102,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # Entry point (called by ToolInstance)
 # =============================================================================
 
+
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""
     return {"success": True, "device": device}

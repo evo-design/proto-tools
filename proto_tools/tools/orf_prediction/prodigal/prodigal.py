@@ -47,9 +47,8 @@ class ProdigalInput(BaseToolInput):
             contain only valid DNA nucleotides including IUPAC ambiguity codes.
             Empty sequences are not allowed.
     """
-    input_sequences: list[str] = InputField(
-        description="DNA sequence(s) to analyze for open reading frames"
-    )
+
+    input_sequences: list[str] = InputField(description="DNA sequence(s) to analyze for open reading frames")
 
     @model_validator(mode="before")
     @classmethod
@@ -73,9 +72,7 @@ class ProdigalInput(BaseToolInput):
             # Check for invalid characters (allow IUPAC ambiguity codes)
             invalid_chars = return_invalid_dna_chars(seq_upper)
             if invalid_chars:
-                raise ValueError(
-                    f"Invalid DNA characters in sequence: {', '.join(sorted(invalid_chars))}"
-                )
+                raise ValueError(f"Invalid DNA characters in sequence: {', '.join(sorted(invalid_chars))}")
             validated.append(seq_upper)
 
         return validated  # type: ignore[return-value]
@@ -225,11 +222,7 @@ class ProdigalOutput(BaseToolOutput):
                         # Prodigal header format style
                         # >sequence_id_gene_id start_pos end_pos strand info...
                         header = f">{orf.parent_id}_{orf.orf_id} # {orf.nucleotide_start} # {orf.nucleotide_end} # {1 if orf.strand == '+' else -1} # {orf.description}"
-                        seq = (
-                            orf.amino_acid_sequence
-                            if file_format == "faa"
-                            else orf.nucleotide_sequence
-                        )
+                        seq = orf.amino_acid_sequence if file_format == "faa" else orf.nucleotide_sequence
                         f.write(f"{header}\n{seq}\n")
 
         elif file_format == "gff":
@@ -312,9 +305,7 @@ def run_prodigal_prediction(
         - Pyrodigal documentation: https://pyrodigal.readthedocs.io/
 
     Example:
-        >>> inputs = ProdigalInput(
-        ...     input_sequences=["ATGCGTAAATAA"]
-        ... )
+        >>> inputs = ProdigalInput(input_sequences=["ATGCGTAAATAA"])
         >>> config = ProdigalConfig(meta_mode=True)
         >>> result = run_prodigal_prediction(inputs, config)
         >>> print(f"Found {result.num_orfs} genes")

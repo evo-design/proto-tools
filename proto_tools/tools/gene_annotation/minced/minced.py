@@ -32,15 +32,9 @@ class CrisprRepeatSpacer(BaseModel):
 
     position: int = Field(description="Position of the repeat in the sequence")
     repeat: str = Field(description="Repeat sequence")
-    spacer: str | None = Field(
-        default=None, description="Spacer sequence (None for last repeat)"
-    )
-    repeat_length: int | None = Field(
-        default=None, description="Length of the repeat"
-    )
-    spacer_length: int | None = Field(
-        default=None, description="Length of the spacer"
-    )
+    spacer: str | None = Field(default=None, description="Spacer sequence (None for last repeat)")
+    repeat_length: int | None = Field(default=None, description="Length of the repeat")
+    spacer_length: int | None = Field(default=None, description="Length of the spacer")
 
 
 class CrisprArray(BaseModel):
@@ -59,10 +53,7 @@ class CrisprArray(BaseModel):
     @property
     def spacers(self) -> list[str]:
         """Extract spacer sequences from this array."""
-        return [
-            rs.spacer for rs in self.repeats_and_spacers
-            if rs.spacer is not None and rs.spacer.strip()
-        ]
+        return [rs.spacer for rs in self.repeats_and_spacers if rs.spacer is not None and rs.spacer.strip()]
 
 
 class MincedSequenceResult(BaseModel):
@@ -94,9 +85,7 @@ class MincedInput(BaseToolInput):
         sequence_ids (list[str] | None): Optional sequence identifiers.
     """
 
-    sequences: list[str] = InputField(
-        description="Nucleotide sequence(s) to search for CRISPR arrays"
-    )
+    sequences: list[str] = InputField(description="Nucleotide sequence(s) to search for CRISPR arrays")
     sequence_ids: list[str] | None = InputField(
         default=None,
         description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
@@ -249,17 +238,17 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
-        "minced", input_data, instance=instance, config=config,
+        "minced",
+        input_data,
+        instance=instance,
+        config=config,
     )
 
     results = []
     for result_dict in output_data["results"]:
         arrays = []
         for array_dict in result_dict["crispr_arrays"]:
-            rs_list = [
-                CrisprRepeatSpacer(**rs)
-                for rs in array_dict["repeats_and_spacers"]
-            ]
+            rs_list = [CrisprRepeatSpacer(**rs) for rs in array_dict["repeats_and_spacers"]]
             arrays.append(CrisprArray(repeats_and_spacers=rs_list))
         results.append(
             MincedSequenceResult(

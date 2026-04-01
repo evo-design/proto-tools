@@ -124,20 +124,14 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
 
 
 def test_select_best_record_prefers_name_match():
-    records = _parse_fasta_records(
-        ">rec1 unrelated protein\nAAAA\n"
-        ">rec2 lacI repressor\nMMMM\n"
-    )
+    records = _parse_fasta_records(">rec1 unrelated protein\nAAAA\n>rec2 lacI repressor\nMMMM\n")
     selected = _select_best_record(records, "lacI")
     assert selected is not None
     assert selected.sequence == "MMMM"
 
 
 def test_select_best_record_fallback():
-    records = _parse_fasta_records(
-        ">rec1 some protein\nAAAA\n"
-        ">rec2 another protein\nMMMM\n"
-    )
+    records = _parse_fasta_records(">rec1 some protein\nAAAA\n>rec2 another protein\nMMMM\n")
     selected = _select_best_record(records, "noMatch")
     assert selected is not None
     assert selected.sequence == "AAAA"

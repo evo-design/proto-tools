@@ -22,8 +22,7 @@ from proto_tools.utils.persistent_worker import (
 )
 
 _STANDALONE_HELPERS_SOURCE = (
-    Path(__file__).parent.parent.parent
-    / "proto_tools" / "utils" / "standalone_standalone_helpers.py"
+    Path(__file__).parent.parent.parent / "proto_tools" / "utils" / "standalone_standalone_helpers.py"
 )
 
 
@@ -32,7 +31,8 @@ _STANDALONE_HELPERS_SOURCE = (
 def echo_script(tmp_path: Path) -> Path:
     """A trivial standalone script that echoes input back."""
     script = tmp_path / "echo_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import json, sys
 
         def dispatch(input_dict):
@@ -45,7 +45,8 @@ def echo_script(tmp_path: Path) -> Path:
             result = dispatch(data)
             with open(output_path, "w") as f:
                 json.dump(result, f)
-        """))
+        """)
+    )
     return script
 
 
@@ -53,7 +54,8 @@ def echo_script(tmp_path: Path) -> Path:
 def adder_script(tmp_path: Path) -> Path:
     """A standalone script that adds two numbers, simulating stateful work."""
     script = tmp_path / "adder_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import json, sys
 
         _call_count = 0
@@ -72,7 +74,8 @@ def adder_script(tmp_path: Path) -> Path:
             result = dispatch(data)
             with open(output_path, "w") as f:
                 json.dump(result, f)
-        """))
+        """)
+    )
     return script
 
 
@@ -80,10 +83,12 @@ def adder_script(tmp_path: Path) -> Path:
 def error_script(tmp_path: Path) -> Path:
     """A standalone script that raises an error."""
     script = tmp_path / "error_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         def dispatch(input_dict):
             raise ValueError("intentional test error")
-        """))
+        """)
+    )
     return script
 
 
@@ -91,7 +96,8 @@ def error_script(tmp_path: Path) -> Path:
 def legacy_script(tmp_path: Path) -> Path:
     """A standalone script without dispatch(), using the legacy __main__ pattern."""
     script = tmp_path / "legacy_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import json, sys
 
         def run_greet(input_dict):
@@ -115,7 +121,8 @@ def legacy_script(tmp_path: Path) -> Path:
                 raise ValueError(f"Unknown operation: {op}")
             with open(output_path, "w") as f:
                 json.dump(result, f)
-        """))
+        """)
+    )
     return script
 
 
@@ -147,12 +154,14 @@ def test_echo(echo_script: Path):
 def test_tool_env_path_injected(tmp_path: Path):
     """TOOL_VENV_PATH should be set in the subprocess environment."""
     script = tmp_path / "env_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import os
 
         def dispatch(input_dict):
             return {"env_path": os.environ.get("TOOL_VENV_PATH", "")}
-        """))
+        """)
+    )
     worker = _make_worker(script)
     try:
         result = worker.send({})
@@ -291,7 +300,8 @@ def test_stop_kills_child_processes(tmp_path: Path):
     """stop() should kill subprocesses spawned by the worker script."""
     # Script that forks a long-lived child and reports its PID
     script = tmp_path / "forking_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import subprocess, sys
 
         def dispatch(input_dict):
@@ -300,7 +310,8 @@ def test_stop_kills_child_processes(tmp_path: Path):
                 [sys.executable, "-c", "import time; time.sleep(3600)"],
             )
             return {"child_pid": child.pid}
-        """))
+        """)
+    )
 
     worker = _make_worker(script)
     try:
@@ -334,7 +345,8 @@ def test_stop_kills_child_processes(tmp_path: Path):
 def test_serialize_tensor_like(tmp_path: Path):
     """_serialize() should handle objects with .detach(), .cpu(), .tolist()."""
     script = tmp_path / "tensor_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         class FakeTensor:
             def __init__(self, data):
                 self._data = data
@@ -362,7 +374,8 @@ def test_serialize_tensor_like(tmp_path: Path):
                 "nested": {"arr": FakeTensor([[1, 2], [3, 4]])},
                 "plain": "hello",
             }
-    """))
+    """)
+    )
     worker = _make_worker(script)
     try:
         result = worker.send({})
@@ -414,10 +427,7 @@ def test_parse_env_vars_set_section(tmp_path: Path):
 
 def test_parse_env_vars_both_sections(tmp_path: Path):
     f = tmp_path / "env_vars.txt"
-    f.write_text(
-        "[passthrough]\nHF_TOKEN\n\n"
-        "[set]\nFOO=${VENV_PATH}/bar\n"
-    )
+    f.write_text("[passthrough]\nHF_TOKEN\n\n[set]\nFOO=${VENV_PATH}/bar\n")
     result = _parse_env_vars_file(f)
     assert result["passthrough"] == ["HF_TOKEN"]
     assert result["set"] == ["FOO=${VENV_PATH}/bar"]
@@ -425,15 +435,7 @@ def test_parse_env_vars_both_sections(tmp_path: Path):
 
 def test_parse_env_vars_comments_and_blank_lines(tmp_path: Path):
     f = tmp_path / "env_vars.txt"
-    f.write_text(
-        "# This is a comment\n"
-        "\n"
-        "[passthrough]\n"
-        "# Another comment\n"
-        "HF_TOKEN\n"
-        "\n"
-        "HF_HOME\n"
-    )
+    f.write_text("# This is a comment\n\n[passthrough]\n# Another comment\nHF_TOKEN\n\nHF_HOME\n")
     result = _parse_env_vars_file(f)
     assert result["passthrough"] == ["HF_TOKEN", "HF_HOME"]
 
@@ -549,10 +551,7 @@ def test_conda_prefix_and_virtual_env(monkeypatch, tmp_path: Path, has_tool_env)
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_parent_ld_library_path_inherited(monkeypatch, device):
     """Parent LD_LIBRARY_PATH entries are carried over for all devices."""
-    monkeypatch.setenv(
-        "LD_LIBRARY_PATH",
-        "/usr/local/cuda-12.4/lib64:/usr/lib64:/opt/nvidia/lib64"
-    )
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda-12.4/lib64:/usr/lib64:/opt/nvidia/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
 
     env = _build_subprocess_env(device=device)
@@ -590,9 +589,7 @@ def test_ld_library_path_conda_auto(monkeypatch, conda_prefix, expect_ld):
     [("/opt/conda", True), (None, False)],
     ids=["with_conda", "without_conda"],
 )
-def test_ld_library_path_via_set_directive(
-    monkeypatch, tmp_path: Path, conda_prefix, expect_conda_lib
-):
+def test_ld_library_path_via_set_directive(monkeypatch, tmp_path: Path, conda_prefix, expect_conda_lib):
     """[set] LD_LIBRARY_PATH + parent LD + conda lib (when set)."""
     if conda_prefix:
         monkeypatch.setenv("CONDA_PREFIX", conda_prefix)
@@ -601,9 +598,7 @@ def test_ld_library_path_via_set_directive(
     monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
     tool_env_vars = {
         "passthrough": [],
-        "set": [
-            "LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib:${VENV_PATH}/cuda_env/lib64"
-        ],
+        "set": ["LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib:${VENV_PATH}/cuda_env/lib64"],
     }
     env = _build_subprocess_env(
         device="cuda",
@@ -714,7 +709,9 @@ def test_set_vars(tmp_path: Path, set_line, var, expected_suffix):
     """[set] entries: interpolate ${VENV_PATH} or pass through literally."""
     tool_env_vars = {"passthrough": [], "set": [set_line]}
     env = _build_subprocess_env(
-        device="cpu", tool_env_path=tmp_path, tool_env_vars=tool_env_vars,
+        device="cpu",
+        tool_env_path=tmp_path,
+        tool_env_vars=tool_env_vars,
     )
 
     if expected_suffix:
@@ -898,8 +895,9 @@ def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
         if _STANDALONE_HELPERS_SOURCE.exists():
             source_content = _STANDALONE_HELPERS_SOURCE.read_text()
             copied_content = helpers_path.read_text()
-            assert copied_content == source_content, \
+            assert copied_content == source_content, (
                 "Copied standalone_helpers.py should be identical to source standalone_standalone_helpers.py"
+            )
 
     finally:
         worker.stop()
@@ -909,10 +907,12 @@ def test_helpers_not_copied_outside_standalone(tmp_path: Path):
     """Verify standalone_helpers.py is not copied if script is not in a standalone/ directory."""
     # Create a script in a non-standalone location
     script = tmp_path / "script_not_in_standalone.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         def dispatch(input_dict):
             return {"result": "ok"}
-        """))
+        """)
+    )
 
     # Create a minimal fake tool environment
     fake_env = tmp_path / "fake_env"
@@ -939,8 +939,9 @@ def test_helpers_not_copied_outside_standalone(tmp_path: Path):
 
         # Verify standalone_helpers.py was NOT copied
         helpers_path = tmp_path / "standalone_helpers.py"
-        assert not helpers_path.exists(), \
+        assert not helpers_path.exists(), (
             "standalone_helpers.py should not be copied for scripts outside standalone/ directories"
+        )
 
     finally:
         worker.stop()
@@ -1000,13 +1001,15 @@ def test_file_fallback_end_to_end(tmp_path: Path):
     # Use a tiny threshold (1KB) so we don't allocate 100MB in tests.
     # The threshold is set inside the worker subprocess via the script.
     script = tmp_path / "large_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import proto_tools.utils._worker_bootstrap as _wb
         _wb._FILE_FALLBACK_THRESHOLD = 1000
 
         def dispatch(input_dict):
             return {"data": "x" * 2000}
-        """))
+        """)
+    )
 
     worker = _make_worker(script)
     try:
@@ -1027,6 +1030,7 @@ def test_default_sets_hf_home_to_proto_model_cache(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / "proto_home"))
     # Clear the lru_cache so monkeypatched PROTO_HOME takes effect
     from proto_tools.utils.proto_home import get_proto_home
+
     get_proto_home.cache_clear()
     try:
         env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
@@ -1121,11 +1125,13 @@ def test_hf_token_resolved_from_git_credentials(monkeypatch, tmp_path: Path):
     git_creds.write_text("https://user:hf_git_cred_token@huggingface.co\n")
     monkeypatch.setattr(
         "proto_tools.utils.auth.os.path.expanduser",
-        lambda p: str(git_creds)
-        if "git-credentials" in p
-        else str(tmp_path / "nonexistent")
-        if "huggingface/token" in p
-        else p,
+        lambda p: (
+            str(git_creds)
+            if "git-credentials" in p
+            else str(tmp_path / "nonexistent")
+            if "huggingface/token" in p
+            else p
+        ),
     )
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["HF_TOKEN"] == "hf_git_cred_token"

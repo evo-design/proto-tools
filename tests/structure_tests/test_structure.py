@@ -52,6 +52,7 @@ def protein_from_cif_content(test_cif_file_content):
 
 # ── Initialization ────────────────────────────────────────────────────────────
 
+
 def test_init_from_pdb_filepath(protein_from_pdb_file):
     assert protein_from_pdb_file is not None
     assert protein_from_pdb_file.structure_format == "pdb"
@@ -83,6 +84,7 @@ def test_init_with_nonexistent_file():
 
 
 # ── Format conversion ────────────────────────────────────────────────────────
+
 
 def test_pdb_file_to_cif_property(protein_from_pdb_file):
     cif_content = protein_from_pdb_file.structure_cif
@@ -124,6 +126,7 @@ def test_cif_to_cif_returns_original(protein_from_cif_file):
 
 # ── Gemmi integration ────────────────────────────────────────────────────────
 
+
 def test_gemmi_struct_lazy_loading(protein_from_pdb_file):
     """Verify gemmi structure is lazily loaded on first access."""
     assert protein_from_pdb_file._gemmi_struct is None
@@ -150,6 +153,7 @@ def test_gemmi_struct_cached(protein_from_pdb_file):
 
 
 # ── File I/O ──────────────────────────────────────────────────────────────────
+
 
 def test_write_cif(protein_from_pdb_file, tmp_path):
     out = tmp_path / "out.cif"
@@ -190,6 +194,7 @@ def test_write_pdb_with_string_path(protein_from_cif_file, tmp_path):
 
 
 # ── Sequence extraction ───────────────────────────────────────────────────────
+
 
 def test_get_chain_sequences(protein_from_pdb_file):
     sequences = protein_from_pdb_file.get_chain_sequences()
@@ -240,6 +245,7 @@ def test_sequences_preserved_through_format_conversion(protein_from_pdb_file):
 
 
 # ── Pydantic serialization ────────────────────────────────────────────────────
+
 
 def test_serialize_to_dict(protein_from_pdb_file):
     serialized = protein_from_pdb_file._serialize_to_dict()
@@ -296,15 +302,11 @@ def test_validate_from_dict_with_b_factor_type():
 
 def test_validate_from_dict_missing_structure():
     with pytest.raises(ValueError, match="Missing 'structure'"):
-        Structure._validate_from_dict(
-            {"b_factor_type": "unspecified", "structure_format": "pdb"}
-        )
+        Structure._validate_from_dict({"b_factor_type": "unspecified", "structure_format": "pdb"})
 
 
 def test_validate_from_dict_missing_structure_format():
-    ps = Structure._validate_from_dict(
-        {"structure": "ATOM  1", "b_factor_type": "unspecified"}
-    )
+    ps = Structure._validate_from_dict({"structure": "ATOM  1", "b_factor_type": "unspecified"})
     assert ps.structure_format == "pdb"
 
 
@@ -320,6 +322,7 @@ def test_visualize(protein_from_pdb_file):
 
 
 # ── Metrics serialization ────────────────────────────────────────────────────
+
 
 def test_metrics_survive_serialize_deserialize_round_trip():
     """Metrics dict should survive _serialize_to_dict → _validate_from_dict."""

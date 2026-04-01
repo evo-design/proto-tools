@@ -40,6 +40,7 @@ _MINI_MODEL_VARIANTS = [
 
 # ── Validation tests (no GPU required) ──────────────────────────────────────
 
+
 def test_protenix_config_rejects_invalid_model_name():
     with pytest.raises(ValidationError, match="model_name"):
         ProtenixConfig(model_name="protenix_nonexistent_v99.0.0")
@@ -100,6 +101,7 @@ def test_protenix_input_accepts_chain_objects():
 # ---------------------------------------------------------------------------
 # GPU tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow

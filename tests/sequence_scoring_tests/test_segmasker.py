@@ -2,6 +2,7 @@
 
 Tests for Segmasker low-complexity region detection tool.
 """
+
 import pytest
 from pydantic import ValidationError
 

@@ -2,6 +2,7 @@
 
 ESM3 scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,9 +23,7 @@ from proto_tools.utils import (
 
 logger = logging.getLogger(__name__)
 
-ESM3_MODEL_CHECKPOINTS = Literal[
-    "esm3_sm_open_v1",
-]
+ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 
 # ============================================================================
 # Data Models
@@ -33,6 +32,7 @@ ESM3_MODEL_CHECKPOINTS = Literal[
 ESM3ScoringInput = MaskedModelInput
 # Output:
 ESM3ScoringOutput = MaskedModelScoringOutput
+
 
 # Config:
 class ESM3ScoringConfig(BaseConfig):
@@ -120,7 +120,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_esm3_score(
-    inputs: ESM3ScoringInput, config: ESM3ScoringConfig | None = None,
+    inputs: ESM3ScoringInput,
+    config: ESM3ScoringConfig | None = None,
     instance: Any = None,
 ) -> ESM3ScoringOutput:
     """Score protein sequences using ESM3 language model.

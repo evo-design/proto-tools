@@ -2,6 +2,7 @@
 
 Tests for ToolPool parallel fan-out across devices.
 """
+
 from __future__ import annotations
 
 import threading
@@ -28,6 +29,7 @@ from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def clean_registry():
     """Provide a clean registry for each test."""
@@ -38,6 +40,7 @@ def clean_registry():
 
 
 # ── Mock models ─────────────────────────────────────────────────────────────
+
 
 class MockInput(BaseToolInput):
     items: list[str] = Field(description="Items to process")
@@ -61,9 +64,8 @@ class MockNonIterableOutput(MockToolOutputBase):
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
-def _register_mock_tool(registry, key="mock-process",
-                        iterable_input_field="items",
-                        iterable_output_field="results"):
+
+def _register_mock_tool(registry, key="mock-process", iterable_input_field="items", iterable_output_field="results"):
     """Register a mock tool and return (wrapper_function, call_log)."""
     call_log = []
 
@@ -79,12 +81,14 @@ def _register_mock_tool(registry, key="mock-process",
         iterable_output_field=iterable_output_field,
     )
     def run_mock_process(inputs, config=None, instance=None):
-        call_log.append({
-            "items": list(inputs.items),
-            "device": config.device if config else None,
-            "instance": instance,
-            "thread": threading.current_thread().name,
-        })
+        call_log.append(
+            {
+                "items": list(inputs.items),
+                "device": config.device if config else None,
+                "instance": instance,
+                "thread": threading.current_thread().name,
+            }
+        )
         return MockOutput(
             results=[f"processed_{item}" for item in inputs.items],
             tool_id=key,
@@ -96,6 +100,7 @@ def _register_mock_tool(registry, key="mock-process",
 
 
 # ── LPT scheduling tests ───────────────────────────────────────────────────
+
 
 def test_lpt_uniform_costs_round_robin():
     """Uniform costs should distribute items roughly evenly."""
@@ -152,7 +157,7 @@ def test_lpt_max_item_cost_filtering():
     ]
     devices = [
         DeviceCapability("cuda:0", max_item_cost=100.0),  # Can't handle huge
-        DeviceCapability("cuda:1", max_item_cost=None),   # No limit
+        DeviceCapability("cuda:1", max_item_cost=None),  # No limit
     ]
     assignments = lpt_schedule(items, devices)
 
@@ -199,6 +204,7 @@ def test_lpt_no_eligible_device_fallback():
 
 
 # ── ContextVar tests ────────────────────────────────────────────────────────
+
 
 def test_contextvar_no_pool_by_default():
     assert get_active_pool() is None
@@ -254,6 +260,7 @@ def test_contextvar_nesting_raises_error():
 
 # ── Parallel dispatch tests ─────────────────────────────────────────────────
 
+
 def test_dispatch_items_split_across_devices(clean_registry):
     """Items should be split across available devices."""
     func, _call_log = _register_mock_tool(clean_registry)
@@ -267,9 +274,7 @@ def test_dispatch_items_split_across_devices(clean_registry):
     result = pool._parallel_dispatch("mock-process", func, inputs, config)
 
     assert len(result.results) == 4
-    assert result.results == [
-        "processed_a", "processed_b", "processed_c", "processed_d"
-    ]
+    assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
 
 
 def test_dispatch_results_reassembled_in_order(clean_registry):
@@ -410,6 +415,7 @@ def test_dispatch_pool_receives_pre_deduped_items(clean_registry):
 
 def test_dispatch_collects_warnings_and_errors(clean_registry):
     """Merged output should collect warnings/errors from all partitions."""
+
     @clean_registry.register(
         key="warn-process",
         label="Warn Process",
@@ -465,8 +471,8 @@ def test_dispatch_persistence_entered():
             pool.__exit__(None, None, None)
 
 
-
 # ── Tool interception tests ─────────────────────────────────────────────────
+
 
 def test_interception_non_iterable_tool_not_intercepted(clean_registry):
     """Tools without iterable fields should not be intercepted by pool."""
@@ -579,6 +585,7 @@ def test_interception_pool_executing_prevents_re_interception(clean_registry):
 
 # ── ToolSpec integration tests ──────────────────────────────────────────────
 
+
 def test_toolspec_iterable_fields_stored(clean_registry):
     """iterable_input_field and iterable_output_field should be on ToolSpec."""
 
@@ -644,9 +651,8 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
     assert "iterable_output_field" not in serialized
 
 
-
-
 # ── devices_per_instance tests ──────────────────────────────────────────────
+
 
 def test_devices_per_instance_default_is_one():
     """Default devices_per_instance should be 1."""
@@ -668,8 +674,8 @@ def test_devices_per_instance_override():
     assert MultiGPU(model_name="large").devices_per_instance == 2
 
 
-
 # ── Error propagation tests ─────────────────────────────────────────────────
+
 
 def test_local_partition_failure_preserves_other_results(clean_registry):
     """When one device fails, succeeded results and failure info are on the exception."""
@@ -762,15 +768,14 @@ def test_all_succeed_unchanged(clean_registry):
 
     result = pool._parallel_dispatch("mock-process", func, inputs, config)
 
-    assert result.results == [
-        "processed_a", "processed_b", "processed_c", "processed_d"
-    ]
+    assert result.results == ["processed_a", "processed_b", "processed_c", "processed_d"]
     assert len(call_log) == 2  # Two partitions
 
 
 # ---------------------------------------------------------------------------
 # Integration tests (require GPU)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.uses_gpu(2)
 @pytest.mark.slow
@@ -849,15 +854,9 @@ def test_gpu_fanout_results_in_original_order():
         # With 6 items and 2 GPUs (LPT round-robin on uniform costs),
         # items [0,2,4] go to one GPU and [1,3,5] go to the other.
         devices = [r.device_used for r in result.results]
-        assert devices[0] == devices[2] == devices[4], (
-            f"Items 0,2,4 should share a GPU: {devices}"
-        )
-        assert devices[1] == devices[3] == devices[5], (
-            f"Items 1,3,5 should share a GPU: {devices}"
-        )
-        assert devices[0] != devices[1], (
-            f"The two groups should be on different GPUs: {devices}"
-        )
+        assert devices[0] == devices[2] == devices[4], f"Items 0,2,4 should share a GPU: {devices}"
+        assert devices[1] == devices[3] == devices[5], f"Items 1,3,5 should share a GPU: {devices}"
+        assert devices[0] != devices[1], f"The two groups should be on different GPUs: {devices}"
     finally:
         ToolInstance.clear_all()
         DeviceManager.reset_instance()
@@ -910,8 +909,7 @@ def test_gpu_fanout_persistence_across_pool_calls():
         assert result1.success
         assert result2.success
         assert warm_time < cold_time, (
-            f"Warm call ({warm_time:.2f}s) should be faster than "
-            f"cold call ({cold_time:.2f}s), workers should persist"
+            f"Warm call ({warm_time:.2f}s) should be faster than cold call ({cold_time:.2f}s), workers should persist"
         )
     finally:
         ToolInstance.clear_all()

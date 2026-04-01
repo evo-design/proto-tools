@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
-
 def _normalize_progress_line(line: str) -> str:
     """Normalize progress bar lines to detect and skip similar consecutive lines.
 
@@ -49,32 +48,31 @@ def _normalize_progress_line(line: str) -> str:
     normalized = line
 
     # Normalize progress bar visualizations (|███|, [===>], etc.)
-    normalized = re.sub(r'[\|\[\(\{][^\|\]\)\}]*[\|\]\)\}]', '|BAR|', normalized)
+    normalized = re.sub(r"[\|\[\(\{][^\|\]\)\}]*[\|\]\)\}]", "|BAR|", normalized)
 
     # Normalize percentages
-    normalized = re.sub(r'\d+\.?\d*%', 'N%', normalized)
+    normalized = re.sub(r"\d+\.?\d*%", "N%", normalized)
 
     # Normalize count ratios
-    normalized = re.sub(r'\d+/\d+', 'N/N', normalized)
-    normalized = re.sub(r'\d+\s+of\s+\d+', 'N of N', normalized)
+    normalized = re.sub(r"\d+/\d+", "N/N", normalized)
+    normalized = re.sub(r"\d+\s+of\s+\d+", "N of N", normalized)
 
     # Normalize time estimates ([HH:MM<HH:MM], <1:23, elapsed: 0:45)
-    normalized = re.sub(r'\[\d+:\d+(?::\d+)?<\d+:\d+(?::\d+)?\]', '[T<T]', normalized)
-    normalized = re.sub(r'<\d+:\d+(?::\d+)?', '<T', normalized)
-    normalized = re.sub(r'elapsed:\s*\d+:\d+(?::\d+)?', 'elapsed: T', normalized)
+    normalized = re.sub(r"\[\d+:\d+(?::\d+)?<\d+:\d+(?::\d+)?\]", "[T<T]", normalized)
+    normalized = re.sub(r"<\d+:\d+(?::\d+)?", "<T", normalized)
+    normalized = re.sub(r"elapsed:\s*\d+:\d+(?::\d+)?", "elapsed: T", normalized)
 
     # Normalize rates (it/s, MB/s) and sizes (1.2MB, 500KB)
-    normalized = re.sub(r'\d+\.?\d*\s*[A-Za-z]+/s', 'N/s', normalized)
-    normalized = re.sub(r'\d+\.?\d*\s*[KMGT]?B\b', 'NB', normalized)
+    normalized = re.sub(r"\d+\.?\d*\s*[A-Za-z]+/s", "N/s", normalized)
+    normalized = re.sub(r"\d+\.?\d*\s*[KMGT]?B\b", "NB", normalized)
 
     # Strip trailing info after separators in detected progress bars
-    if 'N%' in normalized or 'N/N' in normalized or '|BAR|' in normalized:
-        normalized = re.sub(r'(N%.*?N/s.*?),.*$', r'\1', normalized)
-        normalized = re.sub(r'(N%.*?N/s.*?)\s+[-|]\s+.*$', r'\1', normalized)
+    if "N%" in normalized or "N/N" in normalized or "|BAR|" in normalized:
+        normalized = re.sub(r"(N%.*?N/s.*?),.*$", r"\1", normalized)
+        normalized = re.sub(r"(N%.*?N/s.*?)\s+[-|]\s+.*$", r"\1", normalized)
 
     # Normalize remaining standalone numbers
-    return re.sub(r'\b\d+\.?\d*\b', 'N', normalized)
-
+    return re.sub(r"\b\d+\.?\d*\b", "N", normalized)
 
 
 # ============================================================================
@@ -174,9 +172,7 @@ def _parse_env_vars_file(
             if section in result:
                 current_section = section
             else:
-                logger.warning(
-                    "Unknown section %r in %s, ignoring", section, path
-                )
+                logger.warning("Unknown section %r in %s, ignoring", section, path)
                 current_section = None
             continue
         if current_section is not None:
@@ -223,11 +219,9 @@ def _build_subprocess_env(
             env["HF_TOKEN"] = token
 
     # Pass through per-tool weight directory overrides
-    env.update({
-        var: val
-        for var, val in os.environ.items()
-        if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")
-    })
+    env.update(
+        {var: val for var, val in os.environ.items() if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")}
+    )
 
     # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
     path_parts: list[str] = []
@@ -282,6 +276,7 @@ def _build_subprocess_env(
 
     # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from proto_tools.utils.compute_deps import detect_compute_environment
+
     compute_env = detect_compute_environment()
     env.update(compute_env)
 
@@ -295,8 +290,7 @@ def _build_subprocess_env(
                 env[var_name] = val
             else:
                 logger.debug(
-                    "env_vars.txt requests passthrough of %r but it is "
-                    "not set in the parent environment",
+                    "env_vars.txt requests passthrough of %r but it is not set in the parent environment",
                     var_name,
                 )
 
@@ -492,21 +486,16 @@ class PersistentWorker:
             except (BrokenPipeError, OSError) as exc:
                 stderr_tail = "\n".join(self._stderr_lines[-20:])
                 raise RuntimeError(
-                    f"Worker for {self.tool_name} crashed while sending request.\n"
-                    f"stderr:\n{stderr_tail}"
+                    f"Worker for {self.tool_name} crashed while sending request.\nstderr:\n{stderr_tail}"
                 ) from exc
 
             # Read response line (with optional timeout).
             # select() on pipe fds is Unix-only; this module assumes Linux.
             if timeout is not None:
-                ready, _, _ = select.select(
-                    [self._process.stdout.fileno()], [], [], timeout
-                )
+                ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
                 if not ready:
                     self.stop()
-                    raise TimeoutError(
-                        f"Worker for {self.tool_name} timed out after {timeout}s"
-                    )
+                    raise TimeoutError(f"Worker for {self.tool_name} timed out after {timeout}s")
 
             # Read header, skipping non-protocol lines (warnings/logs).
             # Header is either PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path>
@@ -518,8 +507,7 @@ class PersistentWorker:
                 if not header_line:
                     stderr_tail = "\n".join(self._stderr_lines[-20:])
                     raise RuntimeError(
-                        f"Worker for {self.tool_name} closed stdout unexpectedly.\n"
-                        f"stderr:\n{stderr_tail}"
+                        f"Worker for {self.tool_name} closed stdout unexpectedly.\nstderr:\n{stderr_tail}"
                     )
 
                 header_line = header_line.strip()
@@ -531,9 +519,7 @@ class PersistentWorker:
                 normalized = _normalize_progress_line(header_line)
                 if normalized == prev_stdout_normalized:
                     continue
-                logger.debug(
-                    "[%s worker stdout] %s", self.tool_name, header_line
-                )
+                logger.debug("[%s worker stdout] %s", self.tool_name, header_line)
                 prev_stdout_line = header_line
                 prev_stdout_normalized = normalized
 
@@ -544,7 +530,8 @@ class PersistentWorker:
                 if not file_path.startswith(tempfile.gettempdir()):
                     logger.warning(
                         "Worker for %s sent file path outside temp directory: %s",
-                        self.tool_name, file_path,
+                        self.tool_name,
+                        file_path,
                     )
                 try:
                     with open(file_path) as f:
@@ -558,8 +545,7 @@ class PersistentWorker:
                     json_length = int(header_line.split(":", 1)[1])
                 except (ValueError, IndexError) as exc:
                     raise RuntimeError(
-                        f"Worker for {self.tool_name} sent invalid LENGTH header: "
-                        f"{header_line!r}"
+                        f"Worker for {self.tool_name} sent invalid LENGTH header: {header_line!r}"
                     ) from exc
 
                 response_bytes = self._process.stdout.read(json_length)
@@ -573,8 +559,7 @@ class PersistentWorker:
                     response = json.loads(response_bytes)
                 except json.JSONDecodeError as exc:
                     raise RuntimeError(
-                        f"Worker for {self.tool_name} returned invalid JSON: "
-                        f"{response_bytes!r}"
+                        f"Worker for {self.tool_name} returned invalid JSON: {response_bytes!r}"
                     ) from exc
 
             if response.get("id") != request_id:
@@ -584,10 +569,7 @@ class PersistentWorker:
                 )
 
             if "error" in response:
-                raise RuntimeError(
-                    f"Worker for {self.tool_name} returned an error:\n"
-                    f"{response['error']}"
-                )
+                raise RuntimeError(f"Worker for {self.tool_name} returned an error:\n{response['error']}")
 
             return response["result"]  # type: ignore[no-any-return]
 
@@ -602,11 +584,11 @@ class PersistentWorker:
             try:
                 if self._process.stdin and not self._process.stdin.closed:
                     self._process.stdin.close()
-                self._killpg(signal.SIGTERM)          # graceful shutdown
+                self._killpg(signal.SIGTERM)  # graceful shutdown
                 self._process.wait(timeout=10)
             except Exception:
-                self._killpg(signal.SIGKILL)          # force kill
-                self._process.wait(timeout=5)         # reap zombie
+                self._killpg(signal.SIGKILL)  # force kill
+                self._process.wait(timeout=5)  # reap zombie
             finally:
                 for pipe in (self._process.stdout, self._process.stderr):
                     if pipe and not pipe.closed:

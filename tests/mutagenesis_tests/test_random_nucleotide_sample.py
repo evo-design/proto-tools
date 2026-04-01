@@ -2,6 +2,7 @@
 
 Tests for random nucleotide sampling tool.
 """
+
 import pytest
 
 from proto_tools.tools.mutagenesis.codons import IUPAC_DNA
@@ -15,11 +16,13 @@ from proto_tools.tools.mutagenesis.random_nucleotide import (
 # Substitution scheme variations
 # ============================================================================
 
+
 @pytest.mark.parametrize("scheme", ["N", "R", "Y", "S", "W", "K", "M"])
 def test_substitution_scheme(scheme):
     valid_bases = set(IUPAC_DNA[scheme])
     config = RandomNucleotideSampleConfig(
-        substitution_scheme=scheme, seed=42,
+        substitution_scheme=scheme,
+        seed=42,
     )
     result = run_random_nucleotide_sample(
         RandomNucleotideSampleInput(sequences=["____"]),
@@ -32,6 +35,7 @@ def test_substitution_scheme(scheme):
 # ============================================================================
 # DNA vs RNA auto-detection
 # ============================================================================
+
 
 def test_dna_auto_detection():
     config = RandomNucleotideSampleConfig(seed=42)
@@ -55,7 +59,8 @@ def test_rna_auto_detection():
 
 def test_explicit_rna():
     config = RandomNucleotideSampleConfig(
-        sequence_type="rna", seed=42,
+        sequence_type="rna",
+        seed=42,
     )
     result = run_random_nucleotide_sample(
         RandomNucleotideSampleInput(sequences=["____"]),
@@ -69,6 +74,7 @@ def test_explicit_rna():
 # Reproducibility
 # ============================================================================
 
+
 def test_seed_reproducibility():
     inp = RandomNucleotideSampleInput(sequences=["____"])
     config = RandomNucleotideSampleConfig(seed=42)
@@ -80,6 +86,7 @@ def test_seed_reproducibility():
 # ============================================================================
 # Output export
 # ============================================================================
+
 
 def test_export_fasta(tmp_path):
     result = run_random_nucleotide_sample(

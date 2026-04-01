@@ -21,9 +21,7 @@ for _spec in ToolRegistry.list_all():
     if not _spec.uses_gpu or _spec.category == "testing":
         continue
     if _spec.key in _CHIMERA_ONLY_KEYS:
-        _GPU_TOOLS.append(
-            pytest.param(_spec, id=_spec.key, marks=pytest.mark.only_chimera)
-        )
+        _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key, marks=pytest.mark.only_chimera))
     else:
         _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key))
 
@@ -92,19 +90,13 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
             example = tool_spec.example_input()
             with ToolInstance.persist_tool(tool_dir, instance_name=instance_name):
                 result1 = tool_spec.function(example, instance=instance_name)
-                assert result1.success, (
-                    f"{tool_key} failed on first run: {result1.errors}"
-                )
+                assert result1.success, f"{tool_key} failed on first run: {result1.errors}"
 
                 status = dm.get_device_status()
                 alloc = status["allocations"].get(instance_name)
-                assert alloc is not None, (
-                    f"{tool_key} not found in DeviceManager allocations"
-                )
+                assert alloc is not None, f"{tool_key} not found in DeviceManager allocations"
                 initial_device = alloc["device_id"]
-                assert initial_device != "cpu", (
-                    f"{tool_key} should be on GPU, got {initial_device}"
-                )
+                assert initial_device != "cpu", f"{tool_key} should be on GPU, got {initial_device}"
 
                 time.sleep(0.01)  # Ensure LRU ordering
 
@@ -116,35 +108,26 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
                 )
 
                 mock_instance = f"evictor_{instance_name}"
-                with ToolInstance.persist_tool(
-                    "mock_pytorch_tool", instance_name=mock_instance
-                ):
+                with ToolInstance.persist_tool("mock_pytorch_tool", instance_name=mock_instance):
                     mock_result = run_mock_pytorch_tool(
                         MockPyTorchToolInput(),
                         MockPyTorchToolConfig(memory_mb=64),
                         instance=mock_instance,
                     )
-                    assert mock_result.success, (
-                        f"Mock tool failed while evicting {tool_key}: "
-                        f"{mock_result.errors}"
-                    )
+                    assert mock_result.success, f"Mock tool failed while evicting {tool_key}: {mock_result.errors}"
 
                     # Verify eviction happened
                     status = dm.get_device_status()
                     alloc = status["allocations"].get(instance_name)
                     if active_strategy == OffloadStrategy.CPU:
-                        assert alloc is not None, (
-                            f"{tool_key} allocation disappeared after eviction"
-                        )
+                        assert alloc is not None, f"{tool_key} allocation disappeared after eviction"
                         assert alloc["device_id"] == "cpu", (
-                            f"{tool_key} should be evicted to CPU, "
-                            f"got {alloc['device_id']}"
+                            f"{tool_key} should be evicted to CPU, got {alloc['device_id']}"
                         )
                     else:
                         # RESTART strategy removes the allocation entirely
                         assert alloc is None, (
-                            f"{tool_key} allocation should be removed under "
-                            f"RESTART strategy, but found {alloc}"
+                            f"{tool_key} allocation should be removed under RESTART strategy, but found {alloc}"
                         )
 
                     time.sleep(0.01)
@@ -152,19 +135,13 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
                     # --- Step 3: Re-run the tool (should move back to GPU) ---
                     example2 = tool_spec.example_input()
                     result2 = tool_spec.function(example2, instance=instance_name)
-                    assert result2.success, (
-                        f"{tool_key} failed after eviction round-trip: "
-                        f"{result2.errors}"
-                    )
+                    assert result2.success, f"{tool_key} failed after eviction round-trip: {result2.errors}"
 
                     status = dm.get_device_status()
                     alloc = status["allocations"].get(instance_name)
-                    assert alloc is not None, (
-                        f"{tool_key} allocation missing after round-trip"
-                    )
+                    assert alloc is not None, f"{tool_key} allocation missing after round-trip"
                     assert alloc["device_id"] != "cpu", (
-                        f"{tool_key} should be back on GPU after round-trip, "
-                        f"got {alloc['device_id']}"
+                        f"{tool_key} should be back on GPU after round-trip, got {alloc['device_id']}"
                     )
         finally:
             ToolInstance.clear_all()

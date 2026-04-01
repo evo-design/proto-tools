@@ -1,4 +1,5 @@
 """Enformer standalone inference implementation for venv execution."""
+
 from __future__ import annotations
 
 import json
@@ -84,9 +85,7 @@ class EnformerModel:
 
         # Prepare input (Enformer handles 'N' as index 4)
         mapping = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
-        input_ids = torch.tensor(
-            [mapping.get(char, 4) for char in sequence]
-        ).unsqueeze(0).to(device)
+        input_ids = torch.tensor([mapping.get(char, 4) for char in sequence]).unsqueeze(0).to(device)
 
         # Run prediction
         with torch.inference_mode():
@@ -144,7 +143,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "applied_species": input_dict.get("species", "human"),
         }
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

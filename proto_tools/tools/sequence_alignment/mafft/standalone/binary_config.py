@@ -113,15 +113,14 @@ def _extract_from_source(archive_path: Path, bin_dir: Path) -> None:
         # Find the extracted source directory
         src_dirs = [d for d in build_path.iterdir() if d.is_dir()]
         if len(src_dirs) != 1:
-            raise RuntimeError(
-                f"Expected one source directory, found: {src_dirs}"
-            )
+            raise RuntimeError(f"Expected one source directory, found: {src_dirs}")
         core_dir = src_dirs[0] / "core"
 
         print(f"  Compiling MAFFT from source in {core_dir}...")
         subprocess.check_call(
             [
-                "make", "clean",
+                "make",
+                "clean",
                 f"PREFIX={prefix}",
                 f"BINDIR={bin_dir}",
                 f"LIBDIR={prefix / 'libexec' / 'mafft'}",
@@ -130,7 +129,8 @@ def _extract_from_source(archive_path: Path, bin_dir: Path) -> None:
         )
         subprocess.check_call(
             [
-                "make", "-j4",
+                "make",
+                "-j4",
                 f"PREFIX={prefix}",
                 f"BINDIR={bin_dir}",
                 f"LIBDIR={prefix / 'libexec' / 'mafft'}",
@@ -139,7 +139,8 @@ def _extract_from_source(archive_path: Path, bin_dir: Path) -> None:
         )
         subprocess.check_call(
             [
-                "make", "install",
+                "make",
+                "install",
                 f"PREFIX={prefix}",
                 f"BINDIR={bin_dir}",
                 f"LIBDIR={prefix / 'libexec' / 'mafft'}",

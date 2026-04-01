@@ -1,4 +1,5 @@
 """Testing tools for infrastructure testing."""
+
 from __future__ import annotations
 
 from proto_tools.tools.testing.mock_cli_multi_gpu_tool import (

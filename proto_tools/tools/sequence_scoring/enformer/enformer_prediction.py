@@ -2,6 +2,7 @@
 
 Enformer sequence scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,13 +52,9 @@ class EnformerInput(BaseToolInput):
         sequence = sequence.upper()
         invalid_chars = return_invalid_nucleotide_chars(sequence, additional_valid_chars="N")
         if invalid_chars:
-            raise ValueError(
-                f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid_chars))}"
-            )
+            raise ValueError(f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid_chars))}")
         if len(sequence) != ENFORMER_CONTEXT:
-            raise ValueError(
-                f"Input sequence must have length {ENFORMER_CONTEXT}, got {len(sequence)}"
-            )
+            raise ValueError(f"Input sequence must have length {ENFORMER_CONTEXT}, got {len(sequence)}")
         return sequence
 
 
@@ -76,9 +73,7 @@ class EnformerOutput(BaseToolOutput):
 
     sequence: str = Field(description="Input DNA/RNA sequence")
     sequence_length: int = Field(description="Length of input sequence")
-    prediction: list[list[float]] = Field(
-        description="Predicted activity matrix with shape [896, num_tracks]"
-    )
+    prediction: list[list[float]] = Field(description="Predicted activity matrix with shape [896, num_tracks]")
     output_tracks: list[int] = Field(description="Track indices extracted from Enformer")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
 
@@ -97,19 +92,23 @@ class EnformerOutput(BaseToolOutput):
     def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
-            "tool_id", "execution_time", "timestamp", "success",
-            "warnings", "errors", "metadata",
+            "tool_id",
+            "execution_time",
+            "timestamp",
+            "success",
+            "warnings",
+            "errors",
+            "metadata",
         }
-        data = {
-            k: v for k, v in self.model_dump().items()
-            if k not in _metadata_fields
-        }
+        data = {k: v for k, v in self.model_dump().items() if k not in _metadata_fields}
         if file_format == "json":
             import json
+
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         elif file_format == "csv":
             import csv
+
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(data.keys())

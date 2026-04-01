@@ -13,9 +13,18 @@ import tarfile
 from pathlib import Path
 
 URLS = {
-    ("Darwin", "arm64"): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-aarch64-macosx.tar.gz",
-    ("Darwin", "x86_64"): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-macosx.tar.gz",
-    ("Linux", "x86_64"): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-linux.tar.gz",
+    (
+        "Darwin",
+        "arm64",
+    ): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-aarch64-macosx.tar.gz",
+    (
+        "Darwin",
+        "x86_64",
+    ): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-macosx.tar.gz",
+    (
+        "Linux",
+        "x86_64",
+    ): "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-linux.tar.gz",
 }
 
 # Only extract segmasker from the BLAST+ archive
@@ -28,12 +37,7 @@ def extract(archive_path: Path, bin_dir: Path) -> None:
         for member in tar.getmembers():
             parts = Path(member.name).parts
             # Match files in the bin/ subdirectory
-            if (
-                len(parts) == 3
-                and parts[1] == "bin"
-                and member.isfile()
-                and parts[2] in _BINARIES_TO_EXTRACT
-            ):
+            if len(parts) == 3 and parts[1] == "bin" and member.isfile() and parts[2] in _BINARIES_TO_EXTRACT:
                 binary_name = parts[2]
                 member.name = binary_name  # flatten to just the filename
                 tar.extract(member, path=bin_dir)

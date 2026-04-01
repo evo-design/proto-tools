@@ -4,6 +4,7 @@ This is a minimal 2-GPU CLI-pattern tool that spawns subprocesses for inference,
 matching tools like Boltz2 with multi-GPU support. It uses
 get_subprocess_device_env() for device routing with comma-separated device strings.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,17 +72,11 @@ class MockCLIMultiGPUToolOutput(BaseToolOutput):
         cuda_visible_devices (str): CUDA_VISIBLE_DEVICES passed to subprocess.
     """
 
-    result: list[float] = Field(
-        description="Output from the CLI subprocess"
-    )
+    result: list[float] = Field(description="Output from the CLI subprocess")
 
-    device_used: str = Field(
-        description="Device string passed to subprocess"
-    )
+    device_used: str = Field(description="Device string passed to subprocess")
 
-    cuda_visible_devices: str = Field(
-        description="CUDA_VISIBLE_DEVICES passed to subprocess"
-    )
+    cuda_visible_devices: str = Field(description="CUDA_VISIBLE_DEVICES passed to subprocess")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -79,9 +79,7 @@ class NCBIEfetchOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    fasta_records: list[NCBIFastaRecord] = Field(
-        default_factory=list, description="Parsed FASTA records"
-    )
+    fasta_records: list[NCBIFastaRecord] = Field(default_factory=list, description="Parsed FASTA records")
     source_url: str = Field(description="Sanitized request URL")
 
     @property
@@ -171,9 +169,7 @@ def run_ncbi_efetch(
             strand=inputs.strand,
         )
         if result is None:
-            raise ValueError(
-                f"No record found for {inputs.db}:{inputs.identifier}"
-            )
+            raise ValueError(f"No record found for {inputs.db}:{inputs.identifier}")
         text, url = result
         records = _parse_fasta_records(text)
         return NCBIEfetchOutput(fasta_records=records, source_url=url)

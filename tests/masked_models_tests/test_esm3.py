@@ -2,6 +2,7 @@
 
 Tests for ESM3.
 """
+
 import numpy as np
 import pytest
 
@@ -24,6 +25,7 @@ _persistent_tool = make_persistent_fixture("esm3")
 
 # ── Input validation ─────────────────────────────────────────────────────────
 
+
 def test_esm3_scoring_input_normalizes_single_string():
     inp = ESM3ScoringInput(sequences="MKTAYIAKQR")
     assert isinstance(inp.sequences, list)
@@ -41,6 +43,7 @@ def test_esm3_embeddings_input_normalizes_single_string():
 # ---------------------------------------------------------------------------
 
 # ── Embedding tests ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm3_forward_pass():
@@ -64,6 +67,7 @@ def test_esm3_forward_pass():
 
 
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm3_score_tool():
@@ -186,6 +190,7 @@ def test_esm3_score_single_sequence():
 
 
 # ── Logits-specific tests ─────────────────────────────────────────────────────
+
 
 @pytest.mark.uses_gpu
 def test_esm3_score_logits_disabled_by_default():

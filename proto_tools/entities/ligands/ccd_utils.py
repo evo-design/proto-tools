@@ -64,7 +64,7 @@ def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str |
     # Try exact SMILES match first
     with open(CCD_DATABASE_PATH) as f:
         for line in f:
-            fields = line.rstrip().split('\t')
+            fields = line.rstrip().split("\t")
             if len(fields) < 2:
                 continue
             if fields[0] == smiles:
@@ -115,26 +115,18 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> str | None:
 
                 # Case-insensitive substring match
                 if name.lower() in description.lower():
-                    matches.append(
-                        {"ccd_code": ccd_code, "description": description, "smiles": fields[0]}
-                    )
+                    matches.append({"ccd_code": ccd_code, "description": description, "smiles": fields[0]})
 
         # If exactly one match, return it
         if len(matches) == 1:
-            logger.debug(
-                f"Found CCD code via name lookup: {smiles} -> '{name}' -> {matches[0]['ccd_code']}"
-            )
+            logger.debug(f"Found CCD code via name lookup: {smiles} -> '{name}' -> {matches[0]['ccd_code']}")
             return matches[0]["ccd_code"]
 
         # If multiple matches, log them all and return None
         if len(matches) > 1:
-            logger.debug(
-                f"Multiple CCD matches found for SMILES '{smiles}' with name '{name}':"
-            )
+            logger.debug(f"Multiple CCD matches found for SMILES '{smiles}' with name '{name}':")
             for match in matches:
-                logger.debug(
-                    f"  - CCD: {match['ccd_code']}, Description: {match['description']}"
-                )
+                logger.debug(f"  - CCD: {match['ccd_code']}, Description: {match['description']}")
             return None
 
         # No matches found
@@ -175,7 +167,7 @@ def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
 
     with open(CCD_DATABASE_PATH) as f:
         for line in f:
-            fields = line.rstrip().split('\t')
+            fields = line.rstrip().split("\t")
             if len(fields) < 2:
                 continue
             if fields[1].upper() == ccd_code_upper:
@@ -206,7 +198,7 @@ def get_ccd_description(ccd_code: str) -> str | None:
 
     with open(CCD_DATABASE_PATH) as f:
         for line in f:
-            fields = line.rstrip().split('\t')
+            fields = line.rstrip().split("\t")
             if len(fields) < 3:
                 continue
             if fields[1].upper() == ccd_code_upper:
@@ -257,7 +249,7 @@ def get_all_ccd_codes() -> set[str]:
     codes = set()
     with open(CCD_DATABASE_PATH) as f:
         for line in f:
-            fields = line.rstrip().split('\t')
+            fields = line.rstrip().split("\t")
             if len(fields) >= 2:
                 codes.add(fields[1])
 
@@ -336,10 +328,8 @@ def _get_ccd_parent_dataframe() -> pd.DataFrame:
 
     if _CCD_PARENT_DF_CACHE is None:
         if not CCD_PARENT_MAPPING_PATH.exists():
-            raise FileNotFoundError(
-                f"CCD parent mapping file not found at {CCD_PARENT_MAPPING_PATH}"
-            )
-        _CCD_PARENT_DF_CACHE = pd.read_csv(CCD_PARENT_MAPPING_PATH, comment='#')
+            raise FileNotFoundError(f"CCD parent mapping file not found at {CCD_PARENT_MAPPING_PATH}")
+        _CCD_PARENT_DF_CACHE = pd.read_csv(CCD_PARENT_MAPPING_PATH, comment="#")
 
     return _CCD_PARENT_DF_CACHE
 
@@ -395,12 +385,12 @@ def get_canonical_component(ccd_code: str) -> str | None:
         The dataframe is cached in memory after first access for performance.
     """
     df = _get_ccd_parent_dataframe()
-    result = df[df['ccd_code'] == ccd_code.upper()]
+    result = df[df["ccd_code"] == ccd_code.upper()]
 
     if len(result) == 0:
         return None
 
-    return result.iloc[0]['parent_1letter']  # type: ignore[no-any-return]
+    return result.iloc[0]["parent_1letter"]  # type: ignore[no-any-return]
 
 
 def get_modifications_for_component(entity_type: str, canonical_letter: str) -> list[str]:
@@ -449,25 +439,23 @@ def get_modifications_for_component(entity_type: str, canonical_letter: str) -> 
 
     # Validate entity_type
     if entity_type not in {"protein", "dna", "rna"}:
-        raise ValueError(
-            f"Invalid entity_type: {entity_type}. Must be 'protein', 'dna', or 'rna'"
-        )
+        raise ValueError(f"Invalid entity_type: {entity_type}. Must be 'protein', 'dna', or 'rna'")
 
     # Get cached dataframe
     df = _get_ccd_parent_dataframe()
 
     # Filter by canonical letter
-    df = df[df['parent_1letter'] == canonical_letter]
+    df = df[df["parent_1letter"] == canonical_letter]
 
     # Filter by entity type based on parent_3letter pattern
     if entity_type == "protein":
         # Protein: 3-letter codes (ALA, SER, etc.) that don't start with 'D'
-        df = df[(df['parent_3letter'].str.len() == 3) & (~df['parent_3letter'].str.startswith('D'))]
+        df = df[(df["parent_3letter"].str.len() == 3) & (~df["parent_3letter"].str.startswith("D"))]
     elif entity_type == "dna":
         # DNA: starts with 'D' (DA, DG, DC, DT)
-        df = df[df['parent_3letter'].str.startswith('D')]
+        df = df[df["parent_3letter"].str.startswith("D")]
     elif entity_type == "rna":
         # RNA: single letter (A, C, G, U)
-        df = df[df['parent_3letter'].str.len() == 1]
+        df = df[df["parent_3letter"].str.len() == 1]
 
-    return df['ccd_code'].tolist()  # type: ignore[no-any-return]
+    return df["ccd_code"].tolist()  # type: ignore[no-any-return]

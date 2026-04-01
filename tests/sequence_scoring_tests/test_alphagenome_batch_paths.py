@@ -103,12 +103,20 @@ def test_predict_variants_dispatch(mock_dispatch_factory):
         AlphaGenomePredictVariantsInput(
             variants=[
                 AlphaGenomeVariant(
-                    chromosome="chr2", interval_start=0, interval_end=_PREDICT_LENGTH,
-                    variant_position=1024, reference_bases="A", alternate_bases="G",
+                    chromosome="chr2",
+                    interval_start=0,
+                    interval_end=_PREDICT_LENGTH,
+                    variant_position=1024,
+                    reference_bases="A",
+                    alternate_bases="G",
                 ),
                 AlphaGenomeVariant(
-                    chromosome="chr3", interval_start=0, interval_end=_PREDICT_LENGTH,
-                    variant_position=2048, reference_bases="C", alternate_bases="T",
+                    chromosome="chr3",
+                    interval_start=0,
+                    interval_end=_PREDICT_LENGTH,
+                    variant_position=2048,
+                    reference_bases="C",
+                    alternate_bases="T",
                 ),
             ],
         ),
@@ -172,12 +180,20 @@ def test_score_variants_dispatch(mock_dispatch_factory):
         AlphaGenomeScoreVariantsInput(
             variants=[
                 AlphaGenomeVariant(
-                    chromosome="chr4", interval_start=0, interval_end=_SCORE_LENGTH,
-                    variant_position=2048, reference_bases="C", alternate_bases="T",
+                    chromosome="chr4",
+                    interval_start=0,
+                    interval_end=_SCORE_LENGTH,
+                    variant_position=2048,
+                    reference_bases="C",
+                    alternate_bases="T",
                 ),
                 AlphaGenomeVariant(
-                    chromosome="chr5", interval_start=0, interval_end=_SCORE_LENGTH,
-                    variant_position=4096, reference_bases="G", alternate_bases="A",
+                    chromosome="chr5",
+                    interval_start=0,
+                    interval_end=_SCORE_LENGTH,
+                    variant_position=4096,
+                    reference_bases="G",
+                    alternate_bases="A",
                 ),
             ],
         ),
@@ -208,12 +224,18 @@ def test_score_ism_batch_dispatch(mock_dispatch_factory):
         AlphaGenomeScoreISMInput(
             requests=[
                 AlphaGenomeISM(
-                    chromosome="chr5", interval_start=0, interval_end=_SCORE_LENGTH,
-                    ism_interval_start=100, ism_interval_end=110,
+                    chromosome="chr5",
+                    interval_start=0,
+                    interval_end=_SCORE_LENGTH,
+                    ism_interval_start=100,
+                    ism_interval_end=110,
                 ),
                 AlphaGenomeISM(
-                    chromosome="chr6", interval_start=0, interval_end=_SCORE_LENGTH,
-                    ism_interval_start=200, ism_interval_end=210,
+                    chromosome="chr6",
+                    interval_start=0,
+                    interval_end=_SCORE_LENGTH,
+                    ism_interval_start=200,
+                    ism_interval_end=210,
                 ),
             ],
         ),

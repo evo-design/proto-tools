@@ -16,6 +16,7 @@ Usage::
 
     # Check status
     from proto_tools.utils import DeviceManager
+
     status = DeviceManager.get_instance().get_device_status()
 
 Configuration
@@ -119,7 +120,6 @@ class DeviceAllocation:
         return time.time() - self.last_used
 
 
-
 # ============================================================================
 # DeviceManager Singleton
 # ============================================================================
@@ -140,9 +140,7 @@ class DeviceManager:
     def __init__(self) -> None:
         """Private constructor - use get_instance() instead."""
         self._allocations: dict[str, DeviceAllocation] = {}
-        self._instance_lock = (
-            threading.RLock()
-        )  # Reentrant lock to allow eviction callbacks to release devices
+        self._instance_lock = threading.RLock()  # Reentrant lock to allow eviction callbacks to release devices
         self._device_available = threading.Condition(self._instance_lock)
 
         # Configuration (defaults, can be overridden via configure() or env vars)
@@ -281,16 +279,13 @@ class DeviceManager:
                 # Shut down allocations on GPU devices no longer in the pool
                 new_pool = set(self._get_available_devices())
                 orphaned = [
-                    alloc for alloc in list(self._allocations.values())
-                    if any(
-                        self._is_gpu(d) and d not in new_pool
-                        for d in alloc.device_ids
-                    )
+                    alloc
+                    for alloc in list(self._allocations.values())
+                    if any(self._is_gpu(d) and d not in new_pool for d in alloc.device_ids)
                 ]
                 for alloc in orphaned:
                     logger.info(
-                        "DeviceManager: Shutting down %s on %s "
-                        "(device removed from pool)",
+                        "DeviceManager: Shutting down %s on %s (device removed from pool)",
                         alloc.tool_name,
                         self._device_str(alloc.device_ids),
                     )
@@ -299,7 +294,8 @@ class DeviceManager:
                     except Exception as e:
                         logger.warning(
                             "DeviceManager: Error shutting down %s: %s",
-                            alloc.instance_name, e,
+                            alloc.instance_name,
+                            e,
                         )
                     self._allocations.pop(alloc.instance_name, None)
             if allow_multiple_per_device is not None:
@@ -313,8 +309,7 @@ class DeviceManager:
             self._escalate_for_exclusive_process()
 
             logger.info(
-                "DeviceManager configured: managed_devices=%s, "
-                "allow_multiple_per_device=%s, offload_strategy=%s",
+                "DeviceManager configured: managed_devices=%s, allow_multiple_per_device=%s, offload_strategy=%s",
                 self._managed_devices or "auto",
                 self._allow_multiple_per_device,
                 self._offload_strategy.value,
@@ -370,7 +365,7 @@ class DeviceManager:
                 raise ValueError(
                     f"BIO_TOOLS_MANAGED_DEVICES specifies invalid device(s): "
                     f"{', '.join(invalid_devices)}. Only {num_gpus} GPU(s) available "
-                    f"(cuda:0 through cuda:{num_gpus-1})"
+                    f"(cuda:0 through cuda:{num_gpus - 1})"
                 )
 
             return list(self._managed_devices)
@@ -397,8 +392,7 @@ class DeviceManager:
         """Raise ValueError if device string has an unsupported prefix."""
         if not any(device.startswith(p) for p in SUPPORTED_DEVICE_PREFIXES):
             raise ValueError(
-                f"Unsupported device '{device}'. "
-                f"Supported prefixes: {', '.join(SUPPORTED_DEVICE_PREFIXES)}"
+                f"Unsupported device '{device}'. Supported prefixes: {', '.join(SUPPORTED_DEVICE_PREFIXES)}"
             )
 
     @staticmethod
@@ -438,6 +432,7 @@ class DeviceManager:
         existing_str = self._device_str(existing.device_ids)
 
         from proto_tools.utils.device import parse_device_string
+
         spec = parse_device_string(device)
 
         if spec.devices is not None:
@@ -446,16 +441,15 @@ class DeviceManager:
         else:
             # General CUDA requested — any GPU allocation with the
             # right device count is compatible.
-            compatible = (
-                existing_str != "cpu"
-                and len(existing.device_ids) == spec.count
-            )
+            compatible = existing_str != "cpu" and len(existing.device_ids) == spec.count
 
         if not compatible:
             logger.info(
                 "DeviceManager: Existing allocation for %s (%s) is "
                 "incompatible with requested device %s, re-allocating",
-                instance_name, existing_str, device,
+                instance_name,
+                existing_str,
+                device,
             )
             # Release without taking the lock (caller already holds it).
             self._allocations.pop(instance_name, None)
@@ -498,7 +492,10 @@ class DeviceManager:
         logger.info(
             "DeviceManager: Allocated %s [%s] for %s (instance: %s, type: %s)",
             "device" if len(device_ids) == 1 else f"{len(device_ids)} device(s)",
-            device_str, tool_name, instance_name, allocation_type.value,
+            device_str,
+            tool_name,
+            instance_name,
+            allocation_type.value,
         )
         return device_str
 
@@ -524,11 +521,7 @@ class DeviceManager:
             When allow_multiple_per_device=False (default), the returned list will
             have at most one element per GPU device.
         """
-        return [
-            alloc
-            for alloc in self._allocations.values()
-            if device_id in alloc.device_ids
-        ]
+        return [alloc for alloc in self._allocations.values() if device_id in alloc.device_ids]
 
     def _get_all_allocated_devices(self) -> set[str]:
         """Return set of all currently allocated device IDs.
@@ -557,17 +550,11 @@ class DeviceManager:
         all_allocated = self._get_all_allocated_devices()
 
         # Find free devices first
-        free_devices = [
-            dev for dev in available
-            if self._is_gpu(dev) and dev not in all_allocated
-        ]
+        free_devices = [dev for dev in available if self._is_gpu(dev) and dev not in all_allocated]
 
         if self._allow_multiple_per_device and len(free_devices) < n:
             # Reuse allocated devices, prioritizing fewest allocations first
-            allocated_devices = [
-                dev for dev in available
-                if self._is_gpu(dev) and dev in all_allocated
-            ]
+            allocated_devices = [dev for dev in available if self._is_gpu(dev) and dev in all_allocated]
             allocated_devices.sort(key=lambda dev: len(self._get_device_allocations(dev)))
             result = free_devices + allocated_devices
             return result[:n]
@@ -579,9 +566,7 @@ class DeviceManager:
     # Device Eviction (LRU)
     # ------------------------------------------------------------------
 
-    def _ensure_n_free_devices(
-        self, n: int, exclude_instance: str | None = None
-    ) -> list[str]:
+    def _ensure_n_free_devices(self, n: int, exclude_instance: str | None = None) -> list[str]:
         """Evict LRU allocations to free N devices.
 
         Strategy:
@@ -608,7 +593,8 @@ class DeviceManager:
         # Need to evict - sort PERSISTENT allocations by LRU
         # TRANSIENT allocations (one-shot leases) are never evicted
         evictable_allocs = [
-            alloc for alloc in self._allocations.values()
+            alloc
+            for alloc in self._allocations.values()
             if alloc.allocation_type == AllocationType.PERSISTENT
             and any(self._is_gpu(d) for d in alloc.device_ids)
             and (exclude_instance is None or alloc.instance_name != exclude_instance)
@@ -720,27 +706,22 @@ class DeviceManager:
             and alloc.allocation_type == AllocationType.PERSISTENT
         ]
 
-        evictable_devices = {
-            dev for alloc in evictable_conflicts for dev in alloc.device_ids
-        }
+        evictable_devices = {dev for alloc in evictable_conflicts for dev in alloc.device_ids}
         unevictable = [dev for dev in conflicts if dev not in evictable_devices]
         if unevictable:
-            raise RuntimeError(
-                f"Devices {unevictable} held by transient allocations"
-            )
+            raise RuntimeError(f"Devices {unevictable} held by transient allocations")
 
         # Warn if free alternatives exist
         available = self._get_available_devices()
-        free_alternatives = [
-            d for d in available
-            if self._is_gpu(d) and d not in all_allocated
-        ]
+        free_alternatives = [d for d in available if self._is_gpu(d) and d not in all_allocated]
         if free_alternatives:
             names = [a.instance_name for a in evictable_conflicts]
             logger.warning(
                 "Requested devices %s are busy with %s, but %s are free. "
                 "Honoring explicit device request and evicting LRU.",
-                requested_devices, names, free_alternatives,
+                requested_devices,
+                names,
+                free_alternatives,
             )
 
         for alloc in sorted(evictable_conflicts, key=lambda a: a.last_used):
@@ -775,14 +756,15 @@ class DeviceManager:
         available = self._find_n_free_devices(n)
 
         if len(available) < n:
-            logger.info(
-                "Insufficient free GPUs (%d available, %d needed). Evicting LRU...",
-                len(available), n
-            )
+            logger.info("Insufficient free GPUs (%d available, %d needed). Evicting LRU...", len(available), n)
             available = self._ensure_n_free_devices(n)
 
         return self._create_allocation(
-            tool_name, instance_name, available, eviction_callback, allocation_type,
+            tool_name,
+            instance_name,
+            available,
+            eviction_callback,
+            allocation_type,
         )
 
     def _allocate_specific_devices(
@@ -813,14 +795,15 @@ class DeviceManager:
         available = self._get_available_devices()
         invalid = [dev for dev in requested_devices if dev not in available]
         if invalid:
-            raise RuntimeError(
-                f"Devices {invalid} not in managed pool {available}"
-            )
+            raise RuntimeError(f"Devices {invalid} not in managed pool {available}")
 
         self._resolve_device_conflicts(requested_devices)
 
         return self._create_allocation(
-            tool_name, instance_name, requested_devices, eviction_callback,
+            tool_name,
+            instance_name,
+            requested_devices,
+            eviction_callback,
             allocation_type,
         )
 
@@ -858,7 +841,8 @@ class DeviceManager:
         """
         with self._instance_lock:
             existing = self._check_existing_allocation(
-                instance_name, device=device,
+                instance_name,
+                device=device,
             )
             if existing is not None:
                 return existing
@@ -866,6 +850,7 @@ class DeviceManager:
 
             # Parse device string
             from proto_tools.utils.device import parse_device_string
+
             spec = parse_device_string(device)
 
             # Validate callback — always required since a CPU allocation
@@ -879,7 +864,10 @@ class DeviceManager:
             # Handle CPU allocation
             if spec.devices and spec.devices[0] == "cpu":
                 return self._create_allocation(
-                    tool_name, instance_name, ["cpu"], eviction_callback,
+                    tool_name,
+                    instance_name,
+                    ["cpu"],
+                    eviction_callback,
                 )
 
             # Check if any GPUs are available in the system
@@ -893,14 +881,10 @@ class DeviceManager:
 
             # Explicit device(s) requested
             if spec.devices:
-                return self._allocate_specific_devices(
-                    tool_name, instance_name, spec.devices, eviction_callback
-                )
+                return self._allocate_specific_devices(tool_name, instance_name, spec.devices, eviction_callback)
 
             # Auto-allocate N GPUs
-            return self._allocate_n_devices(
-                tool_name, instance_name, spec.count, eviction_callback
-            )
+            return self._allocate_n_devices(tool_name, instance_name, spec.count, eviction_callback)
 
     def release_device(self, instance_name: str) -> None:
         """Release device(s) allocated to a tool instance.
@@ -967,9 +951,7 @@ class DeviceManager:
             return
 
         lease_id = f"_lease_{tool_name}_{uuid4().hex[:8]}"
-        allocated_device = self._acquire_lease(
-            tool_name, lease_id, device, timeout
-        )
+        allocated_device = self._acquire_lease(tool_name, lease_id, device, timeout)
         try:
             yield allocated_device
         finally:
@@ -999,6 +981,7 @@ class DeviceManager:
             str: Resolved device string (e.g., ``"cuda:0"``).
         """
         from proto_tools.utils.device import parse_device_string
+
         spec = parse_device_string(device)
 
         # Fail fast if no GPUs exist at all
@@ -1012,6 +995,7 @@ class DeviceManager:
 
         def noop_callback(action: Any) -> None:  # noqa: ARG001 — required by tool interface
             return None
+
         deadline = time.monotonic() + timeout
 
         with self._device_available:
@@ -1019,12 +1003,18 @@ class DeviceManager:
                 try:
                     if spec.devices:
                         result = self._allocate_specific_devices(
-                            tool_name, lease_id, spec.devices, noop_callback,
+                            tool_name,
+                            lease_id,
+                            spec.devices,
+                            noop_callback,
                             AllocationType.TRANSIENT,
                         )
                     else:
                         result = self._allocate_n_devices(
-                            tool_name, lease_id, spec.count, noop_callback,
+                            tool_name,
+                            lease_id,
+                            spec.count,
+                            noop_callback,
                             AllocationType.TRANSIENT,
                         )
                     return result
@@ -1034,13 +1024,13 @@ class DeviceManager:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise TimeoutError(
-                            f"Timed out waiting for GPU for {tool_name} "
-                            f"(waited {timeout:.1f}s, device={device})"
+                            f"Timed out waiting for GPU for {tool_name} (waited {timeout:.1f}s, device={device})"
                         ) from None
 
                     logger.debug(
                         "DeviceManager: Lease %s waiting for GPU (%.1fs remaining)",
-                        lease_id, remaining,
+                        lease_id,
+                        remaining,
                     )
                     self._device_available.wait(timeout=remaining)
 
@@ -1079,19 +1069,20 @@ class DeviceManager:
 
             # Get GPU memory information
             from proto_tools.utils.device import get_gpu_memory_info
+
             raw_gpu_info = get_gpu_memory_info()
 
             # Convert to GB and add device_id
             gpu_memory = [
                 {
                     "device_id": f"cuda:{gpu['index']}",
-                    "name": gpu['name'],
-                    "total_gb": round(gpu['total_bytes'] / 1e9, 1),  # type: ignore[operator]
-                    "used_gb": round(gpu['used_bytes'] / 1e9, 1),  # type: ignore[operator]
-                    "free_gb": round(gpu['free_bytes'] / 1e9, 1),  # type: ignore[operator]
+                    "name": gpu["name"],
+                    "total_gb": round(gpu["total_bytes"] / 1e9, 1),  # type: ignore[operator]
+                    "used_gb": round(gpu["used_bytes"] / 1e9, 1),  # type: ignore[operator]
+                    "free_gb": round(gpu["free_bytes"] / 1e9, 1),  # type: ignore[operator]
                     "utilization_percent": round(
-                        (gpu['used_bytes'] / gpu['total_bytes'] * 100) if gpu['total_bytes'] > 0 else 0,  # type: ignore[operator]
-                        1
+                        (gpu["used_bytes"] / gpu["total_bytes"] * 100) if gpu["total_bytes"] > 0 else 0,  # type: ignore[operator]
+                        1,
                     ),
                 }
                 for gpu in raw_gpu_info
@@ -1272,7 +1263,8 @@ class DeviceManager:
             if target_device == "cuda":
                 try:
                     resolved_devices = self._ensure_n_free_devices(
-                        1, exclude_instance=instance_name,
+                        1,
+                        exclude_instance=instance_name,
                     )
                 except RuntimeError:
                     resolved_devices = ["cpu"]
@@ -1281,10 +1273,12 @@ class DeviceManager:
             else:
                 # Parse multi-GPU targets (e.g., "cuda:2,3" → ["cuda:2", "cuda:3"])
                 from proto_tools.utils.device import parse_device_string
+
                 spec = parse_device_string(target_device)
                 resolved_devices = spec.devices or [target_device]
                 self._resolve_device_conflicts(
-                    resolved_devices, exclude_instance=instance_name,
+                    resolved_devices,
+                    exclude_instance=instance_name,
                 )
 
             resolved_device = self._device_str(resolved_devices)

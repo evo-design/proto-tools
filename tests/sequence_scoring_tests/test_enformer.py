@@ -23,6 +23,7 @@ def _random_dna(length: int, seed: int = 42) -> str:
 
 # ── Input validation ──────────────────────────────────────────────────────────
 
+
 def test_enformer_input_valid():
     """Valid sequence of the required length is accepted."""
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
@@ -32,10 +33,13 @@ def test_enformer_input_valid():
     assert len(inp.sequence) == ENFORMER_CONTEXT
 
 
-@pytest.mark.parametrize("seq,label", [
-    ("ATCG" * 100, "too short"),
-    ("ATCG" * 100_000, "too long"),
-])
+@pytest.mark.parametrize(
+    "seq,label",
+    [
+        ("ATCG" * 100, "too short"),
+        ("ATCG" * 100_000, "too long"),
+    ],
+)
 def test_enformer_input_rejects_wrong_length(seq, label):
     """Sequences that are not exactly ENFORMER_CONTEXT bp are rejected."""
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
@@ -63,6 +67,7 @@ def test_enformer_input_rejects_invalid_nucleotides():
 
 # ── Config validation ─────────────────────────────────────────────────────────
 
+
 def test_enformer_config_default_species():
     """Default species is 'human'."""
     from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
@@ -81,6 +86,7 @@ def test_enformer_config_rejects_invalid_species():
 
 # ---------------------------------------------------------------------------
 # Integration tests
+
 
 @pytest.mark.uses_gpu
 def test_enformer_prediction_human():
@@ -128,10 +134,13 @@ def test_enformer_prediction_mouse():
     assert len(result.prediction[0]) == 3
 
 
-@pytest.mark.parametrize("track_indices,expected_n_tracks", [
-    ([0], 1),
-    (list(range(100)), 100),
-])
+@pytest.mark.parametrize(
+    "track_indices,expected_n_tracks",
+    [
+        ([0], 1),
+        (list(range(100)), 100),
+    ],
+)
 @pytest.mark.uses_gpu
 def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
     """Output matrix second dimension matches the number of requested tracks."""
@@ -143,9 +152,7 @@ def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
 
     seq = _random_dna(ENFORMER_CONTEXT, seed=456)
     inputs = EnformerInput(sequence=seq)
-    config = EnformerConfig(
-        output_tracks=track_indices, species="human", verbose=False
-    )
+    config = EnformerConfig(output_tracks=track_indices, species="human", verbose=False)
 
     result = run_enformer(inputs, config)
 

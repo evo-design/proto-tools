@@ -70,9 +70,7 @@ class ESMFoldInput(StructurePredictionInput):
 
     @field_validator("complexes", check_fields=False)
     @classmethod
-    def validate_complexes(
-        cls, complexes: list[StructurePredictionComplex]
-    ) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
         """Ensures that complexes are valid inputs for ESMFold.
 
         Args:
@@ -89,9 +87,7 @@ class ESMFoldInput(StructurePredictionInput):
         for comp_idx, comp in enumerate(complexes):
             # Validate characters
             for chain_idx, chain_seq in enumerate(comp.chain_sequences):
-                invalid_chars = return_invalid_protein_chars(
-                    chain_seq, additional_valid_chars="X"
-                )
+                invalid_chars = return_invalid_protein_chars(chain_seq, additional_valid_chars="X")
                 if invalid_chars:
                     raise ValueError(
                         f"Invalid protein characters in complex {comp_idx}, chain {chain_idx}: "
@@ -100,9 +96,7 @@ class ESMFoldInput(StructurePredictionInput):
 
             # Check ESMFold length limit
             if comp.sum_of_chain_lengths() > 2400:
-                raise ValueError(
-                    f"Complex {comp_idx} too long ({comp.sum_of_chain_lengths()} positions, max 2400)"
-                )
+                raise ValueError(f"Complex {comp_idx} too long ({comp.sum_of_chain_lengths()} positions, max 2400)")
 
         return complexes
 
@@ -125,8 +119,10 @@ class ESMFoldInput(StructurePredictionInput):
             )
         return prepared_complexes
 
+
 # Output:
 ESMFoldOutput = StructurePredictionOutput
+
 
 # Config:
 class ESMFoldConfig(StructurePredictionConfig):
@@ -187,6 +183,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         hidden=True,
     )
 
+
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -210,7 +207,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_esmfold(
-    inputs: ESMFoldInput, config: ESMFoldConfig | None = None,
+    inputs: ESMFoldInput,
+    config: ESMFoldConfig | None = None,
     instance: Any = None,
 ) -> ESMFoldOutput:
     """Predict protein 3D structures using ESMFold.
@@ -258,9 +256,7 @@ def run_esmfold(
         - ESM GitHub: https://github.com/facebookresearch/esm
 
     Example:
-        >>> inputs = ESMFoldInput(
-        ...     complexes=["MVLSPADKTNVKAAW"]
-        ... )
+        >>> inputs = ESMFoldInput(complexes=["MVLSPADKTNVKAAW"])
         >>> config = ESMFoldConfig(verbose=True)
         >>> result = run_esmfold(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
@@ -274,12 +270,11 @@ def run_esmfold(
 
     # Split into memory-safe sub-batches
     sub_batches = _split_into_safe_batches(
-        prepared_complexes, max_residues=config.max_batch_residues  # type: ignore[union-attr]
+        prepared_complexes,
+        max_residues=config.max_batch_residues,  # type: ignore[union-attr]
     )
 
-    logger.debug(
-        f"Processing {len(prepared_complexes)} complex(es) in {len(sub_batches)} sub-batch(es)..."
-    )
+    logger.debug(f"Processing {len(prepared_complexes)} complex(es) in {len(sub_batches)} sub-batch(es)...")
 
     # Run inference on all prepared complexes
     all_results = []

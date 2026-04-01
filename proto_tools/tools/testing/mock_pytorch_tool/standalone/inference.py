@@ -5,6 +5,7 @@ model for testing DeviceManager and ToolPool functionality. It's designed to be
 fast (<1s) while still exercising device management, memory tracking, and
 worker protocols.
 """
+
 from __future__ import annotations
 
 import json

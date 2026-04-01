@@ -2,6 +2,7 @@
 
 ESM2 sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,6 +44,7 @@ ESM2_MODEL_CHECKPOINTS = Literal[
 # Input:
 ESM2SampleInput = MaskedModelInput
 
+
 # Output:
 class ESM2SampleOutput(BaseToolOutput):
     """Output from ESM2 protein sequence sampling.
@@ -60,9 +62,8 @@ class ESM2SampleOutput(BaseToolOutput):
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
             if return_logits=True in config.
     """
-    sequences: list[str] = Field(
-        description="Sampled/mutated protein sequences"
-    )
+
+    sequences: list[str] = Field(description="Sampled/mutated protein sequences")
     logits: list[list[list[float]]] | None = Field(
         default=None,
         description="Per-position amino acid logits. Shape: [num_sequences, seq_len, 20].",
@@ -91,10 +92,12 @@ class ESM2SampleOutput(BaseToolOutput):
 
         elif file_format == "json":
             import json
+
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
+
 
 # Config:
 class ESM2SampleConfig(BaseConfig):
@@ -108,6 +111,7 @@ class ESM2SampleConfig(BaseConfig):
         device (str): Device to run on. Default: ``"cuda"``.
         return_logits (bool): Whether to include per-position logits. Default: ``False``.
     """
+
     masking_strategy: MaskingStrategy = ConfigField(
         title="Masking Strategy",
         default_factory=MaskingStrategy,
@@ -174,7 +178,8 @@ def example_input() -> Any:
     iterable_output_field="sequences",
 )
 def run_esm2_sample(
-    inputs: ESM2SampleInput, config: ESM2SampleConfig | None = None,
+    inputs: ESM2SampleInput,
+    config: ESM2SampleConfig | None = None,
     instance: Any = None,
 ) -> ESM2SampleOutput:
     """Sample protein sequences using ESM2 language model.

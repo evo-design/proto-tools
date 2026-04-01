@@ -39,7 +39,19 @@ def download_file(url: str, output_path: Path) -> None:
 
     # Try different download methods
     download_tools = [
-        (["aria2c", "--max-connection-per-server=8", "--allow-overwrite=true", "-o", output_path.name, "-d", str(output_path.parent), url], "aria2c"),
+        (
+            [
+                "aria2c",
+                "--max-connection-per-server=8",
+                "--allow-overwrite=true",
+                "-o",
+                output_path.name,
+                "-d",
+                str(output_path.parent),
+                url,
+            ],
+            "aria2c",
+        ),
         (["curl", "-L", "-o", str(output_path), url], "curl"),
         (["wget", "-O", str(output_path), url], "wget"),
     ]
@@ -85,8 +97,7 @@ def setup_mini_database():
 
     if not mmseqs_bin.exists():
         raise RuntimeError(
-            f"mmseqs binary not found at {mmseqs_bin}. "
-            f"ToolInstance may have failed to set up the environment."
+            f"mmseqs binary not found at {mmseqs_bin}. ToolInstance may have failed to set up the environment."
         )
 
     logger.info("Using mmseqs from: %s", mmseqs_bin)
@@ -94,10 +105,7 @@ def setup_mini_database():
     # Download mini SwissProt database
     archive_path = db_dir / "mini_swissprot2503.tar.gz"
     if not archive_path.exists():
-        download_file(
-            "https://opendata.mmseqs.org/colabfold/mini_swissprot2503.tar.gz",
-            archive_path
-        )
+        download_file("https://opendata.mmseqs.org/colabfold/mini_swissprot2503.tar.gz", archive_path)
 
     # Extract archive
     logger.info("Extracting archive...")

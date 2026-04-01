@@ -2,6 +2,7 @@
 
 ESM3 embeddings tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,15 +19,14 @@ from proto_tools.utils import ConfigField, ToolInstance, require_hf_token
 
 logger = logging.getLogger(__name__)
 
-ESM3_MODEL_CHECKPOINTS = Literal[
-    "esm3_sm_open_v1",
-]
+ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 
 # ============================================================================
 # Data Models
 # ============================================================================
 # Input:
 ESM3EmbeddingsInput = MaskedModelInput
+
 
 # Output:
 class ESM3EmbeddingsOutput(MaskedModelOutput):
@@ -50,6 +50,7 @@ class ESM3EmbeddingsOutput(MaskedModelOutput):
         All outputs are returned as nested Python lists (moved to CPU) for easy
         serialization and downstream processing.
     """
+
 
 # Config:
 class ESM3EmbeddingsConfig(MaskedModelConfig):
@@ -89,6 +90,7 @@ class ESM3EmbeddingsConfig(MaskedModelConfig):
     Note:
         The model is loaded on-demand for each call.
     """
+
     model_checkpoint: Literal[ESM3_MODEL_CHECKPOINTS] = ConfigField(
         title="ESM3 Model Checkpoint",
         default="esm3_sm_open_v1",
@@ -125,7 +127,9 @@ def example_input() -> Any:
     iterable_output_field="results",
     cacheable=True,
 )
-def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance: Any = None) -> ESM3EmbeddingsOutput:
+def run_esm3_embeddings(
+    inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance: Any = None
+) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
     Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
@@ -153,9 +157,7 @@ def run_esm3_embeddings(inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfi
 
     Examples:
         >>> # Basic embedding extraction
-        >>> inputs = MaskedModelInput(
-        ...     sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"]
-        ... )
+        >>> inputs = MaskedModelInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
         >>> config = ESM3EmbeddingsConfig(verbose=True)
         >>> result = run_esm3_embeddings(inputs, config)
         >>> print(f"Processed {len(result.results)} sequences")

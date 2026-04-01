@@ -56,9 +56,7 @@ class NCBIEsearchOutput(BaseToolOutput):
         ids (list[str]): List of NCBI IDs matching the search query.
     """
 
-    ids: list[str] = Field(
-        default_factory=list, description="List of NCBI IDs found by the search"
-    )
+    ids: list[str] = Field(default_factory=list, description="List of NCBI IDs found by the search")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -25,11 +25,13 @@ def is_smiles_valid(smiles: str) -> bool:
     except Exception:
         return False
 
+
 def is_mol_valid(mol: Chem.Mol) -> bool:
     """Check if a RDKit Mol object is valid."""
     if mol is None:
         return False  # type: ignore[unreachable]
     return bool(mol.GetNumAtoms() > 0)
+
 
 # ===============================
 # PubChem Retrieval
@@ -39,9 +41,9 @@ MAX_RETRIES = 10
 TIMEOUT = 10
 
 
-
 TIMEOUT = 10
 MAX_RETRIES = 10
+
 
 def fetch_pubchem_txt(url: str) -> str | None:
     """Fetch a PubChem TXT response from the given URL, with retries and timeout.
@@ -59,7 +61,7 @@ def fetch_pubchem_txt(url: str) -> str | None:
                 result: str = resp.text.strip()
                 return result
             if resp.status_code == 429:  # rate limited
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
                 continue
         except requests.RequestException:
             time.sleep(TIMEOUT)
@@ -78,7 +80,7 @@ def get_smiles_from_name(name: str) -> str:
     Raises:
         ValueError: If the molecule is not found.
     """
-    encoded_name = quote(name, safe='')
+    encoded_name = quote(name, safe="")
     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{encoded_name}/property/CanonicalSMILES/TXT"
     txt = fetch_pubchem_txt(url)
     if not txt:
@@ -100,15 +102,11 @@ def get_name_from_smiles(smiles: str) -> str:
     if not smiles:
         return "Unknown"
 
-    cid_txt = fetch_pubchem_txt(
-        f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/cids/TXT"
-    )
+    cid_txt = fetch_pubchem_txt(f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{smiles}/cids/TXT")
     if not cid_txt:
         return "Unknown"
 
     cid = cid_txt.splitlines()[0]
 
-    name_txt = fetch_pubchem_txt(
-        f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/property/IUPACName/TXT"
-    )
+    name_txt = fetch_pubchem_txt(f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/property/IUPACName/TXT")
     return name_txt or "Unknown"

@@ -2,6 +2,7 @@
 
 Integration tests for sampling tools (masked models + random mutagenesis).
 """
+
 import pytest
 
 from proto_tools.tools.masked_models.esm2 import (
@@ -40,16 +41,29 @@ _VALIDATORS = {
 # Each entry: (run_fn, input_class, config_class, entity_type, has_logits)
 PROTEIN_SAMPLING_TOOLS = [
     pytest.param(
-        run_esm2_sample, ESM2SampleInput, ESM2SampleConfig, "protein", True,
-        id="esm2", marks=pytest.mark.uses_gpu,
+        run_esm2_sample,
+        ESM2SampleInput,
+        ESM2SampleConfig,
+        "protein",
+        True,
+        id="esm2",
+        marks=pytest.mark.uses_gpu,
     ),
     pytest.param(
-        run_esm3_sample, ESM3SampleInput, ESM3SampleConfig, "protein", True,
-        id="esm3", marks=pytest.mark.uses_gpu,
+        run_esm3_sample,
+        ESM3SampleInput,
+        ESM3SampleConfig,
+        "protein",
+        True,
+        id="esm3",
+        marks=pytest.mark.uses_gpu,
     ),
     pytest.param(
-        run_random_protein_sample, RandomProteinSampleInput,
-        RandomProteinSampleConfig, "protein", False,
+        run_random_protein_sample,
+        RandomProteinSampleInput,
+        RandomProteinSampleConfig,
+        "protein",
+        False,
         id="random-protein",
     ),
 ]
@@ -68,8 +82,11 @@ MASKED_PROTEIN_SEQUENCES = [
 
 NUCLEOTIDE_SAMPLING_TOOLS = [
     pytest.param(
-        run_random_nucleotide_sample, RandomNucleotideSampleInput,
-        RandomNucleotideSampleConfig, "nucleotide", False,
+        run_random_nucleotide_sample,
+        RandomNucleotideSampleInput,
+        RandomNucleotideSampleConfig,
+        "nucleotide",
+        False,
         id="random-nucleotide",
     ),
 ]
@@ -86,6 +103,7 @@ MASKED_NUCLEOTIDE_SEQUENCES = [
 
 
 # ── Shared validation ─────────────────────────────────────────────────────────
+
 
 def _validate_sample_output(sequences, result_sequences, entity_type):
     """Shared assertions for all sampling tests."""
@@ -107,13 +125,19 @@ def _validate_sample_output(sequences, result_sequences, entity_type):
 
 # ── Mask-fill tests ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "run_fn, input_cls, config_cls, entity_type, has_logits",
     PROTEIN_SAMPLING_TOOLS,
 )
 @pytest.mark.parametrize("sequences", MASKED_PROTEIN_SEQUENCES)
 def test_protein_sample_fills_masks(
-    run_fn, input_cls, config_cls, entity_type, has_logits, sequences,
+    run_fn,
+    input_cls,
+    config_cls,
+    entity_type,
+    has_logits,
+    sequences,
 ):
     """Sampling with pre-masked protein sequences.
 
@@ -137,12 +161,8 @@ def test_protein_sample_fills_masks(
         assert result.logits is not None, "Logits should be returned"
         assert len(result.logits) == len(sequences)
         for seq, logits in zip(sequences, result.logits, strict=False):
-            assert len(logits) == len(seq), (
-                f"Expected {len(seq)} positions, got {len(logits)}"
-            )
-            assert len(logits[0]) == 20, (
-                f"Expected vocab size 20, got {len(logits[0])}"
-            )
+            assert len(logits) == len(seq), f"Expected {len(seq)} positions, got {len(logits)}"
+            assert len(logits[0]) == 20, f"Expected vocab size 20, got {len(logits[0])}"
 
 
 @pytest.mark.parametrize(
@@ -151,7 +171,12 @@ def test_protein_sample_fills_masks(
 )
 @pytest.mark.parametrize("sequences", MASKED_NUCLEOTIDE_SEQUENCES)
 def test_nucleotide_sample_fills_masks(
-    run_fn, input_cls, config_cls, entity_type, has_logits, sequences,
+    run_fn,
+    input_cls,
+    config_cls,
+    entity_type,
+    has_logits,
+    sequences,
 ):
     """Sampling with pre-masked nucleotide sequences.
 
@@ -164,12 +189,17 @@ def test_nucleotide_sample_fills_masks(
 
 # ── Masking strategy integration ──────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "run_fn, input_cls, config_cls, entity_type, has_logits",
     PROTEIN_SAMPLING_TOOLS,
 )
 def test_protein_sample_masking_strategy_integration(
-    run_fn, input_cls, config_cls, entity_type, has_logits,
+    run_fn,
+    input_cls,
+    config_cls,
+    entity_type,
+    has_logits,
 ):
     """End-to-end masking strategy -> sampling pipeline for protein tools.
 
@@ -200,7 +230,11 @@ def test_protein_sample_masking_strategy_integration(
     NUCLEOTIDE_SAMPLING_TOOLS,
 )
 def test_nucleotide_sample_masking_strategy_integration(
-    run_fn, input_cls, config_cls, entity_type, has_logits,
+    run_fn,
+    input_cls,
+    config_cls,
+    entity_type,
+    has_logits,
 ):
     """End-to-end masking strategy -> sampling pipeline for nucleotide tools."""
     sequences = ["ACGTACGTAC"]
@@ -220,12 +254,17 @@ def test_nucleotide_sample_masking_strategy_integration(
 
 # ── Identity (all positions fixed) ────────────────────────────────────────────
 
+
 @pytest.mark.parametrize(
     "run_fn, input_cls, config_cls, entity_type, has_logits",
     PROTEIN_SAMPLING_TOOLS + NUCLEOTIDE_SAMPLING_TOOLS,
 )
 def test_all_fixed_positions_is_identity(
-    run_fn, input_cls, config_cls, entity_type, has_logits,
+    run_fn,
+    input_cls,
+    config_cls,
+    entity_type,
+    has_logits,
 ):
     """When every position is fixed, output must equal input."""
     seq = "MKTL" if entity_type == "protein" else "ACGT"

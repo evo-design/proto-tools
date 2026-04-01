@@ -2,6 +2,7 @@
 
 Shared data models, constants, and Literal types for AlphaGenome tools.
 """
+
 from __future__ import annotations
 
 import csv
@@ -27,25 +28,46 @@ DEFAULT_ALPHAGENOME_MODEL_VERSION = "all_folds"
 SUPPORTED_CONTEXT_LENGTHS = (1_048_576, 524_288, 131_072, 16_384)
 
 OutputTypeName = Literal[
-    "ATAC", "CAGE", "DNASE", "RNA_SEQ",
-    "CHIP_HISTONE", "CHIP_TF",
-    "SPLICE_SITES", "SPLICE_SITE_USAGE", "SPLICE_JUNCTIONS",
-    "CONTACT_MAPS", "PROCAP",
+    "ATAC",
+    "CAGE",
+    "DNASE",
+    "RNA_SEQ",
+    "CHIP_HISTONE",
+    "CHIP_TF",
+    "SPLICE_SITES",
+    "SPLICE_SITE_USAGE",
+    "SPLICE_JUNCTIONS",
+    "CONTACT_MAPS",
+    "PROCAP",
 ]
 
 VariantScorerName = Literal[
-    "ATAC", "CONTACT_MAPS", "DNASE", "CHIP_TF", "CHIP_HISTONE",
-    "CAGE", "PROCAP", "RNA_SEQ", "RNA_SEQ_ACTIVE",
-    "SPLICE_SITES", "SPLICE_SITE_USAGE", "SPLICE_JUNCTIONS",
+    "ATAC",
+    "CONTACT_MAPS",
+    "DNASE",
+    "CHIP_TF",
+    "CHIP_HISTONE",
+    "CAGE",
+    "PROCAP",
+    "RNA_SEQ",
+    "RNA_SEQ_ACTIVE",
+    "SPLICE_SITES",
+    "SPLICE_SITE_USAGE",
+    "SPLICE_JUNCTIONS",
     "POLYADENYLATION",
-    "ATAC_ACTIVE", "DNASE_ACTIVE", "CHIP_TF_ACTIVE",
-    "CHIP_HISTONE_ACTIVE", "CAGE_ACTIVE", "PROCAP_ACTIVE",
+    "ATAC_ACTIVE",
+    "DNASE_ACTIVE",
+    "CHIP_TF_ACTIVE",
+    "CHIP_HISTONE_ACTIVE",
+    "CAGE_ACTIVE",
+    "PROCAP_ACTIVE",
 ]
 
 
 # ============================================================================
 # Data Models
 # ============================================================================
+
 
 # Input:
 class AlphaGenomeInterval(BaseToolInput):
@@ -192,9 +214,7 @@ class AlphaGenomeScoreOutput(BaseToolOutput):
             ``interval_scorer``, ``track_name``, ``raw_score``, etc.
     """
 
-    scores: list[dict[str, Any]] = Field(
-        description="Tidy score records (one per scorer-track-gene combination)"
-    )
+    scores: list[dict[str, Any]] = Field(description="Tidy score records (one per scorer-track-gene combination)")
 
     @property
     def output_format_options(self) -> list[str]:

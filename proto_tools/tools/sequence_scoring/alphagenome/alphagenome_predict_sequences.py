@@ -2,6 +2,7 @@
 
 AlphaGenome batched raw-sequence prediction tool.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,16 +39,14 @@ def validate_raw_sequence(sequence: str) -> str:
         raise ValueError("sequence must only contain DNA bases A/C/G/T/N")
     if len(sequence) not in SUPPORTED_CONTEXT_LENGTHS:
         supported = ", ".join(str(length) for length in sorted(SUPPORTED_CONTEXT_LENGTHS))
-        raise ValueError(
-            "sequence length must match a supported AlphaGenome context length "
-            f"({supported} bp)"
-        )
+        raise ValueError(f"sequence length must match a supported AlphaGenome context length ({supported} bp)")
     return sequence
 
 
 # ============================================================================
 # Data Models
 # ============================================================================
+
 
 class AlphaGenomePredictSequencesInput(BaseToolInput):
     """Input for batched AlphaGenome raw-sequence prediction.

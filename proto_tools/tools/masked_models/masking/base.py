@@ -2,6 +2,7 @@
 
 Masking strategies for masked language model sampling.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ MASK_TOKEN = "_"  # noqa: S105 -- not a password
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def mutable_mask(seq: str, fixed: list[int] | None = None) -> list[bool]:
     """Return a boolean mask where True = designable (eligible for masking).
@@ -55,7 +57,10 @@ def apply_mask(seq: str, positions: list[int]) -> str:
 
 
 def validate_enough_mutable(
-    seq: str, mutable: list[bool], count: int, seq_index: int,
+    seq: str,
+    mutable: list[bool],
+    count: int,
+    seq_index: int,
 ) -> None:
     """Raise if we're asked to mask more positions than are available."""
     n_mutable = sum(mutable)
@@ -93,7 +98,8 @@ def _resolve_count(
 
 
 def _validate_mutation_spec(
-    num_mutations: int | None, mask_fraction: float | None,
+    num_mutations: int | None,
+    mask_fraction: float | None,
 ) -> None:
     """Ensure num_mutations and mask_fraction aren't both set."""
     if num_mutations is not None and mask_fraction is not None:
@@ -169,7 +175,8 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
         inputs = inputs.model_copy(
             update={
                 "sequences": strategy.mask(
-                    inputs.sequences, position_score_fn=position_score_fn,
+                    inputs.sequences,
+                    position_score_fn=position_score_fn,
                 )
             }
         )
@@ -179,6 +186,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
 # ============================================================================
 # MaskingStrategy: single class for all masking strategies
 # ============================================================================
+
 
 class MaskingStrategy(BaseModel):
     """Masking strategy: select positions to mask for re-design.
@@ -300,15 +308,9 @@ class MaskingStrategy(BaseModel):
         masker_cls = MASKERS[self.method]
         if masker_cls.supported_models is None:
             if self.model_name is not None or self.model_checkpoint is not None:
-                warnings.warn(
-                    f"model_name/model_checkpoint are ignored for "
-                    f"method='{self.method}'", stacklevel=2
-                )
+                warnings.warn(f"model_name/model_checkpoint are ignored for method='{self.method}'", stacklevel=2)
         else:
-            if (
-                self.model_name is not None
-                and self.model_name not in masker_cls.supported_models
-            ):
+            if self.model_name is not None and self.model_name not in masker_cls.supported_models:
                 raise ValueError(
                     f"model '{self.model_name}' not supported for "
                     f"method='{self.method}'. "
@@ -344,7 +346,9 @@ class MaskingStrategy(BaseModel):
         # Lazy-init the masker (persists for the lifetime of this strategy)
         if self._masker is None:
             object.__setattr__(
-                self, "_masker", MASKERS[self.method](strategy=self),
+                self,
+                "_masker",
+                MASKERS[self.method](strategy=self),
             )
 
         # Auto-build position_score_fn for standalone usage
@@ -367,7 +371,9 @@ class MaskingStrategy(BaseModel):
             mutable = mutable_mask(seq, self.fixed_positions)
             eligible = [j for j, m in enumerate(mutable) if m]
             count = _resolve_count(
-                self.num_mutations, self.mask_fraction, len(eligible),
+                self.num_mutations,
+                self.mask_fraction,
+                len(eligible),
             )
             validate_enough_mutable(seq, mutable, count, i)
 
@@ -380,6 +386,7 @@ class MaskingStrategy(BaseModel):
 # ============================================================================
 # build_position_score_fn: shared callable factory for tool preprocess hooks
 # ============================================================================
+
 
 def build_position_score_fn(
     sampling_model: str,
@@ -416,31 +423,37 @@ def build_position_score_fn(
         config_kwargs["model_checkpoint"] = masking_strategy.model_checkpoint
 
     if model_name == "esm2":
+
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
             from proto_tools.tools.masked_models.esm2.esm2_embeddings import (
                 ESM2EmbeddingsConfig,
                 ESM2EmbeddingsInput,
                 run_esm2_embeddings,
             )
+
             result = run_esm2_embeddings(
                 ESM2EmbeddingsInput(sequences=sequences),
                 ESM2EmbeddingsConfig(**config_kwargs),
             )
             return [r.logits for r in result.results]  # type: ignore[attr-defined]
+
         return position_score_fn
 
     if model_name == "esm3":
+
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
             from proto_tools.tools.masked_models.esm3.esm3_embeddings import (
                 ESM3EmbeddingsConfig,
                 ESM3EmbeddingsInput,
                 run_esm3_embeddings,
             )
+
             result = run_esm3_embeddings(
                 ESM3EmbeddingsInput(sequences=sequences),
                 ESM3EmbeddingsConfig(**config_kwargs),
             )
             return [r.logits for r in result.results]  # type: ignore[attr-defined]
+
         return position_score_fn
 
     raise ValueError(f"Unknown model: {model_name}")

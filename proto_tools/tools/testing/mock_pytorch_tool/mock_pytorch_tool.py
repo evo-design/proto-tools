@@ -4,6 +4,7 @@ This is a minimal PyTorch tool designed for fast testing of device management,
 memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
 in <1 second while still exercising all DeviceManager and ToolPool code paths.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -85,9 +86,7 @@ class MockPyTorchToolOutput(BaseToolOutput):
         results (list[MockPyTorchToolResult]): List of results, one per input data item.
     """
 
-    results: list[MockPyTorchToolResult] = Field(
-        description="Results from the model, one per input data item"
-    )
+    results: list[MockPyTorchToolResult] = Field(description="Results from the model, one per input data item")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -114,7 +113,9 @@ class MockPyTorchToolOutput(BaseToolOutput):
                 )
         elif file_format == "txt":
             with open(path, "w") as f:
-                f.writelines(f"Item {i}: device={r.device_used}, result={r.result}\n" for i, r in enumerate(self.results))
+                f.writelines(
+                    f"Item {i}: device={r.device_used}, result={r.result}\n" for i, r in enumerate(self.results)
+                )
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 

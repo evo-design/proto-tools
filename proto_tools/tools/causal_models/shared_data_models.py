@@ -3,6 +3,7 @@
 Contains base schemas for scoring and sampling operations
 shared across all causal/autoregressive language models.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -129,9 +130,7 @@ class CausalModelScoringOutput(BaseToolOutput):
             avg_log_likelihood, perplexity) and optional per-position logits.
     """
 
-    scores: list[SequenceScores] = Field(
-        description="List of scoring outputs, one per input sequence"
-    )
+    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence")
 
     @property
     def vocab(self) -> list[str] | None:
@@ -263,6 +262,7 @@ class CausalModelSampleOutput(BaseToolOutput):
                 f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "json":
             import json
+
             json_path = path.with_suffix(".json")
             with open(json_path, "w") as f:
                 json.dump({"sequences": self.sequences}, f, indent=2)

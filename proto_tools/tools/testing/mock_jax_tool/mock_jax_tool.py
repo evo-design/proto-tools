@@ -4,6 +4,7 @@ This is a minimal JAX-pattern tool designed for testing device management with
 JAX semantics: no in-place .to(), model reload on device change, and
 get_jax_memory_stats() reporting.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -79,13 +80,9 @@ class MockJAXToolOutput(BaseToolOutput):
         device_used (str): Device the model ran on.
     """
 
-    result: list[float] = Field(
-        description="Output from the model"
-    )
+    result: list[float] = Field(description="Output from the model")
 
-    device_used: str = Field(
-        description="Device the model ran on"
-    )
+    device_used: str = Field(description="Device the model ran on")
 
     @property
     def output_format_options(self) -> list[str]:

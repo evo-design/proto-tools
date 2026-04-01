@@ -14,6 +14,7 @@ from proto_tools.utils.device_manager import OffloadStrategy
 # Integration tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_real_tool_eviction_cpu_strategy():
@@ -91,9 +92,7 @@ def test_real_tool_eviction_cpu_strategy():
                 # Step 3: Verify evicted tool still works (auto-restarts if needed)
                 result3 = run_mock_pytorch_tool(input1, config1, instance="mock_1")
                 assert result3.success, f"Evicted tool failed: {result3.errors}"
-                assert (
-                    len(result3.results) > 0
-                ), "Evicted tool should still produce results"
+                assert len(result3.results) > 0, "Evicted tool should still produce results"
 
     finally:
         # Clean up
@@ -146,9 +145,9 @@ def test_real_tool_eviction_restart_strategy():
 
                 # Verify mock_1 was shut down (worker set to None, but kept in cache)
                 status = dm.get_device_status()
-                assert (
-                    "mock_1" not in status["allocations"]
-                ), "Evicted instance should be released with RESTART strategy"
+                assert "mock_1" not in status["allocations"], (
+                    "Evicted instance should be released with RESTART strategy"
+                )
                 assert "mock_2" in status["allocations"]
 
                 # Verify mock_2 reports memory (model loaded on GPU)
@@ -239,9 +238,7 @@ def test_evicted_instance_variable_still_works():
 
         # Verify it's back in allocations (might be on CPU or GPU depending on availability)
         status3 = dm.get_device_status()
-        assert (
-            "mock_1" in status3["allocations"]
-        ), "Instance should be re-allocated after restart"
+        assert "mock_1" in status3["allocations"], "Instance should be re-allocated after restart"
 
         # Verify the restarted instance works correctly
         result4 = run_mock_pytorch_tool(input1, config1, instance="mock_1")

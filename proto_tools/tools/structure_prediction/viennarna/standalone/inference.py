@@ -3,6 +3,7 @@
 This script provides a standalone interface for ViennaRNA that can be executed
 in an isolated virtual environment with JSON-based I/O.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ import sys
 from typing import Any
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 class ViennaRNAModel:
@@ -30,6 +31,7 @@ class ViennaRNAModel:
         """Load ViennaRNA package if not already loaded."""
         if self._RNA is None:
             import RNA
+
             self._RNA = RNA
             logger.debug("ViennaRNA package loaded")
 
@@ -84,8 +86,7 @@ class ViennaRNAModel:
             invalid_chars = set(seq) - valid_chars
             if invalid_chars:
                 raise ValueError(
-                    f"Invalid nucleotide characters in sequence {seq_idx}: "
-                    f"{', '.join(sorted(invalid_chars))}"
+                    f"Invalid nucleotide characters in sequence {seq_idx}: {', '.join(sorted(invalid_chars))}"
                 )
 
         # Configure model details
@@ -106,11 +107,13 @@ class ViennaRNAModel:
         for seq_idx, sequence in enumerate(sequences):
             if not sequence:
                 logger.debug(f"Warning: Found empty sequence (index {seq_idx})")
-                results.append({
-                    "sequence": sequence,
-                    "structure": None,
-                    "mfe": None,
-                })
+                results.append(
+                    {
+                        "sequence": sequence,
+                        "structure": None,
+                        "mfe": None,
+                    }
+                )
                 continue
 
             # Normalize sequence: uppercase and convert T to U for RNA
@@ -118,26 +121,22 @@ class ViennaRNAModel:
             if not use_dna_params:
                 normalized_seq = normalized_seq.replace("T", "U")
 
-            logger.debug(
-                f"Folding sequence {seq_idx + 1}/{len(sequences)} "
-                f"({len(normalized_seq)} nt)"
-            )
+            logger.debug(f"Folding sequence {seq_idx + 1}/{len(sequences)} ({len(normalized_seq)} nt)")
 
             # Create fold compound and compute MFE structure
             fc = RNA.fold_compound(normalized_seq, md)  # type: ignore[attr-defined]
             structure, mfe = fc.mfe()
 
-            results.append({
-                "sequence": normalized_seq,  # type: ignore[dict-item]
-                "structure": structure,
-                "mfe": float(mfe),  # type: ignore[dict-item]
-            })
+            results.append(
+                {
+                    "sequence": normalized_seq,  # type: ignore[dict-item]
+                    "structure": structure,
+                    "mfe": float(mfe),  # type: ignore[dict-item]
+                }
+            )
 
             if verbose:
-                logger.info(
-                    f"Sequence {seq_idx + 1}: {normalized_seq[:20]}... "
-                    f"MFE={mfe:.2f} kcal/mol"
-                )
+                logger.info(f"Sequence {seq_idx + 1}: {normalized_seq[:20]}... MFE={mfe:.2f} kcal/mol")
 
         return {
             "results": results,
@@ -173,6 +172,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # ============================================================================
 # Standalone Entry Point
 # ============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough - tool does not maintain persistent state."""

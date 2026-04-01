@@ -2,6 +2,7 @@
 
 PyHMMER hmmsearch tool: search HMM profiles against protein sequences.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,6 +22,7 @@ from proto_tools.utils import InputField, ToolInstance
 # ============================================================================
 # Data Models
 # ============================================================================
+
 
 # Input:
 class PyHmmsearchInput(PyHmmerInput):
@@ -83,7 +85,9 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | None = None, instance: Any = None) -> PyHmmsearchOutput:
+def run_pyhmmer_hmmsearch(
+    inputs: PyHmmsearchInput, config: PyHmmsearchConfig | None = None, instance: Any = None
+) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
     This function implements the hmmsearch algorithm, searching one or more HMM
@@ -113,14 +117,8 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
 
     Examples:
         >>> # Search a kinase HMM against protein sequences
-        >>> inputs = PyHmmsearchInput(
-        ...     hmm="/path/to/kinase.hmm",
-        ...     sequences=["MVLSPADKTN", "ATCGATCGAT"]
-        ... )
-        >>> config = PyHmmsearchConfig(
-        ...     evalue_threshold=0.001,
-        ...     domain_evalue_threshold=0.001
-        ... )
+        >>> inputs = PyHmmsearchInput(hmm="/path/to/kinase.hmm", sequences=["MVLSPADKTN", "ATCGATCGAT"])
+        >>> config = PyHmmsearchConfig(evalue_threshold=0.001, domain_evalue_threshold=0.001)
         >>> result = run_pyhmmer_hmmsearch(inputs, config)
         >>> print(f"Found {result.num_sequence_hits} sequence hits")
         >>>
@@ -146,9 +144,7 @@ def run_pyhmmer_hmmsearch(inputs: PyHmmsearchInput, config: PyHmmsearchConfig | 
     )
 
     # Convert results to typed hit models
-    sequence_hits, domain_hits = _build_hit_models(
-        output_data["sequence_hits"], output_data["domain_hits"]
-    )
+    sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyHmmsearchOutput(
         metadata={

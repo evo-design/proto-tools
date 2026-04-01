@@ -16,10 +16,7 @@ _MAX_FIELD_DESCRIPTION_LENGTH = 100
 
 def _list_tool_inputs_and_outputs():
     """List of all tool inputs and outputs."""
-    return [
-        (tool.input_model, tool.output_model)
-        for tool in ToolRegistry.list_all()
-    ]
+    return [(tool.input_model, tool.output_model) for tool in ToolRegistry.list_all()]
 
 
 def _list_tool_input_models():
@@ -28,6 +25,7 @@ def _list_tool_input_models():
 
 
 # ── InputField consistency ─────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("tool_input", _list_tool_input_models())
 def test_tool_input_uses_input_field(tool_input):
@@ -41,26 +39,21 @@ def test_tool_input_uses_input_field(tool_input):
 
 # ── Input and output consistency ────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("tool_input, tool_output", _list_tool_inputs_and_outputs())
 def test_tool_input_and_output_consistency(tool_input, tool_output):
     """Test if tool inputs and outputs are defined consistently."""
     # Ensure tool input inherits from BaseToolInput
-    assert issubclass(
-        tool_input, BaseToolInput
-    ), f"Tool input {tool_input} is not a subclass of BaseToolInput"
+    assert issubclass(tool_input, BaseToolInput), f"Tool input {tool_input} is not a subclass of BaseToolInput"
     # Ensure tool output inherits from BaseToolOutput
-    assert issubclass(
-        tool_output, BaseToolOutput
-    ), f"Tool output {tool_output} is not a subclass of BaseToolOutput"
+    assert issubclass(tool_output, BaseToolOutput), f"Tool output {tool_output} is not a subclass of BaseToolOutput"
 
     # Ensure docstring exists and is not empty for both tool input and output
     input_docstring = tool_input.__doc__
     assert input_docstring is not None, f"Tool input {tool_input.__name__} is missing docstring. "
     assert len(input_docstring) > 0, f"Tool input {tool_input.__name__} docstring is empty. "
     output_docstring = tool_output.__doc__
-    assert (
-        output_docstring is not None
-    ), f"Tool output {tool_output.__name__} is missing docstring. "
+    assert output_docstring is not None, f"Tool output {tool_output.__name__} is missing docstring. "
     assert len(output_docstring) > 0, f"Tool output {tool_output.__name__} docstring is empty. "
 
     # Iterate through input fields and ensure they are defined consistently
@@ -108,5 +101,3 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
         f"Missing implementations for abstract methods: "
         f"{sorted(tool_output.__abstractmethods__)}"
     )
-
-

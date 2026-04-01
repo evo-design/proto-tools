@@ -2,6 +2,7 @@
 
 ESM-IF1/ProteinDPO sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -63,9 +64,7 @@ class ESMIF1Sequences(DesignedSequences):
             under the model.
     """
 
-    log_likelihoods: list[float] = Field(
-        description="Average log likelihood of each designed sequence under the model"
-    )
+    log_likelihoods: list[float] = Field(description="Average log likelihood of each designed sequence under the model")
 
 
 # ============================================================================
@@ -77,10 +76,7 @@ def example_input() -> Any:
         inputs=[
             InverseFoldingStructureInput(
                 structure=str(  # type: ignore[arg-type]
-                    Path(__file__).parents[4]
-                    / "tests"
-                    / "dummy_data"
-                    / "test_structure_similarity.pdb"
+                    Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"
                 ),
             )
         ]
@@ -122,10 +118,7 @@ def run_esm_if1_sample(
         ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
     """
     if config.excluded_amino_acids:  # type: ignore[union-attr]
-        raise ValueError(
-            "ESM-IF1 does not support excluded_amino_acids. "
-            "This feature may be added in a future update."
-        )
+        raise ValueError("ESM-IF1 does not support excluded_amino_acids. This feature may be added in a future update.")
 
     designed_sequences = []
 

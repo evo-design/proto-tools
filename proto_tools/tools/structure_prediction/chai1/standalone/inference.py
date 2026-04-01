@@ -156,11 +156,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             fasta_file=Path(input_dict["fasta_file"]),
             output_dir=Path(input_dict["output_dir"]),
             use_esm_embeddings=input_dict.get("use_esm_embeddings", True),
-            msa_directory=(
-                Path(input_dict["msa_directory"])
-                if input_dict.get("msa_directory")
-                else None
-            ),
+            msa_directory=(Path(input_dict["msa_directory"]) if input_dict.get("msa_directory") else None),
             num_trunk_recycles=input_dict.get("num_trunk_recycles", 3),
             num_diffn_timesteps=input_dict.get("num_diffn_timesteps", 200),
             num_diffn_samples=input_dict.get("num_diffn_samples", 1),
@@ -170,7 +166,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

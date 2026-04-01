@@ -1,4 +1,5 @@
 """In-process mode for Evo2: loads the model directly into the current Python process."""
+
 from proto_tools.tools.causal_models.evo2._in_process_mode.evo2_cache import clear_evo2_cache, get_cached_evo2_model
 from proto_tools.tools.causal_models.evo2._in_process_mode.evo2_sample import (
     Evo2SampleConfig,

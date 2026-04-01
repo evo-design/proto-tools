@@ -29,7 +29,9 @@ class ColabFoldSearchWrapper:
         self.mmseqs_executable = None
 
     def _detect_database_name(
-        self, msa_db_dir: Path, verbose: bool = False  # noqa: ARG002 — required by tool interface
+        self,
+        msa_db_dir: Path,
+        verbose: bool = False,  # noqa: ARG002 — required by tool interface
     ) -> str | None:
         """Auto-detect the database name by scanning for .dbtype files.
 
@@ -52,10 +54,7 @@ class ColabFoldSearchWrapper:
                 main_dbs = [
                     f
                     for f in all_dbtype
-                    if not any(
-                        f.stem.endswith(suffix)
-                        for suffix in ["_seq", "_aln", "_h", "_seq_h"]
-                    )
+                    if not any(f.stem.endswith(suffix) for suffix in ["_seq", "_aln", "_h", "_seq_h"])
                 ]
                 if main_dbs:
                     dbtype_files = main_dbs
@@ -159,9 +158,7 @@ class ColabFoldSearchWrapper:
         )
 
         if use_gpu:
-            raise NotImplementedError(
-                "GPU acceleration is not currently supported for colabfold_search"
-            )
+            raise NotImplementedError("GPU acceleration is not currently supported for colabfold_search")
 
         logger.debug(f"Running command: {' '.join(cmd)}")  # type: ignore[arg-type]
 
@@ -277,9 +274,7 @@ class ColabFoldSearchWrapper:
 
         self._loaded = True
 
-        logger.debug(
-            f"ColabFold search initialized. Using executable: {self.colabfold_search_executable}"
-        )
+        logger.debug(f"ColabFold search initialized. Using executable: {self.colabfold_search_executable}")
         logger.debug(f"MMseqs2 executable: {self.mmseqs_executable}")
 
 
@@ -302,9 +297,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # Standalone script entry point for venv execution
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            "Usage: python msa_search.py <input_json_path> <output_json_path>"
-        )
+        raise ValueError("Usage: python msa_search.py <input_json_path> <output_json_path>")
 
     # Get the input and output json paths
     input_json_path = sys.argv[1]

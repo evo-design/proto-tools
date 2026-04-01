@@ -2,6 +2,7 @@
 
 BioEmu conformational ensemble sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,9 +56,7 @@ class BioEmuInput(StructurePredictionInput):
 
     @field_validator("complexes", mode="after")
     @classmethod
-    def validate_complexes(
-        cls, complexes: list[StructurePredictionComplex]
-    ) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
         """Validate BioEmu input constraints for each complex."""
         for comp_idx, comp in enumerate(complexes):
             if comp.num_chains() != 1:
@@ -93,9 +92,7 @@ class BioEmuOutput(BaseToolOutput):
             input complex.
     """
 
-    ensembles: list[StructureEnsemble] = Field(
-        description="Generated protein conformational ensembles"
-    )
+    ensembles: list[StructureEnsemble] = Field(description="Generated protein conformational ensembles")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -116,9 +113,7 @@ class BioEmuOutput(BaseToolOutput):
                 ensemble_dir = path / f"ensemble_{ensemble_idx}"
                 ensemble_dir.mkdir(exist_ok=True)
                 for frame_idx, structure in enumerate(ensemble.structures):
-                    (ensemble_dir / f"conformation_{frame_idx}.pdb").write_text(
-                        structure.structure_pdb
-                    )
+                    (ensemble_dir / f"conformation_{frame_idx}.pdb").write_text(structure.structure_pdb)
             return
 
         if file_format == "json":
@@ -222,9 +217,7 @@ class BioEmuConfig(StructurePredictionConfig):
         if self.colabfold_search_config is None:
             self.colabfold_search_config = ColabfoldSearchConfig()
         self.colabfold_search_config.verbose = self.verbose
-        return _preprocess_structure_prediction_msas(
-            inputs, self.colabfold_search_config, self.verbose
-        )
+        return _preprocess_structure_prediction_msas(inputs, self.colabfold_search_config, self.verbose)
 
 
 # ============================================================================
@@ -261,10 +254,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
             if msa is not None:
                 msa_a3m_contents[seq] = msa.to_a3m_string()
                 if config.verbose:  # type: ignore[union-attr]
-                    logger.info(
-                        f"Loaded MSA for sequence (length {len(seq)}): "
-                        f"{len(msa)} homologs"
-                    )
+                    logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa)} homologs")
 
     output = ToolInstance.dispatch(
         "bioemu",
@@ -290,9 +280,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
         sequence = comp.chains[0].sequence
         result = raw_results[comp_idx]
 
-        structures = _pdb_frames_to_structures(
-            pdb_frames=result["pdb_frames"], comp_idx=comp_idx
-        )
+        structures = _pdb_frames_to_structures(pdb_frames=result["pdb_frames"], comp_idx=comp_idx)
         ensemble = StructureEnsemble(structures=structures, sequence=sequence)
         ensembles.append(ensemble)
         total_structures += len(structures)

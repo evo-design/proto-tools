@@ -43,11 +43,12 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
     """
     try:
         import torch
+
         # Try to load the checkpoint with PyTorch's ZIP reader (PytorchStreamReader)
         # This catches "failed finding central directory" and other ZIP corruption
         # that zipfile.testzip() misses
         logger.info(f"Validating checkpoint integrity (may take 10-30s): {checkpoint_path.name}")
-        torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+        torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         logger.info(f"Checkpoint validation passed: {checkpoint_path.name}")
         return True
     except (RuntimeError, zipfile.BadZipFile, OSError, EOFError) as e:
@@ -74,7 +75,7 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
     needs_validation = True
     if marker_path.exists():
         try:
-            marker_data = marker_path.read_text().strip().split(',')
+            marker_data = marker_path.read_text().strip().split(",")
             if len(marker_data) == 2:
                 cached_size = int(marker_data[0])
                 cached_mtime = float(marker_data[1])
@@ -171,10 +172,7 @@ class ProtenixModel:
         # PROTENIX_ROOT_DIR is always set by dispatch() via resolve_weights_dir()
         protenix_root = os.environ.get("PROTENIX_ROOT_DIR")
         if not protenix_root:
-            raise RuntimeError(
-                "PROTENIX_ROOT_DIR not set. "
-                "Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
-            )
+            raise RuntimeError("PROTENIX_ROOT_DIR not set. Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage.")
         checkpoint_dir = Path(protenix_root) / "checkpoint"
         cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
@@ -186,14 +184,22 @@ class ProtenixModel:
         cmd = [
             self.protenix_executable,
             "pred",
-            "-i", input_json_path,
-            "-o", output_dir,
-            "-n", model_name,
-            "-s", seeds,
-            "-e", str(num_diffusion_samples),  # --sample
-            "-p", str(num_diffusion_steps),    # --step
-            "-c", str(num_pairformer_cycles),  # --cycle
-            "-d", "bf16",                       # --dtype
+            "-i",
+            input_json_path,
+            "-o",
+            output_dir,
+            "-n",
+            model_name,
+            "-s",
+            seeds,
+            "-e",
+            str(num_diffusion_samples),  # --sample
+            "-p",
+            str(num_diffusion_steps),  # --step
+            "-c",
+            str(num_pairformer_cycles),  # --cycle
+            "-d",
+            "bf16",  # --dtype
         ]
 
         kernel = "cuequivariance" if _cuequivariance_available() else "torch"
@@ -232,9 +238,7 @@ class ProtenixModel:
             err_files = list(err_dir.iterdir())
             if err_files:
                 messages = [f"{ef.name}: {ef.read_text()[:500]}" for ef in err_files]
-                raise RuntimeError(
-                    "Protenix reported errors:\n" + "\n".join(messages)
-                )
+                raise RuntimeError("Protenix reported errors:\n" + "\n".join(messages))
 
         # Read job names from input JSON to preserve ordering
         with open(input_json_path) as f:
@@ -242,14 +246,9 @@ class ProtenixModel:
 
         job_names = [job["name"] for job in input_data]
 
-        return [
-            self._extract_job_output(output_dir, job_name, seeds)
-            for job_name in job_names
-        ]
+        return [self._extract_job_output(output_dir, job_name, seeds) for job_name in job_names]
 
-    def _extract_job_output(
-        self, output_dir: str, job_name: str, seeds: str
-    ) -> dict[str, Any]:
+    def _extract_job_output(self, output_dir: str, job_name: str, seeds: str) -> dict[str, Any]:
         """Extract structure and metrics for a single job from Protenix output.
 
         Protenix output structure:
@@ -306,9 +305,7 @@ class ProtenixModel:
                 best_cif = cif_file
 
         if best_cif is None:
-            raise FileNotFoundError(
-                f"No structure output found for job '{job_name}' in {predictions_dir}"
-            )
+            raise FileNotFoundError(f"No structure output found for job '{job_name}' in {predictions_dir}")
 
         return {
             "structure_cif_output": best_cif.read_text(),
@@ -333,9 +330,7 @@ class ProtenixModel:
             )
 
         self._loaded = True  # type: ignore[unreachable]
-        logger.debug(
-            f"Protenix initialized. Using executable: {self.protenix_executable}"
-        )
+        logger.debug(f"Protenix initialized. Using executable: {self.protenix_executable}")
 
 
 # ============================================================================
@@ -378,7 +373,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 MMseqs2 genome-to-genome nucleotide search tool.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -50,16 +51,12 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             If not provided, sequences are assigned sequential IDs (target_0, target_1, ...).
     """
 
-    query_genomes: list[str] = InputField(
-        description="List of query genome sequences (nucleotide)"
-    )
+    query_genomes: list[str] = InputField(description="List of query genome sequences (nucleotide)")
     query_ids: list[str] | None = InputField(
         default=None,
         description="Optional query identifiers (defaults to seq_0, seq_1, ...)",
     )
-    target_genomes: list[str] = InputField(
-        description="List of target genome sequences to search against"
-    )
+    target_genomes: list[str] = InputField(description="List of target genome sequences to search against")
     target_ids: list[str] | None = InputField(
         default=None,
         description="Optional target identifiers (defaults to target_0, target_1, ...)",
@@ -100,9 +97,8 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         results (list[MmseqsSequenceSearchResult]): List of search results, one per
             input query genome. The order matches the input query genomes order.
     """
-    results: list[MmseqsSequenceSearchResult] = Field(
-        description="List of search results, one per input query genome"
-    )
+
+    results: list[MmseqsSequenceSearchResult] = Field(description="List of search results, one per input query genome")
 
     def __len__(self) -> int:
         """Get the number of results."""
@@ -146,7 +142,11 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
             for hit in result.hits
         ]
 
-        df = pd.DataFrame(data, columns=["query", "target", "pident", "evalue"]) if data else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
+        df = (
+            pd.DataFrame(data, columns=["query", "target", "pident", "evalue"])
+            if data
+            else pd.DataFrame(columns=["query", "target", "pident", "evalue"])
+        )
 
         if file_format in ["m8", "csv"]:
             sep = "\t" if file_format == "m8" else ","
@@ -156,6 +156,7 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
 
         elif file_format == "json":
             import json
+
             json_data = [r.model_dump() for r in self.results]
             with open(path, "w") as f:
                 json.dump(json_data, f, indent=2)
@@ -172,6 +173,7 @@ class MmseqsSearchGenomesConfig(BaseConfig):
         threads (int): Number of CPU threads for parallel processing.
         sensitivity (float): Search sensitivity (1.0=fast, 7.5=very sensitive).
     """
+
     search_type: int = ConfigField(
         title="Search Type",
         default=SEARCH_TYPE_NUCLEOTIDE,
@@ -219,7 +221,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_mmseqs_search_genomes(
-    inputs: MmseqsSearchGenomesInput, config: MmseqsSearchGenomesConfig | None = None,
+    inputs: MmseqsSearchGenomesInput,
+    config: MmseqsSearchGenomesConfig | None = None,
     instance: Any = None,
 ) -> MmseqsSearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
@@ -243,7 +246,7 @@ def run_mmseqs_search_genomes(
     Examples:
         >>> inputs = MmseqsSearchGenomesInput(
         ...     query_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
-        ...     target_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."]
+        ...     target_genomes=["ATGGTGCTGTCTCCT...", "ATGAAGCTGCTGGTG..."],
         ... )
         >>> config = MmseqsSearchGenomesConfig()
         >>> result = run_mmseqs_search_genomes(inputs, config)

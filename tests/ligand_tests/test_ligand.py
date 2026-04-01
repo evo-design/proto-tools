@@ -88,11 +88,11 @@ def test_to_pdb_single_fragment():
     assert "HETATM" in pdb_string or "ATOM" in pdb_string
     assert "END" in pdb_string
 
-    lines = pdb_string.split('\n')
-    atom_lines = [line for line in lines if line.startswith(('HETATM', 'ATOM'))]
+    lines = pdb_string.split("\n")
+    atom_lines = [line for line in lines if line.startswith(("HETATM", "ATOM"))]
     assert len(atom_lines) > 0
     # Chain ID is at position 21 in PDB format
-    assert all(line[21] == 'A' for line in atom_lines)
+    assert all(line[21] == "A" for line in atom_lines)
 
 
 @pytest.mark.integration
@@ -105,18 +105,18 @@ def test_to_pdb_multiple_fragments():
     assert len(pdb_string) > 0
     assert is_valid_structure(pdb_string)
 
-    lines = pdb_string.split('\n')
-    atom_lines = [line for line in lines if line.startswith(('HETATM', 'ATOM'))]
+    lines = pdb_string.split("\n")
+    atom_lines = [line for line in lines if line.startswith(("HETATM", "ATOM"))]
     chain_ids = {line[21] for line in atom_lines}
     assert len(chain_ids) == 2
-    assert 'A' in chain_ids
-    assert 'B' in chain_ids
+    assert "A" in chain_ids
+    assert "B" in chain_ids
 
-    ter_lines = [line for line in lines if line.startswith('TER')]
+    ter_lines = [line for line in lines if line.startswith("TER")]
     assert len(ter_lines) == 2
 
-    chain_a_atoms = [line for line in atom_lines if line[21] == 'A']
-    chain_b_atoms = [line for line in atom_lines if line[21] == 'B']
+    chain_a_atoms = [line for line in atom_lines if line[21] == "A"]
+    chain_b_atoms = [line for line in atom_lines if line[21] == "B"]
 
     # X coordinates at columns 31-38 in PDB format
     chain_a_x_coords = [float(line[30:38]) for line in chain_a_atoms]
@@ -158,8 +158,8 @@ def test_to_pdb_spacing_parameter():
     assert is_valid_structure(pdb_large_spacing)
 
     def get_chain_b_min_x(pdb_string):
-        lines = pdb_string.split('\n')
-        chain_b_atoms = [line for line in lines if (line.startswith(('HETATM', 'ATOM'))) and line[21] == 'B']
+        lines = pdb_string.split("\n")
+        chain_b_atoms = [line for line in lines if (line.startswith(("HETATM", "ATOM"))) and line[21] == "B"]
         return min(float(line[30:38]) for line in chain_b_atoms)
 
     assert get_chain_b_min_x(pdb_large_spacing) > get_chain_b_min_x(pdb_small_spacing)

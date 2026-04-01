@@ -29,6 +29,7 @@ from proto_tools.utils.tool_instance import (
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _make_fake_instance(
     tool_name: str = "esm2",
     device: str = "cpu",
@@ -74,6 +75,7 @@ def _make_fake_instance(
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def clear_instance_cache():
     """Ensure the singleton cache and build-failure set are clean for each test."""
@@ -92,6 +94,7 @@ def clear_instance_cache():
 
 
 # ── Singleton factory tests ─────────────────────────────────────────────────
+
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_get_returns_same_instance(mock_init: MagicMock):
@@ -170,6 +173,7 @@ def test_clear_all():
 
 # ── Tool name validation tests ──────────────────────────────────────────────
 
+
 def test_valid_tool_name():
     """Known tool names should validate."""
     assert ToolInstance._validate_tool_name("esm2") == "esm2"
@@ -183,6 +187,7 @@ def test_invalid_tool_name():
 
 
 # ── Script discovery tests ──────────────────────────────────────────────────
+
 
 def test_find_setup_script():
     """Should find setup.sh for known tools."""
@@ -213,6 +218,7 @@ def test_find_script_nonexistent():
 
 # ── run() method tests ──────────────────────────────────────────────────────
 
+
 @patch.object(ToolInstance, "_run_persistent")
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_run_uses_persistent(mock_init: MagicMock, mock_persistent: MagicMock):
@@ -230,11 +236,10 @@ def test_run_uses_persistent(mock_init: MagicMock, mock_persistent: MagicMock):
 
 # ── dispatch() tests ────────────────────────────────────────────────────────
 
+
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_runs_oneshot_when_no_cache(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_dispatch_runs_oneshot_when_no_cache(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() should use _oneshot when no cached instance exists."""
     mock_oneshot.return_value = {"result": "ok"}
     result = ToolInstance.dispatch("esm2", {"op": "score", "device": "cuda"})
@@ -267,9 +272,7 @@ def test_dispatch_uses_cached_instance(mock_init: MagicMock):
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_respects_instance_string_key(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_dispatch_respects_instance_string_key(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() should look up by string instance key when provided."""
     mock_oneshot.return_value = {"result": "oneshot"}
 
@@ -320,15 +323,14 @@ def test_dispatch_passes_script_path(mock_init: MagicMock):
 
 # ── _oneshot() tests ────────────────────────────────────────────────────────
 
+
 @patch.object(ToolInstance, "_run_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_oneshot_does_not_cache(mock_init: MagicMock, mock_run: MagicMock):
     """_oneshot() should not leave anything in _instances."""
     mock_run.return_value = {"result": "ok"}
     # Need script_path set for _oneshot to work
-    with patch.object(
-        ToolInstance, "script_path", Path("/fake/inference.py"), create=True
-    ):
+    with patch.object(ToolInstance, "script_path", Path("/fake/inference.py"), create=True):
         ToolInstance._oneshot("esm2", {"op": "score"})
     assert len(_instances) == 0
 
@@ -338,9 +340,7 @@ def test_oneshot_does_not_cache(mock_init: MagicMock, mock_run: MagicMock):
 def test_oneshot_calls_run_oneshot(mock_init: MagicMock, mock_run: MagicMock):
     """_oneshot() should call _run_oneshot, not _run_persistent."""
     mock_run.return_value = {"result": "ephemeral"}
-    with patch.object(
-        ToolInstance, "script_path", Path("/fake/inference.py"), create=True
-    ):
+    with patch.object(ToolInstance, "script_path", Path("/fake/inference.py"), create=True):
         result = ToolInstance._oneshot("esm2", {"op": "score"})
     assert result == {"result": "ephemeral"}
     mock_run.assert_called_once()
@@ -366,6 +366,7 @@ def test_oneshot_injects_tool_env_path():
 
 
 # ── persist_tool() tests ───────────────────────────────────────────────────
+
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persistent_creates_cached_instance(mock_init: MagicMock):
@@ -456,9 +457,7 @@ def test_persistent_anonymous_second_is_different_object(mock_init: MagicMock):
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_persist_tool_does_not_cache_other_tools(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_persist_tool_does_not_cache_other_tools(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() for a different tool should use one-shot, not auto-cache."""
     mock_oneshot.return_value = {"result": "oneshot"}
 
@@ -476,6 +475,7 @@ def test_persist_tool_does_not_cache_other_tools(
 
 
 # ── scope() tests ──────────────────────────────────────────────────────────
+
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_scope_isolates_cache(mock_init: MagicMock):
@@ -564,6 +564,7 @@ def test_scope_does_not_affect_other_threads(mock_init: MagicMock):
 
 
 # ── persist() tests (auto-cache everything mode) ───────────────────────────
+
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persist_auto_caches_on_dispatch(mock_init: MagicMock):
@@ -657,9 +658,7 @@ def test_persist_nestable(mock_init: MagicMock):
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_uses_oneshot_outside_persist(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_dispatch_uses_oneshot_outside_persist(mock_init: MagicMock, mock_oneshot: MagicMock):
     """Without persist(), dispatch() should still use one-shot."""
     mock_oneshot.return_value = {"result": "ok"}
     ToolInstance.dispatch("esm2", {"op": "score"})
@@ -741,6 +740,7 @@ def test_persist_with_nested_persist_tool(mock_init: MagicMock):
 
 # ── shutdown_instance() tests ──────────────────────────────────────────────
 
+
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_shutdown_instance_removes_instance(mock_init: MagicMock):
     """shutdown_instance() should remove the instance from the cache."""
@@ -799,6 +799,7 @@ def test_shutdown_instance_then_get_creates_fresh(mock_init: MagicMock):
 
 # ── Device restart tests ───────────────────────────────────────────────────
 
+
 @patch.object(ToolInstance, "_oneshot")
 def test_dispatch_forwards_input_dict_to_oneshot(mock_oneshot: MagicMock):
     """dispatch() should forward input_dict (with device) to _oneshot."""
@@ -829,6 +830,7 @@ def test_dispatch_without_device_in_input_dict(mock_oneshot: MagicMock):
 
 # ── Reload-on-change tests ─────────────────────────────────────────────────
 
+
 def test_persistent_worker_restarts_on_reload_param_change():
     """Changing a tracked reload param should restart the worker."""
     inst = _make_fake_instance(device="cpu")
@@ -840,9 +842,7 @@ def test_persistent_worker_restarts_on_reload_param_change():
     mock_worker.script_path = inst.script_path
     inst._worker = mock_worker
 
-    with patch(
-        "proto_tools.utils.tool_instance.PersistentWorker"
-    ) as MockPW:
+    with patch("proto_tools.utils.tool_instance.PersistentWorker") as MockPW:
         new_worker = MagicMock()
         new_worker.send.return_value = {"result": "ok"}
         MockPW.return_value = new_worker
@@ -888,7 +888,9 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
 
     class TestConfig(BaseConfig):
         model_checkpoint: str = ConfigField(
-            default="default", description="model", reload_on_change=True,
+            default="default",
+            description="model",
+            reload_on_change=True,
         )
 
     inst = ToolInstance.get("esm2")
@@ -910,6 +912,7 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
 
 
 # ── BaseConfig.reload_fields() tests ──────────────────────────────────────
+
 
 def test_base_config_reload_fields_empty():
     """BaseConfig.reload_fields() should return empty set."""
@@ -961,14 +964,18 @@ def test_reload_fields_excludes_non_reload():
 
 # ── Timeout tests ──────────────────────────────────────────────────────────
 
+
 def test_oneshot_timeout_raises():
     """_run_oneshot() should convert subprocess.TimeoutExpired to TimeoutError."""
     inst = _make_fake_instance()
 
-    with patch(
-        "proto_tools.utils.tool_instance.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
-    ), pytest.raises(TimeoutError, match="timed out after 10s"):
+    with (
+        patch(
+            "proto_tools.utils.tool_instance.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
+        ),
+        pytest.raises(TimeoutError, match="timed out after 10s"),
+    ):
         inst._run_oneshot(
             {"op": "score"},
             script_path=Path("/fake/inference.py"),
@@ -992,9 +999,7 @@ def test_persistent_timeout_raises():
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_reads_timeout_from_config(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_dispatch_reads_timeout_from_config(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() should use timeout from config object."""
     from proto_tools.utils.base_config import BaseConfig
 
@@ -1012,9 +1017,7 @@ def test_dispatch_reads_timeout_from_config(
 
 @patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_defaults_timeout_to_600(
-    mock_init: MagicMock, mock_oneshot: MagicMock
-):
+def test_dispatch_defaults_timeout_to_600(mock_init: MagicMock, mock_oneshot: MagicMock):
     """dispatch() should default timeout to 600 when not in input_dict."""
     mock_oneshot.return_value = {"result": "ok"}
     ToolInstance.dispatch("esm2", {"op": "score"})
@@ -1055,6 +1058,7 @@ def test_send_timeout_kills_worker():
 
 
 # ── Warmup timeout tests ──────────────────────────────────────────────────
+
 
 def test_first_config_gets_warmup_timeout():
     """A never-seen config combination should get extended warmup timeout."""
@@ -1161,9 +1165,7 @@ def test_persistent_warmup_on_config_change():
     mock_worker.script_path = inst.script_path
     inst._worker = mock_worker
 
-    with patch(
-        "proto_tools.utils.tool_instance.PersistentWorker"
-    ) as MockPW:
+    with patch("proto_tools.utils.tool_instance.PersistentWorker") as MockPW:
         new_worker = MagicMock()
         new_worker.send.return_value = {"result": "ok"}
         MockPW.return_value = new_worker
@@ -1179,6 +1181,7 @@ def test_persistent_warmup_on_config_change():
 
 
 # ── Thread safety tests ───────────────────────────────────────────────────
+
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_concurrent_get_returns_same_instance(mock_init: MagicMock):
@@ -1232,6 +1235,7 @@ def test_concurrent_dispatch_with_cached_instance(mock_init: MagicMock):
 
 # ── _create_env() edge case tests ─────────────────────────────────────────
 
+
 def test_failure_writes_status_and_raises(tmp_path: Path):
     """_create_env() should write FAILED status and raise on setup.sh failure."""
     inst = ToolInstance.__new__(ToolInstance)
@@ -1250,15 +1254,22 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
         """Simulate 'python -m venv' creating the directory."""
         inst.env_path.mkdir(parents=True, exist_ok=True)
 
-    with patch.object(
-        inst, "_ensure_micromamba", return_value=Path("/fake/micromamba"),
-    ), patch(
-        "proto_tools.utils.tool_instance.subprocess.run",
-        side_effect=_create_env_dir,
-    ), patch(
-        "proto_tools.utils.tool_instance.subprocess.Popen",
-        return_value=mock_proc,
-    ), pytest.raises(RuntimeError, match="may not be compatible"):
+    with (
+        patch.object(
+            inst,
+            "_ensure_micromamba",
+            return_value=Path("/fake/micromamba"),
+        ),
+        patch(
+            "proto_tools.utils.tool_instance.subprocess.run",
+            side_effect=_create_env_dir,
+        ),
+        patch(
+            "proto_tools.utils.tool_instance.subprocess.Popen",
+            return_value=mock_proc,
+        ),
+        pytest.raises(RuntimeError, match="may not be compatible"),
+    ):
         inst._create_env()
 
     status = (inst.env_path / "STATUS.txt").read_text()
@@ -1275,16 +1286,14 @@ def test_build_failure_prevents_retry_in_process(tmp_path: Path):
     inst.setup_script = tmp_path / "setup.sh"
     inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
 
-    with patch.object(
-        ToolInstance, "_is_env_ok", return_value=False
-    ), patch.object(
-        ToolInstance,
-        "_create_env",
-        side_effect=RuntimeError(
-            "'fake_tool' may not be compatible with your system. "
-            "setup.sh failed (exit 1)."
-        ),
-    ) as mock_create:
+    with (
+        patch.object(ToolInstance, "_is_env_ok", return_value=False),
+        patch.object(
+            ToolInstance,
+            "_create_env",
+            side_effect=RuntimeError("'fake_tool' may not be compatible with your system. setup.sh failed (exit 1)."),
+        ) as mock_create,
+    ):
         with pytest.raises(RuntimeError, match=r"setup\.sh failed"):
             inst._ensure_env()
 
@@ -1306,9 +1315,7 @@ def test_stale_failure_warns_and_retries(tmp_path: Path, caplog):
     inst.setup_script = tmp_path / "setup.sh"
     inst.setup_script.write_text("#!/bin/bash\necho hi\n")
 
-    setup_hash = hashlib.sha256(
-        inst.setup_script.read_bytes()
-    ).hexdigest()[:16]
+    setup_hash = hashlib.sha256(inst.setup_script.read_bytes()).hexdigest()[:16]
     status_file = inst.env_path / "STATUS.txt"
     status_file.write_text(
         f"FAILED\n\n"
@@ -1319,11 +1326,11 @@ def test_stale_failure_warns_and_retries(tmp_path: Path, caplog):
         f"STDERR:\npip install exploded\n"
     )
 
-    with patch.object(
-        ToolInstance, "_is_env_ok", return_value=False
-    ), patch.object(
-        ToolInstance, "_create_env"
-    ) as mock_create, caplog.at_level(logging.WARNING):
+    with (
+        patch.object(ToolInstance, "_is_env_ok", return_value=False),
+        patch.object(ToolInstance, "_create_env") as mock_create,
+        caplog.at_level(logging.WARNING),
+    ):
         inst._ensure_env()
 
     mock_create.assert_called_once()
@@ -1350,11 +1357,11 @@ def test_changed_setup_hash_logs_info_and_retries(tmp_path: Path, caplog):
         "STDERR:\n\n"
     )
 
-    with patch.object(
-        ToolInstance, "_is_env_ok", return_value=False
-    ), patch.object(
-        ToolInstance, "_create_env"
-    ) as mock_create, caplog.at_level(logging.INFO):
+    with (
+        patch.object(ToolInstance, "_is_env_ok", return_value=False),
+        patch.object(ToolInstance, "_create_env") as mock_create,
+        caplog.at_level(logging.INFO),
+    ):
         inst._ensure_env()
 
     mock_create.assert_called_once()
@@ -1371,13 +1378,9 @@ def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
     inst.setup_script.write_text("#!/bin/bash\necho updated\n")
 
     status_file = inst.env_path / "STATUS.txt"
-    status_file.write_text(
-        "SUCCESS\nSetup hash: 0000000000000000\n"
-    )
+    status_file.write_text("SUCCESS\nSetup hash: 0000000000000000\n")
 
-    with patch.object(
-        ToolInstance, "_create_env"
-    ) as mock_create, caplog.at_level(logging.INFO):
+    with patch.object(ToolInstance, "_create_env") as mock_create, caplog.at_level(logging.INFO):
         inst._ensure_env()
 
     mock_create.assert_called_once()
@@ -1393,6 +1396,7 @@ def test_build_failures_cleared_between_tests():
 
 
 # ── Setup hash tests ──────────────────────────────────────────────────────
+
 
 def test_hash_includes_requirements_txt(tmp_path: Path):
     """_setup_hash() should incorporate requirements.txt when present."""
@@ -1472,6 +1476,7 @@ def test_hash_changes_when_env_vars_change(tmp_path: Path):
 
 # ── _is_env_ok() tests ───────────────────────────────────────────────────
 
+
 def test_returns_false_when_hash_mismatches(tmp_path: Path):
     """_is_env_ok() should return False when setup files changed."""
     inst = ToolInstance.__new__(ToolInstance)
@@ -1524,10 +1529,12 @@ def test_returns_true_when_hash_matches(tmp_path: Path):
 
 # ── _run_oneshot() output tests ──────────────────────────────────────────
 
+
 def test_run_oneshot_reads_output(tmp_path: Path):
     """_run_oneshot() should return the parsed output JSON."""
     script = tmp_path / "echo_script.py"
-    script.write_text(textwrap.dedent("""\
+    script.write_text(
+        textwrap.dedent("""\
         import json, sys
         input_path, output_path = sys.argv[1], sys.argv[2]
         with open(input_path) as f:
@@ -1535,7 +1542,8 @@ def test_run_oneshot_reads_output(tmp_path: Path):
         result = {"echo": data}
         with open(output_path, "w") as f:
             json.dump(result, f)
-    """))
+    """)
+    )
 
     inst = ToolInstance.__new__(ToolInstance)
     inst.tool_name = "test"
@@ -1555,6 +1563,7 @@ def test_run_oneshot_reads_output(tmp_path: Path):
 
 
 # ── env_vars.txt loading tests ─────────────────────────────────────────────
+
 
 def test_init_loads_env_vars():
     """ToolInstance should parse env_vars.txt from the standalone dir."""

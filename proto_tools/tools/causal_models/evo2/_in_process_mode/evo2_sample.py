@@ -2,6 +2,7 @@
 
 Evo2 sampling tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,6 +33,7 @@ EVO2_MODEL_CHECKPOINTS = Literal[
     "evo2_7b_262k",
     "evo2_7b_microviridae",
 ]
+
 
 # ============================================================================
 # Data Models
@@ -64,6 +66,7 @@ class Evo2SampleInput(BaseToolInput):
         if not v:
             raise ValueError("prompts must not be empty")
         return v
+
 
 class Evo2SampleOutput(BaseToolOutput):
     """Output from Evo2 DNA sequence sampling.
@@ -102,6 +105,7 @@ class Evo2SampleOutput(BaseToolOutput):
         Sequences use standard DNA nucleotide characters (A, T, C, G) and may
         include Evo2's special tokens depending on the prompt format.
     """
+
     sequences: list[str] = Field(description="Generated DNA sequences")
     logits: list[Any] | None = Field(
         default=None,
@@ -136,13 +140,12 @@ class Evo2SampleOutput(BaseToolOutput):
 
             # Export minimal sequence data.
             # Logits/KV caches too large for standard export usually.
-            data = {
-                "sequences": self.sequences
-            }
+            data = {"sequences": self.sequences}
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
+
 
 # Config:
 class Evo2SampleConfig(BaseConfig):
@@ -238,6 +241,7 @@ class Evo2SampleConfig(BaseConfig):
         Evo2 is a large model. Smaller batch sizes and shorter sequences
         are recommended if memory is constrained.
     """
+
     # prompt params
     prepend_prompt: bool = ConfigField(
         title="Prepend Prompt",
@@ -357,7 +361,8 @@ class Evo2SampleConfig(BaseConfig):
     uses_gpu=True,
 )
 def run_evo2_sample(
-    inputs: Evo2SampleInput, config: Evo2SampleConfig | None = None,
+    inputs: Evo2SampleInput,
+    config: Evo2SampleConfig | None = None,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
@@ -385,11 +390,7 @@ def run_evo2_sample(
     Examples:
         >>> # Basic DNA sequence generation
         >>> inputs = Evo2SampleInput(prompts=["+~GA"])
-        >>> config = Evo2SampleConfig(
-        ...     num_tokens=1000,
-        ...     temperature=0.8,
-        ...     top_k=4
-        ... )
+        >>> config = Evo2SampleConfig(num_tokens=1000, temperature=0.8, top_k=4)
         >>> result = run_evo2_sample(inputs, config)
         >>> print(f"Generated: {result.sequences[0]}")
 
@@ -461,9 +462,7 @@ def run_evo2_sample(
 
     # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
     if config.prepend_prompt:  # type: ignore[union-attr]
-        result["sequences"] = [
-            prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)
-        ]
+        result["sequences"] = [prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)]
 
     return Evo2SampleOutput(
         metadata={

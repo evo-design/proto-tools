@@ -7,6 +7,7 @@ across persistent workers on different devices using cost-aware LPT scheduling,
 runs them concurrently via ThreadPoolExecutor, and reassembles results in
 original order.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Error types
 # ============================================================================
+
 
 class PartialFailureError(RuntimeError):
     """Some worker partitions failed; successful results are preserved.
@@ -51,6 +53,7 @@ class PartialFailureError(RuntimeError):
         self.succeeded = succeeded
         self.failed = failed
 
+
 # ============================================================================
 # ContextVars for pool state
 # ============================================================================
@@ -73,6 +76,7 @@ def is_pool_executing() -> bool:
 # Data classes
 # ============================================================================
 
+
 @dataclass
 class DeviceCapability:
     """Describes a device (or device group) available for scheduling.
@@ -93,6 +97,7 @@ class DeviceCapability:
             default to None. Reserved for future VRAM-aware scheduling
             (e.g., a 24 GB GPU cannot fold a 5000-residue protein).
     """
+
     device_id: str
     throughput_weight: float = 1.0
     max_item_cost: float | None = None
@@ -101,6 +106,7 @@ class DeviceCapability:
 @dataclass
 class WorkItem:
     """A single item to be scheduled, with its original position for reassembly."""
+
     original_index: int
     item: Any
     cost: float
@@ -109,6 +115,7 @@ class WorkItem:
 @dataclass
 class WorkerAssignment:
     """Items assigned to a specific device after scheduling."""
+
     device: DeviceCapability
     items: list[WorkItem] = field(default_factory=list)
     total_cost: float = 0.0
@@ -117,6 +124,7 @@ class WorkerAssignment:
 # ============================================================================
 # LPT Scheduling
 # ============================================================================
+
 
 def lpt_schedule(
     items: list[WorkItem],
@@ -151,8 +159,7 @@ def lpt_schedule(
     for work_item in sorted_items:
         # Filter devices that can handle this item
         eligible = [
-            a for a in assignments
-            if a.device.max_item_cost is None or work_item.cost <= a.device.max_item_cost
+            a for a in assignments if a.device.max_item_cost is None or work_item.cost <= a.device.max_item_cost
         ]
         if not eligible:
             # No device can handle this item; assign to least-loaded anyway
@@ -182,6 +189,7 @@ def _build_dispatch_stats(
 # ============================================================================
 # ToolPool
 # ============================================================================
+
 
 class ToolPool:
     """Parallel fan-out across devices for list-input tools.
@@ -239,8 +247,7 @@ class ToolPool:
             n = number_of_available_gpus()
             if n == 0:
                 raise RuntimeError(
-                    "ToolPool requires at least one GPU. "
-                    "No GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)."
+                    "ToolPool requires at least one GPU. No GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)."
                 )
             self._devices = [f"cuda:{i}" for i in range(n)]
 
@@ -308,8 +315,7 @@ class ToolPool:
         # Compute costs
         input_cls = type(inputs)
         work_items = [
-            WorkItem(original_index=i, item=item, cost=input_cls.item_cost(item))
-            for i, item in enumerate(items)
+            WorkItem(original_index=i, item=item, cost=input_cls.item_cost(item)) for i, item in enumerate(items)
         ]
 
         local_devices = list(self._devices)
@@ -319,14 +325,16 @@ class ToolPool:
         device_groups: list[str] = []
         if local_devices:
             for i in range(0, len(local_devices), dpi):
-                group = local_devices[i:i + dpi]
+                group = local_devices[i : i + dpi]
                 if len(group) == dpi:
                     device_groups.append(",".join(group))
             leftover = len(local_devices) - len(device_groups) * dpi
             if leftover > 0:
                 logger.warning(
                     "ToolPool: %d device(s) unused (devices_per_instance=%d, total=%d)",
-                    leftover, dpi, len(local_devices),
+                    leftover,
+                    dpi,
+                    len(local_devices),
                 )
             # If no complete groups possible, use all local devices as one group
             if local_devices and not device_groups:
@@ -336,9 +344,11 @@ class ToolPool:
         capabilities = [DeviceCapability(device_id=dg) for dg in device_groups]
 
         logger.info(
-            "ToolPool dispatching %s: %d items (%d local, "
-            "devices_per_instance=%d)",
-            tool_key, n_items, len(work_items), dpi,
+            "ToolPool dispatching %s: %d items (%d local, devices_per_instance=%d)",
+            tool_key,
+            n_items,
+            len(work_items),
+            dpi,
         )
 
         # Execute local partitions via LPT
@@ -371,8 +381,7 @@ class ToolPool:
                             f"device {device_id}"
                         )
                     indexed = [
-                        (wi.original_index, item)
-                        for wi, item in zip(assignment.items, output_items, strict=False)
+                        (wi.original_index, item) for wi, item in zip(assignment.items, output_items, strict=False)
                     ]
                     return indexed, result
                 finally:
@@ -392,16 +401,19 @@ class ToolPool:
                     except Exception as e:
                         indices = [wi.original_index for wi in assignment.items]
                         logger.error(
-                            "ToolPool partition failed on device %s "
-                            "(%d items, indices %s): %s",
+                            "ToolPool partition failed on device %s (%d items, indices %s): %s",
                             assignment.device.device_id,
-                            len(assignment.items), indices, e,
+                            len(assignment.items),
+                            indices,
+                            e,
                         )
-                        failed.append({
-                            "device_id": assignment.device.device_id,
-                            "indices": indices,
-                            "exception": e,
-                        })
+                        failed.append(
+                            {
+                                "device_id": assignment.device.device_id,
+                                "indices": indices,
+                                "exception": e,
+                            }
+                        )
                         continue
                     all_indexed.extend(indexed)
                     all_warnings.extend(getattr(result, "warnings", []))
@@ -412,8 +424,7 @@ class ToolPool:
                 n_failed = sum(len(f["indices"]) for f in failed)
                 n_ok = len(all_indexed)
                 raise PartialFailureError(
-                    f"ToolPool: {len(failed)} partition(s) failed "
-                    f"({n_failed} items lost, {n_ok} succeeded)",
+                    f"ToolPool: {len(failed)} partition(s) failed ({n_failed} items lost, {n_ok} succeeded)",
                     succeeded=list(all_indexed),
                     failed=failed,
                 )
@@ -424,7 +435,9 @@ class ToolPool:
 
         metadata = dict(last_result.metadata) if last_result else {}
         metadata["dispatch_stats"] = _build_dispatch_stats(
-            n_items, len(work_items), len(capabilities),
+            n_items,
+            len(work_items),
+            len(capabilities),
         )
 
         return output_model.model_construct(  # type: ignore[arg-type]
@@ -435,4 +448,3 @@ class ToolPool:
                 "metadata": metadata,
             }
         )
-

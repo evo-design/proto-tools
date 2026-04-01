@@ -23,8 +23,7 @@ def _find_binary(name: str) -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"Binary '{name}' not found at {binary}. "
-            f"The standalone environment may need to be recreated."
+            f"Binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
         )
     return str(binary)
 
@@ -68,9 +67,7 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Create temporary FASTA with all sequences
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".fasta", delete=False
-    ) as tmp_file:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
         for seq_idx, seq_str in enumerate(sequences):
             seq_to_write = seq_str if len(seq_str) > 0 else "A"
             tmp_file.write(f">seq_{seq_idx}\n{seq_to_write}\n")
@@ -99,18 +96,13 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
         seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))  # type: ignore[no-untyped-call]
 
         if len(seq_records) != len(sequences):
-            raise RuntimeError(
-                f"Segmasker returned {len(seq_records)} results "
-                f"but expected {len(sequences)}"
-            )
+            raise RuntimeError(f"Segmasker returned {len(seq_records)} results but expected {len(sequences)}")
 
         fractions: list[float] = []
         counts: list[int] = []
         results_data: list[dict[str, Any]] = []
 
-        for seq_idx, (original_seq, record) in enumerate(
-            zip(sequences, seq_records, strict=False)
-        ):
+        for seq_idx, (original_seq, record) in enumerate(zip(sequences, seq_records, strict=False)):
             if len(original_seq) == 0:
                 fractions.append(0.0)
                 counts.append(0)
@@ -161,6 +153,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

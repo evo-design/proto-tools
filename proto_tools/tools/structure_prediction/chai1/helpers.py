@@ -51,12 +51,14 @@ def write_msa_pqt(
     records = []
     for idx, seq in enumerate(aligned_sequences):
         comment = comments[idx] if comments else f"seq_{idx}"
-        records.append({
-            "sequence": seq,
-            "source_database": "query" if idx == 0 else source_database,
-            "pairing_key": "",
-            "comment": comment,
-        })
+        records.append(
+            {
+                "sequence": seq,
+                "source_database": "query" if idx == 0 else source_database,
+                "pairing_key": "",
+                "comment": comment,
+            }
+        )
 
     df = pd.DataFrame(records)
     df.to_parquet(pqt_path, engine="pyarrow", index=False)

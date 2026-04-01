@@ -43,9 +43,7 @@ def pdb_structure():
 # ============================================================================
 def test_fampnn_sample_input_schema():
     """FAMPNNSampleInput accepts a structure path and validates."""
-    inp = FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(structure=str(TEST_PDB_FILE))]
-    )
+    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=str(TEST_PDB_FILE))])
     assert len(inp.inputs) == 1
     assert inp.inputs[0].structure is not None
 
@@ -105,19 +103,19 @@ def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
 
 def test_fampnn_pack_input_schema(pdb_structure):
     """FAMPNNPackInput accepts a structure."""
-    inp = FAMPNNPackInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     assert len(inp.inputs) == 1
 
 
 def test_fampnn_score_input_schema(pdb_structure):
     """FAMPNNScoreInput accepts a structure and mutations."""
     inp = FAMPNNScoreInput(
-        inputs=[MutationInput(
-            structure=pdb_structure,
-            mutations=["A1V", "G6L"],
-        )]
+        inputs=[
+            MutationInput(
+                structure=pdb_structure,
+                mutations=["A1V", "G6L"],
+            )
+        ]
     )
     assert len(inp.inputs) == 1
     assert inp.inputs[0].mutations == ["A1V", "G6L"]
@@ -153,9 +151,7 @@ def test_fampnn_sample_config_rejects_excluded_amino_acids():
 @pytest.mark.uses_gpu
 def test_fampnn_sample_simple(pdb_structure):
     """Basic FAMPNN sequence sampling with a single structure."""
-    inp = FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNSampleConfig(
         num_sequences_per_structure=2,
         temperature=0.1,
@@ -183,9 +179,7 @@ def test_fampnn_sample_simple(pdb_structure):
 @pytest.mark.uses_gpu
 def test_fampnn_sample_chunked_batching(pdb_structure):
     """Chunked batching produces the correct number of sequences."""
-    inp = FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNSampleConfig(
         num_sequences_per_structure=4,
         batch_size=2,
@@ -205,9 +199,7 @@ def test_fampnn_sample_chunked_batching(pdb_structure):
 @pytest.mark.uses_gpu
 def test_fampnn_sample_seq_only(pdb_structure):
     """seq_only mode produces sequences without sidechains."""
-    inp = FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNSampleConfig(
         num_sequences_per_structure=1,
         num_steps=10,
@@ -254,11 +246,13 @@ def test_fampnn_sample_with_fixed_positions(pdb_structure):
     fixed_pos = all_positions[:10]
 
     inp = FAMPNNSampleInput(
-        inputs=[FAMPNNStructureInput(
-            structure=pdb_structure,
-            chain_ids=[first_chain],
-            fixed_positions={first_chain: fixed_pos},
-        )]
+        inputs=[
+            FAMPNNStructureInput(
+                structure=pdb_structure,
+                chain_ids=[first_chain],
+                fixed_positions={first_chain: fixed_pos},
+            )
+        ]
     )
     config = FAMPNNSampleConfig(
         num_sequences_per_structure=1,
@@ -273,9 +267,7 @@ def test_fampnn_sample_with_fixed_positions(pdb_structure):
 @pytest.mark.uses_gpu
 def test_fampnn_pack_simple(pdb_structure):
     """Basic sidechain packing with a single structure."""
-    inp = FAMPNNPackInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNPackConfig(
         num_samples_per_structure=1,
         seed=42,
@@ -300,9 +292,7 @@ def test_fampnn_pack_simple(pdb_structure):
 @pytest.mark.uses_gpu
 def test_fampnn_pack_multiple_samples(pdb_structure):
     """Packing produces the correct number of samples."""
-    inp = FAMPNNPackInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNPackConfig(
         num_samples_per_structure=3,
         batch_size=2,
@@ -318,9 +308,7 @@ def test_fampnn_pack_multiple_samples(pdb_structure):
 @pytest.mark.uses_gpu
 def test_fampnn_pack_psce_values(pdb_structure):
     """PSCE values are non-negative and in a reasonable range."""
-    inp = FAMPNNPackInput(
-        inputs=[FAMPNNStructureInput(structure=pdb_structure)]
-    )
+    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
     config = FAMPNNPackConfig(seed=42)
     output = run_fampnn_pack(inp, config)
     assert output.success
@@ -352,10 +340,12 @@ def test_fampnn_score_mutations(pdb_structure):
     ]
 
     inp = FAMPNNScoreInput(
-        inputs=[MutationInput(
-            structure=pdb_structure,
-            mutations=mutations,
-        )]
+        inputs=[
+            MutationInput(
+                structure=pdb_structure,
+                mutations=mutations,
+            )
+        ]
     )
     config = FAMPNNScoreConfig(seed=42)
     output = run_fampnn_score(inp, config)
@@ -382,10 +372,12 @@ def test_fampnn_score_mutations_seq_only(pdb_structure):
     mut_res = "A" if wt_res != "A" else "G"
 
     inp = FAMPNNScoreInput(
-        inputs=[MutationInput(
-            structure=pdb_structure,
-            mutations=[f"{wt_res}1{mut_res}"],
-        )]
+        inputs=[
+            MutationInput(
+                structure=pdb_structure,
+                mutations=[f"{wt_res}1{mut_res}"],
+            )
+        ]
     )
     config = FAMPNNScoreConfig(seq_only=True, seed=42)
     output = run_fampnn_score(inp, config)

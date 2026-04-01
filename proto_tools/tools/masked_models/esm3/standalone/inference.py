@@ -1,4 +1,5 @@
 """Local ESM3 inference implementation."""
+
 from __future__ import annotations
 
 import json
@@ -14,13 +15,12 @@ from tqdm import tqdm
 logger = getLogger(__name__)
 
 # Suppress esm library INFO logs
-logging.getLogger('esm').setLevel(logging.ERROR)
-logging.getLogger('esm.sdk').setLevel(logging.ERROR)
+logging.getLogger("esm").setLevel(logging.ERROR)
+logging.getLogger("esm.sdk").setLevel(logging.ERROR)
 
 AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
-ESM3_MODEL_CHECKPOINTS = Literal[
-    "esm3_sm_open_v1",
-]
+ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
+
 
 class ESM3Model:
     """ESM3 model for protein sequence embeddings, logits, and structure prediction.
@@ -78,9 +78,7 @@ class ESM3Model:
         max_seq_len = max(len(seq) for seq in sequences)
 
         # Split the sequences into batches
-        batches = [
-            sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)
-        ]
+        batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
 
         all_mean_embeddings = []
         all_logits = []
@@ -106,7 +104,7 @@ class ESM3Model:
                 )
 
                 # Append the embeddings
-                embeddings = batch_outputs.embeddings[:, 1:-1, :] # Remove special tokens
+                embeddings = batch_outputs.embeddings[:, 1:-1, :]  # Remove special tokens
                 attention_mask = batch_inputs["attention_mask"][:, 1:-1]
 
                 # Average over embeddings
@@ -116,7 +114,7 @@ class ESM3Model:
                 all_mean_embeddings.append(batch_mean_embeddings)
 
                 # Extract logits
-                logits = batch_outputs.sequence_logits[:, 1:-1, :] # Remove special tokens
+                logits = batch_outputs.sequence_logits[:, 1:-1, :]  # Remove special tokens
                 # Only keep the logits corresponding to the amino acids
                 logits = logits[:, :, self.amino_acid_token_ids]
 
@@ -125,13 +123,9 @@ class ESM3Model:
 
                 if additional_padding_len > 0:
                     # Pad attention_mask
-                    attention_mask = torch.nn.functional.pad(
-                        attention_mask, (0, additional_padding_len), value=0
-                    )
+                    attention_mask = torch.nn.functional.pad(attention_mask, (0, additional_padding_len), value=0)
                     # Pad logits
-                    logits = torch.nn.functional.pad(
-                        logits, (0, 0, 0, additional_padding_len), value=0.0
-                    )
+                    logits = torch.nn.functional.pad(logits, (0, 0, 0, additional_padding_len), value=0.0)
 
                 # Save attention mask and logits
                 all_attention_masks.append(attention_mask)
@@ -178,20 +172,17 @@ class ESM3Model:
 
         # Split the sequences into batches
         max_batch_size = min(batch_size, len(sequences))
-        batches = [
-            sequences[i : i + max_batch_size]
-            for i in range(0, len(sequences), max_batch_size)
-        ]
+        batches = [sequences[i : i + max_batch_size] for i in range(0, len(sequences), max_batch_size)]
 
         all_structures = []  # type: ignore[var-annotated]
 
         # For each batch
-        for batch_sequences in tqdm(batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)):
+        for batch_sequences in tqdm(
+            batches, desc="Predicting structures with ESM3", unit="sequence batch", total=len(batches)
+        ):
             # Create protein and config objects
             esm3_proteins = [ESMProtein(sequence=seq) for seq in batch_sequences]
-            structure_configs = [GenerationConfig(track="structure")] * len(
-                esm3_proteins
-            )
+            structure_configs = [GenerationConfig(track="structure")] * len(esm3_proteins)
 
             # Generate the structures
             structures = self.model.batch_generate(  # type: ignore[attr-defined]
@@ -255,16 +246,15 @@ class ESM3Model:
             tokenizer_sequences.append(seq.replace("_", mask_token))
 
         # Batch the forward passes
-        batch_ranges = [
-            (i, min(i + batch_size, len(sequences)))
-            for i in range(0, len(sequences), batch_size)
-        ]
+        batch_ranges = [(i, min(i + batch_size, len(sequences))) for i in range(0, len(sequences), batch_size)]
 
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
         for start, end in tqdm(
-            batch_ranges, desc="ESM3 sampling", unit="batch",
+            batch_ranges,
+            desc="ESM3 sampling",
+            unit="batch",
             disable=not verbose,
         ):
             batch_tok_seqs = tokenizer_sequences[start:end]
@@ -288,9 +278,7 @@ class ESM3Model:
                 aa_logits = outputs.sequence_logits[:, 1:-1, :][:, :, self.amino_acid_token_ids]
 
             # Sample at mask positions for each sequence
-            for seq_idx, (orig_seq, positions) in enumerate(
-                zip(batch_originals, batch_masks, strict=False)
-            ):
+            for seq_idx, (orig_seq, positions) in enumerate(zip(batch_originals, batch_masks, strict=False)):
                 if not positions:
                     all_sampled.append(orig_seq)
                 else:
@@ -307,7 +295,7 @@ class ESM3Model:
 
             if return_logits:
                 for seq_idx, orig_seq in enumerate(batch_originals):
-                    all_logits.append(aa_logits[seq_idx, :len(orig_seq)])
+                    all_logits.append(aa_logits[seq_idx, : len(orig_seq)])
 
         return {
             "sequences": all_sampled,
@@ -372,11 +360,13 @@ class ESM3Model:
             avg_ll = log_prob / valid_count
 
             all_logits.append(logits)
-            all_metrics.append({
-                "log_likelihood": log_prob,
-                "avg_log_likelihood": avg_ll,
-                "perplexity": math.exp(-avg_ll),
-            })
+            all_metrics.append(
+                {
+                    "log_likelihood": log_prob,
+                    "avg_log_likelihood": avg_ll,
+                    "perplexity": math.exp(-avg_ll),
+                }
+            )
 
         return {
             "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
@@ -414,7 +404,7 @@ class ESM3Model:
             masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # type: ignore[attr-defined]  # +1 for BOS token
 
         # Get true token IDs directly from tokenized input
-        true_token_ids = original_ids[0, 1 : 1 + len(seq)] # Token positions: [BOS] + seq + [EOS]
+        true_token_ids = original_ids[0, 1 : 1 + len(seq)]  # Token positions: [BOS] + seq + [EOS]
 
         # Create mask for valid (standard AA) positions - exclusion strategy
         valid_mask = torch.tensor([aa in AMINO_ACIDS_LIST for aa in seq], device=self.device)
@@ -475,7 +465,7 @@ class ESM3Model:
 
         self.amino_acid_token_ids = torch.tensor(
             [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
-            device=device
+            device=device,
         )
         self.device = device  # type: ignore[assignment]
         self._loaded = True
@@ -572,7 +562,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
         )
     raise ValueError(f"Unknown operation: {operation}")
-
 
 
 def to_device(device: str) -> dict[str, Any]:

@@ -73,9 +73,7 @@ def test_hmmsearch_input_empty_sequences():
 
 def test_phmmer_input_single_strings():
     """Single strings are normalized to lists."""
-    inputs = PyPhmmerInput(
-        sequences="MVLSPADKTNVKAAW", target_sequences="ATCGATCGATCGAT"
-    )
+    inputs = PyPhmmerInput(sequences="MVLSPADKTNVKAAW", target_sequences="ATCGATCGATCGAT")
     assert inputs.sequences == ["MVLSPADKTNVKAAW"]
     assert inputs.target_sequences == ["ATCGATCGATCGAT"]
 

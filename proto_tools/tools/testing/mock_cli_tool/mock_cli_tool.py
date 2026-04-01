@@ -4,6 +4,7 @@ This is a minimal CLI-pattern tool that spawns a subprocess for inference,
 matching the pattern used by tools like Boltz2, RFDiffusion3, and Protenix.
 It uses get_subprocess_device_env() for device routing.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,17 +72,11 @@ class MockCLIToolOutput(BaseToolOutput):
         cuda_visible_devices (str): CUDA_VISIBLE_DEVICES passed to subprocess.
     """
 
-    result: list[float] = Field(
-        description="Output from the CLI subprocess"
-    )
+    result: list[float] = Field(description="Output from the CLI subprocess")
 
-    device_used: str = Field(
-        description="Device the subprocess ran on"
-    )
+    device_used: str = Field(description="Device the subprocess ran on")
 
-    cuda_visible_devices: str = Field(
-        description="CUDA_VISIBLE_DEVICES passed to subprocess"
-    )
+    cuda_visible_devices: str = Field(description="CUDA_VISIBLE_DEVICES passed to subprocess")
 
     @property
     def output_format_options(self) -> list[str]:

@@ -2,6 +2,7 @@
 
 Contains base class for representing a protein structure ensemble.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel

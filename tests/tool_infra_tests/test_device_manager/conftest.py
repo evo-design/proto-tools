@@ -18,12 +18,15 @@ def mock_2_gpus():
     CPU and RESTART offload strategies independently (Sherlock GPUs run in
     Exclusive_Process mode which would silently override CPU → RESTART).
     """
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=2,
-    ), patch(
-        "proto_tools.utils.device_manager.is_exclusive_process_mode",
-        return_value=False,
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=2,
+        ),
+        patch(
+            "proto_tools.utils.device_manager.is_exclusive_process_mode",
+            return_value=False,
+        ),
     ):
         yield
 
@@ -59,12 +62,15 @@ def no_gpus_manager(mock_0_gpus):
 @pytest.fixture
 def mock_1_gpu():
     """Mock number_of_visible_gpus to return 1 for test duration."""
-    with patch(
-        "proto_tools.utils.device_manager.number_of_visible_gpus",
-        return_value=1,
-    ), patch(
-        "proto_tools.utils.device_manager.is_exclusive_process_mode",
-        return_value=False,
+    with (
+        patch(
+            "proto_tools.utils.device_manager.number_of_visible_gpus",
+            return_value=1,
+        ),
+        patch(
+            "proto_tools.utils.device_manager.is_exclusive_process_mode",
+            return_value=False,
+        ),
     ):
         yield
 

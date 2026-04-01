@@ -36,11 +36,13 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
+
 # Default cache directory for MSA files, derived from PROTO_HOME
 def _default_output_dir() -> Path:
     from proto_tools.utils.proto_home import get_proto_home
 
     return get_proto_home() / "colabfold_search"
+
 
 # Default database directory (in the same directory as this file)
 DEFAULT_DB_DIR = Path(__file__).parent / "databases"
@@ -102,21 +104,14 @@ class ColabfoldSearchInput(BaseToolInput):
 
     Examples:
         >>> # Simple format - just sequences
-        >>> inputs = ColabfoldSearchInput(
-        ...     queries=["MVLSPADKTN", "ACDEFGHIKL"]
-        ... )
+        >>> inputs = ColabfoldSearchInput(queries=["MVLSPADKTN", "ACDEFGHIKL"])
         >>>
         >>> # Explicit format with IDs
-        >>> query1 = ColabfoldSearchQuery(
-        ...     sequence="MVLSPADKTN",
-        ...     sequence_id="protein_A"
-        ... )
+        >>> query1 = ColabfoldSearchQuery(sequence="MVLSPADKTN", sequence_id="protein_A")
         >>> inputs = ColabfoldSearchInput(queries=[query1])
     """
 
-    queries: list[ColabfoldSearchQuery] = InputField(
-        description="List of protein sequences to search for homologs"
-    )
+    queries: list[ColabfoldSearchQuery] = InputField(description="List of protein sequences to search for homologs")
 
     @field_validator("queries", mode="before")
     @classmethod
@@ -152,9 +147,7 @@ class ColabfoldSearchInput(BaseToolInput):
         # Auto-generate sequence IDs from hash of sequence
         for query in self.queries:
             if query.sequence_id is None:
-                query.sequence_id = (
-                    "seq_" + hashlib.sha256(query.sequence.encode()).hexdigest()[:10]
-                )
+                query.sequence_id = "seq_" + hashlib.sha256(query.sequence.encode()).hexdigest()[:10]
 
         # Ensure that no two queries have the same sequence ID
         seen_ids = set()
@@ -222,9 +215,7 @@ class ColabfoldSearchOutput(BaseToolOutput):
             and metadata. The order matches the input queries order.
     """
 
-    results: list[ColabfoldSearchResult] = Field(
-        description="List of MSA search results"
-    )
+    results: list[ColabfoldSearchResult] = Field(description="List of MSA search results")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -398,9 +389,7 @@ class ColabfoldSearchConfig(BaseConfig):
         if not Path(self.msa_db_dir).exists():
             raise ValueError(f"msa_db_dir does not exist: {self.msa_db_dir}")
         if not Path(self.msa_db_dir).is_dir():
-            raise ValueError(
-                f"msa_db_dir exists but is not a directory: {self.msa_db_dir}"
-            )
+            raise ValueError(f"msa_db_dir exists but is not a directory: {self.msa_db_dir}")
 
         # Ensure the specified database name is available
         available_databases = detect_available_local_databases(self.msa_db_dir)
@@ -446,7 +435,8 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_colabfold_search(
-    inputs: ColabfoldSearchInput, config: ColabfoldSearchConfig | None = None,
+    inputs: ColabfoldSearchInput,
+    config: ColabfoldSearchConfig | None = None,
     instance: Any = None,
 ) -> ColabfoldSearchOutput:
     """Generate MSAs for protein sequences using ColabFold search, with options.
@@ -476,9 +466,7 @@ def run_colabfold_search(
         ValueError: If msa_db_dir does not exist.
 
     Examples:
-        >>> inputs = ColabfoldSearchInput(
-        ...     queries=["MVLSPADKTN", "MKTAYIAKQR"]
-        ... )
+        >>> inputs = ColabfoldSearchInput(queries=["MVLSPADKTN", "MKTAYIAKQR"])
         >>> config = ColabfoldSearchConfig(msa_db_dir="/path/to/db")
         >>> output = run_colabfold_search(inputs, config)
         >>> # Access the MSA object directly
@@ -535,7 +523,6 @@ def _cleanup_default_output_dir_if_cache_empty(
     if config._user_specified_output_dir:
         return
 
-
     # Only cleanup if cache is empty (no entries to preserve)
     if has_cached_entries("colabfold-search"):
         return
@@ -544,9 +531,7 @@ def _cleanup_default_output_dir_if_cache_empty(
     if os.path.exists(config.output_dir):  # type: ignore[arg-type]
         shutil.rmtree(config.output_dir, ignore_errors=True)  # type: ignore[arg-type]
         if config.verbose:
-            logger.info(
-                f"Cleaned up default output directory (cache is empty): {config.output_dir}"
-            )
+            logger.info(f"Cleaned up default output directory (cache is empty): {config.output_dir}")
 
 
 def _count_sequences_in_a3m(a3m_path: str | Path) -> int:
@@ -584,9 +569,7 @@ def _replace_query_header_in_a3m(a3m_path: str | Path, seq_id: str) -> None:
             f.writelines(lines)
 
 
-def detect_available_local_databases(
-    msa_db_dir: str | Path, verbose: bool = False
-) -> list[str]:
+def detect_available_local_databases(msa_db_dir: str | Path, verbose: bool = False) -> list[str]:
     """Detect and list all available databases in the MSA database directory.
 
     This function scans the database directory for ColabFold/MMSeqs2 database files
@@ -616,12 +599,7 @@ def detect_available_local_databases(
         if all_dbtype:
             # Filter out auxiliary files (those with suffixes like _seq, _aln, _h)
             dbtype_files = [
-                f
-                for f in all_dbtype
-                if not any(
-                    f.stem.endswith(suffix)
-                    for suffix in ["_seq", "_aln", "_h", "_seq_h"]
-                )
+                f for f in all_dbtype if not any(f.stem.endswith(suffix) for suffix in ["_seq", "_aln", "_h", "_seq_h"])
             ]
 
     if not dbtype_files:
@@ -695,7 +673,6 @@ def _local_search(
     # Process results: colabfold_search outputs files as 0.a3m, 1.a3m, etc.
     results = []
     for idx, seq_id in enumerate(sequence_ids):
-
         # Collect and convert the A3M file to an MSA object
         numbered_a3m = os.path.join(msa_out_dir, f"{idx}.a3m")
         named_a3m = os.path.join(msa_out_dir, f"{seq_id}.a3m")
@@ -770,9 +747,7 @@ def _remote_search(
             raise RuntimeError(error_msg)
         # Partial failure - log warning but continue
         if config.verbose:
-            logger.warning(
-                f"Remote MSA search partially failed: {num_successful} succeeded, {num_failed} failed"
-            )
+            logger.warning(f"Remote MSA search partially failed: {num_successful} succeeded, {num_failed} failed")
             if "errors" in output_data:
                 for seq_id, error in output_data["errors"].items():
                     logger.warning(f"  {seq_id}: {error}")

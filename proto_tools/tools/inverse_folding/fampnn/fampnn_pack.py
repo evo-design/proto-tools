@@ -2,6 +2,7 @@
 
 FAMPNN sidechain packing tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,9 +35,7 @@ class FAMPNNPackInput(BaseToolInput):
         inputs (list[FAMPNNStructureInput]): List of structure inputs for sidechain packing.
     """
 
-    inputs: list[FAMPNNStructureInput] = InputField(
-        description="List of structure inputs for sidechain packing."
-    )
+    inputs: list[FAMPNNStructureInput] = InputField(description="List of structure inputs for sidechain packing.")
 
 
 class FAMPNNPackConfig(BaseConfig):
@@ -137,6 +136,7 @@ class FAMPNNPackingResult(BaseToolOutput):
                     out_file.write_text(pdb_str)
         elif file_format == "json":
             import json
+
             for i, (pdb_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
                 out_file = path / f"packed_{i}.json"
                 with open(out_file, "w") as f:
@@ -151,9 +151,11 @@ class FAMPNNPackingResult(BaseToolOutput):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNPackInput(
-        inputs=[FAMPNNStructureInput(
-            structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
-        )]
+        inputs=[
+            FAMPNNStructureInput(
+                structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
+            )
+        ]
     )
 
 

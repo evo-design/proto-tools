@@ -6,6 +6,7 @@ Communicates via JSON input/output files (ToolInstance pattern).
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
+
 import json
 import subprocess
 import sys
@@ -18,8 +19,7 @@ def _find_binary(name: str) -> str:
     binary = Path(sys.executable).parent / name
     if not binary.exists():
         raise FileNotFoundError(
-            f"BLAST+ binary '{name}' not found at {binary}. "
-            f"The standalone environment may need to be recreated."
+            f"BLAST+ binary '{name}' not found at {binary}. The standalone environment may need to be recreated."
         )
     return str(binary)
 
@@ -38,9 +38,12 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
 
     cmd = [
         program,
-        "-query", input_data["query_path"],
-        "-db", input_data["db"],
-        "-num_threads", str(input_data["num_threads"]),
+        "-query",
+        input_data["query_path"],
+        "-db",
+        input_data["db"],
+        "-num_threads",
+        str(input_data["num_threads"]),
     ]
 
     # Add default output format only if not overridden
@@ -61,9 +64,7 @@ def run_local_blast(input_data: dict[str, Any]) -> dict[str, Any]:
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"Local BLAST search failed with code {proc.returncode}: {proc.stderr}"
-        )
+        raise RuntimeError(f"Local BLAST search failed with code {proc.returncode}: {proc.stderr}")
 
     return {"stdout": proc.stdout}
 
@@ -82,9 +83,12 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
 
     cmd = [
         makeblastdb,
-        "-in", input_data["fasta_path"],
-        "-dbtype", input_data["dbtype"],
-        "-out", input_data["out_prefix"],
+        "-in",
+        input_data["fasta_path"],
+        "-dbtype",
+        input_data["dbtype"],
+        "-out",
+        input_data["out_prefix"],
     ]
 
     title = input_data.get("title")
@@ -101,9 +105,7 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"BLAST database creation failed with code {proc.returncode}: {proc.stderr}"
-        )
+        raise RuntimeError(f"BLAST database creation failed with code {proc.returncode}: {proc.stderr}")
 
     return {"db_path": input_data["out_prefix"]}
 
@@ -111,6 +113,7 @@ def run_create_blast_db(input_data: dict[str, Any]) -> dict[str, Any]:
 # =============================================================================
 # Entry point (called by ToolInstance)
 # =============================================================================
+
 
 def to_device(device: str) -> dict[str, Any]:
     """Passthrough for CLI tool - automatically unloads after each call."""

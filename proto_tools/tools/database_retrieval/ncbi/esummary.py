@@ -50,9 +50,7 @@ class NCBIEsummaryOutput(BaseToolOutput):
         source_url (str): Sanitized URL used for the request.
     """
 
-    summary: dict[str, Any] = Field(
-        default_factory=dict, description="Record summary data returned by esummary"
-    )
+    summary: dict[str, Any] = Field(default_factory=dict, description="Record summary data returned by esummary")
     source_url: str = Field(description="Sanitized request URL")
 
     @property
@@ -134,9 +132,7 @@ def run_ncbi_esummary(
             session=session,
         )
         if result is None:
-            raise ValueError(
-                f"No record found for {inputs.db}:{inputs.identifier}"
-            )
+            raise ValueError(f"No record found for {inputs.db}:{inputs.identifier}")
         summary, url = result
         return NCBIEsummaryOutput(summary=summary, source_url=url)
     finally:

@@ -2,6 +2,7 @@
 
 Borzoi single-replicate sequence scoring tool.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,14 +52,11 @@ class BorzoiInput(BaseToolInput):
         sequence = sequence.upper()
         invalid_chars = return_invalid_nucleotide_chars(sequence, additional_valid_chars="N")
         if invalid_chars:
-            raise ValueError(
-                f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid_chars))}"
-            )
+            raise ValueError(f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid_chars))}")
         if len(sequence) != BORZOI_CONTEXT:
-            raise ValueError(
-                f"Input sequence must have length {BORZOI_CONTEXT}, got {len(sequence)}"
-            )
+            raise ValueError(f"Input sequence must have length {BORZOI_CONTEXT}, got {len(sequence)}")
         return sequence
+
 
 # Output:
 class BorzoiOutput(BaseToolOutput):
@@ -77,9 +75,7 @@ class BorzoiOutput(BaseToolOutput):
 
     sequence: str = Field(description="Input DNA/RNA sequence")
     sequence_length: int = Field(description="Length of input sequence")
-    prediction: list[list[float]] = Field(
-        description="Prediction matrix with shape [num_tracks, 6144]"
-    )
+    prediction: list[list[float]] = Field(description="Prediction matrix with shape [num_tracks, 6144]")
     output_tracks: list[int] = Field(description="Track indices used for prediction")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
     replicate: str = Field(description="Replicate used for prediction ('0' to '3')")
@@ -100,19 +96,23 @@ class BorzoiOutput(BaseToolOutput):
     def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
         _metadata_fields = {
-            "tool_id", "execution_time", "timestamp", "success",
-            "warnings", "errors", "metadata",
+            "tool_id",
+            "execution_time",
+            "timestamp",
+            "success",
+            "warnings",
+            "errors",
+            "metadata",
         }
-        data = {
-            k: v for k, v in self.model_dump().items()
-            if k not in _metadata_fields
-        }
+        data = {k: v for k, v in self.model_dump().items() if k not in _metadata_fields}
         if file_format == "json":
             import json
+
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         elif file_format == "csv":
             import csv
+
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(data.keys())
@@ -177,9 +177,7 @@ class BorzoiConfig(BaseConfig):
     def validate_mouse_flash_attn(self) -> BorzoiConfig:
         """Mouse Borzoi checkpoints do not support FlashAttention."""
         if self.species == "mouse" and self.use_flash_attn:
-            raise ValueError(
-                "FlashAttention (use_flash_attn=True) is not available for mouse models."
-            )
+            raise ValueError("FlashAttention (use_flash_attn=True) is not available for mouse models.")
         return self
 
 

@@ -47,13 +47,7 @@ def test_input_rejects_multi_chain_complex():
 
 def test_input_rejects_non_protein_entity():
     with pytest.raises(ValueError, match="only supports: protein"):
-        BioEmuInput(
-            complexes=[
-                StructurePredictionComplex(
-                    chains=[{"sequence": "ACGT", "entity_type": "dna"}]
-                )
-            ]
-        )
+        BioEmuInput(complexes=[StructurePredictionComplex(chains=[{"sequence": "ACGT", "entity_type": "dna"}])])
 
 
 def test_input_rejects_invalid_amino_acids():
@@ -64,18 +58,18 @@ def test_input_rejects_invalid_amino_acids():
         ),
         pytest.raises(ValueError, match="Invalid protein characters"),
     ):
-            BioEmuInput(
-                complexes=[
-                    StructurePredictionComplex(
-                        chains=[
-                            {
-                                "sequence": "MVLSPADKTNVKAAW123",
-                                "entity_type": "protein",
-                            }
-                        ]
-                    )
-                ]
-            )
+        BioEmuInput(
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[
+                        {
+                            "sequence": "MVLSPADKTNVKAAW123",
+                            "entity_type": "protein",
+                        }
+                    ]
+                )
+            ]
+        )
 
 
 def test_input_warns_on_long_sequence(caplog):
@@ -87,18 +81,18 @@ def test_input_warns_on_long_sequence(caplog):
         ),
         caplog.at_level("WARNING"),
     ):
-            BioEmuInput(
-                complexes=[
-                    StructurePredictionComplex(
-                        chains=[
-                            {
-                                "sequence": long_sequence,
-                                "entity_type": "protein",
-                            }
-                        ]
-                    )
-                ]
-            )
+        BioEmuInput(
+            complexes=[
+                StructurePredictionComplex(
+                    chains=[
+                        {
+                            "sequence": long_sequence,
+                            "entity_type": "protein",
+                        }
+                    ]
+                )
+            ]
+        )
     assert "500 residues" in caplog.text
 
 
@@ -124,9 +118,7 @@ def test_config_rejects_invalid_model_name():
 
 
 def test_multiple_complexes_produce_separate_ensembles():
-    complex_ = StructurePredictionComplex(
-        chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}]
-    )
+    complex_ = StructurePredictionComplex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
     bioemu_input = BioEmuInput(complexes=[complex_, complex_])
     bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
@@ -166,11 +158,7 @@ def test_bioemu_sample_end_to_end():
     """Test BioEmu conformational ensemble sampling end-to-end."""
     sequence = "MKTAYIAKQRQISFVKSHFSRQLE"
     inputs = BioEmuInput(
-        complexes=[
-            StructurePredictionComplex(
-                chains=[{"sequence": sequence, "entity_type": "protein"}]
-            )
-        ]
+        complexes=[StructurePredictionComplex(chains=[{"sequence": sequence, "entity_type": "protein"}])]
     )
     config = BioEmuConfig(num_samples=5, verbose=False)
 

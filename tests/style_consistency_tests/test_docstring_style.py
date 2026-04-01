@@ -3,6 +3,7 @@
 Tests that multi-line docstrings follow Google style with type annotations
 matching the actual function signatures and class annotations.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,9 +31,7 @@ _EXCLUDE_PATTERNS = [
 
 
 def _get_docstrings_with_annotations():
-    return collect_docstrings_with_annotations(
-        _REPO_ROOT, _SOURCE_DIRS, _EXCLUDE_PATTERNS
-    )
+    return collect_docstrings_with_annotations(_REPO_ROOT, _SOURCE_DIRS, _EXCLUDE_PATTERNS)
 
 
 _DOCSTRINGS = _get_docstrings_with_annotations()
@@ -83,10 +82,7 @@ def test_docstring_types_match_signatures(
         norm_sig = normalize_type(sig_type)
 
         if param.type_name is None:
-            violations.append(
-                f"  {param.arg_name}: missing type in docstring "
-                f"(should be '{norm_sig}')"
-            )
+            violations.append(f"  {param.arg_name}: missing type in docstring (should be '{norm_sig}')")
             continue
 
         norm_doc = normalize_type(param.type_name)
@@ -98,20 +94,13 @@ def test_docstring_types_match_signatures(
                 f"(normalized: '{norm_doc}' vs '{norm_sig}')"
             )
 
-    assert not violations, (
-        f"{file_path}::{name} has docstring param type mismatches:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, f"{file_path}::{name} has docstring param type mismatches:\n" + "\n".join(violations)
 
 
 @pytest.mark.parametrize(
     "file_path, name, docstring, annotations, return_type, node_kind, own_annotations",
     [item for item in _DOCSTRINGS if item[5] == "function" and item[4] is not None],
-    ids=[
-        f"{fp}::{n}"
-        for fp, n, _, _, rt, nk, _ in _DOCSTRINGS
-        if nk == "function" and rt is not None
-    ],
+    ids=[f"{fp}::{n}" for fp, n, _, _, rt, nk, _ in _DOCSTRINGS if nk == "function" and rt is not None],
 )
 def test_docstring_return_type_matches_signature(
     file_path: str,
@@ -157,10 +146,7 @@ def test_docstring_return_type_matches_signature(
         doc_return_type = extract_returns_type(docstring)
 
     if doc_return_type is None:
-        pytest.fail(
-            f"{file_path}::{name}: Returns: section missing type "
-            f"(should be '{norm_sig}')"
-        )
+        pytest.fail(f"{file_path}::{name}: Returns: section missing type (should be '{norm_sig}')")
         return
 
     norm_doc = normalize_type(doc_return_type)
@@ -196,11 +182,5 @@ def test_docstring_continuation_indentation(
     if not violations:
         return
 
-    details = "\n".join(
-        f"  {section} line {lineno}: {text}"
-        for section, lineno, text in violations
-    )
-    pytest.fail(
-        f"{file_path}::{name} has continuation lines at entry indent "
-        f"(should be indented further):\n{details}"
-    )
+    details = "\n".join(f"  {section} line {lineno}: {text}" for section, lineno, text in violations)
+    pytest.fail(f"{file_path}::{name} has continuation lines at entry indent (should be indented further):\n{details}")

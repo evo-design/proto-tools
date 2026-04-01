@@ -81,12 +81,8 @@ def test_parsing_with_test_data():
     first_row = results[0]
     assert first_row["parent_id"] == "dna_seq_1"
     assert first_row["orf_id"] == "ORF.1"
-    assert first_row["amino_acid_sequence"].startswith(
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGK"
-    )
-    assert first_row["nucleotide_sequence"].startswith(
-        "ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAG"
-    )
+    assert first_row["amino_acid_sequence"].startswith("MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGK")
+    assert first_row["nucleotide_sequence"].startswith("ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAG")
 
 
 @pytest.mark.parametrize(
@@ -148,9 +144,7 @@ def test_test_data_integrity():
     aa_headers = [line for line in aa_lines if line.startswith(">")]
     nt_headers = [line for line in nt_lines if line.startswith(">")]
 
-    assert len(aa_headers) == len(nt_headers), (
-        "AA and NT files should have same number of sequences"
-    )
+    assert len(aa_headers) == len(nt_headers), "AA and NT files should have same number of sequences"
     for aa_header, nt_header in zip(aa_headers, nt_headers, strict=False):
         assert aa_header.strip() == nt_header.strip(), (
             f"Headers don't match: {aa_header.strip()} vs {nt_header.strip()}"
@@ -162,9 +156,7 @@ def test_test_data_integrity():
 
 @pytest.mark.integration
 def test_full_workflow():
-    inp = OrfipyInput(
-        sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"
-    )
+    inp = OrfipyInput(sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA")
     config = OrfipyConfig(min_len=30)
     result = run_orfipy_prediction(inp, config)
 
@@ -205,9 +197,7 @@ def test_custom_sequence_ids_preserved():
 
 @pytest.mark.integration
 def test_default_sequence_ids_when_not_provided():
-    inp = OrfipyInput(
-        sequences=["ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"]
-    )
+    inp = OrfipyInput(sequences=["ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"])
     config = OrfipyConfig(min_len=30)
     result = run_orfipy_prediction(inp, config)
 
@@ -261,8 +251,7 @@ def test_sequence_ids_length_mismatch_raises():
 )
 def test_computed_fields_count(orfs_per_sequence, expected_total):
     predicted_orfs = [
-        [_create_sample_orf(f"seq_{i}", f"ORF.{j}") for j in range(count)]
-        for i, count in enumerate(orfs_per_sequence)
+        [_create_sample_orf(f"seq_{i}", f"ORF.{j}") for j in range(count)] for i, count in enumerate(orfs_per_sequence)
     ]
 
     output = OrfipyOutput(

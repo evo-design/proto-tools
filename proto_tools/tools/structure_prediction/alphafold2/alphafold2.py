@@ -61,9 +61,7 @@ class AlphaFold2Input(StructurePredictionInput):
 
     @field_validator("complexes", check_fields=False)
     @classmethod
-    def validate_complexes(
-        cls, complexes: list[StructurePredictionComplex]
-    ) -> list[StructurePredictionComplex]:
+    def validate_complexes(cls, complexes: list[StructurePredictionComplex]) -> list[StructurePredictionComplex]:
         """Validate that complexes contain valid protein sequences.
 
         Args:
@@ -78,9 +76,7 @@ class AlphaFold2Input(StructurePredictionInput):
         """
         for comp_idx, comp in enumerate(complexes):
             for chain_idx, chain_seq in enumerate(comp.chain_sequences):
-                invalid_chars = return_invalid_protein_chars(
-                    chain_seq, additional_valid_chars="X"
-                )
+                invalid_chars = return_invalid_protein_chars(chain_seq, additional_valid_chars="X")
                 if invalid_chars:
                     raise ValueError(
                         f"Invalid protein characters in complex {comp_idx}, chain {chain_idx}: "
@@ -280,20 +276,14 @@ def run_alphafold2(
         msa_a3m_content = None
         if inputs.msas:
             if complex_data["num_chains"] > 1:
-                logger.info(
-                    "MSA not yet supported for multi-chain complexes, "
-                    "running without MSA"
-                )
+                logger.info("MSA not yet supported for multi-chain complexes, running without MSA")
             else:
                 protein_seq = inputs.complexes[complex_data["complex_idx"]].chains[0].sequence
                 msa = inputs.msas.get(protein_seq)
                 if msa is not None:
                     msa_a3m_content = msa.to_a3m_string()
                     if config.verbose:  # type: ignore[union-attr]
-                        logger.info(
-                            f"Loaded MSA for complex {complex_data['complex_idx']} "
-                            f"({len(msa)} sequences)"
-                        )
+                        logger.info(f"Loaded MSA for complex {complex_data['complex_idx']} ({len(msa)} sequences)")
 
         # Prepare input data for standalone dispatch
         input_data = {
@@ -339,4 +329,3 @@ def run_alphafold2(
             "total_chains": sum(s.num_chains for s in structure_outputs),
         },
     )
-

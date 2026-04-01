@@ -4,6 +4,7 @@ Two param pytrees on separate GPUs, following Flax/Haiku conventions.
 Uses real JAX with jax.device_put() for device placement, same pattern
 as ProteinMPNN and other real JAX tools.
 """
+
 from __future__ import annotations
 
 import json
@@ -80,9 +81,7 @@ def _parse_device_pair(device_str: str) -> tuple[str, str]:
     if "," in device_str:
         parts = device_str.split(",")
         if len(parts) != 2:
-            raise ValueError(
-                f"Expected exactly 2 devices for multi-GPU tool, got {len(parts)}: {device_str}"
-            )
+            raise ValueError(f"Expected exactly 2 devices for multi-GPU tool, got {len(parts)}: {device_str}")
         device_a = parts[0].strip()
         device_b = parts[1].strip()
         if not device_b.startswith("cuda:"):
@@ -107,17 +106,26 @@ class MockJAXMultiGPUToolModel:
         self._jax_device_a = resolve_jax_device(self.device_a)
         self._jax_device_b = resolve_jax_device(self.device_b)
         self.params_a = _init_params(
-            input_size=4, hidden_size=hidden_size, output_size=4,
-            memory_mb=memory_mb, device=self._jax_device_a,
+            input_size=4,
+            hidden_size=hidden_size,
+            output_size=4,
+            memory_mb=memory_mb,
+            device=self._jax_device_a,
         )
         self.params_b = _init_params(
-            input_size=4, hidden_size=hidden_size, output_size=4,
-            memory_mb=memory_mb, device=self._jax_device_b,
+            input_size=4,
+            hidden_size=hidden_size,
+            output_size=4,
+            memory_mb=memory_mb,
+            device=self._jax_device_b,
         )
         self._loaded = True
         logger.info(
             "Loaded param pytrees: params_a on %s, params_b on %s (hidden_size=%d, memory_mb=%d)",
-            self.device_a, self.device_b, hidden_size, memory_mb,
+            self.device_a,
+            self.device_b,
+            hidden_size,
+            memory_mb,
         )
 
     def to_device(self, device: str) -> None:

@@ -153,23 +153,15 @@ class Evo1Model:
         vocab_size = 512
         vocab = [chr(j) for j in range(vocab_size)]
 
-        batches = [
-            sequences[i : i + batch_size]
-            for i in range(0, len(sequences), batch_size)
-        ]
+        batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
 
         all_logits = []
         all_metrics = []
 
         with torch.inference_mode():
-            for batch_idx, batch_seqs in enumerate(
-                tqdm(batches, desc="Evo1 Sequence Scoring", unit="batch")
-            ):
+            for batch_idx, batch_seqs in enumerate(tqdm(batches, desc="Evo1 Sequence Scoring", unit="batch")):
                 if verbose:
-                    logger.info(
-                        f"Processing batch {batch_idx + 1}/{len(batches)} "
-                        f"({len(batch_seqs)} sequences)"
-                    )
+                    logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_seqs)} sequences)")
 
                 seq_lengths = [len(s) for s in batch_seqs]
 
@@ -185,10 +177,7 @@ class Evo1Model:
                 logits, _ = self.model(input_ids)  # type: ignore[misc]
 
                 if verbose:
-                    logger.info(
-                        f"Scored batch of {input_ids.shape[0]}, "
-                        f"logits shape: {logits.shape}"
-                    )
+                    logger.info(f"Scored batch of {input_ids.shape[0]}, logits shape: {logits.shape}")
 
                 # logits_to_logprobs handles BOS trim and shift-gather
                 # Returns (batch, seq_len) per-position log-probs
@@ -230,10 +219,13 @@ class Evo1Model:
         # timeouts during the download phase. We monkey-patch snapshot_download
         # to ignore these formats.
         import huggingface_hub
+
         _orig_snapshot_download = huggingface_hub.snapshot_download
+
         def _filtered_snapshot_download(*args: Any, **kwargs: Any) -> Any:
             kwargs.setdefault("ignore_patterns", ["*.bin", "*.pt"])
             return _orig_snapshot_download(*args, **kwargs)
+
         huggingface_hub.snapshot_download = _filtered_snapshot_download
 
         from evo import Evo
@@ -310,7 +302,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"Unknown operation: {operation}")
 
 
-
 def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager)."""
     global _model
@@ -332,9 +323,7 @@ def get_memory_stats() -> dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise ValueError(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>"
-        )
+        raise ValueError(f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>")
 
     with open(sys.argv[1]) as f:
         input_data = json.load(f)

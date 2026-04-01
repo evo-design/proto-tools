@@ -73,9 +73,7 @@ class UniProtFetchInput(BaseToolInput):
     def validate_lookup_params(self) -> Any:
         """Require either uniprot_id or target_name+organism."""
         if not self.uniprot_id and not (self.target_name and self.organism):
-            raise ValueError(
-                "Provide either uniprot_id or both target_name and organism"
-            )
+            raise ValueError("Provide either uniprot_id or both target_name and organism")
         return self
 
 
@@ -101,12 +99,8 @@ class UniProtFetchOutput(BaseToolOutput):
     entry_type: str | None = Field(
         default=None, description="Review status (e.g. 'UniProtKB reviewed (Swiss-Prot)' for curated entries)"
     )
-    gene_names: list[str] = Field(
-        default_factory=list, description="Gene name symbols"
-    )
-    pdb_crossrefs: list[str] = Field(
-        default_factory=list, description="PDB structure IDs linked to this protein entry"
-    )
+    gene_names: list[str] = Field(default_factory=list, description="Gene name symbols")
+    pdb_crossrefs: list[str] = Field(default_factory=list, description="PDB structure IDs linked to this protein entry")
     source_url: str = Field(description="UniProt entry URL")
     raw_entry: dict[str, Any] = Field(
         default_factory=dict, description="Complete UniProt JSON record for advanced programmatic access"
@@ -228,9 +222,7 @@ def run_uniprot_fetch(
         if inputs.uniprot_id:
             entry = _fetch_entry(inputs.uniprot_id, config, session)  # type: ignore[arg-type]
             if entry is None:
-                raise ValueError(
-                    f"UniProt ID '{inputs.uniprot_id}' not found"
-                )
+                raise ValueError(f"UniProt ID '{inputs.uniprot_id}' not found")
         else:
             entry = _search_entry(
                 target_name=inputs.target_name,  # type: ignore[arg-type]
@@ -241,10 +233,7 @@ def run_uniprot_fetch(
                 session=session,
             )
             if entry is None:
-                raise ValueError(
-                    f"No UniProt entry found for '{inputs.target_name}' "
-                    f"in '{inputs.organism}'"
-                )
+                raise ValueError(f"No UniProt entry found for '{inputs.target_name}' in '{inputs.organism}'")
 
         accession = entry.get("primaryAccession", inputs.uniprot_id or "")
         seq_data = entry.get("sequence", {})
@@ -387,8 +376,4 @@ def _extract_gene_names(entry: dict[str, Any]) -> set[str]:
 def _extract_pdb_crossrefs(entry: dict[str, Any]) -> list[str]:
     """Extract PDB cross references from UniProt entry JSON."""
     xrefs = entry.get("uniProtKBCrossReferences", [])
-    return [
-        ref["id"]
-        for ref in xrefs
-        if ref.get("database") == "PDB" and ref.get("id")
-    ]
+    return [ref["id"] for ref in xrefs if ref.get("database") == "PDB" and ref.get("id")]

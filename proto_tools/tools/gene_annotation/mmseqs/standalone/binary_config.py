@@ -12,7 +12,10 @@ from pathlib import Path
 
 URLS = {
     ("Darwin", "arm64"): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-osx-universal.tar.gz",
-    ("Darwin", "x86_64"): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-osx-universal.tar.gz",
+    (
+        "Darwin",
+        "x86_64",
+    ): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-osx-universal.tar.gz",
     ("Linux", "x86_64"): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-linux-avx2.tar.gz",
     ("Linux", "arm64"): "https://github.com/soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-linux-arm64.tar.gz",
 }

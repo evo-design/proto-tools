@@ -7,6 +7,7 @@ orchestrator package works with a CPU-only PyTorch install (or no
 PyTorch at all).  Actual GPU workloads run inside isolated venvs
 that have their own CUDA-enabled PyTorch.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,9 @@ def _run_nvidia_smi_query(*args: str) -> str | None:
     try:
         result = subprocess.run(
             ["nvidia-smi", *list(args)],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return result.stdout if result.returncode == 0 else None
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -41,6 +44,7 @@ class DeviceSpec:
             ``None`` for auto-allocate CUDA.
         count (int): Number of CUDA devices requested (always 1 for cpu).
     """
+
     kind: str
     devices: list[str] | None
     count: int
@@ -140,7 +144,7 @@ def number_of_visible_gpus() -> int:
             if invalid_indices:
                 logger.warning(
                     f"CUDA_VISIBLE_DEVICES references non-existent GPU(s): {invalid_indices}. "
-                    f"Only {num_physical} physical GPU(s) available (indices 0-{num_physical-1}). "
+                    f"Only {num_physical} physical GPU(s) available (indices 0-{num_physical - 1}). "
                     f"These invalid indices will be ignored by CUDA."
                 )
         except ValueError:
@@ -221,7 +225,7 @@ def _parse_count_suffix(device: str, prefix: str) -> int:
     Raises:
         ValueError: If the suffix is missing, non-numeric, zero, or negative.
     """
-    suffix = device[len(prefix):]
+    suffix = device[len(prefix) :]
     if not suffix:
         raise ValueError(f"Invalid device string: '{device}' (missing count)")
     try:
@@ -306,10 +310,7 @@ def parse_device_string(device: str) -> DeviceSpec:
             # Shorthand "N" after "cuda:N"
             devices.append(f"cuda:{part}")
         else:
-            raise ValueError(
-                f"Invalid device string '{device}': "
-                f"shorthand '{part}' without prefix"
-            )
+            raise ValueError(f"Invalid device string '{device}': shorthand '{part}' without prefix")
 
     return DeviceSpec(kind="cuda", devices=devices, count=len(devices))
 
@@ -345,19 +346,13 @@ def _validate_and_map_cuda_indices(
     max_idx = max(cuda_indices)
 
     if num_gpus == 0:
-        raise ValueError(
-            "Requested CUDA devices but no GPUs detected "
-            "(check CUDA_VISIBLE_DEVICES or nvidia-smi)"
-        )
+        raise ValueError("Requested CUDA devices but no GPUs detected (check CUDA_VISIBLE_DEVICES or nvidia-smi)")
     if max_idx >= num_gpus:
         if parent_device_list:
             raise ValueError(
-                f"Device index {max_idx} exceeds parent "
-                f"CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
+                f"Device index {max_idx} exceeds parent CUDA_VISIBLE_DEVICES length ({len(parent_device_list)})"
             )
-        raise ValueError(
-            f"Device index {max_idx} exceeds available GPUs ({num_gpus})"
-        )
+        raise ValueError(f"Device index {max_idx} exceeds available GPUs ({num_gpus})")
 
     seen: set[str] = set()
     physical: list[str] = []
@@ -438,9 +433,7 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
         device_int = device
         num_gpus = number_of_available_gpus()
         if device_int >= num_gpus:
-            raise ValueError(
-                f"Device index {device_int} is greater than the number of available GPUs ({num_gpus})"
-            )
+            raise ValueError(f"Device index {device_int} is greater than the number of available GPUs ({num_gpus})")
         if parent_device_list:
             if device_int >= len(parent_device_list):
                 raise ValueError(
@@ -515,8 +508,7 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
                     raise ValueError(f"Invalid device count specification: '{spec}'") from None
             else:
                 raise ValueError(
-                    f"Invalid device count specification: '{spec}'. "
-                    f"Combined specs must use '>=' or '<=' operators."
+                    f"Invalid device count specification: '{spec}'. Combined specs must use '>=' or '<=' operators."
                 )
 
         # Validate min <= max if both present
@@ -562,10 +554,7 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
             )
 
         if min_count < 1:
-            raise ValueError(
-                f"Invalid device count specification: '{spec}'. "
-                f"Device count must be >= 1."
-            )
+            raise ValueError(f"Invalid device count specification: '{spec}'. Device count must be >= 1.")
 
         return {"min": min_count, "max": max_count}
 
@@ -576,18 +565,11 @@ def parse_device_count_requirement(spec: str) -> dict[str, int | None]:
         raise ValueError(f"Invalid device count specification: '{spec}'") from None
 
     if count < 1:
-        raise ValueError(
-            f"Invalid device count specification: '{spec}'. "
-            f"Device count must be >= 1."
-        )
+        raise ValueError(f"Invalid device count specification: '{spec}'. Device count must be >= 1.")
     return {"min": count, "max": count}
 
 
-def validate_device_allocation(
-    requested_count: int,
-    requirement: str,
-    tool_key: str
-) -> None:
+def validate_device_allocation(requested_count: int, requirement: str, tool_key: str) -> None:
     """Validate requested device count against requirement.
 
     Args:
@@ -623,9 +605,11 @@ def validate_device_allocation(
     # Check over-allocation (WARNING)
     if max_required is not None and requested_count > max_required:
         logger.warning(
-            "Tool '%s' requires at most %d device(s), but %d requested. "
-            "This may waste GPU resources. Requirement: %s",
-            tool_key, max_required, requested_count, requirement
+            "Tool '%s' requires at most %d device(s), but %d requested. This may waste GPU resources. Requirement: %s",
+            tool_key,
+            max_required,
+            requested_count,
+            requirement,
         )
 
 
@@ -671,13 +655,15 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
                 continue
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 5:
-                gpus.append({
-                    "index": int(parts[0]),
-                    "name": parts[1],
-                    "total_bytes": int(parts[2]) * 1024 * 1024,  # MiB to bytes
-                    "used_bytes": int(parts[3]) * 1024 * 1024,
-                    "free_bytes": int(parts[4]) * 1024 * 1024,
-                })
+                gpus.append(
+                    {
+                        "index": int(parts[0]),
+                        "name": parts[1],
+                        "total_bytes": int(parts[2]) * 1024 * 1024,  # MiB to bytes
+                        "used_bytes": int(parts[3]) * 1024 * 1024,
+                        "free_bytes": int(parts[4]) * 1024 * 1024,
+                    }
+                )
         return gpus  # type: ignore[return-value]
     except ValueError:
         return []
@@ -702,7 +688,9 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
     Example:
         >>> processes = get_gpu_process_memory()
         >>> for proc in processes:
-        ...     print(f"PID {proc['pid']} ({proc['process_name']}): {proc['used_bytes'] / 1e9:.1f} GB on GPU {proc['gpu_index']}")
+        ...     print(
+        ...         f"PID {proc['pid']} ({proc['process_name']}): {proc['used_bytes'] / 1e9:.1f} GB on GPU {proc['gpu_index']}"
+        ...     )
         PID 12345 (python): 2.3 GB on GPU 0
         PID 67890 (python): 15.1 GB on GPU 1
 
@@ -730,12 +718,14 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
                 gpu_bus_id = parts[0]
                 gpu_index = bus_to_index.get(gpu_bus_id, -1)
 
-                processes.append({
-                    "gpu_index": gpu_index,
-                    "pid": int(parts[1]),
-                    "process_name": parts[2],
-                    "used_bytes": int(parts[3]) * 1024 * 1024,  # MiB to bytes
-                })
+                processes.append(
+                    {
+                        "gpu_index": gpu_index,
+                        "pid": int(parts[1]),
+                        "process_name": parts[2],
+                        "used_bytes": int(parts[3]) * 1024 * 1024,  # MiB to bytes
+                    }
+                )
         return processes  # type: ignore[return-value]
     except ValueError:
         return []
