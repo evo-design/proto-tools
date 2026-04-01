@@ -685,8 +685,6 @@ def example_input():
     output_class=BlastSearchOutput,
     description="Search sequences against BLAST databases (online or local)",
     example_input=example_input,
-    iterable_input_field="query",
-    iterable_output_field="hits",
     cacheable=True,
 )
 def run_blast_search(
