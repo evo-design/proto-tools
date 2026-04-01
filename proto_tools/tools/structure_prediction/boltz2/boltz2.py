@@ -21,7 +21,6 @@ from tqdm import tqdm
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
-    CHAIN_IDS,
     complex_to_yaml,
     write_msa_csv,
 )
@@ -34,6 +33,7 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 
 logger = getLogger(__name__)
+
 
 # ============================================================================
 # Data Models
@@ -64,8 +64,10 @@ class Boltz2Input(StructurePredictionInput):
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = False
 
+
 # Output:
 Boltz2Output = StructurePredictionOutput
+
 
 # Config:
 class Boltz2Config(MSAStructurePredictionConfig):
@@ -147,6 +149,8 @@ class Boltz2Config(MSAStructurePredictionConfig):
         hidden=True,
         include_in_key=False,
     )
+
+
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -249,15 +253,8 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         - Boltz2 Website: https://boltz.bio/boltz2
 
     Example:
-        >>> inputs = Boltz2Input(
-        ...     complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]]
-        ... )
-        >>> config = Boltz2Config(
-        ...     recycling_steps=10,
-        ...     sampling_steps=200,
-        ...     diffusion_samples=25,
-        ...     verbose=True
-        ... )
+        >>> inputs = Boltz2Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
+        >>> config = Boltz2Config(recycling_steps=10, sampling_steps=200, diffusion_samples=25, verbose=True)
         >>> result = run_boltz2(inputs, config)
         >>> print(f"Confidence: {result.structures[0].confidence_score:.2f}")
 
@@ -271,10 +268,14 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     """
     results = [
         run_boltz2_on_complex(
-            config=config, sp_complex=comp,
-            msas=inputs.msas, instance=instance,
+            config=config,
+            sp_complex=comp,
+            msas=inputs.msas,
+            instance=instance,
         )
-        for comp in tqdm(inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes))
+        for comp in tqdm(
+            inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)
+        )
     ]
     return Boltz2Output(structures=results)
 
@@ -283,25 +284,6 @@ def _msa_to_csv_file(msa, csv_path: str, query_index: int = 0) -> None:
     """Write an MSA object to Boltz's CSV format with pairing keys."""
     sequences, _ids = extract_msa_sequences(msa, query_index)
     write_msa_csv(sequences, csv_path)
-
-
-def _extract_protein_sequences_and_chain_ids(sp_complex) -> tuple[list[str], list[str]]:
-    """Extract protein sequences and their chain IDs from a complex.
-
-    Args:
-        sp_complex: StructurePredictionComplex instance containing chain information
-
-    Returns:
-        tuple[list[str], list[str]]: Tuple of (protein_seqs, protein_chain_ids) where chain IDs are uppercase letters
-    """
-    all_chain_ids = CHAIN_IDS
-    protein_seqs = []
-    protein_chain_ids = []
-    for i, chain in enumerate(sp_complex.chains):
-        if chain.entity_type == "protein":
-            protein_seqs.append(chain.sequence)
-            protein_chain_ids.append(all_chain_ids[i])
-    return protein_seqs, protein_chain_ids
 
 
 def run_boltz2_on_complex(
@@ -331,7 +313,7 @@ def run_boltz2_on_complex(
         chain_msa_paths: dict[str, str] | None = None
         if config.use_msa:
             chain_msa_paths = {}
-            protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(sp_complex)
+            protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
             if protein_seqs and msas:
                 msa_dir = os.path.join(temp_dir, "msas")
                 os.makedirs(msa_dir, exist_ok=True)
@@ -341,10 +323,7 @@ def run_boltz2_on_complex(
                         _msa_to_csv_file(msa=msas[seq], csv_path=csv_path, query_index=0)
                         chain_msa_paths[chain_id] = csv_path
                         if config.verbose:
-                            logger.info(
-                                f"Assigned MSA to chain {chain_id} "
-                                f"({len(msas[seq])} sequences)"
-                            )
+                            logger.info(f"Assigned MSA to chain {chain_id} ({len(msas[seq])} sequences)")
 
             # Warn for protein chains without MSAs
             for chain_id in protein_chain_ids:
@@ -356,10 +335,7 @@ def run_boltz2_on_complex(
                     )
 
         # Generate YAML directly with MSA paths baked in
-        chain_dicts = [
-            {"entity_type": chain.entity_type, "sequence": chain.sequence}
-            for chain in sp_complex.chains
-        ]
+        chain_dicts = [{"entity_type": chain.entity_type, "sequence": chain.sequence} for chain in sp_complex.chains]
         yaml_content = complex_to_yaml(chain_dicts, chain_msa_paths=chain_msa_paths)
 
         input_yaml_path = os.path.join(temp_dir, "boltz2_input.yaml")

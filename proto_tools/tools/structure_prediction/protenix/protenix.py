@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import string
 import tempfile
 from logging import getLogger
 from typing import ClassVar, Literal
@@ -133,6 +132,7 @@ class ProtenixInput(StructurePredictionInput):
 # Output:
 ProtenixOutput = StructurePredictionOutput
 
+
 # Config:
 class ProtenixConfig(MSAStructurePredictionConfig):
     """Configuration object for Protenix structure prediction.
@@ -226,8 +226,7 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         title="Seeds",
         default=[0],
         description=(
-            "Random seeds for structure sampling. Each seed produces "
-            "num_diffusion_samples independent samples."
+            "Random seeds for structure sampling. Each seed produces num_diffusion_samples independent samples."
         ),
         advanced=True,
     )
@@ -288,7 +287,8 @@ def example_input():
     cacheable=True,
 )
 def run_protenix(
-    inputs: ProtenixInput, config: ProtenixConfig | None = None,
+    inputs: ProtenixInput,
+    config: ProtenixConfig | None = None,
     instance=None,
 ) -> ProtenixOutput:
     """Predict 3D structures using Protenix.
@@ -342,9 +342,7 @@ def run_protenix(
         - Protenix paper: https://www.biorxiv.org/content/10.1101/2025.01.08.631857
 
     Example:
-        >>> inputs = ProtenixInput(
-        ...     complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]]
-        ... )
+        >>> inputs = ProtenixInput(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
         >>> config = ProtenixConfig(
         ...     model_name="protenix_base_default_v1.0.0",
         ...     num_diffusion_samples=5,
@@ -428,27 +426,6 @@ def run_protenix(
 # ============================================================================
 # Helper Functions
 # ============================================================================
-def _extract_protein_sequences_and_chain_ids(
-    sp_complex,
-) -> tuple[list[str], list[str]]:
-    """Extract protein sequences and their chain IDs from a complex.
-
-    Args:
-        sp_complex: StructurePredictionComplex instance
-
-    Returns:
-        tuple[list[str], list[str]]: Tuple of (protein_seqs, protein_chain_ids)
-    """
-    all_chain_ids = list(string.ascii_uppercase)
-    protein_seqs = []
-    protein_chain_ids = []
-    for i, chain in enumerate(sp_complex.chains):
-        if chain.entity_type == "protein":
-            protein_seqs.append(chain.sequence)
-            protein_chain_ids.append(all_chain_ids[i])
-    return protein_seqs, protein_chain_ids
-
-
 def _write_msas_to_batch_json(
     batch_json: list[dict],
     inputs: ProtenixInput,
@@ -468,9 +445,7 @@ def _write_msas_to_batch_json(
 
     for job_idx, job in enumerate(batch_json):
         sp_complex = inputs.complexes[job_idx]
-        protein_seqs, protein_chain_ids = _extract_protein_sequences_and_chain_ids(
-            sp_complex
-        )
+        protein_seqs, protein_chain_ids = sp_complex.extract_protein_chains()
 
         if not protein_seqs:
             continue
@@ -484,8 +459,7 @@ def _write_msas_to_batch_json(
 
                 if config.verbose:
                     logger.info(
-                        f"Assigned MSA to chain {chain_id} in complex {job_idx} "
-                        f"({len(inputs.msas[seq])} sequences)"
+                        f"Assigned MSA to chain {chain_id} in complex {job_idx} ({len(inputs.msas[seq])} sequences)"
                     )
 
         # Inject MSA paths into the job's proteinChain entries
@@ -494,7 +468,5 @@ def _write_msas_to_batch_json(
                 chain_seq = seq_entry["proteinChain"]["sequence"]
                 for chain_id, protein_seq in zip(protein_chain_ids, protein_seqs, strict=False):
                     if protein_seq == chain_seq and chain_id in msa_paths:
-                        seq_entry["proteinChain"]["unpairedMsaPath"] = msa_paths[
-                            chain_id
-                        ]
+                        seq_entry["proteinChain"]["unpairedMsaPath"] = msa_paths[chain_id]
                         break

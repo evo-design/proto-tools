@@ -7,9 +7,8 @@ MSA CSV file writing and YAML input generation.
 from __future__ import annotations
 
 import csv
-import string
 
-CHAIN_IDS = list(string.ascii_uppercase)
+from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
 
 
 def write_msa_csv(aligned_sequences: list, csv_path: str) -> None:
@@ -46,6 +45,9 @@ def complex_to_yaml(
         str: YAML formatted string for Boltz2 input
     """
     import yaml
+
+    if len(chains) > len(CHAIN_IDS):
+        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
 
     yaml_entries = []
 

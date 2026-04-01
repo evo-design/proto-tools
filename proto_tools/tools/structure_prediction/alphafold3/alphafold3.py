@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 from proto_tools.entities.ligands import map_smiles_to_ccd_code
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    CHAIN_IDS,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -57,8 +58,10 @@ class AlphaFold3Input(StructurePredictionInput):
     SUPPORTED_ENTITY_TYPES: ClassVar[set[str]] = {"protein", "dna", "rna", "ligand"}
     ALLOWS_CHAIN_MODIFICATIONS = True
 
+
 # Output:
 AlphaFold3Output = StructurePredictionOutput
+
 
 # Config:
 class AlphaFold3Config(MSAStructurePredictionConfig):
@@ -159,6 +162,7 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         hidden=True,
     )
 
+
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -182,13 +186,19 @@ def example_input():
     cacheable=True,
 )
 def run_alphafold3(
-    inputs: AlphaFold3Input, config: AlphaFold3Config | None = None,
+    inputs: AlphaFold3Input,
+    config: AlphaFold3Config | None = None,
     instance=None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
 
-    for comp_idx, comp in tqdm(enumerate(inputs.complexes), desc="Folding structures (AlphaFold3)", unit="complex", total=len(inputs.complexes)):
+    for comp_idx, comp in tqdm(
+        enumerate(inputs.complexes),
+        desc="Folding structures (AlphaFold3)",
+        unit="complex",
+        total=len(inputs.complexes),
+    ):
         input_json = _create_input_json_from_complex(
             comp,
             f"{config.name}_{comp_idx}",
@@ -210,9 +220,7 @@ def run_alphafold3(
 
             # Write pre-computed MSAs to A3M files
             if inputs.msas:
-                input_json = _assign_msas_to_input_json(
-                    input_json, inputs.msas, input_dir, config.verbose
-                )
+                input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)
 
             # Write input JSON to file for worker protocol
             input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
@@ -260,6 +268,7 @@ def run_alphafold3(
         },
     )
 
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -302,9 +311,7 @@ def _assign_msas_to_input_json(
         seq_entry["protein"]["unpairedMsaPath"] = rel_path
 
         if verbose:
-            logger.info(
-                f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)"
-            )
+            logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")
 
     return input_json_data
 
@@ -341,11 +348,10 @@ def _create_input_json_from_complex(
         "sequences": [],
     }
 
-    chain_ids = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    if len(sp_complex.chains) > len(chain_ids):
+    if len(sp_complex.chains) > len(CHAIN_IDS):
         # This is a hard limit on the PDB file format.
         # Consider moving to mmCIF if this becomes an issue.
-        raise ValueError(f"Cannot provide more than {len(chain_ids)} chains")
+        raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
 
     for idx, chain in enumerate(sp_complex.chains):
         mol_type = chain.entity_type  # Currently, we use the same conventions as AlphaFold3.
@@ -361,7 +367,7 @@ def _create_input_json_from_complex(
             # AlphaFold3 prefers CCD codes.
             sequence_entry = {
                 mol_type: {
-                    "id": chain_ids[idx],
+                    "id": CHAIN_IDS[idx],
                     "ccdCodes": [ccd_code],
                 }
             }
@@ -370,7 +376,7 @@ def _create_input_json_from_complex(
             # Ignore MSA fields for DNA and RNA.
             sequence_entry = {
                 mol_type: {
-                    "id": chain_ids[idx],
+                    "id": CHAIN_IDS[idx],
                     "sequence": sequence,
                 }
             }
@@ -378,7 +384,7 @@ def _create_input_json_from_complex(
         else:
             sequence_entry = {
                 mol_type: {
-                    "id": chain_ids[idx],
+                    "id": CHAIN_IDS[idx],
                     "sequence": sequence,
                     "pairedMsa": "",
                     "unpairedMsa": "",
@@ -393,16 +399,15 @@ def _create_input_json_from_complex(
             for mod in chain.modifications:
                 if mol_type == "protein":
                     # Protein uses ptmType and ptmPosition
-                    alphafold3_modifications.append({
-                        "ptmType": mod.modification_code,
-                        "ptmPosition": mod.position
-                    })
+                    alphafold3_modifications.append({"ptmType": mod.modification_code, "ptmPosition": mod.position})
                 elif mol_type in ("dna", "rna"):
                     # DNA and RNA use modificationType and basePosition
-                    alphafold3_modifications.append({
-                        "modificationType": mod.modification_code,
-                        "basePosition": mod.position
-                    })
+                    alphafold3_modifications.append(
+                        {
+                            "modificationType": mod.modification_code,
+                            "basePosition": mod.position,
+                        }
+                    )
 
             # Add modifications to the sequence entry
             sequence_entry[mol_type]["modifications"] = alphafold3_modifications

@@ -2,12 +2,14 @@
 
 Shared data models (configs and outputs) for structure prediction tools.
 """
+
 from __future__ import annotations
 
 import logging
+import string
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -31,6 +33,8 @@ from proto_tools.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+CHAIN_IDS: Final[list[str]] = list(string.ascii_uppercase)
 
 
 class ChainModification(BaseModel):
@@ -68,22 +72,15 @@ class ChainModification(BaseModel):
         structure prediction tools.
     """
 
-    position: int = Field(
-        description="1-based position in the sequence where modification occurs"
-    )
-    modification_code: str = Field(
-        description="Chemical Component Dictionary (CCD) code for the modification"
-    )
+    position: int = Field(description="1-based position in the sequence where modification occurs")
+    modification_code: str = Field(description="Chemical Component Dictionary (CCD) code for the modification")
 
     @field_validator("position")
     @classmethod
     def validate_position(cls, pos: int) -> int:
         """Validate that position is 1-based (>= 1)."""
         if pos < 1:
-            raise ValueError(
-                f"Position must be 1-based (>= 1). Got {pos}. "
-                "Note: positions count from 1, not 0."
-            )
+            raise ValueError(f"Position must be 1-based (>= 1). Got {pos}. Note: positions count from 1, not 0.")
         return pos
 
     @field_validator("modification_code")
@@ -136,24 +133,14 @@ class Chain(BaseModel):
         >>> chain = Chain(
         ...     sequence="MVLSPADKTN",
         ...     entity_type="protein",
-        ...     modifications=[
-        ...         ChainModification(position=5, modification_code="SEP")
-        ...     ]
+        ...     modifications=[ChainModification(position=5, modification_code="SEP")],
         ... )
         >>>
         >>> # Protein with phosphorylation using tuples (more convenient)
-        >>> chain = Chain(
-        ...     sequence="MVLSPADKTN",
-        ...     entity_type="protein",
-        ...     modifications=[(5, "SEP")]
-        ... )
+        >>> chain = Chain(sequence="MVLSPADKTN", entity_type="protein", modifications=[(5, "SEP")])
         >>>
         >>> # RNA with multiple modifications using tuples
-        >>> chain = Chain(
-        ...     sequence="AUGCAUGC",
-        ...     entity_type="rna",
-        ...     modifications=[(1, "2MG"), (4, "5MC")]
-        ... )
+        >>> chain = Chain(sequence="AUGCAUGC", entity_type="rna", modifications=[(1, "2MG"), (4, "5MC")])
 
     Note:
         The entity_type is automatically inferred if not provided, but can be
@@ -161,9 +148,7 @@ class Chain(BaseModel):
         are validated to ensure they don't exceed the sequence length.
     """
 
-    sequence: str = Field(
-        description="Sequence of the chain (protein, DNA, RNA, or ligand SMILES)"
-    )
+    sequence: str = Field(description="Sequence of the chain (protein, DNA, RNA, or ligand SMILES)")
     entity_type: str | None = Field(
         default=None,
         description="Entity type: 'protein', 'dna', 'rna', or 'ligand'. Auto-inferred if None.",
@@ -224,9 +209,7 @@ class Chain(BaseModel):
         # If the sequence is a ligand, we can't have modifications
         if self.entity_type == "ligand":
             if self.modifications:
-                raise ValueError(
-                    f"Ligands cannot have modifications. Found: {self.modifications}"
-                )
+                raise ValueError(f"Ligands cannot have modifications. Found: {self.modifications}")
             return self
 
         for mod in self.modifications:
@@ -249,9 +232,7 @@ class Chain(BaseModel):
             # If the modification has a canonical parent, validate compatibility
             if canonical_for_mod is not None and residue_or_base_char.upper() != canonical_for_mod.upper():
                 # Get allowed modifications for this residue or base to show in error
-                allowed_mods = get_modifications_for_component(
-                    self.entity_type, residue_or_base_char.upper()
-                )
+                allowed_mods = get_modifications_for_component(self.entity_type, residue_or_base_char.upper())
 
                 mods_str = ", ".join(allowed_mods) if allowed_mods else "none"
 
@@ -264,9 +245,7 @@ class Chain(BaseModel):
 
         return self
 
-    def add_modification(
-        self, position: int, modification_code: str
-    ) -> Chain:
+    def add_modification(self, position: int, modification_code: str) -> Chain:
         """Add a modification to this chain.
 
         Args:
@@ -288,10 +267,7 @@ class Chain(BaseModel):
 
         # Validate position is within bounds
         if mod.position > len(self.sequence):
-            raise ValueError(
-                f"Modification at position {mod.position} exceeds "
-                f"sequence length {len(self.sequence)}"
-            )
+            raise ValueError(f"Modification at position {mod.position} exceeds sequence length {len(self.sequence)}")
 
         # Validate modification is compatible with residue or base at this position
         if self.entity_type != "ligand":
@@ -300,9 +276,7 @@ class Chain(BaseModel):
 
             if canonical_for_mod is not None and residue_or_base_char.upper() != canonical_for_mod.upper():
                 # Get allowed modifications for this residue or base
-                allowed_mods = get_modifications_for_component(
-                    self.entity_type, residue_or_base_char.upper()
-                )
+                allowed_mods = get_modifications_for_component(self.entity_type, residue_or_base_char.upper())
 
                 mods_str = ", ".join(allowed_mods) if allowed_mods else "none"
 
@@ -371,52 +345,27 @@ class StructurePredictionComplex(BaseModel):
         >>>
         >>> # Explicit entity types via Chain objects
         >>> complex = StructurePredictionComplex(
-        ...     chains=[
-        ...         Chain(sequence="MVLSPADKTN", entity_type="protein"),
-        ...         Chain(sequence="ATCG", entity_type="dna")
-        ...     ]
+        ...     chains=[Chain(sequence="MVLSPADKTN", entity_type="protein"), Chain(sequence="ATCG", entity_type="dna")]
         ... )
         >>>
         >>> # Mix strings and Chain objects
         >>> complex = StructurePredictionComplex(
-        ...     chains=[
-        ...         "MVLSPADKTN",
-        ...         Chain(
-        ...             sequence="ACDEFGHIKL",
-        ...             modifications=[(3, "SEP")]
-        ...         )
-        ...     ]
+        ...     chains=["MVLSPADKTN", Chain(sequence="ACDEFGHIKL", modifications=[(3, "SEP")])]
         ... )
         >>>
         >>> # Chain objects with modifications using tuples (convenient)
         >>> complex = StructurePredictionComplex(
         ...     chains=[
-        ...         Chain(
-        ...             sequence="MVLSPADKTN",
-        ...             entity_type="protein",
-        ...             modifications=[(5, "HY3"), (10, "TPO")]
-        ...         ),
-        ...         Chain(
-        ...             sequence="AUGCAUGC",
-        ...             entity_type="rna",
-        ...             modifications=[(1, "2MG")]
-        ...         )
+        ...         Chain(sequence="MVLSPADKTN", entity_type="protein", modifications=[(5, "HY3"), (10, "TPO")]),
+        ...         Chain(sequence="AUGCAUGC", entity_type="rna", modifications=[(1, "2MG")]),
         ...     ]
         ... )
         >>>
         >>> # Using dictionaries (most flexible)
         >>> complex = StructurePredictionComplex(
         ...     chains=[
-        ...         {
-        ...             "sequence": "MVLSPADKTN",
-        ...             "entity_type": "protein",
-        ...             "modifications": [(5, "HY3"), (10, "TPO")]
-        ...         },
-        ...         {
-        ...             "sequence": "AUGCAUGC",
-        ...             "entity_type": "rna",
-        ...             "modifications": [(1, "2MG")]
-        ...         }
+        ...         {"sequence": "MVLSPADKTN", "entity_type": "protein", "modifications": [(5, "HY3"), (10, "TPO")]},
+        ...         {"sequence": "AUGCAUGC", "entity_type": "rna", "modifications": [(1, "2MG")]},
         ...     ]
         ... )
         >>>
@@ -425,7 +374,7 @@ class StructurePredictionComplex(BaseModel):
         ...     chains=[
         ...         "MVLSPADKTN",  # String
         ...         {"sequence": "ATCG", "entity_type": "dna"},  # Dictionary
-        ...         Chain(sequence="AUGC", entity_type="rna")  # Chain object
+        ...         Chain(sequence="AUGC", entity_type="rna"),  # Chain object
         ...     ]
         ... )
         >>>
@@ -463,6 +412,8 @@ class StructurePredictionComplex(BaseModel):
         """Normalize chains to Chain objects, converting strings and dicts as needed."""
         if not isinstance(chains, list):
             raise ValueError(f"chains must be a list, got {type(chains)}")
+        if len(chains) > len(CHAIN_IDS):
+            raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
 
         normalized_chains = []
         for chain_idx, chain in enumerate(chains):
@@ -474,17 +425,12 @@ class StructurePredictionComplex(BaseModel):
                 try:
                     normalized_chains.append(Chain(**chain))
                 except Exception as e:
-                    raise ValueError(
-                        f"Chain {chain_idx} dictionary is invalid: {e}"
-                    ) from e
+                    raise ValueError(f"Chain {chain_idx} dictionary is invalid: {e}") from e
             elif isinstance(chain, Chain):
                 # Already a Chain object
                 normalized_chains.append(chain)
             else:
-                raise ValueError(
-                    f"Chain {chain_idx} must be a string, dictionary, or Chain object. "
-                    f"Got {type(chain)}"
-                )
+                raise ValueError(f"Chain {chain_idx} must be a string, dictionary, or Chain object. Got {type(chain)}")
 
         return normalized_chains
 
@@ -501,6 +447,23 @@ class StructurePredictionComplex(BaseModel):
             list[str]: List of entity types, one for each chain.
         """
         return [chain.entity_type for chain in self.chains]
+
+    def extract_protein_chains(self) -> tuple[list[str], list[str]]:
+        """Extract protein sequences and their chain IDs from this complex.
+
+        Iterates over all chains and returns only those with entity_type
+        "protein", along with their corresponding uppercase-letter chain IDs.
+
+        Returns:
+            tuple[list[str], list[str]]: Tuple of (protein_sequences, protein_chain_ids).
+        """
+        protein_seqs: list[str] = []
+        protein_chain_ids: list[str] = []
+        for i, chain in enumerate(self.chains):
+            if chain.entity_type == "protein":
+                protein_seqs.append(chain.sequence)
+                protein_chain_ids.append(CHAIN_IDS[i])
+        return protein_seqs, protein_chain_ids
 
     def sum_of_chain_lengths(self) -> int:
         """Get the sum of the lengths of all chains in the complex."""
@@ -539,7 +502,7 @@ class StructurePredictionComplex(BaseModel):
         if chain_index < 0 or chain_index >= len(self.chains):
             raise IndexError(
                 f"Chain index {chain_index} out of bounds. "
-                f"Complex has {len(self.chains)} chains (indices 0-{len(self.chains)-1})"
+                f"Complex has {len(self.chains)} chains (indices 0-{len(self.chains) - 1})"
             )
 
         self.chains[chain_index].add_modification(position, modification_code)
@@ -610,20 +573,16 @@ class StructurePredictionInput(BaseToolInput):
 
     Examples:
         >>> # Single-chain complexes (entity types auto-inferred)
-        >>> inputs = StructurePredictionInput(
-        ...     complexes=["MVLSPADKTN", "ACDEFGHIKL"]
-        ... )
+        >>> inputs = StructurePredictionInput(complexes=["MVLSPADKTN", "ACDEFGHIKL"])
         >>>
         >>> # Multi-chain complex (entity types auto-inferred)
-        >>> inputs = StructurePredictionInput(
-        ...     complexes=[["MVLSPADKTN", "ACDEFGHIKL"]]
-        ... )
+        >>> inputs = StructurePredictionInput(complexes=[["MVLSPADKTN", "ACDEFGHIKL"]])
         >>>
         >>> # Explicit format with entity types using Chain objects
         >>> complex1 = StructurePredictionComplex(
         ...     chains=[
         ...         Chain(sequence="MVLSPADKTN", entity_type="protein"),
-        ...         Chain(sequence="ATCGATCG", entity_type="dna")
+        ...         Chain(sequence="ATCGATCG", entity_type="dna"),
         ...     ]
         ... )
         >>> inputs = StructurePredictionInput(complexes=[complex1])
@@ -632,7 +591,7 @@ class StructurePredictionInput(BaseToolInput):
         >>> complex2 = StructurePredictionComplex(
         ...     chains=[
         ...         {"sequence": "MVLSPADKTN", "entity_type": "protein"},
-        ...         {"sequence": "ATCGATCG", "entity_type": "dna"}
+        ...         {"sequence": "ATCGATCG", "entity_type": "dna"},
         ...     ]
         ... )
         >>> inputs = StructurePredictionInput(complexes=[complex2])
@@ -691,7 +650,6 @@ class StructurePredictionInput(BaseToolInput):
 
         final_complexes = []
         for sp_complex in value:
-
             # If item is a StructurePredictionComplex, add it to the final list
             if isinstance(sp_complex, StructurePredictionComplex):
                 final_complexes.append(sp_complex)
@@ -723,8 +681,7 @@ class StructurePredictionInput(BaseToolInput):
 
             if not cls.ALLOWS_CHAIN_MODIFICATIONS and comp.has_modifications():
                 raise ValueError(
-                    f"Complex {comp_idx} contains modifications. "
-                    f"{cls.__name__} does not allow chain modifications."
+                    f"Complex {comp_idx} contains modifications. {cls.__name__} does not allow chain modifications."
                 )
 
         return final_complexes
@@ -771,6 +728,7 @@ class StructurePredictionConfig(BaseConfig):
             from GPU acceleration. Default: ``"cuda"``.
 
     """
+
     device: str = ConfigField(
         title="Device",
         default="cuda",
@@ -815,9 +773,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         if self.colabfold_search_config is None:
             self.colabfold_search_config = ColabfoldSearchConfig()
         self.colabfold_search_config.verbose = self.verbose
-        return _preprocess_structure_prediction_msas(
-            inputs, self.colabfold_search_config, self.verbose
-        )
+        return _preprocess_structure_prediction_msas(inputs, self.colabfold_search_config, self.verbose)
 
 
 class StructurePredictionOutput(BaseToolOutput):
@@ -910,10 +866,7 @@ def _preprocess_structure_prediction_msas(
     """
     if inputs.msas is not None:
         if verbose:
-            logger.info(
-                f"Using {len(inputs.msas)} pre-supplied MSA(s), "
-                f"skipping ColabFold search"
-            )
+            logger.info(f"Using {len(inputs.msas)} pre-supplied MSA(s), skipping ColabFold search")
         return inputs
 
     from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
@@ -932,10 +885,7 @@ def _preprocess_structure_prediction_msas(
         return inputs
 
     if verbose:
-        logger.info(
-            f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) "
-            f"using ColabFold search..."
-        )
+        logger.info(f"Generating MSAs for {len(unique_seqs)} unique protein sequence(s) using ColabFold search...")
 
     queries = list(unique_seqs.items())
     colabfold_input = ColabfoldSearchInput(queries=queries)
@@ -949,10 +899,7 @@ def _preprocess_structure_prediction_msas(
             seq = name_to_seq[result.sequence_id]
             msas[seq] = result.msa
             if verbose:
-                logger.info(
-                    f"Generated MSA for {result.sequence_id}: "
-                    f"{result.num_homologs_found} homologs found"
-                )
+                logger.info(f"Generated MSA for {result.sequence_id}: {result.num_homologs_found} homologs found")
         else:
             if verbose:
                 logger.warning(f"No homologs found for {result.sequence_id}")
