@@ -14,8 +14,6 @@ Example:
     >>> print(f"Designed {len(result.output_structures)} structures")
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import tempfile

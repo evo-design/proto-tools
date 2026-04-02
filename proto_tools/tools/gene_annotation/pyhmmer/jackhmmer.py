@@ -3,8 +3,6 @@
 PyHMMER jackhmmer tool: iterative protein sequence search.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import field_validator

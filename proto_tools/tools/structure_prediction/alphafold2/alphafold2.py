@@ -6,8 +6,6 @@ This module provides standardized interfaces for protein structure prediction
 using the original AlphaFold2 model through the ColabDesign JAX wrapper.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any, ClassVar
 

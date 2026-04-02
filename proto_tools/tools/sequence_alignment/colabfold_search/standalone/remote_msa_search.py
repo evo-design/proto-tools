@@ -6,8 +6,6 @@ This script runs ColabFold's remote MMseqs2 API in an isolated environment
 to avoid dependency conflicts with the main proto-language environment.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import shutil

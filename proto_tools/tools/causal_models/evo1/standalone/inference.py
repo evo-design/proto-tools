@@ -7,8 +7,6 @@ Usage (called by ToolInstance, not directly):
     python inference.py <input.json> <output.json>
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import sys

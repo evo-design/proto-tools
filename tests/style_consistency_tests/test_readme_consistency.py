@@ -1,7 +1,5 @@
 """tests/style_consistency_tests/test_readme_consistency.py."""
 
-from __future__ import annotations
-
 import re
 import urllib.error
 import urllib.request

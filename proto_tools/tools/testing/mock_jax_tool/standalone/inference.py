@@ -7,8 +7,6 @@ and device movement uses jax.device_put() on the params pytree (matching
 ProteinMPNN, Flax, Haiku, etc.).
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

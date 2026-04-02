@@ -1,7 +1,5 @@
 """Standalone inference entry point for Splice Transformer RNA splicing prediction."""
 
-from __future__ import annotations
-
 import json
 import logging
 import os

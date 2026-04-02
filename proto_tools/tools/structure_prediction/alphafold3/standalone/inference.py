@@ -6,8 +6,6 @@ via Singularity containers, with support for MSA generation via ColabFold search
 Worker protocol implementation for ToolInstance integration.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

@@ -1,7 +1,5 @@
 """proto_tools/tools/orf_prediction/orf.py."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import GetCoreSchemaHandler
@@ -146,7 +144,7 @@ class ORF:
         )
 
     @classmethod
-    def _validate_from_dict(cls, value: dict[str, Any] | ORF) -> ORF:
+    def _validate_from_dict(cls, value: "dict[str, Any] | ORF") -> "ORF":
         """Create an ORF from a dictionary (used during deserialization)."""
         if isinstance(value, cls):
             return value

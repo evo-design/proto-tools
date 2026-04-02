@@ -3,8 +3,6 @@
 PyHMMER phmmer tool: search protein sequences against protein sequences.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import field_validator

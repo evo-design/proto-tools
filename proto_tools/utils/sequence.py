@@ -3,7 +3,6 @@
 Sequence validation, detection, and ID resolution utilities.
 """
 
-from __future__ import annotations
 
 # ============================================================================
 # Sequence Constants

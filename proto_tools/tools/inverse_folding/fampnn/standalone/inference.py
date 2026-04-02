@@ -7,8 +7,6 @@ Handles all four FAMPNN operations:
   - score_mutations: Score specific mutations from a list
 """
 
-from __future__ import annotations
-
 import json
 import os
 import sys

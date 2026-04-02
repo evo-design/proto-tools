@@ -3,8 +3,6 @@
 Tests for inverse folding shared data models.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

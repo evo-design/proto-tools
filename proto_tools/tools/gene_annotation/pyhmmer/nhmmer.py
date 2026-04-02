@@ -3,8 +3,6 @@
 PyHMMER nhmmer tool: search nucleotide sequences against nucleotide sequences.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import field_validator

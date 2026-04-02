@@ -3,8 +3,6 @@
 This module provides a standardized interface for MAFFT multiple sequence alignment.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any, Literal
 

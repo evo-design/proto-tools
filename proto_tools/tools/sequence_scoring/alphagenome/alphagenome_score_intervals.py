@@ -3,8 +3,6 @@
 AlphaGenome batched interval scoring tool.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 import logging

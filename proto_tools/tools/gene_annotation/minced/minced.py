@@ -5,8 +5,6 @@ in nucleotide sequences using MinCED (Mining CRISPRs in Environmental Datasets),
 a tool for finding CRISPR repeats and spacers in genomic sequences.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

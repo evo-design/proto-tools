@@ -5,8 +5,6 @@ Uses real JAX with jax.device_put() for device placement, same pattern
 as ProteinMPNN and other real JAX tools.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

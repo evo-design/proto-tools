@@ -8,8 +8,6 @@ The subprocess is a simple Python one-liner that scales input data, lightweight
 but exercises the full subprocess device routing path.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import subprocess

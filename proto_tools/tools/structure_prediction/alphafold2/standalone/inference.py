@@ -7,8 +7,6 @@ Usage:
     python inference.py <input_json_path> <output_json_path>
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

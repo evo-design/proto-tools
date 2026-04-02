@@ -3,8 +3,6 @@
 Tests for ToolPool parallel fan-out across devices.
 """
 
-from __future__ import annotations
-
 import threading
 from unittest.mock import MagicMock, patch
 

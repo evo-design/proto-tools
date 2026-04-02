@@ -25,8 +25,6 @@ References:
         https://docs.nvidia.com/deploy/cuda-compatibility/
 """
 
-from __future__ import annotations
-
 import functools
 import logging
 

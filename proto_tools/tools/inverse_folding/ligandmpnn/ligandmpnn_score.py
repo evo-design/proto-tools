@@ -3,8 +3,6 @@
 LigandMPNN scoring tool.
 """
 
-from __future__ import annotations
-
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceStructurePair,

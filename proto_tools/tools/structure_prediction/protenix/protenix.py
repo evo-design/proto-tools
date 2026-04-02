@@ -9,8 +9,6 @@ Example:
     >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
 """
 
-from __future__ import annotations
-
 import json
 import os
 import tempfile

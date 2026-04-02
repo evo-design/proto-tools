@@ -5,8 +5,6 @@ tool.  Accepts two PDB text blobs, writes them to temp files, calls the binary,
 and parses the two TM-scores from stdout.
 """
 
-from __future__ import annotations
-
 from logging import getLogger
 from pathlib import Path
 from typing import Any

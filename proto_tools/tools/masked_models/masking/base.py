@@ -3,8 +3,6 @@
 Masking strategies for masked language model sampling.
 """
 
-from __future__ import annotations
-
 import logging
 import warnings
 from collections.abc import Callable

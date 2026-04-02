@@ -3,8 +3,6 @@
 Contains base class for representing a protein structure.
 """
 
-from __future__ import annotations
-
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -51,7 +49,7 @@ CHAIN_COLORS = [
 ]
 
 
-def _create_bfactor_legend_html(b_factor_type: BFactorType, range_max: float) -> str:
+def _create_bfactor_legend_html(b_factor_type: "BFactorType", range_max: float) -> str:
     """Create an HTML legend for B-factor coloring.
 
     Args:
@@ -607,7 +605,7 @@ class Structure:
         )
 
     @classmethod
-    def _validate_from_dict(cls, value: dict[str, Any] | Structure) -> Structure:
+    def _validate_from_dict(cls, value: "dict[str, Any] | Structure") -> "Structure":
         """Create a Structure from a dictionary (used during deserialization)."""
         if isinstance(value, cls):
             return value

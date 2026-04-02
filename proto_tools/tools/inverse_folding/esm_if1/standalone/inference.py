@@ -1,7 +1,5 @@
 """ESM-IF/ProteinDPO inference implementation for standalone venv execution."""
 
-from __future__ import annotations
-
 import gc
 import json
 import math

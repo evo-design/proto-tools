@@ -3,8 +3,6 @@
 Unified BLAST search tool supporting both online (NCBI) and local modes.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import re
@@ -128,7 +126,7 @@ class BlastSearchInput(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def infer_query_type(self) -> BlastSearchInput:
+    def infer_query_type(self) -> "BlastSearchInput":
         """Classify query as a raw sequence or a FASTA file path."""
         path = Path(self.query)
         if path.exists() and path.is_file():
@@ -552,7 +550,7 @@ class BlastSearchConfig(BaseConfig):
     )
 
     @model_validator(mode="after")
-    def validate_mode_requirements(self) -> BlastSearchConfig:
+    def validate_mode_requirements(self) -> "BlastSearchConfig":
         """Validate that mode-specific required fields are provided and.
 
         warn about mode-inappropriate parameters.

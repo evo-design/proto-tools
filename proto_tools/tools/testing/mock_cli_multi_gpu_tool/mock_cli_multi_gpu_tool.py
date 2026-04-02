@@ -5,8 +5,6 @@ matching tools like Boltz2 with multi-GPU support. It uses
 get_subprocess_device_env() for device routing with comma-separated device strings.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

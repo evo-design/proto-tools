@@ -7,8 +7,6 @@ Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

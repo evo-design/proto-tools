@@ -5,8 +5,6 @@ from nucleotide CRISPR loci using the CRISPRtracrRNA tool from the Backofen Lab
 (https://github.com/BackofenLab/CRISPRtracrRNA).
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 from typing import Any, Literal

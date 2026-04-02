@@ -17,8 +17,6 @@ read-input / run-operation / write-output pattern by calling the
 operations directly based on the ``operation`` key in the input dict.
 """
 
-from __future__ import annotations
-
 import contextlib
 import importlib.util
 import json

@@ -65,8 +65,6 @@ If ``BIO_TOOLS_MANAGED_DEVICES`` is not set, DeviceManager auto-allocates from a
 visible via ``CUDA_VISIBLE_DEVICES`` (or all system GPUs if CUDA_VISIBLE_DEVICES is unset).
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import threading
@@ -134,7 +132,7 @@ class DeviceManager:
     Thread-safe - all public methods are protected by a lock.
     """
 
-    _instance: DeviceManager | None = None
+    _instance: "DeviceManager | None" = None
     _lock = threading.Lock()
 
     def __init__(self) -> None:
@@ -152,7 +150,7 @@ class DeviceManager:
         self._apply_env_overrides()
 
     @classmethod
-    def get_instance(cls) -> DeviceManager:
+    def get_instance(cls) -> "DeviceManager":
         """Return the singleton DeviceManager instance."""
         if cls._instance is None:
             with cls._lock:

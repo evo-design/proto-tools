@@ -8,7 +8,6 @@ Reference file for the `implement-tool` skill. Templates are tagged with which p
 
 ```python
 """{ToolName} {operation} tool."""
-from __future__ import annotations
 
 import logging
 from typing import Dict, List, Literal

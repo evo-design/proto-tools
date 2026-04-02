@@ -3,8 +3,6 @@
 AlphaGenome batched in-silico mutagenesis (ISM) tool.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 import logging
@@ -87,7 +85,7 @@ class AlphaGenomeISM(AlphaGenomeInterval):
         return normalized
 
     @model_validator(mode="after")
-    def validate_ism_interval(self) -> AlphaGenomeISM:
+    def validate_ism_interval(self) -> "AlphaGenomeISM":
         """Validate ISM interval relationships."""
         if self.ism_interval_end <= self.ism_interval_start:
             raise ValueError("ism_interval_end must be greater than ism_interval_start")

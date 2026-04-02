@@ -3,8 +3,6 @@
 Shared data models, constants, and Literal types for AlphaGenome tools.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 from pathlib import Path
@@ -103,7 +101,7 @@ class AlphaGenomeInterval(BaseToolInput):
     )
 
     @model_validator(mode="after")
-    def validate_interval(self) -> AlphaGenomeInterval:
+    def validate_interval(self) -> "AlphaGenomeInterval":
         """Validate interval start < end."""
         if self.interval_end <= self.interval_start:
             raise ValueError("end must be greater than start")
@@ -143,7 +141,7 @@ class AlphaGenomeVariant(AlphaGenomeInterval):
         return normalized
 
     @model_validator(mode="after")
-    def validate_variant_position(self) -> AlphaGenomeVariant:
+    def validate_variant_position(self) -> "AlphaGenomeVariant":
         """Ensure variant position is within the interval."""
         if not (self.interval_start <= self.variant_position < self.interval_end):
             raise ValueError("variant_position must be within [interval_start, interval_end)")

@@ -5,8 +5,6 @@ Accepts two PDB text blobs, calls the binary with ``-mm 1 -ter 1`` flags for
 multimer support, and parses the two TM-scores from stdout.
 """
 
-from __future__ import annotations
-
 from logging import getLogger
 from pathlib import Path
 from typing import Any

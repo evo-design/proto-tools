@@ -9,8 +9,6 @@ The ``MaskingMethod`` Literal and ``MASKERS`` dict are the single source of
 truth for valid method names.
 """
 
-from __future__ import annotations
-
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable

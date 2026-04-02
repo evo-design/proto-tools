@@ -3,8 +3,6 @@
 Model cache helpers for Evo2.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from proto_tools.tools.causal_models.evo2.standalone.inference import Evo2Model

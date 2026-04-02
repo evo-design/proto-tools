@@ -5,8 +5,6 @@ JAX semantics: no in-place .to(), model reload on device change, and
 get_jax_memory_stats() reporting.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

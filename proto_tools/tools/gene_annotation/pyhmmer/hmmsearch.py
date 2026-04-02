@@ -3,8 +3,6 @@
 PyHMMER hmmsearch tool: search HMM profiles against protein sequences.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

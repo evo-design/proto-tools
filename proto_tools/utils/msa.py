@@ -3,8 +3,6 @@
 Shared MSA utilities for structure prediction tools.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 

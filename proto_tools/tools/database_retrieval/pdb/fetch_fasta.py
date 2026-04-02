@@ -4,8 +4,6 @@ Wraps the RCSB PDB FASTA endpoint for fetching chain sequences with
 automatic protein/nucleic acid classification.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import Field

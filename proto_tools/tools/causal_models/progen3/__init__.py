@@ -1,7 +1,5 @@
 """ProGen3 protein language model for sequence generation and scoring."""
 
-from __future__ import annotations
-
 from proto_tools.tools.causal_models.progen3.progen3_sample import (
     ProGen3SampleConfig,
     ProGen3SampleInput,

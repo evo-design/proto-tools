@@ -3,8 +3,6 @@
 Segmasker tool for detecting low-complexity regions in protein sequences.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 from typing import Any

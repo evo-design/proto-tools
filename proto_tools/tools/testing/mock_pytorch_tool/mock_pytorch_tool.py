@@ -5,8 +5,6 @@ memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
 in <1 second while still exercising all DeviceManager and ToolPool code paths.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

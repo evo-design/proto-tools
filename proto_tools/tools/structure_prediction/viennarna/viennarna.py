@@ -6,8 +6,6 @@ This module provides standardized interfaces for RNA secondary structure
 prediction using ViennaRNA's minimum free energy (MFE) folding algorithm.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any

@@ -15,8 +15,6 @@ This file is copied by the worker bootstrap. The source file is tracked by git,
 but the copies in the standalone folders are not tracked.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 from collections.abc import Callable

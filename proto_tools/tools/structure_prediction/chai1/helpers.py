@@ -4,8 +4,6 @@ Shared helpers for Chai-1 structure prediction. Provides utilities for
 sequence hashing, MSA Parquet file writing, and FASTA generation.
 """
 
-from __future__ import annotations
-
 import hashlib
 from typing import Any
 

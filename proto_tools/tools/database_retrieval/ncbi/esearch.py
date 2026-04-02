@@ -4,8 +4,6 @@ Wraps the NCBI E-utilities esearch endpoint for finding IDs across
 protein, nuccore, and gene databases.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import Field

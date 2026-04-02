@@ -6,8 +6,6 @@ Provides a decorator-based API for registering tools with metadata and
 automatic schema generation for API/frontend integration.
 """
 
-from __future__ import annotations
-
 import inspect
 import logging
 import time

@@ -6,8 +6,6 @@ It's designed to be fast (<1s) while exercising multi-device allocation,
 movement, and eviction code paths.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import sys

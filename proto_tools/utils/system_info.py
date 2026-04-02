@@ -3,8 +3,6 @@
 Collects platform, GPU, and environment information without torch dependency.
 """
 
-from __future__ import annotations
-
 import functools
 import logging
 import os

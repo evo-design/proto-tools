@@ -12,8 +12,6 @@ Supports the same CLI options and markers as the main proto-language tests:
                        (combine with -k to re-test specific tools incrementally)
 """
 
-from __future__ import annotations
-
 import functools
 import json
 import logging

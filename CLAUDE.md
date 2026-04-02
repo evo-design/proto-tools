@@ -196,7 +196,6 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 - Never catch exceptions inside tool functions; the `@tool` decorator handles all error wrapping
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
-- Use `from __future__ import annotations` at the top of every file
 - Use `logging.getLogger(__name__)`, never `print()`
 - Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`

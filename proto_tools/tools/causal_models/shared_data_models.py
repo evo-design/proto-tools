@@ -4,8 +4,6 @@ Contains base schemas for scoring and sampling operations
 shared across all causal/autoregressive language models.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any

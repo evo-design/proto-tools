@@ -3,8 +3,6 @@
 Contains class for representing multiple sequence alignments (MSAs).
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import warnings

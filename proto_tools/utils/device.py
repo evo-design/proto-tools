@@ -8,8 +8,6 @@ PyTorch at all).  Actual GPU workloads run inside isolated venvs
 that have their own CUDA-enabled PyTorch.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import shutil

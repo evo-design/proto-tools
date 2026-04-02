@@ -3,8 +3,6 @@
 Shared HTTP session builder with retry logic.
 """
 
-from __future__ import annotations
-
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry

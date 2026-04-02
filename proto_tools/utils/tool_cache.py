@@ -14,8 +14,6 @@ Each Program instance maintains its own isolated cache using Python's
 contextvars.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import logging
@@ -30,7 +28,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # Context variable for program-scoped cache
-_program_tool_cache: ContextVar[ToolCache | None] = ContextVar("_program_tool_cache", default=None)
+_program_tool_cache: ContextVar["ToolCache | None"] = ContextVar("_program_tool_cache", default=None)
 
 
 def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:

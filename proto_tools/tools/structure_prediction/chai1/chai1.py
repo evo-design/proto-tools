@@ -3,8 +3,6 @@
 Protein structure prediction using Chai1.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import tempfile

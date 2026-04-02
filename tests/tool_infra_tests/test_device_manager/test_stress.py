@@ -3,8 +3,6 @@
 Tests for device movement stress with real tool instances.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

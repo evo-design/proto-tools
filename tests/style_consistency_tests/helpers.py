@@ -3,8 +3,6 @@
 Shared helpers for style-consistency tests.
 """
 
-from __future__ import annotations
-
 import ast
 import contextlib
 import re
