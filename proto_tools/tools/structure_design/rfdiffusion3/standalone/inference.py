@@ -5,8 +5,6 @@ References:
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/intro_inference_calculations.md
 """
 
-from __future__ import annotations
-
 import gzip
 import json
 import logging

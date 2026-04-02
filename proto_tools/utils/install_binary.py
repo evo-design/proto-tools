@@ -11,8 +11,6 @@ Usage:
     python install_binary.py <tool_name>
 """
 
-from __future__ import annotations
-
 import importlib.util
 import platform
 import sys

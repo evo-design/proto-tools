@@ -3,8 +3,6 @@
 AlphaGenome batched variant scoring tool.
 """
 
-from __future__ import annotations
-
 import csv
 import json
 import logging

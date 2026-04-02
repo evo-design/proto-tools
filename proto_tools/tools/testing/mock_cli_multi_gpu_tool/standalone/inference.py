@@ -5,8 +5,6 @@ multiple GPUs visible. It uses get_subprocess_device_env() for correct
 CUDA_VISIBLE_DEVICES routing with comma-separated device strings.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import subprocess

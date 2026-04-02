@@ -5,8 +5,6 @@ using the Evo1 language model, supporting multiple model checkpoints
 including CRISPR and transposon fine-tuned variants.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from pathlib import Path

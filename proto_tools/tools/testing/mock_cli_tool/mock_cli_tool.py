@@ -5,8 +5,6 @@ matching the pattern used by tools like Boltz2, RFDiffusion3, and Protenix.
 It uses get_subprocess_device_env() for device routing.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

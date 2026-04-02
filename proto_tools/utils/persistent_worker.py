@@ -4,8 +4,6 @@ Manages a subprocess that stays alive between calls, communicating via
 stdin/stdout JSON-line protocol. This avoids reloading models on every call.
 """
 
-from __future__ import annotations
-
 import contextlib
 import json
 import logging

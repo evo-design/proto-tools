@@ -3,8 +3,6 @@
 Authentication helpers for gated model providers.
 """
 
-from __future__ import annotations
-
 import os
 import re
 

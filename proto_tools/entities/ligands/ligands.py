@@ -3,8 +3,6 @@
 Contains base class for representing small-molecule ligands.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
@@ -23,7 +21,7 @@ from proto_tools.entities.ligands.utils import (
 class Fragment:
     """Class representing a single small molecule."""
 
-    def __init__(self, molecule: str | Chem.Mol | Fragment, name: str | None = None):
+    def __init__(self, molecule: "str | Chem.Mol | Fragment", name: str | None = None):
         """Initialize a Fragment from either a SMILES string, an RDKit Mol object,.
 
         or a Fragment object.
@@ -100,7 +98,7 @@ class Fragment:
     def __repr__(self) -> str:
         return self.__str__()
 
-    def __eq__(self, other: Fragment) -> bool:  # type: ignore[override]
+    def __eq__(self, other: "Fragment") -> bool:  # type: ignore[override]
         return self.smiles == other.smiles
 
     def visualize(self, width: Any = 400, height: Any = 400, style: Any = "stick") -> None:
@@ -130,7 +128,8 @@ class Ligands:
     """Class representing Ligands (which can contain multiple small molecule 'fragments')."""
 
     def __init__(
-        self, input_data: list[Fragment | Chem.Mol | str | Path | Ligands] | Fragment | Chem.Mol | str | Path | Ligands
+        self,
+        input_data: "list[Fragment | Chem.Mol | str | Path | Ligands] | Fragment | Chem.Mol | str | Path | Ligands",
     ):
         """Initialize a Ligands object from a single Fragment, a list of Fragments,.
 
@@ -208,7 +207,7 @@ class Ligands:
     def __str__(self) -> str:
         return f"Ligands(fragments={self.fragments})"
 
-    def __eq__(self, other: Ligands) -> bool:  # type: ignore[override]
+    def __eq__(self, other: "Ligands") -> bool:  # type: ignore[override]
         self_smiles_set = set(self.get_smiles_list())
         other_smiles_set = set(other.get_smiles_list())
         return self_smiles_set == other_smiles_set

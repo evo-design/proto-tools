@@ -3,8 +3,6 @@
 Tests for ToolInstance.
 """
 
-from __future__ import annotations
-
 import contextlib
 import hashlib
 import logging

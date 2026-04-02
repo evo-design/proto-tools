@@ -41,7 +41,6 @@ Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>  # CPU tools
     python inference.py <input.json> <output.json>  # AI model tools
 """
-from __future__ import annotations
 
 import json
 import sys
@@ -159,7 +158,6 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 """
 {ToolName} standalone inference for ToolInstance venv execution.
 """
-from __future__ import annotations
 
 import json
 import sys
@@ -399,7 +397,6 @@ def get_memory_stats() -> dict:
 CRITICAL: This script runs in an isolated environment and CANNOT import from proto_tools.
 Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (auto-copied).
 """
-from __future__ import annotations
 
 import json
 import subprocess
@@ -551,7 +548,7 @@ __all__ = [
 ]
 ```
 
-**Note:** No `from __future__ import annotations` in `__init__.py` files. Sort `__all__` alphabetically.
+**Note:** Sort `__all__` alphabetically.
 
 ### Level 2: Category `__init__.py`
 `tools/{category}/__init__.py` — add imports:

@@ -7,8 +7,6 @@ directory share an environment, so testing one proves the env works.
 Only runs with ``pytest --env-report``; deselected during normal test runs.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from proto_tools.tools.structure_prediction.shared_data_models import (

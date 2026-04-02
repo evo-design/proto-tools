@@ -4,8 +4,6 @@ Self-contained codon infrastructure for random mutagenesis tools.
 No BioPython dependency.
 """
 
-from __future__ import annotations
-
 import functools
 import random
 

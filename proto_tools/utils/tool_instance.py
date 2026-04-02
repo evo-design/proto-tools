@@ -44,8 +44,6 @@ Usage::
     # worker killed, previous cache restored
 """
 
-from __future__ import annotations
-
 import atexit
 import contextvars
 import datetime
@@ -77,15 +75,15 @@ DEVICE_MOVE_TIMEOUT = 200
 # Singleton registry
 # ============================================================================
 _lock = threading.Lock()  # protects _instances dict
-_instances: dict[str, ToolInstance] = {}
+_instances: dict[str, "ToolInstance"] = {}
 
-_scope_override: contextvars.ContextVar[dict[str, ToolInstance] | None] = contextvars.ContextVar(
+_scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = contextvars.ContextVar(
     "_scope_override", default=None
 )
 _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_mode", default=False)
 
 
-def _active_cache() -> dict[str, ToolInstance]:
+def _active_cache() -> dict[str, "ToolInstance"]:
     """Return the scope-local cache if inside scope(), else the global cache."""
     override = _scope_override.get()
     return override if override is not None else _instances
@@ -110,7 +108,7 @@ class ToolInstance:
         tool_name: str,
         *,
         instance_name: str | None = None,
-    ) -> ToolInstance:
+    ) -> "ToolInstance":
         """Return (or create) a ToolInstance for *tool_name*.
 
         Args:
@@ -174,7 +172,7 @@ class ToolInstance:
         tool_name: str,
         input_dict: dict[str, Any],
         *,
-        instance: str | ToolInstance | None = None,
+        instance: "str | ToolInstance | None" = None,
         script_path: Path | str | None = None,
         config: BaseConfig | None = None,
     ) -> dict[str, Any]:
@@ -303,7 +301,7 @@ class ToolInstance:
         tool_name: str,
         *,
         instance_name: str | None = None,
-    ) -> Generator[ToolInstance, None, None]:
+    ) -> Generator["ToolInstance", None, None]:
         """Context manager that caches a persistent worker for its duration.
 
         Tool wrappers called inside the block will find the cached
@@ -577,7 +575,7 @@ class ToolInstance:
                 for k in cache_keys:
                     cache.pop(k, None)
 
-    def _to(self, device: str) -> ToolInstance:
+    def _to(self, device: str) -> "ToolInstance":
         """Move this tool instance to a different device (internal).
 
         Called by device mismatch detection in ``_run_persistent`` (e.g.,

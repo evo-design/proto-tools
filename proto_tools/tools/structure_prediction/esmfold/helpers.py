@@ -4,8 +4,6 @@ Shared helpers for ESMFold structure prediction. Provides utilities for
 batching complexes and relabeling chains in PDB output.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS

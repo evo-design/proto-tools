@@ -6,8 +6,6 @@ fast (<1s) while still exercising device management, memory tracking, and
 worker protocols.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import sys

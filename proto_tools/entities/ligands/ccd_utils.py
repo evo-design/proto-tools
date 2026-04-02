@@ -9,8 +9,6 @@ to map between SMILES strings and CCD codes, and to validate modification codes.
 Data source: https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 

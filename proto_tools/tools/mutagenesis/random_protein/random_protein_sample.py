@@ -3,8 +3,6 @@
 Random protein sampling with codon scheme-biased amino acid selection.
 """
 
-from __future__ import annotations
-
 import logging
 import random
 from pathlib import Path

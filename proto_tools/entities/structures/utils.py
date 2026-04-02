@@ -3,8 +3,6 @@
 Utility functions for working with protein structures.
 """
 
-from __future__ import annotations
-
 from io import StringIO
 from pathlib import Path
 

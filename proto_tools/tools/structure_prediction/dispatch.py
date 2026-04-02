@@ -3,8 +3,6 @@
 Router function for structure prediction tools.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from proto_tools.tools.structure_prediction.alphafold2 import (

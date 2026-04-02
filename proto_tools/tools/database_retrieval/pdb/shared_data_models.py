@@ -4,8 +4,6 @@ Contains configuration, chain models, and private helpers used by
 fetch_entry and fetch_fasta tool modules.
 """
 
-from __future__ import annotations
-
 import logging
 from io import StringIO
 from typing import Any

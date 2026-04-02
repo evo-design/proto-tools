@@ -24,8 +24,6 @@ Example entries:
     6MA,DA,A     # N6-methyladenine -> Adenine (DNA modification)
 """
 
-from __future__ import annotations
-
 import gzip
 from pathlib import Path
 

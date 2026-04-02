@@ -3,8 +3,6 @@
 Shared data models (configs and outputs) for structure prediction tools.
 """
 
-from __future__ import annotations
-
 import logging
 import string
 from collections.abc import Iterator
@@ -245,7 +243,7 @@ class Chain(BaseModel):
 
         return self
 
-    def add_modification(self, position: int, modification_code: str) -> Chain:
+    def add_modification(self, position: int, modification_code: str) -> "Chain":
         """Add a modification to this chain.
 
         Args:
@@ -290,7 +288,7 @@ class Chain(BaseModel):
         self.modifications.append(mod)
         return self
 
-    def clear_modifications(self) -> Chain:
+    def clear_modifications(self) -> "Chain":
         """Remove all modifications from this chain.
 
         Returns:
@@ -481,7 +479,7 @@ class StructurePredictionComplex(BaseModel):
 
     def add_modification_to_chain(
         self, chain_index: int, position: int, modification_code: str
-    ) -> StructurePredictionComplex:
+    ) -> "StructurePredictionComplex":
         """Add a modification to a specific chain in the complex.
 
         Args:
@@ -510,7 +508,7 @@ class StructurePredictionComplex(BaseModel):
         self.chains[chain_index].add_modification(position, modification_code)
         return self
 
-    def clear_all_modifications(self) -> StructurePredictionComplex:
+    def clear_all_modifications(self) -> "StructurePredictionComplex":
         """Remove all modifications from all chains in the complex.
 
         Returns:

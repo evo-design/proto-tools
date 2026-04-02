@@ -4,8 +4,6 @@ Tests that multi-line docstrings follow Google style with type annotations
 matching the actual function signatures and class annotations.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

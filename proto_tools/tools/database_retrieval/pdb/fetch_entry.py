@@ -4,8 +4,6 @@ Wraps the RCSB PDB REST API core entry endpoint for fetching title,
 experimental method, and resolution for a PDB accession.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import Field

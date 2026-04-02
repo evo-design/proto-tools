@@ -9,8 +9,6 @@ Example:
     >>> print(f"Confidence: {result.confidence_score:.2f}")
 """
 
-from __future__ import annotations
-
 import os
 import tempfile
 import warnings

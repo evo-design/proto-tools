@@ -4,8 +4,6 @@ Thin orchestrator that chains database-specific tools (ncbi, uniprot,
 pdb) with molecule-type routing and cross-fetcher ID resolution.
 """
 
-from __future__ import annotations
-
 import hashlib
 import json
 import re

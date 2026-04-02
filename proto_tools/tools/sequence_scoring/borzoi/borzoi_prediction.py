@@ -3,8 +3,6 @@
 Borzoi single-replicate sequence scoring tool.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -172,7 +170,7 @@ class BorzoiConfig(BaseConfig):
     )
 
     @model_validator(mode="after")
-    def validate_mouse_flash_attn(self) -> BorzoiConfig:
+    def validate_mouse_flash_attn(self) -> "BorzoiConfig":
         """Mouse Borzoi checkpoints do not support FlashAttention."""
         if self.species == "mouse" and self.use_flash_attn:
             raise ValueError("FlashAttention (use_flash_attn=True) is not available for mouse models.")

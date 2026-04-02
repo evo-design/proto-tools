@@ -144,7 +144,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    ```
 
 2. Write the core tool file `proto_tools/tools/{category}/{tool_name}/{operation}.py` with:
-   - Proper imports (including `from __future__ import annotations`)
+   - Proper imports
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="ignore"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
    - Output class extending `BaseToolOutput` (or shared base) with `Field()` — `extra="forbid"`
@@ -185,7 +185,7 @@ These ensure consistent formatting across all generated tools:
    logger.debug("Using local venv for {tool_name} {operation}")
    ```
 6. **Don't redefine inherited fields** — Fields like `verbose`, `timeout`, and `device` are inherited from `BaseConfig`. Don't redeclare them in tool-specific Config classes unless overriding the default value.
-7. **`__init__.py` files** — No `from __future__ import annotations`. Sort `__all__` alphabetically.
+7. **`__init__.py` files** — Sort `__all__` alphabetically.
 
 For the complete tool file template, refer to `.claude/skills/implement-tool/TEMPLATES.md`.
 For implementation patterns (CPU/GPU/compile-from-source), refer to `.claude/skills/implement-tool/PATTERNS.md`.
@@ -235,7 +235,6 @@ Here is the standalone from {reference_tool} to use as a structural template:
 ### 1. inference.py (for GPU/AI tools) or run.py (for CPU tools)
 Structure:
 - Module docstring
-- `from __future__ import annotations`
 - Imports (json, sys, os at top; heavy imports inside functions)
 - Model class with lazy loading pattern:
   - `__init__`: set `self._loaded = False`
@@ -612,7 +611,6 @@ File: proto_tools/tools/__init__.py
 Add import block and __all__ entries. Preserve all existing imports.
 
 CRITICAL RULES:
-- Do NOT use `from __future__ import annotations` in `__init__.py` files
 - Sort `__all__` alphabetically
 - Do NOT remove or modify any existing imports
 - Match class names and function names EXACTLY from the contract
@@ -648,7 +646,6 @@ CRITICAL RULES:
 4. **Fix any failures** — If imports fail, check the export chain. If tests fail, fix the tool file or test file directly.
 
 5. **Run the validation checklist:**
-   - [ ] File starts with `from __future__ import annotations`
    - [ ] Uses `logging.getLogger(__name__)`, never `print()`
    - [ ] Input extends `BaseToolInput`, uses `Field()` (not ConfigField)
    - [ ] Config extends `BaseConfig`, uses `ConfigField()` (not bare Field)

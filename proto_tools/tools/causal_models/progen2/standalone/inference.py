@@ -4,8 +4,6 @@ Uses Hugging Face models from https://huggingface.co/hugohrban/
 Based on the ProGen2-finetuning repository: https://github.com/hugohrban/ProGen2-finetuning
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from logging import getLogger

@@ -6,8 +6,6 @@ This module provides standardized interfaces for protein structure prediction
 using ESMFold from Meta AI.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Any, ClassVar
 

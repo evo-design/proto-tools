@@ -8,8 +8,6 @@ runs them concurrently via ThreadPoolExecutor, and reassembles results in
 original order.
 """
 
-from __future__ import annotations
-
 import contextlib
 import contextvars
 import logging
@@ -59,11 +57,11 @@ class PartialFailureError(RuntimeError):
 # ContextVars for pool state
 # ============================================================================
 
-_active_pool: ContextVar[ToolPool | None] = ContextVar("_active_pool", default=None)
+_active_pool: ContextVar["ToolPool | None"] = ContextVar("_active_pool", default=None)
 _pool_executing: ContextVar[bool] = ContextVar("_pool_executing", default=False)
 
 
-def get_active_pool() -> ToolPool | None:
+def get_active_pool() -> "ToolPool | None":
     """Return the active ToolPool, or None if no pool is active."""
     return _active_pool.get()
 
@@ -235,7 +233,7 @@ class ToolPool:
         self._persist_ctx: contextlib.AbstractContextManager[None] | None = None
         self._token: contextvars.Token[ToolPool | None] | None = None
 
-    def __enter__(self) -> ToolPool:
+    def __enter__(self) -> "ToolPool":
         if _active_pool.get() is not None:
             raise RuntimeError("ToolPool contexts cannot be nested")
 

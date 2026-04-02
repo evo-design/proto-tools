@@ -6,8 +6,6 @@ This module provides standardized interfaces for protein structure prediction
 using AlphaFold3 from Google DeepMind.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

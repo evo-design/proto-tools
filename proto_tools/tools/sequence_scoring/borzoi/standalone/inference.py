@@ -1,7 +1,5 @@
 """Borzoi standalone inference implementation for venv execution."""
 
-from __future__ import annotations
-
 import json
 import logging
 import sys

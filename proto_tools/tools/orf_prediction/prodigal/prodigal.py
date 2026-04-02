@@ -6,8 +6,6 @@ This module provides standardized interfaces for ORF (Open Reading Frame) predic
 using Prodigal for prokaryotic ORF prediction and analysis of results.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 from typing import Any

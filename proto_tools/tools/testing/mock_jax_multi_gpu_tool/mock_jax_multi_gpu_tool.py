@@ -5,8 +5,6 @@ allocation, movement, and eviction with JAX semantics: model reload on
 device change, no in-place .to().
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

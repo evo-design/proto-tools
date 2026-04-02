@@ -4,8 +4,6 @@ This script provides a standalone interface for ViennaRNA that can be executed
 in an isolated virtual environment with JSON-based I/O.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import sys

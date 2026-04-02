@@ -4,8 +4,6 @@ This module provides a standardized interface for generating Multiple Sequence
 Alignments (MSAs) using ColabFold's local database search with MMSeqs2.
 """
 
-from __future__ import annotations
-
 import hashlib
 import logging
 import os

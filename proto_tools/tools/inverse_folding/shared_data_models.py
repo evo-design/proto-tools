@@ -3,8 +3,6 @@
 Shared base schemas (configs and io) for inverse folding tools.
 """
 
-from __future__ import annotations
-
 import json
 from abc import ABC
 from collections.abc import Iterator

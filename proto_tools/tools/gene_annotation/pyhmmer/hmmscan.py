@@ -3,8 +3,6 @@
 PyHMMER hmmscan tool: search protein sequences against an HMM database.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

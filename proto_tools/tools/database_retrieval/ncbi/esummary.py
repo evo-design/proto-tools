@@ -4,8 +4,6 @@ Wraps the NCBI E-utilities esummary endpoint for fetching metadata
 about protein, nuccore, and gene records.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import Field

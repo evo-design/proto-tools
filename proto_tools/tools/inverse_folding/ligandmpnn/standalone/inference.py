@@ -1,7 +1,5 @@
 """LigandMPNN inference implementation using Foundry."""
 
-from __future__ import annotations
-
 import gc
 import json
 import os

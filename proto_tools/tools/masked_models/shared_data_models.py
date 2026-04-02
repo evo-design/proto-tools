@@ -4,8 +4,6 @@ Contains base schemas for embeddings, scoring, and sampling operations
 shared across all masked/bidirectional protein language models.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any

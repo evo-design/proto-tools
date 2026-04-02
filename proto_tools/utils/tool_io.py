@@ -3,8 +3,6 @@
 Base input/output classes for standardized tool results with metadata tracking.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from abc import ABC, abstractmethod

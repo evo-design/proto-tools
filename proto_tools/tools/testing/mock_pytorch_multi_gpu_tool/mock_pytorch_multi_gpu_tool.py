@@ -5,8 +5,6 @@ movement, and eviction. It loads two tiny models (one per GPU) while exercising
 all DeviceManager multi-device code paths.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

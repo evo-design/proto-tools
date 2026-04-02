@@ -4,8 +4,6 @@ Shared helpers for Boltz2 structure prediction. Provides utilities for
 MSA CSV file writing and YAML input generation.
 """
 
-from __future__ import annotations
-
 import csv
 from typing import Any
 

@@ -4,8 +4,6 @@ This module provides a standardized interface for ORF prediction using Orfipy,
 supporting general ORF prediction and analysis of results.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any, Literal
 

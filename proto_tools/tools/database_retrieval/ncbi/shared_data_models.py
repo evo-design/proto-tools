@@ -4,8 +4,6 @@ Contains configuration, FASTA record models, and private helpers used
 by esearch, esummary, and efetch tool modules.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from io import StringIO

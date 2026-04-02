@@ -4,8 +4,6 @@ Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
 constants, and helper functions used by all MMseqs2 search tools.
 """
 
-from __future__ import annotations
-
 import io
 from collections.abc import Iterator
 from pathlib import Path

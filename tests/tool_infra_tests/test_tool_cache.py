@@ -3,8 +3,6 @@
 Tests for tool_cache.
 """
 
-from __future__ import annotations
-
 import pytest
 from pydantic import BaseModel
 
