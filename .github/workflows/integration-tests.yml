@@ -27,20 +27,17 @@ jobs:
           /usr/local/share/boost /opt/hostedtoolcache/CodeQL
         sudo docker image prune --all --force
     - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: "pyproject.toml"
     - uses: actions/setup-python@v5
       with:
         python-version: "3.12"
     - uses: actions/cache@v4
       with:
-        path: ~/.cache/uv
-        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
-        restore-keys: ${{ runner.os }}-uv-
-    - uses: actions/cache@v4
-      with:
         path: ~/.proto/.micromamba
         key: ${{ runner.os }}-micromamba
     - name: Install dependencies
-      run: |
-        pip install uv
-        uv pip install --system ".[dev]"
+      run: uv pip install --system ".[dev]"
     - run: pytest --integration --cpu
