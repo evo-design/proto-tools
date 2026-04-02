@@ -1,8 +1,9 @@
 name: Integration Tests
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6am UTC (10pm PST)
+  workflow_dispatch:
   pull_request:
     types: [labeled, synchronize]
 
@@ -13,7 +14,8 @@ concurrency:
 jobs:
   test:
     if: >-
-      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'labeled' && github.event.label.name == 'run-integration') ||
       (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'run-integration'))
     name: Run Integration Tests

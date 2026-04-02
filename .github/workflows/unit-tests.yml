@@ -3,8 +3,9 @@ name: Unit Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 7 * * 0'  # Weekly Sunday 7am UTC
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -12,13 +13,29 @@ concurrency:
 
 jobs:
   test:
-    if: github.event.pull_request.draft == false
-    name: Run Unit Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - uses: actions/cache@v4
+      with:
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+        restore-keys: ${{ runner.os }}-uv-
+    - name: Install dependencies
+      run: |
+        pip install uv
+        uv pip install --system ".[dev]"
+    - run: pytest --cpu
+
+  test-macos:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: Run Unit Tests (macOS)
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
