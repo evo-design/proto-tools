@@ -351,6 +351,7 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
+    assert config is not None
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")
         os.makedirs(output_dir)
@@ -362,7 +363,7 @@ def run_protenix(
 
         # Write pre-computed MSAs and inject paths into the batch JSON
         if inputs.msas:
-            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)  # type: ignore[arg-type]
+            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)
 
         # Write the batch input JSON
         input_json_path = os.path.join(temp_dir, "protenix_input.json")
@@ -370,23 +371,23 @@ def run_protenix(
             json.dump(batch_json, f)
 
         # Prepare input data for inference script
-        seeds_str = ",".join(str(s) for s in config.seeds)  # type: ignore[union-attr]
+        seeds_str = ",".join(str(s) for s in config.seeds)
         input_data = {
             "input_json_path": input_json_path,
             "output_dir": output_dir,
-            "model_name": config.model_name,  # type: ignore[union-attr]
+            "model_name": config.model_name,
             "seeds": seeds_str,
-            "num_diffusion_samples": config.num_diffusion_samples,  # type: ignore[union-attr]
-            "num_diffusion_steps": config.num_diffusion_steps,  # type: ignore[union-attr]
-            "num_pairformer_cycles": config.num_pairformer_cycles,  # type: ignore[union-attr]
-            "use_msa": config.use_msa,  # type: ignore[union-attr]
+            "num_diffusion_samples": config.num_diffusion_samples,
+            "num_diffusion_steps": config.num_diffusion_steps,
+            "num_pairformer_cycles": config.num_pairformer_cycles,
+            "use_msa": config.use_msa,
         }
 
         # Call the inference script (single batched call)
         logger.info(f"Running Protenix prediction for {len(inputs.complexes)} complex(es)...")
 
-        input_data["device"] = config.device  # type: ignore[union-attr]
-        input_data["verbose"] = config.verbose  # type: ignore[union-attr]
+        input_data["device"] = config.device
+        input_data["verbose"] = config.verbose
         output_data = ToolInstance.dispatch(
             "protenix",
             input_data,

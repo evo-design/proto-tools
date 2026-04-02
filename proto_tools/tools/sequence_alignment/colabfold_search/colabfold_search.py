@@ -476,26 +476,27 @@ def run_colabfold_search(
         >>> for seq in msa:
         ...     print(seq)
     """
+    assert config is not None
     if not inputs.queries:
         return ColabfoldSearchOutput(results=[])
 
     # Cleanup leftover files from previous runs if using default directory and cache is empty
-    _cleanup_default_output_dir_if_cache_empty(config)  # type: ignore[arg-type]
+    _cleanup_default_output_dir_if_cache_empty(config)
 
     # Extract sequences and IDs from queries
     sequences = [query.sequence for query in inputs.queries]
     sequence_ids = [query.sequence_id for query in inputs.queries]
 
     # Create output directory structure
-    os.makedirs(config.output_dir, exist_ok=True)  # type: ignore[arg-type, union-attr]
-    msa_out_dir = os.path.join(config.output_dir, "msas")  # type: ignore[arg-type, union-attr]
+    os.makedirs(config.output_dir, exist_ok=True)  # type: ignore[arg-type]
+    msa_out_dir = os.path.join(config.output_dir, "msas")  # type: ignore[arg-type]
     os.makedirs(msa_out_dir, exist_ok=True)
 
-    if config.search_mode == "local":  # type: ignore[union-attr]
+    if config.search_mode == "local":
         return _local_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
-    if config.search_mode == "remote":  # type: ignore[union-attr]
+    if config.search_mode == "remote":
         return _remote_search(sequences, sequence_ids, config, msa_out_dir, instance=instance)  # type: ignore[arg-type]
-    raise ValueError(f"Invalid search mode: {config.search_mode}")  # type: ignore[union-attr]
+    raise ValueError(f"Invalid search mode: {config.search_mode}")
 
 
 # ============================================================================

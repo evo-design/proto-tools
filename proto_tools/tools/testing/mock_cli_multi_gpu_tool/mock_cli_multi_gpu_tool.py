@@ -142,12 +142,13 @@ def run_mock_cli_multi_gpu_tool(
     instance: Any = None,
 ) -> MockCLIMultiGPUToolOutput:
     """Run mock CLI multi-GPU tool (subprocess-based with 2-GPU routing)."""
+    assert config is not None
     result = ToolInstance.dispatch(
         "mock_cli_multi_gpu_tool",
         {
             "data": inputs.data,
-            "device": config.device,  # type: ignore[union-attr]
-            "scale_factor": config.scale_factor,  # type: ignore[union-attr]
+            "device": config.device,
+            "scale_factor": config.scale_factor,
         },
         instance=instance,
         config=config,

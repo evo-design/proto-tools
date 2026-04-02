@@ -142,12 +142,13 @@ def run_mock_cli_tool(
     instance: Any = None,
 ) -> MockCLIToolOutput:
     """Run mock CLI tool (subprocess-based for testing device routing)."""
+    assert config is not None
     result = ToolInstance.dispatch(
         "mock_cli_tool",
         {
             "data": inputs.data,
-            "device": config.device,  # type: ignore[union-attr]
-            "scale_factor": config.scale_factor,  # type: ignore[union-attr]
+            "device": config.device,
+            "scale_factor": config.scale_factor,
         },
         instance=instance,
         config=config,

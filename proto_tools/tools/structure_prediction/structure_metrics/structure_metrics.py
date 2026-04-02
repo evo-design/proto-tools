@@ -147,6 +147,7 @@ def run_structure_metrics(
         >>> print(result.metrics[0].longest_alpha_helix)
         >>> print(result.metrics[0].gyration_radius)
     """
+    assert config is not None
     input_data = {
         "pdb_paths": inputs.pdb_paths,
     }

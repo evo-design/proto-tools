@@ -276,8 +276,9 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: A
         - ESM embeddings generally improve prediction quality
         - Does not support DNA or RNA (use Boltz2 for nucleic acids)
     """
+    assert config is not None
     results = [
-        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)  # type: ignore[arg-type]
+        run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
         for comp in tqdm(
             inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)
         )

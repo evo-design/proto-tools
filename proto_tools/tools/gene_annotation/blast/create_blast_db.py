@@ -212,11 +212,12 @@ def run_create_blast_db(
         >>> result = run_create_blast_db(inputs, config)
         >>> print(f"Database created at: {result.db_path}")
     """
+    assert config is not None
     fasta_path = Path(inputs.fasta)
 
     # Default prefix is the FASTA stem in the same directory
-    if config.out_prefix is not None:  # type: ignore[union-attr]
-        out_prefix = str(Path(config.out_prefix).expanduser().resolve())  # type: ignore[union-attr]
+    if config.out_prefix is not None:
+        out_prefix = str(Path(config.out_prefix).expanduser().resolve())
     else:
         out_prefix = str(fasta_path.with_suffix(""))
 
@@ -226,10 +227,10 @@ def run_create_blast_db(
             "device": "cpu",
             "operation": "create_blast_db",
             "fasta_path": str(fasta_path),
-            "dbtype": config.dbtype,  # type: ignore[union-attr]
+            "dbtype": config.dbtype,
             "out_prefix": out_prefix,
-            "title": config.title,  # type: ignore[union-attr]
-            "additional_params": config.additional_params,  # type: ignore[union-attr]
+            "title": config.title,
+            "additional_params": config.additional_params,
         },
         instance=instance,
         config=config,
@@ -237,9 +238,9 @@ def run_create_blast_db(
 
     return CreateBlastDbOutput(
         metadata={
-            "dbtype": config.dbtype,  # type: ignore[union-attr]
+            "dbtype": config.dbtype,
             "fasta_file": str(fasta_path),
-            "title": config.title,  # type: ignore[union-attr]
+            "title": config.title,
         },
         db_path=output_data["db_path"],
     )

@@ -22,7 +22,7 @@ def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) 
         list[list[dict[str, Any]]]: List of sub-batches, where each sub-batch is a list of complexes
     """
     batches = []
-    current_batch = []  # type: ignore[var-annotated]
+    current_batch: list[dict[str, Any]] = []
     current_residues = 0
 
     for item in complexes:

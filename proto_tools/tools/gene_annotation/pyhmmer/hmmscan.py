@@ -129,6 +129,7 @@ def run_pyhmmer_hmmscan(
         ...         domains = [h.query_name for h in hits]
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
+    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
@@ -136,11 +137,11 @@ def run_pyhmmer_hmmscan(
             "operation": "hmmscan",
             "hmm_db_path": str(inputs.hmm_db),
             "sequences": inputs.sequences,
-            "num_threads": config.num_threads,  # type: ignore[union-attr]
-            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
-            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
-            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
-            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
         config=config,
@@ -153,11 +154,11 @@ def run_pyhmmer_hmmscan(
         metadata={
             "num_hmms": output_data.get("num_hmms", 0),
             "num_queries": output_data.get("num_queries", 0),
-            "num_threads": config.num_threads,  # type: ignore[union-attr]
-            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
-            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
-            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
-            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

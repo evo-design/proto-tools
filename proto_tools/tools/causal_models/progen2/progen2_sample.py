@@ -376,25 +376,26 @@ def run_progen2_sample(
         - ProGen2-finetuning GitHub: https://github.com/hugohrban/ProGen2-finetuning
         - Original ProGen2 GitHub: https://github.com/enijkamp/progen2
     """
-    logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "progen2",
         {
             "operation": "sample",
             "prompts": inputs.prompts,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "top_k": config.top_k,  # type: ignore[union-attr]
-            "max_length": config.max_length,  # type: ignore[union-attr]
-            "truncate_at_stop": config.truncate_at_stop,  # type: ignore[union-attr]
-            "strip_special_tokens": config.strip_special_tokens,  # type: ignore[union-attr]
-            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "top_k": config.top_k,
+            "max_length": config.max_length,
+            "truncate_at_stop": config.truncate_at_stop,
+            "strip_special_tokens": config.strip_special_tokens,
+            "prepend_prompt": config.prepend_prompt,
+            "batch_size": config.batch_size,
             "device": "cuda",
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -402,9 +403,9 @@ def run_progen2_sample(
 
     return ProGen2SampleOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "max_length": config.max_length,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "temperature": config.temperature,
+            "max_length": config.max_length,
         },
         sequences=result["sequences"],
         logits=result.get("logits"),

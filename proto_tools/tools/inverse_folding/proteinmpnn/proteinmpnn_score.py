@@ -199,6 +199,7 @@ def run_proteinmpnn_score(
         - ProteinMPNN uses structure coordinates to condition predictions
         - Set ``return_logits=False`` (default) to save memory
     """
+    assert config is not None
     scores = []
 
     # Local venv execution
@@ -208,19 +209,19 @@ def run_proteinmpnn_score(
         inputs.sequence_structure_pairs,
         desc="ProteinMPNN scoring",
         unit="pair",
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     ):
         input_dict = {
             "operation": "score",
             "pdb_contents": sequence_structure_pair.structure.structure_pdb,
             "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
             "sequence": sequence_structure_pair.sequence,
-            "seed": config.seed,  # type: ignore[union-attr]
-            "fixed_positions": config.fixed_positions,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "model_choice": config.model_choice,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "seed": config.seed,
+            "fixed_positions": config.fixed_positions,
+            "device": config.device,
+            "model_choice": config.model_choice,
+            "return_logits": config.return_logits,
+            "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
             "proteinmpnn",

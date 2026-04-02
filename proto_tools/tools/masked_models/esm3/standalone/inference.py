@@ -174,7 +174,7 @@ class ESM3Model:
         max_batch_size = min(batch_size, len(sequences))
         batches = [sequences[i : i + max_batch_size] for i in range(0, len(sequences), max_batch_size)]
 
-        all_structures = []  # type: ignore[var-annotated]
+        all_structures: list[Any] = []
 
         # For each batch
         for batch_sequences in tqdm(

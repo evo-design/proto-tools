@@ -230,26 +230,27 @@ def run_fampnn_score(
     Returns:
         FAMPNNScoreOutput: FAMPNNScoreOutput with log-likelihood ratio scores for each mutation.
     """
+    assert config is not None
     results = []
 
     for inp in tqdm(
         inputs.inputs,
         desc="FAMPNN scoring",
         unit="structure",
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     ):
         input_dict = {
             "operation": "score_mutations",
             "pdb_contents": inp.structure.structure_pdb,
             "mutations": inp.mutations,
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "seq_only": config.seq_only,  # type: ignore[union-attr]
-            "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
-            "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
-            "seed": config.seed,  # type: ignore[union-attr]
-            "model_variant": config.model_variant,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "seq_only": config.seq_only,
+            "scn_diffusion_steps": config.scn_diffusion_steps,
+            "scn_step_scale": config.scn_step_scale,
+            "seed": config.seed,
+            "model_variant": config.model_variant,
+            "device": config.device,
+            "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
             "fampnn",

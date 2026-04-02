@@ -323,6 +323,7 @@ def run_orfipy_prediction(
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
+    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     output_data = ToolInstance.dispatch(
@@ -332,14 +333,14 @@ def run_orfipy_prediction(
             "sequences": inputs.sequences,
             "sequence_ids": sequence_ids,
             "config": {
-                "threads": config.threads,  # type: ignore[union-attr]
-                "start_codons": config.start_codons,  # type: ignore[union-attr]
-                "stop_codons": config.stop_codons,  # type: ignore[union-attr]
-                "strand": config.strand,  # type: ignore[union-attr]
-                "min_len": config.min_len,  # type: ignore[union-attr]
-                "max_len": config.max_len,  # type: ignore[union-attr]
-                "include_stop": config.include_stop,  # type: ignore[union-attr]
-                "translation_table": config.translation_table,  # type: ignore[union-attr]
+                "threads": config.threads,
+                "start_codons": config.start_codons,
+                "stop_codons": config.stop_codons,
+                "strand": config.strand,
+                "min_len": config.min_len,
+                "max_len": config.max_len,
+                "include_stop": config.include_stop,
+                "translation_table": config.translation_table,
             },
         },
         instance=instance,
@@ -354,10 +355,10 @@ def run_orfipy_prediction(
 
     return OrfipyOutput(
         metadata={
-            "threads": config.threads,  # type: ignore[union-attr]
-            "min_len": config.min_len,  # type: ignore[union-attr]
-            "max_len": config.max_len,  # type: ignore[union-attr]
-            "strand": config.strand,  # type: ignore[union-attr]
+            "threads": config.threads,
+            "min_len": config.min_len,
+            "max_len": config.max_len,
+            "strand": config.strand,
         },
         predicted_orfs=predicted_orfs,
     )

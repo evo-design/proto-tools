@@ -46,7 +46,8 @@ class Fragment:
             self.mol = Chem.AddHs(molecule)
 
         elif isinstance(molecule, Fragment):
-            self.mol = Chem.Mol(molecule.mol)  # type: ignore[arg-type]
+            assert molecule.mol is not None  # guaranteed by Fragment validation
+            self.mol = Chem.Mol(molecule.mol)
             self.name = molecule.name  # type: ignore[has-type]
             self.metrics = dict(molecule.metrics)  # type: ignore[has-type]
             return
@@ -90,7 +91,8 @@ class Fragment:
     @property
     def conformers(self) -> list[Chem.Conformer]:
         """Return all conformers present in the Mol object."""
-        return [self.mol.GetConformer(i) for i in range(self.mol.GetNumConformers())]  # type: ignore[union-attr]
+        assert self.mol is not None
+        return [self.mol.GetConformer(i) for i in range(self.mol.GetNumConformers())]
 
     def __str__(self) -> str:
         return f"Fragment(smiles={self.smiles}, name={self.name})"
@@ -226,9 +228,10 @@ class Ligands:
         writer = Chem.SDWriter(str(filepath))
 
         for frag in self.fragments:
-            if frag.mol.GetNumConformers() == 0:  # type: ignore[union-attr]
+            assert frag.mol is not None
+            if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
-            for i in range(frag.mol.GetNumConformers()):  # type: ignore[union-attr]
+            for i in range(frag.mol.GetNumConformers()):
                 writer.write(frag.mol, confId=i)
         writer.close()
 
@@ -251,7 +254,8 @@ class Ligands:
 
         # Ensure all fragments have conformers
         for frag in self.fragments:
-            if frag.mol.GetNumConformers() == 0:  # type: ignore[union-attr]
+            assert frag.mol is not None
+            if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
 
         pdb_lines = []
@@ -260,8 +264,9 @@ class Ligands:
         chain_ids = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
         for frag_idx, frag in enumerate(self.fragments):
+            assert frag.mol is not None  # guaranteed by loop above
             # Get the first conformer
-            conf = frag.mol.GetConformer(0)  # type: ignore[union-attr]
+            conf = frag.mol.GetConformer(0)
 
             # Calculate bounding box for this fragment
             positions = conf.GetPositions()
@@ -270,7 +275,7 @@ class Ligands:
             bbox_size = max_coords - min_coords
 
             # Create a copy of the molecule to modify coordinates
-            mol_copy = Chem.Mol(frag.mol)  # type: ignore[arg-type]
+            mol_copy = Chem.Mol(frag.mol)
             conf_copy = mol_copy.GetConformer(0)
 
             # Translate fragment to avoid overlap
@@ -393,7 +398,7 @@ def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
 
 def parse_fragments_from_mols(mols: list[Chem.Mol]) -> list[Fragment]:
     """Load fragments from a list of Chem.Mol objects."""
-    fragments = []  # type: ignore[var-annotated]
+    fragments: list[Fragment] = []
     for mol in mols:
         frags = Chem.rdmolops.GetMolFrags(mol, asMols=True)
         fragments.extend(Fragment(frag) for frag in frags)

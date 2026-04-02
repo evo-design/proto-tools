@@ -135,7 +135,7 @@ class FAMPNNModel:
         ]
 
         all_sequences = []
-        all_pdb_strings = []  # type: ignore[var-annotated]
+        all_pdb_strings: list[str] = []
         all_psce = []
 
         B = num_sequences
@@ -306,7 +306,7 @@ class FAMPNNModel:
             "interface_residue_mask",
         ]
 
-        all_pdb_strings = []  # type: ignore[var-annotated]
+        all_pdb_strings: list[str] = []
         all_psce = []
 
         B = num_samples

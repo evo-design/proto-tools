@@ -214,35 +214,36 @@ def run_fampnn_sample(
     Returns:
         FAMPNNSampleOutput: FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
     """
+    assert config is not None
     designed_sequences = []
 
     for inp in tqdm(
         inputs.inputs,
         desc="FAMPNN sampling",
         unit="structure",
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     ):
         all_seqs, all_pdbs, all_psce = [], [], []
-        remaining = config.num_sequences_per_structure  # type: ignore[union-attr]
+        remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var, union-attr]
+            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "num_sequences": chunk,
-                "temperature": config.temperature,  # type: ignore[union-attr]
-                "num_steps": config.num_steps,  # type: ignore[union-attr]
-                "seq_only": config.seq_only,  # type: ignore[union-attr]
-                "repack_last": config.repack_last,  # type: ignore[union-attr]
-                "psce_threshold": config.psce_threshold,  # type: ignore[union-attr]
-                "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
-                "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
-                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
-                "model_variant": config.model_variant,  # type: ignore[union-attr]
-                "device": config.device,  # type: ignore[union-attr]
-                "verbose": config.verbose,  # type: ignore[union-attr]
+                "temperature": config.temperature,
+                "num_steps": config.num_steps,
+                "seq_only": config.seq_only,
+                "repack_last": config.repack_last,
+                "psce_threshold": config.psce_threshold,
+                "scn_diffusion_steps": config.scn_diffusion_steps,
+                "scn_step_scale": config.scn_step_scale,
+                "seed": config.seed + chunk_idx,
+                "model_variant": config.model_variant,
+                "device": config.device,
+                "verbose": config.verbose,
                 "fixed_positions": inp.fixed_positions,
                 "fixed_sidechain_positions": inp.fixed_sidechain_positions,
             }

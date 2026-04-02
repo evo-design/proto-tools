@@ -188,22 +188,23 @@ def run_fampnn_score_all_mutations(
     Returns:
         FAMPNNScoreAllMutationsOutput: FAMPNNScoreAllMutationsOutput with per-position mutation scores.
     """
+    assert config is not None
     results = []
 
     for structure in tqdm(
         inputs.inputs,
         desc="FAMPNN scoring all mutations",
         unit="structure",
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     ):
         input_dict = {
             "operation": "score_all_mutations",
             "pdb_contents": structure.structure_pdb,
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "seed": config.seed,  # type: ignore[union-attr]
-            "model_variant": config.model_variant,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "seed": config.seed,
+            "model_variant": config.model_variant,
+            "device": config.device,
+            "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
             "fampnn",

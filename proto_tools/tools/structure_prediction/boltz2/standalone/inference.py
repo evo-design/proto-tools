@@ -16,14 +16,11 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-def _prepare_output_values(value: any) -> any:  # type: ignore[valid-type]
+def _prepare_output_values(value: Any) -> Any:
     """Prepare Boltz output dictionaries by unpacking them into lists."""
     if isinstance(value, dict):
-        return [
-            _prepare_output_values(value[str(k)])  # type: ignore[index]
-            for k in range(len(value))
-        ]
-    return value  # type: ignore[unreachable]
+        return [_prepare_output_values(value[str(k)]) for k in range(len(value))]
+    return value
 
 
 class Boltz2Model:

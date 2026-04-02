@@ -118,6 +118,7 @@ def run_pyhmmer_jackhmmer(
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
+    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
@@ -125,12 +126,12 @@ def run_pyhmmer_jackhmmer(
             "operation": "jackhmmer",
             "sequences": inputs.sequences,
             "target_sequences": inputs.target_sequences,
-            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
-            "num_threads": config.num_threads,  # type: ignore[union-attr]
-            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
-            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
-            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
-            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
+            "max_iterations": config.max_iterations,
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
         },
         instance=instance,
         config=config,
@@ -142,14 +143,14 @@ def run_pyhmmer_jackhmmer(
         metadata={
             "num_query_sequences": output_data.get("num_query_sequences", 0),
             "num_target_sequences": output_data.get("num_target_sequences", 0),
-            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
+            "max_iterations": config.max_iterations,
             "iterations_per_query": output_data.get("iterations_per_query", []),
             "converged_per_query": output_data.get("converged_per_query", []),
-            "num_threads": config.num_threads,  # type: ignore[union-attr]
-            "evalue_threshold": config.evalue_threshold,  # type: ignore[union-attr]
-            "score_threshold": config.score_threshold,  # type: ignore[union-attr]
-            "domain_evalue_threshold": config.domain_evalue_threshold,  # type: ignore[union-attr]
-            "domain_score_threshold": config.domain_score_threshold,  # type: ignore[union-attr]
+            "num_threads": config.num_threads,
+            "evalue_threshold": config.evalue_threshold,
+            "score_threshold": config.score_threshold,
+            "domain_evalue_threshold": config.domain_evalue_threshold,
+            "domain_score_threshold": config.domain_score_threshold,
         },
         sequence_hits=sequence_hits,
         domain_hits=domain_hits,

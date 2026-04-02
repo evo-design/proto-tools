@@ -227,6 +227,7 @@ def run_alphagenome_score_ism_variants_batch(
     instance: Any = None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run batched in-silico mutagenesis using AlphaGenome variant scorers."""
+    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     serialized_requests = []
@@ -249,10 +250,10 @@ def run_alphagenome_score_ism_variants_batch(
         {
             "operation": "score_ism_variants_batch",
             "requests": serialized_requests,
-            "variant_scorers": config.variant_scorers,  # type: ignore[union-attr]
-            "organism": config.organism,  # type: ignore[union-attr]
-            "model_version": config.model_version,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "variant_scorers": config.variant_scorers,
+            "organism": config.organism,
+            "model_version": config.model_version,
+            "device": config.device,
         },
         instance=instance,
         config=config,

@@ -117,7 +117,8 @@ def run_esm_if1_sample(
     Returns:
         ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
     """
-    if config.excluded_amino_acids:  # type: ignore[union-attr]
+    assert config is not None
+    if config.excluded_amino_acids:
         raise ValueError("ESM-IF1 does not support excluded_amino_acids. This feature may be added in a future update.")
 
     designed_sequences = []
@@ -129,20 +130,20 @@ def run_esm_if1_sample(
         total=len(inputs.inputs),
     ):
         all_seqs, all_lls = [], []
-        remaining = config.num_sequences_per_structure  # type: ignore[union-attr]
+        remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var, union-attr]
+            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
             input_dict = {
                 "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
-                "temperature": config.temperature,  # type: ignore[union-attr]
-                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
-                "device": config.device,  # type: ignore[union-attr]
-                "weights_variant": config.weights_variant,  # type: ignore[union-attr]
-                "verbose": config.verbose,  # type: ignore[union-attr]
+                "temperature": config.temperature,
+                "seed": config.seed + chunk_idx,
+                "device": config.device,
+                "weights_variant": config.weights_variant,
+                "verbose": config.verbose,
                 "fixed_positions": inp.fixed_positions,
             }
             result = ToolInstance.dispatch(

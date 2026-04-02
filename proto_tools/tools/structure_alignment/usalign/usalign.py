@@ -113,6 +113,7 @@ def example_input() -> Any:
 )
 def run_usalign(inputs: USalignInput, config: USalignConfig | None = None, instance: Any = None) -> USalignOutput:
     """Run USalign on two PDB structures."""
+    assert config is not None
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,
         "pdb_text_2": inputs.pdb_text_2,

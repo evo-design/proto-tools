@@ -173,18 +173,19 @@ def run_evo1_score(
           are needed
         - Evo1 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
 
     result = ToolInstance.dispatch(
         "evo1",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_name": config.model_name,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "model_name": config.model_name,
+            "device": config.device,
+            "verbose": config.verbose,
+            "batch_size": config.batch_size,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,

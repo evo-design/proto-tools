@@ -31,7 +31,7 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
     """
     lines = output.split("\n")
     all_arrays = []
-    current_array = []  # type: ignore[var-annotated]
+    current_array: list[dict[str, Any]] = []
     parse = False
 
     for line in lines:

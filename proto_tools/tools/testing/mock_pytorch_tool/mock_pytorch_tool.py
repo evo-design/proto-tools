@@ -150,13 +150,14 @@ def run_mock_pytorch_tool(
     instance: Any = None,
 ) -> MockPyTorchToolOutput:
     """Run mock PyTorch tool (minimal model for fast testing)."""
+    assert config is not None
     result = ToolInstance.dispatch(
         "mock_pytorch_tool",
         {
             "data_items": [list(item) for item in inputs.data_items],
-            "device": config.device,  # type: ignore[union-attr]
-            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
-            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
+            "device": config.device,
+            "hidden_size": config.hidden_size,
+            "memory_mb": config.memory_mb,
         },
         instance=instance,
         config=config,

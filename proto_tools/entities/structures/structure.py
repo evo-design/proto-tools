@@ -399,7 +399,7 @@ class Structure:
 
         in the chain. Residue ID is the 1-letter code of the residue.
         """
-        position_map = {}  # type: ignore[var-annotated]
+        position_map: dict[str, list[tuple[str, int]]] = {}
         for model in self._gemmi_struct:  # type: ignore[attr-defined]
             for chain in model:
                 chain_id = chain.name

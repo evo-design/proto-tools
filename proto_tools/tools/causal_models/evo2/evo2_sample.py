@@ -424,11 +424,12 @@ def run_evo2_sample(
         - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2
         - Evo2 Website: https://arcinstitute.org/tools/evo
     """
+    assert config is not None
     # Local GPU - use standalone venv
-    logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
+    logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
 
     # Warn about KV cache limitation in venv mode
-    if config.old_kv_cache is not None:  # type: ignore[union-attr]
+    if config.old_kv_cache is not None:
         logger.warning(
             "old_kv_cache provided but standalone venv execution does not support "
             "KV caching. The cache will be ignored."
@@ -439,21 +440,21 @@ def run_evo2_sample(
         {
             "operation": "sample",
             "prompts": inputs.prompts,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "top_k": config.top_k,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
-            "cached_generation": config.cached_generation,  # type: ignore[union-attr]
-            "force_prompt_threshold": config.force_prompt_threshold,  # type: ignore[union-attr]
-            "max_seqlen": config.max_seqlen,  # type: ignore[union-attr]
-            "print_generation": config.print_generation,  # type: ignore[union-attr]
-            "stop_at_eos": config.stop_at_eos,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "top_k": config.top_k,
+            "top_p": config.top_p,
+            "temperature": config.temperature,
+            "num_tokens": config.num_tokens,
+            "cached_generation": config.cached_generation,
+            "force_prompt_threshold": config.force_prompt_threshold,
+            "max_seqlen": config.max_seqlen,
+            "print_generation": config.print_generation,
+            "stop_at_eos": config.stop_at_eos,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -467,20 +468,20 @@ def run_evo2_sample(
         logits = logits.cpu().tolist()  # type: ignore[union-attr]
 
     # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
-    if config.prepend_prompt:  # type: ignore[union-attr]
+    if config.prepend_prompt:
         result["sequences"] = [prompt + seq for prompt, seq in zip(inputs.prompts, result["sequences"], strict=False)]
 
     return Evo2SampleOutput(
         metadata={
             "prompts": inputs.prompts,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "top_k": config.top_k,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
-            "cached_generation": config.cached_generation,  # type: ignore[union-attr]
-            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "top_k": config.top_k,
+            "top_p": config.top_p,
+            "temperature": config.temperature,
+            "num_tokens": config.num_tokens,
+            "cached_generation": config.cached_generation,
+            "prepend_prompt": config.prepend_prompt,
         },
         sequences=result["sequences"],
         kv_caches=result["kv_caches"],

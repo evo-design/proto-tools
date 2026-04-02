@@ -320,6 +320,7 @@ def run_mmseqs_search_proteins(
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
+    assert config is not None
     sequences = inputs.query_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
@@ -332,9 +333,9 @@ def run_mmseqs_search_proteins(
             "sequences": sequences,
             "sequence_ids": sequence_ids,
             "mmseqs_db": inputs.mmseqs_db,
-            "threads": config.threads,  # type: ignore[union-attr]
-            "split": config.split,  # type: ignore[union-attr]
-            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
+            "threads": config.threads,
+            "split": config.split,
+            "sensitivity": config.sensitivity,
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -346,7 +347,7 @@ def run_mmseqs_search_proteins(
     df = _parse_m8_output(raw_output)
 
     # Filter to top hits if requested
-    if config.only_top_hits and not df.empty:  # type: ignore[union-attr]
+    if config.only_top_hits and not df.empty:
         df = _filter_top_hits(df)
 
     # Build per-sequence results
@@ -355,9 +356,9 @@ def run_mmseqs_search_proteins(
     return MmseqsSearchProteinsOutput(
         metadata={
             "mmseqs_db": inputs.mmseqs_db,
-            "threads": config.threads,  # type: ignore[union-attr]
-            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
-            "only_top_hits": config.only_top_hits,  # type: ignore[union-attr]
+            "threads": config.threads,
+            "sensitivity": config.sensitivity,
+            "only_top_hits": config.only_top_hits,
             "num_sequences": num_sequences,
         },
         results=results,

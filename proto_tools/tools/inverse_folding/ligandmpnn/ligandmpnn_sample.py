@@ -95,6 +95,7 @@ def run_ligandmpnn_sample(
     Returns:
         LigandMPNNSampleOutput: LigandMPNNSampleOutput with designed sequences for each input structure.
     """
+    assert config is not None
     designed_sequences = []
 
     # Local venv execution
@@ -105,20 +106,20 @@ def run_ligandmpnn_sample(
         total=len(inputs.inputs),
     ):
         all_seqs, all_metrics = [], []
-        remaining = config.num_sequences_per_structure  # type: ignore[union-attr]
+        remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[type-var, union-attr]
+            chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
             input_dict = {
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
-                "temperature": config.temperature,  # type: ignore[union-attr]
+                "temperature": config.temperature,
                 "fixed_positions": inp.fixed_positions,
-                "excluded_amino_acids": config.excluded_amino_acids,  # type: ignore[union-attr]
-                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
-                "device": config.device,  # type: ignore[union-attr]
-                "verbose": config.verbose,  # type: ignore[union-attr]
+                "excluded_amino_acids": config.excluded_amino_acids,
+                "seed": config.seed + chunk_idx,
+                "device": config.device,
+                "verbose": config.verbose,
             }
             result = ToolInstance.dispatch(
                 "ligandmpnn",

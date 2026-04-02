@@ -225,14 +225,15 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
+    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     input_data = {
         "sequences": inputs.sequences,
         "sequence_ids": sequence_ids,
         "config": {
-            "min_num_repeats": config.min_num_repeats,  # type: ignore[union-attr]
-            "min_repeat_length": config.min_repeat_length,  # type: ignore[union-attr]
+            "min_num_repeats": config.min_num_repeats,
+            "min_repeat_length": config.min_repeat_length,
         },
     }
 
@@ -259,8 +260,8 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     return MincedOutput(
         metadata={
-            "min_num_repeats": config.min_num_repeats,  # type: ignore[union-attr]
-            "min_repeat_length": config.min_repeat_length,  # type: ignore[union-attr]
+            "min_num_repeats": config.min_num_repeats,
+            "min_repeat_length": config.min_repeat_length,
             "num_sequences": len(inputs.sequences),
         },
         results=results,

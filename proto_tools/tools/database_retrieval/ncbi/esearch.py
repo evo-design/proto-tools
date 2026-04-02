@@ -121,12 +121,13 @@ def run_ncbi_esearch(
     Returns:
         NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.
     """
+    assert config is not None
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,  # type: ignore[union-attr]
-        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
-        user_agent=config.user_agent,  # type: ignore[union-attr]
+        http_retries=config.http_retries,
+        backoff_seconds=config.backoff_seconds,
+        user_agent=config.user_agent,
         allowed_methods=["GET", "POST"],
     )
 
@@ -135,7 +136,7 @@ def run_ncbi_esearch(
             db=inputs.db,
             term=inputs.search_term,
             max_results=inputs.max_results,
-            config=config,  # type: ignore[arg-type]
+            config=config,
             session=session,
         )
         return NCBIEsearchOutput(ids=ids)
