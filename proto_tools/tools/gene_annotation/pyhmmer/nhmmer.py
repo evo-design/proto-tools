@@ -82,15 +82,13 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_nhmmer(
-    inputs: PyNhmmerInput, config: PyNhmmerConfig | None = None, instance: Any = None
-) -> PyNhmmerOutput:
+def run_pyhmmer_nhmmer(inputs: PyNhmmerInput, config: PyNhmmerConfig, instance: Any = None) -> PyNhmmerOutput:
     """Search nucleotide sequences against nucleotide database using PyHMMER.
 
     Args:
         inputs (PyNhmmerInput): Validated PyHMMER nhmmer input containing both
             query and target nucleotide sequences.
-        config (PyNhmmerConfig | None): Validated PyHMMER configuration with search
+        config (PyNhmmerConfig): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -98,7 +96,6 @@ def run_pyhmmer_nhmmer(
     Returns:
         PyNhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

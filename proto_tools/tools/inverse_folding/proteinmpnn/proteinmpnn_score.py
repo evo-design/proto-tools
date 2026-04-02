@@ -153,7 +153,7 @@ def example_input() -> Any:
 )
 def run_proteinmpnn_score(
     inputs: ProteinMPNNScoringInput,
-    config: ProteinMPNNScoringConfig | None = None,
+    config: ProteinMPNNScoringConfig,
     instance: Any = None,
 ) -> ProteinMPNNScoringOutput:
     """Score protein sequences using ProteinMPNN structure-conditioned model.
@@ -165,7 +165,7 @@ def run_proteinmpnn_score(
     Args:
         inputs (ProteinMPNNScoringInput): Validated input containing sequence-structure
             pairs to score.
-        config (ProteinMPNNScoringConfig | None): Scoring configuration specifying fixed
+        config (ProteinMPNNScoringConfig): Scoring configuration specifying fixed
             positions, device settings, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -199,7 +199,6 @@ def run_proteinmpnn_score(
         - ProteinMPNN uses structure coordinates to condition predictions
         - Set ``return_logits=False`` (default) to save memory
     """
-    assert config is not None
     scores = []
 
     # Local venv execution

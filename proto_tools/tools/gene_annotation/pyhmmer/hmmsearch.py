@@ -86,7 +86,7 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_pyhmmer_hmmsearch(
-    inputs: PyHmmsearchInput, config: PyHmmsearchConfig | None = None, instance: Any = None
+    inputs: PyHmmsearchInput, config: PyHmmsearchConfig, instance: Any = None
 ) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
@@ -98,7 +98,7 @@ def run_pyhmmer_hmmsearch(
     Args:
         inputs (PyHmmsearchInput): Validated PyHMMER hmmsearch input containing
             the HMM file path and target sequences.
-        config (PyHmmsearchConfig | None): Validated PyHMMER configuration with search
+        config (PyHmmsearchConfig): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -126,7 +126,6 @@ def run_pyhmmer_hmmsearch(
         >>> if result.domain_hits:
         ...     high_score = [hit for hit in result.domain_hits if hit.domain_score > 50]
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

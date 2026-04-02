@@ -30,7 +30,7 @@ class FAMPNNModel:
         """Initialize FAMPNNModel."""
         self._loaded = False
         self._model_variant = None
-        self.device = None
+        self.device: str | None = None
         self.model = None
 
     def sample(
@@ -631,7 +631,7 @@ class FAMPNNModel:
         ckpt = torch.load(checkpoint_path, map_location=torch_device, weights_only=False)
         self.model = SeqDenoiser(ckpt["model_cfg"]).to(torch_device).eval()
         self.model.load_state_dict(ckpt["state_dict"])  # type: ignore[attr-defined]
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
         self._model_variant = model_variant  # type: ignore[assignment]
 

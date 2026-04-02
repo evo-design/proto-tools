@@ -106,7 +106,7 @@ def example_input() -> Any:
 )
 def run_ncbi_esearch(
     inputs: NCBIEsearchInput,
-    config: NCBIFetchConfig | None = None,
+    config: NCBIFetchConfig,
     instance: Any = None,
 ) -> NCBIEsearchOutput:
     """Search NCBI Entrez databases by query term.
@@ -114,14 +114,13 @@ def run_ncbi_esearch(
     Args:
         inputs (NCBIEsearchInput): Search parameters including database, query term, and
             max results.
-        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig): HTTP timeout, retry, and authentication settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEsearchOutput: NCBIEsearchOutput containing matching NCBI IDs.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

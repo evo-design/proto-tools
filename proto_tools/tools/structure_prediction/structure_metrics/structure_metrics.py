@@ -121,7 +121,7 @@ def example_input() -> Any:
 )
 def run_structure_metrics(
     inputs: StructureMetricsInput,
-    config: StructureMetricsConfig | None = None,
+    config: StructureMetricsConfig,
     instance: Any = None,
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
@@ -133,7 +133,7 @@ def run_structure_metrics(
 
     Args:
         inputs (StructureMetricsInput): Validated input containing PDB file paths.
-        config (StructureMetricsConfig | None): Configuration (no parameters needed).
+        config (StructureMetricsConfig): Configuration (no parameters needed).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -147,7 +147,6 @@ def run_structure_metrics(
         >>> print(result.metrics[0].longest_alpha_helix)
         >>> print(result.metrics[0].gyration_radius)
     """
-    assert config is not None
     input_data = {
         "pdb_paths": inputs.pdb_paths,
     }

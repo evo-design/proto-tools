@@ -167,6 +167,6 @@ MASKERS: dict[str, type[Masker]] = {
     "max-logit": MaxLogitMasker,
 }
 
-assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (
+assert set(MASKERS.keys()) == set(get_args(MaskingMethod)), (  # noqa: S101 -- module-level registry consistency check
     f"MASKERS keys {set(MASKERS.keys())} don't match MaskingMethod values {set(get_args(MaskingMethod))}"
 )

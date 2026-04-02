@@ -171,7 +171,7 @@ def example_input() -> Any:
 )
 def run_fampnn_score_all_mutations(
     inputs: FAMPNNScoreAllMutationsInput,
-    config: FAMPNNScoreAllMutationsConfig | None = None,
+    config: FAMPNNScoreAllMutationsConfig,
     instance: Any = None,
 ) -> FAMPNNScoreAllMutationsOutput:
     """Score every possible single amino acid substitution at every position.
@@ -182,13 +182,12 @@ def run_fampnn_score_all_mutations(
 
     Args:
         inputs (FAMPNNScoreAllMutationsInput): FAMPNNScoreAllMutationsInput containing structures.
-        config (FAMPNNScoreAllMutationsConfig | None): Configuration for scoring.
+        config (FAMPNNScoreAllMutationsConfig): Configuration for scoring.
         instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNScoreAllMutationsOutput: FAMPNNScoreAllMutationsOutput with per-position mutation scores.
     """
-    assert config is not None
     results = []
 
     for structure in tqdm(

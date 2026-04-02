@@ -649,7 +649,7 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
         return []
 
     try:
-        gpus = []
+        gpus: list[dict[str, int | str]] = []
         for line in out.strip().split("\n"):
             if not line.strip():
                 continue
@@ -664,7 +664,7 @@ def get_gpu_memory_info() -> list[dict[str, int | str]]:
                         "free_bytes": int(parts[4]) * 1024 * 1024,
                     }
                 )
-        return gpus  # type: ignore[return-value]
+        return gpus
     except ValueError:
         return []
 
@@ -709,7 +709,7 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
         # Build PCI bus ID to GPU index mapping
         bus_to_index = _get_pci_bus_to_index_mapping()
 
-        processes = []
+        processes: list[dict[str, int | str]] = []
         for line in out.strip().split("\n"):
             if not line.strip():
                 continue
@@ -726,7 +726,7 @@ def get_gpu_process_memory() -> list[dict[str, int | str]]:
                         "used_bytes": int(parts[3]) * 1024 * 1024,  # MiB to bytes
                     }
                 )
-        return processes  # type: ignore[return-value]
+        return processes
     except ValueError:
         return []
 

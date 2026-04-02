@@ -27,7 +27,7 @@ class ESMIF1Model:
     def __init__(self) -> None:
         """Initialize ESMIF1Model."""
         self._loaded = False
-        self.device = None
+        self.device: str | None = None
         self.model = None
         self.alphabet = None
         self._weights_variant = None
@@ -280,7 +280,7 @@ class ESMIF1Model:
 
         self.model = self.model.to(device)  # type: ignore[attr-defined]
         self.model.eval()  # type: ignore[attr-defined]
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._weights_variant = weights_variant  # type: ignore[assignment]
         self._loaded = True
 
@@ -293,13 +293,13 @@ class ESMIF1Model:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device  # type: ignore[assignment]
+            self.device = device
 
     def unload(self) -> None:
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
             self.model = self.model.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

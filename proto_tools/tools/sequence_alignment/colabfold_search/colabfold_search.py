@@ -436,7 +436,7 @@ def example_input() -> Any:
 )
 def run_colabfold_search(
     inputs: ColabfoldSearchInput,
-    config: ColabfoldSearchConfig | None = None,
+    config: ColabfoldSearchConfig,
     instance: Any = None,
 ) -> ColabfoldSearchOutput:
     """Generate MSAs for protein sequences using ColabFold search, with options.
@@ -453,7 +453,7 @@ def run_colabfold_search(
 
     Args:
         inputs (ColabfoldSearchInput): Validated input containing sequences to search.
-        config (ColabfoldSearchConfig | None): Configuration with database path and search parameters.
+        config (ColabfoldSearchConfig): Configuration with database path and search parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -476,7 +476,6 @@ def run_colabfold_search(
         >>> for seq in msa:
         ...     print(seq)
     """
-    assert config is not None
     if not inputs.queries:
         return ColabfoldSearchOutput(results=[])
 

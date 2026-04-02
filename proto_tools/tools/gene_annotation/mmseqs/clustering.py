@@ -86,7 +86,7 @@ class MmseqsClusteringInput(BaseToolInput):
 
     @field_validator("input_sequences", mode="before")
     @classmethod
-    def validate_input_sequences(cls, v: Any) -> None:
+    def validate_input_sequences(cls, v: Any) -> Any:
         """Validate input sequences."""
         if not isinstance(v, list):
             raise ValueError(f"input_sequences must be a list, got {type(v)}")
@@ -94,7 +94,7 @@ class MmseqsClusteringInput(BaseToolInput):
             raise ValueError("input_sequences list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in input_sequences list must be strings")
-        return v  # type: ignore[return-value]
+        return v
 
 
 # Output:
@@ -203,7 +203,7 @@ def example_input() -> Any:
 )
 def run_mmseqs_clustering(
     inputs: MmseqsClusteringInput,
-    config: MmseqsClusteringConfig | None = None,
+    config: MmseqsClusteringConfig,
     instance: Any = None,
 ) -> MmseqsClusteringOutput:
     """Perform sequence clustering using MMseqs2.
@@ -214,7 +214,7 @@ def run_mmseqs_clustering(
     Args:
         inputs (MmseqsClusteringInput): Validated input containing sequences
             to cluster.
-        config (MmseqsClusteringConfig | None): Configuration with clustering threshold.
+        config (MmseqsClusteringConfig): Configuration with clustering threshold.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -232,7 +232,6 @@ def run_mmseqs_clustering(
         >>> for i, r in enumerate(result):
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
     """
-    assert config is not None
     sequences = inputs.input_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)

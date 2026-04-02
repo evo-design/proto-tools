@@ -75,7 +75,7 @@ class Evo2Model:
         self.model_checkpoint = model_checkpoint
         self.local_path = local_path
         self.tokenizer = None
-        self.device = None
+        self.device: str | None = None
         self.model = None
 
     def sample(
@@ -344,7 +344,7 @@ class Evo2Model:
         self.tokenizer = self.model.tokenizer  # type: ignore[attr-defined]
         self.model.model = self.model.model.eval()  # type: ignore[attr-defined]
 
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         if verbose:
@@ -372,7 +372,7 @@ class Evo2Model:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device == device:
-            return  # type: ignore[unreachable]
+            return
 
         if device == "cpu":
             # Standard offload, no reload needed
@@ -381,7 +381,7 @@ class Evo2Model:
                 self.device,
                 device,
             )
-            self.device = device  # type: ignore[assignment]
+            self.device = device
         else:
             # Moving to GPU requires full reload (vortex auto-sharding)
             self.model.model = move_model_to_device(  # type: ignore[attr-defined]
@@ -397,7 +397,7 @@ class Evo2Model:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
             self.model.model = self.model.model.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 

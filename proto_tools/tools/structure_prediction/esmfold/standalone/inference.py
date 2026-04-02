@@ -30,7 +30,7 @@ class ESMFoldModel:
         """Initialize ESMFold model wrapper."""
         self._loaded = False
         self.tokenizer = None
-        self.device = None
+        self.device: str | None = None
         self.model = None
 
     def __call__(
@@ -242,7 +242,7 @@ class ESMFoldModel:
         self.model = self.model.to(device)  # type: ignore[attr-defined]
         self.model.esm = self.model.esm.half()  # type: ignore[attr-defined]
         self.tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         if verbose:
@@ -255,7 +255,7 @@ class ESMFoldModel:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device  # type: ignore[assignment]
+            self.device = device
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
@@ -264,7 +264,7 @@ class ESMFoldModel:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
             self.model = self.model.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 

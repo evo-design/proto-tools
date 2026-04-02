@@ -82,9 +82,7 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_phmmer(
-    inputs: PyPhmmerInput, config: PyPhmmerConfig | None = None, instance: Any = None
-) -> PyPhmmerOutput:
+def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: Any = None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
     This function implements the phmmer algorithm, which performs iterative
@@ -95,7 +93,7 @@ def run_pyhmmer_phmmer(
     Args:
         inputs (PyPhmmerInput): Validated PyHMMER phmmer input containing both
             query and target protein sequences.
-        config (PyPhmmerConfig | None): Validated PyHMMER configuration with search
+        config (PyPhmmerConfig): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -124,7 +122,6 @@ def run_pyhmmer_phmmer(
         >>> if result.sequence_hits:
         ...     high_identity = [hit for hit in result.sequence_hits if hit.evalue < 1e-10]
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

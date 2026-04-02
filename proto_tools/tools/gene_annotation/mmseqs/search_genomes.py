@@ -64,7 +64,7 @@ class MmseqsSearchGenomesInput(BaseToolInput):
 
     @field_validator("query_genomes", mode="before")
     @classmethod
-    def validate_query_genomes(cls, v: Any) -> None:
+    def validate_query_genomes(cls, v: Any) -> Any:
         """Validate query genomes input."""
         if not isinstance(v, list):
             raise ValueError(f"query_genomes must be a list, got {type(v)}")
@@ -72,11 +72,11 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             raise ValueError("query_genomes list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_genomes list must be strings")
-        return v  # type: ignore[return-value]
+        return v
 
     @field_validator("target_genomes", mode="before")
     @classmethod
-    def validate_target_genomes(cls, v: Any) -> None:
+    def validate_target_genomes(cls, v: Any) -> Any:
         """Validate target genomes input."""
         if not isinstance(v, list):
             raise ValueError(f"target_genomes must be a list, got {type(v)}")
@@ -84,7 +84,7 @@ class MmseqsSearchGenomesInput(BaseToolInput):
             raise ValueError("target_genomes list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in target_genomes list must be strings")
-        return v  # type: ignore[return-value]
+        return v
 
 
 # Output:
@@ -222,7 +222,7 @@ def example_input() -> Any:
 )
 def run_mmseqs_search_genomes(
     inputs: MmseqsSearchGenomesInput,
-    config: MmseqsSearchGenomesConfig | None = None,
+    config: MmseqsSearchGenomesConfig,
     instance: Any = None,
 ) -> MmseqsSearchGenomesOutput:
     """Execute nucleotide genome-to-genome search workflow.
@@ -233,7 +233,7 @@ def run_mmseqs_search_genomes(
     Args:
         inputs (MmseqsSearchGenomesInput): Validated input containing query
             and target genome sequences.
-        config (MmseqsSearchGenomesConfig | None): Configuration with search parameters.
+        config (MmseqsSearchGenomesConfig): Configuration with search parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -253,7 +253,6 @@ def run_mmseqs_search_genomes(
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
-    assert config is not None
     query_sequences = inputs.query_genomes
     target_sequences = inputs.target_genomes
     query_ids = resolve_sequence_ids(query_sequences, inputs.query_ids)

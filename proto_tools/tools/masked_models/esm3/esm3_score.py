@@ -121,7 +121,7 @@ def example_input() -> Any:
 )
 def run_esm3_score(
     inputs: ESM3ScoringInput,
-    config: ESM3ScoringConfig | None = None,
+    config: ESM3ScoringConfig,
     instance: Any = None,
 ) -> ESM3ScoringOutput:
     """Score protein sequences using ESM3 language model.
@@ -137,7 +137,7 @@ def run_esm3_score(
     Args:
         inputs (ESM3ScoringInput): Validated input containing protein sequences
             to score.
-        config (ESM3ScoringConfig | None): Scoring configuration specifying model,
+        config (ESM3ScoringConfig): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -175,7 +175,6 @@ def run_esm3_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    assert config is not None
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")

@@ -273,7 +273,7 @@ def example_input() -> Any:
 )
 def run_splice_transformer(
     inputs: SpliceTransformerInput,
-    config: SpliceTransformerConfig | None = None,
+    config: SpliceTransformerConfig,
     instance: Any = None,
 ) -> SpliceTransformerOutput:
     """Predict splice sites in RNA/DNA sequences using SpliceTransformer.
@@ -286,7 +286,7 @@ def run_splice_transformer(
     Args:
         inputs (SpliceTransformerInput): Validated input containing target sequences
             and their left/right context sequences.
-        config (SpliceTransformerConfig | None): Validated SpliceTransformer configuration
+        config (SpliceTransformerConfig): Validated SpliceTransformer configuration
             specifying context length and device settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -320,7 +320,6 @@ def run_splice_transformer(
         - Target length is typically 1000bp but can vary
         - Each subprocess is fresh (no in-process caching)
     """
-    assert config is not None
     # Local GPU/CPU via standalone venv
 
     logger.debug(f"Using local device for SpliceTransformer inference (context_length={config.context_length})")

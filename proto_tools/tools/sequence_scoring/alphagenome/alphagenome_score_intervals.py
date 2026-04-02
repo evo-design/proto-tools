@@ -183,11 +183,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_score_intervals(
     inputs: AlphaGenomeScoreIntervalsInput,
-    config: AlphaGenomeScoreIntervalsConfig | None = None,
+    config: AlphaGenomeScoreIntervalsConfig,
     instance: Any = None,
 ) -> AlphaGenomeScoreIntervalsOutput:
     """Score genomic intervals in batch using AlphaGenome interval scorers."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(

@@ -84,9 +84,7 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_pyhmmer_hmmscan(
-    inputs: PyHmmscanInput, config: PyHmmscanConfig | None = None, instance: Any = None
-) -> PyHmmscanOutput:
+def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instance: Any = None) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
     This function implements the hmmscan algorithm, searching protein sequences
@@ -97,7 +95,7 @@ def run_pyhmmer_hmmscan(
     Args:
         inputs (PyHmmscanInput): Validated PyHMMER hmmscan input containing
             the HMM database path and query sequences.
-        config (PyHmmscanConfig | None): Validated PyHMMER configuration with search
+        config (PyHmmscanConfig): Validated PyHMMER configuration with search
             parameters including E-value thresholds and threading options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -129,7 +127,6 @@ def run_pyhmmer_hmmscan(
         ...         domains = [h.query_name for h in hits]
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

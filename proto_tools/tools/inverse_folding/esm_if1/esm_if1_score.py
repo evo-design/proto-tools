@@ -107,7 +107,7 @@ def example_input() -> Any:
 )
 def run_esm_if1_score(
     inputs: ESMIF1ScoringInput,
-    config: ESMIF1ScoringConfig | None = None,
+    config: ESMIF1ScoringConfig,
     instance: Any = None,
 ) -> ESMIF1ScoringOutput:
     """Score protein sequences using ESM-IF1/ProteinDPO.
@@ -118,14 +118,13 @@ def run_esm_if1_score(
 
     Args:
         inputs (ESMIF1ScoringInput): Sequence-structure pairs to score.
-        config (ESMIF1ScoringConfig | None): Configuration including weights variant.
+        config (ESMIF1ScoringConfig): Configuration including weights variant.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMIF1ScoringOutput: ESMIF1ScoringOutput with scores for each input pair.
     """
-    assert config is not None
     scores = []
 
     for pair in tqdm(

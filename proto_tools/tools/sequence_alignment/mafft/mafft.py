@@ -154,7 +154,7 @@ def example_input() -> Any:
     example_input=example_input,
     cacheable=True,
 )
-def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, instance: Any = None) -> MafftOutput:
+def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = None) -> MafftOutput:
     """Perform multiple sequence alignment using MAFFT.
 
     Aligns input sequences using MAFFT with the specified method and
@@ -163,7 +163,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
 
     Args:
         inputs (MafftInput): Validated input containing sequences to align.
-        config (MafftConfig | None): Configuration with alignment parameters.
+        config (MafftConfig): Configuration with alignment parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -182,7 +182,6 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.sequence_ids[i]}: {seq}")
     """
-    assert config is not None
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)

@@ -101,7 +101,7 @@ def example_input() -> Any:
 )
 def run_pdb_fetch_entry(
     inputs: PdbFetchEntryInput,
-    config: PdbFetchConfig | None = None,
+    config: PdbFetchConfig,
     instance: Any = None,
 ) -> PdbFetchEntryOutput:
     """Fetch structure metadata from RCSB PDB.
@@ -110,14 +110,13 @@ def run_pdb_fetch_entry(
 
     Args:
         inputs (PdbFetchEntryInput): PDB accession to look up.
-        config (PdbFetchConfig | None): HTTP timeout and retry settings.
+        config (PdbFetchConfig): HTTP timeout and retry settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

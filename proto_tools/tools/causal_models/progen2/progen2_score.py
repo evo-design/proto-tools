@@ -158,7 +158,7 @@ def example_input() -> Any:
 )
 def run_progen2_score(
     inputs: ProGen2ScoringInput,
-    config: ProGen2ScoringConfig | None = None,
+    config: ProGen2ScoringConfig,
     instance: Any = None,
 ) -> ProGen2ScoringOutput:
     """Score protein sequences using ProGen2 autoregressive language model.
@@ -170,7 +170,7 @@ def run_progen2_score(
     Args:
         inputs (ProGen2ScoringInput): Validated input containing protein sequences
             to score.
-        config (ProGen2ScoringConfig | None): Scoring configuration specifying model,
+        config (ProGen2ScoringConfig): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -207,7 +207,6 @@ def run_progen2_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    assert config is not None
     logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "progen2",

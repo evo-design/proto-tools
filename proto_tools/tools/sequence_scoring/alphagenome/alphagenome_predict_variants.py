@@ -146,11 +146,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_predict_variants(
     inputs: AlphaGenomePredictVariantsInput,
-    config: AlphaGenomePredictVariantsConfig | None = None,
+    config: AlphaGenomePredictVariantsConfig,
     instance: Any = None,
 ) -> AlphaGenomePredictVariantsOutput:
     """Predict variant effects in batch using AlphaGenome."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(

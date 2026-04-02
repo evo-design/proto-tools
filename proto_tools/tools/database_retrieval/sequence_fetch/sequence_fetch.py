@@ -529,7 +529,7 @@ def example_input() -> Any:
 )
 def run_sequence_fetch(
     inputs: SequenceFetchInput,
-    config: SequenceFetchConfig | None = None,
+    config: SequenceFetchConfig,
     instance: Any = None,
 ) -> SequenceFetchOutput:
     """Fetch DNA, RNA, protein, and structure records from NCBI, UniProt, and PDB.
@@ -539,7 +539,7 @@ def run_sequence_fetch(
 
     Args:
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
-        config (SequenceFetchConfig | None): Timeout and validation settings.
+        config (SequenceFetchConfig): Timeout and validation settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -560,7 +560,6 @@ def run_sequence_fetch(
         >>> result = run_sequence_fetch(inputs, config)
         >>> print(result.num_requests, result.num_success)
     """
-    assert config is not None
     del instance  # unused; kept for tool API consistency
 
     ncfg = _ncbi_config(config)
@@ -632,24 +631,16 @@ def _process_single_request(
     for sequence_type in request.sequence_types:
         try:
             if sequence_type == "structure":
-                struct_result = _fetch_structure(request, config, session, resolved_ids)
-                if struct_result is None:
-                    errors.append(f"NOT_FOUND[{sequence_type}]: no result returned")
-                    continue
-                fetched_struct, fetched_ids, local_warnings = struct_result
+                fetched_struct, fetched_ids, local_warnings = _fetch_structure(request, config, session, resolved_ids)
                 structures.append(fetched_struct)
             else:
                 fetcher = sequence_fetchers[sequence_type]
-                seq_result = fetcher(request, config, session)
-                if seq_result is None:
-                    errors.append(f"NOT_FOUND[{sequence_type}]: no result returned")
-                    continue
-                fetched_seq, fetched_ids, local_warnings = seq_result
+                fetched_seq, fetched_ids, local_warnings = fetcher(request, config, session)
                 sequences.append(fetched_seq)
             resolved_ids.update(fetched_ids)
             warnings.extend(local_warnings)
 
-        except SequenceFetchError as exc:
+        except SequenceFetchError as exc:  # noqa: PERF203 -- each fetch type is independent
             errors.append(f"NOT_FOUND[{sequence_type}]: {exc}")
         except requests.exceptions.HTTPError as exc:
             errors.append(f"HTTP_ERROR[{sequence_type}]: {exc}")
@@ -709,7 +700,7 @@ def _fetch_protein(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch protein sequence using ID-priority resolution."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
@@ -873,7 +864,7 @@ def _fetch_dna_genomic(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch genomic DNA sequence."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
@@ -977,17 +968,11 @@ def _fetch_dna_genomic(
         attempted_not_found.append(candidate_id)
 
     if selected_id is None:
-        gene_result = _fetch_dna_genomic_from_gene_locus(
+        gene_record, gene_ids, gene_warnings = _fetch_dna_genomic_from_gene_locus(
             request=request,
             config=config,
             session=session,
         )
-        if gene_result is None:
-            raise SequenceFetchError(
-                f"No genomic DNA found for '{request.target_name}' in '{request.organism}' "
-                "(nuccore and gene-locus fallback both failed)"
-            )
-        gene_record, gene_ids, gene_warnings = gene_result
         warnings.append("Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback")
         warnings.extend(gene_warnings)
         return gene_record, gene_ids, warnings
@@ -1016,7 +1001,7 @@ def _fetch_dna_genomic_from_gene_locus(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch genomic DNA by resolving gene locus coordinates from NCBI gene."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
@@ -1104,7 +1089,7 @@ def _fetch_dna_cds(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch coding DNA sequence (CDS)."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
@@ -1218,7 +1203,7 @@ def _fetch_rna_transcript(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch transcript RNA sequence."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
@@ -1291,15 +1276,12 @@ def _fetch_rna_premrna(
     request: SequenceFetchRequest,
     config: SequenceFetchConfig,
     session: requests.Session,
-) -> tuple[FetchedSequence, dict[str, str], list[str]] | None:
+) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch or infer pre-mRNA sequence from genomic sequence."""
     try:
         genomic_result = _fetch_dna_genomic(request, config, session)
     except SequenceFetchError as exc:
         raise SequenceFetchError(f"pre-mRNA inference failed: {exc}") from exc
-
-    if genomic_result is None:
-        raise SequenceFetchError("pre-mRNA inference failed: no genomic DNA result returned")
 
     genomic_record, ids, warnings = genomic_result
     premrna = genomic_record.sequence
@@ -1326,7 +1308,7 @@ def _fetch_structure(
     config: SequenceFetchConfig,
     session: requests.Session,
     resolved_ids: dict[str, str] | None = None,
-) -> tuple[FetchedStructure, dict[str, str], list[str]] | None:
+) -> tuple[FetchedStructure, dict[str, str], list[str]]:
     """Fetch structure metadata from PDB."""
     warnings: list[str] = []
     ucfg = _uniprot_config(config)

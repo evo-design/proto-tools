@@ -156,7 +156,7 @@ class Evo2ScoringConfig(BaseConfig):
 )
 def run_evo2_score(
     inputs: Evo2ScoringInput,
-    config: Evo2ScoringConfig | None = None,
+    config: Evo2ScoringConfig,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> Evo2ScoringOutput:
     """Score DNA sequences using Evo2 autoregressive language model.
@@ -168,7 +168,7 @@ def run_evo2_score(
     Args:
         inputs (Evo2ScoringInput): Validated input containing DNA sequences
             to score.
-        config (Evo2ScoringConfig | None): Scoring configuration specifying model,
+        config (Evo2ScoringConfig): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -201,7 +201,6 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    assert config is not None
     logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
 
     model = get_cached_evo2_model(

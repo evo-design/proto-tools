@@ -112,11 +112,11 @@ def example_input():
     return ToolInput(sequences=["MKTL"])
 
 @tool(key="tool-key", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input, iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
-def run_tool_name(inputs: ToolInput, config: ToolConfig | None = None) -> ToolOutput:
+def run_tool_name(inputs: ToolInput, config: ToolConfig, instance: Any = None) -> ToolOutput:
 ```
 
 - **Input** (`BaseToolInput`): primary data (sequences, structures, files). Uses `extra="forbid"`.
-- **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time**; if `config=None`, the decorator auto-instantiates defaults. All config fields must have defaults.
+- **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time**; the `@tool` wrapper defaults `None` to `config_class()`. Inner function takes non-optional `config` since the wrapper guarantees it. All config fields must have defaults.
 - **Output** (`BaseToolOutput`): results + auto-populated metadata (tool_id, execution_time, success, errors).
 - **`@tool()`**: handles error catching, timing, metadata, registry, default config, and device allocation validation.
 - **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).

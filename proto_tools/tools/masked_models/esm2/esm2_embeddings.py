@@ -143,7 +143,7 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_esm2_embeddings(
-    inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig | None = None, instance: Any = None
+    inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig, instance: Any = None
 ) -> ESM2EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM2.
 
@@ -154,7 +154,7 @@ def run_esm2_embeddings(
     Args:
         inputs (ESM2EmbeddingsInput): Validated input containing one or more protein
             sequences (amino acid sequences).
-        config (ESM2EmbeddingsConfig | None): Validated ESM2 configuration specifying model variant,
+        config (ESM2EmbeddingsConfig): Validated ESM2 configuration specifying model variant,
             batch size, and device settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -193,7 +193,6 @@ def run_esm2_embeddings(
     Note:
         - Larger models require more GPU memory but provide better representations
     """
-    assert config is not None
     logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
     outputs = ToolInstance.dispatch(
         "esm2",

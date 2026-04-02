@@ -384,7 +384,7 @@ def example_input() -> Any:
 )
 def run_evo2_sample(
     inputs: Evo2SampleInput,
-    config: Evo2SampleConfig | None = None,
+    config: Evo2SampleConfig,
     instance: Any = None,
 ) -> Evo2SampleOutput:
     """Sample DNA sequences using Evo2 language model.
@@ -396,7 +396,7 @@ def run_evo2_sample(
     Args:
         inputs (Evo2SampleInput): Validated input containing one or more DNA
             prompt sequences using Evo2's special prompt format (e.g., ``"+~GA"``).
-        config (Evo2SampleConfig | None): Validated Evo2 sampling configuration specifying
+        config (Evo2SampleConfig): Validated Evo2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and caching options.
 
@@ -424,7 +424,6 @@ def run_evo2_sample(
         - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2
         - Evo2 Website: https://arcinstitute.org/tools/evo
     """
-    assert config is not None
     # Local GPU - use standalone venv
     logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
 

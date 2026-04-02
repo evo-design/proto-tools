@@ -39,7 +39,7 @@ class ProteinMPNNModel:
         """Initialize ProteinMPNNModel."""
         self._loaded = False
         self._model_choice = None
-        self.device = None
+        self.device: str | None = None
         self.params = None
         self.model = None
         self.jax = None
@@ -203,7 +203,7 @@ class ProteinMPNNModel:
         # Load the Flax module (params land on CPU by default)
         self.model = mk_mpnn_model(model_name=model_name)
         self.params = self.model._model.params  # type: ignore[attr-defined]
-        self.device = "cpu"  # type: ignore[assignment]
+        self.device = "cpu"
         self._model_choice = model_choice  # type: ignore[assignment]
 
         # Move the model parameters to the selected device
@@ -240,7 +240,7 @@ class ProteinMPNNModel:
             logger.info("Unloading ProteinMPNN to CPU")
 
         self.params = move_model_to_device(self.params, self.device, "cpu")
-        self.device = "cpu"  # type: ignore[assignment]
+        self.device = "cpu"
 
 
 def _serialize_output(value: Any) -> Any:

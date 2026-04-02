@@ -80,7 +80,7 @@ def example_input() -> Any:
 )
 def run_ligandmpnn_sample(
     inputs: LigandMPNNSampleInput,
-    config: LigandMPNNSampleConfig | None = None,
+    config: LigandMPNNSampleConfig,
     instance: Any = None,
 ) -> LigandMPNNSampleOutput:
     """Sample protein sequences using LigandMPNN.
@@ -88,14 +88,13 @@ def run_ligandmpnn_sample(
     Args:
         inputs (LigandMPNNSampleInput): LigandMPNNSampleInput containing a list of structure inputs,
             and optional chain_ids/fixed_positions constraints.
-        config (LigandMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
+        config (LigandMPNNSampleConfig): Configuration for sampling (temperature, batch_size, etc.).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         LigandMPNNSampleOutput: LigandMPNNSampleOutput with designed sequences for each input structure.
     """
-    assert config is not None
     designed_sequences = []
 
     # Local venv execution

@@ -128,7 +128,7 @@ def example_input() -> Any:
     cacheable=True,
 )
 def run_esm3_embeddings(
-    inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig | None = None, instance: Any = None
+    inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig, instance: Any = None
 ) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
@@ -140,7 +140,7 @@ def run_esm3_embeddings(
     Args:
         inputs (ESM3EmbeddingsInput): Validated input containing one or more protein
             sequences (amino acid sequences).
-        config (ESM3EmbeddingsConfig | None): Validated ESM3 configuration specifying model variant,
+        config (ESM3EmbeddingsConfig): Validated ESM3 configuration specifying model variant,
             batch size, and device settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -173,7 +173,6 @@ def run_esm3_embeddings(
         >>> result = run_esm3_embeddings(inputs, config)
 
     """
-    assert config is not None
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution

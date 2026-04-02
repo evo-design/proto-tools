@@ -130,7 +130,7 @@ def example_input() -> Any:
 )
 def run_ncbi_efetch(
     inputs: NCBIEfetchInput,
-    config: NCBIFetchConfig | None = None,
+    config: NCBIFetchConfig,
     instance: Any = None,
 ) -> NCBIEfetchOutput:
     """Fetch sequences from NCBI Entrez databases.
@@ -141,14 +141,13 @@ def run_ncbi_efetch(
     Args:
         inputs (NCBIEfetchInput): Database, identifier, format, and optional coordinate
             parameters.
-        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig): HTTP timeout, retry, and authentication settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

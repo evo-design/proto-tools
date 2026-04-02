@@ -102,7 +102,7 @@ def example_input() -> Any:
 )
 def run_pyhmmer_jackhmmer(
     inputs: PyJackhmmerInput,
-    config: PyJackhmmerConfig | None = None,
+    config: PyJackhmmerConfig,
     instance: Any = None,
 ) -> PyJackhmmerOutput:
     """Iteratively search protein sequences against protein database using PyHMMER.
@@ -110,7 +110,7 @@ def run_pyhmmer_jackhmmer(
     Args:
         inputs (PyJackhmmerInput): Validated jackhmmer input containing query and
             target protein sequences.
-        config (PyJackhmmerConfig | None): Validated configuration including
+        config (PyJackhmmerConfig): Validated configuration including
             ``max_iterations`` and threshold settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -118,7 +118,6 @@ def run_pyhmmer_jackhmmer(
     Returns:
         PyJackhmmerOutput: Structured output with sequence-level and domain-level hits.
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {

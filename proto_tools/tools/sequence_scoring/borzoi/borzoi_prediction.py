@@ -198,19 +198,18 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
 )
-def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig | None = None, instance: Any = None) -> BorzoiOutput:
+def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) -> BorzoiOutput:
     """Predict regulatory activity using a single Borzoi replicate.
 
     Args:
         inputs (BorzoiInput): Validated sequence input.
-        config (BorzoiConfig | None): Validated runtime and model configuration.
+        config (BorzoiConfig): Validated runtime and model configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         BorzoiOutput: Prediction object for one Borzoi replicate.
     """
-    assert config is not None
     if config.use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 

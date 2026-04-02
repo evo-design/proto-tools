@@ -138,11 +138,10 @@ def example_input() -> Any:
 )
 def run_mock_cli_multi_gpu_tool(
     inputs: MockCLIMultiGPUToolInput,
-    config: MockCLIMultiGPUToolConfig | None = None,
+    config: MockCLIMultiGPUToolConfig,
     instance: Any = None,
 ) -> MockCLIMultiGPUToolOutput:
     """Run mock CLI multi-GPU tool (subprocess-based with 2-GPU routing)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_cli_multi_gpu_tool",
         {

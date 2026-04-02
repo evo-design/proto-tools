@@ -42,7 +42,7 @@ class ESM2Model:
         self.model_checkpoint = model_checkpoint
         self.tokenizer = None
         self.amino_acid_token_ids = None
-        self.device = None
+        self.device: str | None = None
         self.model = None
 
     def __call__(
@@ -419,7 +419,7 @@ class ESM2Model:
             [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
             device=device,
         )
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         if verbose:
@@ -433,7 +433,7 @@ class ESM2Model:
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
             self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)  # type: ignore[attr-defined]
-            self.device = device  # type: ignore[assignment]
+            self.device = device
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU to free GPU memory."""
@@ -443,7 +443,7 @@ class ESM2Model:
 
             self.model = self.model.to("cpu")  # type: ignore[attr-defined]
             self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 

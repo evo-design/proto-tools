@@ -223,11 +223,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_score_ism_variants_batch(
     inputs: AlphaGenomeScoreISMInput,
-    config: AlphaGenomeScoreISMConfig | None = None,
+    config: AlphaGenomeScoreISMConfig,
     instance: Any = None,
 ) -> AlphaGenomeScoreISMOutput:
     """Run batched in-silico mutagenesis using AlphaGenome variant scorers."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     serialized_requests = []

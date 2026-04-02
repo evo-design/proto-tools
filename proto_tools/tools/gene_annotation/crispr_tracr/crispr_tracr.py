@@ -170,7 +170,7 @@ def example_input() -> Any:
 )
 def run_crispr_tracr(
     inputs: CrisprTracrInput,
-    config: CrisprTracrConfig | None = None,
+    config: CrisprTracrConfig,
     instance: Any = None,
 ) -> CrisprTracrOutput:
     """Predict tracrRNA sequences from nucleotide CRISPR loci.
@@ -182,7 +182,7 @@ def run_crispr_tracr(
 
     Args:
         inputs (CrisprTracrInput): Validated input containing nucleotide sequences.
-        config (CrisprTracrConfig | None): CRISPRtracrRNA configuration including model type.
+        config (CrisprTracrConfig): CRISPRtracrRNA configuration including model type.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -195,7 +195,6 @@ def run_crispr_tracr(
         >>> result = run_crispr_tracr(inputs, config)
         >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
     """
-    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     num_workers = config.num_workers

@@ -123,7 +123,7 @@ def example_input() -> Any:
 )
 def run_esm2_score(
     inputs: ESM2ScoringInput,
-    config: ESM2ScoringConfig | None = None,
+    config: ESM2ScoringConfig,
     instance: Any = None,
 ) -> ESM2ScoringOutput:
     """Score protein sequences using ESM2 language model.
@@ -139,7 +139,7 @@ def run_esm2_score(
     Args:
         inputs (ESM2ScoringInput): Validated input containing protein sequences
             to score.
-        config (ESM2ScoringConfig | None): Scoring configuration specifying model,
+        config (ESM2ScoringConfig): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -177,7 +177,6 @@ def run_esm2_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
-    assert config is not None
     logger.debug(f"Using local for ESM2 scoring: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm2",

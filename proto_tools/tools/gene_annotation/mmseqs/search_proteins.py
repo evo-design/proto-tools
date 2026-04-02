@@ -121,7 +121,7 @@ class MmseqsSearchProteinsInput(BaseToolInput):
 
     @field_validator("query_sequences", mode="before")
     @classmethod
-    def validate_query_sequences(cls, v: Any) -> None:
+    def validate_query_sequences(cls, v: Any) -> Any:
         """Validate query sequences input."""
         if not isinstance(v, list):
             raise ValueError(f"query_sequences must be a list, got {type(v)}")
@@ -129,7 +129,7 @@ class MmseqsSearchProteinsInput(BaseToolInput):
             raise ValueError("query_sequences list cannot be empty")
         if not all(isinstance(item, str) for item in v):
             raise ValueError("All items in query_sequences list must be strings")
-        return v  # type: ignore[return-value]
+        return v
 
     @field_validator("mmseqs_db")
     @classmethod
@@ -288,7 +288,7 @@ def example_input() -> Any:
 )
 def run_mmseqs_search_proteins(
     inputs: MmseqsSearchProteinsInput,
-    config: MmseqsSearchProteinsConfig | None = None,
+    config: MmseqsSearchProteinsConfig,
     instance: Any = None,
 ) -> MmseqsSearchProteinsOutput:
     """Perform protein sequence search using MMseqs2.
@@ -299,7 +299,7 @@ def run_mmseqs_search_proteins(
     Args:
         inputs (MmseqsSearchProteinsInput): Validated input containing query
             sequences and target database path.
-        config (MmseqsSearchProteinsConfig | None): Configuration with search parameters.
+        config (MmseqsSearchProteinsConfig): Configuration with search parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -320,7 +320,6 @@ def run_mmseqs_search_proteins(
         >>> if result[0].top_hit:
         ...     print(f"Top hit: {result[0].top_hit.pident}% identity")
     """
-    assert config is not None
     sequences = inputs.query_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
