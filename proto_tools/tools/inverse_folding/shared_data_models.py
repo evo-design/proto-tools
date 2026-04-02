@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.utils import (
@@ -400,8 +400,6 @@ class SequenceScores(BaseModel):
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __getattr__(self, name: str) -> Any:
         """Allow attribute-style access to metrics."""

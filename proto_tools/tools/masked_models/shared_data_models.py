@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.utils import (
     BaseConfig,
@@ -141,8 +141,6 @@ class MaskedModelOutput(BaseToolOutput):
         description="Per-sequence embedding results",
     )
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
@@ -265,8 +263,6 @@ class SequenceScores(BaseModel):
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __getattr__(self, name: str) -> Any:
         """Allow attribute-style access to metrics."""

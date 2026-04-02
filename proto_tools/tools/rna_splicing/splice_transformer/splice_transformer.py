@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from pathlib import Path
 
-import numpy as np
-from pydantic import Field, field_serializer, model_validator
+from pydantic import Field, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -179,7 +178,7 @@ class SpliceTransformerOutput(BaseToolOutput):
     per-position probabilities for splice site types and tissue-specific splicing.
 
     Attributes:
-        prediction (np.ndarray): Prediction tensor of shape ``(batch, target_length, 18)``
+        prediction (list[list[list[float]]]): Prediction tensor of shape ``[batch, target_length, 18]``
             where:
 
             - ``batch``: Number of input sequences
@@ -215,14 +214,9 @@ class SpliceTransformerOutput(BaseToolOutput):
             All probabilities are in the range [0, 1].
     """
 
-    prediction: np.ndarray = Field(
-        description="Matrix of (batch, target_length, 18)",
+    prediction: list[list[list[float]]] = Field(
+        description="Matrix of [batch, target_length, 18]",
     )
-
-    @field_serializer("prediction")
-    def serialize_prediction(self, value: np.ndarray) -> list[Any]:
-        """Serialize a prediction array to a JSON-compatible list."""
-        return value.tolist()  # type: ignore[no-any-return]
 
     @property
     def output_format_options(self) -> list[str]:
@@ -237,20 +231,18 @@ class SpliceTransformerOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         from pathlib import Path
 
-        import numpy as np
-
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "npy":
-            np.save(path, self.prediction)
+            import numpy as np
+
+            np.save(path, np.array(self.prediction))
 
         elif file_format == "json":
             import json
 
-            # Convert to list for JSON
-            json_data = self.prediction.tolist()
             with open(path, "w") as f:
-                json.dump(json_data, f)
+                json.dump(self.prediction, f)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -301,7 +293,7 @@ def run_splice_transformer(
 
     Returns:
         SpliceTransformerOutput: Structured output containing:
-            - ``prediction``: Tensor of shape ``(batch, target_length, 18)`` with
+            - ``prediction``: Nested list of shape ``[batch, target_length, 18]`` with
             per-position probabilities for splice types and tissue-specific splicing
 
     See Also:
@@ -316,10 +308,10 @@ def run_splice_transformer(
         ... )
         >>> config = SpliceTransformerConfig(context_length=4000, verbose=True)
         >>> result = run_splice_transformer(inputs, config)
-        >>> # Extract donor sites (channel 2)
-        >>> donor_probs = result.prediction[0, :, 2]
-        >>> # Find high-confidence donor sites
+        >>> # Extract donor site probabilities (channel 2) for first sequence
         >>> import numpy as np
+        >>> pred = np.array(result.prediction)
+        >>> donor_probs = pred[0, :, 2]
         >>> donor_sites = np.where(donor_probs > 0.5)[0]
 
     Note:
@@ -350,9 +342,7 @@ def run_splice_transformer(
         config=config,
     )
 
-    prediction = np.array(output_data["prediction"])
-
     return SpliceTransformerOutput(
         metadata={"context_length": config.context_length},  # type: ignore[union-attr]
-        prediction=prediction,
+        prediction=output_data["prediction"],
     )

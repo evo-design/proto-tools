@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 from tqdm import tqdm
 
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
@@ -43,8 +43,6 @@ class BorzoiEnsembleOutput(BaseToolOutput):
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
     avg_output_tracks: bool = Field(description="Whether track outputs were averaged")
     num_replicates: int = Field(default=4, description="Number of Borzoi replicates returned")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def output_format_options(self) -> list[str]:

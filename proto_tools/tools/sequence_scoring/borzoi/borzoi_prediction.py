@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -80,8 +80,6 @@ class BorzoiOutput(BaseToolOutput):
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
     replicate: str = Field(description="Replicate used for prediction ('0' to '3')")
     avg_output_tracks: bool = Field(description="Whether track outputs were averaged")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def output_format_options(self) -> list[str]:

@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -76,8 +76,6 @@ class EnformerOutput(BaseToolOutput):
     prediction: list[list[float]] = Field(description="Predicted activity matrix with shape [896, num_tracks]")
     output_tracks: list[int] = Field(description="Track indices extracted from Enformer")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def output_format_options(self) -> list[str]:

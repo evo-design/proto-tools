@@ -28,9 +28,11 @@ def _run_splice_transformer_and_check(device: str) -> None:
     output = run_splice_transformer(inp, config)
 
     assert output.success is True, f"SpliceTransformer failed: {output}"
-    assert output.prediction.shape == (1, TARGET_LENGTH, 18), (
-        f"Expected shape (1, {TARGET_LENGTH}, 18), got {output.prediction.shape}"
+    assert len(output.prediction) == 1, f"Expected 1 batch, got {len(output.prediction)}"
+    assert len(output.prediction[0]) == TARGET_LENGTH, (
+        f"Expected target_length {TARGET_LENGTH}, got {len(output.prediction[0])}"
     )
+    assert len(output.prediction[0][0]) == 18, f"Expected 18 channels, got {len(output.prediction[0][0])}"
 
 
 # ---------------------------------------------------------------------------

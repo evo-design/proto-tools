@@ -101,7 +101,7 @@ SpliceTransformer runs on GPU (recommended) or CPU:
 
 | Field | Type | Shape | Description |
 |-------|------|-------|-------------|
-| `prediction` | `np.ndarray` | `(batch, target_len, 18)` | Per-position predictions |
+| `prediction` | `list[list[list[float]]]` | `[batch, target_len, 18]` | Per-position predictions (convert to numpy with `np.array(...)` for slicing) |
 
 **Prediction channels:**
 | Index | Content |
@@ -167,7 +167,8 @@ inputs = SpliceTransformerInput(
 config = SpliceTransformerConfig(context_length=4000, verbose=True)
 
 result = run_splice_transformer(inputs, config)
-print(f"Prediction shape: {result.prediction.shape}")  # (1, 1000, 18)
+pred = np.array(result.prediction)
+print(f"Prediction shape: {pred.shape}")  # (1, 1000, 18)
 ```
 
 **Example 2: Find donor and acceptor sites**
@@ -187,8 +188,8 @@ config = SpliceTransformerConfig()
 
 result = run_splice_transformer(inputs, config)
 
-# Extract predictions
-pred = result.prediction[0]  # First sequence
+# Convert to numpy for slicing
+pred = np.array(result.prediction[0])  # First sequence
 acceptor_probs = pred[:, 1]  # Channel 1
 donor_probs = pred[:, 2]     # Channel 2
 
@@ -216,7 +217,7 @@ inputs = SpliceTransformerInput(
 config = SpliceTransformerConfig()
 
 result = run_splice_transformer(inputs, config)
-pred = result.prediction[0]
+pred = np.array(result.prediction[0])
 
 # Get brain-specific splicing
 brain_idx = SPLICE_TISSUE_CHANNEL_INDEX["BRAIN"]
@@ -247,7 +248,7 @@ inputs = SpliceTransformerInput(
 config = SpliceTransformerConfig()
 
 result = run_splice_transformer(inputs, config)
-print(f"Processed {result.prediction.shape[0]} sequences")
+print(f"Processed {len(result.prediction)} sequences")
 ```
 
 ## Best Practices & Gotchas
