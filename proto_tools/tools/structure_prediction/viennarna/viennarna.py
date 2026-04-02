@@ -254,15 +254,16 @@ def run_viennarna(
         - DNA sequences (containing T) are converted to RNA (U) unless
           use_dna_params is True.
     """
+    assert config is not None
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
 
     # Prepare input data for inference script
     input_data = {
         "sequences": inputs.sequences,
-        "temperature": config.temperature,  # type: ignore[union-attr]
-        "use_dna_params": config.use_dna_params,  # type: ignore[union-attr]
-        "no_lonely_pairs": config.no_lonely_pairs,  # type: ignore[union-attr]
-        "verbose": config.verbose,  # type: ignore[union-attr]
+        "temperature": config.temperature,
+        "use_dna_params": config.use_dna_params,
+        "no_lonely_pairs": config.no_lonely_pairs,
+        "verbose": config.verbose,
     }
 
     # Call the inference script in the isolated venv

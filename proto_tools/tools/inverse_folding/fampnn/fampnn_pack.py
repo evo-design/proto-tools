@@ -191,6 +191,7 @@ def run_fampnn_pack(
     Returns:
         FAMPNNPackingResult: FAMPNNPackingResult with packed PDB structures and pSCE values.
     """
+    assert config is not None
     all_packed = []
     all_psce = []
 
@@ -198,23 +199,23 @@ def run_fampnn_pack(
         inputs.inputs,
         desc="FAMPNN packing",
         unit="structure",
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     ):
         struct_pdbs, struct_psce = [], []
-        remaining = config.num_samples_per_structure  # type: ignore[union-attr]
+        remaining = config.num_samples_per_structure
         chunk_idx = 0
         while remaining > 0:
-            chunk = min(config.batch_size, remaining)  # type: ignore[union-attr]
+            chunk = min(config.batch_size, remaining)
             input_dict = {
                 "operation": "pack",
                 "pdb_contents": inp.structure_pdb,
                 "num_samples": chunk,
-                "scn_diffusion_steps": config.scn_diffusion_steps,  # type: ignore[union-attr]
-                "scn_step_scale": config.scn_step_scale,  # type: ignore[union-attr]
-                "seed": config.seed + chunk_idx,  # type: ignore[union-attr]
-                "model_variant": config.model_variant,  # type: ignore[union-attr]
-                "device": config.device,  # type: ignore[union-attr]
-                "verbose": config.verbose,  # type: ignore[union-attr]
+                "scn_diffusion_steps": config.scn_diffusion_steps,
+                "scn_step_scale": config.scn_step_scale,
+                "seed": config.seed + chunk_idx,
+                "model_variant": config.model_variant,
+                "device": config.device,
+                "verbose": config.verbose,
                 "fixed_positions": inp.fixed_positions,
                 "fixed_sidechain_positions": inp.fixed_sidechain_positions,
             }

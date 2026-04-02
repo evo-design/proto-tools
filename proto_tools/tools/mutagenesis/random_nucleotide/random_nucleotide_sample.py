@@ -224,13 +224,14 @@ def run_random_nucleotide_sample(
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # type: ignore[union-attr]  # noqa: S311 -- not cryptographic
-    scheme = config.substitution_scheme  # type: ignore[union-attr]
+    assert config is not None
+    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
+    scheme = config.substitution_scheme
 
     # Resolve sequence type
-    seq_type = config.sequence_type  # type: ignore[union-attr]
+    seq_type = config.sequence_type
     if seq_type == "auto":
-        seq_type = _detect_sequence_type(inputs.sequences)
+        seq_type = _detect_sequence_type(inputs.sequences)  # type: ignore[assignment]  # returns str, not Literal
 
     is_rna = seq_type == "rna"
 

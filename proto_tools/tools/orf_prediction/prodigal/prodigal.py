@@ -316,16 +316,17 @@ def run_prodigal_prediction(
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
+    assert config is not None
     output_data = ToolInstance.dispatch(
         "prodigal",
         {
             "device": "cpu",
             "sequences": inputs.input_sequences,
             "config": {
-                "meta_mode": config.meta_mode,  # type: ignore[union-attr]
-                "closed_ends": config.closed_ends,  # type: ignore[union-attr]
-                "num_threads": config.num_threads,  # type: ignore[union-attr]
-                "translation_table": config.translation_table,  # type: ignore[union-attr]
+                "meta_mode": config.meta_mode,
+                "closed_ends": config.closed_ends,
+                "num_threads": config.num_threads,
+                "translation_table": config.translation_table,
             },
         },
         instance=instance,
@@ -340,8 +341,8 @@ def run_prodigal_prediction(
 
     return ProdigalOutput(
         metadata={
-            "meta_mode": config.meta_mode,  # type: ignore[union-attr]
-            "num_threads": config.num_threads,  # type: ignore[union-attr]
+            "meta_mode": config.meta_mode,
+            "num_threads": config.num_threads,
             "num_input_sequences": len(inputs.input_sequences),
         },
         predicted_orfs=predicted_orfs,

@@ -565,16 +565,15 @@ def run_rfdiffusion3(
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
+    assert config is not None
     json_spec = inputs.to_json_spec()
 
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        input_dir = Path(config.input_dir) if config.input_dir else temp_dir  # type: ignore[union-attr]
-        output_dir = (
-            Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"  # type: ignore[union-attr]
-        )
+        input_dir = Path(config.input_dir) if config.input_dir else temp_dir
+        output_dir = Path(config.output_dir) if config.output_dir else temp_dir / "rfdiffusion3_output"
         input_dir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
         input_json_path = input_dir / "rfdiffusion3_input.json"
@@ -585,9 +584,9 @@ def run_rfdiffusion3(
         input_data = {
             "input_json_path": str(input_json_path),
             "output_dir": str(output_dir),
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            **config.get_cli_kwargs(),  # type: ignore[union-attr]
+            "device": config.device,
+            "verbose": config.verbose,
+            **config.get_cli_kwargs(),
         }
         output_data = ToolInstance.dispatch(
             "rfdiffusion3",

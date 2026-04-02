@@ -224,12 +224,13 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
+    assert config is not None
     input_data = {
         "sequences": inputs.sequences,
         "config": {
-            "window": config.window,  # type: ignore[union-attr]
-            "locut": config.locut,  # type: ignore[union-attr]
-            "hicut": config.hicut,  # type: ignore[union-attr]
+            "window": config.window,
+            "locut": config.locut,
+            "hicut": config.hicut,
         },
     }
 
@@ -244,9 +245,9 @@ def run_segmasker(
     return SegmaskerOutput(
         metadata={
             "num_sequences": len(inputs.sequences),
-            "window": config.window,  # type: ignore[union-attr]
-            "locut": config.locut,  # type: ignore[union-attr]
-            "hicut": config.hicut,  # type: ignore[union-attr]
+            "window": config.window,
+            "locut": config.locut,
+            "hicut": config.hicut,
         },
         low_complexity_fractions=output_data["fractions"],
         low_complexity_counts=output_data["counts"],

@@ -215,20 +215,21 @@ def run_evo1_sample(
         >>> result = run_evo1_sample(inputs, config)
         >>> print(f"Generated {len(result.sequences)} sequences")
     """
-    logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
 
     result = ToolInstance.dispatch(
         "evo1",
         {
-            "model_name": config.model_name,  # type: ignore[union-attr]
+            "model_name": config.model_name,
             "prompts": inputs.prompts,
-            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
-            "top_k": config.top_k,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "num_tokens": config.num_tokens,
+            "top_k": config.top_k,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "verbose": config.verbose,
         },
         instance=instance,
         config=config,
@@ -238,18 +239,18 @@ def run_evo1_sample(
     scores = result.get("scores")
 
     # Prepend prompts if requested
-    if config.prepend_prompt:  # type: ignore[union-attr]
+    if config.prepend_prompt:
         sequences = [prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)]
 
     return Evo1SampleOutput(
         metadata={
             "prompts": inputs.prompts,
-            "model_name": config.model_name,  # type: ignore[union-attr]
-            "top_k": config.top_k,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "num_tokens": config.num_tokens,  # type: ignore[union-attr]
-            "prepend_prompt": config.prepend_prompt,  # type: ignore[union-attr]
+            "model_name": config.model_name,
+            "top_k": config.top_k,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "num_tokens": config.num_tokens,
+            "prepend_prompt": config.prepend_prompt,
         },
         sequences=sequences,
         scores=scores,

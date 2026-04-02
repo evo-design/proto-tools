@@ -141,6 +141,7 @@ def run_alphagenome_predict_intervals(
     instance: Any = None,
 ) -> AlphaGenomePredictIntervalsOutput:
     """Predict genomic features for batched intervals using AlphaGenome."""
+    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(
@@ -155,11 +156,11 @@ def run_alphagenome_predict_intervals(
                 }
                 for item in inputs.intervals
             ],
-            "requested_outputs": config.requested_outputs,  # type: ignore[union-attr]
-            "ontology_terms": config.ontology_terms,  # type: ignore[union-attr]
-            "organism": config.organism,  # type: ignore[union-attr]
-            "model_version": config.model_version,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "requested_outputs": config.requested_outputs,
+            "ontology_terms": config.ontology_terms,
+            "organism": config.organism,
+            "model_version": config.model_version,
+            "device": config.device,
         },
         instance=instance,
         config=config,
@@ -171,7 +172,7 @@ def run_alphagenome_predict_intervals(
             chromosome=item.chromosome,
             interval_start=item.interval_start,
             interval_end=item.interval_end,
-            requested_outputs=config.requested_outputs,  # type: ignore[union-attr]
+            requested_outputs=config.requested_outputs,
             result={"predictions": prediction},
         )
         for item, prediction in zip(inputs.intervals, predictions, strict=True)

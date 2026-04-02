@@ -243,6 +243,7 @@ def example_input() -> Any:
 )
 def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance: Any = None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
+    assert config is not None
     logger.debug("Using local venv for BioEmu conformational sampling")
 
     # Extract pre-computed MSA A3M strings (populated by preprocess or user)
@@ -253,7 +254,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
             msa = inputs.msas.get(seq)
             if msa is not None:
                 msa_a3m_contents[seq] = msa.to_a3m_string()
-                if config.verbose:  # type: ignore[union-attr]
+                if config.verbose:
                     logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa)} homologs")
 
     output = ToolInstance.dispatch(
@@ -261,13 +262,13 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
         {
             "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
             "msa_a3m_contents": msa_a3m_contents,
-            "num_samples": config.num_samples,  # type: ignore[union-attr]
-            "model_name": config.model_name,  # type: ignore[union-attr]
-            "filter_samples": config.filter_samples,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "output_dir": config.output_dir,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "num_samples": config.num_samples,
+            "model_name": config.model_name,
+            "filter_samples": config.filter_samples,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "output_dir": config.output_dir,
+            "verbose": config.verbose,
         },
         instance=instance,
         config=config,
@@ -290,7 +291,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance
         metadata={
             "num_complexes": len(inputs.complexes),
             "total_structures": total_structures,
-            "model_name": config.model_name,  # type: ignore[union-attr]
+            "model_name": config.model_name,
         },
     )
 

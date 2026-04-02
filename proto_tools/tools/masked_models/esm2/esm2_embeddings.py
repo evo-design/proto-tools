@@ -193,17 +193,18 @@ def run_esm2_embeddings(
     Note:
         - Larger models require more GPU memory but provide better representations
     """
-    logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
     outputs = ToolInstance.dispatch(
         "esm2",
         {
             "operation": "embeddings",
             "sequences": inputs.sequences,
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -220,10 +221,10 @@ def run_esm2_embeddings(
 
     return ESM2EmbeddingsOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
             "num_sequences": len(inputs.sequences),
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "device": config.device,
         },
         results=results,
     )

@@ -253,6 +253,7 @@ def run_mmseqs_search_genomes(
         >>> for r in result:
         ...     print(f"Found {r.num_hits} hits")
     """
+    assert config is not None
     query_sequences = inputs.query_genomes
     target_sequences = inputs.target_genomes
     query_ids = resolve_sequence_ids(query_sequences, inputs.query_ids)
@@ -268,9 +269,9 @@ def run_mmseqs_search_genomes(
             "query_ids": query_ids,
             "target_sequences": target_sequences,
             "target_ids": target_ids,
-            "search_type": config.search_type,  # type: ignore[union-attr]
-            "threads": config.threads,  # type: ignore[union-attr]
-            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
+            "search_type": config.search_type,
+            "threads": config.threads,
+            "sensitivity": config.sensitivity,
             "m8_columns": M8_COLUMNS,
         },
         instance=instance,
@@ -286,9 +287,9 @@ def run_mmseqs_search_genomes(
 
     return MmseqsSearchGenomesOutput(
         metadata={
-            "search_type": config.search_type,  # type: ignore[union-attr]
-            "threads": config.threads,  # type: ignore[union-attr]
-            "sensitivity": config.sensitivity,  # type: ignore[union-attr]
+            "search_type": config.search_type,
+            "threads": config.threads,
+            "sensitivity": config.sensitivity,
             "num_queries": num_queries,
             "num_targets": len(target_sequences),
         },

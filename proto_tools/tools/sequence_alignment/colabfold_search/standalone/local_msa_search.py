@@ -199,7 +199,7 @@ class ColabFoldSearchWrapper:
                 # Parse FASTA content
                 sequences = []
                 current_id = None
-                current_seq = []  # type: ignore[var-annotated]
+                current_seq: list[str] = []
 
                 for line in fasta_content.strip().split("\n"):
                     if line.startswith(">"):

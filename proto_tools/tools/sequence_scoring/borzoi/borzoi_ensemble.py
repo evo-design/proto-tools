@@ -167,7 +167,8 @@ def run_borzoi_ensemble(
     Returns:
         BorzoiEnsembleOutput: Stacked predictions from Borzoi replicates 0-3.
     """
-    if config.use_flash_attn and not config.device.startswith("cuda"):  # type: ignore[union-attr]
+    assert config is not None
+    if config.use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 
     logger.debug("Using local execution for Borzoi ensemble prediction")
@@ -178,18 +179,18 @@ def run_borzoi_ensemble(
         desc="Borzoi replicates",
         unit="replicate",
         total=4,
-        disable=not config.verbose,  # type: ignore[union-attr]
+        disable=not config.verbose,
     )
 
     for replicate in iterator:
         replicate_config = BorzoiConfig(
-            output_tracks=config.output_tracks,  # type: ignore[union-attr]
-            species=config.species,  # type: ignore[union-attr]
+            output_tracks=config.output_tracks,
+            species=config.species,
             replicate=str(replicate),  # type: ignore[arg-type]
-            avg_output_tracks=config.avg_output_tracks,  # type: ignore[union-attr]
-            use_flash_attn=config.use_flash_attn,  # type: ignore[union-attr]
-            device=config.device,  # type: ignore[union-attr]
-            verbose=config.verbose,  # type: ignore[union-attr]
+            avg_output_tracks=config.avg_output_tracks,
+            use_flash_attn=config.use_flash_attn,
+            device=config.device,
+            verbose=config.verbose,
         )
         replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
         predictions.append(replicate_output.prediction)  # type: ignore[arg-type]
@@ -198,8 +199,8 @@ def run_borzoi_ensemble(
         sequence=inputs.sequence,
         sequence_length=len(inputs.sequence),
         predictions=predictions,
-        output_tracks=config.output_tracks,  # type: ignore[union-attr]
-        species=config.species,  # type: ignore[union-attr]
-        avg_output_tracks=config.avg_output_tracks,  # type: ignore[union-attr]
+        output_tracks=config.output_tracks,
+        species=config.species,
+        avg_output_tracks=config.avg_output_tracks,
         num_replicates=4,
     )

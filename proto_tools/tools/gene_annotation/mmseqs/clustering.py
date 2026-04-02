@@ -232,6 +232,7 @@ def run_mmseqs_clustering(
         >>> for i, r in enumerate(result):
         ...     print(f"Seq {i}: cluster={r.cluster_id}, rep={r.is_representative}")
     """
+    assert config is not None
     sequences = inputs.input_sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
@@ -243,7 +244,7 @@ def run_mmseqs_clustering(
             "operation": "clustering",
             "sequences": sequences,
             "sequence_ids": sequence_ids,
-            "min_seq_id": config.min_seq_id,  # type: ignore[union-attr]
+            "min_seq_id": config.min_seq_id,
         },
         instance=instance,
         config=config,
@@ -268,7 +269,7 @@ def run_mmseqs_clustering(
 
     return MmseqsClusteringOutput(
         metadata={
-            "min_seq_id": config.min_seq_id,  # type: ignore[union-attr]
+            "min_seq_id": config.min_seq_id,
             "num_sequences": num_sequences,
         },
         results=results,

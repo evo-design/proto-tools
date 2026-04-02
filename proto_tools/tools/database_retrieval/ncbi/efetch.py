@@ -148,12 +148,13 @@ def run_ncbi_efetch(
     Returns:
         NCBIEfetchOutput: NCBIEfetchOutput containing parsed FASTA records.
     """
+    assert config is not None
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,  # type: ignore[union-attr]
-        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
-        user_agent=config.user_agent,  # type: ignore[union-attr]
+        http_retries=config.http_retries,
+        backoff_seconds=config.backoff_seconds,
+        user_agent=config.user_agent,
         allowed_methods=["GET", "POST"],
     )
 
@@ -162,7 +163,7 @@ def run_ncbi_efetch(
             db=inputs.db,
             identifier=inputs.identifier,
             rettype=inputs.return_format,
-            config=config,  # type: ignore[arg-type]
+            config=config,
             session=session,
             seq_start=inputs.seq_start,
             seq_stop=inputs.seq_stop,

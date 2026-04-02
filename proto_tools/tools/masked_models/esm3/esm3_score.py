@@ -175,19 +175,20 @@ def run_esm3_score(
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
     """
+    assert config is not None
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
-    logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
+    logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm3",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,

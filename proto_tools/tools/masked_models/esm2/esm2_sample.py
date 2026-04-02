@@ -197,18 +197,19 @@ def run_esm2_sample(
     Returns:
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
-    logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm2",
         {
             "operation": "sample",
             "sequences": inputs.sequences,
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "temperature": config.temperature,
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -216,9 +217,9 @@ def run_esm2_sample(
 
     return ESM2SampleOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
             "num_sequences": len(inputs.sequences),
-            "temperature": config.temperature,  # type: ignore[union-attr]
+            "temperature": config.temperature,
         },
         sequences=result["sequences"],
         logits=result["logits"],

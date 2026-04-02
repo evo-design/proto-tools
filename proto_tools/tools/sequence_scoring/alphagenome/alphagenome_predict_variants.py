@@ -150,6 +150,7 @@ def run_alphagenome_predict_variants(
     instance: Any = None,
 ) -> AlphaGenomePredictVariantsOutput:
     """Predict variant effects in batch using AlphaGenome."""
+    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(
@@ -173,11 +174,11 @@ def run_alphagenome_predict_variants(
                 }
                 for v in inputs.variants
             ],
-            "requested_outputs": config.requested_outputs,  # type: ignore[union-attr]
-            "ontology_terms": config.ontology_terms,  # type: ignore[union-attr]
-            "organism": config.organism,  # type: ignore[union-attr]
-            "model_version": config.model_version,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "requested_outputs": config.requested_outputs,
+            "ontology_terms": config.ontology_terms,
+            "organism": config.organism,
+            "model_version": config.model_version,
+            "device": config.device,
         },
         instance=instance,
         config=config,
@@ -189,7 +190,7 @@ def run_alphagenome_predict_variants(
             chromosome=v.chromosome,
             interval_start=v.interval_start,
             interval_end=v.interval_end,
-            requested_outputs=config.requested_outputs,  # type: ignore[union-attr]
+            requested_outputs=config.requested_outputs,
             result={"predictions": prediction},
             variant={
                 "position": v.variant_position,

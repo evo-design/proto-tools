@@ -151,13 +151,14 @@ def run_mock_pytorch_multi_gpu_tool(
     instance: Any = None,
 ) -> MockPyTorchMultiGPUToolOutput:
     """Run mock multi-GPU tool (two minimal models for fast testing)."""
+    assert config is not None
     result = ToolInstance.dispatch(
         "mock_pytorch_multi_gpu_tool",
         {
             "data": inputs.data,
-            "device": config.device,  # type: ignore[union-attr]
-            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
-            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
+            "device": config.device,
+            "hidden_size": config.hidden_size,
+            "memory_mb": config.memory_mb,
         },
         instance=instance,
         config=config,

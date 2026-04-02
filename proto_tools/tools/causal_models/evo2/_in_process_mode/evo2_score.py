@@ -201,22 +201,23 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local GPU for Evo2 scoring: {config.model_checkpoint}")
 
     model = get_cached_evo2_model(
-        model_checkpoint=config.model_checkpoint,  # type: ignore[arg-type, union-attr]
-        local_path=config.local_path,  # type: ignore[union-attr]
+        model_checkpoint=config.model_checkpoint,  # type: ignore[arg-type]
+        local_path=config.local_path,
     )
 
     result = model.score(
         sequences=inputs.sequences,
-        device=config.device,  # type: ignore[union-attr]
-        verbose=config.verbose,  # type: ignore[union-attr]
-        batch_size=config.batch_size,  # type: ignore[union-attr]
-        return_logits=config.return_logits,  # type: ignore[union-attr]
+        device=config.device,
+        verbose=config.verbose,
+        batch_size=config.batch_size,
+        return_logits=config.return_logits,
     )
 
-    if not config.keep_on_gpu:  # type: ignore[union-attr]
+    if not config.keep_on_gpu:
         model.unload()
 
     # Serialize tensors to nested lists at tool boundary

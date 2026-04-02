@@ -173,20 +173,21 @@ def run_esm3_embeddings(
         >>> result = run_esm3_embeddings(inputs, config)
 
     """
+    assert config is not None
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     # Local execution
-    logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")  # type: ignore[union-attr]
+    logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")
     outputs = ToolInstance.dispatch(
         "esm3",
         {
             "operation": "embeddings",
             "sequences": inputs.sequences,
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "model_checkpoint": config.model_checkpoint,
+            "device": config.device,
+            "verbose": config.verbose,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,
@@ -203,10 +204,10 @@ def run_esm3_embeddings(
 
     return ESM3EmbeddingsOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
             "num_sequences": len(inputs.sequences),
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "batch_size": config.batch_size,
+            "device": config.device,
         },
         results=results,
     )

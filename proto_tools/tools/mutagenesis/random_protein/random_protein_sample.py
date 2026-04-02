@@ -156,8 +156,9 @@ def run_random_protein_sample(
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # type: ignore[union-attr]  # noqa: S311 -- not cryptographic
-    scheme = config.codon_scheme  # type: ignore[union-attr]
+    assert config is not None
+    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
+    scheme = config.codon_scheme
 
     sampled = []
     for seq in inputs.sequences:

@@ -212,19 +212,20 @@ def run_evo2_score(
           are needed
         - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None
+    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(
         "evo2",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "return_logits": config.return_logits,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "device": config.device,
+            "verbose": config.verbose,
+            "batch_size": config.batch_size,
+            "return_logits": config.return_logits,
         },
         instance=instance,
         config=config,

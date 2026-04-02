@@ -139,13 +139,14 @@ def run_mock_jax_tool(
     instance: Any = None,
 ) -> MockJAXToolOutput:
     """Run mock JAX tool (minimal model with JAX device semantics)."""
+    assert config is not None
     result = ToolInstance.dispatch(
         "mock_jax_tool",
         {
             "data": inputs.data,
-            "device": config.device,  # type: ignore[union-attr]
-            "hidden_size": config.hidden_size,  # type: ignore[union-attr]
-            "memory_mb": config.memory_mb,  # type: ignore[union-attr]
+            "device": config.device,
+            "hidden_size": config.hidden_size,
+            "memory_mb": config.memory_mb,
         },
         instance=instance,
         config=config,

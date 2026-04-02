@@ -177,16 +177,17 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
     Returns:
         EnformerOutput: Prediction object with sequence, tracks, and metadata.
     """
+    assert config is not None
     logger.debug("Using local venv for Enformer prediction")
 
     result = ToolInstance.dispatch(
         "enformer",
         {
             "sequence": inputs.sequence,
-            "output_tracks": config.output_tracks,  # type: ignore[union-attr]
-            "species": config.species,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "output_tracks": config.output_tracks,
+            "species": config.species,
+            "device": config.device,
+            "verbose": config.verbose,
         },
         instance=instance,
         config=config,
@@ -196,6 +197,6 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, in
         sequence=inputs.sequence,
         sequence_length=len(inputs.sequence),
         prediction=result["prediction"],
-        output_tracks=config.output_tracks,  # type: ignore[union-attr]
-        species=config.species,  # type: ignore[union-attr]
+        output_tracks=config.output_tracks,
+        species=config.species,
     )

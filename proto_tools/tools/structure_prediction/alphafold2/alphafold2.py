@@ -263,6 +263,7 @@ def run_alphafold2(
         >>> result = run_alphafold2(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
     """
+    assert config is not None
     prepared_complexes = inputs.prepare_complexes()
 
     structure_outputs = []
@@ -282,19 +283,19 @@ def run_alphafold2(
                 msa = inputs.msas.get(protein_seq)
                 if msa is not None:
                     msa_a3m_content = msa.to_a3m_string()
-                    if config.verbose:  # type: ignore[union-attr]
+                    if config.verbose:
                         logger.info(f"Loaded MSA for complex {complex_data['complex_idx']} ({len(msa)} sequences)")
 
         # Prepare input data for standalone dispatch
         input_data = {
             "complex_data": complex_data,
-            "num_recycles": config.num_recycles,  # type: ignore[union-attr]
-            "model_num": config.model_num,  # type: ignore[union-attr]
-            "num_ensemble_models": config.num_ensemble_models,  # type: ignore[union-attr]
-            "seed": config.seed,  # type: ignore[union-attr]
+            "num_recycles": config.num_recycles,
+            "model_num": config.model_num,
+            "num_ensemble_models": config.num_ensemble_models,
+            "seed": config.seed,
             "msa_a3m_content": msa_a3m_content,
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "device": config.device,
+            "verbose": config.verbose,
         }
 
         # Dispatch to standalone subprocess

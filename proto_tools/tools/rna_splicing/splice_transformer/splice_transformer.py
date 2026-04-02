@@ -320,19 +320,18 @@ def run_splice_transformer(
         - Target length is typically 1000bp but can vary
         - Each subprocess is fresh (no in-process caching)
     """
+    assert config is not None
     # Local GPU/CPU via standalone venv
 
-    logger.debug(
-        f"Using local device for SpliceTransformer inference (context_length={config.context_length})"  # type: ignore[union-attr]
-    )
+    logger.debug(f"Using local device for SpliceTransformer inference (context_length={config.context_length})")
 
     input_data = {
         "target_seqs": inputs.target_seqs,
         "left_contexts": inputs.left_contexts,
         "right_contexts": inputs.right_contexts,
-        "context_length": config.context_length,  # type: ignore[union-attr]
-        "device": config.device,  # type: ignore[union-attr]
-        "verbose": config.verbose,  # type: ignore[union-attr]
+        "context_length": config.context_length,
+        "device": config.device,
+        "verbose": config.verbose,
     }
 
     output_data = ToolInstance.dispatch(
@@ -343,6 +342,6 @@ def run_splice_transformer(
     )
 
     return SpliceTransformerOutput(
-        metadata={"context_length": config.context_length},  # type: ignore[union-attr]
+        metadata={"context_length": config.context_length},
         prediction=output_data["prediction"],
     )

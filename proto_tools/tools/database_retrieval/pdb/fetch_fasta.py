@@ -117,18 +117,19 @@ def run_pdb_fetch_fasta(
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.
     """
+    assert config is not None
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,  # type: ignore[union-attr]
-        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
-        user_agent=config.user_agent,  # type: ignore[union-attr]
+        http_retries=config.http_retries,
+        backoff_seconds=config.backoff_seconds,
+        user_agent=config.user_agent,
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
 
     try:
-        raw_chains = _fetch_pdb_fasta(pdb_id, config, session)  # type: ignore[arg-type]
+        raw_chains = _fetch_pdb_fasta(pdb_id, config, session)
         if raw_chains is None:
             return PdbFetchFastaOutput()
         pdb_chains = [

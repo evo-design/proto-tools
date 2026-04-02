@@ -564,7 +564,7 @@ class ToolInstance:
             worker.stop()
 
         # Release device from DeviceManager
-        cache_keys = getattr(self, "_cache_keys", set())  # type: ignore[var-annotated]
+        cache_keys: set[str] = getattr(self, "_cache_keys", set())
         if cache_keys:
             instance_name = next(iter(cache_keys))
             device_manager = DeviceManager.get_instance()

@@ -195,9 +195,10 @@ def run_crispr_tracr(
         >>> result = run_crispr_tracr(inputs, config)
         >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
     """
+    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
-    num_workers = config.num_workers  # type: ignore[union-attr]
+    num_workers = config.num_workers
     if num_workers is None:
         slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
         num_workers = int(slurm_cpus) if slurm_cpus else 1
@@ -206,8 +207,8 @@ def run_crispr_tracr(
         "sequences": inputs.sequences,
         "sequence_ids": sequence_ids,
         "config": {
-            "model_type": config.model_type,  # type: ignore[union-attr]
-            "run_type": config.run_type,  # type: ignore[union-attr]
+            "model_type": config.model_type,
+            "run_type": config.run_type,
             "num_workers": num_workers,
         },
     }
@@ -224,8 +225,8 @@ def run_crispr_tracr(
 
     return CrisprTracrOutput(
         metadata={
-            "model_type": config.model_type,  # type: ignore[union-attr]
-            "run_type": config.run_type,  # type: ignore[union-attr]
+            "model_type": config.model_type,
+            "run_type": config.run_type,
             "num_sequences": len(inputs.sequences),
         },
         predictions=predictions,

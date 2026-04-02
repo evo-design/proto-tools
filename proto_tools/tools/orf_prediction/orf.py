@@ -174,7 +174,7 @@ class ORF:
         data.pop("id", None)  # Property, ignore
 
         init_args = {}
-        extra_metrics = {}  # type: ignore[var-annotated]
+        extra_metrics: dict[str, Any] = {}
 
         # If metrics already exists in data, start with it
         metrics = data.pop("metrics", {}) or {}

@@ -187,6 +187,7 @@ def run_alphagenome_score_intervals(
     instance: Any = None,
 ) -> AlphaGenomeScoreIntervalsOutput:
     """Score genomic intervals in batch using AlphaGenome interval scorers."""
+    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(
@@ -201,10 +202,10 @@ def run_alphagenome_score_intervals(
                 }
                 for item in inputs.intervals
             ],
-            "interval_scorers": config.interval_scorers,  # type: ignore[union-attr]
-            "organism": config.organism,  # type: ignore[union-attr]
-            "model_version": config.model_version,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
+            "interval_scorers": config.interval_scorers,
+            "organism": config.organism,
+            "model_version": config.model_version,
+            "device": config.device,
         },
         instance=instance,
         config=config,

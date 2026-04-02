@@ -10,6 +10,7 @@ original order.
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import logging
 from collections.abc import Callable
@@ -231,8 +232,8 @@ class ToolPool:
             devices = [devices]
 
         self._devices_arg = devices
-        self._persist_ctx = None
-        self._token = None
+        self._persist_ctx: contextlib.AbstractContextManager[None] | None = None
+        self._token: contextvars.Token[ToolPool | None] | None = None
 
     def __enter__(self) -> ToolPool:
         if _active_pool.get() is not None:
@@ -254,21 +255,22 @@ class ToolPool:
         logger.info("ToolPool entering with devices: %s", self._devices)
 
         # Enter persistence context for local workers
-        self._persist_ctx = ToolInstance.persist()  # type: ignore[assignment]
-        self._persist_ctx.__enter__()  # type: ignore[attr-defined]
+        self._persist_ctx = ToolInstance.persist()
+        self._persist_ctx.__enter__()
 
         # Set ourselves as the active pool
-        self._token = _active_pool.set(self)  # type: ignore[assignment]
+        self._token = _active_pool.set(self)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
         # Clear active pool
-        _active_pool.reset(self._token)  # type: ignore[arg-type]
+        assert self._token is not None
+        _active_pool.reset(self._token)
         self._token = None
 
         # Exit persistence context
         if self._persist_ctx is not None:
-            self._persist_ctx.__exit__(exc_type, exc_val, exc_tb)  # type: ignore[unreachable]
+            self._persist_ctx.__exit__(exc_type, exc_val, exc_tb)
             self._persist_ctx = None
 
         logger.info("ToolPool exited")

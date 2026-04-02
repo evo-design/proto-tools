@@ -191,6 +191,7 @@ def run_alphafold3(
     instance: Any = None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
+    assert config is not None
     output_structures: list[Structure] = []
 
     for comp_idx, comp in tqdm(
@@ -201,18 +202,18 @@ def run_alphafold3(
     ):
         input_json = _create_input_json_from_complex(
             comp,
-            f"{config.name}_{comp_idx}",  # type: ignore[union-attr]
-            config.seeds,  # type: ignore[union-attr]
+            f"{config.name}_{comp_idx}",
+            config.seeds,
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Determine output directory
-            if config.output_dir is None:  # type: ignore[union-attr]
+            if config.output_dir is None:
                 # Create inside temp directory for auto-cleanup
-                output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")  # type: ignore[union-attr]
+                output_dir = os.path.join(temp_dir, f"{config.name}_{comp_idx}_af3_results")
             else:
                 # Create at specified path (persists after execution)
-                output_dir = f"{config.output_dir}_af3_results"  # type: ignore[union-attr]
+                output_dir = f"{config.output_dir}_af3_results"
 
             # Create input directory for MSAs
             input_dir = os.path.join(output_dir, "af3_inputs")
@@ -220,10 +221,10 @@ def run_alphafold3(
 
             # Write pre-computed MSAs to A3M files
             if inputs.msas:
-                input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)  # type: ignore[arg-type, union-attr]
+                input_json = _assign_msas_to_input_json(input_json, inputs.msas, input_dir, config.verbose)  # type: ignore[arg-type]
 
             # Write input JSON to file for worker protocol
-            input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")  # type: ignore[union-attr]
+            input_json_path = os.path.join(input_dir, f"{config.name}_{comp_idx}.json")
             with open(input_json_path, "w") as f:
                 json.dump(input_json, f, indent=2)
 
@@ -231,12 +232,12 @@ def run_alphafold3(
             input_data = {
                 "input_json_path": input_json_path,
                 "output_dir": output_dir,
-                "device": config.device,  # type: ignore[union-attr]
-                "repo_path": config.repo_path,  # type: ignore[union-attr]
-                "sif_path": config.sif_path,  # type: ignore[union-attr]
-                "model_dir": config.model_dir,  # type: ignore[union-attr]
-                "db_dir": config.db_dir,  # type: ignore[union-attr]
-                "verbose": config.verbose,  # type: ignore[union-attr]
+                "device": config.device,
+                "repo_path": config.repo_path,
+                "sif_path": config.sif_path,
+                "model_dir": config.model_dir,
+                "db_dir": config.db_dir,
+                "verbose": config.verbose,
             }
 
             # Dispatch to worker (goes through DeviceManager)

@@ -125,6 +125,7 @@ def run_esm_if1_score(
     Returns:
         ESMIF1ScoringOutput: ESMIF1ScoringOutput with scores for each input pair.
     """
+    assert config is not None
     scores = []
 
     for pair in tqdm(
@@ -138,9 +139,9 @@ def run_esm_if1_score(
             "pdb_contents": pair.structure.structure_pdb,
             "chain_ids": pair.structure.get_chain_ids(),
             "sequence": pair.sequence,
-            "device": config.device,  # type: ignore[union-attr]
-            "weights_variant": config.weights_variant,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "device": config.device,
+            "weights_variant": config.weights_variant,
+            "verbose": config.verbose,
         }
         result = ToolInstance.dispatch(
             "esm_if1",

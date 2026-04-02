@@ -636,9 +636,10 @@ def run_blast_search(
         >>> result = run_blast_search(inputs, config)
         >>> print(f"Found {result.num_hits} hits")
     """
-    if config.search_mode == "local":  # type: ignore[union-attr]
-        return _local_search(inputs, config, instance=instance)  # type: ignore[arg-type]
-    return _online_search(inputs, config)  # type: ignore[arg-type]
+    assert config is not None
+    if config.search_mode == "local":
+        return _local_search(inputs, config, instance=instance)
+    return _online_search(inputs, config)
 
 
 # ============================================================================

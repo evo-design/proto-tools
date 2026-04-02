@@ -182,6 +182,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.sequence_ids[i]}: {seq}")
     """
+    assert config is not None
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
@@ -190,12 +191,12 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
     input_data = {
         "sequences": sequences,
         "sequence_ids": sequence_ids,
-        "align_method": config.align_method,  # type: ignore[union-attr]
-        "max_iterations": config.max_iterations,  # type: ignore[union-attr]
-        "threads": config.threads,  # type: ignore[union-attr]
+        "align_method": config.align_method,
+        "max_iterations": config.max_iterations,
+        "threads": config.threads,
     }
 
-    input_data["device"] = "cpu"
+    input_data["device"] = "cpu"  # type: ignore[assignment]  # Literal mismatch: "cpu" not in declared Literal union
     output_data = ToolInstance.dispatch(
         "mafft",
         input_data,
@@ -208,9 +209,9 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig | None = None, insta
 
     return MafftOutput(
         metadata={
-            "align_method": config.align_method,  # type: ignore[union-attr]
-            "max_iterations": config.max_iterations,  # type: ignore[union-attr]
-            "threads": config.threads,  # type: ignore[union-attr]
+            "align_method": config.align_method,
+            "max_iterations": config.max_iterations,
+            "threads": config.threads,
             "num_sequences": num_sequences,
         },
         msa=MSA(

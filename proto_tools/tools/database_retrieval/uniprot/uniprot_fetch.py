@@ -210,17 +210,18 @@ def run_uniprot_fetch(
         UniProtFetchOutput: Protein entry with sequence, gene names, and
             PDB cross-references.
     """
+    assert config is not None
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,  # type: ignore[union-attr]
-        backoff_seconds=config.backoff_seconds,  # type: ignore[union-attr]
-        user_agent=config.user_agent,  # type: ignore[union-attr]
+        http_retries=config.http_retries,
+        backoff_seconds=config.backoff_seconds,
+        user_agent=config.user_agent,
     )
 
     try:
         if inputs.uniprot_id:
-            entry = _fetch_entry(inputs.uniprot_id, config, session)  # type: ignore[arg-type]
+            entry = _fetch_entry(inputs.uniprot_id, config, session)
             if entry is None:
                 raise ValueError(f"UniProt ID '{inputs.uniprot_id}' not found")
         else:
@@ -229,7 +230,7 @@ def run_uniprot_fetch(
                 organism=inputs.organism,  # type: ignore[arg-type]
                 prefer_pdb_crossref=inputs.prefer_pdb_crossref,
                 max_candidates=inputs.max_candidates,
-                config=config,  # type: ignore[arg-type]
+                config=config,
                 session=session,
             )
             if entry is None:

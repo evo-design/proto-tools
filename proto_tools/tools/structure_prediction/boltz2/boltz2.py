@@ -266,9 +266,10 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
         - Supports both local and remote ColabFold search modes when ``use_msa=True``
     """
+    assert config is not None
     results = [
         run_boltz2_on_complex(
-            config=config,  # type: ignore[arg-type]
+            config=config,
             sp_complex=comp,
             msas=inputs.msas,
             instance=instance,

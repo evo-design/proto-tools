@@ -265,13 +265,14 @@ def run_esmfold(
         - Maximum 2,400 residues per complex (hard limit)
         - Multi-chain complexes are predicted by linking chains
     """
+    assert config is not None
     # Prepare complexes for inference
-    prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)  # type: ignore[union-attr]
+    prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)
 
     # Split into memory-safe sub-batches
     sub_batches = _split_into_safe_batches(
         prepared_complexes,
-        max_residues=config.max_batch_residues,  # type: ignore[union-attr]
+        max_residues=config.max_batch_residues,
     )
 
     logger.debug(f"Processing {len(prepared_complexes)} complex(es) in {len(sub_batches)} sub-batch(es)...")
@@ -297,13 +298,13 @@ def run_esmfold(
         # Prepare input data for inference script
         input_data = {
             "batch_data": sub_batch,
-            "residue_idx_offset": config.residue_idx_offset,  # type: ignore[union-attr]
-            "chain_linker": config.chain_linker,  # type: ignore[union-attr]
+            "residue_idx_offset": config.residue_idx_offset,
+            "chain_linker": config.chain_linker,
         }
 
         # Call the inference script
-        input_data["device"] = config.device  # type: ignore[union-attr]
-        input_data["verbose"] = config.verbose  # type: ignore[union-attr]
+        input_data["device"] = config.device
+        input_data["verbose"] = config.verbose
         output_data = ToolInstance.dispatch(
             "esmfold",
             input_data,
