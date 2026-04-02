@@ -3,14 +3,10 @@
 Tissue-specific splice site prediction using SpliceTransformer.
 """
 
-from __future__ import annotations
-
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -229,8 +225,6 @@ class SpliceTransformerOutput(BaseToolOutput):
         return "npy"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        from pathlib import Path
-
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "npy":

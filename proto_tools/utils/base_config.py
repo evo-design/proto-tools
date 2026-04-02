@@ -3,16 +3,13 @@
 Base configuration class for all pydantic configs.
 """
 
-from __future__ import annotations
-
 import json
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from proto_tools.utils.tool_io import BaseToolInput
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
+
+from proto_tools.utils.tool_io import BaseToolInput
 
 DEFAULT_TIMEOUT = 600  # seconds
 
