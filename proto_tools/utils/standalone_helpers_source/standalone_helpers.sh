@@ -101,7 +101,10 @@ proto_install_cuda_toolkit() {
 
     echo "Installing CUDA toolkit ${cuda_constraint} locally via micromamba..."
 
+    # Pin cuda-version to force all sub-packages to the same CUDA generation.
+    # cuda-version is available on conda-forge for versions the nvidia channel lacks.
     local packages=(
+        "cuda-version=${cuda_constraint}"
         "cuda-toolkit=${cuda_constraint}"
         "cuda-cudart-dev=${cuda_constraint}"
         "cudnn"

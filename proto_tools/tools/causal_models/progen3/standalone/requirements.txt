@@ -1,0 +1,4 @@
+tqdm
+transformers>=4.42,<4.49
+tokenizers
+accelerate

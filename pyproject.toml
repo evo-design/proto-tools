@@ -142,6 +142,7 @@ module = [
     "colabfold.*",
     "evo.*",
     "evo2.*",
+    "progen3.*",
     "vortex.*",
     "fampnn.*",
     "mpnn.*",

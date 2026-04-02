@@ -1,0 +1,11 @@
+github: https://github.com/Profluent-AI/progen3
+huggingface:
+  - https://huggingface.co/Profluent-Bio/progen3-112m
+  - https://huggingface.co/Profluent-Bio/progen3-219m
+  - https://huggingface.co/Profluent-Bio/progen3-339m
+  - https://huggingface.co/Profluent-Bio/progen3-762m
+  - https://huggingface.co/Profluent-Bio/progen3-1b
+  - https://huggingface.co/Profluent-Bio/progen3-3b
+preprint: https://doi.org/10.1101/2025.05.16.654471
+image: https://cdn.prod.website-files.com/6769c2fceb550649b2f37b59/6769c2fceb550649b2f37d5e_ProGen.avif
+organizations: Profluent AI

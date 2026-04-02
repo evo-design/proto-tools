@@ -69,8 +69,10 @@ def complex_to_yaml(
 
         yaml_entries.append({e_type: entry})
 
-    return yaml.dump(
-        {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}},
-        sort_keys=False,
-        default_flow_style=False,
+    return str(
+        yaml.dump(
+            {"sequences": yaml_entries, "predict": {"structure": {"enabled": True}}},
+            sort_keys=False,
+            default_flow_style=False,
+        )
     )

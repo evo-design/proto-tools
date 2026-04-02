@@ -83,6 +83,10 @@ class SequenceScores(BaseModel):
         metrics (dict[str, float]): Dictionary of scalar scoring metrics.
         logits (list[list[float]] | None): Optional per-position logits array.
         vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        per_position_metrics (dict[str, list[float | None]] | None): Optional per-position
+            scoring metrics, keyed by metric name. Each value is a list of length
+            equal to the input sequence, with ``None`` at positions where that
+            metric is not available.
     """
 
     metrics: dict[str, float] = Field(
@@ -96,6 +100,10 @@ class SequenceScores(BaseModel):
     vocab: list[str] | None = Field(
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
+    )
+    per_position_metrics: dict[str, list[float | None]] | None = Field(
+        default=None,
+        description="Per-position scoring metrics, keyed by metric name",
     )
 
     def __getattr__(self, name: str) -> Any:
@@ -165,13 +173,15 @@ class CausalModelScoringOutput(BaseToolOutput):
                     return obj.tolist()
                 return str(obj)
 
-            data = []
+            data: list[dict[str, Any]] = []
             for s in self.scores:
-                score_data = dict(s.metrics)
+                score_data: dict[str, Any] = dict(s.metrics)
                 if s.logits is not None:
-                    score_data["logits"] = s.logits  # type: ignore[assignment]
+                    score_data["logits"] = s.logits
                 if s.vocab is not None:
-                    score_data["vocab"] = s.vocab  # type: ignore[assignment]
+                    score_data["vocab"] = s.vocab
+                if s.per_position_metrics is not None:
+                    score_data["per_position_metrics"] = s.per_position_metrics
                 data.append(score_data)
 
             with open(path, "w") as f:

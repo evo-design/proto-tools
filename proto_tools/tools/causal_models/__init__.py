@@ -31,6 +31,16 @@ from proto_tools.tools.causal_models.progen2 import (
     run_progen2_sample,
     run_progen2_score,
 )
+from proto_tools.tools.causal_models.progen3 import (
+    ProGen3SampleConfig,
+    ProGen3SampleInput,
+    ProGen3SampleOutput,
+    ProGen3ScoringConfig,
+    ProGen3ScoringInput,
+    ProGen3ScoringOutput,
+    run_progen3_sample,
+    run_progen3_score,
+)
 
 __all__ = [
     # Evo1
@@ -61,4 +71,13 @@ __all__ = [
     "ProGen2ScoringOutput",
     "run_progen2_sample",
     "run_progen2_score",
+    # ProGen3
+    "ProGen3SampleConfig",
+    "ProGen3SampleInput",
+    "ProGen3SampleOutput",
+    "ProGen3ScoringConfig",
+    "ProGen3ScoringInput",
+    "ProGen3ScoringOutput",
+    "run_progen3_sample",
+    "run_progen3_score",
 ]

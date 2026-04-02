@@ -24,12 +24,20 @@ from proto_tools.tools.causal_models import (
     ProGen2ScoringConfig,
     ProGen2ScoringInput,
     ProGen2ScoringOutput,
+    ProGen3SampleConfig,
+    ProGen3SampleInput,
+    ProGen3SampleOutput,
+    ProGen3ScoringConfig,
+    ProGen3ScoringInput,
+    ProGen3ScoringOutput,
     run_evo1_sample,
     run_evo1_score,
     run_evo2_sample,
     run_evo2_score,
     run_progen2_sample,
     run_progen2_score,
+    run_progen3_sample,
+    run_progen3_score,
 )
 
 # Database retrieval tools
@@ -438,6 +446,15 @@ __all__ = [
     "ProGen2ScoringInput",
     "ProGen2ScoringOutput",
     "run_progen2_score",
+    # ProGen3
+    "ProGen3SampleConfig",
+    "ProGen3SampleInput",
+    "ProGen3SampleOutput",
+    "run_progen3_sample",
+    "ProGen3ScoringConfig",
+    "ProGen3ScoringInput",
+    "ProGen3ScoringOutput",
+    "run_progen3_score",
     # BLAST
     "run_blast_search",
     "run_create_blast_db",
