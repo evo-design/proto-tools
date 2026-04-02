@@ -121,7 +121,7 @@ class MSA:
                     raise ValueError(f"Sequence {seq} is not the same length as the MSA ({self._alignment_length})")
 
         # Cache for original sequences
-        self._original_sequences = None
+        self._original_sequences: list[str] | None = None
 
     def __iter__(self) -> Iterator[str]:
         if self._in_memory:
@@ -208,13 +208,11 @@ class MSA:
     @property
     def original_sequences(self) -> list[str]:
         """Get the list of original sequences (without gap characters)."""
-        if self._original_sequences is None and self.num_sequences < MAX_SEQS_IN_MEMORY:  # type: ignore[redundant-expr]
-            self._original_sequences = [  # type: ignore[assignment]
-                seq.replace("-", "") for seq in self._aligned_sequences
-            ]
-            return self._original_sequences  # type: ignore[return-value]
+        if self._original_sequences is None and self.num_sequences < MAX_SEQS_IN_MEMORY:
+            self._original_sequences = [seq.replace("-", "") for seq in self._aligned_sequences]
+            return self._original_sequences
         if self._original_sequences is not None:
-            return self._original_sequences  # type: ignore[unreachable]
+            return self._original_sequences
         return [seq.replace("-", "") for seq in self.aligned_sequences]
 
     @property

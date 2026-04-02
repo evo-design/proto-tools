@@ -58,7 +58,7 @@ class RFdiffusion3Model:
     def __init__(self) -> None:
         """Initialize RFdiffusion3 model wrapper."""
         self._loaded = False
-        self.rfd3_executable = None
+        self.rfd3_executable: str | None = None
 
     def __call__(
         self,
@@ -179,10 +179,11 @@ class RFdiffusion3Model:
 
         # Try venv bin directory first, then PATH
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"
-        self.rfd3_executable = str(venv_rfdiffusion3) if venv_rfdiffusion3.exists() else shutil.which("rfd3")  # type: ignore[assignment]
-        if not self.rfd3_executable:
+        exe = str(venv_rfdiffusion3) if venv_rfdiffusion3.exists() else shutil.which("rfd3")
+        if not exe:
             raise ImportError("Could not find 'rfd3' executable. rc-foundry[rfd3] must be installed.")
-        self._loaded = True  # type: ignore[unreachable]
+        self.rfd3_executable = exe
+        self._loaded = True
 
         logger.debug(f"RFdiffusion3 initialized. Executable: {self.rfd3_executable}")
 

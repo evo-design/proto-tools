@@ -43,7 +43,7 @@ class Boltz2Model:
                 raise RuntimeError(
                     "Cannot determine Boltz2 cache directory. Set PROTO_HOME or PROTO_MODEL_CACHE to configure storage."
                 )
-        self.boltz_executable = None
+        self.boltz_executable: str | None = None
 
     def __call__(
         self,
@@ -169,15 +169,13 @@ class Boltz2Model:
 
         # First try to find boltz in the current venv's bin directory
         venv_boltz = Path(sys.executable).parent / "boltz"
-        self.boltz_executable = (
-            str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")  # type: ignore[assignment]
-        )
-        if not self.boltz_executable:
+        exe = str(venv_boltz) if venv_boltz.exists() else shutil.which("boltz")
+        if not exe:
             raise ImportError(
                 "Could not find the 'boltz' executable. Please make sure Boltz2 is installed in the current environment."
             )
-
-        self.cache_dir.mkdir(parents=True, exist_ok=True)  # type: ignore[unreachable]
+        self.boltz_executable = exe
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._loaded = True
 
         logger.debug(f"Boltz2 initialized successfully. Using executable: {self.boltz_executable}")

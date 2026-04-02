@@ -132,7 +132,7 @@ class ProtenixModel:
     def __init__(self) -> None:
         """Initialize Protenix model wrapper."""
         self._loaded = False
-        self.protenix_executable = None
+        self.protenix_executable: str | None = None
 
     def __call__(
         self,
@@ -318,18 +318,14 @@ class ProtenixModel:
 
         # First try to find protenix in the current venv's bin directory
         venv_protenix = Path(sys.executable).parent / "protenix"
-        self.protenix_executable = (
-            str(venv_protenix)  # type: ignore[assignment]
-            if venv_protenix.exists()
-            else shutil.which("protenix")
-        )
-        if not self.protenix_executable:
+        exe = str(venv_protenix) if venv_protenix.exists() else shutil.which("protenix")
+        if not exe:
             raise ImportError(
                 "Could not find the 'protenix' executable. "
                 "Please make sure Protenix is installed in the current environment."
             )
-
-        self._loaded = True  # type: ignore[unreachable]
+        self.protenix_executable = exe
+        self._loaded = True
         logger.debug(f"Protenix initialized. Using executable: {self.protenix_executable}")
 
 

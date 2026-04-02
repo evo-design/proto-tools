@@ -368,11 +368,7 @@ class ColabfoldSearchConfig(BaseConfig):
     @model_validator(mode="after")
     def set_default_msa_db_dir(self) -> Any:
         """Set default database directory if not provided and track user specification."""
-        if self.msa_db_dir is None:
-            self.msa_db_dir = str(DEFAULT_DB_DIR)  # type: ignore[unreachable]
-            self._user_specified_db_dir = False
-        else:
-            self._user_specified_db_dir = True
+        self._user_specified_db_dir = self.msa_db_dir != str(DEFAULT_DB_DIR)
         return self
 
     @model_validator(mode="after")
@@ -381,9 +377,6 @@ class ColabfoldSearchConfig(BaseConfig):
         # This check should only run for local search mode
         if self.search_mode != "local":
             return self
-
-        if self.msa_db_dir is None:
-            return self  # type: ignore[unreachable]
 
         # Ensure the specified directory exists
         if not Path(self.msa_db_dir).exists():
