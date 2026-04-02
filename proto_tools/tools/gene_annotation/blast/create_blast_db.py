@@ -185,7 +185,7 @@ def example_input() -> Any:
 )
 def run_create_blast_db(
     inputs: CreateBlastDbInput,
-    config: CreateBlastDbConfig | None = None,
+    config: CreateBlastDbConfig,
     instance: Any = None,
 ) -> CreateBlastDbOutput:
     """Create a local BLAST database from a FASTA file.
@@ -195,7 +195,7 @@ def run_create_blast_db(
 
     Args:
         inputs (CreateBlastDbInput): Validated BLAST database creation input
-        config (CreateBlastDbConfig | None): Validated BLAST database creation configuration
+        config (CreateBlastDbConfig): Validated BLAST database creation configuration
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -212,7 +212,6 @@ def run_create_blast_db(
         >>> result = run_create_blast_db(inputs, config)
         >>> print(f"Database created at: {result.db_path}")
     """
-    assert config is not None
     fasta_path = Path(inputs.fasta)
 
     # Default prefix is the FASTA stem in the same directory

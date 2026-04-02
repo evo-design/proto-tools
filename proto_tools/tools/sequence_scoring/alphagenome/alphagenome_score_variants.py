@@ -191,11 +191,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_score_variants(
     inputs: AlphaGenomeScoreVariantsInput,
-    config: AlphaGenomeScoreVariantsConfig | None = None,
+    config: AlphaGenomeScoreVariantsConfig,
     instance: Any = None,
 ) -> AlphaGenomeScoreVariantsOutput:
     """Score variant effects in batch using AlphaGenome variant scorers."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(

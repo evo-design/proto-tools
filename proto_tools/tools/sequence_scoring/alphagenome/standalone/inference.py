@@ -107,7 +107,7 @@ class AlphaGenomeModel:
         """
         self._loaded = False
         self.model_version = model_version
-        self.device = None
+        self.device: str | None = None
         self.model = None
 
     def _ensure_loaded(self, device: str) -> None:
@@ -316,7 +316,7 @@ class AlphaGenomeModel:
                     self.model_version,
                 )
             self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         if verbose:

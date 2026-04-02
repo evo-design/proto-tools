@@ -101,21 +101,20 @@ def example_input() -> Any:
 )
 def run_ncbi_esummary(
     inputs: NCBIEsummaryInput,
-    config: NCBIFetchConfig | None = None,
+    config: NCBIFetchConfig,
     instance: Any = None,
 ) -> NCBIEsummaryOutput:
     """Retrieve record summary metadata from NCBI Entrez.
 
     Args:
         inputs (NCBIEsummaryInput): Database and identifier to summarize.
-        config (NCBIFetchConfig | None): HTTP timeout, retry, and authentication settings.
+        config (NCBIFetchConfig): HTTP timeout, retry, and authentication settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         NCBIEsummaryOutput: NCBIEsummaryOutput containing the record summary.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

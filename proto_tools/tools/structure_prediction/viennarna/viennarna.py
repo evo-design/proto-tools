@@ -209,7 +209,7 @@ def example_input() -> Any:
 )
 def run_viennarna(
     inputs: ViennaRNAInput,
-    config: ViennaRNAConfig | None = None,
+    config: ViennaRNAConfig,
     instance: Any = None,
 ) -> ViennaRNAOutput:
     """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
@@ -220,7 +220,7 @@ def run_viennarna(
 
     Args:
         inputs (ViennaRNAInput): Input containing RNA sequences to fold.
-        config (ViennaRNAConfig | None): Configuration parameters for ViennaRNA.
+        config (ViennaRNAConfig): Configuration parameters for ViennaRNA.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -254,7 +254,6 @@ def run_viennarna(
         - DNA sequences (containing T) are converted to RNA (U) unless
           use_dna_params is True.
     """
-    assert config is not None
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
 
     # Prepare input data for inference script

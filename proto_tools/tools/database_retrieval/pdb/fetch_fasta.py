@@ -100,7 +100,7 @@ def example_input() -> Any:
 )
 def run_pdb_fetch_fasta(
     inputs: PdbFetchFastaInput,
-    config: PdbFetchConfig | None = None,
+    config: PdbFetchConfig,
     instance: Any = None,
 ) -> PdbFetchFastaOutput:
     """Fetch chain sequences from RCSB PDB.
@@ -110,14 +110,13 @@ def run_pdb_fetch_fasta(
 
     Args:
         inputs (PdbFetchFastaInput): PDB accession to look up.
-        config (PdbFetchConfig | None): HTTP timeout and retry settings.
+        config (PdbFetchConfig): HTTP timeout and retry settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

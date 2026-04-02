@@ -288,7 +288,7 @@ def example_input() -> Any:
 )
 def run_protenix(
     inputs: ProtenixInput,
-    config: ProtenixConfig | None = None,
+    config: ProtenixConfig,
     instance: Any = None,
 ) -> ProtenixOutput:
     """Predict 3D structures using Protenix.
@@ -303,7 +303,7 @@ def run_protenix(
     Args:
         inputs (ProtenixInput): Validated input containing one or more complexes to
             predict structures for.
-        config (ProtenixConfig | None): Validated Protenix configuration specifying model
+        config (ProtenixConfig): Validated Protenix configuration specifying model
             variant, MSA settings, diffusion parameters, and execution options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -351,7 +351,6 @@ def run_protenix(
         >>> result = run_protenix(inputs, config)
         >>> print(f"Confidence: {result.structures[0].metrics['confidence_score']:.2f}")
     """
-    assert config is not None
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = os.path.join(temp_dir, "protenix_output")
         os.makedirs(output_dir)

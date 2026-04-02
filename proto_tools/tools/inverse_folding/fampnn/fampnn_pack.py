@@ -174,7 +174,7 @@ def example_input() -> Any:
 )
 def run_fampnn_pack(
     inputs: FAMPNNPackInput,
-    config: FAMPNNPackConfig | None = None,
+    config: FAMPNNPackConfig,
     instance: Any = None,
 ) -> FAMPNNPackingResult:
     """Pack protein sidechains using FAMPNN with per-atom confidence scores.
@@ -185,13 +185,12 @@ def run_fampnn_pack(
 
     Args:
         inputs (FAMPNNPackInput): FAMPNNPackInput containing structure inputs.
-        config (FAMPNNPackConfig | None): Configuration for packing.
+        config (FAMPNNPackConfig): Configuration for packing.
         instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNPackingResult: FAMPNNPackingResult with packed PDB structures and pSCE values.
     """
-    assert config is not None
     all_packed = []
     all_psce = []
 

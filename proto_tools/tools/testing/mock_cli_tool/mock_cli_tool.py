@@ -138,11 +138,10 @@ def example_input() -> Any:
 )
 def run_mock_cli_tool(
     inputs: MockCLIToolInput,
-    config: MockCLIToolConfig | None = None,
+    config: MockCLIToolConfig,
     instance: Any = None,
 ) -> MockCLIToolOutput:
     """Run mock CLI tool (subprocess-based for testing device routing)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_cli_tool",
         {

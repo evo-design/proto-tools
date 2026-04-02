@@ -609,7 +609,7 @@ def example_input() -> Any:
 )
 def run_blast_search(
     inputs: BlastSearchInput,
-    config: BlastSearchConfig | None = None,
+    config: BlastSearchConfig,
     instance: Any = None,
 ) -> BlastSearchOutput:
     """Search sequences against BLAST databases.
@@ -619,7 +619,7 @@ def run_blast_search(
 
     Args:
         inputs (BlastSearchInput): Validated BLAST search input.
-        config (BlastSearchConfig | None): Validated BLAST search configuration.
+        config (BlastSearchConfig): Validated BLAST search configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -636,7 +636,6 @@ def run_blast_search(
         >>> result = run_blast_search(inputs, config)
         >>> print(f"Found {result.num_hits} hits")
     """
-    assert config is not None
     if config.search_mode == "local":
         return _local_search(inputs, config, instance=instance)
     return _online_search(inputs, config)

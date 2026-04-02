@@ -515,9 +515,7 @@ def example_input() -> Any:
     iterable_output_field="output_structures",
     cacheable=True,
 )
-def run_rfdiffusion3(
-    inputs: RFdiffusion3Input, config: RFdiffusion3Config | None = None, instance: Any = None
-) -> RFdiffusion3Output:
+def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance: Any = None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
     Uses RFdiffusion3, a diffusion-based generative model, to design novel
@@ -535,7 +533,7 @@ def run_rfdiffusion3(
     Args:
         inputs (RFdiffusion3Input): Validated input containing one or more design
             specifications. Each spec defines constraints for a design task.
-        config (RFdiffusion3Config | None): Validated configuration specifying diffusion
+        config (RFdiffusion3Config): Validated configuration specifying diffusion
             parameters and execution options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -565,7 +563,6 @@ def run_rfdiffusion3(
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
-    assert config is not None
     json_spec = inputs.to_json_spec()
 
     logger.debug("Using local GPU for RFdiffusion3 structure design...")

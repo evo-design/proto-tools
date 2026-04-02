@@ -212,7 +212,7 @@ def example_input() -> Any:
     iterable_output_field="structures",
     cacheable=True,
 )
-def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: Any = None) -> Chai1Output:
+def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> Chai1Output:
     """Predict 3D structures using Chai1 multi-modal model.
 
     Uses Chai1, a diffusion-based model, to predict 3D structures of proteins,
@@ -222,7 +222,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: A
     Args:
         inputs (Chai1Input): Validated input containing one or more complexes to
             predict structures for. Each complex must be ≤ 2,048 residues total.
-        config (Chai1Config | None): Validated Chai1 configuration specifying ESM embeddings,
+        config (Chai1Config): Validated Chai1 configuration specifying ESM embeddings,
             MSA settings, refinement parameters, and execution options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -276,7 +276,6 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config | None = None, instance: A
         - ESM embeddings generally improve prediction quality
         - Does not support DNA or RNA (use Boltz2 for nucleic acids)
     """
-    assert config is not None
     results = [
         run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
         for comp in tqdm(

@@ -137,11 +137,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_predict_intervals(
     inputs: AlphaGenomePredictIntervalsInput,
-    config: AlphaGenomePredictIntervalsConfig | None = None,
+    config: AlphaGenomePredictIntervalsConfig,
     instance: Any = None,
 ) -> AlphaGenomePredictIntervalsOutput:
     """Predict genomic features for batched intervals using AlphaGenome."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(

@@ -17,7 +17,7 @@ class Chai1Model:
         """Initialize Chai1 model wrapper."""
         self._loaded = False
         self._chai1_run_inference = None
-        self.device = None
+        self.device: str | None = None
 
     def __call__(
         self,
@@ -132,7 +132,7 @@ class Chai1Model:
                 "Could not import chai_lab. Make sure Chai1 is installed in the current environment."
             ) from None
 
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         logger.debug("Chai1 initialized successfully")

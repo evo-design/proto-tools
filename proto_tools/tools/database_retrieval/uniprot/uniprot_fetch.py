@@ -191,7 +191,7 @@ def example_input() -> Any:
 )
 def run_uniprot_fetch(
     inputs: UniProtFetchInput,
-    config: UniProtFetchConfig | None = None,
+    config: UniProtFetchConfig,
     instance: Any = None,
 ) -> UniProtFetchOutput:
     """Fetch protein entries from UniProt.
@@ -202,7 +202,7 @@ def run_uniprot_fetch(
 
     Args:
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
-        config (UniProtFetchConfig | None): HTTP timeout and retry settings.
+        config (UniProtFetchConfig): HTTP timeout and retry settings.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -210,7 +210,6 @@ def run_uniprot_fetch(
         UniProtFetchOutput: Protein entry with sequence, gene names, and
             PDB cross-references.
     """
-    assert config is not None
     del instance
 
     session = build_http_session(

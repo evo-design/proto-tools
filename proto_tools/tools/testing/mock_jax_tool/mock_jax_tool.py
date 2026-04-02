@@ -135,11 +135,10 @@ def example_input() -> Any:
 )
 def run_mock_jax_tool(
     inputs: MockJAXToolInput,
-    config: MockJAXToolConfig | None = None,
+    config: MockJAXToolConfig,
     instance: Any = None,
 ) -> MockJAXToolOutput:
     """Run mock JAX tool (minimal model with JAX device semantics)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_jax_tool",
         {

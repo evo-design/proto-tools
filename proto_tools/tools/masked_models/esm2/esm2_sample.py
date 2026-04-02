@@ -179,7 +179,7 @@ def example_input() -> Any:
 )
 def run_esm2_sample(
     inputs: ESM2SampleInput,
-    config: ESM2SampleConfig | None = None,
+    config: ESM2SampleConfig,
     instance: Any = None,
 ) -> ESM2SampleOutput:
     """Sample protein sequences using ESM2 language model.
@@ -190,14 +190,13 @@ def run_esm2_sample(
 
     Args:
         inputs (ESM2SampleInput): Protein sequences with ``_`` at designable positions.
-        config (ESM2SampleConfig | None): Sampling configuration.
+        config (ESM2SampleConfig): Sampling configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
-    assert config is not None
     logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "esm2",

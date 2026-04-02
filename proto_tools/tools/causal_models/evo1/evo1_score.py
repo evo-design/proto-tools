@@ -134,7 +134,7 @@ def example_input() -> Any:
 )
 def run_evo1_score(
     inputs: Evo1ScoringInput,
-    config: Evo1ScoringConfig | None = None,
+    config: Evo1ScoringConfig,
     instance: Any = None,
 ) -> Evo1ScoringOutput:
     """Score DNA sequences using Evo1 autoregressive language model.
@@ -146,7 +146,7 @@ def run_evo1_score(
     Args:
         inputs (Evo1ScoringInput): Validated input containing DNA sequences
             to score.
-        config (Evo1ScoringConfig | None): Scoring configuration specifying model,
+        config (Evo1ScoringConfig): Scoring configuration specifying model,
             batch size, and whether to return logits.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -173,7 +173,6 @@ def run_evo1_score(
           are needed
         - Evo1 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    assert config is not None
     logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
 
     result = ToolInstance.dispatch(

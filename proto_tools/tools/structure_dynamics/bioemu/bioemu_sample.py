@@ -241,9 +241,8 @@ def example_input() -> Any:
     iterable_input_field="complexes",
     iterable_output_field="ensembles",
 )
-def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig | None = None, instance: Any = None) -> BioEmuOutput:
+def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) -> BioEmuOutput:
     """Generate protein conformational ensembles using BioEmu."""
-    assert config is not None
     logger.debug("Using local venv for BioEmu conformational sampling")
 
     # Extract pre-computed MSA A3M strings (populated by preprocess or user)

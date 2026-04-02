@@ -153,11 +153,10 @@ def example_input() -> Any:
 )
 def run_alphagenome_predict_sequences(
     inputs: AlphaGenomePredictSequencesInput,
-    config: AlphaGenomePredictSequencesConfig | None = None,
+    config: AlphaGenomePredictSequencesConfig,
     instance: Any = None,
 ) -> AlphaGenomePredictSequencesOutput:
     """Predict genomic features from batched raw DNA sequences using AlphaGenome."""
-    assert config is not None
     require_hf_token("AlphaGenome", "https://huggingface.co/google/alphagenome-all-folds")
 
     dispatch_result = ToolInstance.dispatch(

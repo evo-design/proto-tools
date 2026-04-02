@@ -103,21 +103,20 @@ def example_input() -> Any:
 )
 def run_esm_if1_sample(
     inputs: ESMIF1SampleInput,
-    config: ESMIF1SampleConfig | None = None,
+    config: ESMIF1SampleConfig,
     instance: Any = None,
 ) -> ESMIF1SampleOutput:
     """Sample protein sequences using ESM-IF1/ProteinDPO.
 
     Args:
         inputs (ESMIF1SampleInput): Structure inputs with optional chain/fixed position constraints.
-        config (ESMIF1SampleConfig | None): Configuration including weights variant, temperature, etc.
+        config (ESMIF1SampleConfig): Configuration including weights variant, temperature, etc.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESMIF1SampleOutput: ESMIF1SampleOutput with designed sequences for each input structure.
     """
-    assert config is not None
     if config.excluded_amino_acids:
         raise ValueError("ESM-IF1 does not support excluded_amino_acids. This feature may be added in a future update.")
 

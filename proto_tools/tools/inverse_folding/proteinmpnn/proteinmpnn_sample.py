@@ -101,7 +101,7 @@ def example_input() -> Any:
 )
 def run_proteinmpnn_sample(
     inputs: ProteinMPNNSampleInput,
-    config: ProteinMPNNSampleConfig | None = None,
+    config: ProteinMPNNSampleConfig,
     instance: Any = None,
 ) -> ProteinMPNNSampleOutput:
     """Sample protein sequences using ProteinMPNN.
@@ -109,7 +109,7 @@ def run_proteinmpnn_sample(
     Args:
         inputs (ProteinMPNNSampleInput): ProteinMPNNSampleInput containing a list of structure inputs,
             each with optional chain_ids/fixed_positions constraints.
-        config (ProteinMPNNSampleConfig | None): Configuration for sampling (temperature, batch_size, etc.).
+        config (ProteinMPNNSampleConfig): Configuration for sampling (temperature, batch_size, etc.).
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -119,7 +119,6 @@ def run_proteinmpnn_sample(
     Note:
         Multi-chain sampling returns a "/"-delimited sequence preserving chain ID order.
     """
-    assert config is not None
     designed_sequences = []
 
     # Local venv execution

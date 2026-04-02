@@ -174,7 +174,7 @@ def example_input() -> Any:
     iterable_output_field="structures",
     cacheable=True,
 )
-def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance: Any = None) -> Boltz2Output:
+def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) -> Boltz2Output:
     """Predict 3D structures using Boltz2 multi-modal model.
 
     Uses Boltz2, a diffusion-based deep learning model, to predict 3D structures
@@ -184,7 +184,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
     Args:
         inputs (Boltz2Input): Validated input containing one or more complexes to
             predict structures for.
-        config (Boltz2Config | None): Validated Boltz2 configuration specifying MSA settings,
+        config (Boltz2Config): Validated Boltz2 configuration specifying MSA settings,
             refinement parameters, and execution options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -266,7 +266,6 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config | None = None, instance
         - Higher ``recycling_steps`` and ``sampling_steps`` improve quality but increase runtime
         - Supports both local and remote ColabFold search modes when ``use_msa=True``
     """
-    assert config is not None
     results = [
         run_boltz2_on_complex(
             config=config,

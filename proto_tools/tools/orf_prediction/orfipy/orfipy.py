@@ -287,9 +287,7 @@ def example_input() -> Any:
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )
-def run_orfipy_prediction(
-    inputs: OrfipyInput, config: OrfipyConfig | None = None, instance: Any = None
-) -> OrfipyOutput:
+def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: Any = None) -> OrfipyOutput:
     """Predict open reading frames (ORFs) in DNA sequences using Orfipy.
 
     Uses Orfipy, a fast ORF prediction tool, to identify potential coding regions.
@@ -298,7 +296,7 @@ def run_orfipy_prediction(
     Args:
         inputs (OrfipyInput): Validated input containing one or more DNA sequences
             for ORF prediction.
-        config (OrfipyConfig | None): Validated Orfipy configuration specifying start/stop
+        config (OrfipyConfig): Validated Orfipy configuration specifying start/stop
             codons, length filters, strand selection, and threading options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -323,7 +321,6 @@ def run_orfipy_prediction(
         - Caching is performed per-sequence (based on sequence content).
         - Threads are applied per-sequence during execution.
     """
-    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     output_data = ToolInstance.dispatch(

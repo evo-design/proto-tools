@@ -147,11 +147,10 @@ def example_input() -> Any:
 )
 def run_mock_jax_multi_gpu_tool(
     inputs: MockJAXMultiGPUToolInput,
-    config: MockJAXMultiGPUToolConfig | None = None,
+    config: MockJAXMultiGPUToolConfig,
     instance: Any = None,
 ) -> MockJAXMultiGPUToolOutput:
     """Run mock JAX multi-GPU tool (two minimal models with JAX semantics)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_jax_multi_gpu_tool",
         {

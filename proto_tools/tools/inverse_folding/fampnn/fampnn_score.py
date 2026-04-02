@@ -212,7 +212,7 @@ def example_input() -> Any:
 )
 def run_fampnn_score(
     inputs: FAMPNNScoreInput,
-    config: FAMPNNScoreConfig | None = None,
+    config: FAMPNNScoreConfig,
     instance: Any = None,
 ) -> FAMPNNScoreOutput:
     """Score protein mutations with full-atom sidechain context using FAMPNN.
@@ -224,13 +224,12 @@ def run_fampnn_score(
 
     Args:
         inputs (FAMPNNScoreInput): FAMPNNScoreInput containing structures and mutations to score.
-        config (FAMPNNScoreConfig | None): Configuration for scoring.
+        config (FAMPNNScoreConfig): Configuration for scoring.
         instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNScoreOutput: FAMPNNScoreOutput with log-likelihood ratio scores for each mutation.
     """
-    assert config is not None
     results = []
 
     for inp in tqdm(

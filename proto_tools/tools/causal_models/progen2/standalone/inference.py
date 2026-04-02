@@ -67,7 +67,7 @@ class ProGen2Model:
         self.model_checkpoint = model_checkpoint
         self.local_path = local_path
         self.tokenizer = None
-        self.device = None
+        self.device: str | None = None
         self.model = None
         self.pad_token_id = None
 
@@ -92,7 +92,7 @@ class ProGen2Model:
         )
 
         self.tokenizer = Tokenizer.from_pretrained(model_path)
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # type: ignore[attr-defined]  # ID 0
         self._loaded = True
 
@@ -105,7 +105,7 @@ class ProGen2Model:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device  # type: ignore[assignment]
+            self.device = device
 
     def unload(self, verbose: bool = False) -> None:
         """Unload model to free GPU memory."""
@@ -113,7 +113,7 @@ class ProGen2Model:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
             self.model = self.model.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 

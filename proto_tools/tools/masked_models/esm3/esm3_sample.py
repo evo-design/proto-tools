@@ -173,7 +173,7 @@ def example_input() -> Any:
 )
 def run_esm3_sample(
     inputs: ESM3SampleInput,
-    config: ESM3SampleConfig | None = None,
+    config: ESM3SampleConfig,
     instance: Any = None,
 ) -> ESM3SampleOutput:
     """Sample protein sequences using ESM3 language model.
@@ -184,14 +184,13 @@ def run_esm3_sample(
 
     Args:
         inputs (ESM3SampleInput): Protein sequences with ``_`` at designable positions.
-        config (ESM3SampleConfig | None): Sampling configuration.
+        config (ESM3SampleConfig): Sampling configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         ESM3SampleOutput: ESM3SampleOutput with sampled sequences and optional logits.
     """
-    assert config is not None
     require_hf_token("ESM3", "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1")
 
     logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")

@@ -34,7 +34,7 @@ class LigandMPNNModel:
         """Initialize LigandMPNNModel."""
         self._loaded = False
         self._engine = None
-        self.device = None
+        self.device: str | None = None
         self.checkpoint_path = checkpoint_path
 
     def sample(
@@ -167,7 +167,7 @@ class LigandMPNNModel:
             write_fasta=False,
             write_structures=False,
         )
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         if verbose:

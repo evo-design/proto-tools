@@ -195,7 +195,7 @@ def example_input() -> Any:
 )
 def run_fampnn_sample(
     inputs: FAMPNNSampleInput,
-    config: FAMPNNSampleConfig | None = None,
+    config: FAMPNNSampleConfig,
     instance: Any = None,
 ) -> FAMPNNSampleOutput:
     """Design protein sequences with full-atom sidechain co-generation using FAMPNN.
@@ -208,13 +208,12 @@ def run_fampnn_sample(
     Args:
         inputs (FAMPNNSampleInput): FAMPNNSampleInput containing structure inputs with optional
             chain_ids, fixed_positions, and fixed_sidechain_positions.
-        config (FAMPNNSampleConfig | None): Configuration for sampling (temperature, num_steps, etc.).
+        config (FAMPNNSampleConfig): Configuration for sampling (temperature, num_steps, etc.).
         instance (Any): Optional ToolInstance for persistent execution.
 
     Returns:
         FAMPNNSampleOutput: FAMPNNSampleOutput with designed sequences, PDB strings, and pSCE values.
     """
-    assert config is not None
     designed_sequences = []
 
     for inp in tqdm(

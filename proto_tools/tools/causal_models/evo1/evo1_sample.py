@@ -190,7 +190,7 @@ def example_input() -> Any:
 )
 def run_evo1_sample(
     inputs: Evo1SampleInput,
-    config: Evo1SampleConfig | None = None,
+    config: Evo1SampleConfig,
     instance: Any = None,
 ) -> Evo1SampleOutput:
     """Sample DNA sequences using the Evo1 language model.
@@ -201,7 +201,7 @@ def run_evo1_sample(
 
     Args:
         inputs (Evo1SampleInput): Validated input containing prompt sequences.
-        config (Evo1SampleConfig | None): Sampling configuration including model
+        config (Evo1SampleConfig): Sampling configuration including model
             checkpoint, temperature, and top-k parameters.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -215,7 +215,6 @@ def run_evo1_sample(
         >>> result = run_evo1_sample(inputs, config)
         >>> print(f"Generated {len(result.sequences)} sequences")
     """
-    assert config is not None
     logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
 
     result = ToolInstance.dispatch(

@@ -165,19 +165,18 @@ def example_input() -> Any:
     uses_gpu=True,
     example_input=example_input,
 )
-def run_enformer(inputs: EnformerInput, config: EnformerConfig | None = None, instance: Any = None) -> EnformerOutput:
+def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = None) -> EnformerOutput:
     """Predict regulatory activity with Enformer.
 
     Args:
         inputs (EnformerInput): Validated sequence input.
-        config (EnformerConfig | None): Validated runtime and model configuration.
+        config (EnformerConfig): Validated runtime and model configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         EnformerOutput: Prediction object with sequence, tracks, and metadata.
     """
-    assert config is not None
     logger.debug("Using local venv for Enformer prediction")
 
     result = ToolInstance.dispatch(

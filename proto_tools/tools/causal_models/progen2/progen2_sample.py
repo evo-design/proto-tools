@@ -322,7 +322,7 @@ def example_input() -> Any:
 )
 def run_progen2_sample(
     inputs: ProGen2SampleInput,
-    config: ProGen2SampleConfig | None = None,
+    config: ProGen2SampleConfig,
     instance: Any = None,
 ) -> ProGen2SampleOutput:
     """Generate protein sequences using ProGen2 autoregressive language model.
@@ -335,7 +335,7 @@ def run_progen2_sample(
         inputs (ProGen2SampleInput): Validated input containing one or more protein
             prompt sequences. Prompts can include ProGen2's special tokens or raw
             amino acid sequences (which will be automatically normalized).
-        config (ProGen2SampleConfig | None): Validated ProGen2 sampling configuration specifying
+        config (ProGen2SampleConfig): Validated ProGen2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and output processing options.
 
@@ -376,7 +376,6 @@ def run_progen2_sample(
         - ProGen2-finetuning GitHub: https://github.com/hugohrban/ProGen2-finetuning
         - Original ProGen2 GitHub: https://github.com/enijkamp/progen2
     """
-    assert config is not None
     logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
     result = ToolInstance.dispatch(
         "progen2",

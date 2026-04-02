@@ -147,11 +147,10 @@ def example_input() -> Any:
 )
 def run_mock_pytorch_multi_gpu_tool(
     inputs: MockPyTorchMultiGPUToolInput,
-    config: MockPyTorchMultiGPUToolConfig | None = None,
+    config: MockPyTorchMultiGPUToolConfig,
     instance: Any = None,
 ) -> MockPyTorchMultiGPUToolOutput:
     """Run mock multi-GPU tool (two minimal models for fast testing)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_pytorch_multi_gpu_tool",
         {

@@ -39,7 +39,7 @@ class SpliceTransformerModel:
     def __init__(self, context_length: int = 4000):
         """Initialize SpliceTransformerModel."""
         self.context_length = context_length
-        self.device = None
+        self.device: str | None = None
         self.model = None
         self._loaded = False
 
@@ -186,7 +186,7 @@ class SpliceTransformerModel:
         state_dict = self._fix_state_dict_keys(save_dict["state_dict"])
         self.model.load_state_dict(state_dict)  # type: ignore[attr-defined]
 
-        self.device = device  # type: ignore[assignment]
+        self.device = device
         self._loaded = True
 
         logger.debug("SpliceTransformer model loaded successfully")
@@ -198,7 +198,7 @@ class SpliceTransformerModel:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device  # type: ignore[assignment]
+            self.device = device
 
     def unload(self, verbose: bool = False) -> None:  # noqa: ARG002 — required by tool interface
         """Move model to CPU to free GPU memory."""
@@ -206,7 +206,7 @@ class SpliceTransformerModel:
             logger.debug("Unloading SpliceTransformer from GPU")
 
             self.model = self.model.to("cpu")  # type: ignore[attr-defined]
-            self.device = "cpu"  # type: ignore[assignment]
+            self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 

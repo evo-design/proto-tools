@@ -146,11 +146,10 @@ def example_input() -> Any:
 )
 def run_mock_pytorch_tool(
     inputs: MockPyTorchToolInput,
-    config: MockPyTorchToolConfig | None = None,
+    config: MockPyTorchToolConfig,
     instance: Any = None,
 ) -> MockPyTorchToolOutput:
     """Run mock PyTorch tool (minimal model for fast testing)."""
-    assert config is not None
     result = ToolInstance.dispatch(
         "mock_pytorch_tool",
         {

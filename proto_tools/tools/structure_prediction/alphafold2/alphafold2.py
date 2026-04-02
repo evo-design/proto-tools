@@ -221,7 +221,7 @@ def example_input() -> Any:
 )
 def run_alphafold2(
     inputs: AlphaFold2Input,
-    config: AlphaFold2Config | None = None,
+    config: AlphaFold2Config,
     instance: Any = None,
 ) -> AlphaFold2Output:
     """Predict protein 3D structures using AlphaFold2.
@@ -233,7 +233,7 @@ def run_alphafold2(
     Args:
         inputs (AlphaFold2Input): Validated input containing one or more protein
             complexes to predict structures for.
-        config (AlphaFold2Config | None): Validated AlphaFold2 configuration specifying
+        config (AlphaFold2Config): Validated AlphaFold2 configuration specifying
             MSA settings, recycling, and model parameters.
         instance (Any): Optional tool instance name for persistent workers.
 
@@ -263,7 +263,6 @@ def run_alphafold2(
         >>> result = run_alphafold2(inputs, config)
         >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
     """
-    assert config is not None
     prepared_complexes = inputs.prepare_complexes()
 
     structure_outputs = []

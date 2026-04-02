@@ -204,7 +204,7 @@ def example_input() -> Any:
 )
 def run_random_nucleotide_sample(
     inputs: RandomNucleotideSampleInput,
-    config: RandomNucleotideSampleConfig | None = None,
+    config: RandomNucleotideSampleConfig,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> RandomNucleotideSampleOutput:
     """Fill masked positions with random nucleotides from an IUPAC scheme.
@@ -217,14 +217,13 @@ def run_random_nucleotide_sample(
 
     Args:
         inputs (RandomNucleotideSampleInput): Nucleotide sequences with ``_`` at designable positions.
-        config (RandomNucleotideSampleConfig | None): Sampling configuration.
+        config (RandomNucleotideSampleConfig): Sampling configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    assert config is not None
     rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
     scheme = config.substitution_scheme
 

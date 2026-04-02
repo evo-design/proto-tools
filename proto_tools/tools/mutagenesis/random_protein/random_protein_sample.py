@@ -138,7 +138,7 @@ def example_input() -> Any:
 )
 def run_random_protein_sample(
     inputs: RandomProteinSampleInput,
-    config: RandomProteinSampleConfig | None = None,
+    config: RandomProteinSampleConfig,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> RandomProteinSampleOutput:
     """Fill masked positions with random amino acids from a codon scheme.
@@ -149,14 +149,13 @@ def run_random_protein_sample(
 
     Args:
         inputs (RandomProteinSampleInput): Protein sequences with ``_`` at designable positions.
-        config (RandomProteinSampleConfig | None): Sampling configuration.
+        config (RandomProteinSampleConfig): Sampling configuration.
 
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    assert config is not None
     rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
 

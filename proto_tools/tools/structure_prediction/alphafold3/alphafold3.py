@@ -187,11 +187,10 @@ def example_input() -> Any:
 )
 def run_alphafold3(
     inputs: AlphaFold3Input,
-    config: AlphaFold3Config | None = None,
+    config: AlphaFold3Config,
     instance: Any = None,
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
-    assert config is not None
     output_structures: list[Structure] = []
 
     for comp_idx, comp in tqdm(

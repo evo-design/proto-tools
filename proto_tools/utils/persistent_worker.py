@@ -472,9 +472,8 @@ class PersistentWorker:
             if not self.alive:
                 self.start()
 
-            assert self._process is not None
-            assert self._process.stdin is not None
-            assert self._process.stdout is not None
+            if self._process is None or self._process.stdin is None or self._process.stdout is None:
+                raise RuntimeError(f"Worker for {self.tool_name} failed to start: process or pipes are None")
 
             request_id = uuid.uuid4().hex[:8]
             request = {"id": request_id, "input": input_dict}

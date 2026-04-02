@@ -201,7 +201,7 @@ def example_input() -> Any:
     iterable_output_field="results",
     cacheable=True,
 )
-def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance: Any = None) -> MincedOutput:
+def run_minced(inputs: MincedInput, config: MincedConfig, instance: Any = None) -> MincedOutput:
     """Detect CRISPR arrays in nucleotide sequences using MinCED.
 
     Uses MinCED (Mining CRISPRs in Environmental Datasets) to identify
@@ -211,7 +211,7 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
 
     Args:
         inputs (MincedInput): Validated input containing nucleotide sequences.
-        config (MincedConfig | None): MinCED configuration with minimum repeat count
+        config (MincedConfig): MinCED configuration with minimum repeat count
             and length thresholds.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -225,7 +225,6 @@ def run_minced(inputs: MincedInput, config: MincedConfig | None = None, instance
         >>> result = run_minced(inputs, config)
         >>> print(f"{result.num_sequences_with_crispr} sequences have CRISPR arrays")
     """
-    assert config is not None
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
     input_data = {

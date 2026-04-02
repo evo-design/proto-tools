@@ -274,9 +274,7 @@ def example_input() -> Any:
     iterable_output_field="predicted_orfs",
     cacheable=True,
 )
-def run_prodigal_prediction(
-    inputs: ProdigalInput, config: ProdigalConfig | None = None, instance: Any = None
-) -> ProdigalOutput:
+def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, instance: Any = None) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
     Uses pyrodigal Python bindings for  gene prediction in bacterial and archaeal
@@ -287,7 +285,7 @@ def run_prodigal_prediction(
     Args:
         inputs (ProdigalInput): Validated input containing one or more prokaryotic
             DNA sequences for gene prediction.
-        config (ProdigalConfig | None): Validated Prodigal configuration specifying
+        config (ProdigalConfig): Validated Prodigal configuration specifying
             prediction mode (meta vs. single-genome), genetic code, and threading.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -316,7 +314,6 @@ def run_prodigal_prediction(
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
-    assert config is not None
     output_data = ToolInstance.dispatch(
         "prodigal",
         {

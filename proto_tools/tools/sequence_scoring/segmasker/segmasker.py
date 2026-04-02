@@ -190,7 +190,7 @@ def example_input() -> Any:
 )
 def run_segmasker(
     inputs: SegmaskerInput,
-    config: SegmaskerConfig | None = None,
+    config: SegmaskerConfig,
     instance: Any = None,
 ) -> SegmaskerOutput:
     """Detect low-complexity regions in protein sequences using NCBI segmasker.
@@ -202,7 +202,7 @@ def run_segmasker(
     Args:
         inputs (SegmaskerInput): Validated input containing one or more protein
             sequences to analyze.
-        config (SegmaskerConfig | None): Validated segmasker configuration specifying
+        config (SegmaskerConfig): Validated segmasker configuration specifying
             window size and complexity thresholds.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -224,7 +224,6 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {result.low_complexity_fractions}")
     """
-    assert config is not None
     input_data = {
         "sequences": inputs.sequences,
         "config": {

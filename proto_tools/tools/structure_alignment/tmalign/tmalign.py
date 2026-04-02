@@ -110,9 +110,8 @@ def example_input() -> Any:
     ),
     example_input=example_input,
 )
-def run_tmalign(inputs: TMalignInput, config: TMalignConfig | None = None, instance: Any = None) -> TMalignOutput:
+def run_tmalign(inputs: TMalignInput, config: TMalignConfig, instance: Any = None) -> TMalignOutput:
     """Run TMalign on two PDB structures."""
-    assert config is not None
     input_data = {
         "pdb_text_1": inputs.pdb_text_1,
         "pdb_text_2": inputs.pdb_text_2,

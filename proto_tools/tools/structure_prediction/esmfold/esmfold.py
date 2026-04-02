@@ -208,7 +208,7 @@ def example_input() -> Any:
 )
 def run_esmfold(
     inputs: ESMFoldInput,
-    config: ESMFoldConfig | None = None,
+    config: ESMFoldConfig,
     instance: Any = None,
 ) -> ESMFoldOutput:
     """Predict protein 3D structures using ESMFold.
@@ -220,7 +220,7 @@ def run_esmfold(
     Args:
         inputs (ESMFoldInput): Validated input containing one or more protein complexes
             to predict structures for. Each complex must be ≤ 2,400 residues total.
-        config (ESMFoldConfig | None): Validated ESMFold configuration specifying chain linking,
+        config (ESMFoldConfig): Validated ESMFold configuration specifying chain linking,
             batching, and execution options.
 
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -265,7 +265,6 @@ def run_esmfold(
         - Maximum 2,400 residues per complex (hard limit)
         - Multi-chain complexes are predicted by linking chains
     """
-    assert config is not None
     # Prepare complexes for inference
     prepared_complexes = inputs.prepare_complexes(chain_linker=config.chain_linker)
 
