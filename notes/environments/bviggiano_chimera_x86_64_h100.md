@@ -13,12 +13,12 @@
 | **RAM** | 1007.4 GB |
 | **GPU** | 1× NVIDIA H100 80GB HBM3 |
 | **CUDA** | 12.2 |
-| **Mamba Env** | `bio-tools` |
+| **Mamba Env** | `proto-tools` |
 
 ## Git
 
-- **Commit**: `70c61f955ab5`
-- **Branch**: `refactor/env-report-autodiscovery`
+- **Commit**: `1bb9007d8348`
+- **Branch**: `fix/bioemu-protobuf-conflict`
 - **Dirty**: Yes
 
 ## Environment Variables
@@ -27,19 +27,15 @@
 
 ```
 BLASTDB=/common_datasets/external/databases/blast
-CLAUDECODE=1
-CLAUDE_CODE_ENTRYPOINT=cli
-CONDA_DEFAULT_ENV=bio-tools
+CONDA_DEFAULT_ENV=proto-tools
 CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
-CONDA_PREFIX=/home/bviggiano/miniforge3/envs/bio-tools
+CONDA_PREFIX=/home/bviggiano/miniforge3/envs/proto-tools
 CONDA_PREFIX_1=/home/bviggiano/miniforge3
-CONDA_PROMPT_MODIFIER=(bio-tools) 
+CONDA_PROMPT_MODIFIER=(proto-tools)
 CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
 CONDA_SHLVL=2
-COREPACK_ENABLE_AUTO_PIN=0
 CUDA_VISIBLE_DEVICES=0
 DISABLE_PANDERA_IMPORT_WARNING=True
-GIT_EDITOR=true
 GPU_DEVICE_ORDINAL=0
 HOME=/home/bviggiano
 HYDRA_BOOTSTRAP=slurm
@@ -54,17 +50,15 @@ LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd
 MAMBA_EXE=/home/bviggiano/miniforge3/bin/mamba
 MAMBA_ROOT_PREFIX=/home/bviggiano/.local/share/mamba
 MOTD_SHOWN=pam
-NoDefaultCurrentDirectoryInExePath=1
 OLDPWD=/home/bviggiano/main/codebases/proto-bio
 OMPI_MCA_plm_slurm_args=--external-launcher
-OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
-PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/bio-tools/bin:/home/bviggiano/miniforge3/condabin:/usr/local/sbin:/usr/loc...
+PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/usr/local/sbin:/usr/l...
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 PRTE_MCA_plm_slurm_args=--external-launcher
-PWD=/home/bviggiano/main/codebases/evo-design/bio-programming-tools
+PWD=/home/bviggiano/main/codebases/evo-design/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.2
-RDBASE=/home/bviggiano/miniforge3/envs/bio-tools/lib/python3.12/site-packages/rdkit
+RDBASE=/home/bviggiano/miniforge3/envs/proto-tools/lib/python3.12/site-packages/rdkit
 ROCR_VISIBLE_DEVICES=0
 SHELL=/bin/bash
 SHLVL=5
@@ -76,19 +70,19 @@ SLURM_CPUS_ON_NODE=8
 SLURM_GPUS=1
 SLURM_GPUS_ON_NODE=1
 SLURM_GTIDS=0
-SLURM_JOBID=1946909
+SLURM_JOBID=1963539
 SLURM_JOB_ACCOUNT=hielab
 SLURM_JOB_CPUS_PER_NODE=8
-SLURM_JOB_END_TIME=1775016751
+SLURM_JOB_END_TIME=1775101875
 SLURM_JOB_GID=10004
 SLURM_JOB_GPUS=0
-SLURM_JOB_ID=1946909
+SLURM_JOB_ID=1963539
 SLURM_JOB_NAME=1_sh_gpu
 SLURM_JOB_NODELIST=GPUC960
 SLURM_JOB_NUM_NODES=1
 SLURM_JOB_PARTITION=evo_gpu_priority
 SLURM_JOB_QOS=normal
-SLURM_JOB_START_TIME=1774973551
+SLURM_JOB_START_TIME=1775058675
 SLURM_JOB_UID=10249
 SLURM_JOB_USER=bviggiano
 SLURM_LAUNCH_NODE_IPADDR=172.18.140.10
@@ -98,18 +92,18 @@ SLURM_NNODES=1
 SLURM_NODEID=0
 SLURM_NODELIST=GPUC960
 SLURM_OOM_KILL_STEP=0
-SLURM_PMIXP_ABORT_AGENT_PORT=45583
+SLURM_PMIXP_ABORT_AGENT_PORT=46169
 SLURM_PMIX_MAPPING_SERV=(vector,(0,1,1))
 SLURM_PRIO_PROCESS=0
 SLURM_PROCID=0
-SLURM_PTY_PORT=33325
+SLURM_PTY_PORT=36009
 SLURM_PTY_WIN_COL=236
-SLURM_PTY_WIN_ROW=59
+SLURM_PTY_WIN_ROW=64
 SLURM_SRUN_COMM_HOST=172.18.140.10
-SLURM_SRUN_COMM_PORT=37531
+SLURM_SRUN_COMM_PORT=39007
 SLURM_STEPID=4294967290
 SLURM_STEP_ID=4294967290
-SLURM_STEP_LAUNCHER_PORT=37531
+SLURM_STEP_LAUNCHER_PORT=39007
 SLURM_STEP_NODELIST=GPUC960
 SLURM_STEP_NUM_NODES=1
 SLURM_STEP_NUM_TASKS=1
@@ -117,7 +111,7 @@ SLURM_STEP_TASKS_PER_NODE=1
 SLURM_SUBMIT_DIR=/home/bviggiano
 SLURM_SUBMIT_HOST=arc-slurm
 SLURM_TASKS_PER_NODE=8
-SLURM_TASK_PID=858515
+SLURM_TASK_PID=1551588
 SLURM_TOPOLOGY_ADDR=GPUC960
 SLURM_TOPOLOGY_ADDR_PATTERN=node
 SRUN_DEBUG=3
@@ -125,7 +119,7 @@ TERM=xterm-256color
 TERM_PROGRAM=tmux
 TERM_PROGRAM_VERSION=3.2a
 TMPDIR=/tmp
-TMUX=/tmp/tmux-10249/default,342543,0
+TMUX=/tmp/tmux-10249/default,1274489,0
 TMUX_PANE=%0
 USER=bviggiano
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
@@ -135,7 +129,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog fi...
 ZES_ENABLE_SYSMAN=1
 ZE_AFFINITY_MASK=0
-_=/home/bviggiano/miniforge3/envs/bio-tools/bin/python
+_=/home/bviggiano/miniforge3/envs/proto-tools/bin/pytest
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -153,9 +147,9 @@ DETECTED_DRIVER_VERSION=535
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=en_US.UTF-8
-LD_LIBRARY_PATH=/home/bviggiano/miniforge3/envs/bio-tools/lib
+LD_LIBRARY_PATH=/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/viennarna_env/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/bio-tools/bin:/home/bviggiano/miniforge3/co...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/viennarna_env/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/...
 PIP_DEFAULT_TIMEOUT=300
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
@@ -179,117 +173,117 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `evo1-sample` | yes | ✅ | 300.4s | `70c61f9` ✱ | ✅ Pass |
-| `evo2-sample` | yes | ✅ | 342.1s | `70c61f9` ✱ | ✅ Pass |
-| `progen2-sample` | yes | ✅ | 175.4s | `70c61f9` ✱ | ✅ Pass |
+| `evo1-sample` | yes | ✅ | 303.3s | `1bb9007` ✱ | ✅ Pass |
+| `evo2-sample` | yes | ✅ | 353.2s | `1bb9007` ✱ | ✅ Pass |
+| `progen2-sample` | yes | ✅ | 196.4s | `1bb9007` ✱ | ✅ Pass |
 
 ### Gene Annotation (5/5)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `blast-create-db` | no | ✅ | 47.5s | `70c61f9` ✱ | ✅ Pass |
-| `crispr-tracr` | no | ✅ | 137.7s | `70c61f9` ✱ | ✅ Pass |
-| `minced-crispr` | no | ✅ | 17.7s | `70c61f9` ✱ | ✅ Pass |
-| `mmseqs-clustering` | no | ✅ | 25.4s | `70c61f9` ✱ | ✅ Pass |
-| `pyhmmer-hmmscan` | no | ✅ | 20.1s | `70c61f9` ✱ | ✅ Pass |
+| `blast-create-db` | no | ✅ | 46.8s | `1bb9007` ✱ | ✅ Pass |
+| `crispr-tracr` | no | ✅ | 145.2s | `1bb9007` ✱ | ✅ Pass |
+| `minced-crispr` | no | ✅ | 20.4s | `1bb9007` ✱ | ✅ Pass |
+| `mmseqs-clustering` | no | ✅ | 25.6s | `1bb9007` ✱ | ✅ Pass |
+| `pyhmmer-hmmscan` | no | ✅ | 23.8s | `1bb9007` ✱ | ✅ Pass |
 
 ### Inverse Folding (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `esm-if1-sample` | yes | ✅ | 110.4s | `70c61f9` ✱ | ✅ Pass |
-| `fampnn-pack` | yes | ✅ | 183.9s | `70c61f9` ✱ | ✅ Pass |
-| `ligandmpnn-sample` | yes | ✅ | 206.8s | `70c61f9` ✱ | ✅ Pass |
-| `proteinmpnn-sample` | yes | ✅ | 74.7s | `70c61f9` ✱ | ✅ Pass |
+| `esm-if1-sample` | yes | ✅ | 122.6s | `1bb9007` ✱ | ✅ Pass |
+| `fampnn-pack` | yes | ✅ | 178.2s | `1bb9007` ✱ | ✅ Pass |
+| `ligandmpnn-sample` | yes | ✅ | 225.7s | `1bb9007` ✱ | ✅ Pass |
+| `proteinmpnn-sample` | yes | ✅ | 78.1s | `1bb9007` ✱ | ✅ Pass |
 
 ### Masked Models (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `esm2-embedding` | yes | ✅ | 119.4s | `70c61f9` ✱ | ✅ Pass |
-| `esm3-embedding` | yes | ✅ | 123.7s | `70c61f9` ✱ | ✅ Pass |
+| `esm2-embedding` | yes | ✅ | 124.4s | `1bb9007` ✱ | ✅ Pass |
+| `esm3-embedding` | yes | ✅ | 136.9s | `1bb9007` ✱ | ✅ Pass |
 
 ### Mutagenesis (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `random-nucleotide-sample` | no | — | 0.0s | `70c61f9` ✱ | ✅ Pass |
-| `random-protein-sample` | no | — | 0.0s | `70c61f9` ✱ | ✅ Pass |
+| `random-nucleotide-sample` | no | - | 0.0s | `1bb9007` ✱ | ✅ Pass |
+| `random-protein-sample` | no | - | 0.0s | `1bb9007` ✱ | ✅ Pass |
 
 ### Orf Prediction (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `orfipy-prediction` | no | ✅ | 21.5s | `70c61f9` ✱ | ✅ Pass |
-| `prodigal-prediction` | no | ✅ | 13.9s | `70c61f9` ✱ | ✅ Pass |
+| `orfipy-prediction` | no | ✅ | 24.3s | `1bb9007` ✱ | ✅ Pass |
+| `prodigal-prediction` | no | ✅ | 15.0s | `1bb9007` ✱ | ✅ Pass |
 
 ### Rna Splicing (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `splice-transformer-prediction` | yes | ✅ | 112.1s | `70c61f9` ✱ | ✅ Pass |
+| `splice-transformer-prediction` | yes | ✅ | 108.1s | `1bb9007` ✱ | ✅ Pass |
 
 ### Sequence Alignment (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `colabfold-search` | no | ✅ | 110.7s | `70c61f9` ✱ | ✅ Pass |
-| `mafft-align` | no | ✅ | 23.3s | `70c61f9` ✱ | ✅ Pass |
+| `colabfold-search` | no | ✅ | 110.2s | `1bb9007` ✱ | ✅ Pass |
+| `mafft-align` | no | ✅ | 26.4s | `1bb9007` ✱ | ✅ Pass |
 
 ### Sequence Scoring (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `alphagenome-predict-intervals` | yes | ✅ | 914.4s | `70c61f9` ✱ | ✅ Pass |
-| `borzoi-ensemble` | yes | ✅ | 166.4s | `70c61f9` ✱ | ✅ Pass |
-| `enformer-prediction` | yes | ✅ | 100.9s | `70c61f9` ✱ | ✅ Pass |
-| `segmasker-score` | no | ✅ | 29.8s | `70c61f9` ✱ | ✅ Pass |
+| `alphagenome-predict-intervals` | yes | ✅ | 772.3s | `1bb9007` ✱ | ✅ Pass |
+| `borzoi-ensemble` | yes | ✅ | 155.1s | `1bb9007` ✱ | ✅ Pass |
+| `enformer-prediction` | yes | ✅ | 106.8s | `1bb9007` ✱ | ✅ Pass |
+| `segmasker-score` | no | ✅ | 39.6s | `1bb9007` ✱ | ✅ Pass |
 
 ### Structure Alignment (2/2)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `tmalign-alignment` | no | ✅ | 25.6s | `70c61f9` ✱ | ✅ Pass |
-| `usalign-alignment` | no | ✅ | 37.7s | `70c61f9` ✱ | ✅ Pass |
+| `tmalign-alignment` | no | ✅ | 25.3s | `1bb9007` ✱ | ✅ Pass |
+| `usalign-alignment` | no | ✅ | 38.2s | `1bb9007` ✱ | ✅ Pass |
 
 ### Structure Design (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `rfdiffusion3-design` | yes | ✅ | 226.5s | `70c61f9` ✱ | ✅ Pass |
+| `rfdiffusion3-design` | yes | ✅ | 249.4s | `1bb9007` ✱ | ✅ Pass |
 
 ### Structure Dynamics (1/1)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `bioemu-sample` | yes | ✅ | 345.5s | `70c61f9` ✱ | ✅ Pass |
+| `bioemu-sample` | yes | ✅ | 332.8s | `1bb9007` ✱ | ✅ Pass |
 
 ### Structure Prediction (8/8)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `alphafold2-prediction` | yes | ✅ | 1227.0s | `70c61f9` ✱ | ✅ Pass |
-| `alphafold3-prediction` | yes | ✅ | 79.3s | `70c61f9` ✱ | ✅ Pass |
-| `boltz2-prediction` | yes | ✅ | 175.6s | `70c61f9` ✱ | ✅ Pass |
-| `chai1-prediction` | yes | ✅ | 389.9s | `70c61f9` ✱ | ✅ Pass |
-| `esmfold-prediction` | yes | ✅ | 128.0s | `70c61f9` ✱ | ✅ Pass |
-| `protenix-prediction` | yes | ✅ | 400.4s | `70c61f9` ✱ | ✅ Pass |
-| `structure-metrics` | no | ✅ | 24.8s | `70c61f9` ✱ | ✅ Pass |
-| `viennarna-prediction` | no | ✅ | 15.4s | `70c61f9` ✱ | ✅ Pass |
+| `alphafold2-prediction` | yes | ✅ | 1193.5s | `1bb9007` ✱ | ✅ Pass |
+| `alphafold3-prediction` | yes | ✅ | 72.4s | `1bb9007` ✱ | ✅ Pass |
+| `boltz2-prediction` | yes | ✅ | 165.5s | `1bb9007` ✱ | ✅ Pass |
+| `chai1-prediction` | yes | ✅ | 344.2s | `1bb9007` ✱ | ✅ Pass |
+| `esmfold-prediction` | yes | ✅ | 127.3s | `1bb9007` ✱ | ✅ Pass |
+| `protenix-prediction` | yes | ✅ | 393.2s | `1bb9007` ✱ | ✅ Pass |
+| `structure-metrics` | no | ✅ | 24.6s | `1bb9007` ✱ | ✅ Pass |
+| `viennarna-prediction` | no | ✅ | 14.2s | `1bb9007` ✱ | ✅ Pass |
 
 ### Testing (3/3)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `mock-cli-multi-gpu-tool-run` | yes | — | — | `70c61f9` ✱ | ⏭️ Skip |
-| `mock-cli-tool-run` | yes | ✅ | 12.1s | `70c61f9` ✱ | ✅ Pass |
-| `mock-jax-multi-gpu-tool-run` | yes | — | — | `70c61f9` ✱ | ⏭️ Skip |
-| `mock-jax-tool-run` | yes | ✅ | 53.8s | `70c61f9` ✱ | ✅ Pass |
-| `mock-pytorch-multi-gpu-tool-run` | yes | — | — | `70c61f9` ✱ | ⏭️ Skip |
-| `mock-pytorch-tool-run` | yes | ✅ | 118.0s | `70c61f9` ✱ | ✅ Pass |
+| `mock-cli-multi-gpu-tool-run` | yes | - | - | `1bb9007` ✱ | ⏭️ Skip |
+| `mock-cli-tool-run` | yes | ✅ | 13.3s | `1bb9007` ✱ | ✅ Pass |
+| `mock-jax-multi-gpu-tool-run` | yes | - | - | `1bb9007` ✱ | ⏭️ Skip |
+| `mock-jax-tool-run` | yes | ✅ | 60.3s | `1bb9007` ✱ | ✅ Pass |
+| `mock-pytorch-multi-gpu-tool-run` | yes | - | - | `1bb9007` ✱ | ⏭️ Skip |
+| `mock-pytorch-tool-run` | yes | ✅ | 135.0s | `1bb9007` ✱ | ✅ Pass |
 
 ---
-*Generated at 2026-03-31 16:01:05 by `pytest --env-report`*
+*Generated at 2026-04-01 10:44:37 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -298,12 +292,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold2-prediction]",
     "status": "passed",
-    "duration_seconds": 1227.01,
+    "duration_seconds": 1193.53,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -311,12 +305,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold3-prediction]",
     "status": "passed",
-    "duration_seconds": 79.29,
+    "duration_seconds": 72.42,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -324,12 +318,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphagenome-predict-intervals]",
     "status": "passed",
-    "duration_seconds": 914.42,
+    "duration_seconds": 772.31,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -337,12 +331,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_dynamics",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[bioemu-sample]",
     "status": "passed",
-    "duration_seconds": 345.48,
+    "duration_seconds": 332.83,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/bioemu_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -350,12 +344,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[blast-create-db]",
     "status": "passed",
-    "duration_seconds": 47.52,
+    "duration_seconds": 46.8,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/blast_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -363,12 +357,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[boltz2-prediction]",
     "status": "passed",
-    "duration_seconds": 175.64,
+    "duration_seconds": 165.48,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/boltz2_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -376,12 +370,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[borzoi-ensemble]",
     "status": "passed",
-    "duration_seconds": 166.36,
+    "duration_seconds": 155.1,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/borzoi_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -389,12 +383,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[chai1-prediction]",
     "status": "passed",
-    "duration_seconds": 389.86,
+    "duration_seconds": 344.25,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/chai1_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -402,12 +396,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[colabfold-search]",
     "status": "passed",
-    "duration_seconds": 110.71,
+    "duration_seconds": 110.24,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/colabfold_search_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -415,12 +409,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[crispr-tracr]",
     "status": "passed",
-    "duration_seconds": 137.65,
+    "duration_seconds": 145.18,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/crispr_tracr_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -428,12 +422,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[enformer-prediction]",
     "status": "passed",
-    "duration_seconds": 100.89,
+    "duration_seconds": 106.8,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/enformer_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -441,12 +435,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm-if1-sample]",
     "status": "passed",
-    "duration_seconds": 110.37,
+    "duration_seconds": 122.58,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/esm_if1_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -454,12 +448,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "masked_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm2-embedding]",
     "status": "passed",
-    "duration_seconds": 119.4,
+    "duration_seconds": 124.4,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/esm2_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -467,12 +461,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "masked_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm3-embedding]",
     "status": "passed",
-    "duration_seconds": 123.65,
+    "duration_seconds": 136.93,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/esm3_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -480,12 +474,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esmfold-prediction]",
     "status": "passed",
-    "duration_seconds": 128.0,
+    "duration_seconds": 127.35,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/esmfold_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -493,12 +487,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[evo1-sample]",
     "status": "passed",
-    "duration_seconds": 300.42,
+    "duration_seconds": 303.29,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/evo1_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -506,12 +500,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[evo2-sample]",
     "status": "passed",
-    "duration_seconds": 342.08,
+    "duration_seconds": 353.19,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/evo2_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -519,12 +513,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[fampnn-pack]",
     "status": "passed",
-    "duration_seconds": 183.86,
+    "duration_seconds": 178.2,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/fampnn_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -532,12 +526,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[ligandmpnn-sample]",
     "status": "passed",
-    "duration_seconds": 206.85,
+    "duration_seconds": 225.73,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/ligandmpnn_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -545,12 +539,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mafft-align]",
     "status": "passed",
-    "duration_seconds": 23.29,
+    "duration_seconds": 26.41,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/mafft_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -558,12 +552,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[minced-crispr]",
     "status": "passed",
-    "duration_seconds": 17.67,
+    "duration_seconds": 20.4,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/minced_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -571,12 +565,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mmseqs-clustering]",
     "status": "passed",
-    "duration_seconds": 25.38,
+    "duration_seconds": 25.59,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/mmseqs_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -588,8 +582,8 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "uses_gpu": true,
     "env_path": null,
     "env_status": "not_found",
-    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/bio-programming-tools/tests/tool_infra_tests/test_env_report.py', 96, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
-    "git_commit": "70c61f955ab5",
+    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/tests/tool_infra_tests/test_env_report.py', 93, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -597,12 +591,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-cli-tool-run]",
     "status": "passed",
-    "duration_seconds": 12.09,
+    "duration_seconds": 13.28,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/mock_cli_tool_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -614,8 +608,8 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "uses_gpu": true,
     "env_path": null,
     "env_status": "not_found",
-    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/bio-programming-tools/tests/tool_infra_tests/test_env_report.py', 96, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
-    "git_commit": "70c61f955ab5",
+    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/tests/tool_infra_tests/test_env_report.py', 93, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -623,12 +617,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-jax-tool-run]",
     "status": "passed",
-    "duration_seconds": 53.81,
+    "duration_seconds": 60.34,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/mock_jax_tool_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -640,8 +634,8 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "uses_gpu": true,
     "env_path": null,
     "env_status": "not_found",
-    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/bio-programming-tools/tests/tool_infra_tests/test_env_report.py', 96, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
-    "git_commit": "70c61f955ab5",
+    "error_message": "('/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/tests/tool_infra_tests/test_env_report.py', 93, 'Skipped: --env-report: requires 2 GPUs, only 1 visible')",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -649,12 +643,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-pytorch-tool-run]",
     "status": "passed",
-    "duration_seconds": 117.95,
+    "duration_seconds": 134.96,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/mock_pytorch_tool_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -662,12 +656,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "orf_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[orfipy-prediction]",
     "status": "passed",
-    "duration_seconds": 21.53,
+    "duration_seconds": 24.32,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/orfipy_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -675,12 +669,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "orf_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[prodigal-prediction]",
     "status": "passed",
-    "duration_seconds": 13.92,
+    "duration_seconds": 14.98,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/prodigal_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -688,12 +682,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[progen2-sample]",
     "status": "passed",
-    "duration_seconds": 175.39,
+    "duration_seconds": 196.43,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen2_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -701,12 +695,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[proteinmpnn-sample]",
     "status": "passed",
-    "duration_seconds": 74.69,
+    "duration_seconds": 78.11,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/proteinmpnn_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -714,12 +708,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[protenix-prediction]",
     "status": "passed",
-    "duration_seconds": 400.39,
+    "duration_seconds": 393.22,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/protenix_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -727,12 +721,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[pyhmmer-hmmscan]",
     "status": "passed",
-    "duration_seconds": 20.13,
+    "duration_seconds": 23.81,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyhmmer_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -740,12 +734,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "mutagenesis",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[random-nucleotide-sample]",
     "status": "passed",
-    "duration_seconds": 0.0,
+    "duration_seconds": 0.01,
     "uses_gpu": false,
     "env_path": null,
     "env_status": "not_found",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -758,7 +752,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "env_path": null,
     "env_status": "not_found",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -766,12 +760,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_design",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[rfdiffusion3-design]",
     "status": "passed",
-    "duration_seconds": 226.5,
+    "duration_seconds": 249.42,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/rfdiffusion3_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -779,12 +773,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[segmasker-score]",
     "status": "passed",
-    "duration_seconds": 29.81,
+    "duration_seconds": 39.59,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/segmasker_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -792,12 +786,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "rna_splicing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[splice-transformer-prediction]",
     "status": "passed",
-    "duration_seconds": 112.14,
+    "duration_seconds": 108.09,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/splice_transformer_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -805,12 +799,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[structure-metrics]",
     "status": "passed",
-    "duration_seconds": 24.83,
+    "duration_seconds": 24.63,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/structure_metrics_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -818,12 +812,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[tmalign-alignment]",
     "status": "passed",
-    "duration_seconds": 25.58,
+    "duration_seconds": 25.26,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/tmalign_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -831,12 +825,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[usalign-alignment]",
     "status": "passed",
-    "duration_seconds": 37.69,
+    "duration_seconds": 38.16,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/usalign_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   },
   {
@@ -844,12 +838,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[viennarna-prediction]",
     "status": "passed",
-    "duration_seconds": 15.38,
+    "duration_seconds": 14.19,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/viennarna_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "70c61f955ab5",
+    "git_commit": "1bb9007d8348",
     "git_dirty": true
   }
 ]
