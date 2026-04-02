@@ -3,9 +3,9 @@
 > If you are a beta tester, start here: [Beta Tester Instructions](notes/beta-welcome.md)
 
 # 🧬 Proto Tools 🛠️
-[![Lint Check](https://github.com/evo-design/proto-tools/actions/workflows/lint_check.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/lint_check.yml)
-[![Run Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/run-unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/run-unit-tests.yml)
-[![Run Integration Tests](https://github.com/evo-design/proto-tools/actions/workflows/run-integration-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/run-integration-tests.yml)
+[![Checks](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml)
+[![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
+[![Integration Tests](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/integration-tests.yml)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/evs3Unkegv)
 
 
