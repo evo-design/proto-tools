@@ -5,9 +5,10 @@ MSA CSV file writing and YAML input generation.
 """
 
 import csv
+import string
 from typing import Any
 
-from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
+CHAIN_IDS: list[str] = list(string.ascii_uppercase)
 
 
 def write_msa_csv(aligned_sequences: list[Any], csv_path: str) -> None:

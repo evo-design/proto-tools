@@ -4,9 +4,10 @@ Shared helpers for ESMFold structure prediction. Provides utilities for
 batching complexes and relabeling chains in PDB output.
 """
 
+import string
 from typing import Any
 
-from proto_tools.tools.structure_prediction.shared_data_models import CHAIN_IDS
+CHAIN_IDS: list[str] = list(string.ascii_uppercase)
 
 
 def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) -> list[list[dict[str, Any]]]:
