@@ -184,19 +184,21 @@ def run_progen3_score(
         - Lower perplexity indicates higher model confidence in the sequence
         - Bidirectional scoring is more robust than unidirectional
     """
-    logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None  # noqa: S101
+
+    logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(
         "progen3",
         {
             "operation": "score",
             "sequences": inputs.sequences,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "reduction": config.reduction,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "device": config.device,
+            "verbose": config.verbose,
+            "batch_size": config.batch_size,
+            "reduction": config.reduction,
         },
         instance=instance,
         config=config,
