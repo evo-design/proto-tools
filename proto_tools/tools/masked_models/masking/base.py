@@ -362,7 +362,8 @@ class MaskingStrategy(BaseModel):
             device = "cuda" if number_of_visible_gpus() > 0 else "cpu"
             position_score_fn = build_position_score_fn(self.model_name, self, device=device)
 
-        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)  # type: ignore[union-attr]
+        assert self._masker is not None
+        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)
 
         results = []
         for i, seq in enumerate(sequences):

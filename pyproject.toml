@@ -225,15 +225,18 @@ ignore = [
 ]
 "**/standalone/standalone_helpers.py" = ["F401"]
 "**/standalone/*.py" = ["T20", "S", "PLW0602", "PLW0603", "E402", "PLW1510"]
-"proto_tools/utils/install_binary.py" = ["T20", "S603", "S607"]
+"proto_tools/utils/install_binary.py" = ["T20", "S101", "S603", "S607"]
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S603", "S607"]
-"proto_tools/utils/persistent_worker.py" = ["S603", "S607"]
+"proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/tool_pool.py" = ["S101"]
-# S101: type-narrowing asserts (assert mol is not None) for mypy
+# S101: type-narrowing asserts for mypy
 "proto_tools/entities/ligands/ligands.py" = ["S101"]
+"proto_tools/tools/causal_models/evo2/evo2_sample.py" = ["S101"]
+"proto_tools/tools/masked_models/masking/base.py" = ["S101"]
+"proto_tools/tools/mutagenesis/codons.py" = ["S101"]
 "proto_tools/entities/ligands/ccd_maps/*.py" = ["T20"]
 # Lazy imports behind conditionals are intentional in these tool files
 "proto_tools/tools/structure_prediction/*/[!s]*.py" = ["E402"]

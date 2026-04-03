@@ -59,8 +59,10 @@ def _find_tool_config(tool_name: str) -> Path:
 def _load_tool_config(config_path: Path) -> Any:
     """Dynamically load a tool's binary_config module."""
     spec = importlib.util.spec_from_file_location("binary_config", config_path)
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
 
     # Validate the module has required attributes
     if not hasattr(mod, "URLS"):

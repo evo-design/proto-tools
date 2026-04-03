@@ -175,10 +175,11 @@ def sample_amino_acid(scheme: str, rng: random.Random | None = None) -> str:
     """Sample a single amino acid from a codon scheme (stops excluded)."""
     info = get_codon_scheme(scheme)
     weights = info["weights"]
-    aas = list(weights.keys())  # type: ignore[union-attr]
-    ws = list(weights.values())  # type: ignore[union-attr]
+    assert isinstance(weights, dict)
+    aas = list(weights.keys())
+    ws = list(weights.values())
     r = rng or random
-    return r.choices(aas, weights=ws, k=1)[0]  # type: ignore[no-any-return]
+    return r.choices(aas, weights=ws, k=1)[0]
 
 
 # ============================================================================

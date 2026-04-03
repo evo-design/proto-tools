@@ -58,6 +58,12 @@ class ToolExecutionError(Exception):
         super().__init__(f"Attempt to access field of tool output after failure: {last_line}\n{self.message}")
 
 
+def _extra_dict(info: Any) -> dict[str, Any]:
+    """Return ``json_schema_extra`` as a plain dict, defaulting to ``{}``."""
+    extra = info.json_schema_extra
+    return extra if isinstance(extra, dict) else {}
+
+
 class BaseToolInput(BaseModel):
     """Base class for primary tool inputs.
 
@@ -77,11 +83,7 @@ class BaseToolInput(BaseModel):
     @classmethod
     def cache_exclude_fields(cls) -> set[str]:
         """Return field names marked with ``include_in_key=False``."""
-        return {
-            name
-            for name, info in cls.model_fields.items()
-            if not (info.json_schema_extra or {}).get("include_in_key", True)  # type: ignore[union-attr]
-        }
+        return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields."""
