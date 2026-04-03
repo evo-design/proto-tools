@@ -10,7 +10,7 @@ Reference file for the `implement-tool` skill. Templates are tagged with which p
 """{ToolName} {operation} tool."""
 
 import logging
-from typing import Dict, List, Literal
+from typing import Literal
 
 from pydantic import Field, computed_field, field_validator
 
@@ -36,7 +36,7 @@ class {ToolName}Input(BaseToolInput):
     """Input object for {ToolName}.
 
     Attributes:
-        sequences (List[str]): Description of primary input data.
+        sequences (list[str]): Description of primary input data.
             Can be provided as:
 
             - A single string (e.g., ``"ATGCGT..."``)
@@ -45,7 +45,7 @@ class {ToolName}Input(BaseToolInput):
             Additional notes about input format or constraints.
     """
 
-    sequences: List[str] = Field(
+    sequences: list[str] = Field(
         description="Primary input data description"
     )
 
@@ -135,7 +135,7 @@ class {ToolName}Output(BaseToolOutput):
     timestamp, success, warnings, errors, metadata. DO NOT redeclare these.
 
     Attributes:
-        results (List[str]): Description of tool-specific results.
+        results (list[str]): Description of tool-specific results.
         num_results (int): Computed count of results.
     """
 
@@ -143,7 +143,7 @@ class {ToolName}Output(BaseToolOutput):
     # All fields must be JSON-serializable Pydantic types (primitives, list, nested BaseModel).
     # Never use pd.DataFrame, numpy arrays, or arbitrary_types_allowed=True.
     # DataFrames are constructed lazily in _export_output() only.
-    results: List[str] = Field(
+    results: list[str] = Field(
         default_factory=list,
         description="Tool-specific results",
     )
@@ -157,7 +157,7 @@ class {ToolName}Output(BaseToolOutput):
 
     # --- Required abstract implementations ---
     @property
-    def output_format_options(self) -> List[str]:
+    def output_format_options(self) -> list[str]:
         return ["csv", "json"]
 
     @property
