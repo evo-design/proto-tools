@@ -47,7 +47,7 @@ def get_proto_home() -> Path:
     return Path.home() / ".proto"
 
 
-_DOCS_URL = "https://github.com/evo-design/proto-tools/blob/main/notes/model-weights.md"
+_DOCS_URL = "https://github.com/evo-design/proto-tools/blob/main/notes/storage.md"
 
 
 def show_first_run_notice() -> None:

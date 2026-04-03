@@ -47,7 +47,7 @@ Most newer systems will already have compilers and build tools available at a sy
 
 > **Note:** If you are developing or contributing to this project, follow the setup instructions in [CONTRIBUTING.md](CONTRIBUTING.md) instead.
 
-### Step 2: Model weights & data storage (optional) 🗂️
+### Step 2: Configure storage (optional) 🗂️
 
 All persistent data (model weights, tool environments, micromamba) is stored under `PROTO_HOME` (defaults to `~/.proto/`).
 
@@ -58,7 +58,7 @@ To customize the storage location (recommended for labs/HPC):
 export PROTO_HOME=/path/to/your/proto_home
 ```
 
-To override just model weights separately: `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/model-weights.md](notes/model-weights.md) for all options.
+To override just model weights separately: `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/storage.md](notes/storage.md) for all options.
 
 ### Step 3: HuggingFace authentication (optional) 🔑
 

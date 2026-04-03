@@ -221,7 +221,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - **Generally use `--all` when running tests** to include integration and GPU tests
 - Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
 - Test logs saved to `logs/`. Every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
-- **`PROTO_HOME`** controls where all persistent data lives: model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/model-weights.md`.
+- **`PROTO_HOME`** controls where all persistent data lives: model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/storage.md`.
 
 ## Using proto-tools with Claude Code
 
@@ -256,7 +256,7 @@ For script patterns, batch persistence, GPU tools, and citations, see `notes/usa
 
 | File | Contents |
 |---|---|
-| `notes/model-weights.md` | `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout |
+| `notes/storage.md` | `PROTO_HOME`, `PROTO_MODEL_CACHE`, shared weights, per-tool overrides, storage layout |
 | `notes/tool-environments.md` | Standalone env setup, compute deps, GCC/nvcc, caches, binaries, `to_device()` protocol |
 | `utils/device_manager.py` | DeviceManager API (auto-generated reference pages from docstrings) |
 | `utils/tool_instance.py` | ToolInstance API (auto-generated reference pages from docstrings) |

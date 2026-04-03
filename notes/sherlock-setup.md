@@ -268,7 +268,7 @@ A model is downloading weights to `$HOME` instead of following a symlink. Check 
 du -h --max-depth=1 ~ | sort -rh | head -10
 ```
 
-Check your `PROTO_HOME` setting; if unset, weights go to `~/.proto/proto_model_cache/`. See [model-weights.md](model-weights.md) for all options.
+Check your `PROTO_HOME` setting; if unset, weights go to `~/.proto/proto_model_cache/`. See [storage.md](storage.md) for all options.
 
 ### "Disk quota exceeded" during `pip install`
 
