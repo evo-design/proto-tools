@@ -1,6 +1,6 @@
 # Tool Environments Reference
 
-Detailed reference for standalone tool environment setup, compute dependency management, and environment isolation. For model weight storage and `PROTO_HOME` configuration, see [model-weights.md](model-weights.md).
+Detailed reference for standalone tool environment setup, compute dependency management, and environment isolation. For model weight storage and `PROTO_HOME` configuration, see [storage.md](storage.md).
 
 ## Compute Dependency Management
 

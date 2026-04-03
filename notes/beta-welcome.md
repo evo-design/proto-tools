@@ -8,7 +8,7 @@ Please explore as much or as little as you want. We would love to hear any feedb
 
 ## Getting Started
 
-1. Follow the installation steps in the [README](../README.md). Make sure you have the `PROTO_HOME` and `PROTO_MODEL_CACHE` environment variables configured in your `~/.bashrc` where you would like them to be set to avoid any issues with storage limitations on your machine! (see [Model Weights](model-weights.md) for more details).
+1. Follow the installation steps in the [README](../README.md). Make sure you have the `PROTO_HOME` and `PROTO_MODEL_CACHE` environment variables configured in your `~/.bashrc` where you would like them to be set to avoid any issues with storage limitations on your machine! (see [Storage](storage.md) for more details).
 
 2. Try running some tools and let us know your thoughts!
 

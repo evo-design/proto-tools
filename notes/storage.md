@@ -1,4 +1,4 @@
-# Model Weights Management
+# Storage
 
 Tools download model weights on first use. `PROTO_HOME` (defaults to `~/.proto/`) controls where model weights are stored.
 
