@@ -6,7 +6,7 @@ This module provides a standardized interface for MAFFT multiple sequence alignm
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.tool_registry import tool
@@ -70,8 +70,6 @@ class MafftOutput(BaseToolOutput):
     """
 
     msa: MSA = Field(description="The multiple sequence alignment")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -212,7 +210,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
             "num_sequences": num_sequences,
         },
         msa=MSA(
-            aligned_sequences_or_filepath=aligned_sequences,
+            aligned_sequences=aligned_sequences,
             sequence_ids=sequence_ids,
         ),
     )

@@ -33,9 +33,6 @@ dependencies = [
     "rdkit",
     "py3Dmol",
 
-    # File parsing/indexing
-    "pyfaidx",
-
     # Biology-specific tools
     "promotercalculator",
 
@@ -127,7 +124,6 @@ module = [
     # Installed but missing library stubs or py.typed marker
     "biotite.*",
     "py3Dmol.*",
-    "pyfaidx.*",
     "pandas.*",
     "huggingface_hub.*",
     "tokenizers.*",

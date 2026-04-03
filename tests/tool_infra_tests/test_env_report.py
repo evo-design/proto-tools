@@ -109,7 +109,7 @@ def test_tool_env_report(spec: ToolSpec, tmp_path):
         from proto_tools.tools.sequence_alignment.msas import MSA
 
         a3m_path = spec.source_file.parent / "examples" / "example.a3m"
-        fixture_msa = MSA(str(a3m_path))
+        fixture_msa = MSA.from_file(a3m_path)
         sequence = inputs.complexes[0].chains[0].sequence
         inputs = inputs.model_copy(update={"msas": {sequence: fixture_msa}})
 

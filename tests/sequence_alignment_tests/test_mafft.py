@@ -21,7 +21,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 def two_seq_output():
     return MafftOutput(
         msa=MSA(
-            aligned_sequences_or_filepath=["MVLS", "AVLS"],
+            aligned_sequences=["MVLS", "AVLS"],
             sequence_ids=["seq_0", "seq_1"],
         ),
         metadata={},
@@ -32,7 +32,7 @@ def two_seq_output():
 def gapped_output():
     return MafftOutput(
         msa=MSA(
-            aligned_sequences_or_filepath=["MV--LS", "MVLLS-"],
+            aligned_sequences=["MV--LS", "MVLLS-"],
             sequence_ids=["seq_0", "seq_1"],
         ),
         metadata={},
@@ -74,7 +74,7 @@ def test_mafft_output_get_column_out_of_range(two_seq_output):
 def test_mafft_output_get_conservation():
     output = MafftOutput(
         msa=MSA(
-            aligned_sequences_or_filepath=["MVLS", "MVLS", "AVLS"],
+            aligned_sequences=["MVLS", "MVLS", "AVLS"],
             sequence_ids=["seq_0", "seq_1", "seq_2"],
         ),
         metadata={},
@@ -86,7 +86,7 @@ def test_mafft_output_get_conservation():
 def test_mafft_output_get_conservation_all_gaps():
     output = MafftOutput(
         msa=MSA(
-            aligned_sequences_or_filepath=["MVL-", "MVL-"],
+            aligned_sequences=["MVL-", "MVL-"],
             sequence_ids=["seq_0", "seq_1"],
         ),
         metadata={},

@@ -85,7 +85,6 @@ MafftOutput(
     msa=MSA(
         aligned_sequences=["MVLSPADKTN", "MVLSAADKTN"],
         sequence_ids=["seq_0", "seq_1"],
-        original_sequences=["MVLSPADKTN", "MVLSAADKTN"]
     )
 )
 ```

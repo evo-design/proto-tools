@@ -136,6 +136,15 @@ def test_docstring_return_type_matches_signature(
         pytest.skip("No Returns: section in docstring")
         return
 
+    # For Yields: sections, the docstring type is the yielded element type,
+    # while the signature uses Iterator[...] / Generator[...]. Unwrap.
+    if parsed.returns.is_generator:
+        import re
+
+        m = re.match(r"^(?:Iterator|Generator)\[(.+)\]$", norm_sig)
+        if m:
+            norm_sig = normalize_type(m.group(1))
+
     doc_return_type = parsed.returns.type_name
 
     # Fallback: docstring_parser can't handle union types with spaces

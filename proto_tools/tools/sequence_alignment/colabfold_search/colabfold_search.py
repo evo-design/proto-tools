@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.tools.sequence_alignment.msas import MSA
 from proto_tools.tools.tool_registry import tool
@@ -187,8 +187,6 @@ class ColabfoldSearchResult(BaseModel):
         description="Multiple Sequence Alignment containing homologous sequences, or None if no homologs found"
     )
     sequence_id: str = Field(description="Identifier for the searched sequence")
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def num_homologs_found(self) -> int:
@@ -679,7 +677,7 @@ def _local_search(
         # If only the query sequence is present, return None instead of creating an MSA
         num_sequences = _count_sequences_in_a3m(named_a3m)
 
-        msa = None if num_sequences < 2 else MSA(aligned_sequences_or_filepath=named_a3m)
+        msa = None if num_sequences < 2 else MSA.from_file(named_a3m)
 
         results.append(
             ColabfoldSearchResult(
@@ -754,7 +752,7 @@ def _remote_search(
             # Check if the A3M file contains at least 2 sequences (query + at least one homolog)
             num_sequences = _count_sequences_in_a3m(msa_path)
 
-            msa = None if num_sequences < 2 else MSA(aligned_sequences_or_filepath=msa_path)
+            msa = None if num_sequences < 2 else MSA.from_file(msa_path)
 
             results.append(
                 ColabfoldSearchResult(
