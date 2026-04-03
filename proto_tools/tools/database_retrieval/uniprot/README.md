@@ -6,25 +6,7 @@
 
 `uniprot-fetch` retrieves protein entries from UniProt by accession ID or by searching with target name and organism. It returns the protein sequence, gene names, PDB cross-references, and the full UniProt JSON record. This is a CPU-only tool that wraps the UniProt REST API.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Fetching a protein sequence by UniProt accession (e.g., P04637 for human TP53)
-- Searching UniProt by gene name + organism to resolve accessions when you don't have an ID
-- Extracting PDB cross-references from UniProt entries to find available experimental structures
-- Getting curated protein metadata (gene names, review status, function annotations)
-
-**When NOT to use this tool:**
-- Multi-source orchestrated fetches across NCBI, UniProt, and PDB: use `sequence-fetch` instead, which automatically routes to the best database
-- DNA or RNA sequence retrieval: use `ncbi-efetch` (UniProt is protein-only)
-- PDB structure metadata or chain sequences: use `pdb-fetch-entry` / `pdb-fetch-fasta`
-- Homology search or sequence similarity: use `blast-search` or `mmseqs-search-proteins`
-
-**Comparison with alternatives:**
-- **`uniprot-fetch` vs `sequence-fetch`:** `sequence-fetch` is a higher-level orchestrator that can resolve sequences from gene names by querying multiple databases. Use `uniprot-fetch` when you specifically need UniProt metadata (review status, gene names, PDB cross-refs) or when you already have a UniProt accession.
-- **`uniprot-fetch` vs `ncbi-efetch`:** UniProt is protein-centric with curated annotations. NCBI covers all sequence types (protein, DNA, RNA) but with less curation. Use UniProt for protein-specific queries, NCBI for nucleotide sequences or when you have NCBI-style accessions.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 [UniProt](https://www.uniprot.org/) (Universal Protein Resource) is the most comprehensive curated protein sequence and functional annotation database. It combines data from [Swiss-Prot](https://en.wikipedia.org/wiki/Swiss-Prot) (manually reviewed, ~570K entries) and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL) (computationally annotated, ~250M entries).

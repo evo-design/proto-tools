@@ -5,7 +5,7 @@
 ## Overview
 CRISPRtracrRNA predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activating_crRNA) (trans-activating CRISPR RNA) sequences from nucleotide [CRISPR](https://en.wikipedia.org/wiki/CRISPR) loci using [covariance models](http://eddylab.org/infernal/) and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/).
 
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 This tool predicts the location and quality of tracrRNA sequences within CRISPR loci. The tracrRNA is a non-coding RNA essential for [Type II CRISPR-Cas](https://en.wikipedia.org/wiki/CRISPR#Class_2) systems; it base-pairs with the CRISPR repeat (via its anti-repeat region) and forms a complex with [Cas9](https://en.wikipedia.org/wiki/Cas9) to guide DNA cleavage.
@@ -19,24 +19,6 @@ For a CRISPR-Cas9 system to function, three components must be present: the Cas9
 
 **Scientific foundation:**
 CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure; similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
-
-## When to Use This Tool
-
-**Primary use cases:**
-- Validating that a CRISPR locus contains a tracrRNA (functional Type II system confirmation)
-- Predicting tracrRNA in novel or generated CRISPR sequences
-- Extracting anti-repeat interaction information for sgRNA design
-- Screening metagenomic contigs for complete CRISPR-Cas9 systems
-
-**When NOT to use this tool:**
-- For detecting CRISPR arrays (repeats/spacers): use `minced-crispr` first
-- For identifying Cas protein genes: use Prodigal + PyHMMER
-- For Type I or Type III CRISPR systems: these do not use tracrRNA (though `model_type="all"` will search broadly)
-- For designing guide RNAs from known tracrRNA: use specialized sgRNA design tools
-
-**Comparison with alternatives:**
-- **Manual anti-repeat search**: Simple BLAST of the CRISPR repeat against flanking regions; fast but misses structural features
-- **CRISPRtracrRNA**: Uses covariance models that capture both sequence and secondary structure, providing higher sensitivity and E-value scoring
 
 ## How It Works
 

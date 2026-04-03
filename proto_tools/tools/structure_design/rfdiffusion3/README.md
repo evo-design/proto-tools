@@ -5,22 +5,7 @@
 ## Overview
 RFdiffusion3 is a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based generative model for de novo protein structure design. Unlike structure prediction tools that predict what a given sequence will fold into, RFdiffusion3 generates novel protein structures (and sequences) that satisfy specified constraints.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **[De novo protein design](https://en.wikipedia.org/wiki/Protein_design)**: Generate novel protein folds from scratch
-- **Motif scaffolding**: Design proteins that incorporate specific structural motifs (active sites, binding loops)
-- **Binder design**: Create proteins that bind to target proteins, DNA, RNA, or small molecules
-- **Enzyme design**: Scaffold around catalytic residues to create functional enzymes
-- **Symmetric assemblies**: Design homo-oligomers with defined symmetry
-
-**When NOT to use this tool:**
-- **Structure prediction**: Use Boltz2, Chai1, or ESMFold to predict structure from sequence
-- **Sequence optimization only**: Use ProteinMPNN for [inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) (sequence from structure)
-- **Quick screening**: RFdiffusion3 is computationally intensive; use faster methods for initial exploration
-- **Small molecule design**: RFdiffusion3 designs proteins, not small molecules
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 RFdiffusion3 generates novel protein structures at atomic resolution using a diffusion process. Given constraints like target binding sites, structural motifs, or symmetry requirements, it produces designed proteins with both 3D coordinates and amino acid sequences optimized to fold into those structures.

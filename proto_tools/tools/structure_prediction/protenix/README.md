@@ -12,22 +12,7 @@ Protenix is ByteDance's open-source reimplementation of AlphaFold3 that predicts
 - **MSA support**: Automatic via ColabFold search (optional)
 - **GPU required**: Yes
 
-## When to Use This Tool
-
-**Use Protenix when you need to:**
-- Predict 3D structures of protein-protein, protein-DNA, protein-RNA, or protein-ligand complexes
-- Model multi-modal complexes with mixed chain types in a single prediction
-- Predict structures with [post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification) (phosphorylation, methylation, etc.)
-- Obtain high-confidence structure predictions with full open-source reproducibility
-- Screen multiple conformations by sampling with diffusion
-
-**When NOT to use Protenix:**
-- **Single-chain protein folding only**: Use `esmfold-prediction` for fast single-chain folding without MSA
-- **AlphaFold3 server access**: Use `alphafold3-prediction` if you have access to the AlphaFold3 API
-- **Protein design/generation**: Use `proteinmpnn` or `evo2-sample` for sequence design
-- **Gene expression prediction**: Use `enformer-prediction` or `borzoi-prediction`
-
-## Biological Background
+## Background
 
 Predicting the 3D structure of biomolecular complexes is fundamental to understanding biological function. Protein-protein interactions govern signaling pathways, protein-DNA interactions control gene regulation, and protein-ligand binding underlies drug action.
 

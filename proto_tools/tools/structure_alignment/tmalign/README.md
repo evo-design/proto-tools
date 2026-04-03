@@ -6,26 +6,7 @@
 
 TMalign performs pairwise protein structure alignment using the [TM-score](https://en.wikipedia.org/wiki/Template_modeling_score) metric (`tmalign-alignment`). It aligns two monomeric protein structures and returns TM-scores normalized by the length of each chain, providing a length-independent measure of structural similarity. TMalign is a compiled C++ binary that runs on CPU with no external dependencies.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Compare two monomeric protein structures for topological similarity
-- Quantify structural similarity with a length-independent metric (TM-score)
-- Evaluate how well a predicted structure matches a reference/target (e.g., after ESMFold or AlphaFold2 prediction)
-- Quality control in protein design pipelines: compare designed structure to intended fold
-- Benchmark structure prediction methods by comparing predicted vs experimental structures
-
-**When NOT to use this tool:**
-- Compare multimeric complexes or protein-nucleic acid structures: use USalign (`usalign-alignment`) instead, which handles all macromolecular types
-- Compute RMSD without alignment: use structure prediction tools' built-in RMSD or the `structure-rmsd` constraint
-- Predict structures from sequence: use ESMFold, AlphaFold2, Boltz2, etc.
-- Align sequences (not structures): use MAFFT (`mafft-alignment`) or BLAST (`blast-search`)
-
-**Comparison with alternatives:**
-- **TMalign vs USalign:** TMalign is faster and simpler for monomeric protein-protein comparisons. USalign extends the same algorithm to multimers, nucleic acids, and mixed complexes. For simple monomer comparisons, TMalign is preferred.
-- **TMalign vs RMSD:** TM-score is length-independent (always 0-1), while RMSD grows with protein size. TM-score is better for comparing proteins of different lengths.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 TMalign computes the TM-score (Template Modeling score), which measures the topological similarity of two protein structures. It performs a [structural superposition](https://en.wikipedia.org/wiki/Structural_alignment) that maximizes the TM-score, then reports scores normalized by each chain's length.

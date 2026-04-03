@@ -8,23 +8,7 @@ AlphaGenome is Google DeepMind's multi-task genomic foundation model that predic
 
 This implementation uses **local GPU inference** with Hugging Face weights through an isolated standalone venv runtime (`ToolInstance("alphagenome")`).
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Predicting regulatory activity (chromatin accessibility, gene expression, TF binding) across a genomic region
-- Assessing the functional impact of SNVs and indels on regulatory signals
-- In-silico mutagenesis scanning to identify regulatory-sensitive positions
-- Comparing reference vs. alternate allele predictions for variant prioritization
-- Predicting splice site usage and junction effects of genomic variants
-
-**When NOT to use this tool:**
-- For protein sequence tasks: use ESM2, ESM3, or ProGen2
-- For DNA sequence generation: use Evo2
-- For lightweight expression-only prediction: use Enformer (faster, simpler output)
-- For mammalian expression prediction at 32 bp resolution with RNA-seq coverage: use Borzoi
-- For splice-only analysis: use SpliceTransformer
-
-## Biological Background
+## Background
 
 Gene regulation is controlled by a complex interplay of [cis-regulatory elements](https://en.wikipedia.org/wiki/Cis-regulatory_element) (promoters, enhancers, silencers) and [chromatin](https://en.wikipedia.org/wiki/Chromatin) state. Different experimental assays measure different aspects of this regulatory landscape:
 

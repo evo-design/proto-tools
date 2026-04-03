@@ -13,22 +13,7 @@ Borzoi is a deep learning model that predicts gene expression and regulatory act
 - **Replicates**: 4 independently trained models
 - **GPU required**: Yes
 
-## When to Use This Tool
-
-**Use Borzoi when you need to:**
-- Predict RNA-seq coverage profiles from DNA sequence (Borzoi's primary training objective)
-- Model long-range regulatory interactions beyond 100 kb (e.g., distal enhancers, TAD boundaries)
-- Score variant effects on gene expression with higher resolution than Enformer
-- Evaluate synthetic regulatory element designs in a broad genomic context
-- Obtain ensemble predictions for uncertainty estimation across 4 replicates
-
-**When NOT to use Borzoi:**
-- **Shorter context is sufficient** (<100 kb interactions): `enformer-prediction` is faster and may suffice
-- **Splice site effects**: Use `splice-transformer` for splice-specific predictions
-- **Protein structure**: Use `protenix-prediction` or `esmfold-prediction`
-- **Sequence generation**: Use generative models like `evo2-sample`
-
-## Biological Background
+## Background
 
 Gene regulation involves interactions across a wide range of genomic distances. While most promoter-proximal elements act within a few kilobases, enhancers can regulate genes from distances exceeding 100 kb, and [topologically associating domains](https://en.wikipedia.org/wiki/Topologically_associating_domain) (TADs) organize chromatin contacts across megabase scales. Capturing these long-range interactions requires models with sufficient context windows.
 

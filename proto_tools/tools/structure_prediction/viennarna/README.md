@@ -6,30 +6,7 @@
 
 ViennaRNA is a fast RNA secondary structure prediction tool that uses thermodynamic parameters to compute the [minimum free energy](https://en.wikipedia.org/wiki/Nucleic_acid_thermodynamics) (MFE) structure from nucleotide sequences.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **RNA design:** Validate that RNAs have generally correct secondary structure
-- **mRNA optimization:** Predict secondary structures in UTRs and coding regions
-- **[Riboswitch](https://en.wikipedia.org/wiki/Riboswitch) analysis:** Study ligand-responsive structural elements
-- **Primer design:** Ensure primers don't form strong hairpins
-- **Antisense oligo design:** Identify accessible target regions
-- **Quick structural screening:** Fast structure prediction for many sequences
-
-**When NOT to use this tool:**
-- **3D structure prediction:** ViennaRNA only predicts 2D base pairing, not 3D coordinates. Use Boltz2 or AlphaFold3 for 3D RNA structures.
-- **[Pseudoknots](https://en.wikipedia.org/wiki/Pseudoknot):** Standard MFE folding doesn't handle pseudoknots (use specialized tools)
-- **Protein-RNA complexes:** RNA structure can change upon protein binding. Use Boltz2 for protein-RNA complex modeling.
-- **Highly modified RNAs:** Modified nucleotides have different thermodynamics
-- **Co-transcriptional folding:** MFE assumes equilibrium, not kinetic folding
-
-**Comparison with alternatives:**
-- **ViennaRNA vs RNAfold web server:** Same algorithm; this tool enables programmatic batch processing
-- **ViennaRNA vs Mfold/UNAfold:** Similar approach; ViennaRNA has more recent parameters and features
-- **ViennaRNA vs NUPACK:** NUPACK better for multi-strand complexes; ViennaRNA faster for single sequences
-- **ViennaRNA vs LinearFold:** LinearFold is faster (O(n) vs O(n^3)) but slightly less accurate
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 ViennaRNA predicts the secondary structure of RNA molecules; the pattern of [Watson-Crick](https://en.wikipedia.org/wiki/Watson%E2%80%93Crick_base_pair) and wobble base pairs that form within a single RNA strand. It outputs the structure in dot-bracket notation along with the minimum free energy (MFE).

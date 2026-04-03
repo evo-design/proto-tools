@@ -5,24 +5,7 @@
 ## Overview
 BLAST (Basic Local Alignment Search Tool) finds regions of similarity between biological sequences. It compares nucleotide or protein sequences to sequence databases and calculates the statistical significance of matches. This module provides a unified interface for both *Online BLAST* (querying NCBI servers remotely) and *Local BLAST+* (running searches against custom or downloaded databases on your own hardware), as well as utilities for creating custom BLAST databases.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Finding homologous sequences in databases
-- Identifying protein families and domains
-- Annotating newly sequenced genes
-
-**When to use Online vs. Local BLAST:**
-- Online BLAST (`search_mode="online"`): Best for occasional, low-volume queries where you need access to the massive NCBI databases (nt/nr) without downloading terabytes of data.
-- Local BLAST (`search_mode="local"`): Best for high-throughput pipelines, privacy (proprietary sequences), or searching against custom/smaller databases (e.g., searching a specific genome).
-
-**When NOT to use this tool:**
-- Whole Genome Alignment: Use tools like [MUMmer](https://mummer4.github.io/) or Minimap2 for aligning entire chromosomes.
-- Next-Gen Sequencing (NGS) Mapping: Use BWA or Bowtie2 for mapping millions of short reads to a reference.
-- Deep Homology Detection: If sequences are very distantly related (<20% identity), Hidden Markov Model tools like [HMMER](http://hmmer.org/) or HHblits are more sensitive.
-- Large-Scale Searches: For searching millions of sequences, use [MMseqs2](https://mmseqs.com/) which is 100-1000x faster.
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 [BLAST](https://blast.ncbi.nlm.nih.gov/Blast.cgi) finds regions of local similarity between sequences by comparing nucleotide or protein sequences to sequence databases like [NCBI GenBank](https://www.ncbi.nlm.nih.gov/genbank/) and calculates the statistical significance of matches.

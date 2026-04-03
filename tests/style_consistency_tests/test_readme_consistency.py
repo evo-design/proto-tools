@@ -16,20 +16,24 @@ _EXCLUDED_DIRS = frozenset(
         "infra",
         "utils",
         "testing",
-        "mutagenesis",
     }
 )
 
 # Every tool README must contain these exact H2 sections.
 _REQUIRED_SECTIONS = [
     "Overview",
-    "Biological Background",
-    "When to Use",
+    "Background",
     "How It Works",
     "Quick Start Examples",
     "Best Practices & Gotchas",
     "References",
     "Related Tools",
+]
+
+# H2 sections that must NOT appear (removed from the standard).
+_BANNED_SECTIONS = [
+    "When to Use",
+    "When Not to Use",
 ]
 
 # Optional H2 sections that are allowed but not required.
@@ -200,14 +204,7 @@ def test_has_required_sections(readme: Path) -> None:
     text = readme.read_text()
     h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
 
-    missing = []
-    for req in _REQUIRED_SECTIONS:
-        if req == "When to Use":
-            # Allow "When to Use This Tool" or "When to Use These Tools"
-            if not any(h2.startswith("When to Use") for h2 in h2_headings):
-                missing.append(req)
-        elif req not in h2_headings:
-            missing.append(req)
+    missing = [req for req in _REQUIRED_SECTIONS if req not in h2_headings]
     assert not missing, f"{_tool_id(readme)}/README.md is missing required sections: {missing}"
 
 
@@ -217,17 +214,10 @@ def test_only_recognized_sections(readme: Path) -> None:
     text = readme.read_text()
     h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
 
-    allowed = _OPTIONAL_SECTIONS | {s for s in _REQUIRED_SECTIONS if s != "When to Use"}
-    unrecognized = []
-    for h2 in h2_headings:
-        if h2 in allowed:
-            continue
-        if h2.startswith("When to Use"):
-            continue
-        unrecognized.append(h2)
+    allowed = _OPTIONAL_SECTIONS | set(_REQUIRED_SECTIONS)
+    unrecognized = [h2 for h2 in h2_headings if h2 not in allowed]
     assert not unrecognized, (
-        f"{_tool_id(readme)}/README.md has unrecognized H2 sections: {unrecognized}. "
-        f"Use one of: {sorted(allowed | {'When to Use This Tool'})}"
+        f"{_tool_id(readme)}/README.md has unrecognized H2 sections: {unrecognized}. Use one of: {sorted(allowed)}"
     )
 
 
@@ -240,6 +230,19 @@ def test_no_duplicate_h2(readme: Path) -> None:
     seen: set[str] = set()
     duplicates = [h2 for h2 in h2_headings if h2 in seen or seen.add(h2)]  # type: ignore[func-returns-value]
     assert not duplicates, f"{_tool_id(readme)}/README.md has duplicate H2 sections: {duplicates}"
+
+
+@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
+def test_no_banned_sections(readme: Path) -> None:
+    """README must not contain any banned H2 sections."""
+    text = readme.read_text()
+    h2_headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
+
+    found = [h2 for h2 in h2_headings if any(h2.startswith(b) for b in _BANNED_SECTIONS)]
+    assert not found, (
+        f"{_tool_id(readme)}/README.md has banned sections: {found}. "
+        f"These sections have been removed from the standard."
+    )
 
 
 # ── Links ─────────────────────────────────────────────────────────────────

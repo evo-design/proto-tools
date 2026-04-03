@@ -6,28 +6,7 @@
 
 ESMFold is a fast protein structure prediction model from Meta AI that predicts 3D structures directly from amino acid sequences using a [language model](https://en.wikipedia.org/wiki/Language_model) approach, without requiring [multiple sequence alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment).
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **Rapid structure validation:** Quickly check if designed proteins are predicted to fold well
-- **Filtering poorly-folded designs:** Screen out sequences with low pLDDT before more expensive experimental validation
-- **Oligomer design:** Predict symmetric oligomers (dimers, trimers, etc.) by replicating sequences
-- **Structure-based optimization:** Use as a constraint during sequence optimization to ensure foldability
-- **Domain architecture validation:** Check if multi-domain proteins fold with expected domain arrangements
-
-**When NOT to use this tool:**
-- **High-accuracy structure modeling for publication:** Use AlphaFold2 or experimental methods (X-ray, [cryo-EM](https://en.wikipedia.org/wiki/Cryogenic_electron_microscopy)) for final structures
-- **Protein-protein binding interfaces:** Use AlphaFold-Multimer or Boltz2 for heteromeric complex modeling with distinct chains
-- **Conformational dynamics:** ESMFold predicts single static structures, not conformational ensembles
-- **Very long proteins (>2,400 residues):** ESMFold has a hard limit; use AlphaFold2 or split into domains
-- **Non-protein molecules:** ESMFold only handles amino acids (no DNA, RNA, ligands, glycans)
-
-**Comparison with alternatives:**
-- **ESMFold vs AlphaFold2:** ESMFold is 60x faster but slightly less accurate. Use ESMFold for high-throughput screening, AlphaFold2 for final validation.
-- **ESMFold vs Boltz2:** Boltz2 handles heteromeric complexes and small molecules; ESMFold is better for homomeric oligomers and pure protein sequences.
-- **ESMFold vs RosettaFold:** Similar speed/accuracy tradeoff; ESMFold is more widely adopted and easier to deploy.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 ESMFold predicts the 3D atomic coordinates of protein structures from amino acid sequences. It outputs full-atom protein structures with confidence scores for each residue (pLDDT) and overall structure quality metrics (pTM score).

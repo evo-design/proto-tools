@@ -5,23 +5,7 @@
 ## Overview
 ProteinMPNN is a deep learning model for protein sequence design given a protein backbone structure ("inverse folding"). It uses message passing neural networks to predict amino acid sequences that will fold into a target 3D structure. This module provides interfaces for *Sequence Sampling* (generating new sequences for a given backbone) and *Sequence Scoring* (evaluating how well a sequence fits a structure).
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Inverse folding: designing sequences that fold into target structures
-- Protein stabilization through sequence optimization
-- Scaffold-based protein design (e.g., grafting binding loops onto stable scaffolds)
-- Generating diverse sequence libraries for experimental screening
-- Evaluating sequence-structure compatibility
-
-**When NOT to use this tool:**
-- No structure available: ProteinMPNN requires a 3D backbone structure. If you only have a sequence, use structure prediction first (ESMFold, AlphaFold, Boltz2).
-- De novo backbone design: ProteinMPNN designs sequences, not structures. Use RFdiffusion or Chroma for backbone generation.
-- Small molecules/ligands: ProteinMPNN is trained on protein backbones only. It doesn't model ligand interactions directly.
-- Membrane proteins: Performance may be reduced for membrane proteins due to training data bias.
-- Sequence-only analysis: Use ESM2/ESM3 when you don't have a structure.
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 ProteinMPNN solves the "[inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding)" problem: given a protein backbone structure (the 3D coordinates of N, CA, C, O atoms), predict which amino acid sequence will fold into that structure. This is the inverse of structure prediction.

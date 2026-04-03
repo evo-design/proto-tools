@@ -6,27 +6,7 @@
 
 AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper (`alphafold2-prediction`). It supports optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search for improved accuracy, and can predict both monomeric and multimeric protein structures.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- High-accuracy protein structure prediction when quality matters more than speed
-- Final validation of designed protein sequences after initial ESMFold screening
-- Monomeric structure prediction with MSA-enhanced accuracy
-- Benchmarking designed sequences against state-of-the-art structure prediction
-
-**When NOT to use this tool:**
-- Rapid high-throughput screening of many sequences: use ESMFold (`esmfold-prediction`) instead (60x faster)
-- Heteromeric protein-protein complexes with distinct chains: use Boltz2 (`boltz2-prediction`) or AlphaFold3 (`alphafold3-prediction`)
-- Protein-ligand or protein-nucleic acid complexes: use Boltz2 or AlphaFold3 (AlphaFold2 supports proteins only)
-- Conformational dynamics or ensemble generation: use BioEmu (`bioemu-simulation`)
-- Backbone design (inverse problem): use RFDiffusion3 (`rfdiffusion3-generate`)
-
-**Comparison with alternatives:**
-- **AlphaFold2 vs ESMFold:** AlphaFold2 is more accurate (especially with MSAs) but ~60x slower. Use ESMFold for screening, AlphaFold2 for final validation.
-- **AlphaFold2 vs AlphaFold3:** AlphaFold3 handles proteins, nucleic acids, ligands, and modifications. AlphaFold2 is protein-only but uses the well-validated original architecture.
-- **AlphaFold2 vs Boltz2/Chai-1:** Boltz2 and Chai-1 are next-generation structure predictors supporting all biomolecular types. AlphaFold2 remains a strong baseline for protein-only prediction.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 AlphaFold2 predicts the 3D atomic coordinates of protein structures from amino acid sequences. It outputs full-atom protein structures with per-residue confidence scores (pLDDT), global structure quality metrics (pTM), and inter-chain confidence for multimers (ipTM).

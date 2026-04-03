@@ -6,30 +6,7 @@
 
 Boltz2 is a state-of-the-art multi-modal structure prediction model that predicts 3D structures of proteins, DNA, RNA, and ligands using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture with MSA integration. It provides the broadest molecular type support among current structure prediction tools.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **Protein-DNA complexes:** Model transcription factors bound to DNA regulatory elements
-- **Protein-RNA interactions:** Predict RNA-binding protein structures with bound RNA
-- **Multi-molecular complexes:** Model systems with proteins, nucleic acids, AND ligands together
-- **Nucleic acid structures:** Predict DNA/RNA secondary and tertiary structures
-- **Heteromeric protein complexes:** Model protein-protein interactions with different chains (A-B dimers)
-- **Drug-nucleic acid interactions:** Screen small molecules targeting RNA structures
-
-**When NOT to use this tool:**
-- **High-throughput protein-only screening:** ESMFold is 10-100x faster for pure protein predictions
-- **Glycoprotein modeling:** Use Chai1 for glycan-containing structures (Boltz2 doesn't support glycans)
-- **Very rapid predictions:** Boltz2's thorough sampling (25 samples default) takes longer than single-shot methods
-- **Systems without any nucleic acids or ligands:** ESMFold or Chai1 may be faster for protein-only
-- **Real-time applications:** Runtime is too long for interactive use cases
-
-**Comparison with alternatives:**
-- **Boltz2 vs Chai1:** Boltz2 supports DNA/RNA; Chai1 supports glycans. Choose based on molecular types needed.
-- **Boltz2 vs ESMFold:** ESMFold is much faster but protein-only with no MSA. Use Boltz2 for complexes or when MSA improves accuracy.
-- **Boltz2 vs AlphaFold-Multimer:** Similar accuracy; Boltz2 adds ligand and nucleic acid support.
-- **Boltz2 vs RoseTTAFold2NA:** Both handle protein-nucleic acid; Boltz2 is newer with diffusion architecture.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 Boltz2 predicts the 3D atomic coordinates of biomolecular complexes involving proteins, nucleic acids (DNA/RNA), and small molecule ligands. It outputs full-atom structures with comprehensive confidence metrics including pTM, ipTM, pLDDT, and specialized interface scores for different molecular type combinations.

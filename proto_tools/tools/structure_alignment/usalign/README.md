@@ -6,26 +6,7 @@
 
 USalign (Universal Structure alignment) extends TMalign to support monomers, multimers, and nucleic acid structures (`usalign-alignment`). It aligns two macromolecular structures using multimer-aware mode (`-mm 1 -ter 1`) and returns [TM-scores](https://en.wikipedia.org/wiki/Template_modeling_score) normalized by each structure's length. USalign is a compiled C++ binary that runs on CPU with no external dependencies.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Compare multimeric protein complexes (dimers, trimers, oligomers, heteromers)
-- Align structures containing both protein and nucleic acid chains
-- Compare predicted multi-chain complexes to reference structures
-- Universal macromolecular structure comparison when the input type is mixed or unknown
-- Quality control of complex predictions from Boltz2, AlphaFold3, or Chai-1
-
-**When NOT to use this tool:**
-- Compare two simple monomeric proteins: use TMalign (`tmalign-alignment`) instead: it is faster and equivalent for monomers
-- Compute RMSD without alignment: use structure prediction tools' built-in RMSD or the `structure-rmsd` constraint
-- Predict structures from sequence: use ESMFold, AlphaFold2, Boltz2, etc.
-- Align sequences (not structures): use MAFFT (`mafft-alignment`) or BLAST (`blast-search`)
-
-**Comparison with alternatives:**
-- **USalign vs TMalign:** USalign handles all macromolecular types (proteins, nucleic acids, complexes). TMalign is slightly faster for simple monomer-monomer comparisons. Use USalign when any input might be multimeric or contain nucleic acids.
-- **USalign vs RMSD:** TM-score is length-independent (always 0-1), while [RMSD](https://en.wikipedia.org/wiki/Root-mean-square_deviation_of_atomic_positions) grows with structure size. TM-score is better for comparing structures of different sizes.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 USalign computes the TM-score for pairs of macromolecular structures, generalizing the TMalign algorithm to handle:

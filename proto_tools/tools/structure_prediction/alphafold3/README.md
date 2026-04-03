@@ -8,29 +8,7 @@ AlphaFold3 is the latest generation structure prediction model from Google DeepM
 
 **Important**: For greater accuracy, use SMILES [defined here](https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi) when possible to allow for automatic conversion to CCD inputs, which are greatly preferred by AlphaFold3.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **Protein-ligand docking**: Predict how small molecule drugs bind to protein targets without requiring a pre-existing experimental structure
-- **Protein-DNA/RNA complexes**: Model transcription factors, chromatin readers, RNA-binding proteins
-- **Multi-protein assemblies**: Predict structures of heteromeric protein complexes
-- **[Post-translational modifications](https://en.wikipedia.org/wiki/Post-translational_modification)**: Model phosphorylation, glycosylation, and other modifications
-- **Ion and cofactor binding**: Visualize metal binding sites and cofactor positioning
-- **Antibody-antigen interactions**: Predict binding interfaces for therapeutic antibody design
-
-**When NOT to use this tool:**
-- **High-throughput single protein screening**: ESMFold is 10-60x faster for protein-only predictions
-- **Conformational ensembles**: AlphaFold3 predicts single structures, not dynamics
-- **Membrane proteins in lipid context**: Does not model lipid bilayers
-- **Covalent inhibitors**: Standard workflow may not accurately model covalent bonds (requires special setup)
-- **Novel ligand chemotypes**: Accuracy may drop for ligands dissimilar to training data
-
-**Comparison with alternatives:**
-- **AlphaFold3 vs Chai1**: Similar capabilities; AlphaFold3 has broader training data and higher accuracy on benchmarks. Chai1 is fully open-source with commercial-friendly licensing.
-- **AlphaFold3 vs Boltz2**: Both handle DNA/RNA and ligands; Boltz2 is MIT-licensed and may have advantages for specific use cases.
-- **AlphaFold3 vs ESMFold**: ESMFold is much faster but protein-only and lower accuracy. Use AlphaFold3 when you need DNA, RNA, ligands, or multi-chain complexes.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 AlphaFold3 predicts the 3D atomic coordinates of biomolecular complexes from sequences. It outputs full-atom structures with comprehensive confidence scores including per-atom pLDDT, predicted aligned error (PAE), pTM, ipTM, and a composite ranking score. Unlike its predecessors, AlphaFold3 generates predictions for proteins alongside DNA, RNA, small molecule ligands, ions, and post-translational modifications.

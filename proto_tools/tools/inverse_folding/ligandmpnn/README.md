@@ -11,21 +11,7 @@ LigandMPNN is an inverse folding model that designs protein sequences conditione
 - **Output**: Designed amino acid sequences with per-sequence metrics
 - **Execution**: GPU required
 
-## When to Use This Tool
-
-**Use when you need to:**
-- Design protein sequences for structures that contain bound ligands, cofactors, or metal ions
-- Redesign binding-site residues while respecting ligand contacts
-- Generate sequence libraries for enzyme scaffolds where active-site chemistry matters
-- Design protein-nucleic acid interfaces where DNA/RNA context influences sequence selection
-
-**Do NOT use when you need to:**
-- Design sequences for protein-only structures without ligands -- use ProteinMPNN (`proteinmpnn-sample`) instead, which is faster and equally accurate for apo structures
-- Predict protein structure from sequence -- use ESMFold (`esmfold-prediction`) or AlphaFold (`alphafold3-prediction`)
-- Score existing sequence-structure compatibility -- `ligandmpnn-score` is not yet implemented; use ProteinMPNN scoring (`proteinmpnn-score`) for protein-only contexts
-- Design small molecules or ligands -- LigandMPNN designs protein sequences, not ligands
-
-## Biological Background
+## Background
 
 [Inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) solves the "reverse" protein design problem: given a desired 3D backbone structure, what amino acid sequence will fold into that structure? This is the complement of structure prediction (sequence -> structure).
 

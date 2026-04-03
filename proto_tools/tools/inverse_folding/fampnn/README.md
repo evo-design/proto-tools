@@ -5,22 +5,7 @@
 ## Overview
 FAMPNN (Full-Atom MPNN) is a deep learning model for protein sequence design that jointly models discrete amino acid identity and continuous sidechain conformation. Unlike backbone-only inverse folding models, FAMPNN generates both sequences and full-atom sidechain coordinates simultaneously using combined cross-entropy and diffusion loss. This module provides interfaces for *Sequence Sampling*, *Sidechain Packing*, *Mutation Scoring*, and *Exhaustive Mutation Scanning*.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Full-atom protein design: generating sequences with predicted sidechain coordinates
-- Sidechain packing: predicting sidechain conformations for fixed backbone + sequence
-- Mutation fitness prediction: scoring mutations with full-atom structural context
-- Mutational landscape generation: exhaustive single-mutation scanning
-- Protein stabilization through sequence optimization with sidechain awareness
-
-**When NOT to use this tool:**
-- No structure available: FAMPNN requires a 3D backbone structure. Use structure prediction first (ESMFold, AlphaFold, Boltz2).
-- De novo backbone design: FAMPNN designs sequences, not structures. Use RFdiffusion or Chroma for backbone generation.
-- Backbone-only design: If sidechains aren't needed, ProteinMPNN or LigandMPNN are faster.
-- Ligand-aware design: FAMPNN doesn't model ligand interactions. Use LigandMPNN for ligand-conditioned design.
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 FAMPNN solves the full-atom [inverse folding](https://en.wikipedia.org/wiki/Protein_design#Inverse_folding) problem: given a protein backbone structure, predict both the amino acid sequence and the [sidechain](https://en.wikipedia.org/wiki/Side_chain) conformations that are most compatible with the backbone. This goes beyond traditional inverse folding by also predicting atomic-level sidechain geometry.

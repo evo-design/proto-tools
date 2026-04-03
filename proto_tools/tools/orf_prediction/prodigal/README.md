@@ -5,21 +5,7 @@
 ## Overview
 Prodigal (Prokaryotic Dynamic Programming Genefinding Algorithm) is a fast, reliable gene prediction tool specifically designed for [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) genomes (bacteria and archaea). It identifies protein-coding genes using dynamic programming, including partial genes at sequence ends, and provides detailed annotations including ribosome binding sites and start codon types.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Gene prediction in bacterial/archaeal genomes
-- ORF finding in [metagenomic](https://en.wikipedia.org/wiki/Metagenomics) contigs
-- Annotating draft genome assemblies
-- Identifying coding sequences in plasmids
-
-**When NOT to use this tool:**
-- For eukaryotic gene prediction: Use Augustus, GeneMark-ES, or BRAKER instead.
-- For simple ORF finding (any frame): Use ORFipy instead.
-- For virus annotation: Consider specialized tools like Pharokka instead.
-- For RNA genes: Use Infernal/RNAmmer for rRNA, tRNAscan for tRNA instead.
-
-## Biological Background
+## Background
 
 **Prokaryotic gene structure:**
 Prokaryotic genes are simpler than eukaryotic genes:

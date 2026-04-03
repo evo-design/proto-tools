@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-nucleotide"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Random Nucleotide Sampling
 
 ## Overview
@@ -9,22 +11,7 @@ Random Nucleotide Sampling fills masked positions in DNA or RNA sequences with r
 - **Output**: Sequences with masked positions filled by random bases
 - **Execution**: CPU only, no external dependencies
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Generating random nucleotide variants for directed evolution libraries
-- Creating diverse sequence pools for experimental screening
-- Introducing controlled randomness at specific positions in synthetic constructs
-- Testing sequence robustness by random perturbation
-- Building degenerate primer libraries with IUPAC-controlled diversity
-
-**When NOT to use this tool:**
-- For intelligent, model-guided mutations: use Evo1/Evo2 generators
-- For codon-level protein mutagenesis: use `random-protein-sample` instead
-- For structure-aware sequence design: use inverse folding tools (ProteinMPNN, LigandMPNN)
-- For targeted single-nucleotide variants: manually specify mutations
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 This tool performs random [mutagenesis](https://en.wikipedia.org/wiki/Mutagenesis) at the nucleotide level. Given a DNA or RNA sequence, it identifies positions to mutate (either pre-marked with `_` or selected by a masking strategy) and replaces them with random bases drawn from a specified substitution pool.

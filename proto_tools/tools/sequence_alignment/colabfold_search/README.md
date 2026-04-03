@@ -12,21 +12,7 @@ ColabFold MSA Search generates [Multiple Sequence Alignments](https://en.wikiped
 - **Execution**: CPU (local venv via `ToolInstance`), optional GPU for MMSeqs2
 - **Caching**: Per-item caching via `cacheable=True` on `@tool()`
 
-## When to Use This Tool
-
-**Use when you need to:**
-- Generate MSAs as input for AlphaFold2/3 or other structure predictors
-- Analyze evolutionary conservation of specific positions in a protein
-- Assess how many homologs exist for a designed or natural protein sequence
-- Build sequence profiles for downstream analysis (e.g., coevolution, specificity prediction)
-
-**Do NOT use when you need to:**
-- Search for specific sequence hits with E-value statistics -- use BLAST (`blast-search`)
-- Align a small set of known sequences to each other -- use Clustal Omega or MUSCLE
-- Perform structural alignment of 3D structures -- use Foldseek (`foldseek-search`)
-- Search for remote homologs below the twilight zone -- use HHblits or jackhmmer for iterative profile searches
-
-## Biological Background
+## Background
 
 Multiple Sequence Alignments capture the evolutionary history of a protein family by aligning [homologous](https://en.wikipedia.org/wiki/Homology_(biology)) sequences found across organisms. Each column in the alignment represents a structural position, and the patterns of conservation and covariation encode information about:
 

@@ -5,22 +5,7 @@
 ## Overview
 SpliceTransformer is a deep learning model for predicting [splice sites](https://en.wikipedia.org/wiki/RNA_splicing) with tissue-specific resolution. It identifies splice donors (5' splice sites) and acceptors (3' splice sites) across 15 human tissues, enabling analysis of [alternative splicing](https://en.wikipedia.org/wiki/Alternative_splicing) patterns and tissue-specific isoform usage. The model uses [transformer](https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)) architecture with long-range sequence context for accurate splice site prediction.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Predicting splice sites in human sequences
-- Identifying tissue-specific splicing patterns
-- Analyzing variant effects on splicing
-- Designing synthetic introns and exons
-- Understanding alternative splicing regulation
-
-**When NOT to use this tool:**
-- For non-human species: Model trained on human data only
-- For gene expression (not splicing): Use Enformer or Borzoi
-- For protein-level analysis: Use protein language models (ESM2, ESM3)
-- For short sequences (<1kb): Need sufficient context for accurate predictions
-
-## Biological Background
+## Background
 
 **What is splicing?**
 [Pre-mRNA splicing](https://en.wikipedia.org/wiki/RNA_splicing) removes [introns](https://en.wikipedia.org/wiki/Intron) and joins [exons](https://en.wikipedia.org/wiki/Exon):

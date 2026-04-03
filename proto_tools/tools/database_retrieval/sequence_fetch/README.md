@@ -6,25 +6,7 @@
 
 `sequence-fetch` retrieves DNA, RNA, protein, and structure data for named targets across [NCBI](https://www.ncbi.nlm.nih.gov/) Entrez, [UniProt](https://www.uniprot.org/), and [PDB](https://www.rcsb.org/). It supports ID-first resolution, name+organism fallback, and strict molecular type checks.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Fetching protein, transcript, and genomic sequences for a known target + organism
-- Running mixed requests where some entries have IDs and others are name-only
-- Building small to medium sequence manifests with per-item provenance and errors
-- Pulling structure metadata from PDB using `pdb_id`, UniProt cross-references, or name+organism resolution
-
-**When NOT to use this tool:**
-- Large genome-wide extraction workflows: use local FASTA/GFF pipelines
-- Precision transcriptome annotation: use [Ensembl](https://www.ensembl.org/)/[GENCODE](https://www.gencodegenes.org/) pipelines
-- De novo gene calling: use ORF/gene annotation tools first
-
-**Comparison with alternatives:**
-- **`sequence-fetch` vs BLAST (`blast-search`)**: use this tool for record retrieval; use BLAST for similarity search.
-- **`sequence-fetch` vs ORF tools (`prodigal`, `orfipy`)**: use this tool for known targets; ORF tools infer coding regions from raw DNA.
-- **`sequence-fetch` vs MMseqs2 (`mmseqs-search-proteins`)**: use this tool for canonical sequence fetch; MMseqs2 is for large-scale homology search.
-
-## Biological Background
+## Background
 
 **What does this tool retrieve?**
 It fetches canonical molecular records from public databases: genomic DNA (`dna_genomic`), coding DNA (`dna_cds`), transcript RNA (`rna_transcript`), inferred pre-mRNA (`rna_premrna`), proteins (`protein`), and PDB structures (`structure`).

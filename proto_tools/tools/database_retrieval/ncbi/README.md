@@ -12,26 +12,6 @@ Three tools wrapping NCBI Entrez E-utilities for searching and retrieving biolog
 
 All are CPU-only tools that wrap the NCBI Entrez REST API.
 
-## When to Use These Tools
-
-**Primary use cases:**
-- Searching NCBI databases by term (e.g., gene name + organism) to find sequence IDs
-- Fetching protein or nucleotide sequences by accession/ID in FASTA format
-- Retrieving gene summaries and metadata via esummary
-- Subsequence extraction with coordinates and strand selection
-- Getting coding sequences (CDS) in nucleotide format via `fasta_cds_na`
-
-**When NOT to use these tools:**
-- Multi-source orchestrated fetches across NCBI, UniProt, and PDB: use `sequence-fetch`
-- Sequence similarity search: use `blast-search`
-- Large-scale homology search: use `mmseqs-search-proteins`
-- Protein-specific metadata with curated annotations: use `uniprot-fetch` (better curation for proteins)
-- PDB structure metadata: use `pdb-fetch-entry` / `pdb-fetch-fasta`
-
-**Comparison with alternatives:**
-- **NCBI tools vs `sequence-fetch`:** `sequence-fetch` is a higher-level orchestrator that routes to NCBI, UniProt, or PDB automatically. Use NCBI tools directly when you need specific database control, subsequence extraction, or CDS retrieval.
-- **NCBI tools vs `uniprot-fetch`:** UniProt has better curation for protein sequences and annotations. NCBI is broader, covering all sequence types (DNA, RNA, protein, genomic) and providing gene-level information.
-
 ## Tool Catalog
 
 | Tool | Input | Output | Use Case |
@@ -40,7 +20,7 @@ All are CPU-only tools that wrap the NCBI Entrez REST API.
 | `ncbi-esummary` | Database + ID | Record metadata dict | Get gene summaries, accession details, annotations |
 | `ncbi-efetch` | Database + ID + format | FASTA records | Download sequences by accession in FASTA format |
 
-## Biological Background
+## Background
 
 **What do these tools access?**
 [NCBI](https://www.ncbi.nlm.nih.gov/) (National Center for Biotechnology Information) maintains the world's largest collection of biological sequence databases. The [Entrez](https://www.ncbi.nlm.nih.gov/search/) system provides unified search and retrieval across multiple databases:

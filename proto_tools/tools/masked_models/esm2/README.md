@@ -5,22 +5,7 @@
 ## Overview
 ESM2 (Evolutionary Scale Modeling 2) is Meta AI's [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) trained on millions of protein sequences from [UniRef](https://www.uniprot.org/help/uniref). It provides sequence embeddings, per-position amino acid logits, sequence mutation (sampling), and sequence scoring (MLM pseudo-perplexity). ESM2 offers multiple model sizes from 8M to 15B parameters, balancing quality and computational cost.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Extracting protein sequence embeddings for similarity search, clustering, or ML features
-- Zero-shot variant effect prediction using per-position logits
-- Protein sequence mutation and guided design
-- Sequence quality scoring (pseudo-perplexity)
-- Transfer learning for protein property prediction
-
-**When NOT to use this tool:**
-- For DNA/RNA sequences: Use DNA-specific models (Evo2, Enformer)
-- For structure prediction: Use ESMFold, Boltz2, or AlphaFold3
-- For inverse folding: Use ProteinMPNN (structure-conditioned)
-- For very long proteins (>2000 residues): Consider chunking or using ESM3
-
-## Biological Background
+## Background
 
 **What are protein language models?**
 Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. They capture:

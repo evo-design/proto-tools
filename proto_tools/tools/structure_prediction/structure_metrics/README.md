@@ -5,7 +5,7 @@
 ## Overview
 Structure Metrics computes structural quality metrics from PDB files, specifically the longest alpha helix length and radius of gyration. These metrics are used to flag structural artifacts such as unrealistically long helices or disordered/extended conformations in predicted protein structures.
 
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 This tool computes two structural properties from PDB files:
@@ -22,22 +22,6 @@ These metrics provide fast, quantitative filters to catch these artifacts before
 **Scientific foundation:**
 - **Secondary structure assignment** uses the [DSSP](https://en.wikipedia.org/wiki/DSSP_(hydrogen_bond_estimation_algorithm))-like algorithm implemented in Biotite, which assigns helix, sheet, and coil states based on backbone geometry and hydrogen bonding patterns.
 - **Radius of gyration** is a standard biophysical metric used in [small-angle X-ray scattering](https://en.wikipedia.org/wiki/Small-angle_X-ray_scattering) (SAXS) and polymer physics. For globular proteins, it scales approximately as R_g ∝ N^(0.4) where N is the number of residues.
-
-## When to Use This Tool
-
-**Primary use cases:**
-- Filtering predicted structures for artifacts before downstream analysis
-- Quality control of ESMFold/AlphaFold2 predictions on generated sequences
-- Screening large batches of predicted structures in protein design pipelines
-
-**When NOT to use this tool:**
-- For detailed structure quality assessment: use MolProbity or structure prediction confidence scores (pLDDT) instead
-- For comparing structures to each other: use TM-score or RMSD tools
-- For intrinsically disordered proteins: high gyration radius is expected and does not indicate an artifact
-
-**Comparison with alternatives:**
-- **pLDDT / pTM scores**: Per-residue or global confidence from structure predictors; more informative but only available from specific tools
-- **Structure Metrics**: Fast, predictor-agnostic quality check that works on any PDB file; best used as a coarse filter before detailed analysis
 
 ## How It Works
 

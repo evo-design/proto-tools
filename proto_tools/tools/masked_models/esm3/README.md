@@ -5,19 +5,7 @@
 ## Overview
 ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) with sequence understanding and generation capabilities. Unlike ESM2, ESM3 is a generative model that can perform both embedding extraction and sequence generation. The open model (`esm3_sm_open_v1`) provides embeddings, logits, sampling, and scoring in a unified framework.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Extract protein sequence embeddings and per-position logits
-- Score protein sequences via MLM pseudo-perplexity
-- Mutate or generate protein sequences
-**When NOT to use this tool:**
-- For DNA/RNA sequences: Use Evo2 or genomic models
-- For structure prediction: Use Boltz2, Chai1, AlphaFold3, or ESMFold
-- For structure-conditioned design: Use ProteinMPNN
-- For fast embeddings-only tasks at scale: ESM2 is typically faster
-
-## Biological Background
+## Background
 
 **What are protein language models?**
 Protein language models (pLMs) learn the "grammar" of proteins from evolutionary data. ESM3 extends this by jointly modeling sequence and structure, capturing:

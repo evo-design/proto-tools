@@ -6,22 +6,7 @@
 
 Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local GPU/CPU execution with KV caching for efficient long generations.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- De novo DNA sequence generation from prompts (promoters, coding sequences, regulatory elements)
-- Extending partial DNA sequences autoregressively
-- Generating full-length genes or genomic regions
-- Scoring candidate DNA sequences with autoregressive likelihood
-- Comparing DNA sequence variants by model perplexity
-
-**When NOT to use this tool:**
-- For protein sequences: use ESM2, ESM3, or ProGen2
-- For predicting transcriptional activity or regulatory signals: use Enformer, Borzoi, or AlphaGenome
-- For splice site prediction: use SpliceTransformer
-- For short oligo design with specific constraints: simpler tools or codon optimizers may suffice
-
-## Biological Background
+## Background
 
 DNA encodes the instructions for all cellular processes. Beyond protein-coding genes (~1.5% of the human genome), the vast majority of genomic sequence consists of regulatory elements, structural features, repetitive elements, and sequences of unknown function. The "grammar" of DNA -- the patterns that distinguish functional from non-functional sequence -- is complex and context-dependent.
 

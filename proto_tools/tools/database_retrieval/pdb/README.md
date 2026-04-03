@@ -11,24 +11,6 @@ Two tools for retrieving data from the RCSB Protein Data Bank:
 
 Both are CPU-only tools that wrap the RCSB PDB REST API.
 
-## When to Use These Tools
-
-**Primary use cases:**
-- Fetching PDB entry metadata (experimental method, resolution, title) for a known PDB accession
-- Retrieving chain sequences from PDB structures with automatic protein/DNA/RNA classification
-- Getting structure information to decide which experimental structure to use as a reference
-- Extracting protein sequences from specific PDB chains for homology searches or design
-
-**When NOT to use these tools:**
-- Multi-source orchestrated fetches across NCBI, UniProt, and PDB: use `sequence-fetch`
-- Structure prediction from sequence: use `esmfold-prediction`, `boltz2-prediction`, or `alphafold3-prediction`
-- Finding PDB IDs from gene names: use `uniprot-fetch` (which provides PDB cross-references) or `sequence-fetch`
-- Downloading actual PDB coordinate files: these tools return metadata and sequences, not full PDB files
-
-**Comparison with alternatives:**
-- **`pdb-fetch-entry` vs `uniprot-fetch`:** PDB entry tool gives structure-specific metadata (resolution, method). UniProt gives protein-centric annotations (function, gene names). Use PDB tools when you have a PDB ID and need structure information; use UniProt when you need protein-level data.
-- **`pdb-fetch-fasta` vs `ncbi-efetch`:** PDB FASTA gives chain-level sequences with protein/nucleotide classification. NCBI gives individual sequence records. Use PDB FASTA when you need all chains from a specific structure.
-
 ## Tool Catalog
 
 | Tool | Input | Output | Use Case |
@@ -36,7 +18,7 @@ Both are CPU-only tools that wrap the RCSB PDB REST API.
 | `pdb-fetch-entry` | PDB ID | Title, method, resolution | Get structure metadata to assess quality |
 | `pdb-fetch-fasta` | PDB ID | Chain sequences + classification | Extract protein/nucleotide sequences from a structure |
 
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 These tools retrieve information from the [RCSB Protein Data Bank](https://www.rcsb.org/), the global archive for experimentally determined 3D structures of biological macromolecules. PDB entries contain structures solved by [X-ray crystallography](https://en.wikipedia.org/wiki/X-ray_crystallography), [cryo-EM](https://en.wikipedia.org/wiki/Cryogenic_electron_microscopy), [NMR spectroscopy](https://en.wikipedia.org/wiki/Nuclear_magnetic_resonance_spectroscopy_of_proteins), and other methods.

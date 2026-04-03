@@ -5,7 +5,7 @@
 ## Overview
 Evo1 is a 7-billion parameter DNA language model built on the [StripedHyena](https://en.wikipedia.org/wiki/State_space_model#Deep_learning) architecture, trained on 2.7 million [prokaryotic](https://en.wikipedia.org/wiki/Prokaryote) and [phage](https://en.wikipedia.org/wiki/Bacteriophage) genomes from the OpenGenome dataset. This tool performs autoregressive DNA sequence generation from prompts and optionally scores generated sequences by mean log-probability.
 
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 Evo1 generates novel DNA sequences by learning the statistical patterns of prokaryotic and phage genomes. It can also score sequences by log-likelihood, providing a measure of how "natural" a generated sequence appears relative to the training distribution.
@@ -15,24 +15,6 @@ Generative DNA models enable de novo design of biological sequences; genes, [ope
 
 **Scientific foundation:**
 Evo1 uses the StripedHyena architecture, a hybrid state-space/attention model that processes DNA at single-nucleotide resolution. Unlike transformer-only models, StripedHyena supports efficient long-range sequence modeling up to 131k tokens. The model is trained with a standard autoregressive (next-token prediction) objective on raw genomic DNA.
-
-## When to Use This Tool
-
-**Primary use cases:**
-- De novo generation of prokaryotic genes, operons, or CRISPR loci from DNA prompts
-- Extending partial DNA sequences with biologically plausible continuations
-- Scoring candidate DNA sequences by log-likelihood
-- Generating diverse sequence variants via temperature and top-k sampling
-
-**When NOT to use this tool:**
-- For protein sequences: use ESM2/ESM3 or ProGen2
-- For eukaryotic genome-scale tasks: use Evo2 (trained on eukaryotic genomes)
-- For transcriptional activity prediction: use Enformer or Borzoi
-- For short oligo/primer design: simpler tools may suffice
-
-**Comparison with alternatives:**
-- **Evo2**: Successor model with larger training set including eukaryotic genomes and context windows up to 1M tokens. Use Evo2 for eukaryotic sequences or when longer context is needed.
-- **Evo1**: Better suited for prokaryotic/phage sequence generation, especially with the CRISPR and transposon fine-tuned checkpoints.
 
 ## How It Works
 

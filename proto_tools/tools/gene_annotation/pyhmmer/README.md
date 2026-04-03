@@ -5,26 +5,7 @@
 ## Overview
 PyHMMER is a Python library binding to [HMMER3](http://hmmer.org/) for biological sequence analysis using [profile hidden Markov models](https://en.wikipedia.org/wiki/Hidden_Markov_model) (HMMs). It enables fast and sensitive domain annotation and homology detection, particularly for finding distant homologs that BLAST may miss. This module provides interfaces for *HMM Search* (searching HMM profiles against sequences), *HMM Scan* (searching sequences against an HMM database), *PHMMER* (protein sequence-protein sequence search), *NHMMER* (nucleotide sequence search), and *JackHMMER* (iterative protein sequence search).
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Protein domain annotation using databases like [Pfam](https://www.ebi.ac.uk/interpro/)
-- Remote homology detection (<30% sequence identity)
-- Protein family classification
-- Building custom HMM profiles for novel protein families
-- Sensitive sequence searches when BLAST fails to find matches
-
-**When to use PyHMMER vs BLAST/MMseqs2:**
-- PyHMMER (HMM-based): Best for detecting distant homologs, annotating protein domains, and when you have curated HMM profiles (e.g., Pfam, TIGRFAM). More sensitive for divergent sequences.
-- BLAST/MMseqs2: Best for finding close homologs, quick similarity searches, and when you don't have pre-built profiles.
-
-**When NOT to use this tool:**
-- Nucleotide profile-vs-profile workflows: This wrapper currently exposes `nhmmer` (nucleotide sequence-vs-sequence), not nucleotide HMM profile searches.
-- Near-Identical Matches: If you're looking for >90% identity matches, BLAST or MMseqs2 are faster and sufficient.
-- All-vs-All Comparisons: For clustering millions of sequences, use MMseqs2's clustering functionality instead.
-- Quick Exploratory Searches: If you just need a fast answer, BLAST is more straightforward.
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 PyHMMER uses profile Hidden Markov Models to search for sequence homology. Unlike pairwise alignment methods (BLAST), HMMs capture the position-specific conservation patterns of an entire protein family, making them more sensitive for detecting distant relationships.

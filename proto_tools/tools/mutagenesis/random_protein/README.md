@@ -1,3 +1,5 @@
+<a href="https://bio-pro.mintlify.app/tools/mutagenesis/random-protein"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+
 # Random Protein Sampling
 
 ## Overview
@@ -9,22 +11,7 @@ Random Protein Sampling fills masked positions in protein sequences with random 
 - **Output**: Sequences with masked positions filled by random amino acids
 - **Execution**: CPU only, no external dependencies
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Generating random protein variant libraries for [directed evolution](https://en.wikipedia.org/wiki/Directed_evolution)
-- Simulating degenerate codon library diversity (NNK, NNS, NDT schemes)
-- Creating baseline random mutations for comparison against model-guided design
-- Testing protein robustness by random substitution at selected positions
-- Building combinatorial mutant libraries for screening
-
-**When NOT to use this tool:**
-- For structure-aware sequence design: use inverse folding tools (ProteinMPNN, LigandMPNN, FAMPNN)
-- For model-guided protein mutations: use ESM2 or ESM3 sampling
-- For nucleotide-level mutagenesis: use `random-nucleotide-sample`
-- For rational single-point mutations: manually specify mutations
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 This tool performs random [mutagenesis](https://en.wikipedia.org/wiki/Mutagenesis) at the protein level. Given a protein sequence, it identifies positions to mutate and replaces them with random amino acids sampled according to a codon scheme's frequency distribution.

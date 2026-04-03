@@ -5,22 +5,7 @@
 ## Overview
 MAFFT (Multiple Alignment using [Fast Fourier Transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform)) is a widely used tool for [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA). It offers various strategies ranging from fast approximate alignments for large datasets to highly accurate iterative methods for smaller sets of sequences. This module provides a standardized interface for performing MSA using MAFFT.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Aligning protein families to identify conserved residues
-- Preparing sequences for [phylogenetic tree](https://en.wikipedia.org/wiki/Phylogenetic_tree) construction
-- Creating seed alignments for [profile HMM](https://en.wikipedia.org/wiki/Hidden_Markov_model#Profile_HMMs) construction
-- Comparing homologous sequences across species
-- Analyzing sequence conservation in protein engineering
-
-**When NOT to use this tool:**
-- **Single sequence**: MSA requires at least 2 sequences
-- **Very short sequences**: Alignments of sequences <10 residues may not be meaningful
-- **Structural alignment**: For structure-based alignment, use tools like TM-align or DALI
-- **Pairwise alignment only**: For simple pairwise alignment, consider [Needleman-Wunsch](https://en.wikipedia.org/wiki/Needleman%E2%80%93Wunsch_algorithm) or [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm)
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 MAFFT aligns multiple biological sequences (protein or nucleotide) by inserting gap characters to maximize the similarity between sequences. The resulting alignment reveals conserved regions, evolutionary relationships, and functional domains.

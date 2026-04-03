@@ -5,7 +5,7 @@
 ## Overview
 MinCED (Mining CRISPRs in Environmental Datasets) is a tool for detecting [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences. It identifies repeat-spacer arrays using a heuristic [k-mer](https://en.wikipedia.org/wiki/K-mer) search algorithm derived from the CRISPR Recognition Tool (CRT), returning structured information about each array's repeats, spacers, and their genomic positions.
 
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 MinCED detects [CRISPR](https://en.wikipedia.org/wiki/CRISPR) (Clustered Regularly Interspaced Short Palindromic Repeats) arrays in DNA sequences. CRISPR arrays consist of short, conserved repeat sequences separated by unique [spacer sequences](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) derived from past viral infections.
@@ -19,25 +19,6 @@ CRISPR arrays are the [adaptive immune](https://en.wikipedia.org/wiki/CRISPR#Imm
 
 **Scientific foundation:**
 CRISPR arrays have a characteristic structure: direct repeats of 23-47 nucleotides separated by unique spacers of 26-50 nucleotides. MinCED exploits this regularity by searching for repeated k-mers at consistent intervals, then extending and refining candidate arrays. The algorithm is based on CRT (CRISPR Recognition Tool), which uses a seed-and-extend approach analogous to BLAST but tuned for the specific repeat-spacer pattern of CRISPR loci.
-
-## When to Use This Tool
-
-**Primary use cases:**
-- Detecting CRISPR arrays in newly sequenced prokaryotic genomes
-- Validating that generated DNA sequences (e.g., from Evo1) contain CRISPR arrays
-- Extracting spacer sequences for downstream phage-host analysis
-- Counting and characterizing CRISPR arrays in [metagenomic](https://en.wikipedia.org/wiki/Metagenomics) assemblies
-
-**When NOT to use this tool:**
-- For identifying Cas protein genes: use Prodigal + PyHMMER with Cas HMM profiles instead
-- For predicting tracrRNA: use `crispr-tracr` (CRISPRtracrRNA) instead
-- For CRISPR guide RNA design: use specialized guide design tools
-- For eukaryotic sequences: MinCED is designed for prokaryotic CRISPR arrays
-
-**Comparison with alternatives:**
-- **CRISPRFinder/CRISPRCasFinder**: Web-based tools with more comprehensive annotation but not available as local Python libraries
-- **PILER-CR**: Alternative local tool; MinCED generally has higher sensitivity for short arrays
-- **MinCED**: Fast, command-line friendly, good sensitivity for arrays with >=3 repeats
 
 ## How It Works
 

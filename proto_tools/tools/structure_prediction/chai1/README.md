@@ -6,29 +6,7 @@
 
 Chai1 is a multi-modal structure prediction model from Chai Discovery that predicts 3D structures of proteins, ligands, and glycans using a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture. It excels at modeling protein-ligand complexes and can incorporate ESM embeddings for improved accuracy.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- **Protein-ligand docking:** Predict how small molecules bind to protein targets without known experimental structures
-- **Drug discovery screening:** Rapidly evaluate binding poses for compound libraries
-- **[Glycoprotein](https://en.wikipedia.org/wiki/Glycoprotein) modeling:** Predict structures of proteins with attached [glycan](https://en.wikipedia.org/wiki/Glycan) modifications
-- **Binding site analysis:** Understand ligand-induced conformational changes in proteins
-- **Lead optimization:** Evaluate how chemical modifications affect binding geometry
-
-**When NOT to use this tool:**
-- **DNA/RNA complexes:** Chai1 does not support nucleic acids: use Boltz2 instead
-- **Very large complexes (>2,048 residues):** Hard limit on total sequence length; split into domains or use AlphaFold2
-- **High-throughput pure protein screening:** ESMFold is faster for protein-only predictions without ligands
-- **Membrane protein in membrane context:** Does not model lipid bilayers
-- **Covalent inhibitors:** May not accurately model covalent bonds between ligand and protein
-
-**Comparison with alternatives:**
-- **Chai1 vs Boltz2:** Chai1 is optimized for protein-ligand-glycan systems; Boltz2 supports DNA/RNA but may be slower. Choose based on molecular types.
-- **Chai1 vs ESMFold:** ESMFold is 10-60x faster but protein-only. Use Chai1 when you need ligand binding predictions.
-- **Chai1 vs AutoDock/Glide:** Chai1 predicts binding poses without requiring a known protein structure; traditional [docking](https://en.wikipedia.org/wiki/Molecular_docking) requires experimental structures.
-- **Chai1 vs AlphaFold3:** Similar capabilities; Chai1 is open-source and locally deployable.
-
-## Biological Background
+## Background
 
 **What does this tool measure/predict?**
 Chai1 predicts the 3D atomic coordinates of biomolecular complexes from sequences. It outputs full-atom structures for proteins, ligands, and glycans with confidence scores including per-residue pLDDT, interface pTM (ipTM), and overall structure confidence.

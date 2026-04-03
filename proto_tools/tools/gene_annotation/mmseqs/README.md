@@ -5,25 +5,7 @@
 ## Overview
 [MMseqs2](https://mmseqs.com/) (Many-against-Many sequence searching) is an ultra-fast tool for searching and clustering huge protein and nucleotide sequence sets. It performs BLAST-like searches 100x faster while maintaining similar sensitivity, making it ideal for large-scale sequence analysis. This module provides interfaces for *Protein Search*, *Genome Search*, and *Sequence Clustering* operations using MMseqs2.
 
-## When to Use This Tool
-
-**Primary use cases:**
-- Large-scale sequence similarity searches (millions of sequences)
-- Clustering protein families to reduce redundancy
-- Fast homology detection in [metagenomics](https://en.wikipedia.org/wiki/Metagenomics) pipelines
-- Building and searching custom sequence databases
-- All-vs-all sequence comparisons
-
-**When to use MMseqs2 vs BLAST:**
-- MMseqs2: Best for high-throughput pipelines, large databases (>10,000 sequences), clustering, or when speed is critical.
-- BLAST: Best for small-scale queries where you need access to NCBI's curated databases online, or when maximum sensitivity is required for very distant homologs.
-
-**When NOT to use this tool:**
-- Single Sequence Queries: If you're searching one sequence against NCBI, use `blast-search` instead.
-- Very Short Sequences: MMseqs2 may struggle with sequences <30 amino acids or <100 nucleotides.
-- Maximum Sensitivity Required: For detecting extremely distant homologs (<20% identity), profile-based tools like [HMMER](http://hmmer.org/) or HHblits are more appropriate.
-
-## Biological Background
+## Background
 
 **What does this tool do?**
 MMseqs2 finds regions of similarity between biological sequences by using a two-stage cascaded search algorithm. It first uses k-mer matching to quickly identify candidate sequences, then performs sensitive alignment on the filtered set.

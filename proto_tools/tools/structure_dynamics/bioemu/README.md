@@ -11,22 +11,7 @@ BioEmu generates protein conformational ensembles using a diffusion generative m
 - **Output**: `StructureEnsemble` objects containing sampled backbone conformations
 - **Execution**: GPU required
 
-## When to Use This Tool
-
-**Use when you need to:**
-- Sample the conformational landscape of a protein from sequence alone
-- Identify alternative folded states or metastable conformations
-- Assess conformational diversity without running expensive MD simulations
-- Generate structural ensembles for downstream analysis (e.g., druggability assessment, allosteric site identification, flexibility profiling)
-
-**Do NOT use when you need to:**
-- Predict a single high-confidence structure -- use AlphaFold (`alphafold3-prediction`) or ESMFold (`esmfold-prediction`)
-- Model protein-protein or protein-ligand complexes -- BioEmu supports monomers only
-- Simulate explicit dynamics trajectories with time resolution -- use molecular dynamics (GROMACS, OpenMM)
-- Predict structures for very long proteins (>500 residues) -- performance degrades significantly
-- Predict side-chain conformations -- BioEmu outputs backbone-only structures
-
-## Biological Background
+## Background
 
 Proteins are not static objects. In solution, a protein constantly fluctuates between conformational states, and this dynamics is essential for function: enzyme catalysis, [allosteric regulation](https://en.wikipedia.org/wiki/Allosteric_regulation), molecular recognition, and signal transduction all depend on conformational changes.
 

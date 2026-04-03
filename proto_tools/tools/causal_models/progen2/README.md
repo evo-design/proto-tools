@@ -6,23 +6,7 @@
 
 ProGen2 is Salesforce's autoregressive protein language model for de novo protein sequence generation and scoring. Unlike masked language models (ESM2/ESM3) that predict masked positions bidirectionally, ProGen2 generates proteins left-to-right from a prompt and provides autoregressive likelihood scoring. The tool supports local GPU execution via a standalone venv .
 
-## When to Use This Tool
-
-**Primary use cases:**
-- De novo protein sequence generation from N-terminal prompts
-- Extending partial protein sequences autoregressively
-- Generating antibody sequences (using `progen2-oas`)
-- Scoring candidate protein sequences by autoregressive likelihood
-- Comparing sequence plausibility across protein variants
-
-**When NOT to use this tool:**
-- For DNA sequences: use Evo2
-- For masked-language-model embeddings or variant effect prediction: use ESM2 or ESM3
-- For structure-conditioned protein design (inverse folding): use ProteinMPNN
-- For protein structure prediction: use ESMFold, Boltz2, or Chai1
-- For protein-protein interaction scoring: use AlphaFold3
-
-## Biological Background
+## Background
 
 Proteins are linear chains of [amino acids](https://en.wikipedia.org/wiki/Amino_acid) that fold into 3D structures to carry out biological functions. The amino acid sequence ([primary structure](https://en.wikipedia.org/wiki/Protein_structure#Primary_structure)) largely determines the protein's fold and function. Natural proteins occupy a tiny fraction of theoretically possible sequence space -- most random sequences do not fold or function.
 

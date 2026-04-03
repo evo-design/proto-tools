@@ -12,23 +12,7 @@ Enformer is a transformer-based deep learning model that predicts gene expressio
 - **Species heads**: `human` (5,313 tracks), `mouse` (1,643 tracks)
 - **GPU required**: Yes
 
-## When to Use This Tool
-
-**Use Enformer when you need to:**
-- Predict gene expression levels from DNA sequence alone
-- Assess variant effects on regulatory activity (compare reference vs. alternate allele predictions)
-- Evaluate chromatin accessibility (DNase, ATAC) or histone modification signals at a locus
-- Score synthetic promoter or enhancer designs for predicted expression output
-- Understand how sequence changes affect transcription factor binding profiles
-
-**When NOT to use Enformer:**
-- **Longer context needed** (>100 kb regulatory interactions): Use `borzoi-prediction` (524 kb context)
-- **RNA-seq coverage prediction**: Use `borzoi-prediction` (trained directly on RNA-seq)
-- **Splice site effects**: Use `splice-transformer` for splice-specific predictions
-- **Protein structure**: Use `protenix-prediction` or `esmfold-prediction`
-- **Sequence generation**: Use generative models like `evo2-sample`
-
-## Biological Background
+## Background
 
 Gene expression is controlled by a complex interplay of promoters, [enhancers](https://en.wikipedia.org/wiki/Enhancer_(genetics)), [silencers](https://en.wikipedia.org/wiki/Silencer_(genetics)), [insulators](https://en.wikipedia.org/wiki/Insulator_(genetics)), and chromatin state. These regulatory elements can act over distances of tens to hundreds of kilobases. Traditional motif-based models capture local sequence features but miss long-range interactions.
 
