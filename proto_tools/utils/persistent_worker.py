@@ -573,7 +573,8 @@ class PersistentWorker:
     def _killpg(self, sig: int) -> None:
         """Send *sig* to the worker's process group, ignoring already-dead."""
         with contextlib.suppress(OSError):
-            os.killpg(self._process.pid, sig)  # type: ignore[union-attr]
+            assert self._process is not None
+            os.killpg(self._process.pid, sig)
 
     def stop(self) -> None:
         """Terminate the worker and all of its child processes."""

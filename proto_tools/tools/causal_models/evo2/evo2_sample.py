@@ -462,7 +462,8 @@ def run_evo2_sample(
     if isinstance(logits, list) and logits and hasattr(logits[0], "tolist"):
         logits = [t.cpu().tolist() for t in logits]
     elif hasattr(logits, "tolist"):
-        logits = logits.cpu().tolist()  # type: ignore[union-attr]
+        assert logits is not None
+        logits = logits.cpu().tolist()
 
     # Prepend prompts to generated sequences (vortex generate() returns only newly generated tokens)
     if config.prepend_prompt:

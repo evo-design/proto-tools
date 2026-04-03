@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
-from proto_tools.utils.tool_io import BaseToolInput
+from proto_tools.utils.tool_io import BaseToolInput, _extra_dict
 
 DEFAULT_TIMEOUT = 600  # seconds
 
@@ -143,20 +143,12 @@ class BaseConfig(BaseModel):
     @classmethod
     def reload_fields(cls) -> set[str]:
         """Return field names marked with ``reload_on_change=True``."""
-        return {
-            name
-            for name, info in cls.model_fields.items()
-            if (info.json_schema_extra or {}).get("reload_on_change", False)  # type: ignore[union-attr]
-        }
+        return {name for name, info in cls.model_fields.items() if _extra_dict(info).get("reload_on_change", False)}
 
     @classmethod
     def cache_exclude_fields(cls) -> set[str]:
         """Return field names marked with ``include_in_key=False``."""
-        return {
-            name
-            for name, info in cls.model_fields.items()
-            if not (info.json_schema_extra or {}).get("include_in_key", True)  # type: ignore[union-attr]
-        }
+        return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields."""
