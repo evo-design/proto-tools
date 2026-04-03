@@ -307,9 +307,11 @@ def run_progen3_sample(
         - GitHub: https://github.com/Profluent-AI/progen3
         - HuggingFace: https://huggingface.co/Profluent-Bio
     """
-    logger.debug(f"Using local venv for ProGen3 sampling: {config.model_checkpoint}")  # type: ignore[union-attr]
+    assert config is not None  # noqa: S101
 
-    direction_token = _DIRECTION_TOKEN[config.direction]  # type: ignore[union-attr]
+    logger.debug(f"Using local venv for ProGen3 sampling: {config.model_checkpoint}")
+
+    direction_token = _DIRECTION_TOKEN[config.direction]
     prefixed_prompts = [f"{direction_token}{p}" for p in inputs.prompts]
 
     result = ToolInstance.dispatch(
@@ -317,16 +319,16 @@ def run_progen3_sample(
         {
             "operation": "sample",
             "prompts": prefixed_prompts,
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "local_path": config.local_path,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "max_new_tokens": config.max_new_tokens,  # type: ignore[union-attr]
-            "min_new_tokens": config.min_new_tokens,  # type: ignore[union-attr]
-            "num_sequences": config.num_sequences,  # type: ignore[union-attr]
-            "batch_size": config.batch_size,  # type: ignore[union-attr]
-            "device": config.device,  # type: ignore[union-attr]
-            "verbose": config.verbose,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "local_path": config.local_path,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "max_new_tokens": config.max_new_tokens,
+            "min_new_tokens": config.min_new_tokens,
+            "num_sequences": config.num_sequences,
+            "batch_size": config.batch_size,
+            "device": config.device,
+            "verbose": config.verbose,
         },
         instance=instance,
         config=config,
@@ -334,7 +336,7 @@ def run_progen3_sample(
 
     sequences = result["sequences"]
 
-    if not config.include_prompt_in_output:  # type: ignore[union-attr]
+    if not config.include_prompt_in_output:
         stripped = []
         for seq, aa_prompt, direction in zip(
             sequences,
@@ -352,13 +354,13 @@ def run_progen3_sample(
 
     return ProGen3SampleOutput(
         metadata={
-            "model_checkpoint": config.model_checkpoint,  # type: ignore[union-attr]
-            "direction": config.direction,  # type: ignore[union-attr]
-            "temperature": config.temperature,  # type: ignore[union-attr]
-            "top_p": config.top_p,  # type: ignore[union-attr]
-            "max_new_tokens": config.max_new_tokens,  # type: ignore[union-attr]
-            "num_sequences": config.num_sequences,  # type: ignore[union-attr]
-            "include_prompt_in_output": config.include_prompt_in_output,  # type: ignore[union-attr]
+            "model_checkpoint": config.model_checkpoint,
+            "direction": config.direction,
+            "temperature": config.temperature,
+            "top_p": config.top_p,
+            "max_new_tokens": config.max_new_tokens,
+            "num_sequences": config.num_sequences,
+            "include_prompt_in_output": config.include_prompt_in_output,
         },
         sequences=sequences,
     )
