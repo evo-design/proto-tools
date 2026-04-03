@@ -13,7 +13,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -809,8 +809,8 @@ def display_gpu_memory_usage(
         compact_bar_width = 14
         for gpu in gpu_info:
             idx = gpu["index"]
-            total_gb = cast(int, gpu["total_bytes"]) / 1e9
-            used_gb = cast(int, gpu["used_bytes"]) / 1e9
+            total_gb = gpu["total_bytes"] / 1e9  # type: ignore[operator]
+            used_gb = gpu["used_bytes"] / 1e9  # type: ignore[operator]
             filled = int((used_gb / total_gb) * compact_bar_width) if total_gb > 0 else 0
             filled = max(0, min(filled, compact_bar_width))
             bar = "█" * filled + "░" * (compact_bar_width - filled)
@@ -823,23 +823,23 @@ def display_gpu_memory_usage(
     processes_by_gpu: dict[int, list[dict[str, Any]]] = {}
     if show_processes:
         for proc in process_info:
-            gpu_idx = cast(int, proc["gpu_index"])
+            gpu_idx = proc["gpu_index"]
             if gpu_idx not in processes_by_gpu:
-                processes_by_gpu[gpu_idx] = []
-            processes_by_gpu[gpu_idx].append(proc)
+                processes_by_gpu[gpu_idx] = []  # type: ignore[index]
+            processes_by_gpu[gpu_idx].append(proc)  # type: ignore[index]
 
     # Display each GPU
     for gpu in gpu_info:
-        idx = cast(int, gpu["index"])
-        name = cast(str, gpu["name"])
+        idx = gpu["index"]
+        name = gpu["name"]
         # Truncate or pad GPU name to fixed width
-        name_display = name[:name_width].ljust(name_width)
+        name_display = name[:name_width].ljust(name_width)  # type: ignore[index]
 
-        total_bytes = cast(int, gpu["total_bytes"])
-        used_bytes = cast(int, gpu["used_bytes"])
-        total_gb = total_bytes / 1e9
-        used_gb = used_bytes / 1e9
-        utilization = (used_bytes / total_bytes) * 100 if total_bytes > 0 else 0
+        total_bytes = gpu["total_bytes"]
+        used_bytes = gpu["used_bytes"]
+        total_gb = total_bytes / 1e9  # type: ignore[operator]
+        used_gb = used_bytes / 1e9  # type: ignore[operator]
+        utilization = (used_bytes / total_bytes) * 100 if total_bytes > 0 else 0  # type: ignore[operator]
 
         # Build progress bar (guaranteed to be exactly bar_width characters)
         filled = int((used_gb / total_gb) * bar_width) if total_gb > 0 else 0
@@ -851,7 +851,7 @@ def display_gpu_memory_usage(
 
         # Print processes if requested
         if show_processes:
-            gpu_processes = processes_by_gpu.get(idx, [])
+            gpu_processes = processes_by_gpu.get(idx, [])  # type: ignore[arg-type]
             for proc in gpu_processes:
-                proc_gb = cast(int, proc["used_bytes"]) / 1e9
+                proc_gb = proc["used_bytes"] / 1e9  # type: ignore[operator]
                 print(f"  → PID {proc['pid']:6d} ({proc['process_name']:12s}): {proc_gb:5.1f} GB")
