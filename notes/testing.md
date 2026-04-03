@@ -5,7 +5,7 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 ## Structure
 
 - **One-liner module docstring**: `"""Tests for {tool/entity name}."""`
-- **No `from __future__ import annotations`** in test files
+- **No `from __future__ import annotations`** anywhere in the codebase (removed project-wide)
 - **Flat functions only**: No `class Test*`; use descriptive function names (e.g., `test_blast_search_exact_match`)
 - **Section separators**: Use `# ── Section name ──...` for groups. Use `# ---------------------------------------------------------------------------` + `# Integration tests` for the integration boundary
 - **File ordering**: Unit tests first, then the integration boundary separator, then integration/GPU tests

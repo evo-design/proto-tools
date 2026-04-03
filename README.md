@@ -89,7 +89,8 @@ To use these models:
 <a href="proto_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence models
 ├── <a href="proto_tools/tools/causal_models/evo1/">evo1/</a>
 ├── <a href="proto_tools/tools/causal_models/evo2/">evo2/</a>
-└── <a href="proto_tools/tools/causal_models/progen2/">progen2/</a>
+├── <a href="proto_tools/tools/causal_models/progen2/">progen2/</a>
+└── <a href="proto_tools/tools/causal_models/progen3/">progen3/</a>
 <a href="proto_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pdb/">pdb/</a>
@@ -102,11 +103,14 @@ To use these models:
 ├── <a href="proto_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
 └── <a href="proto_tools/tools/gene_annotation/pyhmmer/">pyhmmer/</a>
 <a href="proto_tools/tools/inverse_folding/">inverse_folding/</a>                # Sequence design from structures
+├── <a href="proto_tools/tools/inverse_folding/esm_if1/">esm_if1/</a>
+├── <a href="proto_tools/tools/inverse_folding/fampnn/">fampnn/</a>
 ├── <a href="proto_tools/tools/inverse_folding/ligandmpnn/">ligandmpnn/</a>
 └── <a href="proto_tools/tools/inverse_folding/proteinmpnn/">proteinmpnn/</a>
 <a href="proto_tools/tools/masked_models/">masked_models/</a>                  # Masked language models
 ├── <a href="proto_tools/tools/masked_models/esm2/">esm2/</a>
-└── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
+├── <a href="proto_tools/tools/masked_models/esm3/">esm3/</a>
+└── <a href="proto_tools/tools/masked_models/masking/">masking/</a>
 <a href="proto_tools/tools/mutagenesis/">mutagenesis/</a>                    # Random sequence mutagenesis
 ├── <a href="proto_tools/tools/mutagenesis/random_nucleotide/">random_nucleotide/</a>
 └── <a href="proto_tools/tools/mutagenesis/random_protein/">random_protein/</a>
