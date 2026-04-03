@@ -10,7 +10,7 @@ ProGen3 is available in six sizes from 112M to 3B parameters, trained on large-s
 
 ## Background
 
-[Protein language models](https://en.wikipedia.org/wiki/Protein_language_model) learn the statistical patterns of natural protein sequences, capturing evolutionary constraints on amino acid usage. ProGen3's bidirectional scoring (averaging N→C and C→N likelihoods) provides a more robust assessment of sequence naturalness than unidirectional models, since protein function depends on the complete [3D structure](https://en.wikipedia.org/wiki/Protein_structure) rather than just the N-to-C reading frame.
+Protein language models learn the statistical patterns of natural protein sequences, capturing evolutionary constraints on amino acid usage. ProGen3's bidirectional scoring (averaging N→C and C→N likelihoods) provides a more robust assessment of sequence naturalness than unidirectional models, since protein function depends on the complete [3D structure](https://en.wikipedia.org/wiki/Protein_structure) rather than just the N-to-C reading frame.
 
 The [Mixture-of-Experts](https://en.wikipedia.org/wiki/Mixture_of_experts) architecture activates only a subset of parameters per token, allowing larger model capacity without proportionally increasing compute cost.
 
