@@ -162,7 +162,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 import json
 import sys
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 # Model class with lazy loading
 class {ToolName}Model:
