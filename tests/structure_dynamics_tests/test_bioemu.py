@@ -117,6 +117,7 @@ def test_config_rejects_invalid_model_name():
 # ── Output assembly (mocked dispatch) ────────────────────────────────────────
 
 
+@pytest.mark.slow
 def test_multiple_complexes_produce_separate_ensembles():
     complex_ = StructurePredictionComplex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
     bioemu_input = BioEmuInput(complexes=[complex_, complex_])

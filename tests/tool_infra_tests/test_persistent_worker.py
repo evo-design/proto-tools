@@ -996,6 +996,7 @@ def test_send_response_large_payload_uses_file_protocol(monkeypatch):
     os.unlink(file_path)
 
 
+@pytest.mark.slow
 def test_file_fallback_end_to_end(tmp_path: Path):
     """End-to-end: worker returns a large payload via the PROTO_FILE: protocol."""
     # Use a tiny threshold (1KB) so we don't allocate 100MB in tests.
