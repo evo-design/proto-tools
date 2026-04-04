@@ -282,7 +282,7 @@ class DeviceManager:
                     if any(self._is_gpu(d) and d not in new_pool for d in alloc.device_ids)
                 ]
                 for alloc in orphaned:
-                    logger.info(
+                    logger.debug(
                         "DeviceManager: Shutting down %s on %s (device removed from pool)",
                         alloc.tool_name,
                         self._device_str(alloc.device_ids),
@@ -306,7 +306,7 @@ class DeviceManager:
             # Auto-escalate CPU -> RESTART under Exclusive_Process GPU mode
             self._escalate_for_exclusive_process()
 
-            logger.info(
+            logger.debug(
                 "DeviceManager configured: managed_devices=%s, allow_multiple_per_device=%s, offload_strategy=%s",
                 self._managed_devices or "auto",
                 self._allow_multiple_per_device,
@@ -487,7 +487,7 @@ class DeviceManager:
         )
 
         device_str = self._device_str(device_ids)
-        logger.info(
+        logger.debug(
             "DeviceManager: Allocated %s [%s] for %s (instance: %s, type: %s)",
             "device" if len(device_ids) == 1 else f"{len(device_ids)} device(s)",
             device_str,
@@ -893,7 +893,7 @@ class DeviceManager:
         with self._instance_lock:
             allocation = self._allocations.pop(instance_name, None)
             if allocation is not None:
-                logger.info(
+                logger.debug(
                     "DeviceManager: Released %s from %s (instance: %s)",
                     self._device_str(allocation.device_ids),
                     allocation.tool_name,

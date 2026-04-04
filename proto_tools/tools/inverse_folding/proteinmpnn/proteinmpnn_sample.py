@@ -9,7 +9,6 @@ from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
-from tqdm import tqdm
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -20,6 +19,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ def run_proteinmpnn_sample(
     # Local venv execution
     logger.debug("Using local venv for ProteinMPNN sampling")
 
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="ProteinMPNN sampling",
         unit="structure",

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import Field, field_validator
-from tqdm import tqdm
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -23,6 +22,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.progress import progress_bar
 
 
 class FAMPNNStructureInput(InverseFoldingStructureInput):
@@ -214,7 +214,7 @@ def run_fampnn_sample(
     """
     designed_sequences = []
 
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="FAMPNN sampling",
         unit="structure",

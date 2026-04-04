@@ -277,6 +277,11 @@ class ToolRegistry:
                 inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None
             ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
+                # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
+                from proto_tools.utils.logging_config import _auto_configure_logging
+
+                _auto_configure_logging()
+
                 # If config is None, instantiate default config
                 if config is None:
                     config = config_class()

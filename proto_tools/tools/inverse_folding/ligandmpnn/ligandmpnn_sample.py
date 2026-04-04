@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import Field
-from tqdm import tqdm
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -19,6 +18,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ToolInstance
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def run_ligandmpnn_sample(
     designed_sequences = []
 
     # Local venv execution
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="LigandMPNN sampling",
         unit="structure",

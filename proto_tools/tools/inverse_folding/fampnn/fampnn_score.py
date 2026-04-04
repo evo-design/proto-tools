@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from tqdm import tqdm
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
@@ -20,6 +19,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ def run_fampnn_score(
     """
     results = []
 
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="FAMPNN scoring",
         unit="structure",

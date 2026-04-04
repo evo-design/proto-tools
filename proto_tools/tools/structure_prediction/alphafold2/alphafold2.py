@@ -10,7 +10,6 @@ import logging
 from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
-from tqdm import tqdm
 
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
@@ -25,6 +24,7 @@ from proto_tools.utils import (
     ToolInstance,
     return_invalid_protein_chars,
 )
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +265,7 @@ def run_alphafold2(
 
     structure_outputs = []
 
-    for complex_data in tqdm(
+    for complex_data in progress_bar(
         prepared_complexes,
         desc="Folding structures (AlphaFold2)",
         unit="structure",

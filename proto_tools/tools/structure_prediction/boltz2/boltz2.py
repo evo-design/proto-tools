@@ -15,8 +15,6 @@ import warnings
 from logging import getLogger
 from typing import Any, ClassVar
 
-from tqdm import tqdm
-
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
     complex_to_yaml,
@@ -29,6 +27,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
+from proto_tools.utils.progress import progress_bar
 
 logger = getLogger(__name__)
 
@@ -271,7 +270,7 @@ def run_boltz2(inputs: Boltz2Input, config: Boltz2Config, instance: Any = None) 
             msas=inputs.msas,
             instance=instance,
         )
-        for comp in tqdm(
+        for comp in progress_bar(
             inputs.complexes, desc="Folding structures (Boltz-2)", unit="complex", total=len(inputs.complexes)
         )
     ]

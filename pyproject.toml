@@ -112,6 +112,7 @@ plugins = ["pydantic.mypy"]
 strict = true
 warn_unreachable = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code", "deprecated"]
+exclude = [".*standalone/standalone_helpers\\.py$"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -125,6 +126,7 @@ module = [
     "biotite.*",
     "py3Dmol.*",
     "pandas.*",
+    "yaml.*",
     "huggingface_hub.*",
     "tokenizers.*",
     # Bioinformatics tools (only used in standalone/ dirs, not pip deps)

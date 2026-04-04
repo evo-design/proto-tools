@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import Field
-from tqdm import tqdm
 
 from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import (
     FAMPNNStructureInput,
@@ -22,6 +21,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,7 @@ def run_fampnn_pack(
     all_packed = []
     all_psce = []
 
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="FAMPNN packing",
         unit="structure",
