@@ -10,7 +10,8 @@ import logging
 from typing import Any, ClassVar
 
 from pydantic import field_validator
-from tqdm import tqdm
+
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ def run_esmfold(
 
     # Process each sub-batch through standalone script
     # Use tqdm to show progress over individual structures, not batches
-    pbar = tqdm(
+    pbar = progress_bar(
         total=len(prepared_complexes),
         desc="Folding structures (ESMFold)",
         unit="structure",

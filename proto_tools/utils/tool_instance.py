@@ -65,6 +65,7 @@ from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers as copy
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.persistent_worker import PersistentWorker, _build_subprocess_env, _parse_env_vars_file
+from proto_tools.utils.progress import set_substatus
 
 logger = logging.getLogger(__name__)
 
@@ -459,6 +460,12 @@ class ToolInstance:
         show_first_run_notice()
 
         if not self.env_path.exists() or not self._is_env_ok():
+            if not self.env_path.exists():
+                logger.info(
+                    "First-time setup for %s. Installing dependencies. "
+                    "This is a one-time process; subsequent runs will start much faster.",
+                    self.tool_name,
+                )
             # Check for a stale status from a previous session
             status_file = self.env_path / "STATUS.txt"
             if status_file.exists():
@@ -728,17 +735,19 @@ class ToolInstance:
         params = reload_params or {}
         if self._needs_warmup(params):
             effective_timeout = WARMUP_TIMEOUT if timeout is None else max(WARMUP_TIMEOUT, timeout)
-            if timeout is None or effective_timeout > timeout:
-                config_desc = ""
-                if params:
-                    config_desc = " (config: {})".format(", ".join(f"{k}={v!r}" for k, v in sorted(params.items())))
+            if params:
+                config_desc = ", ".join(f"{k}={v!r}" for k, v in sorted(params.items()))
                 logger.info(
-                    "First run of %s%s detected, using extended warm-up timeout: %ds (configured: %s)",
+                    "First run of %s with %s. Model weights may need to download; "
+                    "subsequent runs with this configuration will be faster.",
                     self.tool_name,
                     config_desc,
-                    effective_timeout,
-                    f"{timeout}s" if timeout is not None else "None",
                 )
+            logger.debug(
+                "Using extended warm-up timeout: %ds (configured: %s)",
+                effective_timeout,
+                f"{timeout}s" if timeout is not None else "None",
+            )
             return effective_timeout
         return timeout
 
@@ -786,6 +795,7 @@ class ToolInstance:
                         ),
                         self.tool_name,
                     )
+                set_substatus("Restarting worker")
                 self._worker.stop()
                 self._worker = None
 
@@ -837,6 +847,7 @@ class ToolInstance:
             self.device = allocated_device
             input_dict["device"] = allocated_device
 
+            set_substatus("Starting worker")
             self._worker = PersistentWorker(
                 tool_name=self.tool_name,
                 env_path=self.env_path,
@@ -869,6 +880,7 @@ class ToolInstance:
         # Apply warm-up timeout for first use of this config combination
         effective_timeout = self._apply_warmup_timeout(timeout, reload_params)
 
+        set_substatus(f"Running {self.tool_name}")
         try:
             result = self._worker.send(input_dict, timeout=effective_timeout)
             self._mark_warmup_complete(reload_params)
@@ -931,6 +943,7 @@ class ToolInstance:
             # Apply warm-up timeout for first use of this config
             effective_timeout = self._apply_warmup_timeout(timeout)
 
+            set_substatus(f"Running {self.tool_name}")
             try:
                 subprocess.run(
                     [python_exe, str(sp), str(input_path), str(output_path)],
@@ -1038,6 +1051,7 @@ class ToolInstance:
                 f"https://conda.anaconda.org/conda-forge/{platform_id}/micromamba-1.5.12-0.tar.bz2",
             ]
             last_err: Exception | None = None
+            set_substatus("Downloading micromamba")
             for url in urls:
                 try:
                     result = subprocess.run(
@@ -1249,7 +1263,7 @@ class ToolInstance:
         python_version = self._get_python_version()
 
         # Create fresh micromamba environment
-        logger.info("Setting up environment for %s (Python %s)...", self.tool_name, python_version)
+        set_substatus(f"Setting up environment for {self.tool_name}")
         # Set MAMBA_ROOT_PREFIX to the .micromamba dir (same filesystem as
         # tool_envs/) so the package cache lives alongside the envs and
         # micromamba can hardlink instead of copying.

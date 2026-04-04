@@ -6,8 +6,6 @@ ProteinMPNN scoring tool.
 import logging
 from typing import Any, Literal
 
-from tqdm import tqdm
-
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceScores,
@@ -21,6 +19,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +201,7 @@ def run_proteinmpnn_score(
     # Local venv execution
     logger.debug("Using local venv for ProteinMPNN scoring")
 
-    for sequence_structure_pair in tqdm(
+    for sequence_structure_pair in progress_bar(
         inputs.sequence_structure_pairs,
         desc="ProteinMPNN scoring",
         unit="pair",

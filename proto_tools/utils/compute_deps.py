@@ -180,7 +180,7 @@ def detect_compute_environment() -> dict[str, str]:
 
     # CPU-only fallback
     if not gpu_info.available or gpu_info.count == 0:
-        logger.info("No GPU detected, recommending CPU-only PyTorch/JAX")
+        logger.debug("No GPU detected, recommending CPU-only PyTorch/JAX")
         return {
             "DETECTED_COMPUTE_PLATFORM": "cpu",
             "RECOMMENDED_TORCH_SPEC": "torch",
@@ -209,12 +209,12 @@ def detect_compute_environment() -> dict[str, str]:
     torch_index = _get_torch_index(driver_major)
     jax_spec, jax_variant = _get_jax_spec(driver_major, cuda_major)
 
-    logger.info(
+    logger.debug(
         f"Compute environment detected: platform=cuda, "
         f"driver={driver_version} (major={driver_major}), "
         f"cuda={cuda_version} (major={cuda_major})"
     )
-    logger.info(f"Recommended: PyTorch {torch_spec} (index: {torch_index}), JAX {jax_spec}")
+    logger.debug(f"Recommended: PyTorch {torch_spec} (index: {torch_index}), JAX {jax_spec}")
 
     env = {
         "DETECTED_COMPUTE_PLATFORM": "cuda",

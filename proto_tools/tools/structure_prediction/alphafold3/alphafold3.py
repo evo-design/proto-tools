@@ -12,7 +12,7 @@ import os
 import tempfile
 from typing import Any, ClassVar
 
-from tqdm import tqdm
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ def run_alphafold3(
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
 
-    for comp_idx, comp in tqdm(
+    for comp_idx, comp in progress_bar(
         enumerate(inputs.complexes),
         desc="Folding structures (AlphaFold3)",
         unit="complex",

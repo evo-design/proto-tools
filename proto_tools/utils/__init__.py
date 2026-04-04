@@ -17,6 +17,7 @@ from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, Allocati
 from proto_tools.utils.http_session import build_http_session
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
+from proto_tools.utils.progress import SPINNER_STYLES, SpinnerStyle, progress_bar, set_substatus
 from proto_tools.utils.sequence import (
     DNA_NUCLEOTIDES,
     PROTEIN_AMINO_ACIDS,
@@ -108,4 +109,9 @@ __all__ = [
     # Logging
     "get_logger",
     "setup_logging",
+    # Progress
+    "progress_bar",
+    "set_substatus",
+    "SpinnerStyle",
+    "SPINNER_STYLES",
 ]

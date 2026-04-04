@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field
-from tqdm import tqdm
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
@@ -19,6 +18,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
+from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ def run_esm_if1_sample(
 
     designed_sequences = []
 
-    for inp in tqdm(
+    for inp in progress_bar(
         inputs.inputs,
         desc="ESM-IF1 sampling",
         unit="structure",

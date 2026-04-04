@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
-from tqdm import tqdm
 
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,7 @@ def run_borzoi_ensemble(
     logger.debug("Using local execution for Borzoi ensemble prediction")
 
     predictions: list[list[list[float]]] = []
-    iterator = tqdm(
+    iterator = progress_bar(
         range(4),
         desc="Borzoi replicates",
         unit="replicate",

@@ -7,8 +7,6 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from tqdm import tqdm
-
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringOutput,
     SequenceScores,
@@ -16,6 +14,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, InputField
 
@@ -125,7 +124,7 @@ def run_esm_if1_score(
     """
     scores = []
 
-    for pair in tqdm(
+    for pair in progress_bar(
         inputs.sequence_structure_pairs,
         desc="ESM-IF1 scoring",
         unit="pair",

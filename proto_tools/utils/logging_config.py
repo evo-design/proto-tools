@@ -3,7 +3,14 @@
 Provides centralized logging setup with file and console handlers,
 automatic log directory management, suppression of noisy third-party loggers,
 and integration with Python's warnings system.
+
+Logging auto-configures on first tool invocation: if no handlers exist on the
+``proto_tools`` logger or the root logger, a minimal stderr console handler
+at INFO level is added automatically.  Downstream library consumers who
+configure their own logging are never affected.
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -13,7 +20,87 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# ============================================================================
+# Library best practice: NullHandler prevents "No handlers found" warnings
+# when proto_tools is imported as a library without explicit logging config.
+# ============================================================================
+logging.getLogger("proto_tools").addHandler(logging.NullHandler())
 
+
+# ============================================================================
+# Noisy third-party loggers (shared between setup_logging and auto-configure)
+# ============================================================================
+_NOISY_LOGGERS = [
+    "transformers",
+    "vortex",
+    "StripedHyena",
+    "esm",
+    "torch",
+    "urllib3",
+    "httpx",
+    "matplotlib",
+    "PIL",
+    "h5py",
+    "numba",
+    "filelock",
+    "huggingface_hub",
+    "datasets",
+    "accelerate",
+]
+
+
+def _suppress_noisy_loggers() -> None:
+    """Suppress noisy third-party loggers to WARNING level."""
+    for logger_name in _NOISY_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
+# ============================================================================
+# Auto-configure: lazy, one-shot logging setup for standalone users
+# ============================================================================
+_state: dict[str, bool] = {"auto_configured": False}
+
+
+def _auto_configure_logging() -> None:
+    """Auto-configure minimal console logging if no handlers are set up.
+
+    Called lazily on first tool invocation via the ``@tool`` wrapper.
+    Adds a stderr handler at INFO level to the ``proto_tools`` logger
+    only if no explicit handlers exist anywhere.
+
+    This ensures "just works" output for standalone users (print-like
+    INFO messages on stderr) while staying out of the way for library
+    consumers who configure their own logging.
+    """
+    if _state["auto_configured"]:
+        return
+    _state["auto_configured"] = True
+
+    pt_logger = logging.getLogger("proto_tools")
+
+    # Someone already configured handlers on the proto_tools logger
+    real_handlers = [h for h in pt_logger.handlers if not isinstance(h, logging.NullHandler)]
+    if real_handlers:
+        return
+
+    # Downstream application configured the root logger — our messages
+    # will propagate there automatically via the NullHandler
+    if logging.getLogger().handlers:
+        return
+
+    # No one configured logging — add minimal stderr handler
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(SelectiveLevelFormatter("%(message)s"))
+    pt_logger.addHandler(handler)
+    pt_logger.setLevel(logging.INFO)
+
+    _suppress_noisy_loggers()
+
+
+# ============================================================================
+# Formatting
+# ============================================================================
 class BioToolsOnlyFilter(logging.Filter):
     """Filter to only allow logs from proto_tools project packages."""
 
@@ -43,6 +130,9 @@ class SelectiveLevelFormatter(logging.Formatter):
         return record.getMessage()
 
 
+# ============================================================================
+# Helpers
+# ============================================================================
 def _parse_log_level(level: int | str) -> int:
     """Parse log level from string or int, case-insensitive.
 
@@ -65,6 +155,9 @@ def _parse_log_level(level: int | str) -> int:
     raise TypeError(f"level must be int or str, got {type(level)}")
 
 
+# ============================================================================
+# Explicit logging setup (power users)
+# ============================================================================
 def setup_logging(
     level: int | str = logging.INFO,
     log_dir: str | None = None,
@@ -78,6 +171,9 @@ def setup_logging(
 ) -> None:
     """Configure logging for proto_tools.
 
+    Calling this function marks logging as explicitly configured, preventing
+    the auto-configure logic from adding its own handler.
+
     Args:
         level (int | str): Default logging level for all handlers. Can be an int (e.g., logging.INFO)
             or a case-insensitive string (e.g., "INFO", "info", "Debug"). Default: INFO.
@@ -89,7 +185,7 @@ def setup_logging(
             When None, file logging is enabled only if a ``pyproject.toml`` is found
             in the directory tree (i.e., running from a development repo) or
             ``PROTO_LOG_DIR`` is set. Pass True/False to override.
-        log_to_console (bool): Whether to enable console logging to stdout (default: True).
+        log_to_console (bool): Whether to enable console logging to stderr (default: True).
         console_level (int | str | None): Override level for console handler. Accepts int or string (default: uses `level`).
         file_level (int | str | None): Override level for file handler. Accepts int or string (default: DEBUG for full capture).
         console_output_formatted (bool): If True, console output includes timestamp and metadata like file logs.
@@ -97,6 +193,9 @@ def setup_logging(
             while WARNING/ERROR/CRITICAL include the level prefix (e.g., "WARNING: message").
         log_file_header (str | None): Optional header text to write at the top of the log file before logging starts.
     """
+    # Mark as explicitly configured — prevents auto-configure from running
+    _state["auto_configured"] = True
+
     # Parse levels (supports case-insensitive strings)
     level = _parse_log_level(level)
     if console_level is not None:
@@ -152,10 +251,10 @@ def setup_logging(
         # Use SelectiveLevelFormatter: shows level prefix only for WARNING and above
         console_formatter = SelectiveLevelFormatter("%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
-    # Console handler (stdout for print-like behavior, works in Jupyter)
+    # Console handler (stderr — safe from subprocess IPC on stdout)
     console_handler = None
     if log_to_console:
-        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(console_level or level)
         console_handler.setFormatter(console_formatter)
         root_logger.addHandler(console_handler)
@@ -186,25 +285,7 @@ def setup_logging(
         root_logger.addHandler(file_handler)
 
     # Suppress noisy third-party loggers
-    noisy_loggers = [
-        "transformers",
-        "vortex",
-        "StripedHyena",
-        "esm",
-        "torch",
-        "urllib3",
-        "httpx",
-        "matplotlib",
-        "PIL",
-        "h5py",
-        "numba",
-        "filelock",
-        "huggingface_hub",
-        "datasets",
-        "accelerate",
-    ]
-    for logger_name in noisy_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
+    _suppress_noisy_loggers()
 
     # Capture warnings through the logging system
     logging.captureWarnings(True)

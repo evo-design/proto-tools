@@ -9,7 +9,8 @@ import tempfile
 from typing import Any, ClassVar
 
 from pydantic import field_validator
-from tqdm import tqdm
+
+from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +277,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
     """
     results = [
         run_chai1_on_complex(comp=comp, config=config, msas=inputs.msas, instance=instance)
-        for comp in tqdm(
+        for comp in progress_bar(
             inputs.complexes, desc="Folding structures (Chai-1)", unit="complex", total=len(inputs.complexes)
         )
     ]
