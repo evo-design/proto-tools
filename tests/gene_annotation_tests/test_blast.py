@@ -485,6 +485,7 @@ def test_local_blastp_no_hits(prot_blast_db):
 
 
 @pytest.mark.integration
+@pytest.mark.skip_ci
 def test_online_blastp():
     """Search a known hemoglobin fragment against swissprot → expect hits."""
     result = run_blast_search(
@@ -497,6 +498,7 @@ def test_online_blastp():
         ),
     )
     assert isinstance(result, BlastSearchOutput)
+    assert result.success, f"BLAST search failed: {result.errors}"
     assert result.num_hits >= 1
     assert len(result.hits) > 0
     assert result.metadata["search_mode"] == "online"
@@ -506,6 +508,7 @@ def test_online_blastp():
 
 
 @pytest.mark.integration
+@pytest.mark.skip_ci
 def test_online_blastn():
     """Search a short nucleotide sequence against nt → verify structure."""
     # Human beta-globin exon 1 fragment
@@ -521,6 +524,7 @@ def test_online_blastn():
         ),
     )
     assert isinstance(result, BlastSearchOutput)
+    assert result.success, f"BLAST search failed: {result.errors}"
     assert result.num_hits >= 1
     # Verify BlastHit has expected fields
     assert len(result.hits) > 0
