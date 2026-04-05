@@ -411,7 +411,7 @@ def run_protenix(
 
         results.append(
             Structure(
-                structure_filepath_or_content=job_result["structure_cif_output"],  # type: ignore[index]
+                structure=job_result["structure_cif_output"],  # type: ignore[index]
                 b_factor_type=BFactorType.PLDDT,
                 metrics=metrics,
                 source="protenix-prediction",

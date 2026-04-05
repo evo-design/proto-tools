@@ -218,7 +218,7 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
 from proto_tools.entities.structures import Structure
 
 # Load structure
-structure = Structure(structure_filepath_or_content="my_protein.pdb")
+structure = Structure.from_file("my_protein.pdb")
 
 # Create sequence-structure pairs to score
 pairs = [

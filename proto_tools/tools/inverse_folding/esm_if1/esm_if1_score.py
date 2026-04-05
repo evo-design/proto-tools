@@ -78,7 +78,7 @@ def example_input() -> Any:
         sequence_structure_pairs=[
             SequenceStructurePair(
                 sequence="A",
-                structure=Structure(structure_filepath_or_content=_pdb_path),
+                structure=Structure.from_file(_pdb_path),
             )
         ]
     )

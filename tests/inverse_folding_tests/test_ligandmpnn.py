@@ -26,7 +26,7 @@ _persistent_tool = make_persistent_fixture("ligandmpnn")
 
 @pytest.fixture(scope="module")
 def cif_structure():
-    return Structure(structure_filepath_or_content=TEST_CIF_FILE)
+    return Structure.from_file(TEST_CIF_FILE)
 
 
 @pytest.mark.uses_gpu

@@ -37,7 +37,7 @@ _persistent_tool = make_persistent_fixture("proteinmpnn")
 
 @pytest.fixture(scope="module")
 def pdb_structure():
-    return Structure(structure_filepath_or_content=TEST_PDB_FILE)
+    return Structure.from_file(TEST_PDB_FILE)
 
 
 @pytest.mark.uses_gpu

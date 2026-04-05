@@ -390,7 +390,7 @@ def run_boltz2_on_complex(
     metrics["avg_pae"] = metrics.get("complex_pde")
 
     return Structure(
-        structure_filepath_or_content=cif_output,
+        structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
         metrics=metrics,
         source="boltz2-prediction",

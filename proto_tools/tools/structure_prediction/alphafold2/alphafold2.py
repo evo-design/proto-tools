@@ -313,7 +313,7 @@ def run_alphafold2(
 
         structure_outputs.append(
             Structure(
-                structure_filepath_or_content=output_data["pdb"],
+                structure=output_data["pdb"],
                 b_factor_type=BFactorType.NORMALIZED_PLDDT,
                 metrics=metrics,
                 source="alphafold2-prediction",

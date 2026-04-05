@@ -3,18 +3,19 @@
 Tests for StructureEnsemble.
 """
 
-from unittest.mock import Mock
+from pathlib import Path
 
 from proto_tools.entities.structures import Structure, StructureEnsemble
 
 _SAMPLE_SEQUENCE = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
+_TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 
 def test_ensemble_creation():
-    """Test creating a StructureEnsemble with mock structures."""
-    mock_structure = Mock(spec=Structure)
+    """Test creating a StructureEnsemble with real structures."""
+    structure = Structure.from_file(_TEST_PDB_FILE)
     ensemble = StructureEnsemble(
-        structures=[mock_structure] * 5,
+        structures=[structure] * 5,
         sequence=_SAMPLE_SEQUENCE,
     )
     assert len(ensemble.structures) == 5

@@ -32,7 +32,7 @@ _persistent_tool = make_persistent_fixture("esm_if1")
 
 @pytest.fixture(scope="module")
 def pdb_structure():
-    return Structure(structure_filepath_or_content=TEST_PDB_FILE)
+    return Structure.from_file(TEST_PDB_FILE)
 
 
 # ============================================================================

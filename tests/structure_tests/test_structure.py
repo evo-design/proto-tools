@@ -3,12 +3,15 @@
 Tests for the Structure entity.
 """
 
+import warnings
 from pathlib import Path
 
+import gemmi
 import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures.utils import convert_cif_str_to_pdb_str
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -28,207 +31,179 @@ def test_cif_file_content() -> str:
 
 @pytest.fixture
 def protein_from_pdb_file():
-    """Create Structure from PDB file path."""
-    return Structure(_TEST_PDB_FILE)
+    return Structure.from_file(_TEST_PDB_FILE)
 
 
 @pytest.fixture
 def protein_from_cif_file():
-    """Create Structure from CIF file path."""
-    return Structure(_TEST_CIF_FILE)
-
-
-@pytest.fixture
-def protein_from_pdb_content(test_pdb_file_content):
-    """Create Structure from PDB content string."""
-    return Structure(test_pdb_file_content)
-
-
-@pytest.fixture
-def protein_from_cif_content(test_cif_file_content):
-    """Create Structure from CIF content string."""
-    return Structure(test_cif_file_content)
+    return Structure.from_file(_TEST_CIF_FILE)
 
 
 # ── Initialization ────────────────────────────────────────────────────────────
 
 
-def test_init_from_pdb_filepath(protein_from_pdb_file):
-    assert protein_from_pdb_file is not None
-    assert protein_from_pdb_file.structure_format == "pdb"
-
-
-def test_init_from_cif_filepath(protein_from_cif_file):
-    assert protein_from_cif_file is not None
-    assert protein_from_cif_file.structure_format == "cif"
-
-
-def test_init_from_pdb_content_string(protein_from_pdb_content):
-    assert protein_from_pdb_content is not None
-    assert protein_from_pdb_content.structure_format == "pdb"
-
-
-def test_init_from_cif_content_string(protein_from_cif_content):
-    assert protein_from_cif_content is not None
-    assert protein_from_cif_content.structure_format == "cif"
+@pytest.mark.parametrize(
+    "source,expected_format",
+    [
+        ("pdb_file", "pdb"),
+        ("cif_file", "cif"),
+        ("pdb_content", "pdb"),
+        ("cif_content", "cif"),
+    ],
+)
+def test_init_detects_format(source, expected_format, test_pdb_file_content, test_cif_file_content):
+    sources = {
+        "pdb_file": lambda: Structure.from_file(_TEST_PDB_FILE),
+        "cif_file": lambda: Structure.from_file(_TEST_CIF_FILE),
+        "pdb_content": lambda: Structure(structure=test_pdb_file_content),
+        "cif_content": lambda: Structure(structure=test_cif_file_content),
+    }
+    s = sources[source]()
+    assert s.structure_format == expected_format
 
 
 def test_init_with_invalid_structure():
     with pytest.raises(ValueError, match="Structure content is invalid"):
-        Structure("invalid structure content")
+        Structure(structure="invalid structure content", structure_format="pdb")
 
 
 def test_init_with_nonexistent_file():
     with pytest.raises(FileNotFoundError, match="File not found"):
-        Structure(Path("/nonexistent/file.pdb"))
+        Structure.from_file(Path("/nonexistent/file.pdb"))
+
+
+@pytest.mark.parametrize("path_type", [str, Path])
+def test_init_accepts_path_in_structure_field(path_type):
+    """Structure(structure=<path>) loads the file transparently and sets source."""
+    s = Structure(structure=path_type(_TEST_PDB_FILE))
+    assert s.structure_format == "pdb"
+    assert s.source == str(_TEST_PDB_FILE)
+    assert "ATOM" in s.structure
+
+
+def test_init_path_does_not_override_explicit_source():
+    s = Structure(structure=str(_TEST_PDB_FILE), source="custom-source")
+    assert s.source == "custom-source"
+
+
+def test_init_content_string_not_treated_as_path(test_pdb_file_content):
+    """Multi-line content strings must not be mistaken for filesystem paths."""
+    s = Structure(structure=test_pdb_file_content)
+    assert s.source is None
+    assert s.structure == test_pdb_file_content
 
 
 # ── Format conversion ────────────────────────────────────────────────────────
 
 
-def test_pdb_file_to_cif_property(protein_from_pdb_file):
+def test_pdb_to_cif_conversion(protein_from_pdb_file):
     cif_content = protein_from_pdb_file.structure_cif
-    assert cif_content is not None
     assert isinstance(cif_content, str)
     assert len(cif_content) > 0
     assert "data_" in cif_content or "_atom_site" in cif_content
 
 
-def test_cif_file_to_pdb_property(protein_from_cif_file):
+def test_cif_to_pdb_conversion(protein_from_cif_file):
     pdb_content = protein_from_cif_file.structure_pdb
-    assert pdb_content is not None
     assert isinstance(pdb_content, str)
-    assert len(pdb_content) > 0
     assert "ATOM" in pdb_content
 
 
-def test_pdb_content_to_cif_property(protein_from_pdb_content):
-    cif_content = protein_from_pdb_content.structure_cif
-    assert cif_content is not None
-    assert len(cif_content) > 0
+def test_cif_to_pdb_no_warnings_for_clean_cif(test_cif_file_content):
+    """A normal single-chain CIF (renin) should convert without any lossy-data warnings."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        convert_cif_str_to_pdb_str(test_cif_file_content)
+    lossy_warnings = [w for w in caught if "CIF→PDB conversion" in str(w.message)]
+    assert lossy_warnings == []
 
 
-def test_cif_content_to_pdb_property(protein_from_cif_content):
-    pdb_content = protein_from_cif_content.structure_pdb
-    assert pdb_content is not None
-    assert len(pdb_content) > 0
+def test_cif_to_pdb_warns_on_long_chain_id(test_cif_file_content):
+    """Multi-character chain IDs cannot fit PDB's 1-char column — must warn."""
+    # Rename chain A to AA, re-emit CIF, then convert.
+    struct = gemmi.make_structure_from_block(gemmi.cif.read_string(test_cif_file_content)[0])
+    for model in struct:
+        for chain in model:
+            chain.name = chain.name + chain.name  # "A" -> "AA"
+            break
+        break
+    modified_cif = struct.make_mmcif_document().as_string()
+
+    with pytest.warns(UserWarning, match="chain ID"):
+        convert_cif_str_to_pdb_str(modified_cif)
 
 
-def test_pdb_to_pdb_returns_original(protein_from_pdb_file):
-    pdb_content = protein_from_pdb_file.structure_pdb
-    assert pdb_content == protein_from_pdb_file.structure
+@pytest.mark.parametrize("fixture_name", ["protein_from_pdb_file", "protein_from_cif_file"])
+def test_same_format_returns_original(fixture_name, request):
+    """Accessing the same format as stored returns the original string."""
+    protein = request.getfixturevalue(fixture_name)
+    if protein.structure_format == "pdb":
+        assert protein.structure_pdb == protein.structure
+    else:
+        assert protein.structure_cif == protein.structure
 
 
-def test_cif_to_cif_returns_original(protein_from_cif_file):
-    cif_content = protein_from_cif_file.structure_cif
-    assert cif_content == protein_from_cif_file.structure
+def test_sequences_preserved_through_format_conversion(protein_from_pdb_file):
+    original_sequences = protein_from_pdb_file.get_chain_sequences()
+    cif_content = protein_from_pdb_file.structure_cif
+    converted = Structure(structure=cif_content)
+    assert converted.get_chain_sequences() == original_sequences
 
 
 # ── Gemmi integration ────────────────────────────────────────────────────────
 
 
-def test_gemmi_struct_lazy_loading(protein_from_pdb_file):
-    """Verify gemmi structure is lazily loaded on first access."""
+def test_gemmi_struct_lazy_loading_and_caching(protein_from_pdb_file):
     assert protein_from_pdb_file._gemmi_struct is None
-    gemmi_struct = protein_from_pdb_file.gemmi_struct
-    assert gemmi_struct is not None
-    assert protein_from_pdb_file._gemmi_struct is not None
-
-
-def test_gemmi_struct_from_pdb(protein_from_pdb_file):
-    gemmi_struct = protein_from_pdb_file.gemmi_struct
-    assert len(gemmi_struct) > 0
-
-
-def test_gemmi_struct_from_cif(protein_from_cif_file):
-    gemmi_struct = protein_from_cif_file.gemmi_struct
-    assert len(gemmi_struct) > 0
-
-
-def test_gemmi_struct_cached(protein_from_pdb_file):
-    """Verify gemmi structure is cached after first access."""
     struct1 = protein_from_pdb_file.gemmi_struct
-    struct2 = protein_from_pdb_file.gemmi_struct
-    assert struct1 is struct2
+    assert struct1 is not None
+    assert len(struct1) > 0
+    assert protein_from_pdb_file.gemmi_struct is struct1
+
+
+@pytest.mark.parametrize("fixture_name", ["protein_from_pdb_file", "protein_from_cif_file"])
+def test_gemmi_struct_parses_both_formats(fixture_name, request):
+    protein = request.getfixturevalue(fixture_name)
+    assert len(protein.gemmi_struct) > 0
 
 
 # ── File I/O ──────────────────────────────────────────────────────────────────
 
 
-def test_write_cif(protein_from_pdb_file, tmp_path):
-    out = tmp_path / "out.cif"
-    protein_from_pdb_file.write_cif(out)
+@pytest.mark.parametrize(
+    "write_method,suffix,content_check",
+    [
+        ("write_cif", ".cif", lambda c: "data_" in c or "_atom_site" in c),
+        ("write_pdb", ".pdb", lambda c: "ATOM" in c),
+    ],
+)
+def test_write_and_round_trip(protein_from_pdb_file, tmp_path, write_method, suffix, content_check):
+    out = tmp_path / f"out{suffix}"
+    getattr(protein_from_pdb_file, write_method)(out)
     assert out.exists()
-
     content = out.read_text()
-    assert len(content) > 0
-    assert "data_" in content or "_atom_site" in content
-
-    # Round-trip: should be loadable
-    Structure(out)
-
-
-def test_write_pdb(protein_from_cif_file, tmp_path):
-    out = tmp_path / "out.pdb"
-    protein_from_cif_file.write_pdb(out)
-    assert out.exists()
-
-    content = out.read_text()
-    assert len(content) > 0
-    assert "ATOM" in content
-
-    # Round-trip: should be loadable
-    Structure(out)
-
-
-def test_write_cif_with_string_path(protein_from_pdb_file, tmp_path):
-    out = str(tmp_path / "out.cif")
-    protein_from_pdb_file.write_cif(out)
-    assert Path(out).exists()
-
-
-def test_write_pdb_with_string_path(protein_from_cif_file, tmp_path):
-    out = str(tmp_path / "out.pdb")
-    protein_from_cif_file.write_pdb(out)
-    assert Path(out).exists()
+    assert content_check(content)
+    Structure.from_file(out)
 
 
 # ── Sequence extraction ───────────────────────────────────────────────────────
 
 
-def test_get_chain_sequences(protein_from_pdb_file):
+def test_get_chain_sequences_and_ids(protein_from_pdb_file):
     sequences = protein_from_pdb_file.get_chain_sequences()
-    assert isinstance(sequences, dict)
     assert len(sequences) > 0
     for chain_id, sequence in sequences.items():
         assert isinstance(chain_id, str)
-        assert isinstance(sequence, str)
         assert len(sequence) > 0
 
-
-def test_get_chain_ids(protein_from_pdb_file):
     chain_ids = protein_from_pdb_file.get_chain_ids()
-    assert isinstance(chain_ids, list)
-    assert len(chain_ids) > 0
-    sequences = protein_from_pdb_file.get_chain_sequences()
     assert set(chain_ids) == set(sequences.keys())
 
+    # Default (no chain_id) returns first chain
+    assert protein_from_pdb_file.get_chain_sequence() == next(iter(sequences.values()))
 
-def test_get_chain_sequence_first_chain(protein_from_pdb_file):
-    sequence = protein_from_pdb_file.get_chain_sequence()
-    assert isinstance(sequence, str)
-    assert len(sequence) > 0
-    sequences = protein_from_pdb_file.get_chain_sequences()
-    first_sequence = next(iter(sequences.values()))
-    assert sequence == first_sequence
-
-
-def test_get_chain_sequence_specific_chain(protein_from_pdb_file):
-    chain_ids = protein_from_pdb_file.get_chain_ids()
-    first_chain_id = chain_ids[0]
-    sequence = protein_from_pdb_file.get_chain_sequence(first_chain_id)
-    assert isinstance(sequence, str)
-    assert len(sequence) > 0
+    # Specific chain
+    assert len(protein_from_pdb_file.get_chain_sequence(chain_ids[0])) > 0
 
 
 def test_get_chain_sequence_invalid_chain(protein_from_pdb_file):
@@ -236,97 +211,53 @@ def test_get_chain_sequence_invalid_chain(protein_from_pdb_file):
         protein_from_pdb_file.get_chain_sequence("INVALID_CHAIN_XYZ")
 
 
-def test_sequences_preserved_through_format_conversion(protein_from_pdb_file):
-    original_sequences = protein_from_pdb_file.get_chain_sequences()
-    cif_content = protein_from_pdb_file.structure_cif
-    protein_from_converted_cif = Structure(cif_content)
-    converted_sequences = protein_from_converted_cif.get_chain_sequences()
-    assert original_sequences == converted_sequences
-
-
 # ── Pydantic serialization ────────────────────────────────────────────────────
 
 
-def test_serialize_to_dict(protein_from_pdb_file):
-    serialized = protein_from_pdb_file._serialize_to_dict()
-    assert isinstance(serialized, dict)
-    assert "structure" in serialized
-    assert "structure_format" in serialized
-    assert "b_factor_type" in serialized
-    assert serialized["structure_format"] == "pdb"
-    assert serialized["b_factor_type"] == "unspecified"
+def test_model_dump_and_validate_round_trip(protein_from_pdb_file):
+    dumped = protein_from_pdb_file.model_dump()
+    assert dumped["structure_format"] == "pdb"
+    assert dumped["b_factor_type"] == "unspecified"
 
-
-def test_validate_from_dict(protein_from_pdb_file):
-    serialized = protein_from_pdb_file._serialize_to_dict()
-    reconstructed = Structure._validate_from_dict(serialized)
-    assert isinstance(reconstructed, Structure)
+    reconstructed = Structure.model_validate(dumped)
     assert reconstructed.structure_format == "pdb"
     assert reconstructed.b_factor_type == protein_from_pdb_file.b_factor_type
 
 
-def test_pydantic_model_integration(protein_from_pdb_file):
-    """Test that Structure works in Pydantic models."""
+def test_nested_pydantic_model_round_trip(protein_from_pdb_file):
+    """Structure survives serialization when nested in another Pydantic model."""
 
     class _StructureModel(BaseModel):
         structure: Structure
 
-    model = _StructureModel(structure=protein_from_pdb_file)
-    assert model.structure is not None
+    original = _StructureModel(structure=protein_from_pdb_file)
+    reconstructed = _StructureModel.model_validate(original.model_dump())
+
+    assert reconstructed.structure.b_factor_type == protein_from_pdb_file.b_factor_type
+    assert reconstructed.structure.get_chain_sequences() == protein_from_pdb_file.get_chain_sequences()
 
 
-def test_pydantic_serialization_round_trip(protein_from_pdb_file):
-    """Test full serialization/deserialization round trip with Pydantic."""
-
-    class _StructureModel(BaseModel):
-        structure: Structure
-
-    original_model = _StructureModel(structure=protein_from_pdb_file)
-    model_dict = original_model.model_dump()
-    reconstructed_model = _StructureModel.model_validate(model_dict)
-
-    assert reconstructed_model.structure is not None
-    assert reconstructed_model.structure.b_factor_type == protein_from_pdb_file.b_factor_type
-
-    original_sequences = protein_from_pdb_file.get_chain_sequences()
-    reconstructed_sequences = reconstructed_model.structure.get_chain_sequences()
-    assert original_sequences == reconstructed_sequences
+def test_model_validate_with_b_factor_type():
+    protein = Structure.from_file(_TEST_PDB_FILE, b_factor_type=BFactorType.PLDDT)
+    dumped = protein.model_dump()
+    assert Structure.model_validate(dumped).b_factor_type == BFactorType.PLDDT
 
 
-def test_validate_from_dict_with_b_factor_type():
-    protein = Structure(_TEST_PDB_FILE, b_factor_type=BFactorType.PLDDT)
-    serialized = protein._serialize_to_dict()
-    reconstructed = Structure._validate_from_dict(serialized)
-    assert reconstructed.b_factor_type == BFactorType.PLDDT
+def test_model_validate_missing_structure():
+    with pytest.raises(ValueError):
+        Structure.model_validate({"b_factor_type": "unspecified", "structure_format": "pdb"})
 
 
-def test_validate_from_dict_missing_structure():
-    with pytest.raises(ValueError, match="Missing 'structure'"):
-        Structure._validate_from_dict({"b_factor_type": "unspecified", "structure_format": "pdb"})
-
-
-def test_validate_from_dict_missing_structure_format():
-    ps = Structure._validate_from_dict({"structure": "ATOM  1", "b_factor_type": "unspecified"})
-    assert ps.structure_format == "pdb"
-
-
-def test_validate_from_dict_with_structure_instance(protein_from_pdb_file):
-    """Passing existing Structure returns it unchanged."""
-    result = Structure._validate_from_dict(protein_from_pdb_file)
-    assert result is protein_from_pdb_file
+def test_model_validate_auto_detects_format(test_pdb_file_content):
+    s = Structure.model_validate({"structure": test_pdb_file_content, "b_factor_type": "unspecified"})
+    assert s.structure_format == "pdb"
 
 
 def test_visualize(protein_from_pdb_file):
-    """Ensure visualize method does not fail."""
     _ = protein_from_pdb_file.visualize(show_legend=False)
 
 
-# ── Metrics serialization ────────────────────────────────────────────────────
-
-
-def test_metrics_survive_serialize_deserialize_round_trip():
-    """Metrics dict should survive _serialize_to_dict → _validate_from_dict."""
-    protein = Structure(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
-    serialized = protein._serialize_to_dict()
-    reconstructed = Structure._validate_from_dict(serialized)
+def test_metrics_survive_round_trip():
+    protein = Structure.from_file(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
+    reconstructed = Structure.model_validate(protein.model_dump())
     assert reconstructed.metrics == {"plddt": 85.2, "ptm": 0.9}
