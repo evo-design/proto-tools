@@ -325,7 +325,7 @@ def run_esmfold(
 
         structure_outputs.append(
             Structure(
-                structure_filepath_or_content=pdb_output,
+                structure=pdb_output,
                 b_factor_type=BFactorType.NORMALIZED_PLDDT,
                 metrics={
                     "avg_plddt": result["avg_plddt"],

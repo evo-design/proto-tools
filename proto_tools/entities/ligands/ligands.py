@@ -1,7 +1,6 @@
-"""proto_tools/entities/ligands/ligands.py.
+"""Small-molecule ligand representations as Pydantic BaseModels."""
 
-Contains base class for representing small-molecule ligands.
-"""
+from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any, Literal
 
 import numpy as np
 import py3Dmol
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -18,62 +18,104 @@ from proto_tools.entities.ligands.utils import (
 )
 
 
-class Fragment:
-    """Class representing a single small molecule."""
+class Fragment(BaseModel):
+    """A single small molecule, stored as a canonical SMILES string.
 
-    def __init__(self, molecule: "str | Chem.Mol | Fragment", name: str | None = None):
-        """Initialize a Fragment from either a SMILES string, an RDKit Mol object,.
+    The RDKit ``Mol`` object is lazy-loaded from the SMILES on first access
+    via the ``mol`` property. Use ``Fragment.from_mol()`` to construct from an
+    existing Mol.
 
-        or a Fragment object.
+    Attributes:
+        smiles (str): Canonical SMILES string (source of truth for serialization).
+        name (str | None): Human-readable molecule name.
+        metrics (dict[str, float]): Computed metrics for this fragment.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    smiles: str = Field(description="Canonical SMILES string")
+    name: str | None = Field(default=None, description="Molecule name")
+    metrics: dict[str, float] = Field(default_factory=dict, description="Computed metrics")
+
+    _mol: Any = PrivateAttr(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _canonicalize_smiles(cls, data: Any) -> Any:
+        """Validate and canonicalize the SMILES string before field assignment."""
+        if isinstance(data, dict) and "smiles" in data:
+            parsed = Chem.MolFromSmiles(data["smiles"])
+            if parsed is None:
+                msg = f"Invalid SMILES string: {data['smiles']}"  # type: ignore[unreachable]
+                raise ValueError(msg)
+            data["smiles"] = Chem.MolToSmiles(parsed, canonical=True)
+        return data
+
+    # ============================================================================
+    # Factory
+    # ============================================================================
+
+    @classmethod
+    def from_mol(cls, mol: Chem.Mol, name: str | None = None) -> Fragment:
+        """Create a Fragment from an RDKit Mol object.
 
         Args:
-            molecule (str | Chem.Mol | Fragment): SMILES string, RDKit Mol object, or Fragment object
-            name (str | None): Optional name for the small molecule
+            mol (Chem.Mol): RDKit molecule (must contain exactly one fragment).
+            name (str | None): Optional molecule name.
+
+        Returns:
+            Fragment: The constructed fragment.
+
+        Raises:
+            ValueError: If the Mol contains more than one fragment.
         """
-        # Initialize the primary representation of the ligand
-        self.mol = None
-        if isinstance(molecule, str):
-            if not is_smiles_valid(molecule):
-                raise ValueError(f"Invalid SMILES string: {molecule}")
-            self.mol = Chem.AddHs(Chem.MolFromSmiles(molecule))
-        elif isinstance(molecule, Chem.Mol):
-            # ValueError if the Mol contains more than one fragment
-            fragments = Chem.rdmolops.GetMolFrags(molecule, asMols=True)
-            if len(fragments) > 1:
-                raise ValueError("Invalid Mol as Fragment input: Mol must contain only one fragment")
-            self.mol = Chem.AddHs(molecule)
+        fragments = Chem.rdmolops.GetMolFrags(mol, asMols=True)
+        if len(fragments) > 1:
+            msg = "Invalid Mol as Fragment input: Mol must contain only one fragment"
+            raise ValueError(msg)
+        smiles = Chem.MolToSmiles(Chem.RemoveHs(mol), canonical=True)
+        frag = cls(smiles=smiles, name=name or get_name_from_smiles(smiles))
+        # Cache the Mol with hydrogens added
+        frag._mol = Chem.AddHs(mol)
+        return frag
 
-        elif isinstance(molecule, Fragment):
-            assert molecule.mol is not None  # guaranteed by Fragment validation
-            self.mol = Chem.Mol(molecule.mol)
-            self.name = molecule.name  # type: ignore[has-type]
-            self.metrics = dict(molecule.metrics)  # type: ignore[has-type]
-            return
-
-        else:
-            raise TypeError("molecule must be a SMILES string, RDKit Mol object, or Fragment object")
-
-        self._validate_mol()
-
-        self.name = name if name is not None else get_name_from_smiles(self.smiles)
-        self.metrics: dict[str, float] = {}  # type: ignore[no-redef]
-
-    def _validate_mol(self) -> None:
-        if self.mol is None:
-            raise ValueError("Invalid Fragment: Mol is None")
-        if not self.mol.GetNumAtoms() > 0:
-            raise ValueError("Invalid Fragment: Fragment must have at least one atom")
+    # ============================================================================
+    # Mol access
+    # ============================================================================
 
     @property
-    def smiles(self) -> str:
-        """Return the SMILES string representation of this ligand."""
-        result: str = Chem.MolToSmiles(Chem.RemoveHs(self.mol), canonical=True)
-        return result
+    def mol(self) -> Chem.Mol:
+        """Lazy-loaded RDKit Mol object with explicit hydrogens.
+
+        Returns:
+            Chem.Mol: The molecule with hydrogens added.
+        """
+        if self._mol is None:
+            self._mol = Chem.AddHs(Chem.MolFromSmiles(self.smiles))
+        return self._mol  # type: ignore[no-any-return]
+
+    @property
+    def conformers(self) -> list[Chem.Conformer]:
+        """All conformers present on the underlying Mol object.
+
+        Returns:
+            list[Chem.Conformer]: List of 3D conformers.
+        """
+        return [self.mol.GetConformer(i) for i in range(self.mol.GetNumConformers())]
 
     def generate_conformers(
         self, num_conformers: int = 1, random_seed: int | None = 42, prune_rms_threshold: float = 0.5
     ) -> None:
-        """Generate 3D conformers for this ligand using RDKit."""
+        """Generate 3D conformers for this molecule using RDKit ETKDGv3.
+
+        Args:
+            num_conformers (int): Number of conformers to generate.
+            random_seed (int | None): Random seed for reproducibility.
+            prune_rms_threshold (float): RMS threshold to prune similar conformers (Angstroms).
+
+        Raises:
+            RuntimeError: If conformer generation fails.
+        """
         params = AllChem.ETKDGv3()  # type: ignore[attr-defined]
         if random_seed is not None:
             params.randomSeed = random_seed
@@ -86,11 +128,9 @@ class Fragment:
         for conf_id in conf_ids:
             AllChem.UFFOptimizeMolecule(self.mol, confId=conf_id)  # type: ignore[attr-defined]
 
-    @property
-    def conformers(self) -> list[Chem.Conformer]:
-        """Return all conformers present in the Mol object."""
-        assert self.mol is not None
-        return [self.mol.GetConformer(i) for i in range(self.mol.GetNumConformers())]
+    # ============================================================================
+    # Display
+    # ============================================================================
 
     def __str__(self) -> str:
         return f"Fragment(smiles={self.smiles}, name={self.name})"
@@ -98,18 +138,26 @@ class Fragment:
     def __repr__(self) -> str:
         return self.__str__()
 
-    def __eq__(self, other: "Fragment") -> bool:  # type: ignore[override]
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Fragment):
+            return NotImplemented
         return self.smiles == other.smiles
 
-    def visualize(self, width: Any = 400, height: Any = 400, style: Any = "stick") -> None:
-        """Render an interactive 3D visualization of this ligand."""
-        # Ensure there is at least one conformer
+    def __hash__(self) -> int:
+        return hash(self.smiles)
+
+    def visualize(self, width: int = 400, height: int = 400, style: str = "stick") -> None:
+        """Render an interactive 3D visualization of this molecule.
+
+        Args:
+            width (int): Viewer width in pixels.
+            height (int): Viewer height in pixels.
+            style (str): Visualization style ('stick', 'sphere', etc.).
+        """
         if len(self.conformers) == 0:
             self.generate_conformers(num_conformers=1)
 
-        # Convert to mol block for py3Dmol
         mol_block = Chem.MolToMolBlock(self.mol)
-
         viewer = py3Dmol.view(width=width, height=height)
         viewer.addModel(mol_block, "mol")
 
@@ -124,55 +172,85 @@ class Fragment:
         viewer.show()
 
 
-class Ligands:
-    """Class representing Ligands (which can contain multiple small molecule 'fragments')."""
+class Ligands(BaseModel):
+    """Collection of small-molecule fragments.
 
-    def __init__(
-        self,
-        input_data: "list[Fragment | Chem.Mol | str | Path | Ligands] | Fragment | Chem.Mol | str | Path | Ligands",
-    ):
-        """Initialize a Ligands object from a single Fragment, a list of Fragments,.
+    Attributes:
+        fragments (list[Fragment]): The fragment molecules in this collection.
+    """
 
-        a single Chem.Mol object, a list of Chem.Mol objects, a single SMILES string,
-        a list of SMILES strings, a single path to a SMILES file, or a list of paths
-        to SMILES files.
+    model_config = ConfigDict(extra="forbid")
+
+    fragments: list[Fragment] = Field(default_factory=list, description="Fragment molecules")
+
+    # ============================================================================
+    # Factories
+    # ============================================================================
+
+    @classmethod
+    def from_smiles(cls, smiles: str) -> Ligands:
+        """Create Ligands from a dot-separated SMILES string.
+
+        Args:
+            smiles (str): SMILES string (dots separate multiple fragments).
+
+        Returns:
+            Ligands: Collection of parsed fragments.
         """
-        self.fragments = []
+        frags = parse_smiles_string(smiles)
+        return cls(fragments=frags)
 
-        # Normalize input data to a list
-        if not isinstance(input_data, list):
-            input_data = [input_data]
+    @classmethod
+    def from_file(cls, path: str | Path) -> Ligands:
+        """Load Ligands from a ``.smi`` or ``.sdf`` file.
 
-        # Parse input data to fragments
-        for item in input_data:
-            if isinstance(item, Fragment):
-                self.fragments.append(item)
-            elif isinstance(item, Ligands):
-                self.fragments.extend(item.fragments)
-            elif isinstance(item, Chem.Mol):
-                self.fragments.extend(parse_fragments_from_mols([item]))
-            elif isinstance(item, (str, Path)):
-                self.fragments.extend(parse_fragments_from_string_or_path(item))
-            else:
-                raise ValueError(f"Invalid list item: {item}")
+        Args:
+            path (str | Path): Path to the file.
+
+        Returns:
+            Ligands: Collection of parsed fragments.
+
+        Raises:
+            ValueError: If the file format is not supported.
+            FileNotFoundError: If the file does not exist.
+        """
+        frags = parse_fragments_from_string_or_path(path)
+        return cls(fragments=frags)
+
+    @classmethod
+    def from_mols(cls, mols: list[Chem.Mol]) -> Ligands:
+        """Create Ligands from a list of RDKit Mol objects.
+
+        Args:
+            mols (list[Chem.Mol]): RDKit molecules.
+
+        Returns:
+            Ligands: Collection of parsed fragments.
+        """
+        frags = parse_fragments_from_mols(mols)
+        return cls(fragments=frags)
+
+    # ============================================================================
+    # Collection operations
+    # ============================================================================
 
     def add_fragment(self, fragment: Fragment) -> None:
-        """Append a fragment to this compound."""
+        """Append a fragment to this collection.
+
+        Args:
+            fragment (Fragment): Fragment to add.
+        """
         self.fragments.append(fragment)
 
     def generate_conformers(
         self, num_conformers: int = 1, random_seed: int | None = 42, prune_rms_threshold: float = 0.5
     ) -> None:
-        """Generate 3D conformers for all fragments in the collection.
+        """Generate 3D conformers for all fragments.
 
         Args:
             num_conformers (int): Number of conformers to generate.
             random_seed (int | None): Random seed for reproducibility.
             prune_rms_threshold (float): RMS threshold to prune similar conformers (Angstroms).
-
-        Notes:
-            Generated conformers are added to the underlying RDKit Mol objects,
-            and are automatically visible via the `conformers` property.
         """
         for fragment in self.fragments:
             fragment.generate_conformers(
@@ -180,22 +258,22 @@ class Ligands:
             )
 
     def get_smiles_list(self) -> list[str]:
-        """Return SMILES strings for all fragments in this compound."""
+        """Return SMILES strings for all fragments."""
         return [fragment.smiles for fragment in self.fragments]
 
     def get_names_list(self) -> list[str | None]:
-        """Return names for all fragments in this compound."""
+        """Return names for all fragments."""
         return [fragment.name for fragment in self.fragments]
 
     @property
     def smiles(self) -> str:
-        """'.' characters are used to separate multiple ligands in the collection."""
+        """Dot-separated SMILES for all fragments."""
         return ".".join(self.get_smiles_list())
 
     def __len__(self) -> int:
         return len(self.fragments)
 
-    def __iter__(self) -> Iterator[Fragment]:
+    def __iter__(self) -> Iterator[Fragment]:  # type: ignore[override]
         return iter(self.fragments)
 
     def __getitem__(self, index: int) -> Fragment:
@@ -207,13 +285,24 @@ class Ligands:
     def __str__(self) -> str:
         return f"Ligands(fragments={self.fragments})"
 
-    def __eq__(self, other: "Ligands") -> bool:  # type: ignore[override]
-        self_smiles_set = set(self.get_smiles_list())
-        other_smiles_set = set(other.get_smiles_list())
-        return self_smiles_set == other_smiles_set
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Ligands):
+            return NotImplemented
+        return set(self.get_smiles_list()) == set(other.get_smiles_list())
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self.get_smiles_list()))
+
+    # ============================================================================
+    # I/O
+    # ============================================================================
 
     def to_smi(self, filepath: str | Path) -> None:
-        """Write all fragments in this collection to a .smi file."""
+        """Write all fragments to a ``.smi`` file.
+
+        Args:
+            filepath (str | Path): Destination file path.
+        """
         filepath = Path(filepath)
         with open(filepath, "w") as f:
             f.writelines(f"{frag.smiles}\t{frag.name}\n" for frag in self.fragments)
@@ -221,13 +310,13 @@ class Ligands:
     def to_sdf(self, filepath: str | Path) -> None:
         """Write all fragments to an SDF file.
 
-        Each fragment's conformers are written as separate entries.
+        Args:
+            filepath (str | Path): Destination file path.
         """
         filepath = Path(filepath)
         writer = Chem.SDWriter(str(filepath))
 
         for frag in self.fragments:
-            assert frag.mol is not None
             if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
             for i in range(frag.mol.GetNumConformers()):
@@ -235,25 +324,24 @@ class Ligands:
         writer.close()
 
     def to_pdb(self, filepath: str | Path | None = None, spacing: float = 5.0) -> str:
-        """Generate a PDB string containing all fragments with non-overlapping positions.
+        """Generate a PDB string with all fragments arranged along the X-axis.
 
-        Fragments are arranged linearly along the X-axis with spacing based on their
-        bounding box sizes to prevent overlap. Each fragment is assigned a different
-        chain ID (A, B, C, etc.).
+        Each fragment gets a different chain ID (A, B, C, ...).
 
         Args:
-            filepath (str | Path | None): Optional path to write the PDB file. If None, only returns the string.
-            spacing (float): Additional spacing (in Angstroms) between fragment bounding boxes. Default: 5.0
+            filepath (str | Path | None): Optional path to write the PDB file.
+            spacing (float): Additional spacing (Angstroms) between bounding boxes.
 
         Returns:
-            str: PDB format string containing all fragments
+            str: PDB format string.
+
+        Raises:
+            ValueError: If no fragments exist.
         """
         if len(self.fragments) == 0:
             raise ValueError("Cannot generate PDB: no fragments in Ligands object")
 
-        # Ensure all fragments have conformers
         for frag in self.fragments:
-            assert frag.mol is not None
             if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
 
@@ -263,22 +351,16 @@ class Ligands:
         chain_ids = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
         for frag_idx, frag in enumerate(self.fragments):
-            assert frag.mol is not None  # guaranteed by loop above
-            # Get the first conformer
             conf = frag.mol.GetConformer(0)
 
-            # Calculate bounding box for this fragment
             positions = conf.GetPositions()
             min_coords = np.min(positions, axis=0)
             max_coords = np.max(positions, axis=0)
             bbox_size = max_coords - min_coords
 
-            # Create a copy of the molecule to modify coordinates
             mol_copy = Chem.Mol(frag.mol)
             conf_copy = mol_copy.GetConformer(0)
 
-            # Translate fragment to avoid overlap
-            # Center the fragment at origin in Y and Z, offset in X
             fragment_center = (min_coords + max_coords) / 2
             translation = np.array(
                 [current_x_offset + bbox_size[0] / 2 - fragment_center[0], -fragment_center[1], -fragment_center[2]]
@@ -289,35 +371,28 @@ class Ligands:
                 new_pos = np.array([pos.x, pos.y, pos.z]) + translation
                 conf_copy.SetAtomPosition(atom_idx, new_pos.tolist())
 
-            # Convert to PDB block
             pdb_block = Chem.MolToPDBBlock(mol_copy, confId=0)
 
-            # Parse and modify PDB block
             chain_id = chain_ids[frag_idx % len(chain_ids)]
             for line in pdb_block.split("\n"):
                 if line.startswith(("HETATM", "ATOM")):
-                    # Modify atom number and chain ID
                     atom_num_str = f"{current_atom_num:5d}"
                     modified_line = line[:6] + atom_num_str + line[11:21] + chain_id + line[22:]
                     pdb_lines.append(modified_line)
                     current_atom_num += 1
                 elif line.startswith("CONECT"):
-                    # Skip CONECT records for now - could be added with renumbering if needed
                     continue
 
-            # Add TER record after each fragment
-            pdb_lines.append(f"TER   {current_atom_num:5d}      {frag.name[:3]:3s} {chain_id}")
+            frag_label = (frag.name or "UNK")[:3]
+            pdb_lines.append(f"TER   {current_atom_num:5d}      {frag_label:3s} {chain_id}")
             current_atom_num += 1
 
-            # Update offset for next fragment
             current_x_offset += bbox_size[0] + spacing
 
-        # Add END record
         pdb_lines.append("END")
 
         pdb_string = "\n".join(pdb_lines)
 
-        # Write to file if filepath provided
         if filepath is not None:
             filepath = Path(filepath)
             with open(filepath, "w") as f:
@@ -331,12 +406,12 @@ class Ligands:
         height: int = 400,
         style: Literal["stick", "sphere", "line", "cartoon", "licorice"] = "stick",
     ) -> None:
-        """Visualize all fragments in a Ligands object in 3D using py3Dmol.
+        """Visualize all fragments in 3D using py3Dmol.
 
         Args:
-            width (int): Width of the 3D viewer in pixels.
-            height (int): Height of the 3D viewer in pixels.
-            style (Literal['stick', 'sphere', 'line', 'cartoon', 'licorice']): Visualization style ('stick', 'sphere', etc.)
+            width (int): Viewer width in pixels.
+            height (int): Viewer height in pixels.
+            style (Literal["stick", "sphere", "line", "cartoon", "licorice"]): Visualization style.
         """
         pdb = self.to_pdb()
         viewer = py3Dmol.view(width=width, height=height)
@@ -346,26 +421,40 @@ class Ligands:
         viewer.show()
 
 
-# -----------------------------
-# SMILES utilities
-# -----------------------------
+# ============================================================================
+# Parsing utilities
+# ============================================================================
 
 
 def parse_smiles_string(smiles: str) -> list[Fragment]:
-    """Parse a SMILES string (may contain '.' for multiple ligands).
+    """Parse a dot-separated SMILES string into Fragment objects.
 
-    into a list of Fragment objects.
+    Args:
+        smiles (str): SMILES string (dots separate fragments).
+
+    Returns:
+        list[Fragment]: Parsed fragments.
     """
     fragments = []
     for raw_fragment in smiles.split("."):
         fragment = raw_fragment.strip()
         if fragment:
-            fragments.append(Fragment(fragment))
+            fragments.append(Fragment(smiles=fragment))
     return fragments
 
 
 def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
-    """Load fragments from a .smi file. Each line can be a single or multi-fragment SMILES string."""
+    """Load fragments from a ``.smi`` file.
+
+    Args:
+        filepath (str | Path): Path to the SMILES file.
+
+    Returns:
+        list[Fragment]: Parsed fragments.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+    """
     if not Path(filepath).exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
@@ -378,11 +467,18 @@ def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
     return fragments
 
 
-# -----------------------------
-# SDF utilities
-# -----------------------------
 def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
-    """Load mols from an SDF file."""
+    """Load Mol objects from an SDF file.
+
+    Args:
+        filepath (str | Path): Path to the SDF file.
+
+    Returns:
+        list[Chem.Mol]: Parsed molecules.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+    """
     if not Path(filepath).exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
@@ -396,25 +492,46 @@ def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
 
 
 def parse_fragments_from_mols(mols: list[Chem.Mol]) -> list[Fragment]:
-    """Load fragments from a list of Chem.Mol objects."""
+    """Convert RDKit Mol objects to Fragment objects.
+
+    Args:
+        mols (list[Chem.Mol]): RDKit molecules (may contain multi-fragment Mols).
+
+    Returns:
+        list[Fragment]: One Fragment per molecular fragment.
+    """
     fragments: list[Fragment] = []
     for mol in mols:
         frags = Chem.rdmolops.GetMolFrags(mol, asMols=True)
-        fragments.extend(Fragment(frag) for frag in frags)
+        fragments.extend(Fragment.from_mol(frag) for frag in frags)
     return fragments
 
 
 def parse_fragments_from_sdf_file(filepath: str | Path) -> list[Fragment]:
-    """Load ligands from an SDF file. Each Mol in the SDF may have multiple fragments."""
+    """Load fragments from an SDF file.
+
+    Args:
+        filepath (str | Path): Path to the SDF file.
+
+    Returns:
+        list[Fragment]: Parsed fragments.
+    """
     mols = parse_mols_from_sdf_file(filepath)
     return parse_fragments_from_mols(mols)
 
 
-# ===============================
-# String utilities
-# ===============================
 def parse_fragments_from_string_or_path(string_or_path: str | Path) -> list[Fragment]:
-    """Parse a string or path to a file into a list of Fragment objects."""
+    """Parse a SMILES string or file path into Fragment objects.
+
+    Args:
+        string_or_path (str | Path): SMILES string, or path to a ``.smi``/``.sdf`` file.
+
+    Returns:
+        list[Fragment]: Parsed fragments.
+
+    Raises:
+        ValueError: If the input is neither valid SMILES nor a supported file.
+    """
     if str(string_or_path).lower().endswith(".smi"):
         return parse_fragments_from_smiles_file(string_or_path)
     if str(string_or_path).lower().endswith(".sdf"):

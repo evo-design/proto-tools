@@ -246,7 +246,7 @@ class OrfipyOutput(BaseToolOutput):
         if file_format in ("csv", "json"):
             import pandas as pd
 
-            all_orfs = [orf.model_dump() for sr in self.predicted_orfs for orf in sr]
+            all_orfs = [orf.to_flat_dict() for sr in self.predicted_orfs for orf in sr]
             df = pd.DataFrame(all_orfs)
             if file_format == "csv":
                 df.to_csv(path, index=False)

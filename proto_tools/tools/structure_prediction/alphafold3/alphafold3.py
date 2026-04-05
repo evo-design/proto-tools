@@ -250,8 +250,8 @@ def run_alphafold3(
             alphafold3_scores = output_data["metrics"]
 
             output_structures.append(
-                Structure(
-                    structure_filepath_or_content=pdb_path,
+                Structure.from_file(
+                    pdb_path,
                     b_factor_type=BFactorType.PLDDT,
                     metrics=alphafold3_scores,
                     source="alphafold3-prediction",

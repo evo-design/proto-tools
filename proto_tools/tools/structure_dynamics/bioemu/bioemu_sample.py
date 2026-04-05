@@ -305,7 +305,7 @@ def _pdb_frames_to_structures(
     for frame_idx, pdb_content in enumerate(pdb_frames):
         structures.append(
             Structure(
-                structure_filepath_or_content=pdb_content,
+                structure=pdb_content,
                 b_factor_type=BFactorType.UNSPECIFIED,
                 metrics={
                     "ensemble_idx": comp_idx,

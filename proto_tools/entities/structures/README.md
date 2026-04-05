@@ -70,10 +70,17 @@ pLDDT is often stored in the B-factor column of structure files.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `structure_filepath_or_content` | `Path \| str` | Path to PDB/CIF file OR structure content as string |
+| `structure` | `str` | Structure content as PDB/CIF format string |
+| `structure_format` | `Literal["pdb", "cif"]` | Format of the structure (auto-detected if not provided) |
 | `b_factor_type` | `BFactorType` | What the B-factor column represents (default: `UNSPECIFIED`) |
 | `metrics` | `Dict[str, float] \| None` | Optional metrics dictionary (e.g., scores, confidence) |
-| `source` | `str \| None` | Optional source identifier (auto-set from filepath) |
+| `source` | `str \| None` | Optional source identifier |
+
+**Loading from file:**
+
+| Method | Parameters | Description |
+|--------|-----------|-------------|
+| `Structure.from_file()` | `path`, `b_factor_type`, `metrics`, `source` | Load structure from file (PDB/CIF) |
 
 ### Visualization
 
@@ -147,7 +154,7 @@ pLDDT is often stored in the B-factor column of structure files.
 from proto_tools.entities.structures import Structure, BFactorType
 
 # Load from PDB file
-structure = Structure(
+structure = Structure.from_file(
     "protein.pdb",
     b_factor_type=BFactorType.PLDDT  # If from AlphaFold/ESMFold
 )
@@ -171,7 +178,7 @@ cif_content = """data_predicted
 ...
 """
 structure = Structure(
-    cif_content,
+    structure=cif_content,
     b_factor_type=BFactorType.PLDDT,
     source="boltz2-prediction"
 )
@@ -189,7 +196,7 @@ structure.visualize(style="cartoon")
 from proto_tools.entities.structures import Structure
 
 # Load PDB, save as CIF
-structure = Structure("input.pdb")
+structure = Structure.from_file("input.pdb")
 
 # Get both format representations
 pdb_str = structure.structure_pdb
@@ -206,7 +213,7 @@ from proto_tools.entities.structures import Structure, BFactorType
 from proto_tools.tools.inverse_folding import run_proteinmpnn_sample
 
 # Load structure
-structure = Structure("design_target.pdb")
+structure = Structure.from_file("design_target.pdb")
 
 # Extract sequence for reference
 original_seq = structure.get_chain_sequence("A")
@@ -221,7 +228,7 @@ print(f"Original: {original_seq}")
 from proto_tools.entities.structures import Structure
 
 # Load a complex
-complex_struct = Structure("antibody_antigen.cif")
+complex_struct = Structure.from_file("antibody_antigen.cif")
 
 # Iterate over chains
 sequences = complex_struct.get_chain_sequences()
@@ -245,7 +252,7 @@ class MyToolOutput(BaseModel):
 
 # Structures can be serialized/deserialized automatically
 output = MyToolOutput(
-    structure=Structure("protein.pdb"),
+    structure=Structure.from_file("protein.pdb"),
     score=0.95
 )
 

@@ -370,7 +370,7 @@ def run_chai1_on_complex(
         metrics = result["metrics"]
 
     return Structure(
-        structure_filepath_or_content=cif_output,
+        structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
         metrics=metrics,
         source="chai1-prediction",

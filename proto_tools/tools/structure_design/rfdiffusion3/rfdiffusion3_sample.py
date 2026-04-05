@@ -593,7 +593,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     output_structures = []
     for design_data in output_data.get("designs", []):
         structure = Structure(
-            structure_filepath_or_content=design_data["structure_content"],
+            structure=design_data["structure_content"],
             source="rfdiffusion3-design",
         )
         output_structures.append(

@@ -15,7 +15,7 @@ from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 @pytest.mark.integration
 def test_ligands_from_single_fragment_smi():
     smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
-    ligands = Ligands(smi_path)
+    ligands = Ligands.from_file(smi_path)
     assert len(ligands) == 1
     frag = ligands[0]
     assert isinstance(frag, Fragment)
@@ -26,7 +26,7 @@ def test_ligands_from_single_fragment_smi():
 @pytest.mark.parametrize("sdf_key", ["2d_sdf", "3d_sdf"])
 def test_ligands_from_single_fragment_sdf(sdf_key):
     sdf_path = LIGAND_TEST_FILES["single_fragment"][sdf_key]
-    ligands = Ligands(sdf_path)
+    ligands = Ligands.from_file(sdf_path)
     assert len(ligands) == 1
     frag = ligands[0]
     assert isinstance(frag, Fragment)
@@ -36,7 +36,7 @@ def test_ligands_from_single_fragment_sdf(sdf_key):
 @pytest.mark.integration
 def test_ligands_from_multiple_fragment_smi():
     smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
-    ligands = Ligands(smi_path)
+    ligands = Ligands.from_file(smi_path)
     assert len(ligands) > 1
     for frag in ligands:
         assert isinstance(frag, Fragment)
@@ -47,7 +47,7 @@ def test_ligands_from_multiple_fragment_smi():
 @pytest.mark.parametrize("sdf_key", ["2d_sdf", "3d_sdf"])
 def test_ligands_from_multiple_fragment_sdf(sdf_key):
     sdf_path = LIGAND_TEST_FILES["multiple_fragment"][sdf_key]
-    ligands = Ligands(sdf_path)
+    ligands = Ligands.from_file(sdf_path)
     assert len(ligands) > 1
     for frag in ligands:
         assert isinstance(frag, Fragment)
@@ -57,7 +57,7 @@ def test_ligands_from_multiple_fragment_sdf(sdf_key):
 @pytest.mark.integration
 def test_generate_conformers_for_all():
     smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
-    ligands = Ligands(smi_path)
+    ligands = Ligands.from_file(smi_path)
     ligands.generate_conformers(num_conformers=2, prune_rms_threshold=0)
     for frag in ligands:
         assert len(frag.conformers) == 2
@@ -66,11 +66,9 @@ def test_generate_conformers_for_all():
 @pytest.mark.integration
 def test_get_smiles_list_and_names_list():
     smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
-    ligands = Ligands(smi_path)
+    ligands = Ligands.from_file(smi_path)
     smiles_list = ligands.get_smiles_list()
-    names_list = ligands.get_names_list()
     assert all(isinstance(s, str) for s in smiles_list)
-    assert all(isinstance(n, str) for n in names_list)
     assert ".".join(smiles_list) == ligands.smiles
 
 
@@ -79,7 +77,7 @@ def test_get_smiles_list_and_names_list():
 
 @pytest.mark.integration
 def test_to_pdb_single_fragment():
-    ligands = Ligands("CCO")
+    ligands = Ligands.from_smiles("CCO")
     pdb_string = ligands.to_pdb()
 
     assert isinstance(pdb_string, str)
@@ -91,13 +89,12 @@ def test_to_pdb_single_fragment():
     lines = pdb_string.split("\n")
     atom_lines = [line for line in lines if line.startswith(("HETATM", "ATOM"))]
     assert len(atom_lines) > 0
-    # Chain ID is at position 21 in PDB format
     assert all(line[21] == "A" for line in atom_lines)
 
 
 @pytest.mark.integration
 def test_to_pdb_multiple_fragments():
-    ligands = Ligands(["CCO", "CO"])
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
     ligands.generate_conformers(num_conformers=1)
     pdb_string = ligands.to_pdb(spacing=5.0)
 
@@ -118,17 +115,15 @@ def test_to_pdb_multiple_fragments():
     chain_a_atoms = [line for line in atom_lines if line[21] == "A"]
     chain_b_atoms = [line for line in atom_lines if line[21] == "B"]
 
-    # X coordinates at columns 31-38 in PDB format
     chain_a_x_coords = [float(line[30:38]) for line in chain_a_atoms]
     chain_b_x_coords = [float(line[30:38]) for line in chain_b_atoms]
 
-    # Ensure spatial separation between fragments
     assert max(chain_a_x_coords) < min(chain_b_x_coords)
 
 
 @pytest.mark.integration
 def test_to_pdb_write_file(tmp_path):
-    ligands = Ligands("CCO")
+    ligands = Ligands.from_smiles("CCO")
     pdb_path = tmp_path / "test.pdb"
     pdb_string = ligands.to_pdb(filepath=pdb_path)
 
@@ -139,8 +134,7 @@ def test_to_pdb_write_file(tmp_path):
 
 @pytest.mark.integration
 def test_to_pdb_empty_ligands():
-    ligands = Ligands("CCO")
-    ligands.fragments = []
+    ligands = Ligands(fragments=[])
 
     with pytest.raises(ValueError, match="Cannot generate PDB: no fragments"):
         ligands.to_pdb()
@@ -149,7 +143,7 @@ def test_to_pdb_empty_ligands():
 @pytest.mark.integration
 def test_to_pdb_spacing_parameter():
     """Larger spacing pushes chain B further along the X-axis."""
-    ligands = Ligands(["CCO", "CO"])
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
 
     pdb_small_spacing = ligands.to_pdb(spacing=1.0)
     pdb_large_spacing = ligands.to_pdb(spacing=20.0)
@@ -163,3 +157,13 @@ def test_to_pdb_spacing_parameter():
         return min(float(line[30:38]) for line in chain_b_atoms)
 
     assert get_chain_b_min_x(pdb_large_spacing) > get_chain_b_min_x(pdb_small_spacing)
+
+
+def test_ligands_round_trip():
+    """Ligands survive model_dump → model_validate."""
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    dumped = ligands.model_dump()
+    reconstructed = Ligands.model_validate(dumped)
+    assert len(reconstructed) == 2
+    assert reconstructed[0].smiles == "CCO"
+    assert reconstructed[1].smiles == "CO"

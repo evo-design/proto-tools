@@ -93,7 +93,12 @@ class InverseFoldingStructureInput(BaseModel):
         if isinstance(structure, Structure):
             resolved_structure = structure
         elif isinstance(structure, (str, Path)):
-            resolved_structure = Structure(structure_filepath_or_content=structure)
+            from proto_tools.entities.structures.utils import SUPPORTED_EXTENSIONS
+
+            if str(structure).lower().endswith(SUPPORTED_EXTENSIONS):
+                resolved_structure = Structure.from_file(structure)
+            else:
+                resolved_structure = Structure(structure=str(structure))
         else:
             raise ValueError(f"Unsupported structure type: {type(structure)}")
 

@@ -146,9 +146,7 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return FAMPNNScoreAllMutationsInput(
         inputs=[
-            Structure(
-                structure_filepath_or_content=str(Path(__file__).parents[1] / "examples" / "example.pdb"),
-            )
+            Structure.from_file(str(Path(__file__).parents[1] / "examples" / "example.pdb")),
         ]
     )
 

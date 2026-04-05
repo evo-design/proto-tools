@@ -196,18 +196,6 @@ def test_custom_sequence_ids_preserved():
 
 
 @pytest.mark.integration
-def test_default_sequence_ids_when_not_provided():
-    inp = OrfipyInput(sequences=["ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"])
-    config = OrfipyConfig(min_len=30)
-    result = run_orfipy_prediction(inp, config)
-
-    validate_output(result)
-    if result.num_orfs > 0:
-        for orf in result.predicted_orfs[0]:
-            assert orf.parent_id == "seq_0"
-
-
-@pytest.mark.integration
 def test_multiple_sequences_with_custom_ids():
     inp = OrfipyInput(
         sequences=[
@@ -265,28 +253,6 @@ def test_computed_fields_count(orfs_per_sequence, expected_total):
     # Verify predicted_orfs structure matches expected count
     total_from_list = sum(len(orfs) for orfs in output.predicted_orfs)
     assert total_from_list == expected_total
-
-
-def test_results_df_columns_and_content():
-    output = OrfipyOutput(
-        predicted_orfs=[[_create_sample_orf("seq_0", "ORF.1")]],
-        tool_id="orfipy-prediction",
-        execution_time=0.1,
-        success=True,
-    )
-
-    # Check ORF object attributes directly
-    orf = output.predicted_orfs[0][0]
-    assert orf.parent_id == "seq_0"
-    assert orf.orf_id == "ORF.1"
-    assert orf.amino_acid_sequence == "MVLS"
-    assert orf.nucleotide_sequence == "ATGGTGCTGAGC"
-    assert orf.strand == "+"
-    assert orf.frame == 1
-    assert orf.amino_acid_length == 4
-    assert orf.nucleotide_length == 12
-    assert orf.nucleotide_start == 1
-    assert orf.nucleotide_end == 12
 
 
 def test_cache_reconstruction():

@@ -128,9 +128,7 @@ def example_input() -> Any:
 
     _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
     return ProteinMPNNScoringInput(
-        sequence_structure_pairs=[
-            SequenceStructurePair(sequence="A", structure=Structure(structure_filepath_or_content=_pdb_path))
-        ]
+        sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure.from_file(_pdb_path))]
     )
 
 

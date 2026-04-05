@@ -202,7 +202,7 @@ from proto_tools.tools.inverse_folding.fampnn import (
 )
 from proto_tools.entities.structures import Structure
 
-structure = Structure(structure_filepath_or_content="my_protein.pdb")
+structure = Structure.from_file("my_protein.pdb")
 inputs = FAMPNNScoreInput(
     inputs=[MutationInput(
         structure=structure,
