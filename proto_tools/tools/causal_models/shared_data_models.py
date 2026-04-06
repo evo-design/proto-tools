@@ -1,8 +1,4 @@
-"""proto_tools/tools/causal_models/shared_data_models.py.
-
-Contains base schemas for scoring and sampling operations
-shared across all causal/autoregressive language models.
-"""
+"""Base schemas for scoring and sampling operations shared across causal language models."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -61,6 +57,7 @@ class CausalModelScoringConfig(BaseConfig):
         default=1,
         ge=1,
         description="Number of sequences to process simultaneously on GPU",
+        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
@@ -206,23 +203,23 @@ class CausalModelSampleInput(BaseToolInput):
     """Input for causal model sampling/generation tools.
 
     Attributes:
-        sequences (list[str]): Prompt sequences to condition generation on.
+        prompts (list[str]): Prompt sequences to condition generation on.
             Can be provided as a single string or a list of strings.
     """
 
-    sequences: list[str] = InputField(
+    prompts: list[str] = InputField(
         description="Prompt sequence(s) to condition generation on",
         examples=["MVLSPADKTNVKAAW", ["MVLSP", "GGGS"]],
     )
 
-    @field_validator("sequences", mode="before")
+    @field_validator("prompts", mode="before")
     @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
+    def normalize_prompts(cls, v: Any) -> Any:
         """Convert single string to list of strings."""
         if isinstance(v, str):
             return [v]
         if not v:
-            raise ValueError("sequences must not be empty")
+            raise ValueError("prompts must not be empty")
         return v
 
 
@@ -230,9 +227,49 @@ class CausalModelSampleConfig(BaseConfig):
     """Base configuration for causal model sampling/generation.
 
     Attributes:
+        prepend_prompt (bool): Whether to include the input prompt at the
+            start of each generated sequence. When ``True``, output sequences
+            begin with the prompt followed by newly generated tokens. When
+            ``False``, only the newly generated tokens are returned.
+        temperature (float): Sampling temperature controlling randomness.
+            Higher values produce more diverse outputs; lower values produce
+            more conservative, high-confidence sequences.
+        top_p (float): Nucleus sampling threshold. Only tokens whose cumulative
+            probability mass reaches this threshold are considered during
+            sampling. Lower values restrict sampling to higher-probability
+            tokens.
+        batch_size (int): Number of prompts to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory; reduce
+            if encountering out-of-memory errors.
         device (str): Device to run the model on.
     """
 
+    prepend_prompt: bool = ConfigField(
+        title="Prepend Prompt",
+        default=True,
+        description="Include the input prompt at the start of each generated sequence",
+    )
+    temperature: float = ConfigField(
+        title="Temperature",
+        default=1.0,
+        gt=0.0,
+        description="Sampling temperature controlling randomness",
+    )
+    top_p: float = ConfigField(
+        title="Top P",
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description="Nucleus sampling threshold",
+        advanced=True,
+    )
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=1,
+        ge=1,
+        description="Number of prompts to process simultaneously on GPU",
+        advanced=True,
+    )
     device: str = ConfigField(
         title="Device",
         default="cuda",
