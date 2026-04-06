@@ -310,7 +310,8 @@ def test_all_links_reachable(readme: Path) -> None:
     # Skip domains that are known-valid but unreliable for automated checks.
     # - bio-pro.mintlify.app: our own docs site, assume it's up
     # - doi.org: permanent academic identifiers, never break but resolver is slow
-    _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org"}
+    # - proteininformationresource.org: valid PIR database, intermittently slow in CI
+    _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org", "proteininformationresource.org"}
 
     broken = []
     for lineno, url in urls:
