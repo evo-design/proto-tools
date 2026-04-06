@@ -709,8 +709,8 @@ class StructurePredictionInput(BaseToolInput):
     def get_entity_type_set(self) -> set[str]:
         """Get the set of unique entity types in the input across all complexes."""
         entity_type_set = set()
-        for complex in self.complexes:
-            entity_type_set.update(complex.get_entity_type_set())
+        for cmplx in self.complexes:
+            entity_type_set.update(cmplx.get_entity_type_set())
         return entity_type_set
 
 

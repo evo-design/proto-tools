@@ -112,6 +112,7 @@ plugins = ["pydantic.mypy"]
 strict = true
 warn_unreachable = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code", "deprecated"]
+explicit_package_bases = true
 exclude = [".*standalone/standalone_helpers\\.py$"]
 
 [[tool.mypy.overrides]]
@@ -205,18 +206,31 @@ select = [
     "ARG",      # flake8-unused-arguments — dead parameters
     "TID",      # flake8-tidy-imports — import hygiene, ban relative imports
     "ASYNC",    # flake8-async — catches blocking calls in async functions
+    "A",        # flake8-builtins — catch shadowing of Python builtins
 ]
 ignore = [
     "E501",     # line too long — enforced by formatter when run manually
     "PLW1641",  # eq-without-hash — Pydantic models handle __hash__; non-Pydantic uses are intentional
     "D105",     # missing magic method docstring — __repr__, __eq__ are self-documenting
     "RUF022",   # unsorted-__all__ — keep logical grouping with section comments
+    "A002",     # argument-shadowing-builtin — `format` param is intentional for export functions
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "S",        # security rules don't apply to tests
+    "S101",     # assert is the whole point of tests
+    "S105",     # hardcoded password strings ok in test fixtures
+    "S106",     # hardcoded passwords ok in test fixtures
+    "S110",     # try-except-pass ok in test cleanup
+    "S112",     # try-except-continue ok in test loops
+    "S202",     # tarfile.extractall ok in test fixtures
+    "S310",     # URL open with arbitrary schemes ok in test fixtures
+    "S311",     # random ok in tests (not cryptographic)
+    "S603",     # subprocess calls in test fixtures
+    "S607",     # partial executable paths in test fixtures
     "ERA001",   # commented-out test code sometimes intentional
+    "B017",     # assert-raises-exception — test patterns
+    "SIM117",   # multiple-with-statements — readability preference in tests
     "T20",      # print() used for test diagnostics
     "D100", "D101", "D102", "D103", "D104", "D106", "D107",  # docstring presence rules relaxed in tests
     "ARG",      # pytest fixtures appear as unused arguments
