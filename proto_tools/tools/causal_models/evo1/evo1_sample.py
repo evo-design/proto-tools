@@ -7,11 +7,13 @@ including CRISPR and transposon fine-tuned variants.
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.causal_models.shared_data_models import SequenceScores
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -63,11 +65,12 @@ class Evo1SampleOutput(BaseToolOutput):
 
     Attributes:
         sequences (list[str]): Generated DNA sequences.
-        scores (list[float] | None): Mean log-probability scores per sequence.
+        scores (list[SequenceScores] | None): Scoring metrics per sequence, including
+            log_likelihood, avg_log_likelihood, and perplexity.
     """
 
     sequences: list[str] = Field(description="Generated DNA sequences")
-    scores: list[float] | None = Field(default=None, description="Mean log-probability scores per sequence")
+    scores: list[SequenceScores] | None = Field(default=None, description="Scoring metrics per generated sequence")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -233,11 +236,25 @@ def run_evo1_sample(
     )
 
     sequences = result["sequences"]
-    scores = result.get("scores")
+    raw_scores: list[float] | None = result.get("scores")
 
     # Prepend prompts if requested
     if config.prepend_prompt:
         sequences = [prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)]
+
+    # Derive standard score triplet from mean log-prob per token.
+    scores: list[SequenceScores] | None = None
+    if raw_scores is not None:
+        scores = [
+            SequenceScores(
+                metrics={
+                    "log_likelihood": s * config.num_tokens,
+                    "avg_log_likelihood": s,
+                    "perplexity": math.exp(-s),
+                },
+            )
+            for s in raw_scores
+        ]
 
     return Evo1SampleOutput(
         metadata={
