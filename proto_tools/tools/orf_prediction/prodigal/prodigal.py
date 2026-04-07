@@ -1,6 +1,4 @@
-"""proto_tools/tools/orf_prediction/prodigal/prodigal.py.
-
-Utility functions for programmatic ORF calling with Prodigal.
+"""Prodigal ORF prediction for prokaryotic genomes.
 
 This module provides standardized interfaces for ORF (Open Reading Frame) prediction
 using Prodigal for prokaryotic ORF prediction and analysis of results.
@@ -8,7 +6,7 @@ using Prodigal for prokaryotic ORF prediction and analysis of results.
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, computed_field, field_validator, model_validator
 
@@ -23,6 +21,53 @@ from proto_tools.utils import (
     ToolInstance,
     return_invalid_dna_chars,
 )
+
+# ============================================================================
+# Translation Table Mapping
+# ============================================================================
+TranslationTable = Literal[
+    "standard",
+    "vertebrate_mitochondrial",
+    "yeast_mitochondrial",
+    "mycoplasma",
+    "invertebrate_mitochondrial",
+    "ciliate_nuclear",
+    "echinoderm_mitochondrial",
+    "euplotid_nuclear",
+    "bacterial",
+    "alternative_yeast_nuclear",
+    "ascidian_mitochondrial",
+    "alternative_flatworm_mitochondrial",
+    "blepharisma_nuclear",
+    "chlorophycean_mitochondrial",
+    "trematode_mitochondrial",
+    "scenedesmus_mitochondrial",
+    "thraustochytrium_mitochondrial",
+    "rhabdopleuridae_mitochondrial",
+    "candidate_division_sr1",
+]
+
+TRANSLATION_TABLE_MAP: dict[str, int] = {
+    "standard": 1,
+    "vertebrate_mitochondrial": 2,
+    "yeast_mitochondrial": 3,
+    "mycoplasma": 4,
+    "invertebrate_mitochondrial": 5,
+    "ciliate_nuclear": 6,
+    "echinoderm_mitochondrial": 9,
+    "euplotid_nuclear": 10,
+    "bacterial": 11,
+    "alternative_yeast_nuclear": 12,
+    "ascidian_mitochondrial": 13,
+    "alternative_flatworm_mitochondrial": 14,
+    "blepharisma_nuclear": 15,
+    "chlorophycean_mitochondrial": 16,
+    "trematode_mitochondrial": 21,
+    "scenedesmus_mitochondrial": 22,
+    "thraustochytrium_mitochondrial": 23,
+    "rhabdopleuridae_mitochondrial": 24,
+    "candidate_division_sr1": 25,
+}
 
 
 # ============================================================================
@@ -95,16 +140,16 @@ class ProdigalConfig(BaseConfig):
 
             Default: ``True``.
 
-        translation_table (int): NCBI genetic code translation table number (1-25).
+        translation_table (TranslationTable): NCBI genetic code for translation.
             Only used in single-genome mode (``meta_mode=False``). In meta mode,
             pre-trained metagenomic models use their own built-in translation
             tables and this parameter is ignored. Common options:
 
-            - ``11``: Bacterial, archaeal, and plant plastid code (default)
-            - ``4``: Mycoplasma/Spiroplasma code
-            - ``25``: Candidate division SR1 and Gracilibacteria code
+            - ``"bacterial"``: Bacterial, archaeal, and plant plastid code (default)
+            - ``"mycoplasma"``: Mycoplasma/Spiroplasma code
+            - ``"candidate_division_sr1"``: Candidate division SR1 and Gracilibacteria
 
-            See NCBI documentation for complete list. Range: 1-25. Default: 11.
+            See ``TRANSLATION_TABLE_MAP`` for the complete list. Default: ``"bacterial"``.
 
         closed_ends (bool): Prevent genes from running off sequence edges. Options:
 
@@ -131,12 +176,10 @@ class ProdigalConfig(BaseConfig):
         description="Use meta mode for short sequences/fragments (True) or single-genome mode (False)",
         advanced=True,
     )
-    translation_table: int = ConfigField(
+    translation_table: TranslationTable = ConfigField(
         title="Translation Table",
-        default=11,
-        ge=1,
-        le=25,
-        description="NCBI translation table (default: 11 for bacteria)",
+        default="bacterial",
+        description="NCBI genetic code for translation (bacterial = table 11, standard = table 1)",
         advanced=True,
     )
     closed_ends: bool = ConfigField(
@@ -275,7 +318,7 @@ def example_input() -> Any:
 def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, instance: Any = None) -> ProdigalOutput:
     """Predict genes in prokaryotic DNA sequences using Prodigal.
 
-    Uses pyrodigal Python bindings for  gene prediction in bacterial and archaeal
+    Uses pyrodigal Python bindings for gene prediction in bacterial and archaeal
     genomes. Prodigal identifies protein-coding genes, including partial genes
     at sequence ends, and provides detailed annotations including ribosome binding
     sites and start codon types.
@@ -321,7 +364,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
                 "meta_mode": config.meta_mode,
                 "closed_ends": config.closed_ends,
                 "num_threads": config.num_threads,
-                "translation_table": config.translation_table,
+                "translation_table": TRANSLATION_TABLE_MAP[config.translation_table],
             },
         },
         instance=instance,

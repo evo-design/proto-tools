@@ -50,7 +50,7 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `meta_mode` | `bool` | `True` | Use meta mode (True) or single-genome mode (False) |
-| `translation_table` | `int` | `11` | NCBI genetic code (11 = standard bacterial) |
+| `translation_table` | `TranslationTable` | `"bacterial"` | NCBI genetic code (e.g. `"bacterial"`, `"mycoplasma"`, `"standard"`) |
 | `closed_ends` | `bool` | `False` | Prevent partial genes at sequence ends |
 | `num_threads` | `int` | auto | CPU threads for parallel processing |
 
@@ -63,11 +63,14 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 | Single-genome mode (`False`) | Complete/near-complete genomes (>100kb) |
 
 **Translation table options:**
-| Code | Description |
-|------|-------------|
-| `11` | Bacterial, archaeal, plant plastid (default) |
-| `4` | Mycoplasma/Spiroplasma |
-| `25` | Candidate division SR1, Gracilibacteria |
+| Name | NCBI Code | Description |
+|------|-----------|-------------|
+| `"bacterial"` | 11 | Bacterial, archaeal, plant plastid (default) |
+| `"mycoplasma"` | 4 | Mycoplasma/Spiroplasma |
+| `"standard"` | 1 | Standard genetic code |
+| `"candidate_division_sr1"` | 25 | Candidate division SR1, Gracilibacteria |
+
+See `TRANSLATION_TABLE_MAP` for the complete list of all 19 supported NCBI genetic codes.
 
 **Closed ends:**
 | Setting | When to Use |
@@ -90,7 +93,6 @@ When multiple sequences are provided, Prodigal processes them in parallel using 
 | `predicted_orfs` | `List[List[ORF]]` | List of ORF results per input sequence |
 | `num_orfs` | `int` | Total genes predicted across all sequences (computed) |
 | `num_orfs_per_sequence` | `List[int]` | Gene count per sequence (computed) |
-| `results_df` | `DataFrame` | All ORFs as a pandas DataFrame (computed) |
 
 **ORF / DataFrame columns**
 
@@ -197,7 +199,7 @@ inputs = ProdigalInput(input_sequences=sequence)
 config = ProdigalConfig(
     meta_mode=False,  # Single-genome mode for complete genome
     closed_ends=True,  # No partial genes (circular)
-    translation_table=11
+    translation_table="bacterial"
 )
 
 result = run_prodigal_prediction(inputs, config)

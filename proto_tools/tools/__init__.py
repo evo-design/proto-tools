@@ -243,12 +243,14 @@ from proto_tools.tools.mutagenesis import (
 # ORF prediction tools
 from proto_tools.tools.orf_prediction import (
     ORF,
+    TRANSLATION_TABLE_MAP,
     OrfipyConfig,
     OrfipyInput,
     OrfipyOutput,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
+    TranslationTable,
     run_orfipy_prediction,
     run_prodigal_prediction,
 )
@@ -528,6 +530,8 @@ __all__ = [
     "ProdigalInput",
     "ProdigalConfig",
     "ProdigalOutput",
+    "TRANSLATION_TABLE_MAP",
+    "TranslationTable",
     "run_prodigal_prediction",
     # Inverse folding - ESM-IF1 / ProteinDPO
     "ESMIF1SampleConfig",
