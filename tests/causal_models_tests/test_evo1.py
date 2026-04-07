@@ -87,7 +87,11 @@ def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
 
 
 def test_evo1_sample_export_fasta(tmp_path):
-    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5])
+    scores = [
+        SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72}),
+        SequenceScores(metrics={"log_likelihood": -150.0, "avg_log_likelihood": -1.5, "perplexity": 4.48}),
+    ]
+    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="fasta")
     fasta_file = tmp_path / "test.fasta"
     assert fasta_file.exists()
@@ -99,7 +103,8 @@ def test_evo1_sample_export_fasta(tmp_path):
 
 
 def test_evo1_sample_export_json(tmp_path):
-    output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=[-1.0])
+    scores = [SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72})]
+    output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="json")
     json_file = tmp_path / "test.json"
     assert json_file.exists()
@@ -109,7 +114,11 @@ def test_evo1_sample_export_json(tmp_path):
 
 
 def test_evo1_sample_export_txt(tmp_path):
-    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=[-1.0, -1.5])
+    scores = [
+        SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72}),
+        SequenceScores(metrics={"log_likelihood": -150.0, "avg_log_likelihood": -1.5, "perplexity": 4.48}),
+    ]
+    output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="txt")
     txt_file = tmp_path / "test.txt"
     assert txt_file.exists()
@@ -199,7 +208,10 @@ def test_evo1_sample_tool():
         assert not invalid, f"Non-DNA characters in output: {invalid}"
 
     for score in result.scores:
-        assert float(score) < 0
+        assert isinstance(score, SequenceScores)
+        assert score.log_likelihood < 0
+        assert score.avg_log_likelihood < 0
+        assert score.perplexity > 1.0
 
 
 @pytest.mark.uses_gpu
