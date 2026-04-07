@@ -260,7 +260,7 @@ def example_input() -> ProGen3SampleInput:
 )
 def run_progen3_sample(
     inputs: ProGen3SampleInput,
-    config: ProGen3SampleConfig | None = None,
+    config: ProGen3SampleConfig,
     instance: Any = None,
 ) -> ProGen3SampleOutput:
     """Generate protein sequences using ProGen3 autoregressive language model.
@@ -273,7 +273,7 @@ def run_progen3_sample(
     Args:
         inputs (ProGen3SampleInput): Validated input containing one or more amino acid
             prompt sequences. Pass an empty string for unconditional generation.
-        config (ProGen3SampleConfig | None): Validated ProGen3 sampling configuration specifying
+        config (ProGen3SampleConfig): Validated ProGen3 sampling configuration specifying
             model variant, direction, generation parameters (temperature, top_p),
             and sequence length.
         instance (Any): Optional ToolInstance for subprocess execution.
@@ -307,8 +307,6 @@ def run_progen3_sample(
         - GitHub: https://github.com/Profluent-AI/progen3
         - HuggingFace: https://huggingface.co/Profluent-Bio
     """
-    assert config is not None  # noqa: S101
-
     logger.debug(f"Using local venv for ProGen3 sampling: {config.model_checkpoint}")
 
     direction_token = _DIRECTION_TOKEN[config.direction]

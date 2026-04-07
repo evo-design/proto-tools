@@ -390,7 +390,7 @@ def run_progen2_sample(
             "strip_special_tokens": config.strip_special_tokens,
             "prepend_prompt": config.prepend_prompt,
             "batch_size": config.batch_size,
-            "device": "cuda",
+            "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
         },

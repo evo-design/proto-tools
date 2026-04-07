@@ -154,7 +154,7 @@ def example_input() -> ProGen3ScoringInput:
 )
 def run_progen3_score(
     inputs: ProGen3ScoringInput,
-    config: ProGen3ScoringConfig | None = None,
+    config: ProGen3ScoringConfig,
     instance: Any = None,
 ) -> ProGen3ScoringOutput:
     """Score protein sequences using ProGen3 bidirectional language model.
@@ -165,7 +165,7 @@ def run_progen3_score(
 
     Args:
         inputs (ProGen3ScoringInput): Validated input containing protein sequences to score.
-        config (ProGen3ScoringConfig | None): Scoring configuration specifying model and batch size.
+        config (ProGen3ScoringConfig): Scoring configuration specifying model and batch size.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
@@ -184,8 +184,6 @@ def run_progen3_score(
         - Lower perplexity indicates higher model confidence in the sequence
         - Bidirectional scoring is more robust than unidirectional
     """
-    assert config is not None  # noqa: S101
-
     logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(
