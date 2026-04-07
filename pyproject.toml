@@ -61,7 +61,7 @@ dev = [
     "pytest-asyncio>=0.21", # asyncio_mode="auto" requires 0.21+
     "pytest-cov>=4.1.0",
     "pytest-forked",        # Required on Sherlock (exclusive GPU process mode)
-
+    "pytest-randomly>=3.15",
 
     # Code quality
     "ruff",
@@ -85,9 +85,13 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = [
+    "-ra",
     "-v",
     "--tb=short",
     "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+    "--durations=20",
 ]
 markers = [
     "asyncio: mark test as requiring asyncio",
@@ -105,6 +109,28 @@ asyncio_default_fixture_loop_scope = "function"
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+[tool.coverage.run]
+branch = true
+source = ["proto_tools"]
+omit = [
+    "*/tests/*",
+    "*/tool_envs/*",
+    "*/standalone/*",
+    "*/examples/*",
+    # Tool implementation files require GPU or external services to test.
+    # Coverage tracks infra (utils/, entities/, tool_registry) not tool wrappers.
+    "proto_tools/tools/*/*/*.py",
+    "*/_in_process_mode/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.mypy]
 python_version = "3.10"

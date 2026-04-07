@@ -33,3 +33,7 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 - **Property tests**: `test_{model}_{property}`
 - **Export tests**: `test_export_{format}`
 - **Integration tests**: `test_{tool}_{scenario}`
+
+## Test order randomization
+
+`pytest-randomly` shuffles test order each run to catch hidden inter-test dependencies. The seed is printed in the test header. Reproduce a specific order with `--randomly-seed=N`.
