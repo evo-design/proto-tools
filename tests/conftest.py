@@ -851,6 +851,16 @@ def pytest_collection_modifyitems(config, items):
             if "only_chimera" in item.keywords:
                 item.add_marker(skip_not_chimera)
 
+    # Skip test_on_platforms tests when current architecture doesn't match
+    import platform as _platform
+
+    current_arch = _platform.machine()
+    for item in items:
+        for marker in item.iter_markers("test_on_platforms"):
+            allowed = marker.args
+            if current_arch not in allowed:
+                item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
+
     # Skip uses_gpu(n) tests when fewer than n GPUs are visible
     visible_gpus = number_of_visible_gpus()
     for item in items:

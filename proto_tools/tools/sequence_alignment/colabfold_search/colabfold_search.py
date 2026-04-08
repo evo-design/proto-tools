@@ -7,6 +7,7 @@ Alignments (MSAs) using ColabFold's local database search with MMSeqs2.
 import hashlib
 import logging
 import os
+import platform
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -294,10 +295,11 @@ class ColabfoldSearchConfig(BaseConfig):
             processing. If None, automatically detects and uses all available
             CPU cores. Must be at least 1 if specified. Default: None (auto-detect).
 
-        use_gpu: Only used if search_mode is "local". Whether to enable GPU-accelerated search using MMseqs2-GPU.
-            Requires GPU databases to be set up using 'GPU=1 ./setup_databases.sh'.
-            When enabled, uses all available GPUs for search. Default: False.
-            TODO: This is currently not working due to issue with GPU flag in local_msa_search.py
+        use_gpu (bool): Only used if search_mode is "local". Whether to enable GPU-accelerated search using MMseqs2-GPU.
+            Requires a GPU-capable MMseqs2 binary and NVIDIA GPU (Turing gen or newer).
+            Only available on Linux. Raises ValueError if set with search_mode="remote"
+            or on unsupported platforms. When enabled, passes --gpu 1 to colabfold_search.
+            Default: False.
 
         timeout (int): Maximum execution time in seconds. Full database searches
             can take more than 10 minutes. Default: 3600.
@@ -348,6 +350,13 @@ class ColabfoldSearchConfig(BaseConfig):
         description="Number of CPU threads (None for auto-detect)",
         hidden=True,
     )
+    use_gpu: bool = ConfigField(
+        title="Use GPU",
+        default=False,
+        description="Enable GPU-accelerated MSA search (requires NVIDIA GPU, Turing gen or newer)",
+        advanced=True,
+        include_in_key=False,
+    )
     timeout: int = ConfigField(
         title="Timeout",
         default=3600,
@@ -397,6 +406,39 @@ class ColabfoldSearchConfig(BaseConfig):
             self._user_specified_output_dir = False
         else:
             self._user_specified_output_dir = True
+        return self
+
+    @model_validator(mode="after")
+    def validate_use_gpu_requires_local(self) -> Any:
+        """Validate that use_gpu is only set with local search mode."""
+        if self.use_gpu and self.search_mode != "local":
+            raise ValueError(
+                "use_gpu=True requires search_mode='local' (GPU acceleration is not available for remote search)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_use_gpu_platform(self) -> Any:
+        """Validate that use_gpu is only set on Linux where the GPU binary is available."""
+        if self.use_gpu and platform.system() != "Linux":
+            raise ValueError(
+                f"use_gpu=True requires Linux (current platform: {platform.system()} {platform.machine()}). "
+                "GPU-accelerated MMseqs2 is only available for Linux."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_use_gpu_database(self) -> Any:
+        """Validate that the database has been formatted for GPU search."""
+        if not self.use_gpu or self.search_mode != "local":
+            return self
+        idx_pad = Path(self.msa_db_dir) / f"{self.database_name}.idx_pad"
+        if not idx_pad.exists():
+            raise ValueError(
+                f"use_gpu=True requires a GPU-formatted database, but {self.database_name}.idx_pad "
+                f"was not found in {self.msa_db_dir}. "
+                f"Create it with: mmseqs makepaddedseqdb {self.database_name}.idx {self.database_name}.idx_pad"
+            )
         return self
 
 
@@ -641,7 +683,7 @@ def _local_search(
             "use_metagenomic_db": config.use_metagenomic_db,
             "sensitivity": config.sensitivity,
             "database_name": config.database_name,
-            "use_gpu": False,
+            "use_gpu": config.use_gpu,
             "verbose": config.verbose,
         }
 
