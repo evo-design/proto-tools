@@ -113,18 +113,6 @@ fi
 # Make MMseqs2 merge the databases to avoid spamming the folder with files
 export MMSEQS_FORCE_MERGE=1
 
-GPU_PAR=""
-GPU_INDEX_PAR=""
-if [ -n "${GPU}" ]; then
-  GPU_PAR="--gpu 1"
-  GPU_INDEX_PAR=" --split 1 --index-subset 2"
-
-  if ! mmseqs --help | grep -q 'gpuserver'; then
-    echo "Warning: The installed MMseqs2 has no GPU support, continuing with CPU mode"
-    GPU=""
-  fi
-fi
-
 # Setup UniRef30 database
 if [ ! -f UNIREF30_READY ]; then
   echo "Setting up UniRef30 database..."
@@ -132,7 +120,13 @@ if [ ! -f UNIREF30_READY ]; then
 
   if [ -z "$MMSEQS_NO_INDEX" ]; then
     echo "Creating index for UniRef30 (this may take a while)..."
-    mmseqs createindex "${UNIREF30DB}_db" tmp1 --remove-tmp-files 1 ${GPU_INDEX_PAR}
+    mmseqs createindex "${UNIREF30DB}_db" tmp1 --remove-tmp-files 1
+  fi
+
+  # Create GPU-compatible padded database when makepaddedseqdb is available (works for both GPU and CPU searches)
+  if mmseqs makepaddedseqdb -h >/dev/null 2>&1; then
+    echo "Creating GPU-compatible padded database for UniRef30..."
+    mmseqs makepaddedseqdb "${UNIREF30DB}_db" "${UNIREF30DB}_db.idx_pad"
   fi
 
   # Update taxonomy and mapping files
@@ -165,7 +159,13 @@ if [ ! -f COLABDB_READY ] && [ "${SKIP_METAGENOMIC}" != "1" ]; then
 
   if [ -z "$MMSEQS_NO_INDEX" ]; then
     echo "Creating index for environmental database (this may take a while)..."
-    mmseqs createindex "${CFDB}_db" tmp2 --remove-tmp-files 1 ${GPU_INDEX_PAR}
+    mmseqs createindex "${CFDB}_db" tmp2 --remove-tmp-files 1
+  fi
+
+  # Create GPU-compatible padded database when makepaddedseqdb is available (works for both GPU and CPU searches)
+  if mmseqs makepaddedseqdb -h >/dev/null 2>&1; then
+    echo "Creating GPU-compatible padded database for environmental database..."
+    mmseqs makepaddedseqdb "${CFDB}_db" "${CFDB}_db.idx_pad"
   fi
 
   touch COLABDB_READY

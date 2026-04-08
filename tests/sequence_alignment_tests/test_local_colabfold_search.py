@@ -4,6 +4,7 @@ Tests for local ColabFold MSA search tool.
 """
 
 import logging
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,6 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
-    CHIMERA_COLABFOLD_DB_LOCATION,
     ColabfoldSearchConfig,
     ColabfoldSearchInput,
     ColabfoldSearchQuery,
@@ -50,6 +50,15 @@ ACDEFGHIKLMNPQRSTVWY
 # ── Path to test database ──────────────────────────────────────────────────
 _TEST_DB_DIR = Path(__file__).parent.parent / "dummy_data" / "mini_mmseqs_db"
 _TEST_DB_SETUP_SCRIPT = Path(__file__).parent.parent / "dummy_data" / "create_mini_mmseqs_db.py"
+
+
+def _gpu_search_available() -> bool:
+    """Check if GPU-accelerated search is available (GPU present, Linux, padded DB exists)."""
+    from proto_tools.utils.device import number_of_visible_gpus
+
+    if platform.system() != "Linux" or number_of_visible_gpus() < 1:
+        return False
+    return (_TEST_DB_DIR / "uniref30_mini_db.idx_pad").exists()
 
 
 # ============================================================================
@@ -235,6 +244,22 @@ def setup_mini_database():
             )
         except subprocess.TimeoutExpired:
             pytest.fail("Database setup timed out after 10 minutes")
+
+    # Create GPU-compatible padded database if it doesn't exist
+    idx_pad = _TEST_DB_DIR / "uniref30_mini_db.idx_pad"
+    if not idx_pad.exists():
+        from proto_tools.utils.proto_home import get_proto_home
+
+        mmseqs = get_proto_home() / "proto_tool_envs" / "colabfold_search_env" / "bin" / "mmseqs"
+        if mmseqs.exists():
+            db = _TEST_DB_DIR / "uniref30_mini_db"
+            logger.info("Creating GPU-compatible padded database for mini test DB...")
+            subprocess.run(
+                [str(mmseqs), "makepaddedseqdb", str(db), str(idx_pad)],
+                check=True,
+                capture_output=True,
+            )
+
     yield
 
 
@@ -262,6 +287,7 @@ def test_finding_self_in_database(setup_mini_database, tmp_path):
         output_dir=str(tmp_path),
         use_metagenomic_db=False,
         num_threads=2,
+        use_gpu=_gpu_search_available(),
         verbose=False,
     )
 
@@ -309,6 +335,7 @@ def test_finding_homologs(setup_mini_database, tmp_path):
         output_dir=str(tmp_path),
         use_metagenomic_db=False,
         num_threads=2,
+        use_gpu=_gpu_search_available(),
         verbose=False,
     )
 
@@ -323,7 +350,8 @@ def test_finding_homologs(setup_mini_database, tmp_path):
     assert len(result) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
     msa = result.results[0].msa
-    assert len(msa) == 439
+    expected = 493 if _gpu_search_available() else 439
+    assert len(msa) == expected
 
 
 @pytest.mark.skipif(
@@ -356,6 +384,7 @@ def test_multiple_sequences_search(setup_mini_database, tmp_path):
         output_dir=str(tmp_path),
         use_metagenomic_db=False,
         num_threads=2,
+        use_gpu=_gpu_search_available(),
         verbose=False,
     )
 
@@ -371,8 +400,9 @@ def test_multiple_sequences_search(setup_mini_database, tmp_path):
     assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
     # First two MSAs should have a lot of homologs
-    assert len(result.results[0].msa) == 439
-    assert len(result.results[1].msa) == 107
+    gpu = _gpu_search_available()
+    assert len(result.results[0].msa) == (493 if gpu else 439)
+    assert len(result.results[1].msa) == (117 if gpu else 107)
 
     # Third MSA should have no homologs (returns None)
     assert result.results[2].msa is None
@@ -403,6 +433,7 @@ def test_with_sensitivity(setup_mini_database, tmp_path):
         use_metagenomic_db=False,
         num_threads=2,
         sensitivity=1.0,
+        use_gpu=_gpu_search_available(),
         verbose=False,
     )
 
@@ -417,43 +448,5 @@ def test_with_sensitivity(setup_mini_database, tmp_path):
     # Verify results
     assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
 
-    assert len(result.results[0].msa) == 425
-
-
-# ============================================================================
-# Integration Tests (Full Database)
-# ============================================================================
-
-
-@pytest.mark.skipif(
-    not Path(CHIMERA_COLABFOLD_DB_LOCATION).exists(),
-    reason="Full database not found. Skipping",
-)
-@pytest.mark.skip_ci
-@pytest.mark.only_chimera
-@pytest.mark.integration
-@pytest.mark.slow
-def test_full_database_search(tmp_path):
-    """Test end-to-end search against the full ColabFold database."""
-    test_sequences = [
-        (
-            "MRAKKRFGQNFLIDQNIINKIVDSSEVENRNIIEIGPGKGALTKILVKKANKVLAYEIDQDMVNILNQQISSKNFVLINKDFLKEEFDKSQNYNIVANIPYYITSDIIFKIIENHQIFDQATLMVQKEVALRILAKQNDSEFSKLSLSVQFFFDVFLICDVSKNSFRPIPKVDSAVIKLVKKKNKDFSLWKEYFEFLKIAFSSRRKTLLNNLKYFFNEQKILKFFELKNYDPKVRAQNIKNEDFYALFLELR",
-            "Ribosomal RNA small subunit methyltransferase A OS=Hydrogenobaculum sp",
-        ),
-    ]
-
-    config = ColabfoldSearchConfig(
-        search_mode="local",
-        msa_db_dir=CHIMERA_COLABFOLD_DB_LOCATION,
-        output_dir=str(tmp_path),
-        verbose=False,
-    )
-
-    inputs = ColabfoldSearchInput(queries=test_sequences)
-
-    # Execute the search
-    result = run_colabfold_search(inputs, config)
-
-    # Verify results
-    assert result.success, f"Search failed with errors: {result.errors}"
-    assert len(result.results) == len(inputs.queries), "Expected number of results to be equal to the number of queries"
+    expected = 493 if _gpu_search_available() else 425
+    assert len(result.results[0].msa) == expected

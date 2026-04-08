@@ -21,6 +21,6 @@ while [ ! -f "$SEARCH_DIR/utils/install_binary.py" ]; do
         exit 1
     fi
 done
-python "$SEARCH_DIR/utils/install_binary.py" mmseqs
+python "$SEARCH_DIR/utils/install_binary.py" colabfold_search
 
 echo "ColabFold Search setup complete!"
