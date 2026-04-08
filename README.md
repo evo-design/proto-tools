@@ -18,6 +18,11 @@ Every tool runs in its own automatically managed isolated environment, so you ne
 
 You can use it as a standalone Python library or as part of the broader [proto-language](https://github.com/proto-bio/proto-language) system.
 
+## Related Repositories
+
+- [`proto-language`](https://github.com/proto-bio/proto-language) – Core language framework (constraints, generators, optimizers)
+- [`proto-client`](https://github.com/proto-bio/proto-client) – Python SDK for Proto Bio APIs
+
 ## Setup 🚧
 
 > [!NOTE]
