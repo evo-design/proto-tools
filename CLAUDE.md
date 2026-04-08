@@ -116,7 +116,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig, instance: Any = None) -
 ```
 
 - **Input** (`BaseToolInput`): primary data (sequences, structures, files). Uses `extra="forbid"`.
-- **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="ignore"`. **Optional at call time**; the `@tool` wrapper defaults `None` to `config_class()`. Inner function takes non-optional `config` since the wrapper guarantees it. All config fields must have defaults.
+- **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="forbid"`. **Optional at call time**; the `@tool` wrapper defaults `None` to `config_class()`. Inner function takes non-optional `config` since the wrapper guarantees it. All config fields must have defaults.
 - **Output** (`BaseToolOutput`): results + auto-populated metadata (tool_id, execution_time, success, errors).
 - **`@tool()`**: handles error catching, timing, metadata, registry, default config, and device allocation validation.
 - **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
@@ -197,7 +197,7 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 - All biological coordinates are **1-indexed, inclusive**
 - `batch_size` defaults to `1` (prevents OOM). The tool layer owns the batching loop. **Exception**: inverse folding tools default `batch_size` to `num_sequences_per_structure`
 - Use `logging.getLogger(__name__)`, never `print()`
-- Config: `extra="ignore"` | Input: `extra="forbid"` | Output: `extra="forbid"`
+- Config: `extra="forbid"` | Input: `extra="forbid"` | Output: `extra="forbid"`
 - Follow the `__init__.py` export chain: tool → category → `tools/__init__.py` → package `__init__.py`
 - Every tool directory must include an `examples/example.ipynb` notebook. Include a `cite.bib` when wrapping a published model or tool; omit it for simple algorithmic utilities with no paper to cite
 - Output model fields must be JSON-serializable Pydantic types (primitives, `list`, nested `BaseModel`). Never use `pd.DataFrame`, numpy arrays, or other non-serializable types as `Field()` or `@computed_field` on output models — they break JSON Schema generation for MCP and downstream consumers. Never set `arbitrary_types_allowed=True` on output models. DataFrames are a presentation layer; construct them lazily inside `_export_output()` or provide a `to_dataframe()` method instead

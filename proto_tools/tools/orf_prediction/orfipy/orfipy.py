@@ -183,7 +183,7 @@ class OrfipyConfig(BaseConfig):
         description="Optional NCBI translation table (1-33)",
         advanced=True,
     )
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("strand")
     @classmethod

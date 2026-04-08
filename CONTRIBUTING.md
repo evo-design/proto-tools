@@ -92,7 +92,7 @@ When filing a bug, include the full traceback and your environment details (OS, 
 - Mypy strict mode with Pydantic plugin. Every `# type: ignore` must include the error code. Prefer `assert` guards for type narrowing. Do NOT use `cast()`, `Protocol`, or `TYPE_CHECKING` blocks
 - Use `logging.getLogger(__name__)`, never `print()`
 - All biological coordinates are **1-indexed, inclusive**
-- Pydantic v2 models: Config uses `extra="ignore"`, Input uses `extra="forbid"`, Output uses `extra="forbid"`
+- Pydantic v2 models: Config uses `extra="forbid"`, Input uses `extra="forbid"`, Output uses `extra="forbid"`
 
 ## Testing
 

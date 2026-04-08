@@ -42,9 +42,11 @@ def test_input_path_objects_converted_to_strings():
 # ── Config ───────────────────────────────────────────────────────────────────
 
 
-def test_config_extra_fields_ignored():
-    config = StructureMetricsConfig(extra_field="should_be_ignored")
-    assert "extra_field" not in config.model_dump()
+def test_config_extra_fields_rejected():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        StructureMetricsConfig(extra_field="should_be_rejected")
 
 
 # ── StructureMetrics data model ───────────────────────────────────────────────

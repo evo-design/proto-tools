@@ -126,7 +126,7 @@ class BaseConfig(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="ignore",  # Ignore unknown fields
+        extra="forbid",  # Reject unknown fields
         validate_assignment=True,  # Validate on field updates
         use_enum_values=True,  # Serialize enums as values
         validate_default=True,  # Validate default values
