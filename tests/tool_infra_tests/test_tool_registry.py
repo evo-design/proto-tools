@@ -1132,6 +1132,144 @@ def test_cacheable_on_toolspec(clean_registry):
     assert spec2.cacheable is False
 
 
+# ── Input/config coercion ───────────────────────────────────────────────────
+
+
+class ParentInput(BaseToolInput):
+    """Parent input with a shared field."""
+
+    sequences: list[str] = Field(description="Input sequences")
+
+
+class ChildInput(ParentInput):
+    """Child input adding a field with a default."""
+
+    uppercase: bool = Field(default=True, description="Whether to uppercase sequences")
+
+
+class ParentConfig(BaseConfig):
+    """Parent config with shared fields."""
+
+    temperature: float = ConfigField(default=0.5, description="Sampling temperature")
+
+
+class ChildConfig(ParentConfig):
+    """Child config adding a field and overriding a parent default."""
+
+    temperature: float = ConfigField(default=0.1, description="Sampling temperature")
+    model_name: str = ConfigField(default="v2", description="Model variant")
+
+
+class CoercionOutput(MockToolOutputBase):
+    """Output capturing the coerced values for assertions."""
+
+    input_type: str = Field(description="Type name of the input received")
+    config_type: str = Field(description="Type name of the config received")
+    uppercase: bool = Field(description="Value of uppercase from input")
+    model_name: str = Field(description="Value of model_name from config")
+    temperature: float = Field(description="Value of temperature from config")
+
+
+def _register_coercion_tool(registry, key):
+    """Register a tool that records the types and values it receives."""
+
+    @registry.register(
+        key=key,
+        label=key,
+        category="test",
+        input_class=ChildInput,
+        config_class=ChildConfig,
+        output_class=CoercionOutput,
+        description="Coercion test tool",
+    )
+    def run(inputs: ChildInput, config: ChildConfig, instance=None) -> CoercionOutput:
+        return CoercionOutput(
+            input_type=type(inputs).__name__,
+            config_type=type(config).__name__,
+            uppercase=inputs.uppercase,
+            model_name=config.model_name,
+            temperature=config.temperature,
+        )
+
+    return registry.get(key)
+
+
+def test_parent_config_coerced_with_child_defaults(clean_registry):
+    """Parent config is coerced to child; child defaults take precedence."""
+    spec = _register_coercion_tool(clean_registry, "coerce-config")
+    inputs = ChildInput(sequences=["MKTL"])
+    parent_config = ParentConfig(temperature=0.8)
+
+    result = spec.function(inputs, parent_config)
+
+    assert result.success
+    assert result.config_type == "ChildConfig"
+    assert result.temperature == 0.8  # explicitly set, preserved
+    assert result.model_name == "v2"  # child default, not missing
+
+
+def test_parent_config_unset_fields_use_child_defaults(clean_registry):
+    """Unset parent fields get child defaults, not parent defaults."""
+    spec = _register_coercion_tool(clean_registry, "coerce-config-defaults")
+    inputs = ChildInput(sequences=["MKTL"])
+    # temperature not explicitly set — parent default is 0.5, child default is 0.1
+    parent_config = ParentConfig()
+
+    result = spec.function(inputs, parent_config)
+
+    assert result.success
+    assert result.temperature == 0.1  # child default wins over parent default
+
+
+def test_parent_input_coerced_with_child_defaults(clean_registry):
+    """Parent input is coerced to child; child defaults fill missing fields."""
+    spec = _register_coercion_tool(clean_registry, "coerce-input")
+    parent_input = ParentInput(sequences=["MKTL"])
+    config = ChildConfig()
+
+    result = spec.function(parent_input, config)
+
+    assert result.success
+    assert result.input_type == "ChildInput"
+    assert result.uppercase is True  # child default
+
+
+def test_unrelated_config_raises_type_error(clean_registry):
+    """Passing a config that is not the expected class or a parent raises TypeError."""
+    spec = _register_coercion_tool(clean_registry, "coerce-unrelated")
+    inputs = ChildInput(sequences=["MKTL"])
+    unrelated_config = MockToolConfig(param1="oops")
+
+    with pytest.raises(TypeError, match="must be ChildConfig"):
+        spec.function(inputs, unrelated_config)
+
+
+def test_unrelated_input_raises_type_error(clean_registry):
+    """Passing an input that is not the expected class or a parent raises TypeError."""
+    spec = _register_coercion_tool(clean_registry, "coerce-unrelated-input")
+    unrelated_input = MockToolInput(input_data="oops")
+    config = ChildConfig()
+
+    with pytest.raises(TypeError, match="must be ChildInput"):
+        spec.function(unrelated_input, config)
+
+
+def test_exact_child_classes_not_coerced(clean_registry):
+    """Passing the exact child classes skips coercion entirely."""
+    spec = _register_coercion_tool(clean_registry, "coerce-noop")
+    inputs = ChildInput(sequences=["MKTL"], uppercase=False)
+    config = ChildConfig(temperature=0.3, model_name="v1")
+
+    result = spec.function(inputs, config)
+
+    assert result.success
+    assert result.input_type == "ChildInput"
+    assert result.config_type == "ChildConfig"
+    assert result.uppercase is False
+    assert result.temperature == 0.3
+    assert result.model_name == "v1"
+
+
 # ── preprocess hook ──────────────────────────────────────────────────────────
 
 

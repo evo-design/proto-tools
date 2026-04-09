@@ -282,10 +282,15 @@ class ToolRegistry:
 
                 _auto_configure_logging()
 
-                # If config is None, instantiate default config
+                # Coerce inputs/config to the tool's expected classes if a parent
+                # class was passed. Only explicitly-set fields are forwarded so
+                # child class defaults take precedence over parent defaults.
+                inputs = _coerce_model(inputs, input_class, key, "input")  # type: ignore[assignment]
                 if config is None:
                     config = config_class()
                     logger.debug(f"Tool {key}: config not provided, using default config")
+                else:
+                    config = _coerce_model(config, config_class, key, "config")  # type: ignore[assignment]
 
                 start_time = time.time()
                 last_exception = None
@@ -696,6 +701,39 @@ class ToolRegistry:
             else:
                 error_msg += f"\nExisting tool: {existing_label}"
             raise ValueError(error_msg)
+
+
+def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key: str, role: str) -> BaseModel:
+    """Coerce a Pydantic model to the expected class if a parent class was passed.
+
+    Only explicitly-set fields are forwarded so child class defaults take
+    precedence over parent defaults.
+
+    Args:
+        instance (BaseModel): The model instance to coerce.
+        expected_class (type[BaseModel]): The expected Pydantic model class.
+        tool_key (str): Tool registry key for log messages.
+        role (str): "input" or "config" for log messages.
+
+    Returns:
+        BaseModel: The coerced model instance, or the original if already correct.
+
+    Raises:
+        TypeError: If the instance is not the expected class or a parent of it.
+    """
+    if isinstance(instance, expected_class):
+        return instance
+    actual_type = type(instance)
+    if not issubclass(expected_class, actual_type):
+        raise TypeError(
+            f"Tool {tool_key}: {role} must be {expected_class.__name__} (or a parent class), got {actual_type.__name__}"
+        )
+    coerced = expected_class.model_validate(instance.model_dump(include=instance.model_fields_set))
+    logger.warning(
+        f"Tool {tool_key}: coerced {role} {actual_type.__name__} to {expected_class.__name__}. "
+        f"Use {expected_class.__name__} directly to silence this warning."
+    )
+    return coerced
 
 
 def _make_error_output(
