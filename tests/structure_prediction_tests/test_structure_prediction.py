@@ -315,6 +315,56 @@ def test_structure_prediction_complex_rejects_entity_types_param():
         StructurePredictionComplex(chains=["MKTL"], entity_types=["protein"])
 
 
+# ── Dict deserialization tests (no GPU required) ────────────────────────────────
+
+
+def test_normalize_complexes_accepts_dict():
+    """Dict-form complexes from JSON deserialization."""
+    inp = ESMFoldInput.model_validate({"complexes": [{"chains": [{"sequence": "MKTL"}]}]})
+    assert len(inp.complexes) == 1
+    assert inp.complexes[0].chains[0].sequence == "MKTL"
+
+
+def test_normalize_complexes_accepts_dict_string_shorthand():
+    """Dict with string chains shorthand."""
+    inp = ESMFoldInput.model_validate({"complexes": [{"chains": ["MKTL"]}]})
+    assert len(inp.complexes) == 1
+    assert inp.complexes[0].chains[0].sequence == "MKTL"
+
+
+def test_normalize_complexes_roundtrip():
+    """model_dump() -> model_validate() round-trip."""
+    original = ESMFoldInput(complexes=["MKTL"])
+    dumped = original.model_dump()
+    restored = ESMFoldInput.model_validate(dumped)
+    assert restored.complexes[0].chains[0].sequence == original.complexes[0].chains[0].sequence
+
+
+def test_normalize_complexes_rejects_invalid_dict():
+    """Invalid dict structure raises ValueError."""
+    with pytest.raises(ValidationError):
+        ESMFoldInput.model_validate({"complexes": [{"not_chains": "bad"}]})
+
+
+def test_convert_modifications_accepts_dict():
+    """Dict-form modifications from JSON deserialization."""
+    comp = StructurePredictionComplex.model_validate(
+        {"chains": [{"sequence": "MKTL", "modifications": [{"position": 1, "modification_code": "MSE"}]}]}
+    )
+    assert comp.chains[0].modifications[0].position == 1
+    assert comp.chains[0].modifications[0].modification_code == "MSE"
+
+
+def test_normalize_complexes_roundtrip_with_modifications():
+    """Round-trip with modifications exercises both dict branches."""
+    original = ProtenixInput(
+        complexes=[StructurePredictionComplex(chains=[{"sequence": "MKTL", "modifications": [(1, "MSE")]}])]
+    )
+    dumped = original.model_dump()
+    restored = ProtenixInput.model_validate(dumped)
+    assert restored.complexes[0].chains[0].modifications[0].modification_code == "MSE"
+
+
 # ── Primary folding test (GPU) ─────────────────────────────────────────────────
 
 

@@ -118,9 +118,10 @@ class Chain(BaseModel):
             modifications to apply to this chain. Each modification can be either:
 
             - A ChainModification object
+            - A dict with ``position`` and ``modification_code`` keys (e.g. from JSON deserialization)
             - A tuple of (position, modification_code) for convenience
 
-            All tuples are automatically converted to ChainModification objects.
+            All dicts and tuples are automatically converted to ChainModification objects.
             Default: empty list (no modifications).
 
     Examples:
@@ -184,10 +185,15 @@ class Chain(BaseModel):
             elif isinstance(mod, ChainModification):
                 # Already a ChainModification object
                 normalized_mods.append(mod)
+            elif isinstance(mod, dict):
+                try:
+                    normalized_mods.append(ChainModification(**mod))
+                except Exception as e:
+                    raise ValueError(f"Modification dict at index {idx} is invalid: {e}") from e
             else:
                 raise ValueError(
-                    f"Modification at index {idx} must be a ChainModification object or "
-                    f"a tuple (position, modification_code). Got {type(mod)}"
+                    f"Modification at index {idx} must be a ChainModification object, "
+                    f"a dict, or a tuple (position, modification_code). Got {type(mod)}"
                 )
 
         return normalized_mods
@@ -669,6 +675,12 @@ class StructurePredictionInput(BaseToolInput):
             # If item is a StructurePredictionComplex, add it to the final list
             if isinstance(sp_complex, StructurePredictionComplex):
                 final_complexes.append(sp_complex)
+            # If item is a dict (e.g. from JSON deserialization), construct the model
+            elif isinstance(sp_complex, dict):
+                try:
+                    final_complexes.append(StructurePredictionComplex(**sp_complex))
+                except Exception as e:
+                    raise ValueError(f"Invalid complex dictionary: {e}") from e
             # If item is a string, treat it as a single-chain complex
             elif isinstance(sp_complex, str):
                 final_complexes.append(StructurePredictionComplex(chains=[sp_complex]))  # type: ignore[list-item]
@@ -677,8 +689,8 @@ class StructurePredictionInput(BaseToolInput):
                 final_complexes.append(StructurePredictionComplex(chains=sp_complex))
             else:
                 raise ValueError(
-                    f"Unsupported input format for auto-normalizing complexes: {sp_complex}"
-                    "Expected type: StructurePredictionComplex, str, or list of strings"
+                    f"Unsupported input format for auto-normalizing complexes: {sp_complex}. "
+                    "Expected type: StructurePredictionComplex, dict, str, or list of strings"
                 )
 
         # VALIDATION ==========================================================

@@ -299,7 +299,7 @@ def test_chain_rejects_malformed_modification_tuple(bad_tuple):
 
 
 def test_chain_rejects_invalid_modification_type():
-    with pytest.raises(ValueError, match="must be a ChainModification object or a tuple"):
+    with pytest.raises(ValueError, match="must be a ChainModification object, a dict, or a tuple"):
         Chain(sequence=_PROTEIN_SEQ, modifications=["invalid"])
 
 
