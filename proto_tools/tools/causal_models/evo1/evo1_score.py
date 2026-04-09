@@ -6,18 +6,15 @@ Evo1 scoring tool.
 import logging
 from typing import Any, Literal
 
-from pydantic import field_validator
-
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelScoringConfig,
+    CausalModelScoringInput,
     CausalModelScoringOutput,
     SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -35,32 +32,14 @@ EVO1_MODEL_CHECKPOINTS = Literal[
 # Data Models
 # ============================================================================
 # Input:
-class Evo1ScoringInput(BaseToolInput):
-    """Input for Evo1 DNA sequence scoring.
-
-    Attributes:
-        sequences (list[str]): DNA sequences to score.
-    """
-
-    sequences: list[str] = InputField(description="DNA sequences to score")
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
-        """Convert single string to list of strings."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
-
+Evo1ScoringInput = CausalModelScoringInput
 
 # Output:
 Evo1ScoringOutput = CausalModelScoringOutput
 
 
 # Config:
-class Evo1ScoringConfig(BaseConfig):
+class Evo1ScoringConfig(CausalModelScoringConfig):
     """Configuration for Evo1 DNA sequence scoring.
 
     Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
@@ -69,11 +48,8 @@ class Evo1ScoringConfig(BaseConfig):
     Attributes:
         model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use. Default: ``"evo-1-8k-base"``.
         batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-        device (str): Device to run the model on. Default: ``"cuda"``.
-        return_logits (bool): Whether to include per-position logits in the
-            output. Default: ``False``.
+            Larger batches improve throughput but use more GPU memory.
+        return_logits (bool): Whether to include per-position logits in the output.
 
     Note:
         - Evo1 uses byte-level tokenization with vocab_size=512
@@ -85,26 +61,6 @@ class Evo1ScoringConfig(BaseConfig):
         default="evo-1-8k-base",
         description="Evo1 model checkpoint to use",
         reload_on_change=True,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on",
-        hidden=True,
-        include_in_key=False,
-    )
-    return_logits: bool = ConfigField(
-        title="Return Logits",
-        default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
-        advanced=True,
     )
 
 

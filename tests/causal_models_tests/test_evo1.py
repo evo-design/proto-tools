@@ -128,26 +128,6 @@ def test_evo1_sample_export_txt(tmp_path):
     assert lines[1] == "GCTAGCTA"
 
 
-# ── Scoring input validation ─────────────────────────────────────────────────
-
-
-def test_evo1_scoring_input_normalizes_single_string():
-    inp = Evo1ScoringInput(sequences="ATCGATCG")
-    assert isinstance(inp.sequences, list)
-    assert len(inp.sequences) == 1
-    assert inp.sequences[0] == "ATCGATCG"
-
-
-def test_evo1_scoring_input_preserves_list():
-    inp = Evo1ScoringInput(sequences=["ATCG", "GCTA"])
-    assert len(inp.sequences) == 2
-
-
-def test_evo1_scoring_input_rejects_empty():
-    with pytest.raises(ValueError, match="sequences must not be empty"):
-        Evo1ScoringInput(sequences=[])
-
-
 # ── Scoring output export ────────────────────────────────────────────────────
 
 

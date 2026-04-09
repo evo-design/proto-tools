@@ -49,21 +49,6 @@ def test_evo2_sample_config_validation(config_kwargs, match):
         Evo2SampleConfig(**config_kwargs)
 
 
-# ── Scoring input validation ─────────────────────────────────────────────────
-
-
-def test_evo2_score_input_validation():
-    """Test Evo2ScoringInput validation and normalization."""
-    with pytest.raises(ValueError, match="sequences must not be empty"):
-        Evo2ScoringInput(sequences=[])
-
-    input_str = Evo2ScoringInput(sequences="ATCG")
-    assert input_str.sequences == ["ATCG"]
-
-    input_list = Evo2ScoringInput(sequences=["ATCG", "GCTA"])
-    assert input_list.sequences == ["ATCG", "GCTA"]
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

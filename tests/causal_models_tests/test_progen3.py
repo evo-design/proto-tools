@@ -41,28 +41,6 @@ def test_sample_input_rejects_empty():
         ProGen3SampleInput(prompts=[])
 
 
-# ── Scoring input validation ────────────────────────────────────────────────
-
-
-def test_scoring_input_accepts_single_string():
-    """Single string is coerced to a list."""
-    inp = ProGen3ScoringInput(sequences="MKTL")
-    assert isinstance(inp.sequences, list)
-    assert inp.sequences == ["MKTL"]
-
-
-def test_scoring_input_accepts_list():
-    """List of strings is accepted as-is."""
-    inp = ProGen3ScoringInput(sequences=["MKTL", "EVQL"])
-    assert inp.sequences == ["MKTL", "EVQL"]
-
-
-def test_scoring_input_rejects_empty():
-    """Empty list raises ValueError."""
-    with pytest.raises(ValueError, match="sequences must not be empty"):
-        ProGen3ScoringInput(sequences=[])
-
-
 # ── Sample config validation ────────────────────────────────────────────────
 
 
@@ -90,6 +68,12 @@ def test_scoring_config_defaults():
     assert cfg.batch_size == 1
     assert cfg.reduction == "mean"
     assert cfg.local_path is None
+
+
+def test_scoring_config_rejects_return_logits():
+    """ProGen3 does not support return_logits."""
+    with pytest.raises(ValueError, match="ProGen3 does not support return_logits"):
+        ProGen3ScoringConfig(return_logits=True)
 
 
 def test_sample_config_rejects_invalid_temperature():

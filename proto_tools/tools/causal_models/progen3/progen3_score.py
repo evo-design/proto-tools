@@ -3,18 +3,17 @@
 import logging
 from typing import Any, Literal
 
-from pydantic import field_validator
+from pydantic import model_validator
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelScoringConfig,
+    CausalModelScoringInput,
     CausalModelScoringOutput,
     SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -33,28 +32,7 @@ PROGEN3_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-class ProGen3ScoringInput(BaseToolInput):
-    """Input for ProGen3 protein sequence scoring.
-
-    Sequences should be provided in N-to-C direction using standard amino
-    acid characters. ProGen3 automatically scores in both forward and
-    reverse directions and averages the results.
-
-    Attributes:
-        sequences (list[str]): Protein sequences to score.
-    """
-
-    sequences: list[str] = InputField(description="Protein sequences to score")
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def validate_sequences(cls, v: Any) -> Any:
-        """Coerce a single string to a list and validate non-empty."""
-        if isinstance(v, str):
-            v = [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
+ProGen3ScoringInput = CausalModelScoringInput
 
 
 # Output:
@@ -62,7 +40,7 @@ ProGen3ScoringOutput = CausalModelScoringOutput
 
 
 # Config:
-class ProGen3ScoringConfig(BaseConfig):
+class ProGen3ScoringConfig(CausalModelScoringConfig):
     """Configuration for ProGen3 protein sequence scoring.
 
     ProGen3 computes bidirectional autoregressive likelihood by averaging
@@ -80,20 +58,25 @@ class ProGen3ScoringConfig(BaseConfig):
             If provided, loads model from local filesystem instead of
             downloading from HuggingFace. Default: ``None``.
 
-        device (str): Device to run the model on. Default: ``"cuda"``.
-
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Default: 1.
-
         reduction (Literal["mean", "sum"]): How to aggregate per-token log-likelihoods.
             ``"mean"`` averages over tokens, ``"sum"`` sums them.
             Default: ``"mean"``.
+        batch_size (int): Number of sequences to process simultaneously on GPU.
+            Larger batches improve throughput but use more GPU memory.
 
     Note:
         - ProGen3 uses bidirectional scoring: averages forward + reverse passes
         - Lower perplexity indicates higher model confidence
         - Requires GPU with bfloat16 support (A100/H100 recommended)
+        - ``return_logits`` is not supported; ProGen3 returns per-position
+          metrics instead
     """
+
+    @model_validator(mode="after")
+    def _validate_no_logits(self) -> Any:
+        if self.return_logits:
+            raise ValueError("ProGen3 does not support return_logits; use per_position_metrics instead")
+        return self
 
     model_checkpoint: PROGEN3_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
@@ -107,20 +90,6 @@ class ProGen3ScoringConfig(BaseConfig):
         description="Path to local model weights",
         hidden=True,
         reload_on_change=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on",
-        hidden=True,
-        include_in_key=False,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
     )
     reduction: Literal["mean", "sum"] = ConfigField(
         title="Reduction",

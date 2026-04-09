@@ -6,18 +6,17 @@ Evo2 scoring tool.
 import logging
 from typing import Any, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import model_validator
 
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelScoringConfig,
+    CausalModelScoringInput,
     CausalModelScoringOutput,
     SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -38,24 +37,8 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-class Evo2ScoringInput(BaseToolInput):
-    """Input for Evo2 DNA sequence scoring.
-
-    Attributes:
-        sequences (list[str]): DNA sequences to score.
-    """
-
-    sequences: list[str] = InputField(description="DNA sequences to score")
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
-        """Convert single string to list of strings."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
+# Input:
+Evo2ScoringInput = CausalModelScoringInput
 
 
 # Output:
@@ -63,7 +46,7 @@ Evo2ScoringOutput = CausalModelScoringOutput
 
 
 # Config:
-class Evo2ScoringConfig(BaseConfig):
+class Evo2ScoringConfig(CausalModelScoringConfig):
     """Configuration for Evo2 DNA sequence scoring.
 
     Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
@@ -77,18 +60,7 @@ class Evo2ScoringConfig(BaseConfig):
         local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading.
             Default: ``None``.
-
-        device (str): Device to run the model on. Options include ``"cuda"``,
-            ``"cpu"``, or specific GPU devices like ``"cuda:0"``.
-            Default: ``"cuda"``.
-
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-
         return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
 
     Note:
         - Evo2 uses byte-level tokenization with vocab_size=512
@@ -118,26 +90,6 @@ class Evo2ScoringConfig(BaseConfig):
         description="Optional path to local model weights",
         hidden=True,
         reload_on_change=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on",
-        hidden=True,
-        include_in_key=False,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-    return_logits: bool = ConfigField(
-        title="Return Logits",
-        default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
-        advanced=True,
     )
 
 

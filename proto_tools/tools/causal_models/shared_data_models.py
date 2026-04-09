@@ -52,6 +52,10 @@ class CausalModelScoringConfig(BaseConfig):
             Larger batches improve throughput but use more GPU memory; reduce
             if encountering out-of-memory errors.
         device (str): Device to run the model on.
+        return_logits (bool): Whether to include per-position logits in the
+            output. When ``True``, returns logits for each sequence. When
+            ``False``, only returns metrics (saves memory and serialization
+            time).
     """
 
     batch_size: int = ConfigField(
@@ -67,6 +71,12 @@ class CausalModelScoringConfig(BaseConfig):
         description="Device to run the model on",
         hidden=True,
         include_in_key=False,
+    )
+    return_logits: bool = ConfigField(
+        title="Return Logits",
+        default=False,
+        description="Whether to include per-position logits in the output",
+        advanced=True,
     )
 
 

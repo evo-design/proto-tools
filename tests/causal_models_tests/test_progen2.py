@@ -54,21 +54,6 @@ def test_progen2_sample_config_validation(config_kwargs, match):
         ProGen2SampleConfig(**config_kwargs)
 
 
-# ── Scoring input validation ─────────────────────────────────────────────────
-
-
-def test_progen2_score_input_validation():
-    """Test ProGen2ScoringInput validation and normalization."""
-    with pytest.raises(ValueError, match="sequences must not be empty"):
-        ProGen2ScoringInput(sequences=[])
-
-    input_str = ProGen2ScoringInput(sequences="MKTL")
-    assert input_str.sequences == ["MKTL"]
-
-    input_list = ProGen2ScoringInput(sequences=["MKTL", "EVQL"])
-    assert input_list.sequences == ["MKTL", "EVQL"]
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

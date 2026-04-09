@@ -6,18 +6,15 @@ ProGen2 scoring tool.
 import logging
 from typing import Any, Literal
 
-from pydantic import field_validator
-
 from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelScoringConfig,
+    CausalModelScoringInput,
     CausalModelScoringOutput,
     SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -36,25 +33,7 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-class ProGen2ScoringInput(BaseToolInput):
-    """Input for ProGen2 protein sequence scoring.
-
-    Attributes:
-        sequences (list[str]): Protein sequences to score. The start token '1' will be
-            automatically prepended if not present.
-    """
-
-    sequences: list[str] = InputField(description="Protein sequences to score")
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def validate_sequences(cls, v: Any) -> Any:
-        """Coerce a single string to a list and validate non-empty."""
-        if isinstance(v, str):
-            v = [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
+ProGen2ScoringInput = CausalModelScoringInput
 
 
 # Output:
@@ -62,7 +41,7 @@ ProGen2ScoringOutput = CausalModelScoringOutput
 
 
 # Config:
-class ProGen2ScoringConfig(BaseConfig):
+class ProGen2ScoringConfig(CausalModelScoringConfig):
     """Configuration for ProGen2 protein sequence scoring.
 
     Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
@@ -78,18 +57,9 @@ class ProGen2ScoringConfig(BaseConfig):
         local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading
             from HuggingFace. Default: ``None``.
-
-        device (str): Device to run the model on. Options include ``"cuda"``,
-            ``"cpu"``, or specific GPU devices like ``"cuda:0"``.
-            Default: ``"cuda"``.
-
         batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-
+            Larger batches improve throughput but use more GPU memory.
         return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
 
     Note:
         - ProGen2 uses autoregressive scoring: P(sequence) = prod_t P(x_t | x_{<t})
@@ -109,26 +79,6 @@ class ProGen2ScoringConfig(BaseConfig):
         description="Path to local model weights",
         hidden=True,
         reload_on_change=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on",
-        hidden=True,
-        include_in_key=False,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-    return_logits: bool = ConfigField(
-        title="Return Logits",
-        default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
-        advanced=True,
     )
 
 
