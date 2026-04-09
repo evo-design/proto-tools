@@ -54,7 +54,7 @@ def test_sample_config_defaults():
     assert cfg.max_new_tokens == 256
     assert cfg.min_new_tokens == 1
     assert cfg.num_sequences == 1
-    assert cfg.include_prompt_in_output is True
+    assert cfg.prepend_prompt is True
     assert cfg.batch_size == 1
     assert cfg.device == "cuda"
     assert cfg.local_path is None

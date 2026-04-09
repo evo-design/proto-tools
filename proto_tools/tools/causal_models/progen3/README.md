@@ -47,7 +47,7 @@ Generates protein sequences autoregressively from a prompt:
 1. A direction token is prepended internally (`"1"` for forward, `"2"` for reverse)
 2. The model generates tokens autoregressively until a stop token or `max_new_tokens` is reached
 3. Special tokens and direction markers are stripped from the output
-4. If `include_prompt_in_output=False`, prompt residues are removed
+4. If `prepend_prompt=False`, prompt residues are removed
 
 The `direction` config controls generation direction:
 - `direction="forward"` (default): N→C generation, extending from the N-terminus
@@ -91,7 +91,7 @@ Returns `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, p
 | `max_new_tokens` | `int` | `256` | Max new tokens to generate (excludes prompt) |
 | `min_new_tokens` | `int` | `1` | Min new tokens before stopping |
 | `num_sequences` | `int` | `1` | Sequences to generate per prompt |
-| `include_prompt_in_output` | `bool` | `True` | Include prompt residues in output sequence |
+| `prepend_prompt` | `bool` | `True` | Include prompt residues in output sequence |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 
 ### Scoring (`ProGen3ScoringConfig`)

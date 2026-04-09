@@ -3,20 +3,19 @@
 ProGen2 sampling tool.
 """
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
+from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSampleConfig,
+    CausalModelSampleInput,
+    CausalModelSampleOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
-    BaseToolOutput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -35,107 +34,25 @@ PROGEN2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-class ProGen2SampleInput(BaseToolInput):
-    """Input object for ProGen2 protein sequence generation.
-
-    This class defines the input parameters for generating protein sequences using
-    the ProGen2 autoregressive language model.
-
-    Attributes:
-        prompts (list[str]): Prompt sequences for protein generation.
-            Can be provided as:
-
-            - A single prompt string (e.g., ``"MKTL"``)
-            - A list of prompt strings for batch generation (e.g., ``["MKTL", "MVLS"]``)
-
-            ProGen2 uses special tokens: '1' (start) and '2' (end/stop).
-            The start token is automatically prepended by the inference layer
-            if not already present.
-
-            The model will autoregressively generate proteins continuing from these prompts.
-    """
-
-    prompts: list[str] = InputField(description="Prompt sequences for generation")
-
-    @field_validator("prompts", mode="before")
-    @classmethod
-    def validate_prompts(cls, v: Any) -> Any:
-        """Coerce a single string to a list and validate non-empty."""
-        if isinstance(v, str):
-            v = [v]
-        if not v:
-            raise ValueError("prompts must not be empty")
-        return v
+ProGen2SampleInput = CausalModelSampleInput
 
 
-class ProGen2SampleOutput(BaseToolOutput):
+class ProGen2SampleOutput(CausalModelSampleOutput):
     """Output from ProGen2 protein sequence generation.
 
-    This class encapsulates the results of ProGen2 protein sequence generation,
-    providing generated sequences and optionally the logits.
-
     Attributes:
-        sequences (list[str]): Generated protein sequences. Each sequence is a string
-            of amino acids. Depending on configuration:
-
-            - If ``prepend_prompt=True``: Sequences include both input prompt and
-              newly generated tokens
-            - If ``prepend_prompt=False``: Only newly generated tokens are returned
-            - If ``strip_special_tokens=True``: ProGen2 special tokens ('1', '2')
-              are removed
-            - If ``truncate_at_stop=True``: Sequences are truncated at stop tokens
+        sequences (list[str]): Generated protein sequences.
         logits (list[list[list[float]]] | None): Per-position logits for each
-            generated sequence. Shape is (num_sequences, generated_len, vocab_size).
-            Only present if return_logits=True in config.
-
-    Note:
-        Sequences use standard amino acid characters. Special tokens ('1' start,
-        '2' end) may be present depending on configuration.
+            generated sequence (shape: [num_sequences, generated_len, vocab_size]).
     """
 
-    sequences: list[str] = Field(description="Generated protein sequences")
     logits: list[list[list[float]]] | None = Field(
-        default=None,
-        description="Per-position logits for generated tokens. Only present if return_logits=True.",
+        default=None, description="Per-position logits for each generated sequence"
     )
-
-    @property
-    def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["fasta", "txt", "json"]
-
-    @property
-    def output_format_default(self) -> str:
-        """Return the default output format."""
-        return "fasta"
-
-    def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        path = Path(export_path)
-
-        if file_format == "fasta":
-            if path.is_dir():
-                path = path / "progen2_sequences.fasta"
-            with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
-
-        elif file_format == "txt":
-            if path.is_dir():
-                path = path / "progen2_sequences.txt"
-            with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
-
-        elif file_format == "json":
-            if path.is_dir():
-                path = path / "progen2_sequences.json"
-
-            with open(path, "w") as f:
-                json.dump(self.sequences, f, indent=2)
-        else:
-            raise ValueError(f"Unsupported format: {file_format}")
 
 
 # Config:
-class ProGen2SampleConfig(BaseConfig):
+class ProGen2SampleConfig(CausalModelSampleConfig):
     """Configuration object for ProGen2 protein sequence sampling.
 
     This class defines all configuration parameters for generating protein sequences
@@ -144,6 +61,10 @@ class ProGen2SampleConfig(BaseConfig):
     (OAS) and broader protein families (BFD90).
 
     Attributes:
+        prepend_prompt (bool): Whether to include the input prompt at the
+            start of each generated sequence. Default: ``True``.
+        batch_size (int): Number of sequences to process simultaneously.
+            Default: 1.
         model_checkpoint (PROGEN2_MODEL_CHECKPOINTS): ProGen2 model checkpoint to use. Options:
 
             - ``"progen2-small"``: 151M parameters (fastest)
@@ -160,27 +81,15 @@ class ProGen2SampleConfig(BaseConfig):
             from HuggingFace. Useful for offline inference or custom model versions.
             Default: ``None`` (download from HuggingFace hugohrban/).
 
-        temperature (float): Scales the randomness of sampling by adjusting the
-            sharpness of the probability distribution:
+        temperature (float): Sampling temperature. Lower values produce more
+            deterministic sequences. Default: 0.2 (following ProGen2 defaults).
 
-            - ``< 1.0``: Sharper distribution, more deterministic (recommended for proteins)
-            - ``1.0``: Standard sampling from model distribution
-            - ``> 1.0``: Flatter distribution, more random and diverse
-
-            Must be greater than 0. Default: 0.2 (following ProGen2 defaults).
-
-        top_p (float): Nucleus sampling parameter. Chooses the smallest set of tokens
-            whose cumulative probability mass is at least ``top_p``. Common values:
-
-            - ``0.9``: Conservative, high-probability tokens only
-            - ``0.95``: Balanced (default, following ProGen2 recommendations)
-            - ``1.0``: No filtering, sample from full distribution
-
-            Range: (0.0, 1.0]. Default: 0.95.
+        top_p (float): Nucleus sampling threshold. Default: 0.95
+            (following ProGen2 recommendations).
 
         top_k (int): Limits sampling to the top-k most probable tokens at each
             generation step. Set to 0 to disable (use top_p only).
-            Must be >= 0. Default: 0 (disabled).
+            Default: 0 (disabled).
 
         max_length (int): Maximum total sequence length including prompt.
             Generation stops when this length is reached or a stop token is encountered.
@@ -194,20 +103,9 @@ class ProGen2SampleConfig(BaseConfig):
             tokens ('1' or '2') from the output. If ``True``, returns clean amino
             acid sequences. Default: ``True``.
 
-        prepend_prompt (bool): Whether to include the prompt in the returned
-            sequence. If ``False``, only newly generated tokens are returned.
-            Default: ``True``.
-
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-
         return_logits (bool): Whether to include per-position logits in the output.
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
-
-        device (str): Device to run the model on (e.g., ``"cuda"``, ``"cpu"``).
-            Default: ``"cuda"``.
 
     Note:
         For detailed information on ProGen2, see:
@@ -217,14 +115,20 @@ class ProGen2SampleConfig(BaseConfig):
         - Original paper: https://www.cell.com/cell-systems/fulltext/S2405-4712(23)00272-7
     """
 
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run the model on (e.g., 'cuda', 'cpu')",
-        hidden=True,
-        include_in_key=False,
+    temperature: float = ConfigField(
+        title="Temperature",
+        default=0.2,
+        gt=0.0,
+        description="Sampling temperature controlling randomness of generation",
     )
-
+    top_p: float = ConfigField(
+        title="Top P",
+        default=0.95,
+        gt=0.0,
+        le=1.0,
+        description="Nucleus sampling threshold",
+        advanced=True,
+    )
     model_checkpoint: PROGEN2_MODEL_CHECKPOINTS = ConfigField(
         default="progen2-large",
         title="Model Checkpoint",
@@ -237,19 +141,6 @@ class ProGen2SampleConfig(BaseConfig):
         description="Path to local model weights (if None, downloads from HuggingFace)",
         hidden=True,
         reload_on_change=True,
-    )
-    temperature: float = ConfigField(
-        default=0.2,
-        gt=0.0,
-        title="Temperature",
-        description="Scales the randomness of sampling.",
-    )
-    top_p: float = ConfigField(
-        default=0.95,
-        gt=0.0,
-        le=1.0,
-        title="Top-p",
-        description="Nucleus sampling parameter.",
     )
     top_k: int = ConfigField(
         default=0,
@@ -274,19 +165,6 @@ class ProGen2SampleConfig(BaseConfig):
         title="Strip Special Tokens",
         default=True,
         description="Whether to strip start and stop tokens ('1' or '2')",
-        advanced=True,
-    )
-    prepend_prompt: bool = ConfigField(
-        default=True,
-        title="Prepend Prompt",
-        description="Whether to prepend prompt to generation.",
-        hidden=True,
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     return_logits: bool = ConfigField(

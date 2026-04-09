@@ -289,7 +289,11 @@ class CausalModelSampleConfig(BaseConfig):
 
 
 class CausalModelSampleOutput(BaseToolOutput):
-    """Base output for causal model sampling/generation tools."""
+    """Base output for causal model sampling/generation tools.
+
+    Attributes:
+        sequences (list[str]): Generated sequences.
+    """
 
     sequences: list[str] = Field(
         description="Generated sequences",
@@ -298,7 +302,7 @@ class CausalModelSampleOutput(BaseToolOutput):
     @property
     def output_format_options(self) -> list[str]:
         """Return the supported output format options."""
-        return ["fasta", "json"]
+        return ["fasta", "txt", "json"]
 
     @property
     def output_format_default(self) -> str:
@@ -312,6 +316,10 @@ class CausalModelSampleOutput(BaseToolOutput):
             fasta_path = path.with_suffix(".fasta")
             with open(fasta_path, "w") as f:
                 f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
+        elif file_format == "txt":
+            txt_path = path.with_suffix(".txt")
+            with open(txt_path, "w") as f:
+                f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
             json_path = path.with_suffix(".json")
             with open(json_path, "w") as f:

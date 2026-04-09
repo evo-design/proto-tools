@@ -5,22 +5,21 @@ using the Evo1 language model, supporting multiple model checkpoints
 including CRISPR and transposon fine-tuned variants.
 """
 
-import json
 import logging
 import math
-from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
-from proto_tools.tools.causal_models.shared_data_models import SequenceScores
+from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSampleConfig,
+    CausalModelSampleInput,
+    CausalModelSampleOutput,
+    SequenceScores,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
-    BaseToolOutput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -38,29 +37,11 @@ EVO1_MODEL_CHECKPOINTS = Literal[
 # Data Models
 # ============================================================================
 # Input:
-class Evo1SampleInput(BaseToolInput):
-    """Input object for Evo1 DNA sequence sampling.
-
-    Attributes:
-        prompts (list[str]): Prompt sequences for DNA generation.
-            Can be a single prompt string or a list of prompt strings.
-    """
-
-    prompts: list[str] = InputField(description="Prompt sequences for generation")
-
-    @field_validator("prompts", mode="before")
-    @classmethod
-    def normalize_prompts(cls, v: Any) -> Any:
-        """Convert single string to list of strings."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("prompts must not be empty")
-        return v
+Evo1SampleInput = CausalModelSampleInput
 
 
 # Output:
-class Evo1SampleOutput(BaseToolOutput):
+class Evo1SampleOutput(CausalModelSampleOutput):
     """Output from Evo1 DNA sequence sampling.
 
     Attributes:
@@ -69,52 +50,31 @@ class Evo1SampleOutput(BaseToolOutput):
             log_likelihood, avg_log_likelihood, and perplexity.
     """
 
-    sequences: list[str] = Field(description="Generated DNA sequences")
     scores: list[SequenceScores] | None = Field(default=None, description="Scoring metrics per generated sequence")
-
-    @property
-    def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["fasta", "txt", "json"]
-
-    @property
-    def output_format_default(self) -> str:
-        """Return the default output format."""
-        return "fasta"
-
-    def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        path = Path(export_path).with_suffix(f".{file_format}")
-
-        if file_format == "fasta":
-            with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
-        elif file_format == "txt":
-            with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
-        elif file_format == "json":
-            with open(path, "w") as f:
-                json.dump({"sequences": self.sequences}, f, indent=2)
-        else:
-            raise ValueError(f"Unsupported format: {file_format}")
 
 
 # Config:
-class Evo1SampleConfig(BaseConfig):
+class Evo1SampleConfig(CausalModelSampleConfig):
     """Configuration for Evo1 DNA sequence sampling.
 
     Attributes:
+        prepend_prompt (bool): Whether to include the input prompt at the
+            start of each generated sequence.
         model_name (EVO1_MODEL_CHECKPOINTS): Evo1 model checkpoint to use.
-        top_k (int): Top-k sampling parameter.
-        temperature (float): Sampling temperature.
-        top_p (float): Top-p (nucleus) sampling parameter.
-        num_tokens (int): Number of tokens to generate.
-        prepend_prompt (bool): Whether to prepend prompt to output.
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors.
-        device (str): Device to run on.
+        top_k (int): Number of top tokens to consider for sampling.
+        num_tokens (int): Number of tokens to generate per prompt.
+
+    Note:
+        Inherits temperature, top_p, prepend_prompt, batch_size, and device
+        from CausalModelSampleConfig. Overrides prepend_prompt default to
+        ``False`` (Evo1 does not prepend by default).
     """
 
+    prepend_prompt: bool = ConfigField(
+        title="Prepend Prompt",
+        default=False,
+        description="Whether to prepend the input prompt to the generated sequence",
+    )
     model_name: EVO1_MODEL_CHECKPOINTS = ConfigField(
         title="Model Name",
         default="evo-1-8k-base",
@@ -125,46 +85,13 @@ class Evo1SampleConfig(BaseConfig):
         title="Top K",
         default=4,
         ge=1,
-        description="Top-k sampling parameter",
-    )
-    temperature: float = ConfigField(
-        title="Temperature",
-        default=1.0,
-        gt=0.0,
-        description="Sampling temperature",
-    )
-    top_p: float = ConfigField(
-        title="Top P",
-        default=1.0,
-        gt=0.0,
-        le=1.0,
-        description="Top-p (nucleus) sampling parameter",
-        advanced=True,
+        description="Number of top tokens to consider for sampling",
     )
     num_tokens: int = ConfigField(
-        title="Num Tokens",
+        title="Number of Tokens",
         default=100,
         ge=1,
-        description="Number of tokens to generate",
-    )
-    prepend_prompt: bool = ConfigField(
-        title="Prepend Prompt",
-        default=False,
-        description="Whether to prepend prompt to generated sequence",
-    )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run on",
-        hidden=True,
-        include_in_key=False,
+        description="Number of tokens to generate per prompt",
     )
 
 

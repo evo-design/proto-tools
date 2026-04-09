@@ -3,20 +3,19 @@
 Evo2 sampling tool.
 """
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
+from proto_tools.tools.causal_models.shared_data_models import (
+    CausalModelSampleConfig,
+    CausalModelSampleInput,
+    CausalModelSampleOutput,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
-    BaseToolInput,
-    BaseToolOutput,
     ConfigField,
-    InputField,
     ToolInstance,
 )
 
@@ -37,208 +36,70 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 # ============================================================================
 # Data Models
 # ============================================================================
-class Evo2SampleInput(BaseToolInput):
-    """Input object for Evo2 DNA sequence sampling.
-
-    This class defines the input parameters for generating DNA sequences using
-    the Evo2 language model. Evo2 uses prompt sequences to guide autoregressive
-    generation of genomic DNA.
-
-    Attributes:
-        prompts (list[str]): Prompt sequences for DNA generation.
-            Can be provided as:
-
-            - A single prompt string (e.g., ``"GA"``)
-            - A list of prompt strings for batch generation (e.g., ``["GA", "GC"]``)
-
-            The model will autoregressively generate DNA continuing from these prompts.
-    """
-
-    prompts: list[str] = InputField(description="Prompt sequences for generation")
-
-    @field_validator("prompts", mode="before")
-    @classmethod
-    def normalize_prompts(cls, v: Any) -> Any:
-        """Convert single string to list of strings."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("prompts must not be empty")
-        return v
+Evo2SampleInput = CausalModelSampleInput
 
 
-class Evo2SampleOutput(BaseToolOutput):
+class Evo2SampleOutput(CausalModelSampleOutput):
     """Output from Evo2 DNA sequence sampling.
 
-    This class encapsulates the results of Evo2 DNA sequence generation,
-    providing generated sequences and optional generation metadata.
-
     Attributes:
-        sequences (list[str]): Generated DNA sequences. Each sequence is a string
-            of nucleotides. If ``prepend_prompt=True`` in the config, sequences
-            include both the input prompt and newly generated tokens. If ``False``,
-            only the newly generated tokens are returned.
-
-        logits (list[Any] | None): Per-token logits for each generated sequence.
-            Shape: ``[num_sequences, num_generated_tokens, vocab_size]``. Higher
-            logit values indicate higher model confidence for that token. Useful for:
-
-            - Analyzing generation uncertainty
-            - Computing sequence likelihoods
-            - Implementing custom decoding strategies
-
-            Returns ``None`` if logits were not computed or stored.
-
-        kv_caches (list[dict[str, Any]] | None): List of KV cache dictionaries, one per
-            sequence. Each cache contains the intermediate attention states from
-            generation. Can be passed as ``old_kv_cache`` in a subsequent generation
-            call to continue generation from the cached state. Useful for:
-
-            - Continuing generation from a previous run
-            - Interactive generation workflows
-            - Memory-efficient long sequence generation
-
-            Returns ``None`` if caching was disabled or not used.
-
-    Note:
-        Sequences use standard DNA nucleotide characters (A, T, C, G) and may
-        include Evo2's special tokens depending on the prompt format.
+        sequences (list[str]): Generated DNA sequences.
+        logits (list[Any] | None): Per-token logits for each generated sequence
+            (shape: [num_sequences, num_generated_tokens, vocab_size]).
+        kv_caches (list[dict[str, Any]] | None): KV caches for each sequence,
+            enabling continued generation from where sampling left off.
     """
 
-    sequences: list[str] = Field(description="Generated DNA sequences")
-    logits: list[Any] | None = Field(
-        default=None,
-        description="Per-token logits for each sequence",
-    )
-    kv_caches: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="List of KV caches for each sequence",
-    )
-
-    @property
-    def output_format_options(self) -> list[str]:
-        """Return the supported output format options."""
-        return ["fasta", "txt", "json"]
-
-    @property
-    def output_format_default(self) -> str:
-        """Return the default output format."""
-        return "fasta"
-
-    def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        path = Path(export_path).with_suffix(f".{file_format}")
-
-        if file_format == "fasta":
-            with open(path, "w") as f:
-                f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
-
-        elif file_format == "txt":
-            with open(path, "w") as f:
-                f.writelines(f"{seq}\n" for seq in self.sequences)
-
-        elif file_format == "json":
-            # Export minimal sequence data.
-            # Logits/KV caches too large for standard export usually.
-            data = {"sequences": self.sequences}
-            with open(path, "w") as f:
-                json.dump(data, f, indent=2)
-        else:
-            raise ValueError(f"Unsupported format: {file_format}")
+    logits: list[Any] | None = Field(default=None, description="Per-token logits for each generated sequence")
+    kv_caches: list[dict[str, Any]] | None = Field(default=None, description="KV caches for continued generation")
 
 
 # Config:
-class Evo2SampleConfig(BaseConfig):
+class Evo2SampleConfig(CausalModelSampleConfig):
     """Configuration object for Evo2 DNA sequence sampling.
 
-    This class defines all configuration parameters for generating DNA sequences
-    using the Evo2 language model. Evo2 is a 7B parameter model trained on genomic
-    DNA sequences for autoregressive generation.
-
     Attributes:
-        prepend_prompt (bool): Whether to prepend the input prompt to the generated
-            sequence in the output. If ``True``, the returned sequences include both
-            the prompt and generated tokens. If ``False``, only the newly generated
-            tokens are returned. Default: ``True``.
-
-        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use. Options:
-
-            - ``"evo2_7b"``: 7 billion parameter Evo2 model (default)
-
+        prepend_prompt (bool): Whether to include the input prompt at the
+            start of each generated sequence. Default: ``True``.
+        temperature (float): Sampling temperature controlling randomness.
+            Default: 1.0.
+        top_p (float): Nucleus sampling threshold. Default: 1.0.
+        batch_size (int): Number of sequences to process simultaneously.
+            Default: 1.
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 model checkpoint to use.
             Default: ``"evo2_7b"``.
 
         local_path (str | None): Optional path to local model weights directory.
             If provided, loads model from local filesystem instead of downloading
-            from Hugging Face. Useful for offline inference or custom model versions.
-            Default: ``None`` (download from Hugging Face).
+            from Hugging Face. Default: ``None``.
 
         top_k (int): Limits sampling to the top-k most probable tokens at each
-            generation step. Lower values make generation more focused and deterministic,
-            higher values increase diversity. Must be at least 1. Default: 4.
-
-        top_p (float): Nucleus sampling parameter. Chooses the smallest set of tokens
-            whose cumulative probability mass is at least ``top_p``. Common values:
-
-            - ``0.9``: Conservative, high-probability tokens only
-            - ``0.95``: Balanced (typical)
-            - ``1.0``: No filtering, sample from full distribution (default)
-
-            Range: (0.0, 1.0]. Default: 1.0.
-
-        temperature (float): Scales the randomness of sampling by adjusting the
-            sharpness of the probability distribution:
-
-            - ``< 1.0``: Sharper distribution, more deterministic
-            - ``1.0``: Standard sampling from model distribution (default)
-            - ``> 1.0``: Flatter distribution, more random and diverse
-
-            Must be greater than 0. Default: 1.0.
+            generation step. Default: 4.
 
         num_tokens (int): Number of new tokens to generate per sequence (does not
-            include the prompt tokens). For DNA sequences, each token represents
-            a nucleotide or short subsequence depending on the tokenizer. Must be
-            at least 1. Default: 32.
+            include the prompt tokens). Default: 32.
 
         cached_generation (bool): Whether to use vortex KV caching for faster
-            generation. KV caching stores intermediate attention states to avoid
-            recomputation. Recommended for long sequences. Default: ``True``.
+            generation. Default: ``True``.
 
         force_prompt_threshold (int | None): Optional number of tokens to
             prefill in parallel before switching to autoregressive prompt forcing.
-            This can speed up generation for long prompts. Default: ``None``
-            (automatic determination).
+            Default: ``None``.
 
         max_seqlen (int | None): Optional maximum sequence length to generate.
-            Determines the maximum size of the KV cache. If ``None``, automatically
-            calculated as ``prompt_length + num_tokens``. Useful for constraining
-            memory usage. Default: ``None``.
+            Default: ``None``.
 
         print_generation (bool): Whether to print generated tokens to console in
-            real-time as they are generated. Useful for debugging and monitoring
-            progress. Default: ``True``.
+            real-time as they are generated. Default: ``True``.
 
         stop_at_eos (bool): Whether to stop generation when an end-of-sequence
-            (EOS) token is encountered. If ``True``, generation terminates early
-            for sequences that naturally end. If ``False``, always generates exactly
-            ``num_tokens`` tokens. Default: ``True``.
+            (EOS) token is encountered. Default: ``True``.
 
         old_kv_cache (dict[str, Any] | None): Dictionary of inference parameters containing
-            a pre-computed KV cache from a previous generation run. Used for
-            continuing generation from a cached state. Default: ``None``.
+            a pre-computed KV cache from a previous generation run. Default: ``None``.
 
-        batch_size (int): Number of sequences to process simultaneously on GPU.
-            Larger batches improve throughput but use more GPU memory; reduce
-            if encountering out-of-memory errors. Default: ``1``.
-
-        device (str): Device to run sampling on (``"cuda"``, ``"cpu"``, ``"mps"``).
-            Default: ``"cuda"``.
-
-        return_logits (bool): Whether to include per-position logits in the output.
-            When ``True``, returns logits for each sequence. When ``False``, only
-            returns metrics (saves memory and serialization time). Default: ``False``.
-
-    Note:
-        Evo2 is a large model. Smaller batch sizes and shorter sequences
-        are recommended if memory is constrained.
+        return_logits (bool): Whether to include per-token logits in the output.
+            Default: ``False``.
     """
 
     @model_validator(mode="after")
@@ -250,13 +111,6 @@ class Evo2SampleConfig(BaseConfig):
                 "manager system. Use a 7b or 1b variant instead."
             )
         return self
-
-    # prompt params
-    prepend_prompt: bool = ConfigField(
-        title="Prepend Prompt",
-        default=True,
-        description="Whether to prepend the prompt to the generated sequence in the output",
-    )
 
     # Evo2 model params
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
@@ -278,19 +132,6 @@ class Evo2SampleConfig(BaseConfig):
         default=4,
         ge=1,
         description="Limits sampling to the top-k most probable tokens at each generation step.",
-    )
-    top_p: float = ConfigField(
-        title="Top P",
-        default=1,
-        gt=0.0,
-        le=1.0,
-        description="Chooses the smallest set of tokens whose cumulative probability mass ≥ top-p.",
-    )
-    temperature: float = ConfigField(
-        title="Temperature",
-        default=1.0,
-        gt=0.0,
-        description="Scales the randomness of sampling by adjusting probability distribution sharpness.",
     )
     num_tokens: int = ConfigField(
         title="Num Tokens",
@@ -334,26 +175,10 @@ class Evo2SampleConfig(BaseConfig):
         description="Dictionary of inference parameters to use for cached sampling (KV cache)",
         hidden=True,
     )
-    batch_size: int = ConfigField(
-        title="Batch Size",
-        default=1,
-        ge=1,
-        description="Number of sequences to process simultaneously on GPU",
-        advanced=True,
-    )
-
-    # memory management params
-    device: str = ConfigField(
-        title="Device",
-        default="cuda",
-        description="Device to run on",
-        hidden=True,
-        include_in_key=False,
-    )
     return_logits: bool = ConfigField(
         title="Return Logits",
         default=False,
-        description="Whether to include per-position logits in the output. Disable to save memory.",
+        description="Whether to include per-token logits in the output. Disable to save memory.",
         advanced=True,
     )
 
