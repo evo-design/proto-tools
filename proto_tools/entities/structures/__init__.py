@@ -1,7 +1,7 @@
 """Macromolecular structure representations and format conversion."""
 
 from proto_tools.entities.structures.examples import GFP_CIF_PATH, get_gfp_structure
-from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
 from proto_tools.entities.structures.structure_ensemble import StructureEnsemble
 from proto_tools.entities.structures.utils import (
     adjacent_distances,
@@ -37,6 +37,7 @@ __all__ = [
     # Structure
     "Structure",
     "BFactorType",
+    "StructureMetrics",
     "StructureEnsemble",
     # Examples
     "GFP_CIF_PATH",

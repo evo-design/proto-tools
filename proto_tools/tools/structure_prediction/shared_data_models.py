@@ -7,7 +7,7 @@ import logging
 import string
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar, Final
+from typing import Any, ClassVar, Final, TypedDict
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -309,6 +309,22 @@ class Chain(BaseModel):
     def __len__(self) -> int:
         """Returns the length of the sequence."""
         return len(self.sequence)
+
+
+class MetricSpec(TypedDict):
+    """Specification for a single structure prediction metric.
+
+    Attributes:
+        availability (str): When the metric is present (e.g., ``"always"``, ``"multi-chain input only"``).
+        type (type): Expected Python type (``float``, ``list``, or ``bool``).
+        min (float | None): Minimum valid value, or ``None`` if unbounded. For lists, applies to each element.
+        max (float | None): Maximum valid value, or ``None`` if unbounded. For lists, applies to each element.
+    """
+
+    availability: str
+    type: type
+    min: float | None
+    max: float | None
 
 
 class StructurePredictionComplex(BaseModel):

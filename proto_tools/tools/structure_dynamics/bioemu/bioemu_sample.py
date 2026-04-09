@@ -14,6 +14,7 @@ from proto_tools.entities.structures import (
     BFactorType,
     Structure,
     StructureEnsemble,
+    StructureMetrics,
 )
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
@@ -306,10 +307,10 @@ def _pdb_frames_to_structures(
             Structure(
                 structure=pdb_content,
                 b_factor_type=BFactorType.UNSPECIFIED,
-                metrics={
-                    "ensemble_idx": comp_idx,
-                    "frame_idx": frame_idx,
-                },
+                metrics=StructureMetrics(
+                    ensemble_idx=comp_idx,
+                    frame_idx=frame_idx,
+                ),
                 source="bioemu-ensemble",
             )
         )

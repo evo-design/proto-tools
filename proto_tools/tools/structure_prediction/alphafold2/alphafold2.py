@@ -11,8 +11,9 @@ from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
 
-from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -106,7 +107,26 @@ class AlphaFold2Input(StructurePredictionInput):
 
 
 # Output:
-AlphaFold2Output = StructurePredictionOutput
+class AlphaFold2Output(StructurePredictionOutput):
+    """AlphaFold2 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        avg_plddt (float): Average predicted LDDT score (0-1). Always present.
+        ptm (float): Predicted TM-score (0-1). Always present.
+        iptm (float): Interface predicted TM-score (0-1). Multi-chain input only.
+        avg_pae (float): Average predicted aligned error. Always present.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "multi-chain input only", "type": float, "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
 
 
 # Config:
@@ -304,12 +324,13 @@ def run_alphafold2(
         )
 
         # Post-process: create Structure from PDB output
-        metrics = {
-            "avg_plddt": output_data["avg_plddt"],
-            "ptm": output_data["ptm"],
-            "iptm": output_data.get("iptm"),
-            "avg_pae": output_data.get("avg_pae"),
-        }
+        metrics = StructureMetrics(
+            primary_metric="avg_plddt",
+            avg_plddt=output_data["avg_plddt"],
+            ptm=output_data["ptm"],
+            iptm=output_data.get("iptm"),
+            avg_pae=output_data.get("avg_pae"),
+        )
 
         structure_outputs.append(
             Structure(

@@ -15,7 +15,7 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
-from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.esmfold.helpers import (
     relabel_chains as _relabel_chains,
 )
@@ -23,6 +23,7 @@ from proto_tools.tools.structure_prediction.esmfold.helpers import (
     split_into_safe_batches as _split_into_safe_batches,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    MetricSpec,
     StructurePredictionComplex,
     StructurePredictionConfig,
     StructurePredictionInput,
@@ -120,7 +121,24 @@ class ESMFoldInput(StructurePredictionInput):
 
 
 # Output:
-ESMFoldOutput = StructurePredictionOutput
+class ESMFoldOutput(StructurePredictionOutput):
+    """ESMFold prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        avg_plddt (float): Average predicted LDDT score (0-1). Always present.
+        ptm (float): Predicted TM-score (0-1). Depends on model output.
+        avg_pae (float): Average predicted aligned error. Depends on model output.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "depends on model output", "type": float, "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "depends on model output", "type": float, "min": 0.0, "max": None},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
 
 
 # Config:
@@ -327,11 +345,12 @@ def run_esmfold(
             Structure(
                 structure=pdb_output,
                 b_factor_type=BFactorType.NORMALIZED_PLDDT,
-                metrics={
-                    "avg_plddt": result["avg_plddt"],
-                    "ptm": result["ptm"],
-                    "avg_pae": result["avg_pae"],
-                },
+                metrics=StructureMetrics(
+                    primary_metric="avg_plddt",
+                    avg_plddt=result["avg_plddt"],
+                    ptm=result["ptm"],
+                    avg_pae=result["avg_pae"],
+                ),
                 source="esmfold-prediction",
             )
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -21,6 +22,171 @@ from proto_tools.entities.structures.utils import (
 )
 
 VISUALIZE_STYLE_OPTIONS = ["cartoon", "line", "stick", "sphere", "licorice"]
+
+StructureMetricValue = float | int | list[float] | list[list[float]] | bool
+
+
+class StructureMetrics(BaseModel):
+    """Metrics container with attribute and dict-style access. None values are excluded at construction.
+
+    Wraps a dict of metric values, automatically stripping any ``None`` entries so that
+    only metrics the model actually produced are stored. Supports both attribute access
+    (``metrics.ptm``) and dict-style access (``metrics["ptm"]``, ``"ptm" in metrics``).
+
+    Attributes:
+        primary_metric (str | None): Key of the primary quality metric for the prediction.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    primary_metric: str | None = Field(default=None, description="Key of the primary quality metric")
+
+    def __init__(self, *, primary_metric: str | None = None, **kwargs: StructureMetricValue | None) -> None:
+        """Accept arbitrary metric keyword arguments alongside primary_metric."""
+        super().__init__(primary_metric=primary_metric, **kwargs)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _exclude_none_values(cls, data: Any) -> Any:
+        """Strip None-valued entries so absent metrics are truly absent."""
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
+
+    # ── Dict-like interface ──────────────────────────────────────────────────
+
+    def _metric_data(self) -> dict[str, StructureMetricValue]:
+        """Return the metric key-value pairs (excludes primary_metric metadata)."""
+        return dict(self.__pydantic_extra__) if self.__pydantic_extra__ else {}
+
+    def __contains__(self, key: object) -> bool:
+        """Check if a metric key is present."""
+        if not isinstance(key, str):
+            return False
+        return key in self._metric_data()
+
+    def __getitem__(self, key: str) -> StructureMetricValue:
+        """Get a metric value by key."""
+        data = self._metric_data()
+        if key in data:
+            return data[key]
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a metric value by key with a default."""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self) -> list[str]:
+        """Return all metric keys."""
+        return list(self._metric_data().keys())
+
+    def values(self) -> list[StructureMetricValue]:
+        """Return all metric values."""
+        return list(self._metric_data().values())
+
+    def items(self) -> list[tuple[str, StructureMetricValue]]:
+        """Return all metric key-value pairs."""
+        return list(self._metric_data().items())
+
+    def __len__(self) -> int:
+        """Return the number of metrics."""
+        return len(self._metric_data())
+
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
+        """Iterate over metric keys."""
+        return iter(self._metric_data())
+
+    def __eq__(self, other: object) -> bool:
+        """Compare metric data, supporting comparison with dicts."""
+        if isinstance(other, StructureMetrics):
+            return self._metric_data() == other._metric_data()
+        if isinstance(other, dict):
+            return self._metric_data() == other
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        """Return a string representation."""
+        data = self._metric_data()
+        items = ", ".join(f"{k}={v!r}" for k, v in data.items())
+        primary = f", primary_metric={self.primary_metric!r}" if self.primary_metric else ""
+        return f"StructureMetrics({items}{primary})"
+
+    # ── Convenience ──────────────────────────────────────────────────────────
+
+    @property
+    def primary_value(self) -> StructureMetricValue | None:
+        """Value of the primary quality metric, or None if not set."""
+        if self.primary_metric and self.primary_metric in self:
+            return self[self.primary_metric]
+        return None
+
+    # ── Validation ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _flatten_scalars(value: Any) -> list[float | int]:
+        """Recursively extract all numeric scalars from a (possibly nested) list."""
+        if isinstance(value, (int, float)):
+            return [value]
+        if isinstance(value, list):
+            result: list[float | int] = []
+            for item in value:
+                result.extend(StructureMetrics._flatten_scalars(item))
+            return result
+        return []
+
+    def _check_value(self, name: str, value: Any, spec: dict[str, Any]) -> None:
+        """Validate a single metric value against its spec."""
+        expected_type = spec["type"]
+        if expected_type is float:
+            if not isinstance(value, (int, float)):
+                raise AssertionError(f"Metric '{name}': expected numeric, got {type(value).__name__}")
+            if spec["min"] is not None and value < spec["min"]:
+                raise AssertionError(f"Metric '{name}'={value} below min {spec['min']}")
+            if spec["max"] is not None and value > spec["max"]:
+                raise AssertionError(f"Metric '{name}'={value} above max {spec['max']}")
+        elif expected_type is list:
+            if not isinstance(value, list):
+                raise AssertionError(f"Metric '{name}': expected list, got {type(value).__name__}")
+            for scalar in self._flatten_scalars(value):
+                if spec["min"] is not None and scalar < spec["min"]:
+                    raise AssertionError(f"Metric '{name}' element {scalar} below min {spec['min']}")
+                if spec["max"] is not None and scalar > spec["max"]:
+                    raise AssertionError(f"Metric '{name}' element {scalar} above max {spec['max']}")
+        elif expected_type is int:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise AssertionError(f"Metric '{name}': expected int, got {type(value).__name__}")
+            if spec["min"] is not None and value < spec["min"]:
+                raise AssertionError(f"Metric '{name}'={value} below min {spec['min']}")
+            if spec["max"] is not None and value > spec["max"]:
+                raise AssertionError(f"Metric '{name}'={value} above max {spec['max']}")
+        elif expected_type is bool:
+            if not isinstance(value, bool):
+                raise AssertionError(f"Metric '{name}': expected bool, got {type(value).__name__}")
+
+    def validate_against_spec(self, spec: dict[str, Any]) -> None:
+        """Validate all metrics against a declared spec.
+
+        Checks that all "always" metrics are present, every present metric has the
+        correct type and is within its declared range, and no undeclared metrics exist.
+
+        Args:
+            spec (dict[str, Any]): Mapping of metric names to ``MetricSpec`` dicts.
+
+        Raises:
+            AssertionError: If any validation check fails.
+        """
+        for metric_name, metric_spec in spec.items():
+            if metric_spec["availability"] == "always" and metric_name not in self:
+                raise AssertionError(f"Guaranteed metric '{metric_name}' not found")
+            if metric_name in self:
+                self._check_value(metric_name, self[metric_name], metric_spec)
+        for key in self:
+            if key not in spec:
+                raise AssertionError(f"Undeclared metric '{key}'")
+
 
 # Color palette for chain coloring (supports up to 20 chains with distinct colors)
 CHAIN_COLORS = [
@@ -146,7 +312,8 @@ class Structure(BaseModel):
         structure_format (Literal["pdb", "cif"] | None): Format of the content string (auto-detected if omitted).
         b_factor_type (BFactorType): What the B-factor column represents.
         source (str | None): Optional source identifier (filepath or tool name).
-        metrics (dict[str, float]): Associated metrics (e.g., pLDDT, pTM scores).
+        metrics (StructureMetrics): Associated metrics (e.g., pLDDT, pTM scores,
+            per-chain lists, pairwise matrices). None values are stripped at construction.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -157,7 +324,7 @@ class Structure(BaseModel):
         default=BFactorType.UNSPECIFIED, description="What the B-factor column represents"
     )
     source: str | None = Field(default=None, description="Source identifier for the structure")
-    metrics: dict[str, float] = Field(default_factory=dict, description="Associated metrics")
+    metrics: StructureMetrics = Field(default_factory=StructureMetrics, description="Associated metrics")
 
     _gemmi_struct: Any = PrivateAttr(default=None)
 
@@ -206,7 +373,7 @@ class Structure(BaseModel):
         cls,
         path: str | Path,
         b_factor_type: BFactorType = BFactorType.UNSPECIFIED,
-        metrics: dict[str, float] | None = None,
+        metrics: StructureMetrics | dict[str, Any] | None = None,
         source: str | None = None,
     ) -> Structure:
         """Load a Structure from a PDB or CIF file.
@@ -214,7 +381,7 @@ class Structure(BaseModel):
         Args:
             path (str | Path): Path to a ``.pdb``, ``.cif``, or ``.mmcif`` file.
             b_factor_type (BFactorType): What the B-factor column represents.
-            metrics (dict[str, float] | None): Optional metrics to attach.
+            metrics (StructureMetrics | dict[str, Any] | None): Optional metrics to attach.
             source (str | None): Source identifier. Defaults to the filepath.
 
         Returns:
@@ -226,12 +393,16 @@ class Structure(BaseModel):
         """
         content = load_structure_file(path)
         fmt = detect_structure_format(content)
+        if metrics is None:
+            metrics = StructureMetrics()
+        elif isinstance(metrics, dict):
+            metrics = StructureMetrics(**metrics)
         return cls(
             structure=content,
             structure_format=fmt,  # type: ignore[arg-type]
             b_factor_type=b_factor_type,
             source=source or str(path),
-            metrics=metrics or {},
+            metrics=metrics,
         )
 
     # ============================================================================
@@ -250,14 +421,18 @@ class Structure(BaseModel):
             return metrics[name]
         raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-    def add_metric(self, metric: str, value: float) -> None:
+    def add_metric(self, metric: str, value: StructureMetricValue) -> None:
         """Add a metric to the structure.
 
         Args:
             metric (str): Name of the metric.
-            value (float): Value of the metric.
+            value (StructureMetricValue): Value of the metric.
         """
-        self.metrics[metric] = value
+        extra = self.metrics.__pydantic_extra__
+        if extra is None:
+            self.metrics.__pydantic_extra__ = {metric: value}
+        else:
+            extra[metric] = value
 
     # ============================================================================
     # Gemmi / Format Conversion

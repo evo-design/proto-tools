@@ -17,9 +17,10 @@ from proto_tools.utils.progress import progress_bar
 logger = logging.getLogger(__name__)
 
 from proto_tools.entities.ligands import map_smiles_to_ccd_code
-from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
+    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -58,7 +59,28 @@ class AlphaFold3Input(StructurePredictionInput):
 
 
 # Output:
-AlphaFold3Output = StructurePredictionOutput
+class AlphaFold3Output(StructurePredictionOutput):
+    """AlphaFold3 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        avg_plddt (float): Average predicted LDDT score (0-100). Always present.
+        avg_pae (float): Average predicted aligned error. Always present.
+        ptm (float): Predicted TM-score (0-1). Depends on model output.
+        iptm (float): Interface predicted TM-score (0-1). Depends on model output.
+        ranking_score (float): AlphaFold3 ranking score. Depends on model output.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 100.0},
+        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
+        "ptm": {"availability": "depends on model output", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "depends on model output", "type": float, "min": 0.0, "max": 1.0},
+        "ranking_score": {"availability": "depends on model output", "type": float, "min": None, "max": None},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
 
 
 # Config:
@@ -247,13 +269,13 @@ def run_alphafold3(
 
             # Extract results from dict
             pdb_path = output_data["structure_pdb"]
-            alphafold3_scores = output_data["metrics"]
+            metrics = StructureMetrics(primary_metric="avg_plddt", **output_data["metrics"])
 
             output_structures.append(
                 Structure.from_file(
                     pdb_path,
                     b_factor_type=BFactorType.PLDDT,
-                    metrics=alphafold3_scores,
+                    metrics=metrics,
                     source="alphafold3-prediction",
                 )
             )

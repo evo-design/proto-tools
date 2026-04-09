@@ -15,8 +15,9 @@ import tempfile
 from logging import getLogger
 from typing import Any, ClassVar, Literal
 
-from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -128,7 +129,36 @@ class ProtenixInput(StructurePredictionInput):
 
 
 # Output:
-ProtenixOutput = StructurePredictionOutput
+class ProtenixOutput(StructurePredictionOutput):
+    """Protenix prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        confidence_score (float): Protenix ranking score. Always present.
+        ptm (float): Predicted TM-score (0-1). Always present.
+        iptm (float): Interface predicted TM-score (0-1). Always present.
+        avg_plddt (float): Average predicted LDDT score (0-1). Always present.
+        gpde (float): Global predicted distance error. Always present.
+        chain_ptm (list[float]): Per-chain pTM scores. Depends on model output.
+        chain_plddt (list[float]): Per-chain pLDDT scores. Depends on model output.
+        chain_pair_iptm (list[list[float]]): Pairwise chain ipTM. Depends on model output.
+        has_clash (bool): Whether clashes were detected. Depends on model output.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "confidence_score": {"availability": "always", "type": float, "min": None, "max": None},
+        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "gpde": {"availability": "always", "type": float, "min": 0.0, "max": None},
+        "chain_ptm": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
+        "chain_plddt": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
+        "chain_pair_iptm": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
+        "has_clash": {"availability": "depends on model output", "type": bool, "min": None, "max": None},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "confidence_score"
 
 
 # Config:
@@ -397,17 +427,18 @@ def run_protenix(
     for _i, job_result in enumerate(output_data):
         raw_metrics = job_result.get("metrics", {})  # type: ignore[attr-defined]
 
-        metrics = {
-            "confidence_score": float(raw_metrics.get("ranking_score", 0.0)),
-            "ptm": float(raw_metrics.get("ptm", 0.0)),
-            "iptm": float(raw_metrics.get("iptm", 0.0)),
-            "avg_plddt": float(raw_metrics.get("plddt", 0.0)) / 100.0,
-            "gpde": float(raw_metrics.get("gpde", 0.0)),
-            "chain_ptm": raw_metrics.get("chain_ptm"),
-            "chain_plddt": raw_metrics.get("chain_plddt"),
-            "chain_pair_iptm": raw_metrics.get("chain_pair_iptm"),
-            "has_clash": raw_metrics.get("has_clash"),
-        }
+        metrics = StructureMetrics(
+            primary_metric="confidence_score",
+            confidence_score=float(raw_metrics.get("ranking_score", 0.0)),
+            ptm=float(raw_metrics.get("ptm", 0.0)),
+            iptm=float(raw_metrics.get("iptm", 0.0)),
+            avg_plddt=float(raw_metrics.get("plddt", 0.0)) / 100.0,
+            gpde=float(raw_metrics.get("gpde", 0.0)),
+            chain_ptm=raw_metrics.get("chain_ptm"),
+            chain_plddt=raw_metrics.get("chain_plddt"),
+            chain_pair_iptm=raw_metrics.get("chain_pair_iptm"),
+            has_clash=raw_metrics.get("has_clash"),
+        )
 
         results.append(
             Structure(

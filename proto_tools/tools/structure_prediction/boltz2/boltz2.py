@@ -15,12 +15,13 @@ import warnings
 from logging import getLogger
 from typing import Any, ClassVar
 
-from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
     complex_to_yaml,
     write_msa_csv,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -63,7 +64,40 @@ class Boltz2Input(StructurePredictionInput):
 
 
 # Output:
-Boltz2Output = StructurePredictionOutput
+class Boltz2Output(StructurePredictionOutput):
+    """Boltz2 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        confidence_score (float): Overall confidence score. Always present.
+        ptm (float): Predicted TM-score. Always present.
+        iptm (float): Interface predicted TM-score. Always present.
+        chains_ptm (list[float]): Per-chain pTM scores. Always present.
+        pair_chains_iptm (list[list[float]]): Pairwise chain ipTM scores. Always present.
+        ligand_iptm (float): Ligand interface pTM. Depends on complex composition.
+        protein_iptm (float): Protein interface pTM. Depends on complex composition.
+        complex_plddt (float): Complex predicted LDDT. Depends on complex composition.
+        complex_iplddt (float): Complex interface predicted LDDT. Depends on complex composition.
+        complex_pde (float): Complex predicted distance error. Depends on complex composition.
+        complex_ipde (float): Complex interface PDE. Depends on complex composition.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "confidence_score": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "chains_ptm": {"availability": "always", "type": list, "min": 0.0, "max": 1.0},
+        "pair_chains_iptm": {"availability": "always", "type": list, "min": 0.0, "max": 1.0},
+        "ligand_iptm": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
+        "protein_iptm": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
+        "complex_plddt": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
+        "complex_iplddt": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
+        "complex_pde": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": None},
+        "complex_ipde": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": None},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "confidence_score"
 
 
 # Config:
@@ -363,35 +397,20 @@ def run_boltz2_on_complex(
         formatted_metrics = output_data["metrics"]
 
     # Extract metrics
-    metrics = {
+    metrics_dict: dict[str, Any] = {
         "confidence_score": float(formatted_metrics["confidence_score"]),
         "ptm": float(formatted_metrics["ptm"]),
         "iptm": float(formatted_metrics["iptm"]),
         "chains_ptm": formatted_metrics["chains_ptm"],
         "pair_chains_iptm": formatted_metrics["pair_chains_iptm"],
     }
-    optional_metrics = [
-        "ligand_iptm",
-        "protein_iptm",
-        "complex_plddt",
-        "complex_iplddt",
-        "complex_pde",
-        "complex_ipde",
-    ]
-    for metric in optional_metrics:
+    for metric in ("ligand_iptm", "protein_iptm", "complex_plddt", "complex_iplddt", "complex_pde", "complex_ipde"):
         if metric in formatted_metrics:
-            metrics[metric] = float(formatted_metrics[metric])
-        else:
-            metrics[metric] = None
-
-    # Add these for consistency across structure predictor metrics.
-    metrics["avg_plddt"] = metrics.get("complex_plddt")
-    # Boltz does not natively store PAE, use PDE instead:
-    metrics["avg_pae"] = metrics.get("complex_pde")
+            metrics_dict[metric] = float(formatted_metrics[metric])
 
     return Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
-        metrics=metrics,
+        metrics=StructureMetrics(primary_metric="confidence_score", **metrics_dict),
         source="boltz2-prediction",
     )

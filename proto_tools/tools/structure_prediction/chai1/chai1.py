@@ -14,7 +14,7 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
-from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
     write_msa_pqt,
@@ -23,6 +23,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
     hash_sequence as _hash_sequence,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -76,7 +77,28 @@ class Chai1Input(StructurePredictionInput):
 
 
 # Output:
-Chai1Output = StructurePredictionOutput
+class Chai1Output(StructurePredictionOutput):
+    """Chai-1 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures with confidence metrics.
+
+    Metrics:
+        avg_plddt (float): Average predicted LDDT score (0-1). Always present.
+        ptm (float): Predicted TM-score (0-1). Always present.
+        iptm (float): Interface predicted TM-score (0-1). Always present.
+        avg_pae (float): Average predicted aligned error. Always present.
+        confidence_score (float): Chai-1 confidence score. Always present.
+    """
+
+    METRICS: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
+        "confidence_score": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+    }
+    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
 
 
 # Config:
@@ -367,11 +389,10 @@ def run_chai1_on_complex(
         )
 
         cif_output = result["cif_output"]
-        metrics = result["metrics"]
 
     return Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
-        metrics=metrics,
+        metrics=StructureMetrics(primary_metric="avg_plddt", **result["metrics"]),
         source="chai1-prediction",
     )

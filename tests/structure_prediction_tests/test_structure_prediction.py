@@ -13,16 +13,22 @@ from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2Input,
+    AlphaFold2Output,
     AlphaFold3Config,
     AlphaFold3Input,
+    AlphaFold3Output,
     Boltz2Config,
     Boltz2Input,
+    Boltz2Output,
     Chai1Config,
     Chai1Input,
+    Chai1Output,
     ESMFoldConfig,
     ESMFoldInput,
+    ESMFoldOutput,
     ProtenixConfig,
     ProtenixInput,
+    ProtenixOutput,
     StructurePredictionComplex,
     StructurePredictionOutput,
     run_alphafold2,
@@ -45,12 +51,12 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _FASTA_DIR = Path(__file__).parent.parent / "dummy_data" / "structure_prediction_test_examples"
 
 _STRUCTURE_PREDICTORS = {
-    "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig),
-    "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config),
-    "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
-    "chai1": (run_chai1, Chai1Input, Chai1Config),
-    "boltz2": (run_boltz2, Boltz2Input, Boltz2Config),
-    "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
+    "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig, ESMFoldOutput),
+    "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config, AlphaFold2Output),
+    "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config, AlphaFold3Output),
+    "chai1": (run_chai1, Chai1Input, Chai1Config, Chai1Output),
+    "boltz2": (run_boltz2, Boltz2Input, Boltz2Config, Boltz2Output),
+    "protenix": (run_protenix, ProtenixInput, ProtenixConfig, ProtenixOutput),
 }
 
 _FAST_PREDICTORS = ["esmfold"]
@@ -197,7 +203,7 @@ def _generate_test_params() -> list:
     """
     params = []
 
-    for predictor_name, (_, input_class, config_class) in _STRUCTURE_PREDICTORS.items():
+    for predictor_name, (_, input_class, config_class, _output_class) in _STRUCTURE_PREDICTORS.items():
         for test_name, complexes in _TEST_COMPLEXES.items():
             if not _is_compatible_input_for_test(complexes, input_class):
                 continue
@@ -321,7 +327,7 @@ def test_structure_prediction_complex_rejects_entity_types_param():
 def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
     complexes = _TEST_COMPLEXES[test_name]
 
-    run_func, input_class, config_class = _STRUCTURE_PREDICTORS[predictor_name]
+    run_func, input_class, config_class, output_class = _STRUCTURE_PREDICTORS[predictor_name]
 
     # Create input (should always succeed since we filtered incompatible combinations)
     inputs = input_class(complexes=complexes)
@@ -355,33 +361,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         if not is_valid_structure(structure.structure_cif):
             pytest.fail(f"Predicted structure {i} is not valid: {structure.structure_cif}")
 
-        metrics = structure.metrics
-
-        # pLDDT
-        assert "avg_plddt" in metrics, f"'avg_plddt' not found in {predictor_name} metrics"
-        if predictor_name == "alphafold3":
-            assert 0 <= metrics["avg_plddt"] <= 100, f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
-        else:
-            assert 0 <= metrics["avg_plddt"] <= 1.0, f"'avg_plddt' has invalid value of {metrics['avg_plddt']}"
-
-        # pTM
-        assert "ptm" in metrics, f"'ptm' not found in {predictor_name} metrics"
-        assert 0 <= metrics["ptm"] <= 1.0, f"'ptm' has invalid value of {metrics['ptm']}"
-
-        # iPTM
-        if predictor_name != "esmfold":
-            assert "iptm" in metrics, f"'iptm' not found in {predictor_name} metrics"
-            assert metrics["iptm"] is None or 0 <= metrics["iptm"] <= 1.0, (
-                f"'iptm' has invalid value of {metrics['iptm']}"
-            )
-
-        # PAE / GPDE
-        if predictor_name == "protenix":
-            assert "gpde" in metrics, f"'gpde' not found in {predictor_name} metrics"
-            assert metrics["gpde"] >= 0, f"'gpde' has invalid value of {metrics['gpde']}"
-        else:
-            assert "avg_pae" in metrics, f"'avg_pae' not found in {predictor_name} metrics"
-            assert 0 <= metrics["avg_pae"] <= 31.75, f"'avg_pae' has invalid value of {metrics['avg_pae']}"
+        structure.metrics.validate_against_spec(output_class.METRICS)
 
 
 # ── Cache test (GPU) ───────────────────────────────────────────────────────────
@@ -491,7 +471,7 @@ def test_batched_vs_individual_inference_consistency():
             f"Sequence {i}: ptm mismatch (batched={batched_metrics['ptm']}, individual={individual_metrics['ptm']})"
         )
 
-        if batched_metrics["avg_pae"] is not None:
+        if batched_metrics.get("avg_pae") is not None:
             assert batched_metrics["avg_pae"] == pytest.approx(individual_metrics["avg_pae"], rel=0.10, abs=0.05), (
                 f"Sequence {i}: avg_pae mismatch "
                 f"(batched={batched_metrics['avg_pae']}, "
