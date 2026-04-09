@@ -3,6 +3,7 @@
 Evo2 sampling tool.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -134,8 +135,6 @@ class Evo2SampleOutput(BaseToolOutput):
                 f.writelines(f"{seq}\n" for seq in self.sequences)
 
         elif file_format == "json":
-            import json
-
             # Export minimal sequence data.
             # Logits/KV caches too large for standard export usually.
             data = {"sequences": self.sequences}

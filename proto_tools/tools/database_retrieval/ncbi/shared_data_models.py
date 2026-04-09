@@ -8,6 +8,7 @@ import json
 import logging
 from io import StringIO
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import requests
 from Bio import SeqIO
@@ -208,8 +209,6 @@ def _check_response(response: requests.Response, label: str) -> bool:
 
 def _sanitize_url(url: str) -> str:
     """Strip sensitive query parameters (api_key, email) from a URL."""
-    from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
-
     parts = urlsplit(url)
     params = parse_qs(parts.query, keep_blank_values=True)
     for key in ("api_key", "email"):

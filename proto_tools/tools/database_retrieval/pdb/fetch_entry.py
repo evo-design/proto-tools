@@ -4,6 +4,8 @@ Wraps the RCSB PDB REST API core entry endpoint for fetching title,
 experimental method, and resolution for a PDB accession.
 """
 
+import json
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field
@@ -62,9 +64,6 @@ class PdbFetchEntryOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
-        import json
-        from pathlib import Path
-
         if file_format == "json":
             path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:

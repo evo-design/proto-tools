@@ -204,6 +204,16 @@ Google style everywhere. Enforced by ruff D rules (Google convention) and `tests
 
 **The `implement-tool` skill provides the complete tool implementation guide with step-by-step templates and examples.**
 
+## Import Conventions
+
+| Location | When to use | Examples |
+|---|---|---|
+| **Module-level** | stdlib, lightweight deps, anything needed for Pydantic field types | `import json`, `from pathlib import Path`, `import csv` |
+| **Lazy (in function body)** | Heavy ML libs, truly optional deps, circular dep breaks | `import torch`, `from rdkit import Chem` |
+| **Standalone inference files** | Always lazy — these run in isolated subprocess envs | All imports in `standalone/inference.py` |
+
+Never weaken a Pydantic field type annotation (e.g. `Optional[object]`) to avoid an import. If a type is needed for a field definition, import it at module level.
+
 ## Test Conventions
 
 Flat functions only (no test classes). See `notes/testing.md` for full conventions (structure, assertions, markers, naming).

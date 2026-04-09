@@ -3,6 +3,7 @@
 Tissue-specific splice site prediction using SpliceTransformer.
 """
 
+import json
 import logging
 from enum import Enum
 from pathlib import Path
@@ -233,8 +234,6 @@ class SpliceTransformerOutput(BaseToolOutput):
             np.save(path, np.array(self.prediction))
 
         elif file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(self.prediction, f)
         else:

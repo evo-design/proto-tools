@@ -3,6 +3,7 @@
 Random protein sampling with codon scheme-biased amino acid selection.
 """
 
+import json
 import logging
 import random
 from pathlib import Path
@@ -66,8 +67,6 @@ class RandomProteinSampleOutput(BaseToolOutput):
             with open(path, "w") as f:
                 f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
         else:

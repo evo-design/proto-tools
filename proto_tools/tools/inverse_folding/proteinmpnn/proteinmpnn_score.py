@@ -4,6 +4,7 @@ ProteinMPNN scoring tool.
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Literal
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
@@ -122,8 +123,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    from pathlib import Path
-
     from proto_tools.entities.structures import Structure
 
     _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")

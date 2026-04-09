@@ -3,6 +3,7 @@
 MMseqs2 genome-to-genome nucleotide search tool.
 """
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -153,8 +154,6 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
             df.to_csv(path, sep=sep, index=False, header=header)
 
         elif file_format == "json":
-            import json
-
             json_data = [r.model_dump() for r in self.results]
             with open(path, "w") as f:
                 json.dump(json_data, f, indent=2)

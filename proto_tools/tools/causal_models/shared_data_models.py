@@ -1,5 +1,7 @@
 """Base schemas for scoring and sampling operations shared across causal language models."""
 
+import csv
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -161,7 +163,6 @@ class CausalModelScoringOutput(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
-            import json
 
             def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
@@ -183,8 +184,6 @@ class CausalModelScoringOutput(BaseToolOutput):
                 json.dump(data, f, indent=2, default=default)
 
         elif file_format == "csv":
-            import csv
-
             if self.scores:
                 fieldnames = list(self.scores[0].metrics.keys())
                 with open(path, "w", newline="") as f:
@@ -304,8 +303,6 @@ class CausalModelSampleOutput(BaseToolOutput):
             with open(fasta_path, "w") as f:
                 f.writelines(f">seq_{i}\n{seq}\n" for i, seq in enumerate(self.sequences))
         elif file_format == "json":
-            import json
-
             json_path = path.with_suffix(".json")
             with open(json_path, "w") as f:
                 json.dump({"sequences": self.sequences}, f, indent=2)

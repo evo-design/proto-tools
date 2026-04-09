@@ -3,6 +3,7 @@
 ProGen3 sampling tool.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -98,7 +99,6 @@ class ProGen3SampleOutput(BaseToolOutput):
 
         elif file_format == "json":
             path = path / "progen3_sequences.json" if path.is_dir() else path.with_suffix(".json")
-            import json
 
             with open(path, "w") as f:
                 json.dump({"sequences": self.sequences}, f, indent=2)

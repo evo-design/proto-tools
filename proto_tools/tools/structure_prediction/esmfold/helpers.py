@@ -4,6 +4,7 @@ Shared helpers for ESMFold structure prediction. Provides utilities for
 batching complexes and relabeling chains in PDB output.
 """
 
+import io
 import string
 from typing import Any
 
@@ -64,8 +65,6 @@ def relabel_chains(pdb_str: str, chain_lengths: list[int]) -> str:
     Returns:
         str: PDB content with chains relabeled and written back to string format
     """
-    import io
-
     from Bio import PDB
 
     parser = PDB.PDBParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]

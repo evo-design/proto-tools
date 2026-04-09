@@ -8,6 +8,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import select
 import signal
 import subprocess
@@ -41,8 +42,6 @@ def _normalize_progress_line(line: str) -> str:
 
     Returns the normalized line template for similarity comparison.
     """
-    import re
-
     normalized = line
 
     # Normalize progress bar visualizations (|███|, [===>], etc.)

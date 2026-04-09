@@ -3,6 +3,7 @@
 Shared base schemas (configs and io) for inverse folding tools.
 """
 
+import csv
 import json
 from abc import ABC
 from collections.abc import Iterator
@@ -88,7 +89,6 @@ class InverseFoldingStructureInput(BaseModel):
             fixed_positions = getattr(data, "fixed_positions", None)
 
         # 1. Load structure if it's a string or Path
-        from pathlib import Path
 
         if isinstance(structure, Structure):
             resolved_structure = structure
@@ -461,7 +461,6 @@ class InverseFoldingScoringOutput(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
-            import json
 
             def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
@@ -481,8 +480,6 @@ class InverseFoldingScoringOutput(BaseToolOutput):
                 json.dump(data, f, indent=2, default=default)
 
         elif file_format == "csv":
-            import csv
-
             if self.scores:
                 fieldnames = list(self.scores[0].metrics.keys())
                 with open(path, "w", newline="") as f:

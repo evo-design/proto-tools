@@ -3,9 +3,12 @@
 Unified BLAST search tool supporting both online (NCBI) and local modes.
 """
 
+import csv
 import io
 import logging
 import re
+import tempfile
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
@@ -177,8 +180,6 @@ class BlastSearchOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        import warnings
-
         import pandas as pd
 
         if not self.hits:
@@ -716,8 +717,6 @@ def _local_search(
     instance: Any = None,
 ) -> BlastSearchOutput:
     """Run BLAST+ locally against a local database."""
-    import tempfile
-
     # If query is a raw sequence, write it to a temp FASTA file
     if inputs.query_type == "sequence":
         tmp = tempfile.NamedTemporaryFile(  # noqa: SIM115 -- delete=False requires manual cleanup
@@ -791,7 +790,6 @@ def _local_search(
             Path(query_path).unlink(missing_ok=True)
 
     # Parse raw tabular output into BlastHit objects
-    import csv
 
     raw_output = output_data["stdout"]
     hits: list[BlastHit] = []

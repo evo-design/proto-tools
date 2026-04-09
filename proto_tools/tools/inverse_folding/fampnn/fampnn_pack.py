@@ -3,6 +3,7 @@
 FAMPNN sidechain packing tool.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -133,8 +134,6 @@ class FAMPNNPackingResult(BaseToolOutput):
                     out_file = path / f"packed_{i}_sample_{j}.pdb"
                     out_file.write_text(pdb_str)
         elif file_format == "json":
-            import json
-
             for i, (pdb_list, psce_list) in enumerate(zip(self.packed_structures, self.psce, strict=False)):
                 out_file = path / f"packed_{i}.json"
                 with open(out_file, "w") as f:

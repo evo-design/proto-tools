@@ -5,6 +5,7 @@ movement, and eviction. It loads two tiny models (one per GPU) while exercising
 all DeviceManager multi-device code paths.
 """
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -96,9 +97,6 @@ class MockPyTorchMultiGPUToolOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        import json
-        from pathlib import Path
-
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":

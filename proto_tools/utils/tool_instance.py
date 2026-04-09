@@ -51,6 +51,7 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -1023,8 +1024,6 @@ class ToolInstance:
                 return mamba_bin
 
             logger.info("Downloading micromamba to %s...", mamba_root)
-
-            import platform
 
             system = platform.system()
             arch = platform.machine()

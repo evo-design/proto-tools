@@ -6,13 +6,13 @@ This module provides standardized interfaces for RNA secondary structure
 prediction using ViennaRNA's minimum free energy (MFE) folding algorithm.
 """
 
+import csv
+import json
 import logging
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
-
-logger = logging.getLogger(__name__)
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -23,6 +23,8 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -121,8 +123,6 @@ class ViennaRNAOutput(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "csv":
-            import csv
-
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(["sequence", "structure", "mfe"])
@@ -130,8 +130,6 @@ class ViennaRNAOutput(BaseToolOutput):
                     writer.writerow([r.sequence, r.structure, r.mfe])
 
         elif file_format == "json":
-            import json
-
             data = [r.model_dump() for r in self.results]
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)

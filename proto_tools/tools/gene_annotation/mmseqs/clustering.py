@@ -3,6 +3,7 @@
 MMseqs2 sequence clustering tool.
 """
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -154,8 +155,6 @@ class MmseqsClusteringOutput(BaseToolOutput):
             df.to_csv(path, index=False)
 
         elif file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         else:

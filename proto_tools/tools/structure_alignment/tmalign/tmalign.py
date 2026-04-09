@@ -5,6 +5,7 @@ tool.  Accepts two PDB text blobs, writes them to temp files, calls the binary,
 and parses the two TM-scores from stdout.
 """
 
+import json
 from logging import getLogger
 from pathlib import Path
 from typing import Any
@@ -67,12 +68,10 @@ class TMalignOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Path | str, file_format: str) -> None:  # noqa: ARG002 — required by base class _export_output interface
-        import json as json_mod
-
         path = Path(export_path).with_suffix(".json")
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            json_mod.dump(
+            json.dump(
                 {
                     "tm_score_chain_1": self.tm_score_chain_1,
                     "tm_score_chain_2": self.tm_score_chain_2,

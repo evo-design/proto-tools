@@ -5,6 +5,7 @@ memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
 in <1 second while still exercising all DeviceManager and ToolPool code paths.
 """
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -97,9 +98,6 @@ class MockPyTorchToolOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        import json
-        from pathlib import Path
-
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":

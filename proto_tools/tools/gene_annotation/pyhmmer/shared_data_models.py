@@ -3,6 +3,7 @@
 Shared data models and helpers for PyHMMER tools.
 """
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -257,8 +258,6 @@ class PyHmmerOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        import warnings
-
         import pandas as pd
 
         base_path = Path(export_path)

@@ -3,6 +3,7 @@
 BioEmu conformational ensemble sampling tool.
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -115,8 +116,6 @@ class BioEmuOutput(BaseToolOutput):
             return
 
         if file_format == "json":
-            import json
-
             json_path = path.with_suffix(".json")
             payload = []
             for ensemble_idx, ensemble in enumerate(self.ensembles):

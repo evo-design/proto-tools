@@ -5,6 +5,7 @@ constants, and helper functions used by all MMseqs2 search tools.
 """
 
 import io
+import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -208,10 +209,7 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
             df.to_csv(path, sep=sep, index=False, header=header)
 
         elif file_format == "json":
-            # Export structured data
-            import json
-
-            # Use pydantic's model_dump/dict
+            # Export structured data — use pydantic's model_dump/dict
             json_data = [r.model_dump() for r in self.results]
             with open(path, "w") as f:
                 json.dump(json_data, f, indent=2)

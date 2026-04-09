@@ -5,7 +5,9 @@ protein entries by accession or searching by gene name and organism with
 ranked result selection.
 """
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -115,9 +117,6 @@ class UniProtFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
-        import json
-        from pathlib import Path
-
         if file_format == "json":
             path = Path(export_path).with_suffix(".json")
             with path.open("w", encoding="utf-8") as f:

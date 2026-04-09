@@ -4,6 +4,9 @@ Contains base schemas for embeddings, scoring, and sampling operations
 shared across all masked/bidirectional protein language models.
 """
 
+import csv
+import json
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -151,8 +154,6 @@ class MaskedModelOutput(BaseToolOutput):
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         if not self.results:
-            import warnings
-
             warnings.warn(
                 "No embeddings to export. The model output contains no embedding data.", UserWarning, stacklevel=2
             )
@@ -167,8 +168,6 @@ class MaskedModelOutput(BaseToolOutput):
         if file_format == "csv":
             np.savetxt(path, data, delimiter=",")
         elif file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(embeddings, f)
         elif file_format == "npy":
@@ -322,7 +321,6 @@ class MaskedModelScoringOutput(BaseToolOutput):
         path = Path(export_path).with_suffix(f".{file_format}")
 
         if file_format == "json":
-            import json
 
             def default(obj: Any) -> Any:
                 if hasattr(obj, "tolist"):
@@ -342,8 +340,6 @@ class MaskedModelScoringOutput(BaseToolOutput):
                 json.dump(data, f, indent=2, default=default)
 
         elif file_format == "csv":
-            import csv
-
             if self.scores:
                 fieldnames = list(self.scores[0].metrics.keys())
                 with open(path, "w", newline="") as f:

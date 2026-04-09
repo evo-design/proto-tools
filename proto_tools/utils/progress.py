@@ -13,6 +13,7 @@ to create new animation patterns.
 from __future__ import annotations
 
 import contextvars
+import logging
 import os
 import sys
 import threading
@@ -366,8 +367,6 @@ def _fallback_log(message: str) -> None:
     Args:
         message (str): Status message to display.
     """
-    import logging
-
     logger = logging.getLogger("proto_tools.utils.progress")
     logger.info(message)
 

@@ -3,6 +3,8 @@
 Borzoi ensemble sequence scoring tool.
 """
 
+import csv
+import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -65,13 +67,9 @@ class BorzoiEnsembleOutput(BaseToolOutput):
         }
         data = {k: v for k, v in self.model_dump().items() if k not in _metadata_fields}
         if file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
         elif file_format == "csv":
-            import csv
-
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(data.keys())

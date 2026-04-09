@@ -3,6 +3,7 @@
 Random nucleotide sampling with IUPAC degenerate base support.
 """
 
+import json
 import logging
 import random
 from pathlib import Path
@@ -103,8 +104,6 @@ class RandomNucleotideSampleOutput(BaseToolOutput):
             with open(path, "w") as f:
                 f.writelines(f"{seq}\n" for seq in self.sequences)
         elif file_format == "json":
-            import json
-
             with open(path, "w") as f:
                 json.dump(self.sequences, f, indent=2)
         else:

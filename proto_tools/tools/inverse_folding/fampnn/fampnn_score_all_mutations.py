@@ -3,6 +3,8 @@
 FAMPNN exhaustive single-mutation scoring tool.
 """
 
+import csv
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -114,8 +116,6 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
         path.mkdir(parents=True, exist_ok=True)
 
         if file_format == "csv":
-            import csv
-
             for i, result in enumerate(self.results):
                 out_file = path / f"all_scores_{i}.csv"
                 if not result.scores:
@@ -129,8 +129,6 @@ class FAMPNNScoreAllMutationsOutput(BaseToolOutput):
                         row = [pos_label] + [scores.get(r, 0.0) for r in residue_types]
                         writer.writerow(row)
         elif file_format == "json":
-            import json
-
             for i, result in enumerate(self.results):
                 out_file = path / f"all_scores_{i}.json"
                 with open(out_file, "w") as f:
