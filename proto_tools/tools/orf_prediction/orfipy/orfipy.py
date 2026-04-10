@@ -1,8 +1,4 @@
-"""proto_tools/tools/orf_prediction/orfipy/orfipy.py.
-
-This module provides a standardized interface for ORF prediction using Orfipy,
-supporting general ORF prediction and analysis of results.
-"""
+"""Standardized interface for ORF prediction using Orfipy."""
 
 from pathlib import Path
 from typing import Any, Literal
@@ -20,6 +16,68 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_sequence_ids,
 )
+
+# ============================================================================
+# Codon & Translation Table Types
+# ============================================================================
+StartCodon = Literal["ATG", "GTG", "TTG", "CTG"]
+StopCodon = Literal["TAA", "TAG", "TGA"]
+
+OrfipyTranslationTable = Literal[
+    "standard",
+    "vertebrate_mitochondrial",
+    "yeast_mitochondrial",
+    "mold_protozoan_mitochondrial",
+    "invertebrate_mitochondrial",
+    "ciliate_nuclear",
+    "echinoderm_mitochondrial",
+    "euplotid_nuclear",
+    "bacterial",
+    "alternative_yeast_nuclear",
+    "ascidian_mitochondrial",
+    "alternative_flatworm_mitochondrial",
+    "chlorophycean_mitochondrial",
+    "trematode_mitochondrial",
+    "scenedesmus_mitochondrial",
+    "thraustochytrium_mitochondrial",
+    "rhabdopleuridae_mitochondrial",
+    "candidate_division_sr1",
+    "pachysolen_nuclear",
+    "karyorelict_nuclear",
+    "condylostoma_nuclear",
+    "mesodinium_nuclear",
+    "peritrich_nuclear",
+]
+
+# NOTE: Values are orfipy's internal sequential keys (1-23), NOT NCBI transl_table
+# numbers. Orfipy's translation_tables_dict uses contiguous numbering that diverges
+# from NCBI starting at key 7 (NCBI skips tables 7, 8, 15, 17-20, but orfipy
+# numbers them sequentially). See: orfipy/translation_tables.py
+ORFIPY_TRANSLATION_TABLE_MAP: dict[str, int] = {
+    "standard": 1,
+    "vertebrate_mitochondrial": 2,
+    "yeast_mitochondrial": 3,
+    "mold_protozoan_mitochondrial": 4,
+    "invertebrate_mitochondrial": 5,
+    "ciliate_nuclear": 6,
+    "echinoderm_mitochondrial": 7,  # NCBI 9
+    "euplotid_nuclear": 8,  # NCBI 10
+    "bacterial": 9,  # NCBI 11
+    "alternative_yeast_nuclear": 10,  # NCBI 12
+    "ascidian_mitochondrial": 11,  # NCBI 13
+    "alternative_flatworm_mitochondrial": 12,  # NCBI 14
+    "chlorophycean_mitochondrial": 13,  # NCBI 16
+    "trematode_mitochondrial": 14,  # NCBI 21
+    "scenedesmus_mitochondrial": 15,  # NCBI 22
+    "thraustochytrium_mitochondrial": 16,  # NCBI 23
+    "rhabdopleuridae_mitochondrial": 17,  # NCBI 24
+    "candidate_division_sr1": 18,  # NCBI 25
+    "pachysolen_nuclear": 19,  # NCBI 26
+    "karyorelict_nuclear": 20,  # NCBI 27
+    "condylostoma_nuclear": 21,  # NCBI 28
+    "mesodinium_nuclear": 22,  # NCBI 29
+    "peritrich_nuclear": 23,  # NCBI 30
+}
 
 
 # ============================================================================
@@ -72,23 +130,24 @@ class OrfipyConfig(BaseConfig):
             Since processing is batched per-sequence, this controls intra-sequence
             parallelism. Must be at least 1. Default: 4.
 
-        start_codons (str): Comma-separated list of start codons to recognize.
-            Common options:
+        start_codons (list[StartCodon]): Start codons to recognize for ORF
+            prediction. Multi-select from:
 
-            - ``"ATG"``: Standard start codon only (most stringent)
-            - ``"ATG,GTG,TTG"``: Include alternative bacterial start codons (default)
-            - ``"ATG,CTG,GTG,TTG"``: Extended set for some bacteria
+            - ``"ATG"``: Standard start codon
+            - ``"GTG"``: Alternative bacterial start codon
+            - ``"TTG"``: Alternative bacterial start codon
+            - ``"CTG"``: Alternative bacterial start codon
 
-            Default: ``"ATG,GTG,TTG"``.
+            Default: ``["ATG", "GTG", "TTG"]``.
 
-        stop_codons (str): Comma-separated list of stop codons to recognize.
-            Standard genetic code uses:
+        stop_codons (list[StopCodon]): Stop codons to recognize for ORF
+            prediction. Multi-select from:
 
-            - ``"TAA"``: Ochre
-            - ``"TAG"``: Amber
-            - ``"TGA"``: Opal
+            - ``"TAA"``: Ochre stop codon
+            - ``"TAG"``: Amber stop codon
+            - ``"TGA"``: Opal stop codon
 
-            Default: ``"TAA,TAG,TGA"`` (all three standard stop codons).
+            Default: ``["TAA", "TAG", "TGA"]``.
 
         strand (Literal['f', 'r', 'b']): Which strand(s) to scan for ORFs. Options:
 
@@ -117,20 +176,17 @@ class OrfipyConfig(BaseConfig):
             both the nucleotide sequence and length calculations. If ``False``,
             the stop codon is excluded. Default: ``True``.
 
-        translation_table (int | None): Optional NCBI genetic code translation
-            table number (1-33). Common options:
+        translation_table (OrfipyTranslationTable | None): NCBI genetic code for
+            translation. ``None`` uses the standard genetic code (table 1).
+            Only tables supported by orfipy's built-in translation table dict
+            are available (NCBI tables 1-6, 9-14, 16, 21-30). Common options:
 
-            - ``None``: Use standard genetic code (defaults to ``1``)
-            - ``1``: Standard genetic code
-            - ``11``: Bacterial, archaeal, and plant plastid code
-            - ``2``: Vertebrate mitochondrial code
-            - ``4``: Mold, protozoan, and coelenterate mitochondrial code
+            - ``"standard"``: Standard genetic code (NCBI table 1)
+            - ``"bacterial"``: Bacterial, archaeal, and plant plastid (NCBI table 11)
+            - ``"vertebrate_mitochondrial"``: Vertebrate mitochondrial (NCBI table 2)
+            - ``"mold_protozoan_mitochondrial"``: Mold/protozoan mitochondrial (NCBI table 4)
 
-            See NCBI documentation for complete list. Range: 1-33. Default: ``None``.
-
-    Note:
-        The ``translation_table`` parameter should be converted to a Literal type
-        with descriptive string values. TODO
+            See ``ORFIPY_TRANSLATION_TABLE_MAP`` for the complete list. Default: ``None``.
     """
 
     threads: int = ConfigField(
@@ -140,17 +196,17 @@ class OrfipyConfig(BaseConfig):
         description="Number of CPU threads to use",
         hidden=True,
     )
-    # TODO: This should be a multi-select. Can we do that?
-    start_codons: str = ConfigField(
+    start_codons: list[StartCodon] = ConfigField(
         title="Start Codons",
-        default="ATG,GTG,TTG",
-        description="Comma-separated list of start codons",
+        default=["ATG", "GTG", "TTG"],
+        min_length=1,
+        description="Start codons to recognize for ORF prediction",
     )
-    # TODO: This should be a multi-select. Can we do that?
-    stop_codons: str = ConfigField(
+    stop_codons: list[StopCodon] = ConfigField(
         title="Stop Codons",
-        default="TAA,TAG,TGA",
-        description="Comma-separated list of stop codons",
+        default=["TAA", "TAG", "TGA"],
+        min_length=1,
+        description="Stop codons to recognize for ORF prediction",
     )
     strand: Literal["f", "r", "b"] = ConfigField(
         title="Strand",
@@ -174,25 +230,13 @@ class OrfipyConfig(BaseConfig):
         default=True,
         description="Whether to include the stop codon in the reported ORF",
     )
-    # TODO: This should be a literal with string values that get translated to ints internally
-    translation_table: int | None = ConfigField(
+    translation_table: OrfipyTranslationTable | None = ConfigField(
         title="Translation Table",
         default=None,
-        ge=1,
-        le=33,
-        description="Optional NCBI translation table (1-33)",
+        description="NCBI genetic code for translation (None = standard genetic code)",
         advanced=True,
     )
     model_config = ConfigDict(extra="forbid")
-
-    @field_validator("strand")
-    @classmethod
-    def validate_strand(cls, v: str) -> str:
-        """Validate strand parameter."""
-        valid_strands = {"f", "r", "b"}
-        if v not in valid_strands:
-            raise ValueError(f"Invalid strand '{v}'. Must be one of: {', '.join(valid_strands)}")
-        return v
 
 
 class OrfipyOutput(BaseToolOutput):
@@ -329,13 +373,17 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
             "sequence_ids": sequence_ids,
             "config": {
                 "threads": config.threads,
-                "start_codons": config.start_codons,
-                "stop_codons": config.stop_codons,
+                "start_codons": ",".join(config.start_codons),
+                "stop_codons": ",".join(config.stop_codons),
                 "strand": config.strand,
                 "min_len": config.min_len,
                 "max_len": config.max_len,
                 "include_stop": config.include_stop,
-                "translation_table": config.translation_table,
+                "translation_table": (
+                    ORFIPY_TRANSLATION_TABLE_MAP[config.translation_table]
+                    if config.translation_table is not None
+                    else None
+                ),
             },
         },
         instance=instance,

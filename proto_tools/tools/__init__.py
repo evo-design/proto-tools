@@ -243,13 +243,17 @@ from proto_tools.tools.mutagenesis import (
 # ORF prediction tools
 from proto_tools.tools.orf_prediction import (
     ORF,
+    ORFIPY_TRANSLATION_TABLE_MAP,
     TRANSLATION_TABLE_MAP,
     OrfipyConfig,
     OrfipyInput,
     OrfipyOutput,
+    OrfipyTranslationTable,
     ProdigalConfig,
     ProdigalInput,
     ProdigalOutput,
+    StartCodon,
+    StopCodon,
     TranslationTable,
     run_orfipy_prediction,
     run_prodigal_prediction,
@@ -521,9 +525,13 @@ __all__ = [
     "CrisprArray",
     "CrisprRepeatSpacer",
     # ORF prediction - Orfipy
-    "OrfipyInput",
+    "ORFIPY_TRANSLATION_TABLE_MAP",
     "OrfipyConfig",
+    "OrfipyInput",
     "OrfipyOutput",
+    "OrfipyTranslationTable",
+    "StartCodon",
+    "StopCodon",
     "run_orfipy_prediction",
     "ORF",
     # ORF prediction - Prodigal

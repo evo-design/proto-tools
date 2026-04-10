@@ -1,7 +1,16 @@
 """Open reading frame prediction tools."""
 
 from proto_tools.tools.orf_prediction.orf import ORF
-from proto_tools.tools.orf_prediction.orfipy import OrfipyConfig, OrfipyInput, OrfipyOutput, run_orfipy_prediction
+from proto_tools.tools.orf_prediction.orfipy import (
+    ORFIPY_TRANSLATION_TABLE_MAP,
+    OrfipyConfig,
+    OrfipyInput,
+    OrfipyOutput,
+    OrfipyTranslationTable,
+    StartCodon,
+    StopCodon,
+    run_orfipy_prediction,
+)
 from proto_tools.tools.orf_prediction.prodigal import (
     TRANSLATION_TABLE_MAP,
     ProdigalConfig,
@@ -14,9 +23,13 @@ from proto_tools.tools.orf_prediction.prodigal import (
 __all__ = [
     "ORF",
     # Orfipy
-    "OrfipyInput",
+    "ORFIPY_TRANSLATION_TABLE_MAP",
     "OrfipyConfig",
+    "OrfipyInput",
     "OrfipyOutput",
+    "OrfipyTranslationTable",
+    "StartCodon",
+    "StopCodon",
     "run_orfipy_prediction",
     # Prodigal
     "TRANSLATION_TABLE_MAP",

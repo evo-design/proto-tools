@@ -41,13 +41,13 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `start_codons` | `str` | `ATG,GTG,TTG` | Comma-separated start codons |
-| `stop_codons` | `str` | `TAA,TAG,TGA` | Comma-separated stop codons |
+| `start_codons` | `list[StartCodon]` | `["ATG", "GTG", "TTG"]` | Start codons to recognize (multi-select) |
+| `stop_codons` | `list[StopCodon]` | `["TAA", "TAG", "TGA"]` | Stop codons to recognize (multi-select) |
 | `strand` | `str` | `b` | Strand to scan: `f` (forward), `r` (reverse), `b` (both) |
 | `min_len` | `int` | `0` | Minimum ORF length in nucleotides |
 | `max_len` | `int` | `10000` | Maximum ORF length in nucleotides |
 | `include_stop` | `bool` | `True` | Include stop codon in reported sequence |
-| `translation_table` | `int` | `None` | NCBI genetic code (1-33), None = standard |
+| `translation_table` | `OrfipyTranslationTable \| None` | `None` | NCBI genetic code name (None = standard) |
 | `threads` | `int` | `4` | CPU threads per sequence |
 
 ### Parameter Guides
@@ -55,9 +55,9 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 **Start codon selection:**
 | Setting | Codons | Use Case |
 |---------|--------|----------|
-| Standard | `ATG` | Eukaryotic sequences, strict filtering |
-| Prokaryotic (default) | `ATG,GTG,TTG` | Bacterial/archaeal sequences |
-| Custom | Any valid codons | Specialized genetic codes |
+| Standard | `["ATG"]` | Eukaryotic sequences, strict filtering |
+| Prokaryotic (default) | `["ATG", "GTG", "TTG"]` | Bacterial/archaeal sequences |
+| Extended | `["ATG", "GTG", "TTG", "CTG"]` | Specialized genetic codes |
 
 **Length filtering guidelines:**
 | min_len | Approximate proteins | Use case |
@@ -82,7 +82,7 @@ ORFipy finds ORFs; gene predictors like Prodigal use additional signals to disti
 |-------|------|-------------|
 | `predicted_orfs` | `List[List[Orf]]` | ORFs per input sequence |
 | `num_orfs` | `int` | Total ORFs across all sequences (computed) |
-| `results_df` | `DataFrame` | All ORFs as DataFrame (computed) |
+| `num_orfs_per_sequence` | `List[int]` | ORFs per input sequence (computed) |
 
 **Orf object / DataFrame columns**
 
@@ -130,7 +130,8 @@ config = OrfipyConfig(min_len=30)  # At least 10 codons
 result = run_orfipy_prediction(inputs, config)
 
 print(f"Found {result.num_orfs} ORFs")
-print(result.results_df)
+for orf in result.predicted_orfs[0]:
+    print(f"  {orf.orf_id}: {orf.amino_acid_length} aa, frame {orf.frame}")
 ```
 
 **Example 2: ATG-only starts**
@@ -141,7 +142,7 @@ from proto_tools.tools.orf_prediction.orfipy import (
 
 inputs = OrfipyInput(sequences="ATGCGTAAACTGATGTAA...")
 config = OrfipyConfig(
-    start_codons="ATG",  # Only standard start
+    start_codons=["ATG"],  # Only standard start
     min_len=150
 )
 
