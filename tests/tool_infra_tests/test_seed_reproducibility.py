@@ -58,40 +58,77 @@ def test_masking_strategy_seeded():
 # Exhaustive seed reproducibility (all registered tools)
 # ============================================================================
 
-# Tools excluded from seed reproducibility tests due to upstream non-determinism
-# that cannot be fixed on our end (external subprocess without deterministic mode).
-# See: https://github.com/RosettaCommons/foundry/issues/170
+# Three exclusion sets, depending on which variants of the seed reproducibility
+# test a tool fails. The goal is to keep test coverage for the variant that
+# *does* pass when the failure is variant-specific, instead of dropping a tool
+# from both tests.
+#
+# All exclusions are due to upstream non-determinism we cannot fix on our end
+# without unacceptable speed costs (e.g. forcing slower deterministic CUDA
+# kernels or float32 outputs).
+
+# Tools where BOTH variants fail. Excluded from collection entirely.
 #
 # - rfdiffusion3-design: external subprocess without a deterministic mode.
+#   Upstream: https://github.com/RosettaCommons/foundry/issues/170.
 # - protenix-prediction: protenix's CLI ``--seed`` is honoured, but the
 #   cuequivariance triangle multiplication / attention kernels accumulate
 #   floating-point ops non-deterministically across runs. Coordinates drift by
-#   ~1-2 mÅ even with the same seed. Forcing the torch fallback kernel would
-#   restore determinism at a significant speed cost, so we exclude instead.
-# - chai1-prediction: deterministic across fresh subprocesses, but consecutive
-#   dispatches inside the same persistent worker drift by ~3 mÅ with a fully
-#   consistent delta. Root cause appears to be hidden CUDA/JIT state inside
-#   chai_lab that torch does not expose a reset API for — neither pre-loading
-#   ESM, early CUBLAS_WORKSPACE_CONFIG, empty_cache+synchronize, nor the
-#   existing set_torch_seed+use_deterministic_algorithms path eliminates the
-#   drift. User impact is negligible (well below bond-length noise) and a full
-#   warmup at load time would add significant first-call latency.
-# - progen3-sample, progen3-score: MoE forward-pass non-determinism in the
-#   grouped-gemm CUDA library used by megablocks. A weight-hash diagnostic
-#   confirms two fresh subprocesses load bit-identical weights, so the drift
-#   is entirely in the MoE forward pass (~1e-3 in log-likelihood, amplified
-#   to completely different sequences via autoregressive sampling). The
-#   persistent variant passes because the same CUDA context gives the same
-#   grouped-gemm trajectory on consecutive calls. Upstream acknowledged:
-#   - https://github.com/Profluent-AI/progen3/issues/6
-#   - https://github.com/databricks/megablocks/issues/83
+#   ~1-2 mÅ even with the same seed. Upstream:
+#   - https://github.com/bytedance/Protenix/issues/116
+#   - https://github.com/bytedance/Protenix/issues/119
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "protenix-prediction",
+    }
+)
+
+# Tools where ONLY the persistent variant fails. Fresh subprocesses with the
+# same seed are reproducible, but consecutive dispatches inside the same
+# persistent worker drift due to hidden CUDA/JIT state.
+#
+# - chai1-prediction: ~3 mÅ drift with a fully consistent delta. Hidden
+#   CUDA/JIT state inside ``chai_lab`` that torch does not expose a reset API
+#   for — neither pre-loading ESM, early ``CUBLAS_WORKSPACE_CONFIG``,
+#   ``empty_cache + synchronize``, nor the existing ``set_torch_seed +
+#   use_deterministic_algorithms`` path eliminates the drift. Upstream:
+#   - https://github.com/chaidiscovery/chai-lab/issues/228
+#   - https://github.com/chaidiscovery/chai-lab/issues/246
+_SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
+    {
         "chai1-prediction",
+    }
+)
+
+# Tools where ONLY the non-persistent variant fails. The same loaded model
+# inside one worker process produces deterministic output, but two fresh
+# subprocesses (with the same seed) end up with slightly different CUDA kernel
+# autotune choices and drift at the kernel-numerics level.
+#
+# - progen3-sample, progen3-score: MoE forward-pass non-determinism in the
+#   ``grouped-gemm`` CUDA library used by megablocks. A weight-hash diagnostic
+#   confirmed two fresh subprocesses load bit-identical weights, so the drift
+#   is entirely in the MoE forward pass (~1e-3 in log-likelihood, amplified to
+#   completely different sequences via autoregressive sampling). Upstream:
+#   - https://github.com/Profluent-AI/progen3/issues/6
+#   - https://github.com/databricks/megablocks/issues/83
+# - alphagenome-*: JAX bfloat16 forward pass with ``compute=bfloat16,
+#   output=bfloat16``. Inter-process CUDA kernel variance produces underlying
+#   float32 drift large enough to cross bfloat16 ULP boundaries (~2 ULPs in the
+#   7-bit mantissa, 0.4-1.4% relative). The forward pass passes ``PRNGKey=None``
+#   so it's mathematically deterministic, but JAX/CUDA autotune doesn't
+#   guarantee bit-exact behaviour across processes.
+_SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
+    {
         "progen3-sample",
         "progen3-score",
+        "alphagenome-predict-intervals",
+        "alphagenome-predict-sequences",
+        "alphagenome-predict-variants",
+        "alphagenome-score-intervals",
+        "alphagenome-score-ism-variants-batch",
+        "alphagenome-score-variants",
     }
 )
 
@@ -130,6 +167,12 @@ def _build_seed_test_params() -> list:
 @pytest.mark.parametrize("spec", _build_seed_test_params())
 def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     """Same seed + same input produces identical output for every registered tool."""
+    if spec.key in _SEED_NON_PERSISTENT_EXCLUDED_KEYS:
+        pytest.skip(
+            f"{spec.key} is excluded from the non-persistent variant: drift across "
+            f"fresh subprocesses (see _SEED_NON_PERSISTENT_EXCLUDED_KEYS comment)."
+        )
+
     inputs, config = build_inputs_and_config(spec, tmp_path, {"seed": 42})
 
     r1 = spec.function(inputs, config)
@@ -151,6 +194,12 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
     # has nothing to persist and would raise.
     if not spec.has_standalone_env:
         pytest.skip(f"{spec.key} has no standalone env — persistent worker not applicable")
+
+    if spec.key in _SEED_PERSISTENT_EXCLUDED_KEYS:
+        pytest.skip(
+            f"{spec.key} is excluded from the persistent variant: drift across "
+            f"consecutive worker calls (see _SEED_PERSISTENT_EXCLUDED_KEYS comment)."
+        )
 
     inputs, config = build_inputs_and_config(spec, tmp_path, {"seed": 42})
     tool_dir = spec.source_file.parent.name
