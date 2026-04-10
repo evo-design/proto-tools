@@ -154,9 +154,6 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
             ``model_num``; when ensembling, models are selected from the full pool
             (models 1 through N). Range: 1-5. Default: 1.
 
-        seed (int | None): Random seed for reproducibility. If ``None``, uses
-            non-deterministic initialization. Default: ``None``.
-
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
@@ -195,12 +192,6 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
         ge=1,
         le=5,
         description="Number of model parameter sets to run and average (higher=better but slower)",
-    )
-    seed: int | None = ConfigField(
-        title="Random Seed",
-        default=None,
-        description="Random seed for reproducibility. If None, uses non-deterministic initialization.",
-        advanced=True,
     )
 
     @model_validator(mode="after")
@@ -309,7 +300,7 @@ def run_alphafold2(
             "num_recycles": config.num_recycles,
             "model_num": config.model_num,
             "num_ensemble_models": config.num_ensemble_models,
-            "seed": config.seed,
+            "seed": config.resolved_seed,
             "msa_a3m_content": msa_a3m_content,
             "device": config.device,
             "verbose": config.verbose,

@@ -83,7 +83,6 @@ class RandomProteinSampleConfig(BaseConfig):
             probabilities. ``"UNIFORM"`` gives equal weight to all 20
             amino acids; other schemes (NNK, NNS, NDT, etc.) weight
             amino acids by the number of codons encoding them.
-        seed (int | None): Random seed for reproducibility. Default: ``None``.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -95,13 +94,6 @@ class RandomProteinSampleConfig(BaseConfig):
         title="Codon Scheme",
         default="UNIFORM",
         description="Codon scheme for amino acid sampling probabilities.",
-    )
-    seed: int | None = ConfigField(
-        title="Random Seed",
-        default=None,
-        description="Random seed for reproducible sampling.",
-        advanced=True,
-        include_in_key=False,
     )
 
     def preprocess(self, inputs: Any) -> Any:
@@ -153,7 +145,7 @@ def run_random_protein_sample(
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
+    rng = random.Random(config.resolved_seed)  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
 
     sampled = []

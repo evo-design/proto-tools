@@ -59,8 +59,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
             In scoring, fixed positions will not be utilized in perplexity calculation.
             NOTE: Positions should match positions in the structure (generally 1-indexed).
 
-        seed (int): Random seed to use for scoring. Default: 42.
-
         device (str): Device to run the model on. Options include ``"cuda"`` (NVIDIA GPU),
             ``"cpu"`` (CPU execution). Default: ``"cuda"``.
 
@@ -83,14 +81,6 @@ class ProteinMPNNScoringConfig(BaseConfig):
         default=None,
         description="Dictionary mapping chain IDs to fixed positions in the sequence. If None, no positions will be fixed",
         examples={"A": [1, 2, 3, 4, 5, 20, 21, 22], "B": [10, 11, 12, 13, 14, 15, 20, 21, 22]},
-    )
-
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed to use for scoring",
-        examples=[42, 123, 456],
-        hidden=True,
     )
 
     device: str = ConfigField(
@@ -209,7 +199,7 @@ def run_proteinmpnn_score(
             "pdb_contents": sequence_structure_pair.structure.structure_pdb,
             "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
             "sequence": sequence_structure_pair.sequence,
-            "seed": config.seed,
+            "seed": config.resolved_seed,
             "fixed_positions": config.fixed_positions,
             "device": config.device,
             "model_choice": config.model_choice,

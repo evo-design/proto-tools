@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, set_torch_seed
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,7 @@ class Evo2Model:
         old_kv_cache: dict[str, Any] | None = None,
         batch_size: int = 1,
         return_logits: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Sample DNA sequences using vortex generation.
 
@@ -120,6 +121,8 @@ class Evo2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
+            seed: Random seed for reproducible generation
+
         Returns:
             Dictionary with keys: "sequences" (List[str]), optionally "logits" (List[torch.Tensor]), "kv_caches" (Optional[List[Dict]])
         """
@@ -130,6 +133,9 @@ class Evo2Model:
             self.load(device, verbose=verbose)
         elif self.device != device:
             self.to_device(device)
+
+        # Seed after load so each dispatch enters sampling with the same RNG state.
+        set_torch_seed(seed)
 
         if isinstance(prompts, str):  # type: ignore[unreachable]
             prompts = [prompts]  # type: ignore[unreachable]
@@ -243,6 +249,7 @@ class Evo2Model:
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Score DNA sequences by computing logits and metrics via forward pass.
 
@@ -256,6 +263,9 @@ class Evo2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
+            seed: Random seed. Scoring is deterministic given the model state,
+                but we still seed RNGs/cudnn flags so consecutive calls in a
+                persistent worker behave identically regardless of call order.
 
         Returns a dict with optional logits (per-sequence tensors), metrics, and vocab tokens.
         """
@@ -264,6 +274,8 @@ class Evo2Model:
             self.load(device, verbose=verbose)
         elif self.device != device:
             self.to_device(device)
+
+        set_torch_seed(seed)
 
         if not sequences:
             raise ValueError("Cannot score empty sequence list")
@@ -517,6 +529,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             old_kv_cache=None,  # KV caching not supported in venv mode
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
         # KV caches are vortex GPU objects, not JSON-serializable
         result["kv_caches"] = None
@@ -528,6 +541,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
     raise ValueError(f"Unknown operation: {operation}")
 

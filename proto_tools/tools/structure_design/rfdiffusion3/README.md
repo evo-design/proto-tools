@@ -184,6 +184,14 @@ result = run_rfdiffusion3(inputs, config)
 - **Tight geometric constraints**: May require more samples to find satisfying designs
 - **Symmetric designs**: Use symmetry mode for homo-oligomers
 
+## Seed Reproducibility
+
+The `seed` parameter is passed to the rfd3 subprocess but the diffusion
+pipeline uses non-deterministic CUDA operations that cannot be controlled
+from outside the process, so different runs with the same seed produce
+different designs. Upstream issue:
+[RosettaCommons/foundry#170](https://github.com/RosettaCommons/foundry/issues/170).
+
 ## References
 
 **Primary publication:**

@@ -13,7 +13,7 @@ import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, set_torch_seed
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ class Evo1Model:
         top_p: float = 1.0,
         batch_size: int = 1,
         verbose: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Sample DNA sequences autoregressively from prompts.
 
@@ -71,10 +72,13 @@ class Evo1Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             verbose: Whether to print progress.
+            seed: Random seed for reproducibility.
 
         Returns:
             Dictionary with keys "sequences" (List[str]) and "scores" (List[float]).
         """
+        set_torch_seed(seed)
+
         if not self._loaded:
             self.load(self.device, verbose=verbose)
 
@@ -118,6 +122,7 @@ class Evo1Model:
         batch_size: int = 1,
         return_logits: bool = False,
         verbose: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Score DNA sequences by computing autoregressive log-likelihood.
 
@@ -130,6 +135,10 @@ class Evo1Model:
                 are faster but use more memory.
             return_logits: Whether to include per-position logits in the output.
             verbose: Whether to print progress.
+            seed: Random seed. Scoring is deterministic given the model state,
+                but we still seed RNGs/cudnn flags for consistency with sampling
+                so consecutive calls in a persistent worker behave identically
+                regardless of call order.
 
         Returns:
             Dictionary with keys:
@@ -141,6 +150,8 @@ class Evo1Model:
         """
         if not self._loaded:
             self.load(self.device, verbose=verbose)
+
+        set_torch_seed(seed)
 
         if not sequences:
             raise ValueError("Cannot score empty sequence list")
@@ -286,6 +297,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             top_p=input_dict.get("top_p", 1.0),
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             verbose=input_dict.get("verbose", False),
+            seed=input_dict.get("seed"),
         )
     if operation == "score":
         result = _model.score(
@@ -293,6 +305,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
             verbose=input_dict.get("verbose", False),
+            seed=input_dict.get("seed"),
         )
         if result["logits"] is not None:
             result["logits"] = [t.tolist() for t in result["logits"]]

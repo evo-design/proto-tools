@@ -15,6 +15,8 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any
 
+from standalone_helpers import set_torch_seed
+
 logger = getLogger(__name__)
 
 # Standard amino acid alphabet (1-letter codes, 20 canonical)
@@ -45,7 +47,7 @@ class FAMPNNModel:
         psce_threshold: float = 0.3,
         scn_diffusion_steps: int = 50,
         scn_step_scale: float = 1.5,
-        seed: int = 42,
+        seed: int | None = None,
         model_variant: str = "0.3",
         device: str = "cuda",
         verbose: bool = False,
@@ -66,6 +68,7 @@ class FAMPNNModel:
         )
         from fampnn.model.sd_model import SeqDenoiser
 
+        set_torch_seed(seed)
         sampling_utils.seed_everything(seed)
 
         # Build timestep schedules
@@ -229,7 +232,7 @@ class FAMPNNModel:
         num_samples: int = 1,
         scn_diffusion_steps: int = 50,
         scn_step_scale: float = 1.5,
-        seed: int = 42,
+        seed: int | None = None,
         model_variant: str = "0.0",
         device: str = "cuda",
         verbose: bool = False,
@@ -250,6 +253,7 @@ class FAMPNNModel:
         )
         from fampnn.model.sd_model import SeqDenoiser
 
+        set_torch_seed(seed)
         sampling_utils.seed_everything(seed)
 
         t_scd = sampling_utils.get_timesteps_from_schedule(
@@ -376,7 +380,7 @@ class FAMPNNModel:
         self,
         pdb_path: str,
         batch_size: int = 16,
-        seed: int = 42,
+        seed: int | None = None,
         model_variant: str = "0.3_cath",
         device: str = "cuda",
         verbose: bool = False,
@@ -393,6 +397,7 @@ class FAMPNNModel:
         from fampnn.data.data import load_feats_from_pdb, process_single_pdb
         from fampnn.sampling_utils import seed_everything
 
+        set_torch_seed(seed)
         seed_everything(seed)
 
         data = load_feats_from_pdb(pdb_path)
@@ -483,7 +488,7 @@ class FAMPNNModel:
         seq_only: bool = False,
         scn_diffusion_steps: int = 50,
         scn_step_scale: float = 1.5,
-        seed: int = 42,
+        seed: int | None = None,
         model_variant: str = "0.3_cath",
         device: str = "cuda",
         verbose: bool = False,
@@ -498,6 +503,7 @@ class FAMPNNModel:
         from fampnn import sampling_utils, scoring_utils
         from fampnn.data.data import load_feats_from_pdb, process_single_pdb
 
+        set_torch_seed(seed)
         sampling_utils.seed_everything(seed)
 
         # Convert 1-indexed mutations to 0-indexed for FAMPNN internals
@@ -725,7 +731,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 psce_threshold=input_dict.get("psce_threshold", 0.3),
                 scn_diffusion_steps=input_dict.get("scn_diffusion_steps", 50),
                 scn_step_scale=input_dict.get("scn_step_scale", 1.5),
-                seed=input_dict.get("seed", 42),
+                seed=input_dict.get("seed"),
                 model_variant=input_dict.get("model_variant", "0.3"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
@@ -738,7 +744,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 num_samples=input_dict.get("num_samples", 1),
                 scn_diffusion_steps=input_dict.get("scn_diffusion_steps", 50),
                 scn_step_scale=input_dict.get("scn_step_scale", 1.5),
-                seed=input_dict.get("seed", 42),
+                seed=input_dict.get("seed"),
                 model_variant=input_dict.get("model_variant", "0.0"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
@@ -747,7 +753,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return _model.score_all_mutations(
                 pdb_path=pdb_path,  # type: ignore[arg-type]
                 batch_size=input_dict.get("batch_size", 16),
-                seed=input_dict.get("seed", 42),
+                seed=input_dict.get("seed"),
                 model_variant=input_dict.get("model_variant", "0.3_cath"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
@@ -760,7 +766,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 seq_only=input_dict.get("seq_only", False),
                 scn_diffusion_steps=input_dict.get("scn_diffusion_steps", 50),
                 scn_step_scale=input_dict.get("scn_step_scale", 1.5),
-                seed=input_dict.get("seed", 42),
+                seed=input_dict.get("seed"),
                 model_variant=input_dict.get("model_variant", "0.3_cath"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),

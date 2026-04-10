@@ -186,6 +186,7 @@ def run_esm2_score(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
+            "seed": config.resolved_seed,
         },
         instance=instance,
         config=config,

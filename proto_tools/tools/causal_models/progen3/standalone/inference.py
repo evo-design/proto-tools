@@ -7,6 +7,8 @@ import sys
 from logging import getLogger
 from typing import Any
 
+from standalone_helpers import set_torch_seed
+
 logger = getLogger(__name__)
 
 HUGGINGFACE_REPO_PREFIX = "Profluent-Bio"
@@ -98,6 +100,7 @@ class ProGen3Model:
         batch_size: int = 1,
         device: str = "cuda",
         verbose: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Sample protein sequences using ProGen3.
 
@@ -111,10 +114,13 @@ class ProGen3Model:
             batch_size (int): Batch size for generation.
             device (str): Device to run on.
             verbose (bool): Whether to log progress.
+            seed (int | None): Random seed for reproducibility.
 
         Returns:
             dict[str, Any]: Dict with "sequences" key containing list of generated sequences.
         """
+        set_torch_seed(seed)
+
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
@@ -180,6 +186,7 @@ class ProGen3Model:
         verbose: bool = False,
         batch_size: int = 1,
         reduction: str = "mean",
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Score protein sequences using bidirectional likelihood.
 
@@ -193,6 +200,10 @@ class ProGen3Model:
             verbose (bool): Whether to log progress.
             batch_size (int): Batch size for scoring.
             reduction (str): How to aggregate per-token log-likelihoods ("mean" or "sum").
+            seed (int | None): Random seed. Scoring is deterministic given the
+                model state, but we still seed RNGs/cudnn flags so consecutive
+                calls in a persistent worker behave identically regardless of
+                call order.
 
         Returns:
             dict[str, Any]: Dict with "metrics" and "per_position_metrics" keys.
@@ -201,6 +212,8 @@ class ProGen3Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        set_torch_seed(seed)
 
         max_batch_tokens = max(
             batch_size * max(len(s) for s in sequences) * 2,
@@ -424,6 +437,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
+            seed=input_dict.get("seed"),
         )
     if operation == "score":
         return _model.score(
@@ -432,6 +446,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
             batch_size=input_dict.get("batch_size", 1),
             reduction=input_dict.get("reduction", "mean"),
+            seed=input_dict.get("seed"),
         )
     raise ValueError(f"Unknown operation: {operation}")
 

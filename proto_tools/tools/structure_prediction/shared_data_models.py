@@ -794,6 +794,19 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
         hidden=True,
     )
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "MSAStructurePredictionConfig":
+        """Create a minimal-cost config with MSA generation disabled.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor.
+
+        Returns:
+            MSAStructurePredictionConfig: Config with ``use_msa=False``.
+        """
+        kwargs.setdefault("use_msa", False)
+        return super().minimal(**kwargs)  # type: ignore[return-value]
+
     def preprocess(self, inputs: StructurePredictionInput) -> StructurePredictionInput:  # type: ignore[override]
         """Preprocess structure prediction inputs before execution."""
         if not self.use_msa:

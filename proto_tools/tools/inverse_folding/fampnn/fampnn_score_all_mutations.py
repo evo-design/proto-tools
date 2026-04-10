@@ -45,7 +45,6 @@ class FAMPNNScoreAllMutationsConfig(BaseConfig):
     Attributes:
         model_variant (str): Checkpoint variant. '0.3_cath' recommended for scoring.
         batch_size (int): Number of positions to score simultaneously on GPU.
-        seed (int): Random seed.
         device (str): Device to run on.
     """
 
@@ -60,12 +59,6 @@ class FAMPNNScoreAllMutationsConfig(BaseConfig):
         default=16,
         ge=1,
         description="Number of positions to score simultaneously on GPU.",
-    )
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed",
-        hidden=True,
     )
     device: str = ConfigField(
         title="Device",
@@ -194,7 +187,7 @@ def run_fampnn_score_all_mutations(
             "operation": "score_all_mutations",
             "pdb_contents": structure.structure_pdb,
             "batch_size": config.batch_size,
-            "seed": config.seed,
+            "seed": config.resolved_seed,
             "model_variant": config.model_variant,
             "device": config.device,
             "verbose": config.verbose,

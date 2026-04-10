@@ -45,8 +45,6 @@ class LigandMPNNScoringConfig(BaseConfig):
             If None, no positions will be fixed. In scoring, fixed positions will not
             be utilized in perplexity calculation.
 
-        seed (int): Random seed to use for scoring.
-
         device (str): Device to run the model on.
 
         return_logits (bool): Whether to include per-position logits in the output.
@@ -58,13 +56,6 @@ class LigandMPNNScoringConfig(BaseConfig):
         title="Fixed Positions",
         default=None,
         description="Dictionary mapping chain IDs to fixed positions in the sequence",
-    )
-
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed to use for scoring",
-        hidden=True,
     )
 
     device: str = ConfigField(

@@ -276,6 +276,7 @@ def run_evo2_sample(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
+            "seed": config.resolved_seed,
         },
         instance=instance,
         config=config,

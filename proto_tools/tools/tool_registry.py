@@ -130,6 +130,17 @@ class ToolSpec(BaseModel):
         "arbitrary_types_allowed": True,
     }
 
+    @property
+    def has_standalone_env(self) -> bool:
+        """Whether this tool ships a ``standalone/`` directory with an isolated env.
+
+        ``True`` for tools that run in a micromamba-based subprocess worker
+        (most GPU/ML tools). ``False`` for pure-Python in-process tools
+        (e.g. ``random_nucleotide``, ``random_protein``, simple sequence
+        utilities) — these cannot be used with ``ToolInstance.persist_tool``.
+        """
+        return (self.source_file.parent / "standalone").is_dir()
+
     @field_serializer("config_model")
     def serialize_config_model(self, config_model: type[BaseModel]) -> dict[str, Any]:
         """Serialize config_model as standard JSON Schema."""

@@ -225,3 +225,25 @@ def test_device_override_after_move(device_manager, mock_callback):
     assert sent_input["device"].startswith("cuda"), (
         f"Worker should receive resolved cuda device, got {sent_input['device']}"
     )
+
+
+# ── cudax auto-allocate resolution ──────────────────────────────────────────
+
+
+def test_move_to_cudax_resolves_to_specific_devices(device_manager, mock_callback):
+    """move_to_device('cudax2') should resolve to specific device indices, not pass 'cudax2' through."""
+    # Start with a multi-GPU allocation (the normal path via request_device)
+    device_manager.request_device("tool1", "instance1", device="cudax2", eviction_callback=mock_callback)
+    assert device_manager._allocations["instance1"].device_ids == ["cuda:0", "cuda:1"]
+
+    # Simulate a subsequent move_to_device with the same cudax2 spec.
+    # This happens in persistent mode when a second dispatch sends the
+    # default device string again.
+    callback = MagicMock()
+    result = device_manager.move_to_device("instance1", "cudax2", worker_callback=callback)
+
+    alloc = device_manager._allocations["instance1"]
+    assert all(d.startswith("cuda:") for d in alloc.device_ids), (
+        f"All devices should be specific indices, got {alloc.device_ids}"
+    )
+    assert "cudax" not in result, f"Should return resolved devices, got {result!r}"

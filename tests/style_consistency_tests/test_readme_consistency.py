@@ -47,6 +47,7 @@ _OPTIONAL_SECTIONS = frozenset(
         "Output Specification",
         "Interpreting Results",
         "Important Parameters",
+        "Seed Reproducibility",
     }
 )
 

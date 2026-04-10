@@ -4,6 +4,7 @@ Base input/output classes for standardized tool results with metadata tracking.
 """
 
 import json
+import math
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -101,6 +102,19 @@ class BaseToolInput(BaseModel):
             item (Any): A single item from the iterable input field.
         """
         return 1.0
+
+
+# Metadata fields populated by the @tool decorator — these differ between
+# runs and are excluded from output comparisons.
+_OUTPUT_METADATA_FIELDS: set[str] = {
+    "tool_id",
+    "execution_time",
+    "timestamp",
+    "success",
+    "warnings",
+    "errors",
+    "metadata",
+}
 
 
 class BaseToolOutput(BaseModel, ABC):
@@ -264,6 +278,95 @@ class BaseToolOutput(BaseModel, ABC):
 
         export_path = Path(export_path) / f"{str(name).lower()}"
         self._export_output(export_path, file_format)
+
+    def approx_equal(self, other: "BaseToolOutput", rtol: float = 1e-4, atol: float = 1e-5) -> None:
+        """Assert that two tool outputs are approximately equal.
+
+        Compares tool-specific output fields (excluding decorator metadata like
+        ``tool_id``, ``execution_time``, ``timestamp``, etc.) with tolerance for
+        floating-point differences.
+
+        GPU tools using the same seed produce approximately — not exactly — identical
+        results because CUDA operations like ``atomicAdd`` reduce floating-point values
+        in non-deterministic order across threads. The results are mathematically
+        equivalent but differ at the bit level (~1e-7 to 1e-15). Discrete outputs
+        (sequences, labels, structure topology) are compared exactly; floating-point
+        outputs (scores, coordinates, pLDDT) use configurable tolerance.
+
+        Args:
+            other (BaseToolOutput): The other output to compare against.
+            rtol (float): Relative tolerance for float comparison.
+            atol (float): Absolute tolerance for float comparison. ``1e-5`` matches
+                the GPU float32 forward-pass noise floor for log-likelihood ratios
+                and other small-magnitude scores that cluster near zero.
+
+        Raises:
+            AssertionError: If the outputs differ, with the path to the first difference.
+        """
+        for field_name in type(self).model_fields:
+            if field_name in _OUTPUT_METADATA_FIELDS:
+                continue
+            self_val = getattr(self, field_name)
+            other_val = getattr(other, field_name)
+            _approx_equal_values(self_val, other_val, rtol=rtol, atol=atol, path=f"output.{field_name}")
+
+
+def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) -> None:
+    """Recursively compare nested structures with float tolerance.
+
+    Args:
+        a (Any): First value.
+        b (Any): Second value.
+        rtol (float): Relative tolerance for float comparison.
+        atol (float): Absolute tolerance for float comparison.
+        path (str): Dot-separated path for error messages (e.g. ``output.results[0].score``).
+
+    Raises:
+        AssertionError: If values differ, with the path to the first difference.
+    """
+    if type(a) is not type(b):
+        raise AssertionError(f"Type mismatch at {path}: {type(a).__name__} != {type(b).__name__}")
+
+    if isinstance(a, float):
+        # Treat ``nan`` vs ``nan`` as equal: tools deliberately emit ``nan`` for
+        # undefined metrics (e.g. ligand_interface_sequence_recovery when there
+        # is no interface). ``math.isclose`` would otherwise reject it.
+        if math.isnan(a) and math.isnan(b):
+            return
+        if not math.isclose(a, b, rel_tol=rtol, abs_tol=atol):
+            raise AssertionError(f"Float mismatch at {path}: {a} != {b} (rtol={rtol}, atol={atol})")
+    elif isinstance(a, dict):
+        if a.keys() != b.keys():
+            raise AssertionError(f"Dict keys differ at {path}: {set(a.keys()) ^ set(b.keys())}")
+        for key in a:
+            _approx_equal_values(a[key], b[key], rtol, atol, f"{path}.{key}")
+    elif isinstance(a, (list, tuple)):
+        if len(a) != len(b):
+            raise AssertionError(f"Length mismatch at {path}: {len(a)} != {len(b)}")
+        for i, (ai, bi) in enumerate(zip(a, b, strict=True)):
+            _approx_equal_values(ai, bi, rtol, atol, f"{path}[{i}]")
+    elif hasattr(a, "approx_equal"):
+        # Explicit per-class override takes precedence over generic recursion.
+        try:
+            a.approx_equal(b, rtol=rtol, atol=atol)
+        except AssertionError as e:
+            raise AssertionError(f"At {path}: {e}") from None
+    elif isinstance(a, BaseModel):
+        # Generic fallback for nested Pydantic models: recurse field-by-field so
+        # float drift in nested ``metrics`` / ``per_position_metrics`` is compared
+        # with tolerance instead of falling through to bit-exact ``BaseModel.__eq__``.
+        # Classes that need custom comparison logic can override this by defining
+        # their own ``approx_equal`` method (handled by the branch above).
+        for field_name in type(a).model_fields:
+            _approx_equal_values(
+                getattr(a, field_name),
+                getattr(b, field_name),
+                rtol,
+                atol,
+                f"{path}.{field_name}",
+            )
+    elif a != b:
+        raise AssertionError(f"Value mismatch at {path}: {a!r} != {b!r}")
 
 
 __all__ = [

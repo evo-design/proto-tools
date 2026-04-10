@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from enum import Enum
 from pathlib import Path
@@ -652,6 +653,53 @@ class Structure(BaseModel):
         return sum(len(chain) for chain in self.get_chain_sequences().values())
 
     # ============================================================================
+    # Approximate Comparison
+    # ============================================================================
+
+    def approx_equal(self, other: Structure, rtol: float = 1e-4, atol: float = 1e-6) -> None:
+        """Assert that two structures are approximately equal.
+
+        Compares topology (chain IDs, sequences) exactly and atom coordinates
+        approximately. Used by seed reproducibility tests where CUDA non-determinism
+        causes bit-level float differences in coordinates.
+
+        Args:
+            other (Structure): The other structure to compare against.
+            rtol (float): Relative tolerance for coordinate comparison.
+            atol (float): Absolute tolerance for coordinate comparison.
+
+        Raises:
+            AssertionError: If the structures differ, with details about the first mismatch.
+        """
+        # Compare topology exactly
+        self_seqs = self.get_chain_sequences()
+        other_seqs = other.get_chain_sequences()
+        if self_seqs != other_seqs:
+            raise AssertionError(f"Chain sequences differ: {self_seqs} != {other_seqs}")
+
+        # Extract and compare atom coordinates approximately
+        self_atoms = _extract_atom_positions(self)
+        other_atoms = _extract_atom_positions(other)
+
+        if len(self_atoms) != len(other_atoms):
+            raise AssertionError(f"Atom count differs: {len(self_atoms)} != {len(other_atoms)}")
+
+        for i, ((s_name, s_pos), (o_name, o_pos)) in enumerate(zip(self_atoms, other_atoms, strict=True)):
+            if s_name != o_name:
+                raise AssertionError(f"Atom {i} name differs: {s_name!r} != {o_name!r}")
+            for axis, (s_val, o_val) in zip("xyz", zip(s_pos, o_pos, strict=True), strict=True):
+                if not math.isclose(s_val, o_val, rel_tol=rtol, abs_tol=atol):
+                    raise AssertionError(
+                        f"Atom {i} ({s_name}) {axis} coordinate: {s_val} != {o_val} (rtol={rtol}, atol={atol})"
+                    )
+
+        # Compare metrics approximately
+        if self.metrics.keys() != other.metrics.keys():
+            raise AssertionError(f"Metric keys differ: {set(self.metrics.keys()) ^ set(other.metrics.keys())}")
+        for key in self.metrics:
+            _approx_equal_metric(key, self.metrics[key], other.metrics[key], rtol, atol)
+
+    # ============================================================================
     # Visualization
     # ============================================================================
 
@@ -763,3 +811,34 @@ class Structure(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+def _extract_atom_positions(structure: Structure) -> list[tuple[str, tuple[float, float, float]]]:
+    """Extract atom names and (x, y, z) positions from a Structure via gemmi.
+
+    Args:
+        structure (Structure): The structure to extract atoms from.
+
+    Returns:
+        list[tuple[str, tuple[float, float, float]]]: List of (atom_name, (x, y, z)) tuples.
+    """
+    atoms: list[tuple[str, tuple[float, float, float]]] = []
+    for model in structure.gemmi_struct:
+        for chain in model:
+            for residue in chain:
+                atoms.extend((atom.name, (atom.pos.x, atom.pos.y, atom.pos.z)) for atom in residue)
+    return atoms
+
+
+def _approx_equal_metric(key: str, a: Any, b: Any, rtol: float, atol: float) -> None:
+    """Compare two metric values with float tolerance, recursing into lists."""
+    if isinstance(a, float) and isinstance(b, float):
+        if not math.isclose(a, b, rel_tol=rtol, abs_tol=atol):
+            raise AssertionError(f"Metric {key!r}: {a} != {b} (rtol={rtol}, atol={atol})")
+    elif isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            raise AssertionError(f"Metric {key!r} length: {len(a)} != {len(b)}")
+        for i, (ai, bi) in enumerate(zip(a, b, strict=True)):
+            _approx_equal_metric(f"{key}[{i}]", ai, bi, rtol, atol)
+    elif a != b:
+        raise AssertionError(f"Metric {key!r}: {a!r} != {b!r}")

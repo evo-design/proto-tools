@@ -1267,15 +1267,25 @@ class DeviceManager:
             elif target_device == "cpu":
                 resolved_devices = ["cpu"]
             else:
-                # Parse multi-GPU targets (e.g., "cuda:2,3" → ["cuda:2", "cuda:3"])
                 from proto_tools.utils.device import parse_device_string
 
                 spec = parse_device_string(target_device)
-                resolved_devices = spec.devices or [target_device]
-                self._resolve_device_conflicts(
-                    resolved_devices,
-                    exclude_instance=instance_name,
-                )
+                if spec.devices:
+                    # Explicit devices (e.g., "cuda:2,3" → ["cuda:2", "cuda:3"])
+                    resolved_devices = spec.devices
+                    self._resolve_device_conflicts(
+                        resolved_devices,
+                        exclude_instance=instance_name,
+                    )
+                else:
+                    # Auto-allocate N devices (e.g., "cudax2" → ["cuda:0", "cuda:1"]).
+                    # Release current allocation first so those devices are
+                    # available for reallocation.
+                    allocation.device_ids = ["cpu"]
+                    try:
+                        resolved_devices = self._ensure_n_free_devices(spec.count)
+                    except RuntimeError:
+                        resolved_devices = ["cpu"]
 
             resolved_device = self._device_str(resolved_devices)
             old_devices = allocation.device_ids

@@ -15,8 +15,6 @@ from standalone_helpers import move_model_to_device
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
-# TODO: Standardize where this seed is set
-DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation (standard MPNN)
 MPNN_VOCAB = "ACDEFGHIKLMNPQRSTVWYX"
@@ -43,7 +41,7 @@ class LigandMPNNModel:
         temperature: float = DEFAULT_TEMPERATURE,
         fixed_positions: dict[str, list[int]] | None = None,
         excluded_amino_acids: list[str] | None = None,
-        seed: int = DEFAULT_SEED,
+        seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
@@ -56,13 +54,17 @@ class LigandMPNNModel:
             temperature: Sampling temperature (default: 0.1).
             fixed_positions: Dict mapping chain IDs to fixed residue positions.
             excluded_amino_acids: List of amino acids to exclude.
-            seed: Random seed for reproducibility.
+            seed: Random seed for reproducibility (required — Foundry engine
+                expects an int).
             device: Device to run on ('cuda' or 'cpu').
             verbose: Whether to print status messages.
 
         Returns:
             Dictionary with keys: sequences, metrics
         """
+        if seed is None:
+            raise ValueError("LigandMPNNModel.sample requires an explicit int seed.")
+
         # Lazy load the model
         if not self._loaded or self.device != device:
             self.load(device, verbose)
@@ -117,7 +119,7 @@ class LigandMPNNModel:
         chain_ids: list[str],
         sequence: str,
         fixed_positions: dict[str, list[int]] | None = None,
-        seed: int = DEFAULT_SEED,
+        seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
@@ -249,7 +251,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
                 fixed_positions=input_dict.get("fixed_positions"),
                 excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                seed=input_dict.get("seed", DEFAULT_SEED),
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )
@@ -259,7 +261,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 chain_ids=input_dict.get("chain_ids", []),
                 sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
                 fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict.get("seed", DEFAULT_SEED),
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 verbose=input_dict.get("verbose", False),
             )

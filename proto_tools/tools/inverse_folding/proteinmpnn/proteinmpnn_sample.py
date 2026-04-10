@@ -141,7 +141,7 @@ def run_proteinmpnn_sample(
                 "temperature": config.temperature,
                 "fixed_positions": inp.fixed_positions,
                 "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": config.seed + chunk_idx,
+                "seed": config.resolved_seed + chunk_idx,
                 "device": config.device,
                 "model_choice": config.model_choice,
                 "verbose": config.verbose,

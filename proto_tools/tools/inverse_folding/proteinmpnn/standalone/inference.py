@@ -16,7 +16,6 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 1.0
-DEFAULT_SEED = 42
 
 # Alphabet ordering for logits interpretation
 ALPHAFOLD_VOCAB: list[str] = list(
@@ -50,7 +49,7 @@ class ProteinMPNNModel:
         temperature: float | None = DEFAULT_TEMPERATURE,
         fixed_positions: dict[str, list[int]] | None = None,
         excluded_amino_acids: list[str] | None = None,
-        seed: int | None = DEFAULT_SEED,
+        seed: int | None = None,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
@@ -74,6 +73,12 @@ class ProteinMPNNModel:
         Returns:
             Dictionary with keys: seq, score, seqid, and optionally logits
         """
+        from standalone_helpers import set_jax_seed
+
+        key = set_jax_seed(seed)
+        if key is None:
+            raise ValueError("ProteinMPNNModel.sample requires an explicit int seed (jax.random.PRNGKey rejects None).")
+
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
             self.load(device, model_choice, verbose)
@@ -98,7 +103,7 @@ class ProteinMPNNModel:
         sequences = self.model.sample_parallel(  # type: ignore[attr-defined]
             batch=batch_size,
             temperature=temperature,
-            key=self.jax.random.PRNGKey(seed),  # type: ignore[attr-defined]
+            key=key,
         )
 
         self.unload()
@@ -115,7 +120,7 @@ class ProteinMPNNModel:
         chain_ids: list[str],
         sequence: str,
         fixed_positions: dict[str, list[int]] | None = None,
-        seed: int = DEFAULT_SEED,
+        seed: int | None = None,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
@@ -128,7 +133,7 @@ class ProteinMPNNModel:
             chain_ids: List of chain IDs
             sequence: Sequence to score
             fixed_positions: Dict mapping chain IDs to fixed positions
-            seed: Random seed
+            seed: Random seed (required — jax.random.PRNGKey rejects None)
             device: Device to run on
             model_choice: Model weights ('proteinmpnn' or 'abmpnn')
             verbose: Whether to print status messages
@@ -138,6 +143,12 @@ class ProteinMPNNModel:
             Dictionary with keys: metrics (log_likelihood, avg_log_likelihood, perplexity),
             and optionally logits.
         """
+        from standalone_helpers import set_jax_seed
+
+        key = set_jax_seed(seed)
+        if key is None:
+            raise ValueError("ProteinMPNNModel.score requires an explicit int seed (jax.random.PRNGKey rejects None).")
+
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
             self.load(device, model_choice, verbose)
@@ -160,7 +171,7 @@ class ProteinMPNNModel:
         # Score the sequence (model returns "score" (negative avg log likelihood), "logits")
         output = self.model.score(  # type: ignore[attr-defined]
             seq=sequence,
-            key=self.jax.random.PRNGKey(seed),  # type: ignore[attr-defined]
+            key=key,
         )
 
         neg_avg_ll = float(output["score"])
@@ -292,7 +303,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
                 fixed_positions=input_dict.get("fixed_positions"),
                 excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                seed=input_dict.get("seed", DEFAULT_SEED),
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 model_choice=model_choice,
                 verbose=input_dict.get("verbose", False),
@@ -304,7 +315,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 chain_ids=input_dict.get("chain_ids", []),
                 sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
                 fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict.get("seed", DEFAULT_SEED),
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 model_choice=model_choice,
                 verbose=input_dict.get("verbose", False),

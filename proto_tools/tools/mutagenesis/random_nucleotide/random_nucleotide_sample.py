@@ -122,7 +122,6 @@ class RandomNucleotideSampleConfig(BaseConfig):
         sequence_type (Literal['auto', 'dna', 'rna']): How to interpret input sequences. ``"auto"``
             detects DNA vs RNA by presence of U; ``"dna"`` or ``"rna"``
             forces the type.
-        seed (int | None): Random seed for reproducibility. Default: ``None``.
     """
 
     masking_strategy: MaskingStrategy = ConfigField(
@@ -140,13 +139,6 @@ class RandomNucleotideSampleConfig(BaseConfig):
         default="auto",
         description="Sequence type: auto-detect, force DNA, or force RNA.",
         hidden=True,
-    )
-    seed: int | None = ConfigField(
-        title="Random Seed",
-        default=None,
-        description="Random seed for reproducible sampling.",
-        advanced=True,
-        include_in_key=False,
     )
 
     def preprocess(self, inputs: Any) -> Any:
@@ -221,7 +213,7 @@ def run_random_nucleotide_sample(
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.seed) if config.seed is not None else None  # noqa: S311 -- not cryptographic
+    rng = random.Random(config.resolved_seed)  # noqa: S311 -- not cryptographic
     scheme = config.substitution_scheme
 
     # Resolve sequence type

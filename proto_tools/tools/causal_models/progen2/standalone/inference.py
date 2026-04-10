@@ -10,7 +10,7 @@ from logging import getLogger
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, set_torch_seed
 from tqdm import tqdm
 
 logger = getLogger(__name__)
@@ -166,6 +166,7 @@ class ProGen2Model:
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Sample protein sequences using ProGen2 with batched generation.
 
@@ -184,6 +185,7 @@ class ProGen2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to return per-position logits for generated tokens.
+            seed: Random seed for reproducibility.
 
         Returns:
             Dictionary with:
@@ -195,6 +197,9 @@ class ProGen2Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        # Seed after load so each dispatch enters sampling with the same RNG state.
+        set_torch_seed(seed)
 
         if not prompts:
             raise ValueError("Cannot sample from empty prompt list")
@@ -269,6 +274,7 @@ class ProGen2Model:
         verbose: bool = False,
         batch_size: int = 1,
         return_logits: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Score protein sequences by computing logits and metrics via forward pass.
 
@@ -283,6 +289,9 @@ class ProGen2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
+            seed: Random seed. Scoring is deterministic given the model state,
+                but we still seed RNGs/cudnn flags so consecutive calls in a
+                persistent worker behave identically regardless of call order.
 
         Returns:
             Dictionary with:
@@ -295,6 +304,8 @@ class ProGen2Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        set_torch_seed(seed)
 
         if not sequences:
             raise ValueError("Cannot score empty sequence list")
@@ -406,6 +417,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
     if operation == "score":
         return _model.score(
@@ -414,6 +426,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict.get("verbose", False),
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
     raise ValueError(f"Unknown operation: {operation}")
 

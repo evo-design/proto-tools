@@ -11,12 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, set_torch_seed
 
 logger = getLogger(__name__)
 
 DEFAULT_TEMPERATURE = 0.1
-DEFAULT_SEED = 42
 
 
 class ESMIF1Model:
@@ -113,7 +112,7 @@ class ESMIF1Model:
         chain_ids: list[str],
         batch_size: int,
         temperature: float = DEFAULT_TEMPERATURE,
-        seed: int = DEFAULT_SEED,
+        seed: int | None = None,
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
@@ -148,7 +147,7 @@ class ESMIF1Model:
         sequences = []
         log_likelihoods = []
 
-        torch.manual_seed(seed)
+        set_torch_seed(seed)
         for _ in range(batch_size):
             if fixed_positions and target_chain in fixed_positions:
                 sampled_seq = self._sample_with_fixed_positions(
@@ -187,6 +186,7 @@ class ESMIF1Model:
         pdb_structure: str,
         chain_ids: list[str],
         sequence: str,
+        seed: int | None = None,
         device: str = "cuda",
         weights_variant: str = "protein_dpo",
         verbose: bool = False,
@@ -201,6 +201,8 @@ class ESMIF1Model:
             pdb_structure: Path to PDB file containing the structure.
             chain_ids: List of chain IDs. First chain is the target for scoring.
             sequence: Protein sequence to score.
+            seed: Random seed. Score is deterministic given the model state, but
+                we still seed RNGs/cuDNN to keep behaviour consistent across calls.
             device: Device to run on.
             weights_variant: 'esmif' for vanilla or 'protein_dpo' for DPO weights.
             verbose: Whether to print status messages.
@@ -217,6 +219,7 @@ class ESMIF1Model:
 
         all_coords, _all_native_seqs, target_chain = self._load_structure(pdb_structure, chain_ids)
 
+        set_torch_seed(seed)
         # Score the sequence in the complex context
         avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
             self.model,
@@ -351,7 +354,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 chain_ids=input_dict.get("chain_ids", []),
                 batch_size=input_dict.get("batch_size", 1),
                 temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
-                seed=input_dict.get("seed", DEFAULT_SEED),
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 weights_variant=input_dict.get("weights_variant", "protein_dpo"),
                 verbose=input_dict.get("verbose", False),
@@ -362,6 +365,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 pdb_structure=pdb_structure,  # type: ignore[arg-type]
                 chain_ids=input_dict.get("chain_ids", []),
                 sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
+                seed=input_dict.get("seed"),
                 device=input_dict.get("device", "cuda"),
                 weights_variant=input_dict.get("weights_variant", "protein_dpo"),
                 verbose=input_dict.get("verbose", False),

@@ -24,3 +24,24 @@ class StructureEnsemble(BaseModel):
 
     structures: list[Structure]
     sequence: str
+
+    def approx_equal(self, other: "StructureEnsemble", rtol: float = 1e-4, atol: float = 1e-6) -> None:
+        """Assert that two structure ensembles are approximately equal.
+
+        Compares sequences exactly, structure counts exactly, and delegates
+        per-structure comparison to ``Structure.approx_equal``.
+
+        Args:
+            other (StructureEnsemble): The other ensemble to compare against.
+            rtol (float): Relative tolerance for coordinate comparison.
+            atol (float): Absolute tolerance for coordinate comparison.
+
+        Raises:
+            AssertionError: If the ensembles differ.
+        """
+        if self.sequence != other.sequence:
+            raise AssertionError(f"Ensemble sequences differ: {self.sequence!r} != {other.sequence!r}")
+        if len(self.structures) != len(other.structures):
+            raise AssertionError(f"Ensemble structure count differs: {len(self.structures)} != {len(other.structures)}")
+        for s, o in zip(self.structures, other.structures, strict=True):
+            s.approx_equal(o, rtol=rtol, atol=atol)

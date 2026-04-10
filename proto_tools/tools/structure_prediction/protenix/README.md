@@ -248,6 +248,23 @@ result.export("protenix_output/", file_format="pdb")
 - **Ligand input format**: Ligands are specified as SMILES strings or CCD codes, not as sequences.
 - **Seeds for diversity**: Use multiple seeds (`seeds=[0, 1, 2]`) to explore different sampling trajectories. Each seed produces `num_diffusion_samples` independent samples.
 
+## Seed Reproducibility
+
+Protenix honours `--seed`, but the `cuequivariance` triangle
+multiplication/attention kernels we enable for speed accumulate float
+ops non-deterministically, causing ~1-2 mÅ coordinate drift between
+runs with the same seed. Forcing the `torch` fallback kernel would
+restore determinism at a significant speed cost. Upstream confirmation
+and deterministic-mode escape hatch:
+
+- [bytedance/Protenix#116 — Different results for the same seed](https://github.com/bytedance/Protenix/issues/116)
+- [bytedance/Protenix#119 — unstable predictions](https://github.com/bytedance/Protenix/issues/119)
+
+The Protenix maintainers' recommended fix is to set
+`USE_DEEPSPEED_EVO_ATTENTION=false` and pass `--deterministic true` to
+the CLI — proto-tools currently does not enable this path because it
+trades off significant inference speed.
+
 ## References
 
 - ByteDance Protenix Team. "Protenix: Toward High-Accuracy Open-Source Biomolecular Structure Prediction." [Technical Report](https://github.com/bytedance/Protenix/blob/main/docs/PTX_V1_Technical_Report_202602042356.pdf)

@@ -137,7 +137,7 @@ def run_esm_if1_sample(
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
                 "temperature": config.temperature,
-                "seed": config.seed + chunk_idx,
+                "seed": config.resolved_seed + chunk_idx,
                 "device": config.device,
                 "weights_variant": config.weights_variant,
                 "verbose": config.verbose,

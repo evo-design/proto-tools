@@ -134,10 +134,6 @@ class Chai1Config(MSAStructurePredictionConfig):
             diffusion sample. Increases diversity in structure generation. Must be
             at least 1. Default: 1.
 
-        seed (int | None): Random seed for reproducible results. Set to a fixed
-            value for deterministic predictions or ``None`` for random behavior.
-            Default: 42.
-
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``True``.
@@ -194,12 +190,6 @@ class Chai1Config(MSAStructurePredictionConfig):
         ge=1,
         description="Number of independent trunk forward passes per diffusion sample",
         advanced=True,
-    )
-    seed: int | None = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed for reproducible results",
-        hidden=True,
     )
     timeout: int = ConfigField(
         title="Timeout",
@@ -375,7 +365,7 @@ def run_chai1_on_complex(
             "num_diffn_timesteps": config.num_diffn_timesteps,
             "num_diffn_samples": config.num_diffn_samples,
             "num_trunk_samples": config.num_trunk_samples,
-            "seed": config.seed,
+            "seed": config.resolved_seed,
         }
 
         # Call the inference script with the venv activated

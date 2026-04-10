@@ -46,7 +46,6 @@ class FAMPNNPackConfig(BaseConfig):
         batch_size (int): Number of samples to process simultaneously on GPU.
         scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
         scn_step_scale (float): Step scale for sidechain diffusion.
-        seed (int): Random seed.
         device (str): Device to run on.
     """
 
@@ -80,12 +79,6 @@ class FAMPNNPackConfig(BaseConfig):
         default=1.5,
         gt=0.0,
         description="Step scale (eta) for sidechain diffusion",
-        hidden=True,
-    )
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed",
         hidden=True,
     )
     device: str = ConfigField(
@@ -208,7 +201,7 @@ def run_fampnn_pack(
                 "num_samples": chunk,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
                 "scn_step_scale": config.scn_step_scale,
-                "seed": config.seed + chunk_idx,
+                "seed": config.resolved_seed + chunk_idx,
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,

@@ -246,6 +246,19 @@ if per_pos:
 - **Empty prompt for unconditional generation**: pass `""` as a prompt, not `None`
 - **Scoring reduction matters**: use `mean` (default) for comparing sequences of different lengths; `sum` only for fixed-length comparisons
 
+## Seed Reproducibility
+
+ProGen3's MoE forward pass is non-deterministic: the `grouped-gemm` CUDA
+kernels used by MegaBlocks to batch GEMMs across experts accumulate
+reductions in non-deterministic order, so outputs drift by ~1e-3 in
+log-likelihood across independent invocations with the same seed
+(amplified to completely different sequences under autoregressive
+sampling). For bit-exact repeat calls, keep the model in a single
+persistent worker. Acknowledged upstream:
+
+- [Profluent-AI/progen3#6 — Reproducibility issue in computing model logits](https://github.com/Profluent-AI/progen3/issues/6)
+- [databricks/megablocks#83 — ParallelDroplessMLP initialises self.mlp twice](https://github.com/databricks/megablocks/issues/83)
+
 ## References
 
 - **Paper**: Roney et al. "ProGen3: A Large-Scale Protein Language Model" (2025). [bioRxiv doi:10.1101/2025.05.16.654471](https://doi.org/10.1101/2025.05.16.654471)

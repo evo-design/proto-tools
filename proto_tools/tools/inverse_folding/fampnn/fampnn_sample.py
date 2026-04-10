@@ -237,7 +237,7 @@ def run_fampnn_sample(
                 "psce_threshold": config.psce_threshold,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
                 "scn_step_scale": config.scn_step_scale,
-                "seed": config.seed + chunk_idx,
+                "seed": config.resolved_seed + chunk_idx,
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,

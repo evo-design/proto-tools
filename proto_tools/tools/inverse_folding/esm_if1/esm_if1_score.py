@@ -135,6 +135,7 @@ def run_esm_if1_score(
             "pdb_contents": pair.structure.structure_pdb,
             "chain_ids": pair.structure.get_chain_ids(),
             "sequence": pair.sequence,
+            "seed": config.resolved_seed,
             "device": config.device,
             "weights_variant": config.weights_variant,
             "verbose": config.verbose,

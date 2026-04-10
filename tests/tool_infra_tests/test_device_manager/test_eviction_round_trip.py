@@ -11,34 +11,18 @@ import pytest
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.tool_infra_tests.pytest_helpers import CHIMERA_ONLY_KEYS, parse_min_gpu_count
 
 # Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
 # Tools requiring specific clusters get per-item markers via pytest.param.
-_CHIMERA_ONLY_KEYS = {"alphafold3-prediction"}
-
 _GPU_TOOLS = []
 for _spec in ToolRegistry.list_all():
     if not _spec.uses_gpu or _spec.category == "testing":
         continue
-    if _spec.key in _CHIMERA_ONLY_KEYS:
+    if _spec.key in CHIMERA_ONLY_KEYS:
         _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key, marks=pytest.mark.only_chimera))
     else:
         _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key))
-
-
-def _get_gpu_count_for_tool(spec) -> int:
-    """Determine how many GPUs a tool needs from its device_count spec."""
-    dc = spec.device_count
-    # "1" -> 1, "2" -> 2, "1-2" -> 1 (minimum), ">=1" -> 1, etc.
-    if dc.isdigit():
-        return int(dc)
-    if "-" in dc and not dc.startswith(">") and not dc.startswith("<"):
-        # Range like "1-2": use the minimum
-        return int(dc.split("-")[0])
-    if dc.startswith(">="):
-        return int(dc[2:])
-    # Fallback
-    return 1
 
 
 @pytest.mark.exhaustive
@@ -56,7 +40,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
     Verifies that every tool's standalone worker correctly handles
     to_device() calls for both GPU->CPU and CPU->GPU transitions.
     """
-    n_gpus = _get_gpu_count_for_tool(tool_spec)
+    n_gpus = parse_min_gpu_count(tool_spec.device_count)
 
     # Build managed device list: tool's GPUs + 1 extra for the evictor
     # Actually, for eviction we want all GPUs occupied so the mock tool

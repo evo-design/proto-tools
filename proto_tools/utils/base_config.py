@@ -4,9 +4,10 @@ Base configuration class for all pydantic configs.
 """
 
 import json
+import random
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 from pydantic import Field as PydanticField
 
 from proto_tools.utils.tool_io import BaseToolInput, _extra_dict
@@ -102,6 +103,13 @@ class BaseConfig(BaseModel):
         verbose (bool): Whether to print status messages.
         device (str): Device to run the tool on.
         timeout (int): Maximum execution time in seconds.
+        seed (int | None): Random seed for reproducible results. When set, same seed + same
+            input produces identical output. When None, a random seed is auto-assigned
+            internally via the ``resolved_seed`` property. Some GPU tools produce
+            approximately (not bit-exact) identical results because CUDA operations
+            reduce floating-point values in non-deterministic thread order. Discrete
+            outputs (sequences, structures) are exact; floating-point outputs (scores,
+            coordinates) may differ at the bit level (~1e-7).
 
     Properties:
         devices_per_instance: Number of GPUs each worker needs (default 1).
@@ -172,6 +180,32 @@ class BaseConfig(BaseModel):
         include_in_key=False,
     )
 
+    seed: int | None = ConfigField(
+        title="Random Seed",
+        default=None,
+        ge=0,
+        lt=2**32,
+        description="Random seed for reproducible results.",
+        advanced=True,
+        include_in_key=True,
+    )
+
+    _seed_value: int = PrivateAttr(default=0)
+
+    @model_validator(mode="after")
+    def _resolve_seed(self) -> "BaseConfig":
+        """Auto-assign a random seed when none is provided."""
+        if self.seed is None:
+            self._seed_value = random.randint(0, 2**31 - 1)  # noqa: S311 -- not cryptographic
+        else:
+            self._seed_value = self.seed
+        return self
+
+    @property
+    def resolved_seed(self) -> int:
+        """Concrete seed for tool dispatch — always an int, even when ``seed`` is None."""
+        return self._seed_value
+
     @property
     def devices_per_instance(self) -> int:
         """Number of GPUs each ToolPool worker needs for this configuration.
@@ -188,6 +222,35 @@ class BaseConfig(BaseModel):
         config subclasses where this applies; the default is 1.
         """
         return 1
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "BaseConfig":
+        """Create a config instance with minimal-cost defaults for smoke testing.
+
+        Returns a valid config that exercises the tool's core logic as cheaply
+        as possible — disabling expensive optional features (e.g. MSA generation),
+        reducing iteration counts, and lowering sample counts.
+
+        Subclasses override this to set tool-specific minimal defaults using
+        ``setdefault`` so callers can still override any field explicitly::
+
+            @classmethod
+            def minimal(cls, **kwargs):
+                kwargs.setdefault("use_msa", False)
+                return super().minimal(**kwargs)
+
+        This is used by parametrized test infrastructure (env-report, seed
+        reproducibility) to run every registered tool without tool-specific
+        hardcoding in test helpers.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor. These
+                take precedence over minimal defaults set by subclasses.
+
+        Returns:
+            BaseConfig: An instance of the config with minimal-cost defaults applied.
+        """
+        return cls(**kwargs)
 
     def preprocess(self, inputs: BaseToolInput) -> BaseToolInput:
         """Transform inputs before tool execution. Override in subclasses."""

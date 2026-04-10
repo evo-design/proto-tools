@@ -383,6 +383,7 @@ def run_boltz2_on_complex(
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,
+            "seed": config.resolved_seed,
         }
 
         # Call the inference script

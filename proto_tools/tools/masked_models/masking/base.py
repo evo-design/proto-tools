@@ -108,6 +108,7 @@ def weighted_sample(
     eligible: list[int],
     scores: list[float],
     k: int,
+    rng: np.random.RandomState | None = None,
 ) -> list[int]:
     """Softmax-weighted sampling without replacement (numpy-accelerated).
 
@@ -118,6 +119,8 @@ def weighted_sample(
         eligible (list[int]): 0-indexed position indices to sample from.
         scores (list[float]): One score per position. Higher means more likely to be picked.
         k (int): How many positions to select.
+        rng (np.random.RandomState | None): Random number generator for reproducibility.
+            If None, uses the global numpy RNG.
 
     Returns:
         list[int]: List of *k* 0-indexed positions drawn from *eligible*.
@@ -132,7 +135,10 @@ def weighted_sample(
     weights /= weights.sum()
 
     # numpy's multinomial-style sampling without replacement
-    chosen_idx = np.random.choice(len(eligible), size=k, replace=False, p=weights)
+    if rng is None:
+        chosen_idx = np.random.choice(len(eligible), size=k, replace=False, p=weights)
+    else:
+        chosen_idx = rng.choice(len(eligible), size=k, replace=False, p=weights)
     return [eligible[i] for i in chosen_idx]
 
 
@@ -148,7 +154,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
     was explicitly provided.
 
     Args:
-        config (Any): The tool's config object (has ``.masking_strategy``).
+        config (Any): The tool's config object (has ``.masking_strategy`` and ``.seed``).
         inputs (Any): A ``BaseToolInput``-like object with a ``sequences`` field
             and a ``model_copy(update=...)`` method (Pydantic model).
         position_score_fn (Any): Optional callable that takes sequences and returns
@@ -175,6 +181,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
                 "sequences": strategy.mask(
                     inputs.sequences,
                     position_score_fn=position_score_fn,
+                    seed=getattr(config, "resolved_seed", None),
                 )
             }
         )
@@ -322,6 +329,7 @@ class MaskingStrategy(BaseModel):
         self,
         sequences: list[str],
         position_score_fn: Callable[..., Any] | None = None,
+        seed: int | None = None,
     ) -> list[str]:
         """Apply the masking strategy to a batch of sequences.
 
@@ -337,6 +345,8 @@ class MaskingStrategy(BaseModel):
                 ``build_position_score_fn()``. When called standalone,
                 auto-built from ``model_name`` / ``model_checkpoint``
                 if not provided.
+            seed (int | None): Random seed for reproducible masking. Creates a seeded
+                RandomState for position selection. If None, uses global numpy RNG.
 
         Returns:
             list[str]: List of masked sequences with ``_`` at selected positions.
@@ -365,6 +375,9 @@ class MaskingStrategy(BaseModel):
         assert self._masker is not None
         all_scores = self._masker.score(sequences, position_score_fn=position_score_fn)
 
+        # Create seeded RNG if seed is provided
+        rng = np.random.RandomState(seed) if seed is not None else None
+
         results = []
         for i, seq in enumerate(sequences):
             mutable = mutable_mask(seq, self.fixed_positions)
@@ -377,7 +390,7 @@ class MaskingStrategy(BaseModel):
             validate_enough_mutable(seq, mutable, count, i)
 
             scores = [all_scores[i][j] / self.temperature for j in eligible]
-            chosen = weighted_sample(eligible, scores, count)
+            chosen = weighted_sample(eligible, scores, count, rng=rng)
             results.append(apply_mask(seq, chosen))
         return results
 

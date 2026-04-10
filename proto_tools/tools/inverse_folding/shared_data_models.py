@@ -191,8 +191,6 @@ class InverseFoldingConfig(BaseConfig):
         excluded_amino_acids (list[str] | None): List of amino acids that are not allowed in the sequence.
             If None, no amino acids will be disallowed. C is commonly specified. Defaults to None.
 
-        seed (int): Random seed to use for sampling. Defaults to 42.
-
         device (str): Device to run the model on. Options include 'cuda' (NVIDIA GPU), 'cpu' (CPU execution), or specific GPU devices like 'cuda:0'. Defaults to 'cuda'.
     """
 
@@ -231,14 +229,6 @@ class InverseFoldingConfig(BaseConfig):
         default=None,
         description="List of amino acids that are not allowed in the sequence. If None, no amino acids will be disallowed",
         examples=["C"],
-    )
-
-    seed: int = ConfigField(
-        title="Random Seed",
-        default=42,
-        description="Random seed to use for sampling",
-        examples=[42, 123, 456],
-        hidden=True,
     )
 
     device: str = ConfigField(

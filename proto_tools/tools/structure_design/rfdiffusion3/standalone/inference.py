@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import gemmi
+from standalone_helpers import set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class RFdiffusion3Model:
         step_scale: float = 1.5,
         low_memory_mode: bool = False,
         ckpt_path: str = "rfd3",
+        seed: int | None = None,
         verbose: bool = False,
         # All other CLI args pass through to rfd3
         **cli_kwargs: Any,
@@ -93,6 +95,7 @@ class RFdiffusion3Model:
             low_memory_mode: memory-efficient tokenization mode; set True if GPU RAM is tight (default: False).
             ckpt_path: String containing the path and file name of the checkpoint path
                 you want to use (default: rfd3).
+            seed: Random seed for reproducibility (default: None).
             verbose: Whether to print status messages
             **cli_kwargs: Additional CLI arguments passed directly to rfd3.
                 See RFdiffusion3 docs for complete list.
@@ -106,6 +109,11 @@ class RFdiffusion3Model:
             RFdiffusion3 Input Specification:
             https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
         """
+        # Seed Python-side RNG. The rfd3 subprocess also receives seed as
+        # a CLI argument, but does not yet produce deterministic results
+        # due to upstream non-determinism (RosettaCommons/foundry#170).
+        set_torch_seed(seed)
+
         # Lazy load on first call
         if not self._loaded:
             self.load(verbose)
@@ -123,6 +131,10 @@ class RFdiffusion3Model:
             f"low_memory_mode={low_memory_mode}",
             f"ckpt_path={ckpt_path}",
         ]
+
+        # Add seed if provided (passed to rfd3's RNG for reproducibility)
+        if seed is not None:
+            cmd.append(f"seed={seed}")
 
         # Add all additional CLI kwargs
         for key, value in cli_kwargs.items():
@@ -286,11 +298,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     device = kwargs.pop("device", "cuda")  # Extract device for subprocess environment
     rfdiffusion3_input_json = kwargs.pop("input_json_path")
     rfdiffusion3_output_dir = kwargs.pop("output_dir")
+    seed = kwargs.pop("seed", None)
 
     return _model(
         input_json_path=rfdiffusion3_input_json,
         output_dir=rfdiffusion3_output_dir,
         device=device,
+        seed=seed,
         verbose=kwargs.pop("verbose", False),
         **kwargs,
     )

@@ -21,6 +21,7 @@ from standalone_helpers import (
     get_jax_memory_stats,
     move_model_to_device,
     resolve_jax_device,
+    set_jax_seed,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,10 @@ def _init_params(
     output_size: int = 4,
     memory_mb: int = 512,
     device: jax.Device | None = None,
+    seed: int = 0,
 ) -> dict[str, Any]:
     """Initialize model params as a dict pytree (Flax/Haiku convention)."""
-    key = jax.random.PRNGKey(0)
+    key = jax.random.PRNGKey(seed)
     k1, k2 = jax.random.split(key)
 
     params = {
@@ -96,7 +98,7 @@ class MockJAXMultiGPUToolModel:
     the Flax/Haiku convention of separated params and apply functions.
     """
 
-    def __init__(self, hidden_size: int = 128, memory_mb: int = 512, device: str = "cuda:0,cuda:1"):
+    def __init__(self, hidden_size: int = 128, memory_mb: int = 512, device: str = "cuda:0,cuda:1", seed: int = 0):
         """Initialize MockJAXMultiGPUToolModel."""
         self.hidden_size = hidden_size
         self.memory_mb = memory_mb
@@ -109,6 +111,7 @@ class MockJAXMultiGPUToolModel:
             output_size=4,
             memory_mb=memory_mb,
             device=self._jax_device_a,
+            seed=seed,
         )
         self.params_b = _init_params(
             input_size=4,
@@ -116,6 +119,7 @@ class MockJAXMultiGPUToolModel:
             output_size=4,
             memory_mb=memory_mb,
             device=self._jax_device_b,
+            seed=seed,
         )
         self._loaded = True
         logger.info(
@@ -175,12 +179,33 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     device = input_dict.get("device", "cuda:0,cuda:1")
     hidden_size = input_dict.get("hidden_size", 128)
     memory_mb = input_dict.get("memory_mb", 512)
+    seed = input_dict.get("seed", 0)
+
+    set_jax_seed(seed)
 
     if _model is None:
         _model = MockJAXMultiGPUToolModel(
             hidden_size=hidden_size,
             memory_mb=memory_mb,
             device=device,
+            seed=seed,
+        )
+    else:
+        _model.params_a = _init_params(
+            input_size=4,
+            hidden_size=_model.hidden_size,
+            output_size=4,
+            memory_mb=_model.memory_mb,
+            device=_model._jax_device_a,
+            seed=seed,
+        )
+        _model.params_b = _init_params(
+            input_size=4,
+            hidden_size=_model.hidden_size,
+            output_size=4,
+            memory_mb=_model.memory_mb,
+            device=_model._jax_device_b,
+            seed=seed,
         )
 
     return _model.run(data)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class BioEmuModel:
         batch_size: int = 10,
         device: str = "cuda",
         output_dir: str | None = None,
+        seed: int | None = None,
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Sample a conformational ensemble with BioEmu."""
@@ -39,6 +40,9 @@ class BioEmuModel:
             self.load(model_name=model_name, device=device, verbose=verbose)
         elif self.device != device:
             self.to_device(device)
+
+        # Seed after load so each dispatch enters sampling with the same RNG state.
+        set_torch_seed(seed)
 
         use_temp_dir = output_dir is None
         if use_temp_dir:
@@ -55,6 +59,7 @@ class BioEmuModel:
                 logger.info(f"Sampling {num_samples} conformations for sequence of length {len(sequence)}")
                 logger.info(f"Using model: {self._model_name}, device: {self.device}")
 
+            # Pass base_seed so bioemu uses our seed instead of time.time_ns()
             bioemu_sample(
                 sequence=sequence,
                 num_samples=num_samples,
@@ -62,6 +67,7 @@ class BioEmuModel:
                 output_dir=working_dir,
                 batch_size_100=batch_size,
                 filter_samples=filter_samples,
+                base_seed=seed,
             )
 
             pdb_frames, num_frames, num_residues = self.extract_pdb_frames(working_dir, verbose)
@@ -149,6 +155,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     sequences = input_data["sequences"]
     output_dir = input_data.get("output_dir")
+    seed = input_data.get("seed")
 
     model = BioEmuModel()
     results: list[dict[str, Any]] = []
@@ -159,6 +166,9 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 output_dir if len(sequences) == 1 else str(Path(output_dir) / f"complex_{seq_idx}")
             )
 
+        # Derive a distinct but reproducible seed for each sequence
+        per_seq_seed = seed + seq_idx if seed is not None else None
+
         result = model(
             sequence=sequence,
             num_samples=input_data.get("num_samples", 500),
@@ -167,6 +177,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
             batch_size=input_data.get("batch_size", 10),
             device=input_data.get("device", "cuda"),
             output_dir=per_sequence_output_dir,
+            seed=per_seq_seed,
             verbose=input_data.get("verbose", False),
         )
         results.append(result)

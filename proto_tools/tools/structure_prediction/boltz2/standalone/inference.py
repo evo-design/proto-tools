@@ -52,6 +52,7 @@ class Boltz2Model:
         sampling_steps: int = 200,
         diffusion_samples: int = 25,
         num_workers: int = 4,
+        seed: int | None = None,
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Run Boltz2 structure prediction.
@@ -64,6 +65,8 @@ class Boltz2Model:
             sampling_steps: Number of sampling steps
             diffusion_samples: Number of diffusion samples
             num_workers: Number of workers for prediction
+            seed: Random seed forwarded to the boltz CLI as ``--seed``. None
+                leaves the boltz default (unseeded) in place.
             verbose: Whether to print status messages
 
         Returns:
@@ -100,6 +103,8 @@ class Boltz2Model:
             f"--cache={self.cache_dir!s}",
             f"--num_workers={num_workers}",
         ]
+        if seed is not None:
+            cmd.append(f"--seed={seed}")
 
         logger.debug(f"Running Boltz command: {' '.join(cmd)}")  # type: ignore[arg-type]
         sys.stdout.flush()
@@ -201,6 +206,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             sampling_steps=input_dict.get("sampling_steps", 200),
             diffusion_samples=input_dict.get("diffusion_samples", 25),
             num_workers=input_dict.get("num_workers", 4),
+            seed=input_dict.get("seed"),
             verbose=input_dict.get("verbose", False),
         )
     raise ValueError(f"Unknown operation: {operation}")

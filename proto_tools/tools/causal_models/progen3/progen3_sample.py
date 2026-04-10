@@ -238,6 +238,7 @@ def run_progen3_sample(
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,
+            "seed": config.resolved_seed,
         },
         instance=instance,
         config=config,

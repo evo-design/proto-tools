@@ -195,6 +195,18 @@ for structure in result.structures:
 - **Metal-binding sites:** Metals are not directly modeled; predictions may be less accurate near metal sites
 - **Highly charged ligands:** Electrostatic interactions may be less accurate without explicit solvent
 
+## Seed Reproducibility
+
+Fresh subprocesses with the same seed produce identical structures, but
+consecutive calls inside the same persistent worker drift by ~3 mÅ due
+to hidden CUDA/JIT state in `chai_lab` that torch does not expose a
+reset API for. Use one-shot execution (not `persist_tool`) for bit-exact
+reproducibility across repeat calls. Upstream confirmation that some
+chai_lab operations are inherently non-deterministic:
+
+- [chaidiscovery/chai-lab#228 — guarantee result reproducibility with seed](https://github.com/chaidiscovery/chai-lab/issues/228)
+- [chaidiscovery/chai-lab#246 — How does the seed number influence the results?](https://github.com/chaidiscovery/chai-lab/issues/246)
+
 ## References
 
 **Primary publication:**

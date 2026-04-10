@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 
 # Import standalone helpers (auto-copied by worker bootstrap)
-from standalone_helpers import get_pytorch_memory_stats, move_model_to_device
+from standalone_helpers import get_pytorch_memory_stats, move_model_to_device, set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     device = input_dict.get("device", "cuda")
     hidden_size = input_dict.get("hidden_size", 128)
     memory_mb = input_dict.get("memory_mb", 512)
+    seed = input_dict.get("seed")
+
+    set_torch_seed(seed)
 
     # Initialize model if needed
     if _model is None:

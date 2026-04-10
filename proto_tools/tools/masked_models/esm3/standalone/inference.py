@@ -8,6 +8,7 @@ from logging import getLogger
 from typing import Any, Literal
 
 import torch
+from standalone_helpers import set_torch_seed
 from tqdm import tqdm
 
 logger = getLogger(__name__)
@@ -209,6 +210,7 @@ class ESM3Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = False,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Sample amino acids at masked positions ('_') in protein sequences.
 
@@ -217,15 +219,17 @@ class ESM3Model:
         replacement amino acids from the model's predictions.
 
         Args:
-            sequences: Protein sequences with '_' at positions to sample.
-            temperature: Sampling temperature for amino acid selection.
-            batch_size: Sequences per GPU forward pass.
-            device: Device to run on.
-            verbose: Whether to print progress.
-            return_logits: Whether to return per-position AA logits.
+            sequences (list[str]): Protein sequences with '_' at positions to sample.
+            temperature (float): Sampling temperature for amino acid selection.
+            batch_size (int): Sequences per GPU forward pass.
+            device (str): Device to run on.
+            verbose (bool): Whether to print progress.
+            return_logits (bool): Whether to return per-position AA logits.
+            seed (int | None): Random seed for reproducible sampling. If None, uses
+                torch's current RNG state.
 
         Returns:
-            Dictionary with "sequences" and optionally "logits".
+            dict[str, Any]: Dictionary with "sequences" and optionally "logits".
         """
         device_obj = torch.device(device)
 
@@ -233,6 +237,9 @@ class ESM3Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        # Seed after load so each dispatch enters sampling with the same RNG state.
+        set_torch_seed(seed)
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token  # type: ignore[attr-defined]
@@ -307,6 +314,7 @@ class ESM3Model:
         device: str = "cuda",
         verbose: bool = False,
         return_logits: bool = True,
+        seed: int | None = None,
     ) -> dict[str, list[Any]]:
         """Score protein sequences using ESM3 with MLM pseudo-perplexity.
 
@@ -325,6 +333,9 @@ class ESM3Model:
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to include logits in the output
+            seed: Random seed. Scoring is deterministic given the model state,
+                but we still seed RNGs/cudnn flags so consecutive calls in a
+                persistent worker behave identically regardless of call order.
 
         Returns:
             Dictionary with:
@@ -336,6 +347,8 @@ class ESM3Model:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
+
+        set_torch_seed(seed)
 
         # Validate sequences for scoring
         if not sequences:
@@ -543,6 +556,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
     if operation == "score":
         return _model.score(
@@ -551,6 +565,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
             return_logits=input_dict.get("return_logits", False),
+            seed=input_dict.get("seed"),
         )
     if operation == "predict_structure":
         return _model.predict_structure(  # type: ignore[return-value]

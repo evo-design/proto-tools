@@ -223,7 +223,12 @@ class BioEmuConfig(StructurePredictionConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return BioEmuInput(complexes=["MKTL"])  # type: ignore[list-item]
+    from proto_tools.tools.sequence_alignment.msas import MSA
+
+    a3m_path = Path(__file__).parent / "examples" / "example.a3m"
+    fixture_msa = MSA.from_file(a3m_path)
+    sequence = "MKTL"
+    return BioEmuInput(complexes=[sequence], msas={sequence: fixture_msa})  # type: ignore[list-item]
 
 
 @tool(
@@ -265,6 +270,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "batch_size": config.batch_size,
             "device": config.device,
             "output_dir": config.output_dir,
+            "seed": config.resolved_seed,
             "verbose": config.verbose,
         },
         instance=instance,
