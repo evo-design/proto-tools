@@ -1,3 +1,9 @@
 # AlphaGenome environment
 aiohttp
+# flax is required at runtime by orbax-checkpoint (>=0.11.34) which
+# unconditionally imports it from ``orbax/checkpoint/_src/tree/utils.py``
+# even though the package only declares flax under its ``[docs, testing]``
+# extras. Adding it explicitly here makes the env self-sufficient and is
+# forward-compatible if orbax fixes the unconditional import.
+flax
 # JAX with CUDA is installed by setup.sh (auto-detects CUDA 12 vs 13 and uses bundled libraries)

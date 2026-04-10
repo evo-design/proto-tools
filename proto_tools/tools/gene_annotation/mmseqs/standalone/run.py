@@ -151,8 +151,17 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         Path(res_dir).mkdir()
 
         search_type = str(input_data.get("search_type", 3))
-        threads = str(input_data.get("threads", 96))
         sensitivity = str(input_data.get("sensitivity", 7.5))
+
+        # NOTE:
+        # Cap threads at the target DB size. mmseqs splits the target DB into
+        # chunks proportional to thread count; if ``threads > num_target_seqs``
+        # it crashes with "World Size: <threads> dbSize: <num_target_seqs>"
+        # because there aren't enough chunks to distribute across workers.
+        requested_threads = int(input_data.get("threads", 96))
+        target_db_size = len(input_data["target_sequences"])
+        effective_threads = max(1, min(requested_threads, target_db_size))
+        threads = str(effective_threads)
 
         # Step 1: Create databases
         _run_cmd(
