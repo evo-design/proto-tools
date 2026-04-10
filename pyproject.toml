@@ -36,7 +36,10 @@ dependencies = [
     # Biology-specific tools
     "promotercalculator",
 
-    # Visualization & utilities
+    # Notebooks & visualization
+    "jupyter",
+    "ipykernel",
+    "ipywidgets",
     "matplotlib",
     "ipython",
     "ipymol",
@@ -69,10 +72,6 @@ dev = [
     "types-requests",       # mypy stubs for requests
     "types-tqdm",           # mypy stubs for tqdm
     "types-PyYAML",         # mypy stubs for pyyaml
-    # Notebooks & interactive
-    "jupyter",
-    "ipykernel",
-    "ipywidgets",
 
     # Documentation
     "docstring-parser",
