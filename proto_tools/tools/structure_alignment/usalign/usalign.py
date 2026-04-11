@@ -84,7 +84,7 @@ class USalignOutput(BaseToolOutput):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "examples" / "example.pdb")
+_EXAMPLE_PDB_PATH = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
 
 
 def example_input() -> Any:

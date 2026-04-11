@@ -69,6 +69,7 @@ class FAMPNNScoreConfig(BaseConfig):
         seq_only (bool): If True, score without sidechain context (backbone-only).
         scn_diffusion_steps (int): Number of sidechain diffusion denoising steps.
         scn_step_scale (float): Step scale for sidechain diffusion.
+        seed (int): Random seed.
         device (str): Device to run on.
     """
 
@@ -101,6 +102,12 @@ class FAMPNNScoreConfig(BaseConfig):
         default=1.5,
         gt=0.0,
         description="Step scale (eta) for sidechain diffusion",
+        hidden=True,
+    )
+    seed: int = ConfigField(
+        title="Random Seed",
+        default=42,
+        description="Random seed",
         hidden=True,
     )
     device: str = ConfigField(
@@ -176,8 +183,8 @@ def example_input() -> Any:
     return FAMPNNScoreInput(
         inputs=[
             MutationInput(
-                structure=Structure.from_file(str(Path(__file__).parents[1] / "examples" / "example.pdb")),
-                mutations=["M1V"],
+                structure=Structure.from_file(str(Path(__file__).parents[1] / "example_input_fixture.pdb")),
+                mutations=["A1V"],
             )
         ]
     )

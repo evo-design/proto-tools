@@ -8,13 +8,7 @@ ProGen2 is Salesforce's autoregressive protein language model for de novo protei
 
 ## Background
 
-Proteins are linear chains of [amino acids](https://en.wikipedia.org/wiki/Amino_acid) that fold into 3D structures to carry out biological functions. The amino acid sequence ([primary structure](https://en.wikipedia.org/wiki/Protein_structure#Primary_structure)) largely determines the protein's fold and function. Natural proteins occupy a tiny fraction of theoretically possible sequence space -- most random sequences do not fold or function.
-
-[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases ([UniRef](https://www.uniprot.org/help/uniref), BFD, [OAS](https://opig.stats.ox.ac.uk/webapps/oas/)). By training to predict each amino acid given the preceding context, the model implicitly captures:
-
-- **Local motifs**: secondary structure preferences, active site patterns
-- **Long-range dependencies**: distal residue co-evolution, domain boundaries
-- **Family-specific grammar**: sequence patterns characteristic of particular protein families
+[Autoregressive](https://en.wikipedia.org/wiki/Autoregressive_model) protein language models like ProGen2 learn the statistical patterns of natural protein sequences from large databases ([UniRef](https://www.uniprot.org/help/uniref), BFD, [OAS](https://opig.stats.ox.ac.uk/webapps/oas/)). By training to predict each amino acid given the preceding context, the model implicitly captures local motifs, long-range dependencies (such as distal residue co-evolution), and sequence patterns characteristic of particular protein families
 
 This learned distribution enables two key applications: **generation** (sampling new sequences that follow natural protein statistics) and **scoring** (evaluating how "protein-like" a given sequence is under the model). Lower perplexity indicates a sequence is more consistent with the model's learned distribution of natural proteins.
 

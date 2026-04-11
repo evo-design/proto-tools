@@ -143,7 +143,7 @@ def example_input() -> Any:
     return FAMPNNPackInput(
         inputs=[
             FAMPNNStructureInput(
-                structure=str(Path(__file__).parents[1] / "examples" / "example.pdb"),  # type: ignore[arg-type]
+                structure=str(Path(__file__).parents[1] / "example_input_fixture.pdb"),  # type: ignore[arg-type]
             )
         ]
     )

@@ -1,7 +1,7 @@
 {
   "tool_id": "sequence-fetch",
-  "execution_time": 1.149472951889038,
-  "timestamp": "2026-02-21T17:09:00.038323",
+  "execution_time": 0.5717952251434326,
+  "timestamp": "2026-04-06T18:43:00.383455",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -9,38 +9,27 @@
   "results": [
     {
       "request_id": "request_0",
-      "target_name": "TP53",
-      "organism": "Homo sapiens",
+      "target_name": "lacI",
+      "organism": "Escherichia coli",
       "requested_types": [
-        "protein",
-        "structure"
+        "protein"
       ],
       "status": "success",
       "fetched_sequences": [
         {
           "sequence_type": "protein",
           "source_database": "uniprot",
-          "accession": "P04637",
-          "sequence": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD",
-          "length": 393,
-          "checksum_sha256": "e3ca60f18e3b6e98986ad6749215ee3b7a3abc09c191675213d1f243c035c9a3",
-          "source_url": "https://rest.uniprot.org/uniprotkb/P04637",
+          "accession": "A0A094XSW9",
+          "sequence": "MAELNYIPNRVAQQLAGKQSLLIGVATSSLALHAPSQIVAAIKSRADQLGASVVVSMVERSGVEACKAAVHNLLAQRVSGLIINYPLDDQDAIAVEAACTNVPALFLDVSDQTPINSIIFSHEDGTRLGVEHLVALGHQQIALLAGPLSSVSARLRLAGWHKYLTRNQIQPIAEREGDWSAMSGFQQTMQMLNEGIVPTAMLVANDQMALGAMRAITESGLRVGADISVVGYDDTEDSSCYIPPLTTIKQDFRLLGQTSVDRLLQLSQGQAVKGNQLLPVSLVKRKTTLAPNTQTASPRALADSLMQLARQVSRLESGQ",
+          "length": 319,
+          "checksum_sha256": "d1e28f3b686fe1e9b5796661950bc019c9707915df46e93125f9c877a712c37d",
+          "source_url": "https://rest.uniprot.org/uniprotkb/A0A094XSW9",
           "inferred": false
         }
       ],
-      "fetched_structures": [
-        {
-          "pdb_id": "1TSR",
-          "source_database": "pdb",
-          "title": "P53 CORE DOMAIN IN COMPLEX WITH DNA",
-          "method": "X-RAY DIFFRACTION",
-          "resolution": 2.2,
-          "source_url": "https://www.rcsb.org/structure/1TSR"
-        }
-      ],
+      "fetched_structures": [],
       "resolved_ids": {
-        "uniprot_id": "P04637",
-        "pdb_id": "1TSR"
+        "uniprot_id": "A0A094XSW9"
       },
       "warnings": [],
       "errors": []

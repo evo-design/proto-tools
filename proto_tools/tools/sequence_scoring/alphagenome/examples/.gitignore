@@ -1,0 +1,4 @@
+# Full alphagenome predict outputs are too large to commit (~400 MB and ~650 MB
+# for a single 524,288 bp context). Re-run the notebook to regenerate locally.
+example_output/alphagenome_predict_intervals.json
+example_output/alphagenome_predict_variants.json

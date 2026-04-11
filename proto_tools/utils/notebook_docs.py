@@ -200,7 +200,7 @@ def _convert_model_section(section_html: str) -> str:
         tag_attrs = m.group(1)
         desc_raw = m.group(2)
         # Strip nested tags, collapse whitespace
-        desc = re.sub(r"<[^>]+>", "", desc_raw).strip()
+        desc = re.sub(r"</?[a-zA-Z][^>]*>", "", desc_raw).strip()
         desc = re.sub(r"\s+", " ", desc)
         rows.append(_paramfield_to_row(tag_attrs, desc))
 
@@ -233,6 +233,41 @@ def _extract_api_model(md: str, model: str, function_name: str | None = None) ->
             return _convert_model_section(section)
 
     return f"*{model.capitalize()} section not found.*"
+
+
+def _extract_available_tools(md: str) -> str:
+    """Extract function names and descriptions from the API Docs section.
+
+    Args:
+        md (str): Full page markdown.
+
+    Returns:
+        str: Markdown-formatted list of available run functions with descriptions.
+    """
+    api_section = _extract_section(md, "API Docs")
+    entries = []
+    for m in re.finditer(r"### `(run_\w+)\(\)`\s*\n+(.+)", api_section):
+        func_name, description = m.group(1), m.group(2).strip()
+        entries.append(f"- **`{func_name}()`** — {description}")
+    return "\n".join(entries) if entries else "*No functions found.*"
+
+
+def display_available_tools(tool: str) -> None:
+    """Fetch a docs page and render the list of available run functions.
+
+    Args:
+        tool (str): Tool identifier — full path (``"structure-prediction/esmfold"``),
+            tool name (``"esmfold"``), or run function (``"run_esmfold"``).
+    """
+    from IPython.display import Markdown, display
+
+    tool_path = _resolve_tool_path(tool)
+    try:
+        md = _fetch_markdown(tool_path)
+    except Exception:
+        logger.warning("Unable to fetch docs for '%s'", tool_path)
+        return
+    display(Markdown(_extract_available_tools(md)))  # type: ignore[no-untyped-call]
 
 
 def display_overview(tool: str) -> None:
@@ -272,6 +307,40 @@ def display_docs_section(tool: str, section: str) -> None:
     content = _extract_section(md, section)
     content = _strip_html(content)
     display(Markdown(content))  # type: ignore[no-untyped-call]
+
+
+def display_doc_link(tool: str, label: str = "VIEW IN PROTO DOCS") -> None:
+    """Display a shield-style badge linking to the tool's documentation page.
+
+    Renders an inline SVG badge matching the shields.io ``for-the-badge`` style
+    used in tool READMEs. Works offline — no external image requests.
+
+    Args:
+        tool (str): Tool identifier — full path (``"structure-prediction/esmfold"``),
+            tool name (``"esmfold"``), or run function (``"run_esmfold"``).
+        label (str): Badge text. Defaults to ``"VIEW IN PROTO DOCS"``.
+    """
+    from IPython.display import HTML, display
+
+    tool_path = _resolve_tool_path(tool)
+    url = f"{_DOCS_BASE_URL}/{tool_path}"
+    text = label.upper()
+    # Approximate width: 7.5px per char + padding, matching shields.io for-the-badge metrics
+    text_width = len(text) * 7.5 + 20
+    total_width = 30 + text_width
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" height="28" width="{total_width}">'
+        f'<rect rx="4" width="{total_width}" height="28" fill="#046e7a"/>'
+        '<rect rx="0" x="0" width="30" height="28" fill="#046e7a"/>'
+        # readthedocs book icon (simplified)
+        '<text x="15" y="18" fill="white" font-size="14" text-anchor="middle">'
+        "\U0001f4d6</text>"
+        f'<text x="{30 + text_width / 2}" y="18" fill="white" '
+        'font-family="Verdana,sans-serif" font-size="10" font-weight="bold" '
+        f'text-anchor="middle" letter-spacing="1">{text}</text>'
+        "</svg>"
+    )
+    display(HTML(f'<a href="{url}" target="_blank">{svg}</a>'))  # type: ignore[no-untyped-call]
 
 
 def display_api_reference(tool: str, model: str, function_name: str | None = None) -> None:
