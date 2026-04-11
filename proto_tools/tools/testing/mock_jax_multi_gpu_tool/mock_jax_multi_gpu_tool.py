@@ -147,6 +147,7 @@ def run_mock_jax_multi_gpu_tool(
     instance: Any = None,
 ) -> MockJAXMultiGPUToolOutput:
     """Run mock JAX multi-GPU tool (two minimal models with JAX semantics)."""
+    seed = config.seed if config.seed is not None else config.get_random_int()
     result = ToolInstance.dispatch(
         "mock_jax_multi_gpu_tool",
         {
@@ -154,7 +155,7 @@ def run_mock_jax_multi_gpu_tool(
             "device": config.device,
             "hidden_size": config.hidden_size,
             "memory_mb": config.memory_mb,
-            "seed": config.seed,
+            "seed": seed,
         },
         instance=instance,
         config=config,

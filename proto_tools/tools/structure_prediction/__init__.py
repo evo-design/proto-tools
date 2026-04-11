@@ -26,13 +26,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
 )
-from proto_tools.tools.structure_prediction.structure_metrics import (
-    StructureMetrics,
-    StructureMetricsConfig,
-    StructureMetricsInput,
-    StructureMetricsOutput,
-    run_structure_metrics,
-)
 from proto_tools.tools.structure_prediction.viennarna import (
     ViennaRNAConfig,
     ViennaRNAInput,
@@ -86,10 +79,4 @@ __all__ = [
     "StructurePredictionOutput",
     # Dispatch
     "predict_structures",
-    # Structure Metrics
-    "run_structure_metrics",
-    "StructureMetrics",
-    "StructureMetricsInput",
-    "StructureMetricsConfig",
-    "StructureMetricsOutput",
 ]

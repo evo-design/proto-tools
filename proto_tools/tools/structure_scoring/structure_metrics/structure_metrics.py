@@ -1,8 +1,6 @@
-"""proto_tools/tools/structure_prediction/structure_metrics/structure_metrics.py.
+"""Structural quality metrics (longest alpha helix length, gyration radius) from PDB files.
 
-Computes structural quality metrics including longest alpha helix length
-and gyration radius from PDB files, used to filter out disordered or
-artifactual predicted protein structures.
+Used to filter out disordered or artifactual predicted protein structures.
 """
 
 from pathlib import Path
@@ -107,7 +105,7 @@ def example_input() -> Any:
 @tool(
     key="structure-metrics",
     label="Structure Quality Metrics",
-    category="structure_prediction",
+    category="structure_scoring",
     input_class=StructureMetricsInput,
     config_class=StructureMetricsConfig,
     output_class=StructureMetricsOutput,
@@ -132,7 +130,6 @@ def run_structure_metrics(
     Args:
         inputs (StructureMetricsInput): Validated input containing PDB file paths.
         config (StructureMetricsConfig): Configuration (no parameters needed).
-
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:

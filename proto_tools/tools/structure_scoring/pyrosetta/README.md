@@ -5,14 +5,12 @@
 > [!IMPORTANT]
 > **License:** PyRosetta is distributed under the [Rosetta Software License](https://www.rosettacommons.org/software/license-and-download). Free for academic and non-commercial use. Commercial users must obtain a license from [UW CoMotion](https://els2.comotion.uw.edu/product/pyrosetta). By using this tool, you accept these terms.
 
+> [!IMPORTANT]
+> NOTE: This README is placeholder text! We need to review and update
+
 ## Overview
 
 PyRosetta provides physics-based scoring of protein structures using the Rosetta molecular modeling suite. Three operations are available: Spatial Aggregation Propensity (SAP) scoring, Solvent Accessible Surface Area (SASA) computation, and full Rosetta energy scoring with optional FastRelax.
-
-- **Tool keys**: `pyrosetta-sap`, `pyrosetta-sasa`, `pyrosetta-energy`
-- **Input**: Protein structures (PDB or mmCIF file paths, raw content strings, or Structure objects) with optional chain selection
-- **Output**: Numeric scores with per-residue breakdowns
-- **Execution**: CPU-only
 
 ## Background
 
@@ -230,9 +228,9 @@ for r in result.results:
 **Often used together:**
 - **Structure prediction** (`esmfold-prediction`, `alphafold3-prediction`) -- Generate structures to score
 - **Inverse folding** (`proteinmpnn-sample`, `ligandmpnn-sample`) -- Design sequences, then score the resulting structures
-- **Structure metrics** (`structure-metrics`) -- Compute geometric quality metrics (RMSD, pLDDT, clashes)
+- **Structure metrics** (`structure-metrics`) -- Compute geometric quality metrics (longest alpha helix, radius of gyration)
 - **TM-align** (`tmalign-align`) -- Structural alignment and TM-score comparison
 
 **Alternatives:**
-- **Structure metrics** -- For geometric quality checks (clashes, bond angles) without physics-based energy
+- **Structure metrics** -- For coarse geometric filters (helix length, gyration radius) without physics-based energy
 - **ESM2 scoring** (`esm2-score`) -- Learned sequence-based fitness scoring (complementary to physics-based scoring)

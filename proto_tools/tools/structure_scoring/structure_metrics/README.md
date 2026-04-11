@@ -1,4 +1,4 @@
-<a href="https://bio-pro.mintlify.app/tools/structure-prediction/structure-metrics"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
+<a href="https://bio-pro.mintlify.app/tools/structure-scoring/structure-metrics"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
 
 # Structure Metrics
 
@@ -123,7 +123,7 @@ No configuration parameters. Both metrics are computed deterministically from th
 
 **Example 1: Analyze a single PDB file**
 ```python
-from proto_tools.tools.structure_prediction.structure_metrics import (
+from proto_tools.tools.structure_scoring.structure_metrics import (
     run_structure_metrics, StructureMetricsInput, StructureMetricsConfig
 )
 
@@ -139,7 +139,7 @@ print(f"Radius of gyration: {m.gyration_radius:.1f} A")
 
 **Example 2: Batch filtering in a pipeline**
 ```python
-from proto_tools.tools.structure_prediction.structure_metrics import (
+from proto_tools.tools.structure_scoring.structure_metrics import (
     run_structure_metrics, StructureMetricsInput, StructureMetricsConfig
 )
 

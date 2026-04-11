@@ -1,6 +1,6 @@
-"""Structure quality metrics (pLDDT, pTM, DockQ)."""
+"""Structural quality metrics (longest alpha helix length, gyration radius)."""
 
-from proto_tools.tools.structure_prediction.structure_metrics.structure_metrics import (
+from proto_tools.tools.structure_scoring.structure_metrics.structure_metrics import (
     StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,

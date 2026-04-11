@@ -398,10 +398,6 @@ from proto_tools.tools.structure_prediction import (
     ProtenixConfig,
     ProtenixInput,
     ProtenixOutput,
-    StructureMetrics,
-    StructureMetricsConfig,
-    StructureMetricsInput,
-    StructureMetricsOutput,
     StructurePredictionComplex,
     StructurePredictionOutput,
     ViennaRNAConfig,
@@ -414,7 +410,6 @@ from proto_tools.tools.structure_prediction import (
     run_chai1,
     run_esmfold,
     run_protenix,
-    run_structure_metrics,
     run_viennarna,
 )
 from proto_tools.tools.structure_scoring import (
@@ -433,9 +428,14 @@ from proto_tools.tools.structure_scoring import (
     ResidueSASA,
     SAPResult,
     SASAResult,
+    StructureMetrics,
+    StructureMetricsConfig,
+    StructureMetricsInput,
+    StructureMetricsOutput,
     run_pyrosetta_energy,
     run_pyrosetta_sap,
     run_pyrosetta_sasa,
+    run_structure_metrics,
 )
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec, tool
 from proto_tools.utils.tool_cache import (
@@ -794,12 +794,6 @@ __all__ = [
     "ColabfoldSearchOutput",
     # Sequence alignment - Shared helpers
     "MSA",
-    # Structure prediction - Structure Metrics
-    "run_structure_metrics",
-    "StructureMetrics",
-    "StructureMetricsInput",
-    "StructureMetricsConfig",
-    "StructureMetricsOutput",
     # Structure design - RFdiffusion3
     "run_rfdiffusion3",
     "RFdiffusion3Input",
@@ -896,4 +890,10 @@ __all__ = [
     "PyRosettaEnergyOutput",
     "EnergyResult",
     "ResidueEnergy",
+    # Structure scoring - Structure Metrics
+    "run_structure_metrics",
+    "StructureMetrics",
+    "StructureMetricsInput",
+    "StructureMetricsConfig",
+    "StructureMetricsOutput",
 ]

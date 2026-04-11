@@ -135,6 +135,7 @@ def run_mock_jax_tool(
     instance: Any = None,
 ) -> MockJAXToolOutput:
     """Run mock JAX tool (minimal model with JAX device semantics)."""
+    seed = config.seed if config.seed is not None else config.get_random_int()
     result = ToolInstance.dispatch(
         "mock_jax_tool",
         {
@@ -142,7 +143,7 @@ def run_mock_jax_tool(
             "device": config.device,
             "hidden_size": config.hidden_size,
             "memory_mb": config.memory_mb,
-            "seed": config.seed,
+            "seed": seed,
         },
         instance=instance,
         config=config,

@@ -20,6 +20,13 @@ from proto_tools.tools.structure_scoring.pyrosetta import (
     run_pyrosetta_sap,
     run_pyrosetta_sasa,
 )
+from proto_tools.tools.structure_scoring.structure_metrics import (
+    StructureMetrics,
+    StructureMetricsConfig,
+    StructureMetricsInput,
+    StructureMetricsOutput,
+    run_structure_metrics,
+)
 
 __all__ = [
     "EnergyResult",
@@ -37,7 +44,12 @@ __all__ = [
     "ResidueSASA",
     "SAPResult",
     "SASAResult",
+    "StructureMetrics",
+    "StructureMetricsConfig",
+    "StructureMetricsInput",
+    "StructureMetricsOutput",
     "run_pyrosetta_energy",
     "run_pyrosetta_sap",
     "run_pyrosetta_sasa",
+    "run_structure_metrics",
 ]

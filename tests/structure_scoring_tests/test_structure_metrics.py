@@ -1,14 +1,11 @@
-"""tests/structure_prediction_tests/test_structure_metrics.py.
-
-Tests for structure metrics.
-"""
+"""Tests for structure metrics."""
 
 import json
 from pathlib import Path
 
 import pytest
 
-from proto_tools.tools.structure_prediction.structure_metrics import (
+from proto_tools.tools.structure_scoring.structure_metrics import (
     StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,
