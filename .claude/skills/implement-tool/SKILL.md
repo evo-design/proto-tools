@@ -94,6 +94,7 @@ The user provides EITHER:
    - `standalone/inference.py` (or `run.py`)
    - `standalone/setup.sh`
    - `standalone/requirements.txt`
+   - `standalone/python_version.txt` (if present — the Python version pin for the env)
    - `__init__.py` (at tool and category level)
    - `README.md`
    - `cite.bib`
@@ -208,7 +209,7 @@ Then launch all 5 subagents simultaneously:
 
 ### Subagent 1: Standalone Environment
 
-**What it produces:** `standalone/inference.py` (or `run.py`), `standalone/setup.sh`, `standalone/requirements.txt`, optionally `standalone/env_vars.txt`
+**What it produces:** `standalone/inference.py` (or `run.py`), `standalone/setup.sh`, `standalone/requirements.txt`, `standalone/python_version.txt`, optionally `standalone/env_vars.txt`
 
 **Prompt template:**
 ```
@@ -372,7 +373,27 @@ model_path = os.path.join(weights_dir, "model.pt")
 ### 3. requirements.txt
 List all Python dependencies with version pins. Do NOT include torch/jax — those are installed by setup.sh using hardware-aware detection.
 
-### 4. env_vars.txt (only if needed)
+### 4. python_version.txt
+Pins the Python version for the tool's micromamba env. Always use the keyed format with a required `default` key. Comments (`#` to end of line) and blank lines are allowed.
+
+```text
+default: 3.12
+```
+
+**Per-platform overrides** (rarely needed): use only when an upstream dependency is unavailable for the default Python on a specific platform. Three-tier lookup, most specific wins:
+
+1. `{system}-{machine}` (e.g. `linux-aarch64`)
+2. `{system}` (e.g. `linux`)
+3. `default` (required catch-all)
+
+```text
+default: 3.11
+linux-aarch64: 3.10    # only when forced by dep availability — see PyRosetta
+```
+
+Pick `default` to match the reference tool unless the upstream library has explicit Python-version constraints. The full spec lives in `notes/tool-environments.md`. **Validation:** every `python_version.txt` is checked by `tests/style_consistency_tests/test_python_version_consistency.py`, which enforces the format and the required `default` key on every shipped file.
+
+### 5. env_vars.txt (only if needed)
 [passthrough]
 HF_TOKEN
 [set]
@@ -509,51 +530,43 @@ Here are the tests from {reference_tool} as a structural template:
 
 ```python
 """Tests for {ToolName} tool."""
+from pathlib import Path
+
 import pytest
+
+from proto_tools.entities.structures.structure import Structure  # if needed
 from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
 
-# If the tool uses structures:
-from proto_tools.entities.structures.structure import Structure
-from pathlib import Path
-TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"  # if needed
 
-# If the category has shared data models:
-from proto_tools.tools.{category}.shared_data_models import ...
+# ── Validation ────────────────────────────────────────────────────────────────
 
-# For export validation:
-from tests.tool_infra_tests.test_export_functionality import validate_output
+def test_{tool_name}_input_normalizes_single_item():
+    """Test that single inputs are normalized to lists (custom validator)."""
 
+# ── Integration ───────────────────────────────────────────────────────────────
 
-class Test{ToolName}:
-    @pytest.mark.uses_gpu  # Add for GPU tools
-    def test_basic_execution(self):
-        """Test basic tool execution with default config."""
-        # Create input with realistic data
-        # Run tool
-        # Assert result.success
-        # Assert result.tool_id == "{tool-key}"
-        # Assert specific output fields are populated
-        # validate_output(result)
+@pytest.mark.uses_gpu  # or @pytest.mark.integration for CPU tools
+def test_{tool_name}_basic_execution():
+    """Test basic tool execution with default config."""
+    # Create input with realistic data
+    # Run tool
+    # Assert result.success
+    # Assert result.tool_id == "{tool-key}"
+    # Assert specific output fields are populated
 
-    def test_input_normalization(self):
-        """Test that single inputs are normalized to lists."""
-
-    def test_empty_input_raises(self):
-        """Test that empty input raises ValidationError."""
-
-    @pytest.mark.uses_gpu
-    def test_export(self, tmp_path):
-        """Test output export to supported formats."""
-
-    @pytest.mark.uses_gpu
-    def test_batched_execution(self):
-        """Test with batch_size > 1 if applicable."""
+@pytest.mark.uses_gpu
+def test_{tool_name}_export(tmp_path):
+    """Test output export to supported formats."""
 ```
 
 CRITICAL RULES:
+- **Flat functions only** — no `class Test*`, use descriptive function names
+- **No trivial tests** — do NOT test Pydantic built-in behavior. Tests that verify required fields exist, `extra="forbid"` rejects unknown fields, or config stores default values are worthless — Pydantic already guarantees these. Only test custom validators, computed properties, normalization logic, and real tool behavior.
+- Do NOT write tests like: `test_*_rejects_missing_*`, `test_*_rejects_extra_fields`, `test_*_config_defaults`, `test_*_rejects_invalid_*` (for simple `ge=`/`le=` constraints). These just re-test Pydantic.
 - Import from `proto_tools.tools` (top-level), not from deep paths
-- Use `@pytest.mark.uses_gpu` for any test that runs the actual tool
-- Use `validate_output()` from test_export_functionality to check metadata
+- Use `@pytest.mark.uses_gpu` for any test that runs the actual tool on GPU
+- Use `@pytest.mark.integration` for CPU dispatch tests
 - Use realistic biological data (real sequences/structures from dummy_data/)
 - Check `result.success` and `result.tool_id`
 - Test both default config and non-default parameters
@@ -692,6 +705,7 @@ Read all generated files for the {tool_name} tool and check for issues.
 - proto_tools/tools/{category}/{tool_name}/standalone/inference.py (or run.py)
 - proto_tools/tools/{category}/{tool_name}/standalone/setup.sh
 - proto_tools/tools/{category}/{tool_name}/standalone/requirements.txt
+- proto_tools/tools/{category}/{tool_name}/standalone/python_version.txt
 - proto_tools/tools/{category}/{tool_name}/README.md
 - proto_tools/tools/{category}/{tool_name}/examples/example.ipynb
 - tests/{category}_tests/test_{tool_name}.py

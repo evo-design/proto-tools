@@ -1,0 +1,92 @@
+"""Tests for PyRosetta energy scoring tool."""
+
+from pathlib import Path
+
+import pytest
+
+from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+    PyRosettaEnergyInput,
+    ResidueEnergy,
+    run_pyrosetta_energy,
+)
+from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+
+TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
+TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
+
+# ── Validation ────────────────────────────────────────────────────────────────
+
+
+def test_energy_input_normalizes_single_structure():
+    structure = Structure(structure=TEST_PDB)
+    inp = PyRosettaEnergyInput(inputs=structure)
+    assert len(inp.inputs) == 1
+    assert isinstance(inp.inputs[0], ScoringStructureInput)
+
+
+def test_energy_input_rejects_invalid_chain():
+    with pytest.raises(ValueError, match="not found in structure"):
+        PyRosettaEnergyInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["Z"]}])
+
+
+# ── Integration ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_run_pyrosetta_energy_on_pdb():
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+        PyRosettaEnergyConfig,
+    )
+
+    structure = Structure(structure=TEST_PDB)
+    result = run_pyrosetta_energy(
+        PyRosettaEnergyInput(inputs=[structure]),
+        PyRosettaEnergyConfig(relax_cycles=1),
+    )
+
+    assert result.success
+    assert result.tool_id == "pyrosetta-energy"
+    assert len(result.results) == 1
+
+    energy = result.results[0]
+    assert energy.relaxed is True
+    assert -2000 <= energy.total_energy <= 0, f"Total energy {energy.total_energy} outside expected range"
+
+    assert isinstance(energy.energy_terms, dict)
+    assert len(energy.energy_terms) > 5
+    assert "fa_atr" in energy.energy_terms
+    assert "fa_rep" in energy.energy_terms
+    assert energy.energy_terms["fa_atr"] < 0
+
+    assert len(energy.per_residue) == 340
+
+    residue = energy.per_residue[0]
+    assert isinstance(residue, ResidueEnergy)
+    assert residue.residue_index >= 1
+    assert -50 <= residue.total_energy <= 50, f"Residue energy {residue.total_energy} outside expected range"
+
+
+@pytest.mark.integration
+def test_run_pyrosetta_energy_chain_selection_filters_residues():
+    """Chain A selection should return fewer residues than whole complex."""
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+        PyRosettaEnergyConfig,
+    )
+
+    no_relax = PyRosettaEnergyConfig(relax=False)
+    whole = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[TEST_CIF_MULTICHAIN]), no_relax)
+    chain_a = run_pyrosetta_energy(
+        PyRosettaEnergyInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]),
+        no_relax,
+    )
+
+    assert whole.success and chain_a.success
+
+    whole_res = whole.results[0]
+    chain_a_res = chain_a.results[0]
+
+    assert len(chain_a_res.per_residue) < len(whole_res.per_residue), (
+        "Chain A should have fewer residues than whole complex"
+    )
+    assert all(r.chain_id == "A" for r in chain_a_res.per_residue), "All residues should be from chain A"

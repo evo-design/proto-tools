@@ -296,3 +296,89 @@ def test_load_structure_file_bad_extension(tmp_path):
 def test_convert_empty_strings():
     assert convert_pdb_str_to_cif_str("") == ""
     assert convert_cif_str_to_pdb_str("") == ""
+
+
+# ── to_pdb_with_chain_mapping ─────────────────────────────────────────────────
+
+
+def _synthetic_cif(chain_names: list[str]) -> str:
+    """Build a minimal valid mmCIF with one glycine residue per named chain.
+
+    Each chain gets four atoms (N, CA, C, O) so gemmi accepts it as a real residue.
+    Chains are spaced 100 A apart on the x-axis to avoid any overlap artifacts.
+    """
+    header = (
+        "data_synthetic\n"
+        "loop_\n"
+        "_atom_site.group_PDB\n"
+        "_atom_site.id\n"
+        "_atom_site.type_symbol\n"
+        "_atom_site.label_atom_id\n"
+        "_atom_site.label_alt_id\n"
+        "_atom_site.label_comp_id\n"
+        "_atom_site.label_asym_id\n"
+        "_atom_site.label_entity_id\n"
+        "_atom_site.label_seq_id\n"
+        "_atom_site.pdbx_PDB_ins_code\n"
+        "_atom_site.Cartn_x\n"
+        "_atom_site.Cartn_y\n"
+        "_atom_site.Cartn_z\n"
+        "_atom_site.occupancy\n"
+        "_atom_site.B_iso_or_equiv\n"
+        "_atom_site.auth_seq_id\n"
+        "_atom_site.auth_comp_id\n"
+        "_atom_site.auth_asym_id\n"
+        "_atom_site.auth_atom_id\n"
+        "_atom_site.pdbx_PDB_model_num\n"
+    )
+    atom_records = []
+    atom_id = 1
+    for chain_idx, name in enumerate(chain_names):
+        base_x = chain_idx * 100.0
+        label_asym = chr(ord("A") + chain_idx % 26)
+        for atom_name, dx, dy in [("N", 0.0, 0.0), ("CA", 1.5, 0.0), ("C", 2.0, 1.5), ("O", 1.3, 2.5)]:
+            atom_records.append(
+                f"ATOM {atom_id} {atom_name[0]} {atom_name} . GLY {label_asym} 1 1 ? "
+                f"{base_x + dx:.3f} {dy:.3f} 0.000 1.00 20.00 1 GLY {name} {atom_name} 1"
+            )
+            atom_id += 1
+    return header + "\n".join(atom_records) + "\n"
+
+
+def test_to_pdb_with_chain_mapping_pdb_input_is_identity(protein_from_pdb_file):
+    """PDB-backed Structure returns identity mapping and unchanged content."""
+    pdb_content, mapping = protein_from_pdb_file.to_pdb_with_chain_mapping()
+
+    assert pdb_content == protein_from_pdb_file.structure
+    assert mapping == {cid: cid for cid in protein_from_pdb_file.get_chain_ids()}
+
+
+def test_to_pdb_with_chain_mapping_multichar_cif_shortens_and_maps():
+    """CIF with multi-char chains yields a valid PDB and a populated mapping."""
+    s = Structure(structure=_synthetic_cif(["Heavy", "Light"]))
+    assert s.get_chain_ids() == ["Heavy", "Light"]
+
+    pdb_content, mapping = s.to_pdb_with_chain_mapping()
+
+    # Mapping covers every original chain with a single-character target.
+    assert set(mapping.keys()) == {"Heavy", "Light"}
+    assert all(len(v) == 1 for v in mapping.values())
+    # Targets are distinct so PyRosetta can disambiguate.
+    assert len(set(mapping.values())) == len(mapping)
+    # Emitted content is re-parseable PDB (round-trips through gemmi cleanly).
+    round_tripped = gemmi.read_pdb_string(pdb_content)
+    round_trip_chains = {chain.name for model in round_tripped for chain in model}
+    assert round_trip_chains == set(mapping.values())
+
+
+def test_to_pdb_with_chain_mapping_does_not_mutate_cached_gemmi_struct():
+    """Calling the helper must not touch the lazy-loaded gemmi cache."""
+    s = Structure(structure=_synthetic_cif(["Heavy", "Light"]))
+    # Warm the cache first.
+    _ = s.gemmi_struct
+    chains_before = [chain.name for model in s.gemmi_struct for chain in model]
+
+    s.to_pdb_with_chain_mapping()
+
+    chains_after = [chain.name for model in s.gemmi_struct for chain in model]
+    assert chains_before == chains_after == ["Heavy", "Light"]

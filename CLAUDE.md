@@ -60,7 +60,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | `utils/install_binary.py` | `notes/tool-environments.md` (Binary Installation) |
 | `standalone/env_vars.txt` (any tool) | `notes/tool-environments.md` |
 | `standalone/setup.sh` patterns | `notes/tool-environments.md`, `fix-env` SKILL.md |
-| `standalone/python_version.txt` | `notes/tool-environments.md` |
+| `standalone/python_version.txt` | `notes/tool-environments.md`, `implement-tool` SKILL.md |
 | New tool added/removed | CLAUDE.md (Package Hierarchy if structure changes), Key File Paths |
 | New skills or commands added | CLAUDE.md Skills & Commands section |
 | pytest markers, test patterns | `notes/testing.md`, CLAUDE.md Configuration |

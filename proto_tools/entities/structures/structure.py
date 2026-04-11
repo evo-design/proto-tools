@@ -467,6 +467,64 @@ class Structure(BaseModel):
             return convert_cif_str_to_pdb_str(self.structure)
         return self.structure
 
+    def to_pdb_with_chain_mapping(self) -> tuple[str, dict[str, str]]:
+        """Convert to PDB content, shortening multi-character chain IDs for PDB compatibility.
+
+        PDB format restricts chain IDs to a single character, while mmCIF permits
+        arbitrary-length chain labels. When a CIF structure contains multi-character
+        chain IDs (e.g., ``"Heavy"``, ``"Light"``, ``"AA"``), a naive CIF→PDB
+        conversion either fails outright (≥3 chars) or produces non-standard PDB
+        output that downstream tools mis-parse (2 chars — the chain name overflows
+        into the residue name column). This method pre-shortens chain names via
+        gemmi's ``shorten_chain_names`` so that the resulting PDB is spec-compliant,
+        and returns the mapping from original chain IDs to their single-character
+        equivalents so callers can translate user-supplied chain IDs before
+        dispatching to PDB-only tools and reconstruct original labels in outputs.
+
+        For structures already in PDB format, or CIF structures whose chain IDs
+        are already single-character, the mapping is the identity and the PDB
+        content is emitted without shortening.
+
+        Returns:
+            tuple[str, dict[str, str]]: A ``(pdb_content, chain_id_map)`` pair where
+                ``chain_id_map`` maps each original chain ID to its PDB-compatible
+                single-character equivalent.
+
+        Raises:
+            ValueError: If the structure content cannot be parsed or if PDB
+                conversion cannot represent the structure even after chain shortening
+                (e.g., more chains than available single-character slots).
+        """
+        # PDB input: no conversion, identity mapping.
+        if self.structure_format == "pdb":
+            identity = {cid: cid for cid in self.get_chain_ids()}
+            return self.structure, identity
+
+        # CIF input: parse fresh (do not mutate the cached _gemmi_struct),
+        # shorten chain names in place on the copy, then emit PDB.
+        try:
+            doc = gemmi.cif.read_string(self.structure)
+            gemmi_struct: gemmi.Structure | None = None
+            for block in doc:
+                try:
+                    candidate = gemmi.make_structure_from_block(block)
+                    if candidate is not None and len(candidate) > 0:  # type: ignore[redundant-expr]
+                        gemmi_struct = candidate
+                        break
+                except Exception:  # noqa: S112
+                    continue
+            if gemmi_struct is None:
+                raise ValueError("No valid structure found in CIF content")
+
+            before = [chain.name for model in gemmi_struct for chain in model]
+            gemmi_struct.shorten_chain_names()
+            after = [chain.name for model in gemmi_struct for chain in model]
+            chain_id_map = dict(zip(before, after, strict=True))
+
+            return gemmi_struct.make_pdb_string(), chain_id_map
+        except Exception as e:
+            raise ValueError(f"Failed to convert CIF to PDB with chain mapping: {e}") from e
+
     @property
     def structure_cif(self) -> str:
         """Get the structure content as a CIF string, converting from PDB if needed."""

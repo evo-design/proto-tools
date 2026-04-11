@@ -1,0 +1,2 @@
+default: 3.11
+linux-aarch64: 3.10

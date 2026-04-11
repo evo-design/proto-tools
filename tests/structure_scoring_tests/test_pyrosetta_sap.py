@@ -1,0 +1,82 @@
+"""Tests for PyRosetta SAP scoring tool."""
+
+from pathlib import Path
+
+import pytest
+
+from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sap import (
+    PyRosettaSAPInput,
+    ResidueSAP,
+    run_pyrosetta_sap,
+)
+from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+
+TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
+TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
+
+# ── Validation ────────────────────────────────────────────────────────────────
+
+
+def test_sap_input_normalizes_single_structure():
+    structure = Structure(structure=TEST_PDB)
+    inp = PyRosettaSAPInput(inputs=structure)
+    assert len(inp.inputs) == 1
+    assert isinstance(inp.inputs[0], ScoringStructureInput)
+
+
+def test_sap_input_accepts_bare_path():
+    inp = PyRosettaSAPInput(inputs=TEST_PDB)
+    assert len(inp.inputs) == 1
+    assert isinstance(inp.inputs[0].structure, Structure)
+
+
+def test_sap_input_accepts_dict_with_chain_ids():
+    inp = PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["A"]}])
+    assert inp.inputs[0].chain_ids == ["A"]
+
+
+def test_sap_input_rejects_invalid_chain():
+    with pytest.raises(ValueError, match="not found in structure"):
+        PyRosettaSAPInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["Z"]}])
+
+
+# ── Integration ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_run_pyrosetta_sap_on_pdb():
+    structure = Structure(structure=TEST_PDB)
+    result = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[structure]))
+
+    assert result.success
+    assert result.tool_id == "pyrosetta-sap"
+    assert len(result.results) == 1
+
+    sap = result.results[0]
+    assert isinstance(sap.sap_score, float)
+    assert 0 <= sap.sap_score <= 300, f"SAP score {sap.sap_score} outside expected range"
+
+    assert len(sap.per_residue) == 340
+    residue = sap.per_residue[0]
+    assert isinstance(residue, ResidueSAP)
+    assert residue.residue_index >= 1
+    assert isinstance(residue.sap_score, float)
+
+
+@pytest.mark.integration
+def test_run_pyrosetta_sap_chain_selection_changes_score():
+    """Chain A score should differ from whole-complex score on a multi-chain structure."""
+    whole = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[TEST_CIF_MULTICHAIN]))
+    chain_a = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]))
+
+    assert whole.success and chain_a.success
+    assert whole.results[0].sap_score != chain_a.results[0].sap_score, (
+        "Chain A SAP should differ from whole-complex SAP"
+    )
+    assert len(chain_a.results[0].per_residue) < len(whole.results[0].per_residue), (
+        "Chain A should have fewer per-residue entries than whole complex"
+    )
+    assert all(r.chain_id == "A" for r in chain_a.results[0].per_residue), (
+        "All per-residue entries should be from chain A"
+    )

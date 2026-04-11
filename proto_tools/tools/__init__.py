@@ -417,6 +417,26 @@ from proto_tools.tools.structure_prediction import (
     run_structure_metrics,
     run_viennarna,
 )
+from proto_tools.tools.structure_scoring import (
+    EnergyResult,
+    PyRosettaEnergyConfig,
+    PyRosettaEnergyInput,
+    PyRosettaEnergyOutput,
+    PyRosettaSAPConfig,
+    PyRosettaSAPInput,
+    PyRosettaSAPOutput,
+    PyRosettaSASAConfig,
+    PyRosettaSASAInput,
+    PyRosettaSASAOutput,
+    ResidueEnergy,
+    ResidueSAP,
+    ResidueSASA,
+    SAPResult,
+    SASAResult,
+    run_pyrosetta_energy,
+    run_pyrosetta_sap,
+    run_pyrosetta_sasa,
+)
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec, tool
 from proto_tools.utils.tool_cache import (
     clear_cache,
@@ -855,4 +875,25 @@ __all__ = [
     "RandomNucleotideSampleInput",
     "RandomNucleotideSampleConfig",
     "RandomNucleotideSampleOutput",
+    # Structure scoring - PyRosetta SAP
+    "run_pyrosetta_sap",
+    "PyRosettaSAPInput",
+    "PyRosettaSAPConfig",
+    "PyRosettaSAPOutput",
+    "ResidueSAP",
+    "SAPResult",
+    # Structure scoring - PyRosetta SASA
+    "run_pyrosetta_sasa",
+    "PyRosettaSASAInput",
+    "PyRosettaSASAConfig",
+    "PyRosettaSASAOutput",
+    "ResidueSASA",
+    "SASAResult",
+    # Structure scoring - PyRosetta Energy
+    "run_pyrosetta_energy",
+    "PyRosettaEnergyInput",
+    "PyRosettaEnergyConfig",
+    "PyRosettaEnergyOutput",
+    "EnergyResult",
+    "ResidueEnergy",
 ]
