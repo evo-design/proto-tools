@@ -5,7 +5,7 @@ Supports the same CLI options and markers as the main proto-language tests:
   --gpu        Run only GPU tests (skip CPU tests)
   --all        Include slow and GPU tests
   --slow       Run only slow tests
-  --exhaustive Include exhaustive combinatorial tests (e.g., every tool x device)
+  --ext        Include extensive combinatorial tests (e.g., every tool x device). Long form: --extensive
   --skip-ci    Skip tests marked skip_ci (mimics CI)
   --no-log-console  Disable console logging during tests
   --env-report[=PATH]  Run venv smoke tests and generate compatibility report
@@ -507,10 +507,12 @@ def pytest_addoption(parser):
         help="Run integration tests (hit external APIs/services). Skipped by default.",
     )
     parser.addoption(
-        "--exhaustive",
+        "--extensive",
+        "--ext",
         action="store_true",
         default=False,
-        help="Include exhaustive combinatorial tests (e.g., every tool x device transition)",
+        dest="extensive",
+        help="Include extensive combinatorial tests (e.g., every tool x device transition)",
     )
     parser.addoption(
         "--no-log-console",
@@ -821,8 +823,8 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" not in item.keywords:
                 item.add_marker(skip_non_slow)
-    elif not run_all and not config.getoption("--exhaustive"):
-        # By default, skip slow tests (--all or --exhaustive bypass this)
+    elif not run_all and not config.getoption("extensive"):
+        # By default, skip slow tests (--all or --ext bypass this)
         skip_slow = pytest.mark.skip(reason="slow test (use --all to run, or --slow to run only slow tests)")
         for item in items:
             if "slow" in item.keywords:
@@ -837,12 +839,12 @@ def pytest_collection_modifyitems(config, items):
             if "integration" in item.keywords:
                 item.add_marker(skip_integration)
 
-    # Skip exhaustive tests unless --exhaustive is specified
-    if not config.getoption("--exhaustive"):
-        skip_exhaustive = pytest.mark.skip(reason="exhaustive test (use --exhaustive to run)")
+    # Skip extensive tests unless --ext (or --extensive) is specified
+    if not config.getoption("extensive"):
+        skip_extensive = pytest.mark.skip(reason="extensive test (use --ext to run)")
         for item in items:
-            if "exhaustive" in item.keywords:
-                item.add_marker(skip_exhaustive)
+            if "extensive" in item.keywords:
+                item.add_marker(skip_extensive)
 
     # Skip only_chimera tests when not on Chimera cluster
     if not is_on_chimera():

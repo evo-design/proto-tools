@@ -100,7 +100,7 @@ markers = [
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
     "only_chimera: Test only runs on Chimera cluster (arc-slurm)",
-    "exhaustive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --exhaustive is passed",
+    "extensive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --ext (or --extensive) is passed",
     "test_on_platforms: mark test as requiring specific platform architectures. Args: architecture strings (e.g., 'x86_64', 'aarch64')",
     "include_in_env_report: Include test in --env-report. Requires kwargs: tool='tool-key', category='category_name'. Applied by test_env_report.py",
 ]

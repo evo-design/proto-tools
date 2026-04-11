@@ -405,7 +405,7 @@ HF_TOKEN
 Run all tests (functional + infra) filtered to the new tool:
 
 ```bash
-pytest --all --exhaustive -k "{tool_name}" -v
+pytest --all --ext -k "{tool_name}" -v
 ```
 
 This runs the tool's functional tests AND the parametrized infra tests (`example_input`, device consistency, registry integration). A detailed log file is generated in `logs/` (project root).

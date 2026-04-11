@@ -25,7 +25,7 @@ for _spec in ToolRegistry.list_all():
         _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key))
 
 
-@pytest.mark.exhaustive
+@pytest.mark.extensive
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 @pytest.mark.parametrize("tool_spec", _GPU_TOOLS)

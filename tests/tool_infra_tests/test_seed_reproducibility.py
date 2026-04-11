@@ -41,7 +41,7 @@ def test_masking_strategy_seeded():
 
 
 # ============================================================================
-# Exhaustive seed reproducibility (all registered tools)
+# Extensive seed reproducibility (all registered tools)
 # ============================================================================
 
 # Three exclusion sets, depending on which variants of the seed reproducibility
@@ -159,7 +159,7 @@ def _build_seed_test_params() -> list:
     return params
 
 
-@pytest.mark.exhaustive
+@pytest.mark.extensive
 @pytest.mark.parametrize("spec", _build_seed_test_params())
 def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     """Same seed + same input produces identical output for every registered tool."""
@@ -180,7 +180,7 @@ def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     r1.approx_equal(r2)
 
 
-@pytest.mark.exhaustive
+@pytest.mark.extensive
 @pytest.mark.parametrize("spec", _build_seed_test_params())
 def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
     """Same seed produces identical output across dispatches to a persistent worker."""
