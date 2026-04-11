@@ -9,6 +9,7 @@ import pytest
 
 from proto_tools.utils.device import determine_visible_devices
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import (
+    _parse_cuda_indices,
     get_subprocess_device_env,
 )
 
@@ -395,3 +396,17 @@ def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tm
 
     home = os.path.expanduser("~")
     assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn")
+
+
+def test_parse_cuda_indices_invalid():
+    assert _parse_cuda_indices("cuda:abc") is None
+    assert _parse_cuda_indices("cuda:0,abc") is None
+
+
+@pytest.mark.parametrize(
+    "device,expected",
+    [("cuda:0,1,2", [0, 1, 2]), ("cuda:0", [0]), ("cpu", None)],
+    ids=["multi", "single", "cpu-returns-none"],
+)
+def test_parse_cuda_indices_valid(device, expected):
+    assert _parse_cuda_indices(device) == expected
