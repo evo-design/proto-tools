@@ -200,6 +200,15 @@ from proto_tools.tools.inverse_folding import (
 
 # Masked model tools
 from proto_tools.tools.masked_models import (
+    AbLangEmbeddingsConfig,
+    AbLangEmbeddingsInput,
+    AbLangEmbeddingsOutput,
+    AbLangSampleConfig,
+    AbLangSampleInput,
+    AbLangSampleOutput,
+    AbLangScoringConfig,
+    AbLangScoringInput,
+    AbLangScoringOutput,
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
     ESM2EmbeddingsOutput,
@@ -220,6 +229,9 @@ from proto_tools.tools.masked_models import (
     ESM3ScoringOutput,
     MaskingStrategy,
     SequenceEmbedding,
+    run_ablang_embeddings,
+    run_ablang_sample,
+    run_ablang_score,
     run_esm2_embeddings,
     run_esm2_sample,
     run_esm2_score,
@@ -778,6 +790,21 @@ __all__ = [
     # Masked models - shared
     "MaskingStrategy",
     "SequenceEmbedding",
+    # Masked models - AbLang Embeddings
+    "AbLangEmbeddingsConfig",
+    "AbLangEmbeddingsInput",
+    "AbLangEmbeddingsOutput",
+    "run_ablang_embeddings",
+    # Masked models - AbLang Sampling
+    "AbLangSampleConfig",
+    "AbLangSampleInput",
+    "AbLangSampleOutput",
+    "run_ablang_sample",
+    # Masked models - AbLang Scoring
+    "AbLangScoringConfig",
+    "AbLangScoringInput",
+    "AbLangScoringOutput",
+    "run_ablang_score",
     # Masked models - ESM2 Embeddings
     "run_esm2_embeddings",
     "ESM2EmbeddingsInput",

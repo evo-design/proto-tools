@@ -1,5 +1,19 @@
 """Masked language models for protein sequence editing."""
 
+from proto_tools.tools.masked_models.ablang import (
+    AbLangEmbeddingsConfig,
+    AbLangEmbeddingsInput,
+    AbLangEmbeddingsOutput,
+    AbLangSampleConfig,
+    AbLangSampleInput,
+    AbLangSampleOutput,
+    AbLangScoringConfig,
+    AbLangScoringInput,
+    AbLangScoringOutput,
+    run_ablang_embeddings,
+    run_ablang_sample,
+    run_ablang_score,
+)
 from proto_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
@@ -37,6 +51,21 @@ __all__ = [
     "MaskingMethod",
     # Shared data models
     "SequenceEmbedding",
+    # AbLang - Embeddings
+    "AbLangEmbeddingsConfig",
+    "AbLangEmbeddingsInput",
+    "AbLangEmbeddingsOutput",
+    "run_ablang_embeddings",
+    # AbLang - Sampling
+    "AbLangSampleConfig",
+    "AbLangSampleInput",
+    "AbLangSampleOutput",
+    "run_ablang_sample",
+    # AbLang - Scoring
+    "AbLangScoringConfig",
+    "AbLangScoringInput",
+    "AbLangScoringOutput",
+    "run_ablang_score",
     # ESM2 - Embeddings
     "run_esm2_embeddings",
     "ESM2EmbeddingsInput",

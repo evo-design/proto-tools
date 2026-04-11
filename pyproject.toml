@@ -170,6 +170,7 @@ module = [
     "RNA.*",
     # Tool-specific model packages (installed in standalone envs, not on PyPI)
     "standalone_helpers.*",
+    "ablang2.*",
     "colabdesign.*",
     "colabfold.*",
     "evo.*",
