@@ -243,9 +243,10 @@ def test_weighted_sample_heavily_weighted():
 class _MockConfig:
     """Minimal config-like object for testing apply_masking_strategy."""
 
-    def __init__(self, masking_strategy, device="cuda"):
+    def __init__(self, masking_strategy, device="cuda", seed=None):
         self.masking_strategy = masking_strategy
         self.device = device
+        self.seed = seed
 
 
 def test_apply_masking_strategy_masks_unmasked_sequences():

@@ -184,6 +184,8 @@ def run_fampnn_pack(
     all_packed = []
     all_psce = []
 
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+
     for inp in progress_bar(
         inputs.inputs,
         desc="FAMPNN packing",
@@ -201,7 +203,7 @@ def run_fampnn_pack(
                 "num_samples": chunk,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
                 "scn_step_scale": config.scn_step_scale,
-                "seed": config.resolved_seed + chunk_idx,
+                "seed": base_seed + chunk_idx,
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,

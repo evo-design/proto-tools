@@ -176,7 +176,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     hidden_size = input_dict.get("hidden_size", 128)
     memory_mb = input_dict.get("memory_mb", 512)
     seed = input_dict.get("seed")
-
     set_torch_seed(seed)
 
     if _model is None:

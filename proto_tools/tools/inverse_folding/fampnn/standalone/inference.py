@@ -15,7 +15,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import set_torch_seed
+from standalone_helpers import get_random_int, set_torch_seed
 
 logger = getLogger(__name__)
 
@@ -69,7 +69,8 @@ class FAMPNNModel:
         from fampnn.model.sd_model import SeqDenoiser
 
         set_torch_seed(seed)
-        sampling_utils.seed_everything(seed)
+        sampling_seed = seed if seed is not None else get_random_int()
+        sampling_utils.seed_everything(sampling_seed)
 
         # Build timestep schedules
         t_seq = sampling_utils.get_timesteps_from_schedule(
@@ -254,7 +255,8 @@ class FAMPNNModel:
         from fampnn.model.sd_model import SeqDenoiser
 
         set_torch_seed(seed)
-        sampling_utils.seed_everything(seed)
+        sampling_seed = seed if seed is not None else get_random_int()
+        sampling_utils.seed_everything(sampling_seed)
 
         t_scd = sampling_utils.get_timesteps_from_schedule(
             num_steps=scn_diffusion_steps,
@@ -398,7 +400,8 @@ class FAMPNNModel:
         from fampnn.sampling_utils import seed_everything
 
         set_torch_seed(seed)
-        seed_everything(seed)
+        sampling_seed = seed if seed is not None else get_random_int()
+        seed_everything(sampling_seed)
 
         data = load_feats_from_pdb(pdb_path)
         batch = process_single_pdb(data)
@@ -504,7 +507,8 @@ class FAMPNNModel:
         from fampnn.data.data import load_feats_from_pdb, process_single_pdb
 
         set_torch_seed(seed)
-        sampling_utils.seed_everything(seed)
+        sampling_seed = seed if seed is not None else get_random_int()
+        sampling_utils.seed_everything(sampling_seed)
 
         # Convert 1-indexed mutations to 0-indexed for FAMPNN internals
         internal_mutations = [self._convert_mutation_1indexed_to_0indexed(m) for m in mutations]

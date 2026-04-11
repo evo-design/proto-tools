@@ -365,7 +365,7 @@ def run_chai1_on_complex(
             "num_diffn_timesteps": config.num_diffn_timesteps,
             "num_diffn_samples": config.num_diffn_samples,
             "num_trunk_samples": config.num_trunk_samples,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         }
 
         # Call the inference script with the venv activated

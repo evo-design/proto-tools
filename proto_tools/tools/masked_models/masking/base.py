@@ -181,7 +181,7 @@ def apply_masking_strategy(config: Any, inputs: Any, position_score_fn: Any = No
                 "sequences": strategy.mask(
                     inputs.sequences,
                     position_score_fn=position_score_fn,
-                    seed=getattr(config, "resolved_seed", None),
+                    seed=config.seed,
                 )
             }
         )

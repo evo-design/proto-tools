@@ -199,7 +199,7 @@ def run_proteinmpnn_score(
             "pdb_contents": sequence_structure_pair.structure.structure_pdb,
             "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
             "sequence": sequence_structure_pair.sequence,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             "fixed_positions": config.fixed_positions,
             "device": config.device,
             "model_choice": config.model_choice,

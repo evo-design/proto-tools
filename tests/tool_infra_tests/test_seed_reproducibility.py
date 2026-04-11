@@ -16,20 +16,6 @@ from tests.tool_infra_tests.pytest_helpers import (
 # ============================================================================
 
 
-def test_resolved_seed_auto_assigns():
-    """seed=None auto-assigns distinct resolved_seed values."""
-    c1, c2 = BaseConfig(), BaseConfig()
-    assert c1.seed is None and c2.seed is None
-    assert isinstance(c1.resolved_seed, int)
-    assert c1.resolved_seed != c2.resolved_seed
-
-
-@pytest.mark.parametrize("seed", [0, 42])
-def test_resolved_seed_uses_explicit(seed):
-    """Explicit seed flows through to resolved_seed."""
-    assert BaseConfig(seed=seed).resolved_seed == seed
-
-
 def test_cache_key_with_seed():
     """Seed appears in cache key when set, absent when None."""
     assert '"seed": 42' in BaseConfig(seed=42).cache_key()

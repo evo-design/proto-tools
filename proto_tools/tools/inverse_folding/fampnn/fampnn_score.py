@@ -233,7 +233,7 @@ def run_fampnn_score(
             "seq_only": config.seq_only,
             "scn_diffusion_steps": config.scn_diffusion_steps,
             "scn_step_scale": config.scn_step_scale,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             "model_variant": config.model_variant,
             "device": config.device,
             "verbose": config.verbose,

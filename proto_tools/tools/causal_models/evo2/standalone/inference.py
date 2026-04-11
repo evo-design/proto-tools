@@ -121,7 +121,7 @@ class Evo2Model:
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
             return_logits: Whether to include logits in the output
-            seed: Random seed for reproducible generation
+            seed: Random seed for reproducible generation.
 
         Returns:
             Dictionary with keys: "sequences" (List[str]), optionally "logits" (List[torch.Tensor]), "kv_caches" (Optional[List[Dict]])

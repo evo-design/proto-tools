@@ -187,7 +187,7 @@ def run_fampnn_score_all_mutations(
             "operation": "score_all_mutations",
             "pdb_contents": structure.structure_pdb,
             "batch_size": config.batch_size,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             "model_variant": config.model_variant,
             "device": config.device,
             "verbose": config.verbose,

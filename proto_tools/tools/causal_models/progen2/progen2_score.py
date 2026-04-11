@@ -167,7 +167,7 @@ def run_progen2_score(
             "verbose": config.verbose,
             "batch_size": config.batch_size,
             "return_logits": config.return_logits,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

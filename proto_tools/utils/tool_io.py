@@ -289,9 +289,14 @@ class BaseToolOutput(BaseModel, ABC):
         GPU tools using the same seed produce approximately — not exactly — identical
         results because CUDA operations like ``atomicAdd`` reduce floating-point values
         in non-deterministic order across threads. The results are mathematically
-        equivalent but differ at the bit level (~1e-7 to 1e-15). Discrete outputs
-        (sequences, labels, structure topology) are compared exactly; floating-point
-        outputs (scores, coordinates, pLDDT) use configurable tolerance.
+        equivalent but not bit-exact. Observed noise floors: ~1e-5 relative error on
+        scalar model outputs (log-likelihoods, embeddings), up to ~1e-3 Å on structure
+        coordinates, higher still for MoE models with non-deterministic kernels
+        (progen3, alphagenome). Discrete outputs (sequences, labels, structure topology)
+        are compared exactly; floating-point outputs (scores, coordinates, pLDDT) use
+        the ``rtol`` and ``atol`` defaults below, calibrated to these observed noise
+        floors. Tools that drift further are excluded via the ``_SEED_*_EXCLUDED_KEYS``
+        sets in ``tests/tool_infra_tests/test_seed_reproducibility.py``.
 
         Args:
             other (BaseToolOutput): The other output to compare against.

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import set_torch_seed
+from standalone_helpers import get_random_int, set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -127,23 +127,6 @@ class Chai1Model:
             from chai_lab.chai1 import run_inference  # type: ignore[import-not-found]
 
             self._chai1_run_inference = run_inference
-
-            # Monkey-patch chai-lab's set_seed to include cudnn determinism flags.
-            # Their set_seed uses SeedSequence to derive independent streams for
-            # torch/numpy/random, but doesn't set cudnn.deterministic or disable
-            # cudnn.benchmark, which causes non-reproducible diffusion results.
-            import chai_lab.utils.tensor_utils as chai_tensor_utils  # type: ignore[import-not-found]
-
-            _original_set_seed = chai_tensor_utils.set_seed
-
-            def _patched_set_seed(seed_sequence: list[int]) -> None:
-                _original_set_seed(seed_sequence)
-                import torch
-
-                torch.backends.cudnn.deterministic = True
-                torch.backends.cudnn.benchmark = False
-
-            chai_tensor_utils.set_seed = _patched_set_seed
         except ImportError:
             raise ImportError(
                 "Could not import chai_lab. Make sure Chai1 is installed in the current environment."
@@ -170,14 +153,20 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     seed = input_dict.get("seed")
     set_torch_seed(seed)
 
-    # Chai-lab's diffusion uses scatter/index_add ops that require full
-    # deterministic mode beyond cudnn flags alone
-    import os
+    if seed is not None:
+        # Chai-lab's diffusion uses scatter/index_add ops that require full
+        # deterministic mode beyond cudnn flags alone. Note: these settings
+        # are process-global and sticky — chai1 is excluded from the persistent-worker
+        # seed reproducibility test (_SEED_PERSISTENT_EXCLUDED_KEYS) precisely
+        # because they leak across dispatches within one worker.
+        import os
 
-    import torch
+        import torch
 
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(True)
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        torch.use_deterministic_algorithms(True)
+
+    sampling_seed = seed if seed is not None else get_random_int()
 
     operation = input_dict.get("operation", "predict")
     if operation == "predict":
@@ -190,7 +179,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_diffn_timesteps=input_dict.get("num_diffn_timesteps", 200),
             num_diffn_samples=input_dict.get("num_diffn_samples", 1),
             num_trunk_samples=input_dict.get("num_trunk_samples", 1),
-            seed=input_dict.get("seed"),
+            seed=sampling_seed,
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
         )

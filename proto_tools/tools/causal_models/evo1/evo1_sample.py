@@ -157,7 +157,7 @@ def run_evo1_sample(
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

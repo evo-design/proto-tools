@@ -400,9 +400,9 @@ def run_protenix(
         # Prepare input data for inference script.
         # When BaseConfig.seed is set explicitly (e.g. by the seed-reproducibility
         # tests) we override the protenix-specific ``seeds`` list with a single
-        # entry derived from ``resolved_seed`` so the protenix CLI honours the
+        # entry derived from ``config.seed`` so the protenix CLI honours the
         # caller's seed instead of the field default ``[0]``.
-        seeds_str = str(config.resolved_seed) if config.seed is not None else ",".join(str(s) for s in config.seeds)
+        seeds_str = str(config.seed) if config.seed is not None else ",".join(str(s) for s in config.seeds)
         input_data = {
             "input_json_path": input_json_path,
             "output_dir": output_dir,

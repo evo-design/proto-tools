@@ -95,6 +95,8 @@ def run_ligandmpnn_sample(
     """
     designed_sequences = []
 
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+
     # Local venv execution
     for inp in progress_bar(
         inputs.inputs,
@@ -114,7 +116,7 @@ def run_ligandmpnn_sample(
                 "temperature": config.temperature,
                 "fixed_positions": inp.fixed_positions,
                 "excluded_amino_acids": config.excluded_amino_acids,
-                "seed": config.resolved_seed + chunk_idx,
+                "seed": base_seed + chunk_idx,
                 "device": config.device,
                 "verbose": config.verbose,
             }

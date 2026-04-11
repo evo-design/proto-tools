@@ -206,7 +206,7 @@ def run_esm2_sample(
             "device": config.device,
             "verbose": config.verbose,
             "return_logits": config.return_logits,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

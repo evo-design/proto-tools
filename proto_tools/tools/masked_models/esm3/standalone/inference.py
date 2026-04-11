@@ -225,8 +225,7 @@ class ESM3Model:
             device (str): Device to run on.
             verbose (bool): Whether to print progress.
             return_logits (bool): Whether to return per-position AA logits.
-            seed (int | None): Random seed for reproducible sampling. If None, uses
-                torch's current RNG state.
+            seed (int | None): Random seed for reproducible sampling.
 
         Returns:
             dict[str, Any]: Dictionary with "sequences" and optionally "logits".

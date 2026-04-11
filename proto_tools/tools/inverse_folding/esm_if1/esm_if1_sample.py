@@ -120,6 +120,8 @@ def run_esm_if1_sample(
 
     designed_sequences = []
 
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+
     for inp in progress_bar(
         inputs.inputs,
         desc="ESM-IF1 sampling",
@@ -137,7 +139,7 @@ def run_esm_if1_sample(
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
                 "temperature": config.temperature,
-                "seed": config.resolved_seed + chunk_idx,
+                "seed": base_seed + chunk_idx,
                 "device": config.device,
                 "weights_variant": config.weights_variant,
                 "verbose": config.verbose,

@@ -270,7 +270,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "batch_size": config.batch_size,
             "device": config.device,
             "output_dir": config.output_dir,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             "verbose": config.verbose,
         },
         instance=instance,

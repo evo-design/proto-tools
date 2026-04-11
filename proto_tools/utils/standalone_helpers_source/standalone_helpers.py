@@ -17,6 +17,7 @@ but the copies in the standalone folders are not tracked.
 
 import logging
 import os
+import random
 from collections.abc import Callable
 from typing import Any
 
@@ -536,6 +537,15 @@ def resolve_weights_dir(tool_name: str) -> str | None:
 # ============================================================================
 
 
+def get_random_int() -> int:
+    """Return a fresh random int in ``[0, 2**31)`` for seeding RNGs.
+
+    Use as a fallback when downstream code requires a concrete int seed:
+    ``seed if seed is not None else get_random_int()``.
+    """
+    return random.randint(0, 2**31 - 1)  # noqa: S311 — not for cryptographic use
+
+
 def set_torch_seed(seed: int | None) -> None:
     """Seed PyTorch and related RNG sources for reproducibility. No-op when seed is None.
 
@@ -548,8 +558,6 @@ def set_torch_seed(seed: int | None) -> None:
     """
     if seed is not None:
         # Seed Python stdlib RNG
-        import random
-
         random.seed(seed)
 
         # Seed NumPy RNG (optional, not all tools use NumPy)
@@ -611,8 +619,6 @@ def set_jax_seed(seed: int | None) -> Any:
     """
     if seed is None:
         return None
-
-    import random
 
     random.seed(seed)
 

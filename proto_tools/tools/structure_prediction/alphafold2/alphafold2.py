@@ -300,7 +300,7 @@ def run_alphafold2(
             "num_recycles": config.num_recycles,
             "model_num": config.model_num,
             "num_ensemble_models": config.num_ensemble_models,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             "msa_a3m_content": msa_a3m_content,
             "device": config.device,
             "verbose": config.verbose,

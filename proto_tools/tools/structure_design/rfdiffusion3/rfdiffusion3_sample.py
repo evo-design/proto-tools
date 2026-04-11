@@ -581,7 +581,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
             "output_dir": str(output_dir),
             "device": config.device,
             "verbose": config.verbose,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
             **config.get_cli_kwargs(),
         }
         output_data = ToolInstance.dispatch(

@@ -213,7 +213,7 @@ def run_random_nucleotide_sample(
     Returns:
         RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.resolved_seed)  # noqa: S311 -- not cryptographic
+    rng = random.Random(config.seed)  # noqa: S311 -- not cryptographic
     scheme = config.substitution_scheme
 
     # Resolve sequence type

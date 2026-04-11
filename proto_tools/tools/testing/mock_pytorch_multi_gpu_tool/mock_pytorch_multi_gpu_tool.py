@@ -154,7 +154,7 @@ def run_mock_pytorch_multi_gpu_tool(
             "device": config.device,
             "hidden_size": config.hidden_size,
             "memory_mb": config.memory_mb,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

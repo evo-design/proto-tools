@@ -255,6 +255,7 @@ CRITICAL RULES:
 - All tensor/array outputs must be converted to Python lists via _serialize_output()
 - Match the operation names used in the contract's ToolInstance.dispatch() calls
 - Device handling: accept device from input_dict, pass to model.load()
+- Seed handling: pass `config.seed` (raw `Optional[int]`) through the dispatch dict. In inference.py, call `set_torch_seed(seed)` unconditionally — the helper's None-check gates the expensive cuDNN flags. For any downstream sampler that needs a concrete int, do `sampling_seed = seed if seed is not None else get_random_int()` using the helper from `standalone_helpers`.
 - Audit hardcoded values in the reference/research code (chain IDs, model paths, default parameters, assumed dimensions). If a value could vary across valid inputs, parameterize it — accept it from the dispatch input dict rather than hardcoding. For example, `chain_id="A"` should come from the input, not be a constant.
 
 ### Required Device Management Protocol Functions
@@ -704,7 +705,7 @@ Also read the same files from {reference_tool} to compare patterns.
 3. **Hardcoded values** — Flag any values in standalone code that are hardcoded but should vary with input (chain IDs, model paths, assumed dimensions, fixed sequence lengths)
 4. **Contract-standalone consistency** — Every Config field with `reload_on_change=True` must be read and used in the standalone code. Every operation dispatched in the tool file must be handled in standalone dispatch()
 5. **Notebook accuracy** — Import paths, class names, and field names in the example notebook must exactly match the contract
-6. **Seed propagation** — If Config has a `seed` field, it must be passed through dispatch and used in the standalone code
+6. **Seed propagation** — If the tool uses PyTorch/JAX RNG, Config inherits `seed: int | None` from `BaseConfig`. Pass `config.seed` (raw `Optional[int]`) through the dispatch dict as `"seed": config.seed`. In `standalone/inference.py`, call `set_torch_seed(seed)` unconditionally — the helper no-ops when `seed is None`, so the expensive cuDNN determinism flags are only set on the explicit-seed path. If the tool's internal sampling code needs a concrete int (e.g., a model sampler that doesn't accept `None`), use `seed if seed is not None else get_random_int()` to fall back to a fresh random int from `standalone_helpers.get_random_int`
 7. **Test coverage** — Every operation (sample, score, etc.) should have at least one test
 
 ## Output Format

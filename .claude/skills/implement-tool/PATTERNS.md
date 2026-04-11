@@ -145,6 +145,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
             "sequences": inputs.sequences,
             "param1": config.param1,
             "device": config.device,
+            "seed": config.seed,  # Optional[int] — raw user value; None means no reproducibility requested
         },
         script_path=Path(__file__).parent / "standalone" / "inference.py",
         config=config,
@@ -163,6 +164,8 @@ import json
 import sys
 import os
 from typing import Any
+
+from standalone_helpers import set_torch_seed  # + get_random_int if a downstream sampler needs a concrete int
 
 # Model class with lazy loading
 class {ToolName}Model:
@@ -216,6 +219,15 @@ def dispatch(input_dict: dict) -> dict:
     global _model
     if _model is None:
         _model = {ToolName}Model()
+
+    # Seed handling: set_torch_seed no-ops when seed is None (no expensive
+    # cuDNN determinism flags on the unseeded fast path). For downstream
+    # samplers that need a concrete int, fall back via get_random_int().
+    seed = input_dict.get("seed")
+    set_torch_seed(seed)
+    # If your model sampler needs a concrete int, add get_random_int to the
+    # standalone_helpers import at the top of the file and use:
+    # sampling_seed = seed if seed is not None else get_random_int()
 
     operation = input_dict.get("operation", "predict")
     if operation == "predict":

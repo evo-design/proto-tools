@@ -145,7 +145,7 @@ def run_random_protein_sample(
     Returns:
         RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
     """
-    rng = random.Random(config.resolved_seed)  # noqa: S311 -- not cryptographic
+    rng = random.Random(config.seed)  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
 
     sampled = []

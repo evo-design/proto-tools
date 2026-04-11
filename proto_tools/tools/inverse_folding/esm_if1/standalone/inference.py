@@ -201,8 +201,7 @@ class ESMIF1Model:
             pdb_structure: Path to PDB file containing the structure.
             chain_ids: List of chain IDs. First chain is the target for scoring.
             sequence: Protein sequence to score.
-            seed: Random seed. Score is deterministic given the model state, but
-                we still seed RNGs/cuDNN to keep behaviour consistent across calls.
+            seed: Random seed.
             device: Device to run on.
             weights_variant: 'esmif' for vanilla or 'protein_dpo' for DPO weights.
             verbose: Whether to print status messages.

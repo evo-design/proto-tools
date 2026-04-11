@@ -166,7 +166,7 @@ def run_progen3_score(
             "verbose": config.verbose,
             "batch_size": config.batch_size,
             "reduction": config.reduction,
-            "seed": config.resolved_seed,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

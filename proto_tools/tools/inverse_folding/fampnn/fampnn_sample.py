@@ -214,6 +214,8 @@ def run_fampnn_sample(
     """
     designed_sequences = []
 
+    base_seed = config.seed if config.seed is not None else config.get_random_int()
+
     for inp in progress_bar(
         inputs.inputs,
         desc="FAMPNN sampling",
@@ -237,7 +239,7 @@ def run_fampnn_sample(
                 "psce_threshold": config.psce_threshold,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
                 "scn_step_scale": config.scn_step_scale,
-                "seed": config.resolved_seed + chunk_idx,
+                "seed": base_seed + chunk_idx,
                 "model_variant": config.model_variant,
                 "device": config.device,
                 "verbose": config.verbose,
