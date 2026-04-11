@@ -66,7 +66,7 @@ from proto_tools.utils._worker_bootstrap import _copy_standalone_helpers as copy
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.persistent_worker import PersistentWorker, _build_subprocess_env, _parse_env_vars_file
-from proto_tools.utils.progress import set_substatus
+from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
 
 logger = logging.getLogger(__name__)
 
@@ -977,7 +977,17 @@ class ToolInstance:
             # Apply warm-up timeout for first use of this config
             effective_timeout = self._apply_warmup_timeout(timeout)
 
-            set_substatus(f"Running {self.tool_name}")
+            # Show a spinner only when no tool-level progress bar is active
+            # (tools like ESMFold create their own bar for batch iteration)
+            show_spinner = not has_active_progress_bar()
+            display_name = get_current_tool_function() or self.tool_name
+            pbar = progress_bar(
+                total=1,
+                desc=f"Running {display_name}",
+                bar_format="{desc} [{elapsed}]",
+                show_bar=False,
+                disable=not show_spinner,
+            )
             try:
                 subprocess.run(
                     [python_exe, str(sp), str(input_path), str(output_path)],
@@ -988,6 +998,7 @@ class ToolInstance:
                     stdout=None if verbose else subprocess.PIPE,
                     stderr=None if verbose else subprocess.PIPE,
                 )
+                pbar.update(1)
             except subprocess.CalledProcessError as e:
                 tail = self._stderr_tail(e.stderr or e.stdout or "")
                 logger.error(
@@ -999,6 +1010,8 @@ class ToolInstance:
                 raise
             except subprocess.TimeoutExpired:
                 raise TimeoutError(f"Tool {self.tool_name} timed out after {effective_timeout}s") from None
+            finally:
+                pbar.close()
 
             with open(output_path) as f:
                 result = json.load(f)

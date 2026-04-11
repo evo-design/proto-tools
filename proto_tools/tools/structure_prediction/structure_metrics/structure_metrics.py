@@ -101,7 +101,7 @@ class StructureMetricsConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parent / "examples" / "example.pdb")])
+    return StructureMetricsInput(pdb_paths=[str(Path(__file__).parent / "example_input_fixture.pdb")])
 
 
 @tool(

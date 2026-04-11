@@ -147,6 +147,42 @@ _active_bar: contextvars.ContextVar[_NotebookProgressBar | _AnimatedProgressBar 
 )
 
 
+def has_active_progress_bar() -> bool:
+    """Check if a progress bar is currently active in the current context."""
+    return _active_bar.get() is not None
+
+
+_current_tool_function: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_current_tool_function", default=None
+)
+
+
+def get_current_tool_function() -> str | None:
+    """Return the name of the currently executing tool function, if any."""
+    return _current_tool_function.get()
+
+
+def set_current_tool_function(name: str | None) -> contextvars.Token[str | None]:
+    """Set the currently executing tool function name.
+
+    Args:
+        name (str | None): Function name, or None to clear.
+
+    Returns:
+        contextvars.Token[str | None]: Token for restoring the previous value.
+    """
+    return _current_tool_function.set(name)
+
+
+def reset_current_tool_function(token: contextvars.Token[str | None]) -> None:
+    """Restore the previous tool function name from a token.
+
+    Args:
+        token (contextvars.Token[str | None]): Token from ``set_current_tool_function()``.
+    """
+    _current_tool_function.reset(token)
+
+
 # Notebook-friendly interval (slower to avoid flooding widget updates)
 _NOTEBOOK_INTERVAL = 0.3
 
@@ -162,19 +198,26 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
     animates at a slower interval than the terminal variant.
     """
 
-    def __init__(self, *args: Any, spinner_style: str = "dots", **kwargs: Any) -> None:  # noqa: D417
+    def __init__(self, *args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> None:  # noqa: D417
         """Create a notebook progress bar.
 
         All positional and keyword args are forwarded to tqdm.auto.
 
         Args:
             spinner_style (str): Animation style name from ``SPINNER_STYLES``.
+            show_bar (bool): Whether to show the progress bar widget. When False,
+                only the spinner, description, and elapsed time are visible.
         """
         self._base_desc = kwargs.get("desc", "") or ""
         self._style = SPINNER_STYLES.get(spinner_style, SPINNER_STYLES["dots"])
         self._stop_event = threading.Event()
         self._token = _active_bar.set(self)
         super().__init__(*args, **kwargs)
+
+        if not show_bar and hasattr(self, "container") and hasattr(self.container, "children"):
+            for child in self.container.children:
+                if type(child).__name__ in ("FloatProgress", "IntProgress"):
+                    child.layout.display = "none"
 
         self._spinner_thread = threading.Thread(target=self._animate, daemon=True)
         self._spinner_thread.start()
@@ -216,7 +259,9 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             return
         self._stop_event.set()
         self._spinner_thread.join(timeout=1.0)
-        self.set_description(self._base_desc, refresh=True)
+        completed = self.total is not None and self.n >= self.total
+        icon = "\u2714" if completed else "\u2718"
+        self.set_description(f"{icon} {self._base_desc}", refresh=True)
         _active_bar.reset(self._token)
         super().close()
 
@@ -288,8 +333,9 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
             return
         self._stop_event.set()
         self._spinner_thread.join(timeout=1.0)
-        # Restore clean description for the final rendered line
-        self.set_description(self._base_desc, refresh=True)
+        completed = self.total is not None and self.n >= self.total
+        icon = "\033[32m\u2714\033[0m" if completed else "\033[31m\u2718\033[0m"
+        self.set_description(f"{icon} {self._base_desc}", refresh=True)
         _active_bar.reset(self._token)
         super().close()
 
@@ -297,7 +343,7 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
 # ============================================================================
 # Public API
 # ============================================================================
-def progress_bar(*args: Any, spinner_style: str = "dots", **kwargs: Any) -> tqdm:  # type: ignore[type-arg]  # noqa: D417
+def progress_bar(*args: Any, spinner_style: str = "dots", show_bar: bool = True, **kwargs: Any) -> tqdm:  # type: ignore[type-arg]  # noqa: D417
     """Create a tqdm progress bar with an animated spinner in the description.
 
     Drop-in replacement for ``tqdm()``.  A background thread animates a
@@ -311,6 +357,9 @@ def progress_bar(*args: Any, spinner_style: str = "dots", **kwargs: Any) -> tqdm
 
     Args:
         spinner_style (str): Animation style name from ``SPINNER_STYLES``.
+        show_bar (bool): Whether to show the progress bar widget. When False,
+            only the spinner, description, and elapsed time are visible.
+            Only affects notebook rendering.
 
     Returns:
         tqdm: A tqdm-compatible progress bar instance.
@@ -328,7 +377,7 @@ def progress_bar(*args: Any, spinner_style: str = "dots", **kwargs: Any) -> tqdm
     if _is_disabled() or kwargs.get("disable"):
         return tqdm(*args, **kwargs)
     if _in_notebook():
-        return _NotebookProgressBar(*args, spinner_style=spinner_style, **kwargs)
+        return _NotebookProgressBar(*args, spinner_style=spinner_style, show_bar=show_bar, **kwargs)
     return _AnimatedProgressBar(*args, spinner_style=spinner_style, **kwargs)
 
 

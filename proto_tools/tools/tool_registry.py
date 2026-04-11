@@ -42,6 +42,7 @@ from proto_tools.utils.device import (
     parse_device_string,
     validate_device_allocation,
 )
+from proto_tools.utils.progress import reset_current_tool_function, set_current_tool_function
 from proto_tools.utils.tool_cache import (
     CacheStripResult,
     _generate_cache_key,
@@ -307,6 +308,15 @@ class ToolRegistry:
                 inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None
             ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
+                _func_token = set_current_tool_function(func.__name__)
+                try:
+                    return _wrapper_body(inputs, config, instance)
+                finally:
+                    reset_current_tool_function(_func_token)
+
+            def _wrapper_body(
+                inputs: BaseToolInput, config: BaseConfig | None, instance: ToolInstance | None
+            ) -> BaseToolOutput:
                 # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
                 from proto_tools.utils.logging_config import _auto_configure_logging
 
