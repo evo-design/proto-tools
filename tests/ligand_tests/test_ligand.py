@@ -3,9 +3,13 @@
 Tests for Ligands entity.
 """
 
+from unittest.mock import patch
+
 import pytest
+from rdkit import Chem
 
 from proto_tools.entities.ligands import Fragment, Ligands
+from proto_tools.entities.ligands.ligands import parse_fragments_from_string_or_path
 from proto_tools.entities.structures.utils import is_valid_structure
 from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
@@ -181,3 +185,133 @@ def test_to_smi_round_trip(tmp_path):
     ligands.to_smi(filepath=smi_path)
     reloaded = Ligands.from_file(smi_path)
     assert set(reloaded.get_smiles_list()) == set(ligands.get_smiles_list())
+
+
+# ── Fragment protocol ────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "other,expected",
+    [
+        (Fragment(smiles="CCO"), True),
+        (Fragment(smiles="CO"), False),
+        ("not a fragment", NotImplemented),
+    ],
+    ids=["same", "different", "not-fragment"],
+)
+def test_fragment_eq(other, expected):
+    assert Fragment(smiles="CCO").__eq__(other) is expected
+
+
+def test_fragment_hash():
+    a = Fragment(smiles="CCO")
+    b = Fragment(smiles="CCO")
+    assert hash(a) == hash(b)
+    assert hash(a) == hash("CCO")
+
+
+def test_fragment_from_mol_multi_fragment_raises():
+    mol = Chem.MolFromSmiles("CCO.CO")
+    with pytest.raises(ValueError, match="must contain only one fragment"):
+        Fragment.from_mol(mol)
+
+
+# ── Ligands protocol ────────────────────────────────────────────────────
+
+
+@patch("proto_tools.entities.ligands.ligands.get_name_from_smiles", return_value="mock")
+def test_ligands_from_mols(_mock_name):
+    mol1 = Chem.MolFromSmiles("CCO")
+    mol2 = Chem.MolFromSmiles("CO")
+    ligands = Ligands.from_mols([mol1, mol2])
+    assert len(ligands) == 2
+    assert set(ligands.get_smiles_list()) == {"CCO", "CO"}
+
+
+@pytest.mark.parametrize(
+    "other,expected",
+    [
+        (Ligands(fragments=[Fragment(smiles="CO"), Fragment(smiles="CCO")]), True),
+        (Ligands(fragments=[Fragment(smiles="CO")]), False),
+        ("not ligands", NotImplemented),
+    ],
+    ids=["same-reordered", "different", "not-ligands"],
+)
+def test_ligands_eq(other, expected):
+    a = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    assert a.__eq__(other) is expected
+
+
+def test_ligands_hash():
+    a = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    b = Ligands(fragments=[Fragment(smiles="CO"), Fragment(smiles="CCO")])
+    assert hash(a) == hash(b)
+
+
+# ── I/O ──────────────────────────────────────────────────────────────────
+
+
+def test_to_sdf_round_trip(tmp_path):
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    sdf_path = tmp_path / "out.sdf"
+    ligands.to_sdf(sdf_path)
+    reloaded = Ligands.from_file(sdf_path)
+    assert set(reloaded.get_smiles_list()) == set(ligands.get_smiles_list())
+
+
+@pytest.mark.parametrize("ext", [".smi", ".sdf"], ids=["smi", "sdf"])
+def test_from_file_not_found(ext):
+    with pytest.raises(FileNotFoundError):
+        Ligands.from_file(f"nonexistent{ext}")
+
+
+@pytest.mark.parametrize(
+    "input_val,expected_count,error_match",
+    [
+        ("CCO", 1, None),
+        ("not_valid_at_all", None, "Invalid input"),
+    ],
+    ids=["valid-smiles", "invalid"],
+)
+def test_parse_string_or_path(input_val, expected_count, error_match):
+    if error_match:
+        with pytest.raises(ValueError, match=error_match):
+            parse_fragments_from_string_or_path(input_val)
+    else:
+        frags = parse_fragments_from_string_or_path(input_val)
+        assert len(frags) == expected_count
+
+
+def test_ligands_get_names_list():
+    ligands = Ligands(fragments=[Fragment(smiles="CCO", name="ethanol"), Fragment(smiles="CO")])
+    assert ligands.get_names_list() == ["ethanol", None]
+    assert ligands.smiles == "CCO.CO"
+
+
+def test_fragment_conformers_property():
+    frag = Fragment(smiles="CCO")
+    assert frag.conformers == []
+    frag.generate_conformers(num_conformers=1)
+    assert len(frag.conformers) == 1
+
+
+def test_to_pdb_basic():
+    ligands = Ligands.from_smiles("CCO")
+    pdb_str = ligands.to_pdb()
+    assert "END" in pdb_str
+    assert "TER" in pdb_str
+    atom_lines = [line for line in pdb_str.split("\n") if line.startswith(("HETATM", "ATOM"))]
+    assert len(atom_lines) > 0
+
+
+def test_to_pdb_two_fragments():
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    pdb_str = ligands.to_pdb()
+    lines = pdb_str.split("\n")
+    chain_ids = {line[21] for line in lines if line.startswith(("HETATM", "ATOM"))}
+    assert chain_ids == {"A", "B"}
+
+
+def test_to_pdb_empty_raises():
+    with pytest.raises(ValueError, match="no fragments"):
+        Ligands(fragments=[]).to_pdb()
