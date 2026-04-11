@@ -67,6 +67,10 @@ class ToolSpec(BaseModel):
         category (str): Tool category (e.g., ``"gene_annotation"``).
         description (str): Detailed description of tool functionality.
         uses_gpu (bool): Whether this tool requires a GPU.
+        gpu_only (bool): Tool cannot run on CPU. Direct ``device="cpu"`` dispatch
+            raises ``ValueError``, and LRU eviction restarts the worker instead
+            of offloading. Implies ``uses_gpu=True``. This should generally be False:
+            it is only used for models that have issues with CPU loading.
         device_count (str): Expected device count requirement
             (e.g., ``"1"``, ``"1-2"``, ``">=1"``).
         config_model (type[BaseModel]): Pydantic model for configuration validation
@@ -91,6 +95,14 @@ class ToolSpec(BaseModel):
     category: str = Field(description="Tool category (e.g., 'gene_annotation')")
     description: str = Field(description="Detailed description of tool functionality")
     uses_gpu: bool = Field(default=False, description="Whether this tool requires a GPU")
+    gpu_only: bool = Field(
+        default=False,
+        description=(
+            "Tool cannot run on CPU. Direct device='cpu' dispatch raises "
+            "ValueError; LRU eviction restarts the worker instead of offloading. "
+            "Implies uses_gpu=True."
+        ),
+    )
     device_count: str = Field(
         default="1", description="Expected device count requirement (e.g., '1', '1-2', '>=1', '<=2')"
     )
@@ -221,6 +233,7 @@ class ToolRegistry:
         output_class: type[BaseToolOutput],
         description: str,
         uses_gpu: bool = False,
+        gpu_only: bool = False,
         device_count: str = "1",
         example_input: Callable[[], BaseToolInput] | None = None,
         iterable_input_field: str | None = None,
@@ -245,6 +258,9 @@ class ToolRegistry:
             output_class (type[BaseToolOutput]): Pydantic model class for tool output validation
             description (str): Readable description
             uses_gpu (bool): Whether this tool requires a GPU for execution
+            gpu_only (bool): Tool cannot run on CPU. Direct ``device="cpu"``
+                dispatch raises ``ValueError``, and LRU eviction restarts the
+                worker instead of offloading. Implies ``uses_gpu=True``.
             device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
@@ -268,6 +284,9 @@ class ToolRegistry:
                 raise ValueError(
                     f"Tool '{key}': iterable_input_field and iterable_output_field must both be set or both be None"
                 )
+
+            if gpu_only and not uses_gpu:
+                raise ValueError(f"Tool '{key}': gpu_only=True requires uses_gpu=True")
 
             # Capture source file from call stack (find first frame in tools directory)
             stack = inspect.stack()
@@ -308,9 +327,20 @@ class ToolRegistry:
                 last_traceback = ""
                 warning_list = []
 
+                # Resolve the spec once so runtime-mutable flags (``gpu_only``)
+                # can be monkeypatched by tests. Fall back to the decorator's
+                # captured value if the spec is missing (defensive).
+                spec = cls._registry.get(key)
+                effective_gpu_only = spec.gpu_only if spec is not None else gpu_only
+
                 # Validate device allocation against tool requirements
                 if hasattr(config, "device"):
                     device_str = str(config.device)
+                    if effective_gpu_only and device_str == "cpu":
+                        raise ValueError(
+                            f"Tool {key!r} is gpu_only; cannot run with device='cpu'. "
+                            f"Use a CUDA device (e.g. 'cuda' or 'cuda:0')."
+                        )
                     if device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
@@ -327,7 +357,6 @@ class ToolRegistry:
                 original_items = None
                 strip = None
                 whole_cache_key = None
-                spec = cls._registry.get(key)
 
                 if cacheable and spec and spec.iterable_input_field:
                     assert spec.iterable_output_field is not None  # validated at registration
@@ -434,6 +463,11 @@ class ToolRegistry:
                         whole_cache_key,
                     )
 
+                # Carry per-invocation flags (key, gpu_only) to ToolInstance so
+                # the eviction callback can restart the worker instead of
+                # attempting an in-process CPU offload when the tool is gpu_only.
+                from proto_tools.utils.tool_instance import _current_tool_invocation
+
                 for attempt in range(1 + MAX_RETRIES):
                     try:
                         if attempt == 0:
@@ -444,8 +478,13 @@ class ToolRegistry:
                             # Ensure all warnings are captured
                             warnings.simplefilter("always")
 
-                            # Execute the tool function
-                            result = func(inputs, config, instance)
+                            # Execute the tool function (ContextVar is read by
+                            # ``ToolInstance.dispatch`` / ``_run_persistent``).
+                            _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": effective_gpu_only})
+                            try:
+                                result = func(inputs, config, instance)
+                            finally:
+                                _current_tool_invocation.reset(_inv_token)
 
                             # Populate metadata fields
                             result.tool_id = key
@@ -537,6 +576,7 @@ class ToolRegistry:
                 category=category,
                 description=description,
                 uses_gpu=uses_gpu,
+                gpu_only=gpu_only,
                 device_count=device_count,
                 input_model=input_class,
                 config_model=config_class,

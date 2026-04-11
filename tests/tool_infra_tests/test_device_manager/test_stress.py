@@ -110,12 +110,14 @@ def _run_tool(tool_factory, instance_name, **config_kwargs):
 
     Extra *config_kwargs* (e.g. ``memory_mb=2048``) are forwarded to the
     tool's Config constructor, allowing tests to control the memory footprint.
-    Defaults ``memory_mb`` to _TOOL_MEMORY_MB so all stress tests use a
-    consistent, large-enough buffer for reliable memory assertions.
+    Defaults ``memory_mb`` to _TOOL_MEMORY_MB for tools whose config supports
+    it (pytorch/jax mocks), so all stress tests use a consistent, large-enough
+    buffer for reliable memory assertions. CLI mock has no GPU buffer, so
+    memory_mb is skipped for configs that don't declare the field.
     """
-    if "memory_mb" not in config_kwargs:
-        config_kwargs["memory_mb"] = _TOOL_MEMORY_MB
     _tool_name, InputCls, ConfigCls, run_fn = tool_factory()
+    if "memory_mb" not in config_kwargs and "memory_mb" in ConfigCls.model_fields:
+        config_kwargs["memory_mb"] = _TOOL_MEMORY_MB
     return run_fn(InputCls(), ConfigCls(**config_kwargs), instance=instance_name)
 
 
@@ -766,5 +768,171 @@ def test_two_tools_share_one_gpu():
 
                 # Memory should be roughly double; second tool added more
                 _assert_gpu_memory(dm, after_one, loaded=["cuda:0"], label="second tool also on cuda:0")
+    finally:
+        _teardown()
+
+
+# ── gpu_only flag ───────────────────────────────────────────────────────
+#
+# Tools registered with ``gpu_only=True`` on the ``@tool()`` decorator
+# cannot run on CPU. The framework must:
+#   1. Expose ``gpu_only`` on ``ToolSpec`` with a safe default.
+#   2. Reject direct ``device="cpu"`` dispatch with a clear ValueError.
+#   3. Kill the persistent worker on LRU eviction instead of trying an
+#      in-process CPU offload. Next dispatch spawns a fresh subprocess.
+#   4. Leave default behavior (``gpu_only=False``) unchanged: worker
+#      survives eviction and moves to CPU in-process.
+#
+# Used by ``alphagenome-predict-variants``. See ``notes/tool-environments.md``.
+
+
+def test_tool_spec_exposes_gpu_only_field():
+    """``ToolSpec`` has ``gpu_only`` defaulting to False; it propagates from the decorator."""
+    # Importing the modules registers the tools in the registry.
+    from proto_tools.tools.testing import mock_pytorch_tool  # noqa: F401
+    from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
+
+    assert "gpu_only" in ToolSpec.model_fields
+    assert ToolSpec.model_fields["gpu_only"].default is False
+
+    mock_spec = ToolRegistry.get("mock-pytorch-tool-run")
+    assert mock_spec.gpu_only is False, "mock tools should default to gpu_only=False"
+
+    from proto_tools.tools.sequence_scoring.alphagenome import alphagenome_predict_variants  # noqa: F401
+
+    ag_spec = ToolRegistry.get("alphagenome-predict-variants")
+    assert ag_spec.gpu_only is True, "alphagenome-predict-variants should opt into gpu_only"
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_gpu_only_tool_rejects_cpu_dispatch(monkeypatch):
+    """Direct ``device="cpu"`` on a gpu_only tool raises ValueError before any worker work."""
+    # Import to register mock_pytorch_tool; then monkeypatch its spec.
+    from proto_tools.tools.testing.mock_pytorch_tool import (
+        MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
+    )
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    spec = ToolRegistry.get("mock-pytorch-tool-run")
+    monkeypatch.setattr(spec, "gpu_only", True)
+
+    with pytest.raises(ValueError, match="gpu_only"):
+        run_mock_pytorch_tool(
+            MockPyTorchToolInput(),
+            MockPyTorchToolConfig(device="cpu", memory_mb=64),
+        )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_gpu_only_tool_kills_worker_on_eviction(monkeypatch, caplog):
+    """Under CPU offload strategy, a gpu_only tool's worker is killed (not moved to CPU).
+
+    The next dispatch spawns a fresh subprocess with a different PID.
+    """
+    import logging
+
+    # Import to register the mock_pytorch_tool; then monkeypatch its spec.
+    from proto_tools.tools.testing import mock_pytorch_tool  # noqa: F401
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    spec = ToolRegistry.get("mock-pytorch-tool-run")
+    monkeypatch.setattr(spec, "gpu_only", True)
+
+    dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
+
+    try:
+        with caplog.at_level(logging.WARNING, logger="proto_tools.utils.tool_instance"):
+            # First dispatch: mock_pytorch_tool loads on cuda:0.
+            with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="pt") as pt_inst:
+                result_a = _run_tool(_pytorch_tool, "pt")
+                assert result_a.success, f"Tool A failed: {result_a.errors}"
+                assert pt_inst._worker is not None, "Worker should be alive after first dispatch"
+                assert pt_inst._worker._process is not None
+                first_pid = pt_inst._worker._process.pid
+
+                time.sleep(0.01)
+
+                # Second tool evicts the first. With gpu_only=True, the framework
+                # kills the worker instead of sending ``to_device cpu``.
+                with ToolInstance.persist_tool("mock_jax_tool", instance_name="jx"):
+                    result_b = _run_tool(_jax_tool, "jx")
+                    assert result_b.success, f"Tool B failed: {result_b.errors}"
+
+                    # The gpu_only tool's worker should have been killed by eviction.
+                    assert pt_inst._worker is None, (
+                        "gpu_only worker should be killed on eviction, not kept alive on CPU"
+                    )
+
+                    # A clear warning must be logged.
+                    warning_msgs = [rec.message for rec in caplog.records if rec.levelno >= logging.WARNING]
+                    assert any("gpu_only tool" in msg and "killing worker" in msg for msg in warning_msgs), (
+                        f"Expected gpu_only killing-worker warning, got: {warning_msgs}"
+                    )
+
+                    time.sleep(0.01)
+
+                    # Third dispatch: mock_pytorch_tool comes back. Should spawn
+                    # a fresh subprocess on cuda:0 (new PID), not reuse the dead worker.
+                    result_c = _run_tool(_pytorch_tool, "pt")
+                    assert result_c.success, f"Tool A should succeed after gpu_only worker restart: {result_c.errors}"
+                    assert pt_inst._worker is not None
+                    assert pt_inst._worker._process is not None
+                    new_pid = pt_inst._worker._process.pid
+                    assert new_pid != first_pid, (
+                        f"Expected a fresh subprocess after eviction (old PID {first_pid}), got the same PID back"
+                    )
+
+                    status = dm.get_device_status()
+                    assert status["allocations"]["pt"]["device_id"] == "cuda:0", (
+                        "mock_pytorch_tool should be back on cuda:0 via fresh allocation"
+                    )
+    finally:
+        _teardown()
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_default_tool_survives_eviction_with_same_pid():
+    """Regression: without gpu_only, the existing CPU offload path is unchanged.
+
+    The worker stays alive across eviction (same PID), the model moves in-process.
+    """
+    dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
+    exclusive = is_exclusive_process_mode()
+    if exclusive:
+        pytest.skip("Exclusive_Process auto-escalates CPU→RESTART; same-PID invariant doesn't apply")
+
+    try:
+        with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="pt") as pt_inst:
+            result_a = _run_tool(_pytorch_tool, "pt")
+            assert result_a.success
+            first_pid = pt_inst._worker._process.pid  # type: ignore[union-attr]
+
+            time.sleep(0.01)
+
+            with ToolInstance.persist_tool("mock_jax_tool", instance_name="jx"):
+                result_b = _run_tool(_jax_tool, "jx")
+                assert result_b.success
+
+                # Default path: worker survives eviction, allocation is on CPU.
+                assert pt_inst._worker is not None, "Default worker should survive eviction"
+                assert pt_inst._worker._process is not None
+                assert pt_inst._worker._process.pid == first_pid, (
+                    "Default eviction path should keep the same subprocess alive"
+                )
+
+                status = dm.get_device_status()
+                assert status["allocations"]["pt"]["device_id"] == "cpu"
+
+                time.sleep(0.01)
+
+                # Tool A reclaims the GPU — still the same subprocess.
+                result_c = _run_tool(_pytorch_tool, "pt")
+                assert result_c.success
+                assert pt_inst._worker._process.pid == first_pid, "Moving back to GPU should reuse the same subprocess"
     finally:
         _teardown()

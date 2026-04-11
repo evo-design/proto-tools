@@ -84,6 +84,13 @@ _scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = cont
 )
 _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_mode", default=False)
 
+# Set by the ``@tool()`` wrapper around each dispatch so ``ToolInstance`` can
+# read per-tool flags (e.g. ``gpu_only``) without plumbing the ``ToolSpec``
+# through every call site. Contents: {"key": str, "gpu_only": bool}.
+_current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "_current_tool_invocation", default=None
+)
+
 
 def _active_cache() -> dict[str, "ToolInstance"]:
     """Return the scope-local cache if inside scope(), else the global cache."""
@@ -435,6 +442,9 @@ class ToolInstance:
         self._worker: PersistentWorker | None = None
         # Tracks previous reload-field values for restart detection
         self._reload_params: dict[str, Any] = {}
+        # Latches True if any dispatch sets gpu_only; eviction then uses the
+        # worker-kill path. See notes/tool-environments.md.
+        self._gpu_only: bool = False
 
     def _ensure_env(self) -> None:
         """Build the tool's environment if it doesn't exist or is broken.
@@ -783,6 +793,11 @@ class ToolInstance:
         reload_keys = reload_on or set()
         reload_params = {k: input_dict.get(k) for k in reload_keys}
 
+        # Latch gpu_only so the eviction callback can see it later.
+        _invocation = _current_tool_invocation.get() or {}
+        if _invocation.get("gpu_only"):
+            self._gpu_only = True
+
         if self._worker is not None:
             script_changed = self._worker.script_path != sp
             params_changed = reload_params != self._reload_params
@@ -813,6 +828,24 @@ class ToolInstance:
             # Eviction callback — sends to_device directly to avoid lock ordering deadlock
             def eviction_callback(action: str) -> None:
                 if action == "cpu":
+                    # gpu_only tools can't be offloaded to CPU — kill the worker
+                    # so the next dispatch spawns a fresh subprocess on GPU.
+                    if self._gpu_only:
+                        worker = self._worker
+                        self._worker = None
+                        if worker is not None:
+                            logger.warning(
+                                "Evicting gpu_only tool %s: killing worker "
+                                "(CPU offload not supported; fresh worker will "
+                                "spawn on next GPU dispatch).",
+                                self.tool_name,
+                            )
+                            try:
+                                worker.stop()
+                            except Exception as e:
+                                logger.error("Failed to stop gpu_only worker during eviction: %s", e)
+                        self.device = "cpu"
+                        return
                     worker = self._worker
                     if worker is not None:
                         command = {"command": "to_device", "device": "cpu"}

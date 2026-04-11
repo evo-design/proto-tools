@@ -81,9 +81,14 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   use_deterministic_algorithms`` path eliminates the drift. Upstream:
 #   - https://github.com/chaidiscovery/chai-lab/issues/228
 #   - https://github.com/chaidiscovery/chai-lab/issues/246
+# - alphagenome-predict-variants: second dispatch crashes the persistent
+#   worker (see #413). The tool is marked ``gpu_only=True`` so the eviction
+#   round-trip test handles it via worker restart, but the persistent seed
+#   test has no eviction to trigger that path.
 _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "chai1-prediction",
+        "alphagenome-predict-variants",
     }
 )
 
@@ -105,10 +110,15 @@ _SEED_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
 #   7-bit mantissa, 0.4-1.4% relative). The forward pass passes ``PRNGKey=None``
 #   so it's mathematically deterministic, but JAX/CUDA autotune doesn't
 #   guarantee bit-exact behaviour across processes.
+# - alphafold2-prediction: same root cause as alphagenome (JAX bfloat16 via
+#   ColabDesign's default ``global_config.bfloat16=True``), amplified through
+#   AF2's recycling loop into wholly different structural basins. Persistent
+#   variant passes (single worker = consistent autotune).
 _SEED_NON_PERSISTENT_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "progen3-sample",
         "progen3-score",
+        "alphafold2-prediction",
         "alphagenome-predict-intervals",
         "alphagenome-predict-sequences",
         "alphagenome-predict-variants",
@@ -183,8 +193,9 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
 
     if spec.key in _SEED_PERSISTENT_EXCLUDED_KEYS:
         pytest.skip(
-            f"{spec.key} is excluded from the persistent variant: drift across "
-            f"consecutive worker calls (see _SEED_PERSISTENT_EXCLUDED_KEYS comment)."
+            f"{spec.key} is excluded from the persistent variant: drift or "
+            f"crash across consecutive worker calls (see "
+            f"_SEED_PERSISTENT_EXCLUDED_KEYS comment)."
         )
 
     inputs, config = build_inputs_and_config(spec, tmp_path, {"seed": 42})

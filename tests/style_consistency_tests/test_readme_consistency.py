@@ -1,6 +1,7 @@
 """tests/style_consistency_tests/test_readme_consistency.py."""
 
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -295,6 +296,32 @@ def _extract_urls(text: str) -> list[tuple[int, str]]:
 _BROKEN_HTTP_CODES = {404, 410}
 
 
+def _fetch_url(url: str, method: str = "HEAD", timeout: int = 10, attempts: int = 3) -> None:
+    """Fetch ``url`` with ``method``, retrying transient network errors.
+
+    Retries only on ``URLError``/``OSError`` (transient network glitches, DNS
+    hiccups, SSL handshake timeouts) up to ``attempts`` times with a short
+    linear backoff (1s, 2s, ...). ``HTTPError`` is propagated immediately
+    because the server gave a definitive response — retrying won't change
+    a 404 and just slows the test when a link is actually dead.
+    """
+    req = urllib.request.Request(
+        url,
+        method=method,
+        headers={"User-Agent": "proto-tools-link-checker/1.0"},
+    )
+    for attempt in range(attempts):
+        try:
+            urllib.request.urlopen(req, timeout=timeout)
+            return
+        except urllib.error.HTTPError:  # noqa: PERF203 — retry on transient errors
+            raise
+        except (urllib.error.URLError, OSError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(1 + attempt)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_all_links_reachable(readme: Path) -> None:
@@ -319,25 +346,14 @@ def test_all_links_reachable(readme: Path) -> None:
         if any(domain in url for domain in _SKIP_DOMAINS):
             continue
         try:
-            req = urllib.request.Request(
-                url,
-                method="HEAD",
-                headers={"User-Agent": "proto-tools-link-checker/1.0"},
-            )
-            urllib.request.urlopen(req, timeout=10)
+            _fetch_url(url, method="HEAD")
         except urllib.error.HTTPError as exc:
             if exc.code in _BROKEN_HTTP_CODES:
                 broken.append(f"  line {lineno}: {url} (HTTP {exc.code})")
             elif exc.code == 405:
                 # Server rejects HEAD; retry with GET
                 try:
-                    req = urllib.request.Request(
-                        url,
-                        headers={
-                            "User-Agent": "proto-tools-link-checker/1.0",
-                        },
-                    )
-                    urllib.request.urlopen(req, timeout=10)
+                    _fetch_url(url, method="GET")
                 except urllib.error.HTTPError as exc2:
                     if exc2.code in _BROKEN_HTTP_CODES:
                         broken.append(f"  line {lineno}: {url} (HTTP {exc2.code})")

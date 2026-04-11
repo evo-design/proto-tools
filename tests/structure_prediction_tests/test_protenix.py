@@ -111,7 +111,6 @@ def test_protenix_model_variants(model_name):
     complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
-        name=f"test_{model_name}",
         model_name=model_name,
         use_msa=False,
         num_diffusion_samples=1,
@@ -146,7 +145,6 @@ def test_protenix_mini_models_with_msa(model_name):
     complexes = [StructurePredictionComplex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
-        name=f"test_{model_name}_msa",
         model_name=model_name,
         use_msa=True,
         num_diffusion_samples=1,

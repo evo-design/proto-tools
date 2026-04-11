@@ -251,7 +251,19 @@ def to_device(device: str) -> dict:
         return {"success": True, "device": device, "note": "model not loaded yet"}
 ```
 
-**JAX tools** (AlphaGenome):
+JAX tools come in two flavors depending on what the upstream library gives you. The difference matters because it determines whether your tool can be moved between devices, or has to be thrown away and rebuilt.
+
+**Pattern 1 — move-based** (`mock_jax_tool`, ProteinMPNN):
+```python
+def to_device(device: str) -> dict:
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)  # jax.device_put(params, device) via move_model_to_device
+    return {"success": True, "device": device}
+```
+Use this when the library hands you the model weights as plain data — a dict of arrays you can hold and inspect. You can physically move those arrays between GPU and CPU with `jax.device_put`, and the compiled forward pass runs against them wherever they live. `move_model_to_device()` in `standalone_helpers.py` does the transfer and frees GPU memory via `jax.clear_caches()` when moving off CUDA.
+
+**Pattern 2 — reload-based** (AlphaGenome):
 ```python
 def to_device(device: str) -> dict:
     global _model
@@ -259,6 +271,32 @@ def to_device(device: str) -> dict:
         _model.to_device(device)
     return {"success": True, "device": device}
 ```
+Use this when the library hands you a black-box model object (e.g. from `dna_model.create()`) with its weights and compiled forward pass hidden behind a wrapper. You can't reach in to move anything, so your only option is to destroy the model and create a new one on the target device.
+
+For CPU eviction specifically, even "create a new one on CPU" is a bad trade: compiling a large model like AlphaGenome for the CPU backend takes 10+ minutes, and CPU inference is too slow to actually use. So the tool's `to_device("cpu")` just **unloads** the model (frees the GPU memory and drops the reference) without putting anything on CPU. The next dispatch triggers a fresh load back onto GPU.
+
+There's no registry flag to tell you which pattern to use — it's determined by what the library exposes. If the weights are reachable as plain data, use move-based. Otherwise, use reload-based.
+
+**Neither pattern works — use `gpu_only=True`**
+
+Some tools can't even do the reload-based pattern safely: the first run works, but the second run crashes the worker (either in the same process or in a fresh subprocess). This is usually an upstream bug in how the library tracks CUDA or XLA state across runs. Mark these with `gpu_only=True` in the `@tool()` decorator:
+
+```python
+@tool(
+    key="alphagenome-predict-variants",
+    ...
+    uses_gpu=True,
+    gpu_only=True,
+    ...
+)
+```
+
+The framework then changes two things for this tool:
+
+1. **It refuses CPU dispatch up front.** Calling the tool with `config.device="cpu"` raises `ValueError` immediately, so misconfigurations fail clearly instead of crashing deep inside the worker.
+2. **On LRU eviction, it kills the worker outright.** Instead of sending `to_device("cpu")` (which would hit the broken reload path), the framework calls `worker.stop()`, logs a warning, and drops the reference. The next time this tool is dispatched, a brand-new subprocess is spawned on GPU from scratch — fresh imports, fresh model load, fresh compile. It's slow, but it's always correct.
+
+`gpu_only=True` implies `uses_gpu=True` — the framework checks this at registration. Currently only `alphagenome-predict-variants` opts in; the other alphagenome variants use plain reload-based because they don't exhibit the consecutive-dispatch crash.
 
 **CLI tools** (Boltz2, RFDiffusion3, BLAST, etc.):
 ```python
