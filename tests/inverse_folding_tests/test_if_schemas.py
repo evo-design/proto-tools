@@ -165,3 +165,38 @@ def test_scoring_output_export(fmt, tmp_path):
     )
     output.export("scores", export_path=tmp_path, file_format=fmt)
     assert (tmp_path / f"scores.{fmt}").stat().st_size > 0
+
+
+# ── Validator error paths ────────────────────────────────────────────────────────
+
+
+def test_structure_rejects_unsupported_type():
+    with pytest.raises(ValueError, match="Unsupported structure type"):
+        InverseFoldingStructureInput(structure=12345)
+
+
+def test_structure_rejects_invalid_fixed_positions_residues():
+    with pytest.raises(ValueError, match="Invalid fixed positions"):
+        InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [99999]})
+
+
+# ── SequenceScores ───────────────────────────────────────────────────────────────
+
+
+def test_sequence_scores_getattr_and_add_metric():
+    score = SequenceScores(metrics={"perplexity": 1.5})
+    assert score.perplexity == 1.5
+    score.add_metric("new_metric", 2.0)
+    assert score.new_metric == 2.0
+    with pytest.raises(AttributeError, match="no attribute"):
+        _ = score.nonexistent
+
+
+# ── Export edge cases ────────────────────────────────────────────────────────────
+
+
+def test_output_export_json(tmp_path):
+    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP"])])
+    output.export("designs", export_path=tmp_path, file_format="json")
+    json_files = list((tmp_path / "designs").glob("*.json"))
+    assert len(json_files) == 1
