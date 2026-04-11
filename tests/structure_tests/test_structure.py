@@ -11,7 +11,12 @@ import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
-from proto_tools.entities.structures.utils import convert_cif_str_to_pdb_str
+from proto_tools.entities.structures.utils import (
+    convert_cif_str_to_pdb_str,
+    convert_pdb_str_to_cif_str,
+    detect_structure_format,
+    load_structure_file,
+)
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -261,3 +266,33 @@ def test_metrics_survive_round_trip():
     protein = Structure.from_file(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
     reconstructed = Structure.model_validate(protein.model_dump())
     assert reconstructed.metrics == {"plddt": 85.2, "ptm": 0.9}
+
+
+def test_structure_approx_equal_matching():
+    a = Structure.from_file(_TEST_PDB_FILE)
+    b = Structure.from_file(_TEST_PDB_FILE)
+    a.approx_equal(b)
+
+
+def test_structure_getattr_metrics():
+    protein = Structure.from_file(_TEST_PDB_FILE, metrics={"ptm": 0.9})
+    assert protein.ptm == 0.9
+    with pytest.raises(AttributeError):
+        _ = protein.nonexistent_field
+
+
+def test_detect_structure_format_empty():
+    with pytest.raises(ValueError, match="Empty structure content"):
+        detect_structure_format("")
+
+
+def test_load_structure_file_bad_extension(tmp_path):
+    bad_file = tmp_path / "test.txt"
+    bad_file.write_text("content")
+    with pytest.raises(ValueError, match="Invalid structure file extension"):
+        load_structure_file(bad_file)
+
+
+def test_convert_empty_strings():
+    assert convert_pdb_str_to_cif_str("") == ""
+    assert convert_cif_str_to_pdb_str("") == ""

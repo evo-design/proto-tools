@@ -167,3 +167,17 @@ def test_ligands_round_trip():
     assert len(reconstructed) == 2
     assert reconstructed[0].smiles == "CCO"
     assert reconstructed[1].smiles == "CO"
+
+
+def test_fragment_smiles_canonicalization():
+    frag = Fragment(smiles="c1ccccc1")
+    assert frag.smiles == "c1ccccc1"
+    assert frag.mol is not None
+
+
+def test_to_smi_round_trip(tmp_path):
+    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
+    smi_path = tmp_path / "test.smi"
+    ligands.to_smi(filepath=smi_path)
+    reloaded = Ligands.from_file(smi_path)
+    assert set(reloaded.get_smiles_list()) == set(ligands.get_smiles_list())

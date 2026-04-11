@@ -285,3 +285,7 @@ def test_case_sensitivity_smiles():
     assert result1 == "SEP"
     assert result2 is None or result2 == "SEP"
     assert result3 is None or result3 == "SEP"
+
+
+def test_map_smiles_no_name_fallback():
+    assert map_smiles_to_ccd_code("C1=CC2=CC=CC=C2C=C1", use_name_fallback=False) is None
