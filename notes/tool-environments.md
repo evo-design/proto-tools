@@ -164,15 +164,40 @@ fi
 
 ## Python Version Specification
 
-Tools can specify their required Python version via `standalone/python_version.txt`.
+Tools can specify their required Python version via `standalone/python_version.txt`. Tools without one inherit the running interpreter's `major.minor` at setup time.
 
-**Format:** Single line, `major.minor` or `major.minor.patch` (e.g., `3.11`)
+**Format:** keyed lines, with a required `default` and optional per-platform overrides. Comments (`#` to end of line) and blank lines are ignored. Whitespace around `:` is stripped; keys are lowercased.
 
-**Validation:** Version ≥3.8, numeric components only, no comments/prefixes. Missing file defaults to Python 3.12.
+```text
+# Comments and blank lines are allowed.
+default: 3.11
+linux: 3.10            # OS-only fallback (any Linux)
+linux-aarch64: 3.10    # specific arch override (most specific)
+darwin-arm64: 3.10
+```
 
-**Rebuilds:** Content is included in the environment setup hash; changing version triggers rebuild.
+**Lookup (most specific wins):**
 
-See `tests/tool_infra_tests/test_python_version_files.py` for validation tests.
+1. Exact `{system}-{machine}` key — e.g. `linux-aarch64`
+2. OS-only `{system}` key — e.g. `linux`
+3. `default` (required catch-all)
+
+The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`:
+
+| Platform | Specific key | OS key |
+|---|---|---|
+| Linux x86_64 | `linux-x86_64` | `linux` |
+| Linux ARM | `linux-aarch64` | `linux` |
+| macOS Intel | `darwin-x86_64` | `darwin` |
+| macOS Apple Silicon | `darwin-arm64` | `darwin` |
+
+**Validation:** every value must be `major.minor[.patch]` with `major == 3` and `minor >= 8`. All values are validated up front, so a typo in any override fails on any developer's machine — not just the affected platform.
+
+**When to use overrides:** declare a per-platform override only when a tool's upstream dependency is unavailable for the default Python on that platform (e.g., PyRosetta on `linux-aarch64` only ships py39/py310 builds, so it pins `linux-aarch64: 3.10`). Use the OS-only tier when an entire OS family needs a different version. The reference example is `proto_tools/tools/structure_scoring/pyrosetta/standalone/python_version.txt`.
+
+**Rebuilds:** the file content **and the resolved version** are both included in the environment setup hash, so any edit triggers a rebuild and two platforms with different resolved versions get distinct hashes (matters when `PROTO_HOME` is on shared storage).
+
+**Consistency tests:** every shipped `python_version.txt` is validated by `tests/style_consistency_tests/test_python_version_consistency.py` (one parametrized result per tool). Parser unit tests live in `tests/tool_infra_tests/test_python_version_files.py`.
 
 ## Binary Installation
 

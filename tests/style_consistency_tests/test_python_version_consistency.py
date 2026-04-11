@@ -1,0 +1,71 @@
+"""tests/style_consistency_tests/test_python_version_consistency.py.
+
+Consistency checks for tool standalone/python_version.txt files.
+
+Only runs for tools that ship a python_version.txt; tools without one
+inherit current Python's major.minor at runtime and don't need a check.
+"""
+
+from pathlib import Path
+
+import pytest
+
+from proto_tools.utils.tool_instance import ToolInstance
+
+_TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
+
+
+def _discover_python_version_files() -> list[Path]:
+    """Find all standalone/python_version.txt files under proto_tools/tools."""
+    return sorted(_TOOLS_DIR.rglob("standalone/python_version.txt"))
+
+
+def _tool_id(path: Path) -> str:
+    """Return 'category/tool' identifier for a python_version.txt path."""
+    rel = path.relative_to(_TOOLS_DIR)
+    return f"{rel.parts[0]}/{rel.parts[1]}"
+
+
+_ALL_FILES = _discover_python_version_files()
+_ALL_IDS = [_tool_id(p) for p in _ALL_FILES]
+
+
+@pytest.mark.parametrize("version_file", _ALL_FILES, ids=_ALL_IDS)
+def test_python_version_file_is_well_formed(version_file: Path) -> None:
+    """Every shipped python_version.txt must parse cleanly via the canonical parser.
+
+    The parser enforces the required `default` key, every value's
+    `major.minor[.patch]` shape, and the `>=3.8` floor — so a single parse
+    call covers the full format contract.
+    """
+    content = version_file.read_text()
+    # Sentinel platform key that won't match any real override — exercises
+    # the default-fallback path while still validating every override value.
+    try:
+        ToolInstance._parse_python_version(content, "test-platform-no-match", str(version_file))
+    except (ValueError, RuntimeError) as e:
+        pytest.fail(f"{version_file}:\n  {e}")
+
+
+@pytest.mark.parametrize("version_file", _ALL_FILES, ids=_ALL_IDS)
+def test_python_version_file_declares_default(version_file: Path) -> None:
+    """Every shipped python_version.txt must explicitly declare a 'default' key.
+
+    Redundant with the parser check above, but kept as a separate test so the
+    failure message is precise: a tool author who forgets `default:` sees one
+    test fail with "missing 'default' key" rather than a generic parse error.
+    """
+    content = version_file.read_text()
+    has_default = False
+    for raw in content.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        key, sep, _ = line.partition(":")
+        if sep and key.strip().lower() == "default":
+            has_default = True
+            break
+    assert has_default, (
+        f"{version_file} is missing required 'default' key. "
+        f"Every python_version.txt must declare a default version like 'default: 3.11'."
+    )

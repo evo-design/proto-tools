@@ -1073,38 +1073,26 @@ class ToolInstance:
                     continue
             raise RuntimeError(f"Failed to download/extract micromamba from all sources: {last_err}")
 
-    def _get_python_version(self) -> str:
-        """Get Python version for this tool from python_version.txt.
+    @staticmethod
+    def _validate_python_version(version_str: str, source: str) -> str:
+        """Validate `major.minor[.patch]` with major == 3, minor >= 8.
 
-        Looks for `standalone/python_version.txt` in the tool's directory.
-        Returns version string (e.g., "3.11") or defaults to current Python version.
+        Args:
+            version_str (str): The version string to validate.
+            source (str): Context for error messages (file path, key, etc.).
 
-        Validates format: must be major.minor or major.minor.patch (e.g., "3.11" or "3.11.5").
+        Returns:
+            str: The version string unchanged on success.
+
+        Raises:
+            ValueError: If format is invalid, components are not integers, or version < 3.8.
         """
-        version_file = self.setup_script.parent / "python_version.txt"
-
-        if not version_file.exists():
-            # Default to current Python version
-            return f"{sys.version_info.major}.{sys.version_info.minor}"
-
-        try:
-            version_str = version_file.read_text().strip()
-        except Exception as e:
-            raise RuntimeError(f"Failed to read {version_file} for tool '{self.tool_name}': {e}") from e
-
-        # Validate format
-        if not version_str:
-            raise ValueError(
-                f"python_version.txt for tool '{self.tool_name}' is empty. Expected format: '3.11' or '3.11.5'"
-            )
-
         parts = version_str.split(".")
         if len(parts) not in (2, 3):
             raise ValueError(
-                f"Invalid Python version format in {version_file}: '{version_str}'. "
+                f"Invalid Python version format in {source}: '{version_str}'. "
                 f"Expected format: '3.11' or '3.11.5' (major.minor or major.minor.patch)"
             )
-
         try:
             major = int(parts[0])
             minor = int(parts[1])
@@ -1112,16 +1100,106 @@ class ToolInstance:
                 _ = int(parts[2])  # Validate patch is numeric
         except ValueError:
             raise ValueError(
-                f"Invalid Python version in {version_file}: '{version_str}'. Version components must be integers."
+                f"Invalid Python version in {source}: '{version_str}'. Version components must be integers."
             ) from None
-
-        # Check reasonable bounds
         if major != 3 or minor < 8:
+            raise ValueError(f"Unsupported Python version in {source}: '{version_str}'. Requires Python 3.8 or higher.")
+        return version_str
+
+    @staticmethod
+    def _parse_python_version(content: str, platform_key: str, source: str) -> str:
+        """Parse python_version.txt content and resolve for the given platform.
+
+        Format: keyed lines `key: value` with a required `default` key and
+        optional platform overrides. Comments (`#` to end of line) and blank
+        lines are ignored. Whitespace around `:` is stripped; keys are
+        lowercased.
+
+        Three-tier lookup, most specific wins:
+            1. Exact platform key (e.g. ``linux-aarch64``)
+            2. OS-only key (e.g. ``linux``)
+            3. ``default`` (required catch-all)
+
+        Args:
+            content (str): Raw file contents.
+            platform_key (str): Lookup key for the current platform, formatted as
+                ``f"{platform.system().lower()}-{platform.machine()}"`` (e.g.
+                ``"linux-aarch64"``).
+            source (str): File path or other identifier used in error messages.
+
+        Returns:
+            str: The resolved Python version string (e.g. ``"3.11"``).
+
+        Raises:
+            ValueError: If the file is empty after stripping comments, contains a
+                line without ``:``, has duplicate keys, is missing the required
+                ``default`` key, or any value fails version validation.
+        """
+        versions: dict[str, str] = {}
+        for raw_line in content.splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            if ":" not in line:
+                raise ValueError(
+                    f"Invalid line in {source}: '{line}'. "
+                    f"Expected 'key: value' format (e.g., 'default: 3.11', 'linux-aarch64: 3.10')."
+                )
+            key, _, value = line.partition(":")
+            key = key.strip().lower()
+            value = value.strip()
+            if not key:
+                raise ValueError(f"Invalid line in {source}: '{line}'. Empty key before ':'.")
+            if key in versions:
+                raise ValueError(f"Duplicate key '{key}' in {source}.")
+            versions[key] = ToolInstance._validate_python_version(value, f"{source} (key '{key}')")
+
+        if not versions:
             raise ValueError(
-                f"Unsupported Python version in {version_file}: '{version_str}'. Requires Python 3.8 or higher."
+                f"python_version.txt at {source} has no entries after stripping comments and "
+                f"blank lines. Expected at least 'default: <version>'."
             )
 
-        return version_str
+        if "default" not in versions:
+            raise ValueError(
+                f"python_version.txt at {source} is missing required 'default' key. "
+                f"Every python_version.txt must declare a default version like 'default: 3.11'."
+            )
+
+        # Three-tier lookup: most specific wins.
+        if platform_key in versions:
+            return versions[platform_key]
+        os_key = platform_key.partition("-")[0]
+        if os_key and os_key in versions:
+            return versions[os_key]
+        return versions["default"]
+
+    def _get_python_version(self) -> str:
+        """Get Python version for this tool from python_version.txt.
+
+        Looks for ``standalone/python_version.txt`` in the tool's directory.
+        Returns the version string (e.g. ``"3.11"``), or defaults to the
+        current Python's ``major.minor`` if the file is missing.
+
+        See :meth:`_parse_python_version` for the format spec, including
+        per-platform overrides.
+
+        Returns:
+            str: The resolved Python version string.
+
+        Raises:
+            RuntimeError: If the file exists but cannot be read.
+            ValueError: If the file content is malformed (see ``_parse_python_version``).
+        """
+        version_file = self.setup_script.parent / "python_version.txt"
+        if not version_file.exists():
+            return f"{sys.version_info.major}.{sys.version_info.minor}"
+        try:
+            content = version_file.read_text()
+        except Exception as e:
+            raise RuntimeError(f"Failed to read {version_file} for tool '{self.tool_name}': {e}") from e
+        platform_key = f"{platform.system().lower()}-{platform.machine()}"
+        return self._parse_python_version(content, platform_key, str(version_file))
 
     @classmethod
     def _get_tool_dirs(cls) -> dict[str, Path]:
@@ -1183,9 +1261,13 @@ class ToolInstance:
         env_vars = self.setup_script.parent / "env_vars.txt"
         if env_vars.exists():
             h.update(env_vars.read_bytes())
-        python_version = self.setup_script.parent / "python_version.txt"
-        if python_version.exists():
-            h.update(python_version.read_bytes())
+        python_version_file = self.setup_script.parent / "python_version.txt"
+        if python_version_file.exists():
+            h.update(python_version_file.read_bytes())
+            # Include the resolved version too — ensures the hash differs across
+            # platforms when keyed-form overrides are in use, even if the file
+            # content is identical (matters when PROTO_HOME is on shared storage).
+            h.update(self._get_python_version().encode())
         return h.hexdigest()[:16]
 
     @staticmethod

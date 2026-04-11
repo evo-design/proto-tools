@@ -11,15 +11,15 @@
 | **Hostname** | `GPUC960` |
 | **Python** | 3.12.13 |
 | **RAM** | 1007.4 GB |
-| **GPU** | 1x NVIDIA H100 80GB HBM3 |
+| **GPU** | 1× NVIDIA H100 80GB HBM3 |
 | **CUDA** | 12.2 |
 | **Mamba Env** | `proto-tools` |
 
 ## Git
 
-- **Commit**: `18826105e7b1`
-- **Branch**: `bv/progen3`
-- **Dirty**: Yes
+- **Commit**: `07a60f60c864`
+- **Branch**: `feat/pyrosetta-scoring-tools`
+- **Dirty**: No
 
 ## Environment Variables
 
@@ -39,7 +39,7 @@ CONDA_PREFIX=/home/bviggiano/miniforge3/envs/proto-tools
 CONDA_PREFIX_1=/home/bviggiano/miniforge3
 CONDA_PREFIX_2=/home/bviggiano/miniforge3/envs/proto-tools
 CONDA_PREFIX_3=/home/bviggiano/miniforge3
-CONDA_PROMPT_MODIFIER=(proto-tools) 
+CONDA_PROMPT_MODIFIER=(proto-tools)
 CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
 CONDA_SHLVL=4
 COREPACK_ENABLE_AUTO_PIN=0
@@ -93,16 +93,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bvi...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/b...
 PIP_DEFAULT_TIMEOUT=300
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
@@ -114,21 +114,20 @@ TORCH_CUDA_ARCH_LIST=9.0
 TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
 
 ## Results by Category
 
-### Causal Models (4/4)
+### Causal Models (3/3)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
 | `evo1-sample` | yes | ✅ | 300.4s | `70c61f9` ✱ | ✅ Pass |
 | `evo2-sample` | yes | ✅ | 342.1s | `70c61f9` ✱ | ✅ Pass |
 | `progen2-sample` | yes | ✅ | 175.4s | `70c61f9` ✱ | ✅ Pass |
-| `progen3-sample` | yes | ✅ | 37.4s | `1882610` ✱ | ✅ Pass |
 
 ### Gene Annotation (5/5)
 
@@ -224,6 +223,12 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `structure-metrics` | no | ✅ | 24.8s | `70c61f9` ✱ | ✅ Pass |
 | `viennarna-prediction` | no | ✅ | 15.4s | `70c61f9` ✱ | ✅ Pass |
 
+### Structure Scoring (1/1)
+
+| Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
+|------|--------------|----------------------|----------|-----------|--------|
+| `pyrosetta-energy` | no | ✅ | 231.5s | `07a60f6` | ✅ Pass |
+
 ### Testing (3/3)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
@@ -236,7 +241,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `mock-pytorch-tool-run` | yes | ✅ | 118.0s | `70c61f9` ✱ | ✅ Pass |
 
 ---
-*Generated at 2026-04-01 15:22:09 by `pytest --env-report`*
+*Generated at 2026-04-01 19:03:12 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -800,17 +805,17 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "progen3-sample",
-    "category": "causal_models",
-    "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[progen3-sample]",
+    "tool_name": "pyrosetta-energy",
+    "category": "structure_scoring",
+    "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[pyrosetta-energy]",
     "status": "passed",
-    "duration_seconds": 37.44,
-    "uses_gpu": true,
-    "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env",
+    "duration_seconds": 231.51,
+    "uses_gpu": false,
+    "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "18826105e7b1",
-    "git_dirty": true
+    "git_commit": "07a60f60c864",
+    "git_dirty": false
   }
 ]
 -->

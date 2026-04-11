@@ -1,0 +1,235 @@
+"""PyRosetta Solvent Accessible Surface Area (SASA) scoring tool."""
+
+import logging
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
+    ScoringStructureInput,
+    prepare_pdb_and_chain_maps,
+    remap_per_residue_chain_ids,
+    warn_about_dropped_residues,
+)
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Data Models
+# ============================================================================
+class ResidueSASA(BaseModel):
+    """SASA value for a single residue.
+
+    Attributes:
+        chain_id (str): Chain identifier.
+        residue_index (int): 1-indexed residue position.
+        residue_name (str): Three-letter residue code.
+        sasa (float): Solvent accessible surface area in Angstroms squared.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chain_id: str = Field(description="Chain identifier")
+    residue_index: int = Field(description="1-indexed residue position")
+    residue_name: str = Field(description="Three-letter residue code")
+    sasa: float = Field(description="SASA in Angstroms squared")
+
+
+class SASAResult(BaseModel):
+    """SASA result for a single structure.
+
+    Attributes:
+        total_sasa (float): Total solvent accessible surface area in Angstroms
+            squared. When ``chain_ids`` is set on the input, this is the sum
+            over the selected residues only, not the whole-pose SASA. (Contrast
+            with ``pyrosetta-energy``, whose ``total_energy`` is always the
+            whole-pose total regardless of chain selection — SASA can be
+            meaningfully summed over a residue subset, energy cannot.)
+        per_residue (list[ResidueSASA]): Per-residue SASA breakdown, filtered
+            to the selected residues when chain selection is active.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_sasa: float = Field(
+        description="Total SASA in Angstroms squared (sum over selected residues when chain_ids is set)"
+    )
+    per_residue: list[ResidueSASA] = Field(description="Per-residue SASA breakdown")
+
+
+class PyRosettaSASAInput(BaseToolInput):
+    """Input for PyRosetta SASA computation.
+
+    Attributes:
+        inputs (list[ScoringStructureInput]): Protein structures to analyze,
+            each with optional chain selection. Accepts bare Structure objects,
+            PDB file paths, or PDB content strings for convenience.
+    """
+
+    inputs: list[ScoringStructureInput] = InputField(
+        description="Protein structures with optional chain selection for SASA computation"
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_inputs(cls, value: Any) -> Any:
+        """Normalize a single structure/input to a list."""
+        if isinstance(value, (str, Path, Structure, ScoringStructureInput)):
+            value = [value]
+        if isinstance(value, dict):
+            value = [value]
+        return value
+
+
+class PyRosettaSASAConfig(BaseConfig):
+    """Configuration for PyRosetta SASA computation.
+
+    Attributes:
+        probe_radius (float): Radius of the solvent probe sphere in Angstroms.
+            Standard water probe is 1.4 A.
+    """
+
+    probe_radius: float = ConfigField(
+        title="Probe Radius",
+        default=1.4,
+        gt=0.0,
+        description="Solvent probe radius in Angstroms (standard water = 1.4)",
+    )
+
+
+class PyRosettaSASAOutput(BaseToolOutput):
+    """Output from PyRosetta SASA computation.
+
+    Attributes:
+        results (list[SASAResult]): SASA results, one per input structure.
+    """
+
+    results: list[SASAResult] = Field(
+        default_factory=list,
+        description="SASA results, one per input structure",
+    )
+
+    @property
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
+        return ["csv", "json"]
+
+    @property
+    def output_format_default(self) -> str:
+        """Return the default output format."""
+        return "csv"
+
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        import pandas as pd
+
+        path = Path(export_path).with_suffix(f".{file_format}")
+        rows = [
+            {
+                "structure_index": i,
+                "chain_id": res.chain_id,
+                "residue_index": res.residue_index,
+                "residue_name": res.residue_name,
+                "sasa": res.sasa,
+                "total_sasa": result.total_sasa,
+            }
+            for i, result in enumerate(self.results)
+            for res in result.per_residue
+        ]
+        df = pd.DataFrame(rows)
+        if file_format == "csv":
+            df.to_csv(path, index=False)
+        elif file_format == "json":
+            df.to_json(path, orient="records", indent=2)
+        else:
+            raise ValueError(f"Unsupported format: {file_format}")
+
+
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+def example_input() -> Any:
+    """Minimal valid input for testing and examples."""
+    return PyRosettaSASAInput(
+        inputs=[
+            ScoringStructureInput(
+                structure=Structure(structure=str(Path(__file__).parent / "examples" / "example.pdb"))
+            )
+        ]
+    )
+
+
+@tool(
+    key="pyrosetta-sasa",
+    label="PyRosetta SASA",
+    category="structure_scoring",
+    input_class=PyRosettaSASAInput,
+    config_class=PyRosettaSASAConfig,
+    output_class=PyRosettaSASAOutput,
+    description="Compute Solvent Accessible Surface Area (SASA) for protein structures using PyRosetta",
+    uses_gpu=False,
+    example_input=example_input,
+    iterable_input_field="inputs",
+    iterable_output_field="results",
+    cacheable=True,
+)
+def run_pyrosetta_sasa(
+    inputs: PyRosettaSASAInput,
+    config: PyRosettaSASAConfig | None = None,
+    instance: ToolInstance | None = None,
+) -> PyRosettaSASAOutput:
+    """Compute Solvent Accessible Surface Area (SASA) using PyRosetta.
+
+    Calculates total and per-residue SASA using the SasaCalc module with
+    a configurable probe radius. SASA measures the surface area of a protein
+    accessible to solvent molecules.
+
+    Args:
+        inputs (PyRosettaSASAInput): Structures to analyze with optional chain selection.
+        config (PyRosettaSASAConfig | None): Configuration with probe radius.
+        instance (ToolInstance | None): Optional ToolInstance for persistent execution.
+
+    Returns:
+        PyRosettaSASAOutput: Total and per-residue SASA for each input structure.
+    """
+    logger.debug("Using local venv for PyRosetta SASA computation")
+
+    pdb_contents, chain_ids_list, pdb_to_mmcif_maps = prepare_pdb_and_chain_maps(inputs.inputs)
+
+    input_data = {
+        "operation": "sasa",
+        "pdb_contents": pdb_contents,
+        "chain_ids_list": chain_ids_list,
+        "probe_radius": config.probe_radius,  # type: ignore[union-attr]
+        "device": "cpu",
+    }
+
+    output_data = ToolInstance.dispatch(
+        "pyrosetta",
+        input_data,
+        instance=instance,
+        config=config,
+    )
+
+    warn_about_dropped_residues(output_data["results"])
+    remap_per_residue_chain_ids(output_data["results"], pdb_to_mmcif_maps)
+    results = [SASAResult(**r) for r in output_data["results"]]
+
+    return PyRosettaSASAOutput(
+        metadata={
+            "num_structures": len(inputs.inputs),
+            "probe_radius": config.probe_radius,  # type: ignore[union-attr]
+        },
+        results=results,
+    )
