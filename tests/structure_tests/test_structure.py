@@ -11,6 +11,7 @@ import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures.structure import StructureMetrics, _approx_equal_metric
 from proto_tools.entities.structures.utils import (
     convert_cif_str_to_pdb_str,
     convert_pdb_str_to_cif_str,
@@ -382,3 +383,162 @@ def test_to_pdb_with_chain_mapping_does_not_mutate_cached_gemmi_struct():
 
     chains_after = [chain.name for model in s.gemmi_struct for chain in model]
     assert chains_before == chains_after == ["Heavy", "Light"]
+
+
+# ── StructureMetrics ─────────────────────────────────────────────────────────
+
+
+def test_metrics_init_strips_none():
+    m = StructureMetrics(ptm=0.9, plddt=None)
+    assert "ptm" in m
+    assert "plddt" not in m
+
+
+def test_metrics_dict_protocol():
+    m = StructureMetrics(ptm=0.9, iptm=0.8)
+    assert m["ptm"] == 0.9
+    assert len(m) == 2
+    assert set(m) == {"ptm", "iptm"}
+    assert 42 not in m
+    assert len(StructureMetrics()) == 0
+    with pytest.raises(KeyError):
+        m["missing"]
+
+
+@pytest.mark.parametrize(
+    "other,expected",
+    [
+        (StructureMetrics(ptm=0.9), True),
+        ({"ptm": 0.9}, True),
+        (StructureMetrics(ptm=0.8), False),
+        (42, NotImplemented),
+    ],
+    ids=["metrics-equal", "dict-equal", "metrics-unequal", "other-type"],
+)
+def test_metrics_eq(other, expected):
+    m = StructureMetrics(ptm=0.9)
+    result = m.__eq__(other)
+    assert result == expected
+
+
+def test_metrics_primary_value():
+    assert StructureMetrics(ptm=0.9, primary_metric="ptm").primary_value == 0.9
+    assert StructureMetrics(ptm=0.9).primary_value is None
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [(1.0, [1.0]), ([1.0, [2.0, 3.0]], [1.0, 2.0, 3.0]), ("not numeric", [])],
+    ids=["scalar", "nested-list", "non-numeric"],
+)
+def test_metrics_flatten_scalars(value, expected):
+    assert StructureMetrics._flatten_scalars(value) == expected
+
+
+_FLOAT_SPEC = {"type": float, "min": 0.0, "max": 1.0}
+_LIST_SPEC = {"type": list, "min": 0.0, "max": 1.0}
+_INT_SPEC = {"type": int, "min": 0, "max": 10}
+_BOOL_SPEC = {"type": bool, "min": None, "max": None}
+
+
+@pytest.mark.parametrize(
+    "spec,value,error_match",
+    [
+        (_FLOAT_SPEC, 0.5, None),
+        (_FLOAT_SPEC, 1.5, "above max"),
+        (_FLOAT_SPEC, -0.1, "below min"),
+        (_FLOAT_SPEC, "bad", "expected numeric"),
+        (_LIST_SPEC, [0.5, 0.8], None),
+        (_LIST_SPEC, [0.5, 1.5], r"element .* above max"),
+        (_LIST_SPEC, 0.5, "expected list"),
+        (_INT_SPEC, 5, None),
+        (_INT_SPEC, True, "expected int"),
+        (_INT_SPEC, -1, "below min"),
+        (_BOOL_SPEC, True, None),
+        (_BOOL_SPEC, 1, "expected bool"),
+    ],
+    ids=[
+        "float-ok",
+        "float-above-max",
+        "float-below-min",
+        "float-wrong-type",
+        "list-ok",
+        "list-element-above-max",
+        "list-wrong-type",
+        "int-ok",
+        "int-bool-rejected",
+        "int-below-min",
+        "bool-ok",
+        "bool-wrong-type",
+    ],
+)
+def test_metrics_check_value(spec, value, error_match):
+    m = StructureMetrics(x=value if not isinstance(value, str) else 0.5)
+    if error_match is None:
+        m._check_value("x", value, spec)
+    else:
+        with pytest.raises(AssertionError, match=error_match):
+            m._check_value("x", value, spec)
+
+
+def test_metrics_validate_against_spec():
+    spec = {
+        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "optional", "type": float, "min": 0.0, "max": 1.0},
+    }
+    StructureMetrics(ptm=0.9, iptm=0.8).validate_against_spec(spec)
+    with pytest.raises(AssertionError, match="Guaranteed metric"):
+        StructureMetrics(iptm=0.8).validate_against_spec(spec)
+    with pytest.raises(AssertionError, match="Undeclared metric"):
+        StructureMetrics(ptm=0.9, extra=1.0).validate_against_spec(spec)
+
+
+# ── Structure methods ────────────────────────────────────────────────────────
+
+
+def test_structure_add_metric(protein_from_pdb_file):
+    protein_from_pdb_file.add_metric("new_metric", 42.0)
+    assert protein_from_pdb_file.metrics["new_metric"] == 42.0
+
+
+def test_structure_properties(protein_from_pdb_file):
+    assert protein_from_pdb_file.num_chains > 0
+    assert protein_from_pdb_file.num_residues > 0
+    chain_types = protein_from_pdb_file.get_chain_types()
+    assert chain_types and all(v in ("polymer", "ligand") for v in chain_types.values())
+    pos_map = protein_from_pdb_file.get_residue_position_map()
+    assert pos_map
+    assert all(isinstance(t, tuple) and len(t) == 2 for positions in pos_map.values() for t in positions)
+
+
+def test_get_chain_positions(protein_from_pdb_file):
+    chain_id = protein_from_pdb_file.get_chain_ids()[0]
+    positions = protein_from_pdb_file.get_chain_positions(chain_id)
+    assert positions and all(isinstance(p, int) for p in positions)
+    with pytest.raises(ValueError, match="not found"):
+        protein_from_pdb_file.get_chain_positions("NONEXISTENT")
+
+
+def test_approx_equal_different_metrics():
+    a = Structure.from_file(_TEST_PDB_FILE, metrics={"ptm": 0.9})
+    b = Structure.from_file(_TEST_PDB_FILE, metrics={"iptm": 0.8})
+    with pytest.raises(AssertionError, match="Metric keys differ"):
+        a.approx_equal(b)
+
+
+@pytest.mark.parametrize(
+    "a,b,error_match",
+    [
+        (1.0, 2.0, "Metric"),
+        ([1.0], [1.0, 2.0], "length"),
+        ([1.0, 2.0], [1.0, 2.0], None),
+        ("a", "b", "Metric"),
+    ],
+    ids=["float-mismatch", "list-length", "list-recursive-ok", "non-equal"],
+)
+def test_approx_equal_metric(a, b, error_match):
+    if error_match is None:
+        _approx_equal_metric("k", a, b, 1e-4, 1e-6)
+    else:
+        with pytest.raises(AssertionError, match=error_match):
+            _approx_equal_metric("k", a, b, 1e-4, 1e-6)

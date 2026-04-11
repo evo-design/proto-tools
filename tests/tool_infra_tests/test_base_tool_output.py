@@ -155,15 +155,17 @@ def test_cache_key_excludes_non_key_fields():
 # ── __getattr__ on failed output ────────────────────────────────────────────
 
 
-def test_getattr_failed_output_raises_tool_execution_error():
-    output = _SimpleToolOutput.model_construct(success=False, errors=["something broke"])
-    with pytest.raises(ToolExecutionError, match="something broke"):
-        _ = output.result
-
-
-def test_getattr_failed_output_no_errors():
-    output = _SimpleToolOutput.model_construct(success=False, errors=[])
-    with pytest.raises(ToolExecutionError, match="no error messages"):
+@pytest.mark.parametrize(
+    "errors,match",
+    [
+        (["something broke"], "something broke"),
+        ([], "no error messages"),
+    ],
+    ids=["with-errors", "empty-errors"],
+)
+def test_getattr_failed_output(errors, match):
+    output = _SimpleToolOutput.model_construct(success=False, errors=errors)
+    with pytest.raises(ToolExecutionError, match=match):
         _ = output.result
 
 
@@ -206,3 +208,30 @@ def test_approx_equal_nested_basemodel():
     a = _NestedOutput(inner=_NestedModel(value=1.0))
     b = _NestedOutput(inner=_NestedModel(value=1.0 + 1e-6))
     a.approx_equal(b)
+
+
+@pytest.mark.parametrize(
+    "a,b,match",
+    [
+        (1, "1", "Type mismatch"),
+        ({"a": 1}, {"b": 1}, "Dict keys differ"),
+        ([1, 2], [1], "Length mismatch"),
+        ("a", "b", "Value mismatch"),
+    ],
+    ids=["type", "dict-keys", "list-length", "value"],
+)
+def test_approx_equal_values_error(a, b, match):
+    with pytest.raises(AssertionError, match=match):
+        _approx_equal_values(a, b, 1e-4, 1e-6, "test")
+
+
+@pytest.mark.parametrize(
+    "a,b",
+    [
+        ({"x": 1.0}, {"x": 1.0 + 1e-7}),
+        ([1.0, 2.0], [1.0, 2.0 + 1e-7]),
+    ],
+    ids=["dict", "list"],
+)
+def test_approx_equal_values_recursive(a, b):
+    _approx_equal_values(a, b, 1e-4, 1e-6, "test")

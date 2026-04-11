@@ -35,6 +35,52 @@ def test_fetch_pubchem_retry_on_429():
             assert fetch_pubchem_txt("https://example.com") == "CCO"
 
 
+def test_fetch_pubchem_success_first_attempt():
+    resp = MagicMock(status_code=200, text="CCO\n")
+    with patch("proto_tools.entities.ligands.utils.requests.get", return_value=resp):
+        assert fetch_pubchem_txt("https://example.com") == "CCO"
+
+
+def test_fetch_pubchem_200_empty_text():
+    resp = MagicMock(status_code=200, text="  \n")
+    with patch("proto_tools.entities.ligands.utils.requests.get", return_value=resp):
+        assert fetch_pubchem_txt("https://example.com") is None
+
+
+def test_fetch_pubchem_request_exception():
+    import requests as req
+
+    with patch("proto_tools.entities.ligands.utils.requests.get", side_effect=req.RequestException("timeout")):
+        with patch("proto_tools.entities.ligands.utils.time.sleep"):
+            assert fetch_pubchem_txt("https://example.com") is None
+
+
+def test_fetch_pubchem_all_429_exhausted():
+    resp = MagicMock(status_code=429)
+    with patch("proto_tools.entities.ligands.utils.requests.get", return_value=resp):
+        with patch("proto_tools.entities.ligands.utils.time.sleep"):
+            assert fetch_pubchem_txt("https://example.com") is None
+
+
+def test_get_smiles_from_name_not_found():
+    with patch("proto_tools.entities.ligands.utils.fetch_pubchem_txt", return_value=None):
+        with pytest.raises(ValueError, match="Could not find SMILES"):
+            get_smiles_from_name("anything")
+
+
+@pytest.mark.parametrize(
+    "side_effects,expected",
+    [
+        (["12345\n", "aspirin"], "aspirin"),
+        (["12345\n", None], "Unknown"),
+    ],
+    ids=["happy-path", "name-fetch-fails"],
+)
+def test_get_name_from_smiles(side_effects, expected):
+    with patch("proto_tools.entities.ligands.utils.fetch_pubchem_txt", side_effect=side_effects):
+        assert get_name_from_smiles("CC(=O)Oc1ccccc1C(=O)O") == expected
+
+
 @pytest.mark.integration
 def test_get_smiles_valid_name():
     smiles = get_smiles_from_name("Aspirin")
