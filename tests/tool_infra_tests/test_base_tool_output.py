@@ -1,13 +1,14 @@
 """tests/tool_infra_tests/test_base_tool_output.py.
 
-Tests for BaseToolOutput.
+Tests for BaseToolInput and BaseToolOutput.
 """
 
 from datetime import datetime
 
 import pytest
-from pydantic import Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
+from proto_tools.utils.tool_io import BaseToolInput, InputField, ToolExecutionError, _approx_equal_values
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
 
@@ -129,3 +130,79 @@ def test_complex_subclass_preserves_typed_fields():
     assert output.sequences == ["ATCG", "GCTA"]
     assert output.scores == [0.95, 0.87]
     assert output.count == 2
+
+
+# ── Cache key (BaseToolInput) ───────────────────────────────────────────────
+
+
+class _TestInput(BaseToolInput):
+    sequences: list[str] = InputField(description="Input sequences")
+    device: str = InputField(default="cpu", description="Device", include_in_key=False)
+
+
+def test_cache_key_deterministic():
+    a = _TestInput(sequences=["MVLSP"])
+    b = _TestInput(sequences=["MVLSP"])
+    assert a.cache_key() == b.cache_key()
+
+
+def test_cache_key_excludes_non_key_fields():
+    a = _TestInput(sequences=["MVLSP"], device="cpu")
+    b = _TestInput(sequences=["MVLSP"], device="cuda")
+    assert a.cache_key() == b.cache_key()
+
+
+# ── __getattr__ on failed output ────────────────────────────────────────────
+
+
+def test_getattr_failed_output_raises_tool_execution_error():
+    output = _SimpleToolOutput.model_construct(success=False, errors=["something broke"])
+    with pytest.raises(ToolExecutionError, match="something broke"):
+        _ = output.result
+
+
+def test_getattr_failed_output_no_errors():
+    output = _SimpleToolOutput.model_construct(success=False, errors=[])
+    with pytest.raises(ToolExecutionError, match="no error messages"):
+        _ = output.result
+
+
+# ── approx_equal ────────────────────────────────────────────────────────────
+
+
+class _FloatOutput(MockToolOutputBase):
+    score: float = Field(description="A score")
+
+
+class _NestedModel(BaseModel):
+    value: float = Field(description="Nested value")
+
+
+class _NestedOutput(MockToolOutputBase):
+    inner: _NestedModel = Field(description="Nested model")
+
+
+def test_approx_equal_skips_metadata():
+    """Different metadata fields don't cause mismatch."""
+    a = _FloatOutput(tool_id="a", execution_time=1.0, score=1.0)
+    b = _FloatOutput(tool_id="b", execution_time=99.0, score=1.0)
+    a.approx_equal(b)
+
+
+@pytest.mark.parametrize(
+    "a_val,b_val,should_pass",
+    [(1.0, 1.0 + 1e-6, True), (1.0, 2.0, False), (float("nan"), float("nan"), True)],
+    ids=["within-tolerance", "beyond-tolerance", "nan-equal"],
+)
+def test_approx_equal_float(a_val, b_val, should_pass):
+    if should_pass:
+        _approx_equal_values(a_val, b_val, rtol=1e-4, atol=1e-5, path="test")
+    else:
+        with pytest.raises(AssertionError, match="Float mismatch"):
+            _approx_equal_values(a_val, b_val, rtol=1e-4, atol=1e-5, path="test")
+
+
+def test_approx_equal_nested_basemodel():
+    a = _NestedOutput(inner=_NestedModel(value=1.0))
+    b = _NestedOutput(inner=_NestedModel(value=1.0 + 1e-6))
+    a.approx_equal(b)

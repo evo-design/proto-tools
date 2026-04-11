@@ -13,7 +13,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingInput,
     InverseFoldingOutput,
+    InverseFoldingScoringOutput,
     InverseFoldingStructureInput,
+    SequenceScores,
 )
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -130,3 +132,36 @@ def test_output_getitem():
 def test_output_iter():
     output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
     assert list(output) == [DesignedSequences(sequences=["MVLSP", "GGGS"])]
+
+
+# ── Validation: invalid chain_ids and fixed_positions ───────────────────────
+
+
+def test_structure_rejects_invalid_chain_ids():
+    with pytest.raises(ValueError, match="not found in structure"):
+        InverseFoldingStructureInput(structure=TEST_PDB_FILE, chain_ids=["Z"])
+
+
+def test_structure_rejects_invalid_fixed_position_chain():
+    with pytest.raises(ValueError, match="not in structure"):
+        InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"Z": [1]})
+
+
+# ── Export ──────────────────────────────────────────────────────────────────
+
+
+def test_output_export_fasta(tmp_path):
+    output = InverseFoldingOutput(designed_sequences=[DesignedSequences(sequences=["MVLSP", "GGGS"])])
+    output.export("designs", export_path=tmp_path, file_format="fasta")
+    fasta_files = list((tmp_path / "designs").glob("*.fasta"))
+    assert len(fasta_files) == 1
+    assert "MVLSP" in fasta_files[0].read_text()
+
+
+@pytest.mark.parametrize("fmt", ["csv", "json"])
+def test_scoring_output_export(fmt, tmp_path):
+    output = InverseFoldingScoringOutput(
+        scores=[SequenceScores(metrics={"perplexity": 1.5, "log_likelihood": -3.2})],
+    )
+    output.export("scores", export_path=tmp_path, file_format=fmt)
+    assert (tmp_path / f"scores.{fmt}").stat().st_size > 0

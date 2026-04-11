@@ -20,6 +20,7 @@ from proto_tools.utils.persistent_worker import (
     _build_subprocess_env,
     _parse_env_vars_file,
 )
+from proto_tools.utils.proto_home import get_proto_home
 
 _STANDALONE_HELPERS_SOURCE = (
     Path(__file__).parent.parent.parent / "proto_tools" / "utils" / "standalone_standalone_helpers.py"
@@ -1106,6 +1107,8 @@ def test_hf_hub_cache_not_in_env(monkeypatch):
 
 def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
     """HF_TOKEN is set in subprocess env when token exists only as a file."""
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    get_proto_home.cache_clear()
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     token_file = tmp_path / "token"
@@ -1120,6 +1123,8 @@ def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
 
 def test_hf_token_resolved_from_git_credentials(monkeypatch, tmp_path: Path):
     """HF_TOKEN is set in subprocess env when token exists only in git-credentials."""
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    get_proto_home.cache_clear()
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     git_creds = tmp_path / "git-credentials"
