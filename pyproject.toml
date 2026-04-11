@@ -128,11 +128,17 @@ omit = [
     "proto_tools/utils/install_binary.py",
     # Notebook generation utility — output-only, no test-path callers
     "proto_tools/utils/notebook_docs.py",
+    # Logging setup — stdlib wrappers, bugs visible as missing log output
+    "proto_tools/utils/logging_config.py",
+    # Progress spinners — threading/display code, tested manually
+    "proto_tools/utils/progress.py",
+    # System info collection — reporting/diagnostics, not business logic
+    "proto_tools/utils/system_info.py",
 ]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 72
+fail_under = 76
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

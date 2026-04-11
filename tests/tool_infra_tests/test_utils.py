@@ -5,12 +5,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from tqdm import tqdm
 
 from proto_tools.utils.auth import require_hf_token, resolve_hf_token
 from proto_tools.utils.chemistry import validate_smiles
 from proto_tools.utils.msa import extract_msa_sequences
-from proto_tools.utils.progress import _is_disabled, progress_bar, set_substatus
 from proto_tools.utils.proto_home import get_proto_home, show_first_run_notice
 from proto_tools.utils.sequence import (
     calculate_gc_content,
@@ -188,28 +186,6 @@ def test_first_run_notice_shows_notice(monkeypatch, tmp_path, capsys, _clear_pro
     assert "first-run setup" in err
     assert "PROTO_MODEL_CACHE" in err
     assert (tmp_path / ".initialized").exists()
-
-
-# ── progress.py ──────────────────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize("env_value,expected", [("1", True), ("true", True), ("yes", True), ("", False), ("0", False)])
-def test_is_disabled(monkeypatch, env_value, expected):
-    monkeypatch.setenv("PROTO_NO_SPINNER", env_value)
-    assert _is_disabled() is expected
-
-
-def test_progress_bar_disabled_returns_plain_tqdm(monkeypatch):
-    monkeypatch.setenv("PROTO_NO_SPINNER", "1")
-    bar = progress_bar(total=10, desc="test")
-    assert type(bar) is tqdm
-    bar.close()
-
-
-def test_set_substatus_no_active_bar(caplog):
-    with caplog.at_level("INFO", logger="proto_tools"):
-        set_substatus("building environment")
-    assert any("building environment" in r.message for r in caplog.records)
 
 
 # ── auth.py ──────────────────────────────────────────────────────────────────

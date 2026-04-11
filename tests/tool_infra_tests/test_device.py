@@ -550,3 +550,8 @@ def test_number_of_visible_gpus_backward_compat():
     """Test that number_of_available_gpus() is alias for number_of_visible_gpus()."""
     # Both should return same value
     assert number_of_available_gpus() == number_of_visible_gpus()
+
+
+def test_parse_device_string_cuda_non_integer_index():
+    with pytest.raises(ValueError, match="index must be integer"):
+        parse_device_string("cuda:abc")
