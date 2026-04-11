@@ -1,4 +1,4 @@
-"""Tests for Orfipy ORF prediction tool."""
+"""Tests for Orfipy ORF prediction tool and ORF data model."""
 
 from typing import get_args
 
@@ -15,6 +15,19 @@ from proto_tools.tools.orf_prediction import (
 from proto_tools.tools.orf_prediction.orf import ORF
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
+_VALID_ORF_KWARGS = {
+    "parent_id": "seq_0",
+    "orf_id": "gene_1",
+    "strand": "+",
+    "frame": 1,
+    "amino_acid_sequence": "MKT",
+    "nucleotide_sequence": "ATGAAGACT",
+    "amino_acid_length": 3,
+    "nucleotide_length": 9,
+    "nucleotide_start": 1,
+    "nucleotide_end": 9,
+}
+
 
 def _create_sample_orf(parent_id: str = "seq_0", orf_id: str = "ORF.1") -> ORF:
     return ORF(
@@ -29,6 +42,53 @@ def _create_sample_orf(parent_id: str = "seq_0", orf_id: str = "ORF.1") -> ORF:
         nucleotide_start=1,
         nucleotide_end=12,
     )
+
+
+# ── ORF data model ────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "overrides,match",
+    [
+        ({"nucleotide_start": 0}, "Must be > 0"),
+        ({"nucleotide_end": 0}, "Must be > 0"),
+        ({"nucleotide_start": 10, "nucleotide_end": 5}, "must be < end"),
+    ],
+    ids=["start=0", "end=0", "start>end"],
+)
+def test_orf_coordinate_validation(overrides, match):
+    with pytest.raises(ValueError, match=match):
+        ORF(**{**_VALID_ORF_KWARGS, **overrides})
+
+
+@pytest.mark.parametrize(
+    "metrics,nuc_seq,expected",
+    [
+        ({"gc_content": 55.0}, "ATGAAGACT", 55.0),
+        ({}, "GGCC", 100.0),
+    ],
+    ids=["from-metrics", "computed"],
+)
+def test_orf_gc_content(metrics, nuc_seq, expected):
+    orf = ORF(**{**_VALID_ORF_KWARGS, "metrics": metrics, "nucleotide_sequence": nuc_seq})
+    assert orf.gc_content == pytest.approx(expected)
+
+
+def test_orf_metric_attribute_access_and_missing():
+    orf = ORF(**{**_VALID_ORF_KWARGS, "metrics": {"start_type": "ATG"}})
+    assert orf.start_type == "ATG"
+    with pytest.raises(AttributeError, match="no attribute"):
+        _ = orf.nonexistent_field
+
+
+def test_orf_to_flat_dict():
+    orf = ORF(**{**_VALID_ORF_KWARGS, "metrics": {"start_type": "ATG", "score": 0.9}})
+    flat = orf.to_flat_dict()
+    assert flat["id"] == "seq_0_gene_1"
+    assert "gc_content" in flat
+    assert flat["start_type"] == "ATG"
+    assert flat["score"] == 0.9
+    assert "metrics" not in flat
 
 
 # ── Parsing ────────────────────────────────────────────────────────────

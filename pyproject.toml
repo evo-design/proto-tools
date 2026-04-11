@@ -122,10 +122,17 @@ omit = [
     # Coverage tracks infra (utils/, entities/, tool_registry) not tool wrappers.
     "proto_tools/tools/*/*/*.py",
     "*/_in_process_mode/*",
+    # Subprocess entry point — only exercised by tool dispatch integration tests
+    "proto_tools/utils/_worker_bootstrap.py",
+    # Runs inside standalone tool envs during setup.sh
+    "proto_tools/utils/install_binary.py",
+    # Notebook generation utility — output-only, no test-path callers
+    "proto_tools/utils/notebook_docs.py",
 ]
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 68
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
