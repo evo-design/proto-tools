@@ -7,16 +7,24 @@ import warnings
 from pathlib import Path
 
 import gemmi
+import numpy as np
 import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.entities.structures.structure import StructureMetrics, _approx_equal_metric
 from proto_tools.entities.structures.utils import (
+    adjacent_distances,
     convert_cif_str_to_pdb_str,
     convert_pdb_str_to_cif_str,
     detect_structure_format,
+    distances_to_centroid,
+    get_backbone_atoms,
+    get_centroid,
+    is_valid_structure,
     load_structure_file,
+    pairwise_distances,
+    pdb_file_to_atomarray,
 )
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -542,3 +550,118 @@ def test_approx_equal_metric(a, b, error_match):
     else:
         with pytest.raises(AssertionError, match=error_match):
             _approx_equal_metric("k", a, b, 1e-4, 1e-6)
+
+
+# ── Geometry utilities ──────────────────────────────────────────────────────────
+
+_COORDS = np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [0.0, 4.0, 0.0]])
+
+
+def test_pairwise_distances():
+    result = pairwise_distances(_COORDS)
+    assert result.shape == (3,)
+    np.testing.assert_allclose(sorted(result), [3.0, 4.0, 5.0])
+
+
+def test_adjacent_distances():
+    result = adjacent_distances(_COORDS)
+    assert result.shape == (3,)
+    assert result[1] == pytest.approx(3.0)
+    assert result[2] == pytest.approx(5.0)
+
+
+def test_centroid_and_distances():
+    centroid = get_centroid(_COORDS)
+    assert centroid.shape == (1, 3)
+    np.testing.assert_allclose(centroid[0], [1.0, 4.0 / 3, 0.0])
+    dists = distances_to_centroid(_COORDS)
+    assert dists.shape == (3,)
+    assert all(d > 0 for d in dists)
+
+
+def test_pdb_file_to_atomarray_and_backbone():
+    atoms = pdb_file_to_atomarray(str(_TEST_PDB_FILE))
+    assert len(atoms) > 0
+    assert "CA" in atoms.atom_name
+    backbone = get_backbone_atoms(atoms)
+    assert len(backbone) > 0
+    assert set(backbone.atom_name).issubset({"CA", "N", "C"})
+
+
+# ── Format detection edge cases ─────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "content,expected",
+    [
+        ("# comment\nloop_\n_atom_site.id\nATOM 1\n", "cif"),
+        ("# comment\n" * 20 + "ATOM      1  N   ALA A   1\n", "pdb"),
+        ("# filler\n" * 15 + "_atom_site.id 1\n", "cif"),
+    ],
+    ids=["cif-loop-marker", "pdb-late-atom", "cif-atom-site-deep"],
+)
+def test_detect_format_edge_cases(content, expected):
+    assert detect_structure_format(content) == expected
+
+
+# ── is_valid_structure ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "input_val,expected",
+    [
+        ("HEADER\nEND\n", False),
+        (_TEST_PDB_FILE, True),
+        ("not a structure at all", False),
+    ],
+    ids=["no-atoms", "file-path", "garbage"],
+)
+def test_is_valid_structure(input_val, expected):
+    assert is_valid_structure(input_val) is expected
+
+
+# ── CIF→PDB warning branches ───────────────────────────────────────────────────
+
+
+def test_warn_cif_to_pdb_long_atom_names(test_cif_file_content):
+    struct = gemmi.make_structure_from_block(gemmi.cif.read_string(test_cif_file_content)[0])
+    for model in struct:
+        for chain in model:
+            for residue in chain:
+                for atom in residue:
+                    atom.name = "LONGNAME"
+                    break
+                break
+            break
+        break
+    modified_cif = struct.make_mmcif_document().as_string()
+    with pytest.warns(UserWarning, match="atom name"):
+        convert_cif_str_to_pdb_str(modified_cif)
+
+
+def test_warn_cif_to_pdb_long_residue_names(test_cif_file_content):
+    struct = gemmi.make_structure_from_block(gemmi.cif.read_string(test_cif_file_content)[0])
+    for model in struct:
+        for chain in model:
+            for residue in chain:
+                residue.name = "LONGRES"
+                break
+            break
+        break
+    modified_cif = struct.make_mmcif_document().as_string()
+    with pytest.warns(UserWarning, match="residue name"):
+        convert_cif_str_to_pdb_str(modified_cif)
+
+
+def test_warn_cif_to_pdb_metadata_markers(test_cif_file_content):
+    injected = test_cif_file_content + "\n_struct_ncs_oper.id 1\n"
+    with pytest.warns(UserWarning, match="extension metadata"):
+        convert_cif_str_to_pdb_str(injected)
+
+
+# ── CIF→PDB conversion error paths ─────────────────────────────────────────────
+
+
+def test_convert_cif_to_pdb_unparseable():
+    with pytest.raises(ValueError, match="Failed to convert CIF to PDB"):
+        convert_cif_str_to_pdb_str("this is not valid CIF content at all")

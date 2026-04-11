@@ -3,16 +3,20 @@
 Tests for structure prediction shared input data models.
 """
 
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
 
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
     Chain,
     ChainModification,
+    MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
+    StructurePredictionOutput,
 )
 
 # ── Module-level test sequences ────────────────────────────────────────────────
@@ -784,3 +788,104 @@ def test_complex_with_invalid_modification_raises():
                 }
             ]
         )
+
+
+# ── Validator error paths ────────────────────────────────────────────────────────
+
+
+def test_chain_modifications_must_be_list():
+    with pytest.raises(ValueError, match="modifications must be a list"):
+        Chain(sequence=_PROTEIN_SEQ, entity_type="protein", modifications="not a list")
+
+
+def test_chain_modification_invalid_dict():
+    with pytest.raises(ValueError, match="Modification dict at index 0 is invalid"):
+        Chain(sequence=_PROTEIN_SEQ, entity_type="protein", modifications=[{"bad_key": "value"}])
+
+
+def test_ligand_rejects_modifications():
+    with pytest.raises(ValueError, match="Ligands cannot have modifications"):
+        Chain(sequence="CCO", entity_type="ligand", modifications=[(1, "SEP")])
+
+
+def test_chain_modification_zero_based_position():
+    with pytest.raises(ValueError, match="1-based"):
+        Chain(sequence=_PROTEIN_SEQ, entity_type="protein", modifications=[(0, "TPO")])
+
+
+def test_chains_must_be_list():
+    with pytest.raises(ValueError, match="chains must be a list"):
+        StructurePredictionComplex(chains="not a list")
+
+
+def test_chains_too_many():
+    seqs = [f"M{'A' * 5}" for _ in range(len(CHAIN_IDS) + 1)]
+    with pytest.raises(ValueError, match="Cannot provide more than"):
+        StructurePredictionComplex(chains=seqs)
+
+
+def test_input_rejects_unsupported_entity_types():
+    with pytest.raises(ValueError, match="unsupported entity types"):
+        _ProteinOnlyInput(complexes=[StructurePredictionComplex(chains=[Chain(sequence=_DNA_SEQ, entity_type="dna")])])
+
+
+def test_input_rejects_modifications_when_disallowed():
+    chain = Chain(sequence=_PROTEIN_SEQ_TYPED, entity_type="protein", modifications=[(4, "TPO")])
+    with pytest.raises(ValueError, match="does not allow chain modifications"):
+        _NoModificationsInput(complexes=[StructurePredictionComplex(chains=[chain])])
+
+
+def test_input_get_entity_type_set():
+    inp = _AllTypesInput(
+        complexes=[
+            StructurePredictionComplex(chains=[Chain(sequence=_PROTEIN_SEQ, entity_type="protein")]),
+            StructurePredictionComplex(chains=[Chain(sequence=_DNA_SEQ, entity_type="dna")]),
+        ]
+    )
+    assert inp.get_entity_type_set() == {"protein", "dna"}
+
+
+@pytest.mark.parametrize(
+    "attrs,match",
+    [
+        ({"ALLOWS_CHAIN_MODIFICATIONS": True}, "SUPPORTED_ENTITY_TYPES"),
+        ({"SUPPORTED_ENTITY_TYPES": {"protein"}}, "ALLOWS_CHAIN_MODIFICATIONS"),
+    ],
+    ids=["missing-entity-types", "missing-allows-modifications"],
+)
+def test_init_subclass_missing_class_attrs(attrs, match):
+    with pytest.raises(TypeError, match=match):
+        type("_Bad", (StructurePredictionInput,), attrs)
+
+
+def test_normalize_complexes_wraps_non_list():
+    inp = _AllTypesInput(complexes=StructurePredictionComplex(chains=[_PROTEIN_SEQ]))
+    assert len(inp) == 1
+
+
+# ── MSAStructurePredictionConfig ─────────────────────────────────────────────────
+
+
+def test_msa_config_minimal():
+    config = MSAStructurePredictionConfig.minimal()
+    assert config.use_msa is False
+
+
+# ── StructurePredictionOutput ────────────────────────────────────────────────────
+
+_TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+
+
+@pytest.mark.parametrize("fmt", ["pdb", "cif"], ids=["pdb", "cif"])
+def test_output_export(fmt, tmp_path):
+    struct = Structure.from_file(_TEST_PDB_FILE)
+    output = StructurePredictionOutput.model_construct(structures=[struct], success=True)
+    output._export_output(tmp_path / "out", fmt)
+    assert (tmp_path / "out" / f"structure_0.{fmt}").exists()
+
+
+def test_output_export_invalid_format(tmp_path):
+    struct = Structure.from_file(_TEST_PDB_FILE)
+    output = StructurePredictionOutput.model_construct(structures=[struct], success=True)
+    with pytest.raises(ValueError, match="Invalid file format"):
+        output._export_output(tmp_path / "out", "xyz")
