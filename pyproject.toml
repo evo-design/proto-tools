@@ -276,7 +276,8 @@ ignore = [
     "D100", "D101", "D102", "D103", "D104", "D106", "D107",  # docstring presence rules relaxed in tests
     "ARG",      # pytest fixtures appear as unused arguments
 ]
-"**/standalone/standalone_helpers.py" = ["F401"]
+"**/standalone_helpers/__init__.py" = ["F401", "TID252"]  # re-exports; relative imports needed for copy-into-subprocess pattern
+"**/standalone_helpers/*.py" = ["TID252"]  # relative imports needed for copy-into-subprocess pattern
 "**/standalone/*.py" = ["T20", "S", "PLW0602", "PLW0603", "E402", "PLW1510"]
 "proto_tools/utils/install_binary.py" = ["T20", "S101", "S603", "S607"]
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]

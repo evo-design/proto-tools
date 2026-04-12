@@ -56,6 +56,7 @@ analyses/*
 !analyses/examples/
 
 # Auto-generated helpers in standalone directories (source is in utils/standalone_helpers_source/)
+**/standalone/standalone_helpers/
 **/standalone/standalone_helpers.py
 **/standalone/standalone_helpers.sh
 

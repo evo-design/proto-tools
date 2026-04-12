@@ -37,11 +37,11 @@ _FILE_FALLBACK_THRESHOLD = 100_000_000
 
 
 def _copy_standalone_helpers(script_path: str) -> None:
-    """Copy standalone helpers (Python and shell) to the tool's standalone directory.
+    """Copy standalone helpers (Python package and shell file) to the tool's standalone directory.
 
     Checks if 'standalone' appears in the script's absolute path. If found,
-    copies standalone_helpers.py and standalone_helpers.sh from
-    utils/standalone_helpers_source/ into that standalone directory.
+    copies the ``standalone_helpers/`` package and ``standalone_helpers.sh``
+    from ``utils/standalone_helpers_source/`` into that standalone directory.
 
     Args:
         script_path (str): Path to the standalone inference.py or run.py script
@@ -61,15 +61,27 @@ def _copy_standalone_helpers(script_path: str) -> None:
     # Source directory: utils/standalone_helpers_source/
     helpers_dir = Path(__file__).parent / "standalone_helpers_source"
 
-    for filename in ("standalone_helpers.py", "standalone_helpers.sh"):
-        source = helpers_dir / filename
-        target = standalone_dir / filename
+    for name in ("standalone_helpers", "standalone_helpers.sh"):
+        source = helpers_dir / name
+        target = standalone_dir / name
         if not source.exists():
             continue
+        # When copying the new package, remove any stale single-file copy
+        # left from before the package refactor so it doesn't shadow on sys.path.
+        if source.is_dir():
+            stale_py = standalone_dir / f"{name}.py"
+            if stale_py.exists():
+                try:
+                    stale_py.unlink()
+                except OSError as exc:
+                    sys.stderr.write(f"[worker] Warning: Failed to remove stale {stale_py}: {exc}\n")
         try:
-            shutil.copy2(source, target)
+            if source.is_dir():
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, target)
         except Exception as exc:
-            sys.stderr.write(f"[worker] Warning: Failed to copy {filename}: {exc}\n")
+            sys.stderr.write(f"[worker] Warning: Failed to copy {name}: {exc}\n")
 
 
 def _load_module(script_path: str) -> Any:
