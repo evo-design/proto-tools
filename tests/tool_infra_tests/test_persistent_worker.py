@@ -23,7 +23,7 @@ from proto_tools.utils.persistent_worker import (
 from proto_tools.utils.proto_home import get_proto_home
 
 _STANDALONE_HELPERS_SOURCE = (
-    Path(__file__).parent.parent.parent / "proto_tools" / "utils" / "standalone_standalone_helpers.py"
+    Path(__file__).parent.parent.parent / "proto_tools" / "utils" / "standalone_helpers_source" / "standalone_helpers"
 )
 
 
@@ -853,7 +853,7 @@ def test_compute_env_vars_can_be_overridden_by_tool(monkeypatch, tmp_path: Path)
 
 
 def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
-    """Verify standalone_helpers.py is copied to standalone directory on worker startup."""
+    """Verify standalone_helpers package is copied to standalone directory on worker startup."""
     # Create a minimal fake tool environment
     fake_env = tmp_path / "fake_env"
     fake_env.mkdir()
@@ -871,9 +871,9 @@ def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
     script_path = standalone_dir / "test_script.py"
     script_path.write_text(echo_script.read_text())
 
-    # Verify standalone_helpers.py doesn't exist yet
-    helpers_path = standalone_dir / "standalone_helpers.py"
-    assert not helpers_path.exists(), "standalone_helpers.py should not exist before worker starts"
+    # Verify standalone_helpers package doesn't exist yet
+    helpers_path = standalone_dir / "standalone_helpers"
+    assert not helpers_path.exists(), "standalone_helpers package should not exist before worker starts"
 
     # Start the worker
     worker = PersistentWorker(
@@ -889,23 +889,26 @@ def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
         result = worker.send({"test": "data"})
         assert result["echo"]["test"] == "data", "Worker should be functional"
 
-        # Verify standalone_helpers.py was copied
-        assert helpers_path.exists(), "standalone_helpers.py should be copied on worker startup"
+        # Verify standalone_helpers package was copied
+        assert helpers_path.is_dir(), "standalone_helpers package should be copied on worker startup"
 
-        # Verify content matches source exactly
-        if _STANDALONE_HELPERS_SOURCE.exists():
-            source_content = _STANDALONE_HELPERS_SOURCE.read_text()
-            copied_content = helpers_path.read_text()
-            assert copied_content == source_content, (
-                "Copied standalone_helpers.py should be identical to source standalone_standalone_helpers.py"
-            )
+        # Verify the package has __init__.py and expected submodules
+        assert (helpers_path / "__init__.py").exists(), "standalone_helpers/__init__.py should exist"
+        for submodule in ("device.py", "memory.py", "seeding.py", "weights.py", "compression.py"):
+            assert (helpers_path / submodule).exists(), f"standalone_helpers/{submodule} should exist"
+
+        # Verify __init__.py content matches source exactly
+        assert _STANDALONE_HELPERS_SOURCE.is_dir(), "source standalone_helpers package must exist"
+        source_init = (_STANDALONE_HELPERS_SOURCE / "__init__.py").read_text()
+        copied_init = (helpers_path / "__init__.py").read_text()
+        assert copied_init == source_init, "Copied standalone_helpers/__init__.py should be identical to source"
 
     finally:
         worker.stop()
 
 
 def test_helpers_not_copied_outside_standalone(tmp_path: Path):
-    """Verify standalone_helpers.py is not copied if script is not in a standalone/ directory."""
+    """Verify standalone_helpers package is not copied if script is not in a standalone/ directory."""
     # Create a script in a non-standalone location
     script = tmp_path / "script_not_in_standalone.py"
     script.write_text(
@@ -934,14 +937,14 @@ def test_helpers_not_copied_outside_standalone(tmp_path: Path):
     try:
         worker.start()
 
-        # Worker should still function (just without standalone_helpers.py)
+        # Worker should still function (just without standalone_helpers)
         result = worker.send({"test": "data"})
         assert result["result"] == "ok"
 
-        # Verify standalone_helpers.py was NOT copied
-        helpers_path = tmp_path / "standalone_helpers.py"
+        # Verify standalone_helpers package was NOT copied
+        helpers_path = tmp_path / "standalone_helpers"
         assert not helpers_path.exists(), (
-            "standalone_helpers.py should not be copied for scripts outside standalone/ directories"
+            "standalone_helpers package should not be copied for scripts outside standalone/ directories"
         )
 
     finally:
