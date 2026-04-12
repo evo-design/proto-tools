@@ -17,6 +17,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
+from proto_tools.utils.compressed_array import decompress_result
 
 # ============================================================================
 # Constants
@@ -170,6 +171,19 @@ class AlphaGenomePredictOutput(BaseToolOutput):
         default=None,
         description="Variant metadata for variant-effect predictions",
     )
+
+    def model_post_init(self, __context: Any) -> None:
+        """Decompress any compressed arrays in the result dict.
+
+        Compression is used as a wire format for subprocess IPC — large numpy
+        arrays are sent as ``base85(zlib(tobytes()))`` dicts instead of nested
+        Python lists, cutting transport time from minutes to seconds. This hook
+        transparently decompresses them back to lists when the Pydantic model
+        is constructed, so consumers always see the same ``list[list[float]]``
+        structure regardless of whether compression was used on the wire.
+        """
+        super().model_post_init(__context)
+        object.__setattr__(self, "result", decompress_result(self.result, to_list=True))
 
     @property
     def output_format_options(self) -> list[str]:
