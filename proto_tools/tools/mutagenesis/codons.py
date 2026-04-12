@@ -7,6 +7,8 @@ No BioPython dependency.
 import functools
 import random
 
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
+
 # ============================================================================
 # Standard genetic code (codon → amino acid)
 # ============================================================================
@@ -100,7 +102,7 @@ IUPAC_DNA: dict[str, str] = {
     "N": "ACGT",
 }
 
-STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+STANDARD_AMINO_ACIDS = PROTEIN_AMINO_ACIDS
 
 # Named codon schemes supported by the protein sampler
 COMMON_CODON_SCHEMES: list[str] = [

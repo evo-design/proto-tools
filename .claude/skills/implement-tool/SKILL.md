@@ -241,7 +241,7 @@ Structure:
   - `__init__`: set `self._loaded = False`
   - `load(device)`: import heavy deps, load model weights
   - Core method(s) matching the operations from the contract
-  - `_serialize_output()` helper for tensor → list conversion
+  - `serialize_output()` from `standalone_helpers` for tensor → list conversion
 - `dispatch(input_dict)` function as entry point:
   - Global model instance (lazy-initialized)
   - Routes by `input_dict["operation"]` to model methods
@@ -253,7 +253,7 @@ Structure:
 CRITICAL RULES:
 - Heavy imports (torch, model libraries) ONLY inside methods, never at module level
 - The dispatch() function is the entry point for both persistent-worker and one-shot execution
-- All tensor/array outputs must be converted to Python lists via _serialize_output()
+- All tensor/array outputs must be converted to Python lists via serialize_output() from standalone_helpers
 - Match the operation names used in the contract's ToolInstance.dispatch() calls
 - Device handling: accept device from input_dict, pass to model.load()
 - Seed handling: pass `config.seed` (raw `Optional[int]`) through the dispatch dict. In inference.py, call `set_torch_seed(seed)` unconditionally — the helper's None-check gates the expensive cuDNN flags. For any downstream sampler that needs a concrete int, do `sampling_seed = seed if seed is not None else get_random_int()` using the helper from `standalone_helpers`.

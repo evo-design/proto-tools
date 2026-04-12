@@ -165,7 +165,7 @@ import sys
 import os
 from typing import Any
 
-from standalone_helpers import set_torch_seed  # + get_random_int if a downstream sampler needs a concrete int
+from standalone_helpers import serialize_output, set_torch_seed  # + get_random_int if a downstream sampler needs a concrete int
 
 # Model class with lazy loading
 class {ToolName}Model:
@@ -193,25 +193,6 @@ class {ToolName}Model:
         return {"results": [...]}
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively serialize tensors and arrays to JSON-safe types."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "item"):
-        return value.item()
-    return value
-
-
 _model = None
 
 def dispatch(input_dict: dict) -> dict:
@@ -231,7 +212,7 @@ def dispatch(input_dict: dict) -> dict:
 
     operation = input_dict.get("operation", "predict")
     if operation == "predict":
-        return _serialize_output(_model.predict(input_dict))
+        return serialize_output(_model.predict(input_dict))
     else:
         raise ValueError(f"Unknown operation: {operation}")
 

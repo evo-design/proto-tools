@@ -149,7 +149,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/device_manager.py` | `DeviceManager`: centralized GPU allocation tracking with LRU eviction |
 | `utils/compute_deps.py` | `detect_compute_environment()`: hardware detection & version resolution |
 | `utils/install_binary.py` | Shared binary downloader for standalone tool environments |
-| `utils/standalone_helpers_source/standalone_helpers.py` | `resolve_weights_dir()`, `get_subprocess_device_env()`, `move_model_to_device()` |
+| `utils/standalone_helpers_source/standalone_helpers/` | `resolve_weights_dir()`, `get_subprocess_device_env()`, `move_model_to_device()`, `serialize_output()`, `AMINO_ACIDS_LIST` |
 | `utils/standalone_helpers_source/standalone_helpers.sh` | `proto_install_pytorch()`, `proto_install_jax()`, `proto_resolve_weights_dir()`, `proto_check_gated_hf_repo()` |
 | `utils/sequence.py` | Sequence validation, detection, `resolve_sequence_ids()` |
 | `utils/auth.py` | `require_hf_token()`: HuggingFace gated model auth |

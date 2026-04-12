@@ -43,6 +43,12 @@ from .seeding import (
     set_jax_seed,
     set_torch_seed,
 )
+from .serialization import (
+    AMINO_ACIDS_LIST,
+    DNA_NUCLEOTIDES,
+    RNA_NUCLEOTIDES,
+    serialize_output,
+)
 from .weights import resolve_weights_dir
 
 __all__ = [
@@ -65,6 +71,11 @@ __all__ = [
     "get_random_int",
     "set_jax_seed",
     "set_torch_seed",
+    # serialization
+    "AMINO_ACIDS_LIST",
+    "DNA_NUCLEOTIDES",
+    "RNA_NUCLEOTIDES",
+    "serialize_output",
     # weights
     "resolve_weights_dir",
 ]
