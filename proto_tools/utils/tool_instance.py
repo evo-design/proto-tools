@@ -54,7 +54,6 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 import tempfile
 import threading
 from collections.abc import Generator
@@ -1223,23 +1222,27 @@ class ToolInstance:
     def _get_python_version(self) -> str:
         """Get Python version for this tool from python_version.txt.
 
-        Looks for ``standalone/python_version.txt`` in the tool's directory.
-        Returns the version string (e.g. ``"3.11"``), or defaults to the
-        current Python's ``major.minor`` if the file is missing.
-
-        See :meth:`_parse_python_version` for the format spec, including
-        per-platform overrides.
+        Every tool with a ``standalone/`` directory must ship a
+        ``standalone/python_version.txt`` that pins its Python version. A
+        missing file is a hard error — see :meth:`_parse_python_version` for
+        the format spec, including per-platform overrides.
 
         Returns:
-            str: The resolved Python version string.
+            str: The resolved Python version string (e.g. ``"3.12"``).
 
         Raises:
+            FileNotFoundError: If ``standalone/python_version.txt`` is missing.
             RuntimeError: If the file exists but cannot be read.
             ValueError: If the file content is malformed (see ``_parse_python_version``).
         """
         version_file = self.setup_script.parent / "python_version.txt"
         if not version_file.exists():
-            return f"{sys.version_info.major}.{sys.version_info.minor}"
+            raise FileNotFoundError(
+                f"Tool {self.tool_name!r} is missing required standalone/python_version.txt "
+                f"at {version_file}. Every tool must pin its Python version explicitly. "
+                f"Create the file with a single line like 'default: 3.12'. "
+                f"See notes/tool-environments.md for the format."
+            )
         try:
             content = version_file.read_text()
         except Exception as e:

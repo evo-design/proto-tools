@@ -3,7 +3,6 @@
 Tests for python_version.txt parsing and validation.
 """
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -40,15 +39,6 @@ def test_valid_default_major_minor_patch(tmp_path):
 
     tool = _make_test_instance(tmp_path)
     assert tool._get_python_version() == "3.11.5"
-
-
-def test_missing_file_defaults_to_current_python(tmp_path):
-    """Missing python_version.txt defaults to current Python version."""
-    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
-
-    tool = _make_test_instance(tmp_path)
-    expected = f"{sys.version_info.major}.{sys.version_info.minor}"
-    assert tool._get_python_version() == expected
 
 
 def test_whitespace_around_separator_is_stripped(tmp_path):

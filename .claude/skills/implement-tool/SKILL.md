@@ -94,7 +94,7 @@ The user provides EITHER:
    - `standalone/inference.py` (or `run.py`)
    - `standalone/setup.sh`
    - `standalone/requirements.txt`
-   - `standalone/python_version.txt` (if present — the Python version pin for the env)
+   - `standalone/python_version.txt` (required — the Python version pin for the env)
    - `__init__.py` (at tool and category level)
    - `README.md`
    - `cite.bib`
@@ -374,7 +374,7 @@ model_path = os.path.join(weights_dir, "model.pt")
 List all Python dependencies with version pins. Do NOT include torch/jax — those are installed by setup.sh using hardware-aware detection.
 
 ### 4. python_version.txt
-Pins the Python version for the tool's micromamba env. Always use the keyed format with a required `default` key. Comments (`#` to end of line) and blank lines are allowed.
+**Required.** Every tool must pin its Python version — `ToolInstance` raises `FileNotFoundError` at setup time for a tool without this file, and the style consistency tests fail if any tool is missing it. Always use the keyed format with a required `default` key. Comments (`#` to end of line) and blank lines are allowed.
 
 ```text
 default: 3.12

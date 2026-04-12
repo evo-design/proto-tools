@@ -2,8 +2,9 @@
 
 Consistency checks for tool standalone/python_version.txt files.
 
-Only runs for tools that ship a python_version.txt; tools without one
-inherit current Python's major.minor at runtime and don't need a check.
+Every tool with a standalone/ directory must ship a python_version.txt —
+the existence check below enforces this, and the format checks validate
+every shipped file.
 """
 
 from pathlib import Path
@@ -20,14 +21,37 @@ def _discover_python_version_files() -> list[Path]:
     return sorted(_TOOLS_DIR.rglob("standalone/python_version.txt"))
 
 
+def _discover_standalone_dirs() -> list[Path]:
+    """Find every standalone/ directory under proto_tools/tools."""
+    return sorted(p for p in _TOOLS_DIR.rglob("standalone") if p.is_dir())
+
+
 def _tool_id(path: Path) -> str:
     """Return 'category/tool' identifier for a python_version.txt path."""
     rel = path.relative_to(_TOOLS_DIR)
     return f"{rel.parts[0]}/{rel.parts[1]}"
 
 
+def _standalone_dir_id(path: Path) -> str:
+    """Return 'category/tool' identifier for a standalone/ directory path."""
+    rel = path.relative_to(_TOOLS_DIR)
+    return f"{rel.parts[0]}/{rel.parts[1]}"
+
+
 _ALL_FILES = _discover_python_version_files()
 _ALL_IDS = [_tool_id(p) for p in _ALL_FILES]
+
+_ALL_STANDALONE_DIRS = _discover_standalone_dirs()
+_ALL_STANDALONE_IDS = [_standalone_dir_id(p) for p in _ALL_STANDALONE_DIRS]
+
+
+@pytest.mark.parametrize("standalone_dir", _ALL_STANDALONE_DIRS, ids=_ALL_STANDALONE_IDS)
+def test_every_standalone_tool_has_python_version_file(standalone_dir: Path) -> None:
+    """Every tool with a standalone/ directory must pin its Python version."""
+    assert (standalone_dir / "python_version.txt").exists(), (
+        f"{standalone_dir}/python_version.txt is missing. "
+        f"Every tool must pin its Python version — see notes/tool-environments.md."
+    )
 
 
 @pytest.mark.parametrize("version_file", _ALL_FILES, ids=_ALL_IDS)

@@ -1242,6 +1242,7 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     inst.env_path = tmp_path / "fake_env"
     inst.setup_script = tmp_path / "setup.sh"
     inst.setup_script.write_text("#!/bin/bash\nexit 1\n")
+    (tmp_path / "python_version.txt").write_text("default: 3.12\n")
     inst._tool_env_vars = {"passthrough": [], "set": []}
 
     mock_proc = MagicMock()

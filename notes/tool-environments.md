@@ -164,7 +164,7 @@ fi
 
 ## Python Version Specification
 
-Tools can specify their required Python version via `standalone/python_version.txt`. Tools without one inherit the running interpreter's `major.minor` at setup time.
+Every tool with a `standalone/` directory must ship a `standalone/python_version.txt` that pins its Python version. The consistency tests fail if any tool is missing the file, and `ToolInstance._get_python_version` raises `FileNotFoundError` on setup for a tool whose file is missing.
 
 **Format:** keyed lines, with a required `default` and optional per-platform overrides. Comments (`#` to end of line) and blank lines are ignored. Whitespace around `:` is stripped; keys are lowercased.
 

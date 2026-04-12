@@ -416,7 +416,7 @@ fi
 
 **Symptoms:** `No matching distribution found for scikit-learn-extra==0.3.0 (Python 3.12)`, `Could not find a version that satisfies the requirement`.
 
-**Root Cause:** Some packages lack wheels for newer Python. `standalone/python_version.txt` controls tool env Python version; if missing, defaults to 3.12.
+**Root Cause:** Some packages lack wheels for newer Python. `standalone/python_version.txt` controls tool env Python version; it is required, and a missing file fails setup with `FileNotFoundError` (see `ToolInstance._get_python_version`).
 
 **Debugging:**
 ```bash
@@ -424,11 +424,11 @@ cat proto_tools/tools/{category}/{tool}/standalone/python_version.txt
 tool_envs/{tool}_env/bin/python --version
 ```
 
-**Solution:** Create/update `python_version.txt`:
+**Solution:** Update `python_version.txt` using the keyed format:
 ```
-3.11
+default: 3.11
 ```
-Format: single line, `major.minor` or `major.minor.patch`, `>=3.8`. Delete tool env and rebuild after changing. See `protenix/standalone/python_version.txt`, `tests/tool_infra_tests/test_python_version_files.py`.
+Per-platform overrides are supported (e.g. `linux-aarch64: 3.10`) — see "Python Version Specification" in `notes/tool-environments.md` for the full format. Delete the tool env and rebuild after changing. Reference example: `protenix/standalone/python_version.txt`. Tests: `tests/style_consistency_tests/test_python_version_consistency.py`, `tests/tool_infra_tests/test_python_version_files.py`.
 
 ---
 
