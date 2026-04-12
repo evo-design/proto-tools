@@ -188,6 +188,8 @@ def run_proteinmpnn_score(
     # Local venv execution
     logger.debug("Using local venv for ProteinMPNN scoring")
 
+    seed = config.seed if config.seed is not None else config.get_random_int()
+
     for sequence_structure_pair in progress_bar(
         inputs.sequence_structure_pairs,
         desc="ProteinMPNN scoring",
@@ -199,7 +201,7 @@ def run_proteinmpnn_score(
             "pdb_contents": sequence_structure_pair.structure.structure_pdb,
             "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
             "sequence": sequence_structure_pair.sequence,
-            "seed": config.seed,
+            "seed": seed,
             "fixed_positions": config.fixed_positions,
             "device": config.device,
             "model_choice": config.model_choice,
