@@ -632,3 +632,111 @@ def set_jax_seed(seed: int | None) -> Any:
     import jax
 
     return jax.random.PRNGKey(seed)
+
+
+def enable_jax_compilation_cache(tool_name: str) -> str | None:
+    """Enable JAX disk compilation cache for faster cold starts.
+
+    Persists compiled XLA kernels (and, transitively via
+    ``jax_persistent_cache_enable_xla_caches``, the Triton autotuner's
+    per-fusion cache) across process restarts. For large JAX models where
+    the first compile spends minutes on XLA/Triton autotuning, cached
+    shapes on subsequent runs drop from minutes to seconds — a dramatic
+    speedup for tests, CI, and repeat usage.
+
+    Must be called BEFORE any JAX computation happens (ideally right after
+    ``import jax``). Safe to call multiple times (idempotent per-process).
+    No-op if ``jax`` is not importable from the current environment.
+
+    The cache lives inside the tool's micromamba environment at
+    ``{CONDA_PREFIX}/jax_cache/``, so it is automatically cleaned up when
+    the environment is rebuilt or deleted. An explicit
+    ``JAX_COMPILATION_CACHE_DIR`` env var overrides this default.
+
+    Args:
+        tool_name (str): Tool name for logging (e.g., ``"alphagenome"``).
+
+    Returns:
+        str | None: Resolved cache directory path, or ``None`` if ``jax``
+            is not importable or the tool env path cannot be determined.
+    """
+    from pathlib import Path
+
+    try:
+        import jax
+    except ImportError:
+        return None
+
+    override = os.environ.get("JAX_COMPILATION_CACHE_DIR", "").strip()
+    if override:
+        cache_dir = Path(override)
+    else:
+        venv_path = os.environ.get("CONDA_PREFIX", "").strip()
+        if not venv_path:
+            logger.warning(
+                "Cannot enable JAX compilation cache for %s: CONDA_PREFIX not set (tool env path unknown).",
+                tool_name,
+            )
+            return None
+        cache_dir = Path(venv_path) / "jax_cache"
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    jax.config.update("jax_compilation_cache_dir", str(cache_dir))
+    logger.info("JAX compilation cache for %s enabled at %s", tool_name, cache_dir)
+    return str(cache_dir)
+
+
+# ============================================================================
+# Array Compression (large array IPC optimization)
+# ============================================================================
+
+_COMPRESSED_ARRAY_SENTINEL = "__compressed_array__"
+_COMPRESS_MIN_SIZE = 1000
+
+
+def compress_array(arr: Any) -> dict[str, Any]:
+    """Compress a numpy/jax array for JSON-safe IPC transport.
+
+    Uses zlib compression on raw float32 bytes, then base85 encoding for
+    JSON safety. The returned dict contains only JSON-primitive values
+    (str, int, bool, list[int]) so it survives ``json.dump``/``json.load``
+    roundtrips and Pydantic ``model_dump(mode="json")`` unchanged.
+
+    For a ``(16384, 667)`` float32 array (typical AlphaGenome RNA_SEQ output):
+    raw bytes = 43.7 MB, compressed ≈ 15-25 MB, base85 ≈ 20-31 MB — versus
+    ~220 MB as JSON text via ``.tolist()``. Compression takes <0.5s versus
+    ~30s for ``.tolist()`` + ``json.dumps``.
+
+    Args:
+        arr (Any): Array-like with ``.tobytes()``, ``.dtype``, ``.shape``
+            attributes (numpy ndarray, jax Array, etc.).
+
+    Returns:
+        dict[str, Any]: JSON-serializable compressed representation with
+            sentinel key ``__compressed_array__`` for detection.
+    """
+    import base64
+    import zlib
+
+    import numpy as np
+
+    np_arr = np.asarray(arr, dtype=np.float32)
+    if not np_arr.flags["C_CONTIGUOUS"]:
+        np_arr = np.ascontiguousarray(np_arr)
+
+    raw_bytes = np_arr.tobytes()
+    compressed = zlib.compress(raw_bytes, level=1)
+    encoded = base64.b85encode(compressed).decode("ascii")
+
+    return {
+        _COMPRESSED_ARRAY_SENTINEL: True,
+        "data": encoded,
+        "dtype": "float32",
+        "shape": list(np_arr.shape),
+        "version": 1,
+    }
+
+
+def is_compressed_array(obj: Any) -> bool:
+    """Check if *obj* is a compressed array dict produced by :func:`compress_array`."""
+    return isinstance(obj, dict) and obj.get(_COMPRESSED_ARRAY_SENTINEL) is True

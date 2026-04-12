@@ -54,6 +54,11 @@ def _ensure_jax_memory_compat() -> None:
 
 _ensure_jax_memory_compat()
 
+
+from standalone_helpers import _COMPRESS_MIN_SIZE, enable_jax_compilation_cache
+
+enable_jax_compilation_cache("alphagenome")
+
 # Minimum center-mask widths required by the recommended scorers.
 # Interval scorers: RNA_SEQ GeneMaskScorer has width=200,001.
 # Variant scorers: CHIP_HISTONE CenterMaskScorer has width=2,001 (the largest).
@@ -402,6 +407,12 @@ def _serialize_data(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return _serialize_data(value.model_dump())
     if hasattr(value, "tolist"):
+        # Compress large multi-dimensional arrays instead of converting to
+        # nested Python lists.
+        if hasattr(value, "ndim") and hasattr(value, "size") and value.ndim >= 2 and value.size >= _COMPRESS_MIN_SIZE:
+            from standalone_helpers import compress_array
+
+            return compress_array(value)
         try:
             return _serialize_data(value.tolist())
         except Exception:
@@ -469,6 +480,9 @@ def _validate_sequence_length(sequence_length: int, operation: str) -> None:
     )
 
 
+_SHRINK_SUGGESTION_THRESHOLD = 0.10  # suggest shrinking if within 10% above a smaller supported size
+
+
 def _resize_interval(
     chromosome: str,
     interval_start: int,
@@ -484,11 +498,33 @@ def _resize_interval(
             f"Context interval ({interval.width:,} bp) exceeds the largest "
             f"supported context length ({max(_SUPPORTED_CONTEXT_LENGTHS):,} bp)."
         )
+    supported_str = ", ".join(f"{ctx:,}" for ctx in sorted(_SUPPORTED_CONTEXT_LENGTHS))
     logger.warning(
-        "Context length %s bp not supported; auto-resizing to %s bp.",
+        "Context length %s bp not supported. AlphaGenome operates at fixed context "
+        "lengths (%s bp); auto-resizing to %s bp.",
         f"{interval.width:,}",
+        supported_str,
         f"{target:,}",
     )
+
+    # Suggest shrinking if the user is just slightly above a smaller supported size.
+    smaller = [ctx for ctx in _SUPPORTED_CONTEXT_LENGTHS if ctx < interval.width]
+    if smaller:
+        closest_smaller = max(smaller)
+        overshoot = (interval.width - closest_smaller) / closest_smaller
+        if overshoot <= _SHRINK_SUGGESTION_THRESHOLD:
+            inflation = target / closest_smaller
+            logger.warning(
+                "Your interval is only %s bp (%.1f%%) above the supported %s bp "
+                "context. Shrinking to %s bp would avoid a %.0fx context inflation "
+                "and significantly reduce compile time and output size.",
+                f"{interval.width - closest_smaller:,}",
+                overshoot * 100,
+                f"{closest_smaller:,}",
+                f"{closest_smaller:,}",
+                inflation,
+            )
+
     return interval.resize(target)
 
 

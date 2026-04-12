@@ -158,14 +158,20 @@ class AlphaGenomeScoreVariantsConfig(BaseConfig):
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
+    """Minimal valid input for testing and examples.
+
+    Uses the smallest supported context length (16,384 bp) to keep test runs
+    fast. See ``alphagenome_predict_variants.example_input`` for the rationale.
+    The variant scorer's minimum context is 2,001 bp, so 16,384 is safely
+    above the floor.
+    """
     return AlphaGenomeScoreVariantsInput(
         variants=[
             AlphaGenomeVariant(
                 chromosome="chr1",
                 interval_start=0,
-                interval_end=196608,
-                variant_position=100000,
+                interval_end=16_384,
+                variant_position=8_192,
                 reference_bases="A",
                 alternate_bases="G",
             )

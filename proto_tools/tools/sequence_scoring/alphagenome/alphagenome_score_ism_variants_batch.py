@@ -191,15 +191,21 @@ AlphaGenomeScoreISMConfig = AlphaGenomeScoreVariantsConfig
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
+    """Minimal valid input for testing and examples.
+
+    Uses the smallest supported context length (16,384 bp) to keep test runs
+    fast. See ``alphagenome_predict_variants.example_input`` for the rationale.
+    The variant scorer's minimum context is 2,001 bp, so 16,384 is safely
+    above the floor.
+    """
     return AlphaGenomeScoreISMInput(
         requests=[
             AlphaGenomeISM(
                 chromosome="chr1",
                 interval_start=0,
-                interval_end=196608,
-                ism_interval_start=100000,
-                ism_interval_end=100010,
+                interval_end=16_384,
+                ism_interval_start=8_000,
+                ism_interval_end=8_010,
             )
         ]
     )

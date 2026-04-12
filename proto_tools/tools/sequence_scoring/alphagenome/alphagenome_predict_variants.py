@@ -113,14 +113,23 @@ AlphaGenomePredictVariantsConfig = AlphaGenomePredictConfig
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
+    """Minimal valid input for testing and examples.
+
+    Uses the smallest supported context length (16,384 bp) to keep test and
+    example runs fast. AlphaGenome only compiles for a fixed set of supported
+    context lengths ``[16_384, 131_072, 524_288, 1_048_576]``; any width not
+    in that set is auto-resized up to the next-larger supported value, which
+    inflates the output tensor size and serialization cost dramatically. For
+    realistic variant-effect analysis users should pick a larger context
+    (e.g., 131,072 or 524,288 bp) that matches their biological question.
+    """
     return AlphaGenomePredictVariantsInput(
         variants=[
             AlphaGenomeVariant(
                 chromosome="chr1",
                 interval_start=0,
-                interval_end=196608,
-                variant_position=100000,
+                interval_end=16_384,
+                variant_position=8_192,
                 reference_bases="A",
                 alternate_bases="G",
             )

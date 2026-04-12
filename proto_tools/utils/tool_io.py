@@ -13,6 +13,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from proto_tools.utils.compressed_array import is_compressed_array
+
 
 def InputField(
     default: Any = ...,
@@ -341,6 +343,21 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
         if not math.isclose(a, b, rel_tol=rtol, abs_tol=atol):
             raise AssertionError(f"Float mismatch at {path}: {a} != {b} (rtol={rtol}, atol={atol})")
     elif isinstance(a, dict):
+        # Compressed array dicts: decompress both and compare as numpy arrays.
+        if is_compressed_array(a) and is_compressed_array(b):
+            import numpy as np
+
+            from proto_tools.utils.compressed_array import decompress_array
+
+            arr_a = decompress_array(a)
+            arr_b = decompress_array(b)
+            if arr_a.shape != arr_b.shape:
+                raise AssertionError(f"Shape mismatch at {path}: {arr_a.shape} != {arr_b.shape}")
+            if not np.allclose(arr_a, arr_b, rtol=rtol, atol=atol, equal_nan=True):
+                max_diff = float(np.max(np.abs(arr_a - arr_b)))
+                raise AssertionError(f"Array mismatch at {path}: max_diff={max_diff} (rtol={rtol}, atol={atol})")
+            return
+
         if a.keys() != b.keys():
             raise AssertionError(f"Dict keys differ at {path}: {set(a.keys()) ^ set(b.keys())}")
         for key in a:

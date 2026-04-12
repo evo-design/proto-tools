@@ -113,9 +113,13 @@ AlphaGenomePredictIntervalsConfig = AlphaGenomePredictConfig
 # Tool Implementation
 # ============================================================================
 def example_input() -> Any:
-    """Minimal valid input for testing and examples."""
+    """Minimal valid input for testing and examples.
+
+    Uses the smallest supported context length (16,384 bp) to keep test runs
+    fast. See ``alphagenome_predict_variants.example_input`` for the rationale.
+    """
     return AlphaGenomePredictIntervalsInput(
-        intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=196608)]
+        intervals=[AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=16_384)]
     )
 
 
