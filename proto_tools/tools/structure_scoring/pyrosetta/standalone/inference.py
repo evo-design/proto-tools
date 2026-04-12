@@ -323,6 +323,7 @@ class PyRosettaScorer:
         relax_cycles: int = 5,
         constrain_to_start: bool = True,
         chain_ids_list: list[list[str] | None] | None = None,
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Compute energy scores for a list of PDB content strings.
 
@@ -343,6 +344,7 @@ class PyRosettaScorer:
             relax_cycles (int): Number of FastRelax cycles.
             constrain_to_start (bool): Constrain relaxation to starting coords.
             chain_ids_list (list[list[str] | None] | None): Per-structure chain IDs.
+            seed (int | None): Random seed for FastRelax reproducibility.
 
         Returns:
             dict: {"results": [{"total_energy": float, "energy_terms": {...}, ...}, ...]}
@@ -352,6 +354,10 @@ class PyRosettaScorer:
         from pyrosetta.rosetta.core.scoring.methods import (
             EnergyMethodOptions,
         )
+
+        # Seed PyRosetta's internal C++ RNG for reproducible FastRelax.
+        if seed is not None:
+            pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
         sfxn = pyrosetta.create_score_function(scorefxn_name)
 
@@ -460,6 +466,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             relax_cycles=input_dict.get("relax_cycles", 5),
             constrain_to_start=input_dict.get("constrain_to_start", True),
             chain_ids_list=chain_ids_list,
+            seed=input_dict.get("seed"),
         )
     raise ValueError(f"Unknown operation: {operation}")
 

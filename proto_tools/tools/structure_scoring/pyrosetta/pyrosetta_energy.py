@@ -249,6 +249,7 @@ def run_pyrosetta_energy(
     """
     logger.debug("Using local venv for PyRosetta energy scoring")
 
+    seed = config.seed if config.seed is not None else config.get_random_int()  # type: ignore[union-attr]
     pdb_contents, chain_ids_list, pdb_to_mmcif_maps = prepare_pdb_and_chain_maps(inputs.inputs)
 
     input_data = {
@@ -259,6 +260,7 @@ def run_pyrosetta_energy(
         "relax": config.relax,  # type: ignore[union-attr]
         "relax_cycles": config.relax_cycles,  # type: ignore[union-attr]
         "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
+        "seed": seed,
         "device": "cpu",
     }
 
