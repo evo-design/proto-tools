@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, set_torch_seed
+from standalone_helpers import move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -479,23 +479,6 @@ def _split_cache(cache: dict[str, Any]) -> list[dict[str, Any]]:
     return [_slice_cache(cache, i, i + 1) for i in range(n_samples)]
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively serialize torch tensors and other non-JSON types to Python primitives."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -592,4 +575,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

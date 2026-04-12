@@ -252,25 +252,6 @@ class ProteinMPNNModel:
         self.device = "cpu"
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively serialize tensors and arrays to JSON-safe types."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "item"):
-        return value.item()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -348,5 +329,7 @@ if __name__ == "__main__":
 
     result = dispatch(input_data)
 
+    from standalone_helpers import serialize_output
+
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

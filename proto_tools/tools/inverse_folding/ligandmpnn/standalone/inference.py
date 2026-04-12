@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import move_model_to_device
+from standalone_helpers import move_model_to_device, serialize_output
 
 logger = getLogger(__name__)
 
@@ -199,25 +199,6 @@ class LigandMPNNModel:
             torch.cuda.empty_cache()
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively serialize tensors and arrays to JSON-safe types."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "item"):
-        return value.item()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -297,4 +278,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

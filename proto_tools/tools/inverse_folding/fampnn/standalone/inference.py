@@ -15,12 +15,9 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_random_int, set_torch_seed
+from standalone_helpers import get_random_int, serialize_output, set_torch_seed
 
 logger = getLogger(__name__)
-
-# Standard amino acid alphabet (1-letter codes, 20 canonical)
-AMINO_ACID_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 
 
 class FAMPNNModel:
@@ -680,25 +677,6 @@ class FAMPNNModel:
             pass
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively serialize tensors and arrays to JSON-safe types."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "item"):
-        return value.item()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -806,4 +784,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

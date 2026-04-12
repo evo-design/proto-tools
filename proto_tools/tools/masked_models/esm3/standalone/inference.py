@@ -8,7 +8,7 @@ from logging import getLogger
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import set_torch_seed
+from standalone_helpers import AMINO_ACIDS_LIST, serialize_output, set_torch_seed
 from tqdm import tqdm
 
 logger = getLogger(__name__)
@@ -16,8 +16,6 @@ logger = getLogger(__name__)
 # Suppress esm library INFO logs
 logging.getLogger("esm").setLevel(logging.ERROR)
 logging.getLogger("esm.sdk").setLevel(logging.ERROR)
-
-AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 
 
@@ -379,7 +377,7 @@ class ESM3Model:
             )
 
         return {
-            "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
+            "logits": all_logits if return_logits else None,
             "metrics": all_metrics,
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
@@ -506,24 +504,6 @@ class ESM3Model:
                 torch.cuda.empty_cache()
 
 
-def _serialize_output(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "tolist"):
-        # .tolist() handles CPU transfer internally for CUDA tensors,
-        # avoiding an unnecessary intermediate CPU tensor allocation.
-        return value.tolist()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -605,4 +585,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

@@ -7,12 +7,10 @@ import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import move_model_to_device, set_torch_seed
+from standalone_helpers import AMINO_ACIDS_LIST, move_model_to_device, serialize_output, set_torch_seed
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
-AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 ESM2_MODEL_CHECKPOINTS = Literal[
     "esm2_t6_8M_UR50D",
     "esm2_t12_35M_UR50D",
@@ -330,7 +328,7 @@ class ESM2Model:
             )
 
         return {
-            "logits": all_logits if return_logits else None,  # type: ignore[dict-item]
+            "logits": all_logits if return_logits else None,
             "metrics": all_metrics,
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
@@ -457,22 +455,6 @@ class ESM2Model:
                 torch.cuda.empty_cache()
 
 
-def _serialize_output(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -547,4 +529,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)

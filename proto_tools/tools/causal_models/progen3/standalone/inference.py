@@ -7,7 +7,7 @@ import sys
 from logging import getLogger
 from typing import Any
 
-from standalone_helpers import set_torch_seed
+from standalone_helpers import serialize_output, set_torch_seed
 
 logger = getLogger(__name__)
 
@@ -393,23 +393,6 @@ class _PerPositionScorer:
         return scores
 
 
-def _serialize_output(value: Any) -> Any:
-    """Recursively convert tensors to Python types for JSON serialization."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return {k: _serialize_output(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_serialize_output(v) for v in value]
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    return value
-
-
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -484,4 +467,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        json.dump(_serialize_output(result), f)
+        json.dump(serialize_output(result), f)
