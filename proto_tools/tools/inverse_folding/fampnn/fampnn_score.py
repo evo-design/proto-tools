@@ -184,7 +184,7 @@ def example_input() -> Any:
         inputs=[
             MutationInput(
                 structure=Structure.from_file(str(Path(__file__).parents[1] / "example_input_fixture.pdb")),
-                mutations=["A1V"],
+                mutations=["M1V"],
             )
         ]
     )

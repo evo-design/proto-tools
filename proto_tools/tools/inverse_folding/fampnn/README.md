@@ -206,7 +206,7 @@ structure = Structure.from_file("my_protein.pdb")
 inputs = FAMPNNScoreInput(
     inputs=[MutationInput(
         structure=structure,
-        mutations=["A0V", "G5L", "wt"],  # 0-indexed positions
+        mutations=["A1V", "G5L", "wt"],  # 1-indexed positions; "wt" scores the wild-type as a baseline
     )]
 )
 result = run_fampnn_score(inputs, FAMPNNScoreConfig())
