@@ -381,14 +381,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
     if _model is None:
         _model = ProGen2Model(
-            model_checkpoint=input_dict.get("model_checkpoint", "progen2-large"),
+            model_checkpoint=input_dict["model_checkpoint"],
             local_path=input_dict.get("local_path"),
         )
 
-    operation = input_dict.get("operation", "sample")
+    operation = input_dict["operation"]
     if operation == "sample":
         return _model.sample(
-            prompts=input_dict.get("prompts", []),
+            prompts=input_dict["prompts"],
             temperature=input_dict.get("temperature", 0.2),
             top_p=input_dict.get("top_p", 0.95),
             top_k=input_dict.get("top_k", 0),
@@ -405,7 +405,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "score":
         return _model.score(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]

@@ -290,7 +290,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ESMFoldModel()
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         results = _model(
             batch_data=input_dict["batch_data"],

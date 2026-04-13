@@ -337,23 +337,23 @@ _model: AbLangModel | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
-    model_choice = input_dict.get("model_choice", "ablang2-paired")
+    model_choice = input_dict["model_choice"]
     if _model is None or _model.model_choice != model_choice:
         if _model is not None and _model._loaded:
             _model.unload()
         _model = AbLangModel(model_choice=model_choice)
 
-    operation = input_dict.get("operation", "embeddings")
+    operation = input_dict["operation"]
     if operation == "embeddings":
         return _model.embeddings(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
         )
     if operation == "score":
         return _model.score(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             scoring_mode=input_dict.get("scoring_mode", "pseudo_log_likelihood"),
             batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
@@ -361,7 +361,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "sample":
         return _model.sample(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),

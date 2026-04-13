@@ -109,7 +109,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = EnformerModel()
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         prediction = _model(
             sequence=input_dict["sequence"],

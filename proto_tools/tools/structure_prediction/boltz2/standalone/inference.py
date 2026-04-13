@@ -196,7 +196,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = Boltz2Model()
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         return _model(
             input_yaml_path=input_dict["input_yaml_path"],

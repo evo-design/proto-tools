@@ -223,7 +223,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             context_length=input_dict.get("context_length", 4000),
         )
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         prediction = _model(
             target_seqs=input_dict["target_seqs"],

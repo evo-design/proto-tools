@@ -352,7 +352,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ProtenixModel()
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         return _model(  # type: ignore[return-value]
             input_json_path=input_dict["input_json_path"],

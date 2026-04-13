@@ -515,13 +515,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
     if _model is None:
         _model = ESM3Model(
-            model_checkpoint=input_dict.get("model_checkpoint", "esm3_sm_open_v1"),
+            model_checkpoint=input_dict["model_checkpoint"],
         )
 
-    operation = input_dict.get("operation", "embeddings")
+    operation = input_dict["operation"]
     if operation in ("embeddings", "inference"):
         return _model(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size", 128),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
@@ -529,7 +529,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "sample":
         return _model.sample(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             temperature=input_dict.get("temperature", 1.0),
             batch_size=input_dict.get("batch_size", 1),
             device=input_dict.get("device", "cuda"),
@@ -539,7 +539,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "score":
         return _model.score(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size", 32),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),
@@ -548,7 +548,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "predict_structure":
         return _model.predict_structure(  # type: ignore[return-value]
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size", 128),
             device=input_dict.get("device", "cuda"),
             verbose=input_dict.get("verbose", False),

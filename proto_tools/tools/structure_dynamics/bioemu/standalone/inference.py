@@ -193,7 +193,7 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
-    operation = input_dict.get("operation", "sample")
+    operation = input_dict["operation"]
     if operation == "sample":
         return run_bioemu_batch(input_dict)
     raise ValueError(f"Unknown operation: {operation}")

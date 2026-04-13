@@ -697,7 +697,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             pdb_path = str(Path(temp_dir) / "input.pdb")
             Path(pdb_path).write_text(pdb_contents)
 
-        operation = input_dict.get("operation", "sample")
+        operation = input_dict["operation"]
 
         if operation == "sample":
             return _model.sample(
@@ -743,7 +743,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if operation == "score_mutations":
             return _model.score_mutations(
                 pdb_path=pdb_path,  # type: ignore[arg-type]
-                mutations=input_dict.get("mutations", []),
+                mutations=input_dict["mutations"],
                 batch_size=input_dict.get("batch_size", 16),
                 seq_only=input_dict.get("seq_only", False),
                 scn_diffusion_steps=input_dict.get("scn_diffusion_steps", 50),

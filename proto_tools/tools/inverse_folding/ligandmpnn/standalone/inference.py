@@ -223,7 +223,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             pdb_path.write_text(pdb_contents)
             pdb_structure = str(pdb_path)
 
-        operation = input_dict.get("operation", "sample")
+        operation = input_dict["operation"]
         if operation == "sample":
             return _model.sample(
                 pdb_structure=pdb_structure,  # type: ignore[arg-type]

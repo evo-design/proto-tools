@@ -282,15 +282,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
     if _model is None:
         _model = Evo1Model(
-            model_name=input_dict.get("model_name", "evo-1-8k-base"),
+            model_name=input_dict["model_name"],
             device=input_dict.get("device", "cuda"),
         )
 
-    operation = input_dict.get("operation", "sample")
+    operation = input_dict["operation"]
 
     if operation == "sample":
         return _model.sample(
-            prompts=input_dict.get("prompts", []),
+            prompts=input_dict["prompts"],
             num_tokens=input_dict.get("num_tokens", 100),
             top_k=input_dict.get("top_k", 4),
             temperature=input_dict.get("temperature", 1.0),
@@ -301,7 +301,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "score":
         result = _model.score(
-            sequences=input_dict.get("sequences", []),
+            sequences=input_dict["sequences"],
             batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
             return_logits=input_dict.get("return_logits", False),
             verbose=input_dict.get("verbose", False),

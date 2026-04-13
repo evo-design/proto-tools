@@ -294,7 +294,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = RFdiffusion3Model()
 
     kwargs = dict(input_dict)
-    kwargs.pop("operation", None)
+    kwargs.pop("operation")
     device = kwargs.pop("device", "cuda")  # Extract device for subprocess environment
     rfdiffusion3_input_json = kwargs.pop("input_json_path")
     rfdiffusion3_output_dir = kwargs.pop("output_dir")

@@ -168,7 +168,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     sampling_seed = seed if seed is not None else get_random_int()
 
-    operation = input_dict.get("operation", "predict")
+    operation = input_dict["operation"]
     if operation == "predict":
         return _model(
             fasta_file=Path(input_dict["fasta_file"]),
