@@ -14,7 +14,7 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
-from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
+from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
     write_msa_pqt,
@@ -23,7 +23,6 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
     hash_sequence as _hash_sequence,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -31,6 +30,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 os.environ["DISABLE_PANDERA_IMPORT_WARNING"] = "True"
 
@@ -76,14 +76,10 @@ class Chai1Input(StructurePredictionInput):
         return complexes
 
 
-# Output:
-class Chai1Output(StructurePredictionOutput):
-    """Chai-1 prediction output.
+class Chai1Metrics(Metrics):
+    """Per-structure metrics emitted by Chai-1 prediction.
 
-    Attributes:
-        structures (list[Structure]): Predicted structures with confidence metrics.
-
-    Metrics:
+    Metrics documented in ``metric_spec``:
         avg_plddt (float): Average predicted LDDT score (0-1). Always present.
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Always present.
@@ -91,14 +87,24 @@ class Chai1Output(StructurePredictionOutput):
         confidence_score (float): Chai-1 confidence score. Always present.
     """
 
-    METRICS: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
-        "confidence_score": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "confidence_score": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
     }
-    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
+    primary_metric: str | None = "avg_plddt"
+
+
+# Output:
+class Chai1Output(StructurePredictionOutput):
+    """Chai-1 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures, each carrying a
+            :class:`Chai1Metrics` instance on ``.metrics``.
+    """
 
 
 # Config:
@@ -383,6 +389,6 @@ def run_chai1_on_complex(
     return Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
-        metrics=StructureMetrics(primary_metric="avg_plddt", **result["metrics"]),
+        metrics=Chai1Metrics(**result["metrics"]),
         source="chai1-prediction",
     )

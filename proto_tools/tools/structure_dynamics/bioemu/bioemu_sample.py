@@ -14,7 +14,6 @@ from proto_tools.entities.structures import (
     BFactorType,
     Structure,
     StructureEnsemble,
-    StructureMetrics,
 )
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
@@ -32,6 +31,7 @@ from proto_tools.utils import (
     ToolInstance,
     return_invalid_protein_chars,
 )
+from proto_tools.utils.tool_io import Metrics
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +313,7 @@ def _pdb_frames_to_structures(
             Structure(
                 structure=pdb_content,
                 b_factor_type=BFactorType.UNSPECIFIED,
-                metrics=StructureMetrics(
+                metrics=Metrics(
                     ensemble_idx=comp_idx,
                     frame_idx=frame_idx,
                 ),

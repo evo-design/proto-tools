@@ -130,11 +130,11 @@ Export formats: `fasta`, `json`
 
 ### Scoring Output (`InverseFoldingScoringOutput`)
 
-Contains a list of `SequenceScores` objects, one per input pair:
+Contains a list of `InverseFoldingScoringMetrics` objects, one per input pair. Metric values are accessed via attribute-style (`score.perplexity`) or mapping-style (`score["perplexity"]`):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `metrics` | `Dict[str, float]` | Contains `avg_log_likelihood` and `perplexity` |
+| `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 
 Export formats: `csv`, `json`
 

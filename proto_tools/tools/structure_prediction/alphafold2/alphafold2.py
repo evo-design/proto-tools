@@ -11,9 +11,8 @@ from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
 
-from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
+from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -26,6 +25,7 @@ from proto_tools.utils import (
     return_invalid_protein_chars,
 )
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -106,27 +106,36 @@ class AlphaFold2Input(StructurePredictionInput):
         return prepared_complexes
 
 
-# Output:
-class AlphaFold2Output(StructurePredictionOutput):
-    """AlphaFold2 prediction output.
+class AlphaFold2Metrics(Metrics):
+    """Per-structure metrics emitted by AlphaFold2 prediction.
 
     Attributes:
-        structures (list[Structure]): Predicted structures with confidence metrics.
+        primary_metric (str | None): Defaults to ``"avg_plddt"`` for AlphaFold2.
 
-    Metrics:
+    Metrics documented in ``metric_spec``:
         avg_plddt (float): Average predicted LDDT score (0-1). Always present.
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Multi-chain input only.
         avg_pae (float): Average predicted aligned error. Always present.
     """
 
-    METRICS: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "multi-chain input only", "type": float, "min": 0.0, "max": 1.0},
-        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "multi-chain input only", "type": "float", "min": 0.0, "max": 1.0},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
     }
-    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
+    primary_metric: str | None = "avg_plddt"
+
+
+# Output:
+class AlphaFold2Output(StructurePredictionOutput):
+    """AlphaFold2 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures, each carrying an
+            :class:`AlphaFold2Metrics` instance on ``.metrics``.
+    """
 
 
 # Config:
@@ -315,8 +324,7 @@ def run_alphafold2(
         )
 
         # Post-process: create Structure from PDB output
-        metrics = StructureMetrics(
-            primary_metric="avg_plddt",
+        metrics = AlphaFold2Metrics(
             avg_plddt=output_data["avg_plddt"],
             ptm=output_data["ptm"],
             iptm=output_data.get("iptm"),

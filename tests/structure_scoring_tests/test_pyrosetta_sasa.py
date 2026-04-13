@@ -11,6 +11,7 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sasa import (
     run_pyrosetta_sasa,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
@@ -37,6 +38,7 @@ def test_sasa_input_rejects_invalid_chain():
 def test_run_pyrosetta_sasa_on_pdb():
     structure = Structure(structure=TEST_PDB)
     result = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[structure]))
+    assert_metrics_in_spec(result)
 
     assert result.success
     assert result.tool_id == "pyrosetta-sasa"

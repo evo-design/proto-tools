@@ -44,6 +44,7 @@ from proto_tools.utils.tool_cache import (
     get_cache_info,
 )
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -354,7 +355,7 @@ def test_normalize_complexes_roundtrip_with_modifications():
 def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
     complexes = _TEST_COMPLEXES[test_name]
 
-    run_func, input_class, config_class, output_class = _STRUCTURE_PREDICTORS[predictor_name]
+    run_func, input_class, config_class, _output_class = _STRUCTURE_PREDICTORS[predictor_name]
 
     # Create input (should always succeed since we filtered incompatible combinations)
     inputs = input_class(complexes=complexes)
@@ -388,7 +389,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
         if not is_valid_structure(structure.structure_cif):
             pytest.fail(f"Predicted structure {i} is not valid: {structure.structure_cif}")
 
-        structure.metrics.validate_against_spec(output_class.METRICS)
+    assert_metrics_in_spec(output)
 
 
 # ── Cache test (GPU) ───────────────────────────────────────────────────────────
@@ -525,15 +526,12 @@ def test_batched_inference_varying_lengths():
     batched_output = run_esmfold(batched_input, batched_config)
 
     validate_output(batched_output)
+    assert_metrics_in_spec(batched_output)
 
     assert len(batched_output.structures) == len(varying_length_sequences)
 
     for i, structure in enumerate(batched_output.structures):
         assert is_valid_structure(structure.structure_cif), f"Structure {i} is invalid"
-
-        metrics = structure.metrics
-        assert 0 <= metrics["avg_plddt"] <= 1.0, f"Invalid avg_plddt for structure {i}"
-        assert 0 <= metrics["ptm"] <= 1.0, f"Invalid ptm for structure {i}"
 
 
 @pytest.mark.uses_gpu

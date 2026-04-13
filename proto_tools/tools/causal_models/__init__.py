@@ -41,8 +41,11 @@ from proto_tools.tools.causal_models.progen3 import (
     run_progen3_sample,
     run_progen3_score,
 )
+from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
 
 __all__ = [
+    # Shared Data Models
+    "CausalModelScoringMetrics",
     # Evo1
     "Evo1SampleConfig",
     "Evo1SampleInput",

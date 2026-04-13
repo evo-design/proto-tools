@@ -8,8 +8,8 @@ from pydantic import model_validator
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
     CausalModelScoringInput,
+    CausalModelScoringMetrics,
     CausalModelScoringOutput,
-    SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -138,16 +138,17 @@ def run_progen3_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ProGen3ScoringOutput: Contains SequenceScores for each input sequence with:
+        ProGen3ScoringOutput: Contains a ``CausalModelScoringMetrics`` for each input
+            sequence with:
 
-            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
-              ``perplexity``
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
+              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
 
     Examples:
         >>> inputs = ProGen3ScoringInput(sequences=["MVLSPADKTN", "MKTLLILAVVAA"])
         >>> config = ProGen3ScoringConfig(model_checkpoint="progen3-762m")
         >>> result = run_progen3_score(inputs, config)
-        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+        >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
 
     Note:
         - Lower perplexity indicates higher model confidence in the sequence
@@ -174,9 +175,9 @@ def run_progen3_score(
 
     per_position_list = result.get("per_position_metrics", [None] * len(result["metrics"]))
     scores = [
-        SequenceScores(
-            metrics=metrics,
-            per_position_metrics=per_pos,
+        CausalModelScoringMetrics(
+            **metrics,
+            **{f"{k}_pp": v for k, v in (per_pos or {}).items()},
         )
         for metrics, per_pos in zip(result["metrics"], per_position_list, strict=True)
     ]

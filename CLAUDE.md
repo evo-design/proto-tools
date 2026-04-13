@@ -118,6 +118,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig, instance: Any = None) -
 - **Input** (`BaseToolInput`): primary data (sequences, structures, files). Uses `extra="forbid"`.
 - **Config** (`BaseConfig`): parameters (evalue, threads, temperature). Uses `extra="forbid"`. **Optional at call time**; the `@tool` wrapper defaults `None` to `config_class()`. Inner function takes non-optional `config` since the wrapper guarantees it. All config fields must have defaults.
 - **Output** (`BaseToolOutput`): results + auto-populated metadata (tool_id, execution_time, success, errors).
+- **Metrics** (`Metrics`): standardized container for scalar metric values emitted by the tool (plDDT, perplexity, SASA, etc.). Subclass `Metrics` (per-tool or per-category) and declare a `metric_spec: ClassVar[dict[str, MetricSpec]]` mapping each metric name to its type/range. Access values via attribute (`m.plddt`) or mapping (`m["plddt"]`). See `Metrics` / `MetricSpec` in `utils/tool_io.py` for the contract and the `implement-tool` SKILL.md for usage.
 - **`@tool()`**: handles error catching, timing, metadata, registry, default config, and device allocation validation.
 - **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
 - **`device_count`** (optional): expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
@@ -139,7 +140,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 
 | File | Provides |
 |---|---|
-| `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `ToolExecutionError` |
+| `utils/tool_io.py` | `BaseToolInput`, `BaseToolOutput`, `Metrics`, `MetricSpec`, `ToolExecutionError` |
 | `utils/base_config.py` | `BaseConfig`, `ConfigField()` |
 | `tools/tool_registry.py` | `@tool` decorator, `ToolRegistry`, `ToolSpec` |
 | `utils/tool_cache.py` | `ToolCache`, `cache_strip_items`, `cache_store_items`, `cache_stitch_items` |

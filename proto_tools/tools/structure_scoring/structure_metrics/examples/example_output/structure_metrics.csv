@@ -1,2 +1,2 @@
-pdb_path,longest_alpha_helix,gyration_radius
-/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/structure_scoring/structure_metrics/example_input_fixture.pdb,10,11.745495329833469
+primary_metric,pdb_path,longest_alpha_helix,gyration_radius
+,/large_storage/hielab/bviggiano/codebases/proto-bio/proto-tools/proto_tools/tools/structure_scoring/structure_metrics/example_input_fixture.pdb,10,11.745495329833469

@@ -13,9 +13,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedSequences,
     InverseFoldingInput,
     InverseFoldingOutput,
+    InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
     InverseFoldingStructureInput,
-    SequenceScores,
 )
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -161,7 +161,7 @@ def test_output_export_fasta(tmp_path):
 @pytest.mark.parametrize("fmt", ["csv", "json"])
 def test_scoring_output_export(fmt, tmp_path):
     output = InverseFoldingScoringOutput(
-        scores=[SequenceScores(metrics={"perplexity": 1.5, "log_likelihood": -3.2})],
+        scores=[InverseFoldingScoringMetrics(perplexity=1.5, log_likelihood=-3.2)],
     )
     output.export("scores", export_path=tmp_path, file_format=fmt)
     assert (tmp_path / f"scores.{fmt}").stat().st_size > 0
@@ -180,16 +180,17 @@ def test_structure_rejects_invalid_fixed_positions_residues():
         InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [99999]})
 
 
-# ── SequenceScores ───────────────────────────────────────────────────────────────
+# ── InverseFoldingScoringMetrics ─────────────────────────────────────────────────
 
 
-def test_sequence_scores_getattr_and_add_metric():
-    score = SequenceScores(metrics={"perplexity": 1.5})
+def test_scoring_metrics_attribute_and_dict_access():
+    score = InverseFoldingScoringMetrics(perplexity=1.5)
     assert score.perplexity == 1.5
-    score.add_metric("new_metric", 2.0)
+    assert score["perplexity"] == 1.5
+    # Set via mapping interface
+    score["new_metric"] = 2.0
     assert score.new_metric == 2.0
-    with pytest.raises(AttributeError, match="no attribute"):
-        _ = score.nonexistent
+    assert score["new_metric"] == 2.0
 
 
 # ── Export edge cases ────────────────────────────────────────────────────────────

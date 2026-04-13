@@ -1,8 +1,8 @@
 [
   {
-    "log_likelihood": -27.243494987487793,
-    "avg_log_likelihood": -2.7243494987487793,
-    "perplexity": 15.246492837700893,
+    "log_likelihood": -27.243496894836426,
+    "avg_log_likelihood": -2.7243496894836428,
+    "perplexity": 15.246495745738901,
     "vocab": [
       "A",
       "C",
@@ -27,9 +27,9 @@
     ]
   },
   {
-    "log_likelihood": -28.39646053314209,
-    "avg_log_likelihood": -2.839646053314209,
-    "perplexity": 17.109708540649383,
+    "log_likelihood": -28.396464347839355,
+    "avg_log_likelihood": -2.8396464347839356,
+    "perplexity": 17.109715067486466,
     "vocab": [
       "A",
       "C",

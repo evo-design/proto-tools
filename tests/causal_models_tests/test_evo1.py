@@ -18,8 +18,9 @@ from proto_tools.tools.causal_models.evo1 import (
     run_evo1_sample,
     run_evo1_score,
 )
-from proto_tools.tools.causal_models.shared_data_models import SequenceScores
+from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("evo1")
@@ -28,19 +29,15 @@ _persistent_tool = make_persistent_fixture("evo1")
 def _make_mock_scoring_output():
     """Create a mock scoring output for testing."""
     scores = [
-        SequenceScores(
-            metrics={
-                "log_likelihood": -10.5,
-                "avg_log_likelihood": -1.05,
-                "perplexity": 2.86,
-            },
+        CausalModelScoringMetrics(
+            log_likelihood=-10.5,
+            avg_log_likelihood=-1.05,
+            perplexity=2.86,
         ),
-        SequenceScores(
-            metrics={
-                "log_likelihood": -12.3,
-                "avg_log_likelihood": -1.23,
-                "perplexity": 3.42,
-            },
+        CausalModelScoringMetrics(
+            log_likelihood=-12.3,
+            avg_log_likelihood=-1.23,
+            perplexity=3.42,
         ),
     ]
     return Evo1ScoringOutput(scores=scores)
@@ -88,8 +85,8 @@ def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
 
 def test_evo1_sample_export_fasta(tmp_path):
     scores = [
-        SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72}),
-        SequenceScores(metrics={"log_likelihood": -150.0, "avg_log_likelihood": -1.5, "perplexity": 4.48}),
+        CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72),
+        CausalModelScoringMetrics(log_likelihood=-150.0, avg_log_likelihood=-1.5, perplexity=4.48),
     ]
     output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="fasta")
@@ -103,7 +100,7 @@ def test_evo1_sample_export_fasta(tmp_path):
 
 
 def test_evo1_sample_export_json(tmp_path):
-    scores = [SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72})]
+    scores = [CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72)]
     output = Evo1SampleOutput(sequences=["ATCGATCG"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="json")
     json_file = tmp_path / "test.json"
@@ -115,8 +112,8 @@ def test_evo1_sample_export_json(tmp_path):
 
 def test_evo1_sample_export_txt(tmp_path):
     scores = [
-        SequenceScores(metrics={"log_likelihood": -100.0, "avg_log_likelihood": -1.0, "perplexity": 2.72}),
-        SequenceScores(metrics={"log_likelihood": -150.0, "avg_log_likelihood": -1.5, "perplexity": 4.48}),
+        CausalModelScoringMetrics(log_likelihood=-100.0, avg_log_likelihood=-1.0, perplexity=2.72),
+        CausalModelScoringMetrics(log_likelihood=-150.0, avg_log_likelihood=-1.5, perplexity=4.48),
     ]
     output = Evo1SampleOutput(sequences=["ATCGATCG", "GCTAGCTA"], scores=scores)
     output.export(name="test", export_path=tmp_path, file_format="txt")
@@ -173,6 +170,7 @@ def test_evo1_sample_tool():
 
     result = run_evo1_sample(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "evo1-sample"
     assert result.metadata["model_name"] == "evo-1-8k-base"
@@ -186,12 +184,6 @@ def test_evo1_sample_tool():
         assert isinstance(seq, str) and len(seq) > 0
         invalid = set(seq) - valid_chars
         assert not invalid, f"Non-DNA characters in output: {invalid}"
-
-    for score in result.scores:
-        assert isinstance(score, SequenceScores)
-        assert score.log_likelihood < 0
-        assert score.avg_log_likelihood < 0
-        assert score.perplexity > 1.0
 
 
 @pytest.mark.uses_gpu
@@ -246,6 +238,7 @@ def test_evo1_score_tool():
 
     result = run_evo1_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "evo1-score"
     assert len(result.scores) == 2
@@ -254,8 +247,6 @@ def test_evo1_score_tool():
         assert isinstance(score.log_likelihood, float)
         assert isinstance(score.avg_log_likelihood, float)
         assert isinstance(score.perplexity, float)
-        assert score.log_likelihood < 0
-        assert score.perplexity >= 1.0
 
     score = result.scores[0]
     expected_perplexity = np.exp(-score.avg_log_likelihood)
@@ -286,11 +277,10 @@ def test_evo1_score_batched():
 
     result = run_evo1_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 6
 
     for score in result.scores:
         assert isinstance(score.log_likelihood, float)
-        assert score.log_likelihood < 0
-        assert score.perplexity >= 1.0
         assert score.logits is not None

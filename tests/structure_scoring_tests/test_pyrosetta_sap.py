@@ -11,6 +11,7 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sap import (
     run_pyrosetta_sap,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
@@ -48,6 +49,7 @@ def test_sap_input_rejects_invalid_chain():
 def test_run_pyrosetta_sap_on_pdb():
     structure = Structure(structure=TEST_PDB)
     result = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[structure]))
+    assert_metrics_in_spec(result)
 
     assert result.success
     assert result.tool_id == "pyrosetta-sap"
@@ -55,7 +57,7 @@ def test_run_pyrosetta_sap_on_pdb():
 
     sap = result.results[0]
     assert isinstance(sap.sap_score, float)
-    assert 0 <= sap.sap_score <= 300, f"SAP score {sap.sap_score} outside expected range"
+    assert sap.sap_score <= 300, f"SAP score {sap.sap_score} outside expected range"
 
     assert len(sap.per_residue) == 340
     residue = sap.per_residue[0]

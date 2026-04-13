@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
+    InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
-    SequenceScores,
     SequenceStructurePair,
 )
 from proto_tools.tools.tool_registry import tool
@@ -146,10 +146,6 @@ def run_esm_if1_score(
             instance=instance,
             config=config,
         )
-        scores.append(
-            SequenceScores(
-                metrics=result["metrics"],
-            )
-        )
+        scores.append(InverseFoldingScoringMetrics(**result["metrics"]))
 
     return ESMIF1ScoringOutput(scores=scores)

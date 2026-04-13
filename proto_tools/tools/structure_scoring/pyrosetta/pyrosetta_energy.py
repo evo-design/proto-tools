@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -22,6 +22,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class ResidueEnergy(BaseModel):
     total_energy: float = Field(description="Total residue energy in REU")
 
 
-class EnergyResult(BaseModel):
+class PyRosettaEnergyMetrics(Metrics):
     """Energy scoring result for a single structure.
 
     ``total_energy`` and ``energy_terms`` are always computed on the full pose,
@@ -62,23 +63,40 @@ class EnergyResult(BaseModel):
     that residue's contribution within the full complex. To score a chain as
     if it were isolated, extract it into its own Structure first.
 
-    Attributes:
+    Metrics documented in ``metric_spec``:
         total_energy (float): Total Rosetta energy in REU (Rosetta Energy Units).
             Always the whole-pose total, independent of chain selection.
-        energy_terms (dict[str, float]): Breakdown by score term (fa_atr, fa_rep, etc.).
-            Always the whole-pose terms, independent of chain selection.
-        per_residue (list[ResidueEnergy]): Per-residue energy breakdown, filtered
-            to the selected chains when ``chain_ids`` is set. Energies reflect
-            each residue's contribution in the context of the full complex.
         relaxed (bool): Whether FastRelax was applied before scoring.
+
+    Attributes:
+        energy_terms (dict[str, float]): Breakdown by score term (fa_atr, fa_rep, etc.).
+            Always the whole-pose terms. Declared as a real field (not a metric)
+            because it's a named-term breakdown, not a scalar quantity.
+        per_residue (list[ResidueEnergy]): Per-residue energy breakdown, filtered
+            to the selected chains when ``chain_ids`` is set. Declared as a
+            real field because each entry carries chain/residue identifiers
+            alongside the energy value.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "total_energy": {
+            "availability": "always",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "unit": "REU",
+        },
+        "relaxed": {
+            "availability": "always",
+            "type": "bool",
+            "min": None,
+            "max": None,
+        },
+    }
+    primary_metric: str | None = "total_energy"
 
-    total_energy: float = Field(description="Total Rosetta energy in REU")
     energy_terms: dict[str, float] = Field(description="Energy breakdown by score term (fa_atr, fa_rep, etc.)")
     per_residue: list[ResidueEnergy] = Field(description="Per-residue energy breakdown")
-    relaxed: bool = Field(description="Whether FastRelax was applied before scoring")
 
 
 class PyRosettaEnergyInput(BaseToolInput):
@@ -150,10 +168,13 @@ class PyRosettaEnergyOutput(BaseToolOutput):
     """Output from PyRosetta energy scoring.
 
     Attributes:
-        results (list[EnergyResult]): Energy scores, one per input structure.
+        results (list[PyRosettaEnergyMetrics]): Energy scores, one per input
+            structure. Each entry carries ``total_energy`` + ``relaxed`` as
+            specced metrics plus ``energy_terms`` and ``per_residue`` as
+            declared non-metric fields.
     """
 
-    results: list[EnergyResult] = Field(
+    results: list[PyRosettaEnergyMetrics] = Field(
         default_factory=list,
         description="Energy scores, one per input structure",
     )
@@ -175,8 +196,8 @@ class PyRosettaEnergyOutput(BaseToolOutput):
         rows = [
             {
                 "structure_index": i,
-                "total_energy": result.total_energy,
-                "relaxed": result.relaxed,
+                "total_energy": result["total_energy"],
+                "relaxed": result["relaxed"],
                 "chain_id": res.chain_id,
                 "residue_index": res.residue_index,
                 "residue_name": res.residue_name,
@@ -273,7 +294,7 @@ def run_pyrosetta_energy(
 
     warn_about_dropped_residues(output_data["results"])
     remap_per_residue_chain_ids(output_data["results"], pdb_to_mmcif_maps)
-    results = [EnergyResult(**r) for r in output_data["results"]]
+    results = [PyRosettaEnergyMetrics(**r) for r in output_data["results"]]
 
     return PyRosettaEnergyOutput(
         metadata={

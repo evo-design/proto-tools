@@ -112,18 +112,18 @@ Contains a list of `ProteinMPNNSequences` objects, one per input structure:
 
 ### Scoring Output (`ProteinMPNNScoringOutput`)
 
-Contains a list of `SequenceScores` objects, one per input pair. Metrics can be accessed via attribute-style (`score.perplexity`) or dict-style (`score.metrics["perplexity"]`):
+Contains a list of `InverseFoldingScoringMetrics` objects, one per input pair. Metric values are accessed via attribute-style (`score.perplexity`) or mapping-style (`score["perplexity"]`):
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `List[SequenceScores]` | List of scores, one per input sequence-structure pair |
+| `scores` | `List[InverseFoldingScoringMetrics]` | List of scores, one per input sequence-structure pair |
 | `vocab` | `Optional[List[str]]` | Token ordering for logits: `logits[:, j]` corresponds to `vocab[j]` |
 
-Each `SequenceScores` contains:
+Each `InverseFoldingScoringMetrics` contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `metrics` | `Dict[str, float]` | Dictionary containing `log_likelihood`, `avg_log_likelihood`, and `perplexity` |
+| `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 | `logits` | `Optional[List[List[float]]]` | Per-position logits array of shape `(seq_length, vocab_size)` |
 
 ## Interpreting Results

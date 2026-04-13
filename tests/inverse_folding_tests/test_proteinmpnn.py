@@ -22,8 +22,8 @@ from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
+    InverseFoldingScoringMetrics,
     InverseFoldingStructureInput,
-    SequenceScores,
     SequenceStructurePair,
 )
 from tests.conftest import make_persistent_fixture
@@ -158,7 +158,7 @@ def test_proteinmpnn_score(pdb_structure: Structure):
     assert output.vocab == ALPHAFOLD_VOCAB
 
     assert len(output.scores) == 2
-    assert all(isinstance(score, SequenceScores) for score in output.scores)
+    assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
 
     # Original sequence should have lower perplexity than the modified one
     assert output.scores[0].perplexity < output.scores[1].perplexity
@@ -188,10 +188,10 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     assert isinstance(score.avg_log_likelihood, float)
     assert isinstance(score.perplexity, float)
 
-    # Validate metrics via dict access
-    assert isinstance(score.metrics["log_likelihood"], float)
-    assert isinstance(score.metrics["avg_log_likelihood"], float)
-    assert isinstance(score.metrics["perplexity"], float)
+    # Validate metrics via mapping access
+    assert isinstance(score["log_likelihood"], float)
+    assert isinstance(score["avg_log_likelihood"], float)
+    assert isinstance(score["perplexity"], float)
 
     # Validate logits shape
     logits_arr = np.array(score.logits)
@@ -278,9 +278,9 @@ def test_proteinmpnn_score_batched(pdb_structure: Structure):
     for score in output.scores:
         assert score.perplexity >= 1.0
         assert score.logits is not None
-        assert "log_likelihood" in score.metrics
-        assert "avg_log_likelihood" in score.metrics
-        assert "perplexity" in score.metrics
+        assert "log_likelihood" in score
+        assert "avg_log_likelihood" in score
+        assert "perplexity" in score
 
 
 @pytest.mark.uses_gpu
@@ -448,4 +448,4 @@ def test_abmpnn_score(pdb_structure: Structure):
     output = run_proteinmpnn_score(inp, config)
     assert output.success, f"AbMPNN scoring failed: {output}"
     assert output.scores[0].perplexity >= 1.0
-    assert "avg_log_likelihood" in output.scores[0].metrics
+    assert "avg_log_likelihood" in output.scores[0]

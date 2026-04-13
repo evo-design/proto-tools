@@ -4,6 +4,7 @@ import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from proto_tools.utils.base_config import BaseConfig
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.pytest_helpers import (
     CHIMERA_ONLY_KEYS,
     EXCLUDED_CATEGORIES,
@@ -173,9 +174,11 @@ def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
 
     r1 = spec.function(inputs, config)
     assert r1.success, f"First run of {spec.key} failed: {r1.errors}"
+    assert_metrics_in_spec(r1)
 
     r2 = spec.function(inputs, config)
     assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
+    assert_metrics_in_spec(r2)
 
     r1.approx_equal(r2)
 
@@ -204,8 +207,10 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
     with ToolInstance.persist_tool(tool_dir):
         r1 = spec.function(inputs, config)
         assert r1.success, f"First run of {spec.key} failed: {r1.errors}"
+        assert_metrics_in_spec(r1)
 
         r2 = spec.function(inputs, config)
         assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
+        assert_metrics_in_spec(r2)
 
         r1.approx_equal(r2)

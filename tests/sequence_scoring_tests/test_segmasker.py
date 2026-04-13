@@ -63,17 +63,13 @@ def test_segmasker_scores_sequences():
     result = run_segmasker(inputs, SegmaskerConfig())
 
     validate_output(result)
-    assert len(result.low_complexity_fractions) == 2
-    assert len(result.low_complexity_counts) == 2
-    assert len(result.sequence_lengths) == 2
-    assert result.sequence_lengths[0] == 25
-    assert result.sequence_lengths[1] == 51
+    assert len(result.results) == 2
+    assert result.results[0].sequence_length == 25
+    assert result.results[1].sequence_length == 51
 
     # PolyA should have higher low-complexity fraction than hemoglobin
-    assert all(0.0 <= f <= 1.0 for f in result.low_complexity_fractions)
-    assert result.low_complexity_fractions[0] >= result.low_complexity_fractions[1]
+    assert all(0.0 <= r.low_complexity_fraction <= 1.0 for r in result.results)
+    assert result.results[0].low_complexity_fraction >= result.results[1].low_complexity_fraction
 
-    # All output lists should be populated and equal length
-    assert len(result.low_complexity_fractions) == 2
-    assert len(result.low_complexity_counts) == 2
-    assert len(result.sequence_lengths) == 2
+    # Every result has all three metrics populated
+    assert all(r.low_complexity_count is not None for r in result.results)

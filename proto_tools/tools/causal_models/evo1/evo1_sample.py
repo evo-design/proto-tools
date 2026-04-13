@@ -15,7 +15,7 @@ from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
-    SequenceScores,
+    CausalModelScoringMetrics,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -46,11 +46,14 @@ class Evo1SampleOutput(CausalModelSampleOutput):
 
     Attributes:
         sequences (list[str]): Generated DNA sequences.
-        scores (list[SequenceScores] | None): Scoring metrics per sequence, including
-            log_likelihood, avg_log_likelihood, and perplexity.
+        scores (list[CausalModelScoringMetrics] | None): Scoring metrics per
+            sequence, including log_likelihood, avg_log_likelihood, and perplexity.
     """
 
-    scores: list[SequenceScores] | None = Field(default=None, description="Scoring metrics per generated sequence")
+    scores: list[CausalModelScoringMetrics] | None = Field(
+        default=None,
+        description="Scoring metrics per generated sequence",
+    )
 
 
 # Config:
@@ -171,15 +174,13 @@ def run_evo1_sample(
         sequences = [prompt + seq for prompt, seq in zip(inputs.prompts, sequences, strict=False)]
 
     # Derive standard score triplet from mean log-prob per token.
-    scores: list[SequenceScores] | None = None
+    scores: list[CausalModelScoringMetrics] | None = None
     if raw_scores is not None:
         scores = [
-            SequenceScores(
-                metrics={
-                    "log_likelihood": s * config.num_tokens,
-                    "avg_log_likelihood": s,
-                    "perplexity": math.exp(-s),
-                },
+            CausalModelScoringMetrics(
+                log_likelihood=s * config.num_tokens,
+                avg_log_likelihood=s,
+                perplexity=math.exp(-s),
             )
             for s in raw_scores
         ]

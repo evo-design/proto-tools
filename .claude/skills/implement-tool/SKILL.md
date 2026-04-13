@@ -152,6 +152,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    - `@tool()` decorator with all 9 required kwargs: key, label, category, input_class, config_class, output_class, description, uses_gpu, example_input (plus optional `device_count`)
    - `run_*()` function that calls `ToolInstance.dispatch()`
    - If category has shared data models, use type aliases (e.g., `ToolInput = InverseFoldingInput`)
+   - **Metrics**: if the tool emits scalar metric-like values (plDDT, perplexity, scores, etc.), route them through a `Metrics` subclass (from `proto_tools/utils/tool_io.py`). Prefer a shared per-category class (`MaskedModelScoringMetrics`, `InverseFoldingScoringMetrics`, `CausalModelScoringMetrics`, etc.) when the metric set matches siblings. Otherwise declare a per-tool `<Tool>Metrics(Metrics)` subclass in the tool file with a `metric_spec: ClassVar[dict[str, MetricSpec]]` documenting type/range for each metric. Verification lives in each tool's e2e test via `assert_metrics_in_spec(result)` (helper at `tests/tool_infra_tests/_metric_helpers.py`).
 
 **Critical conventions:**
 - Tool registry key: `{tool}-{action}` kebab-case (e.g., `"esmif-sample"`)

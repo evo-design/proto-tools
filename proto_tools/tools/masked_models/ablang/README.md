@@ -129,12 +129,12 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `list[SequenceScores]` | One score object per input sequence |
+| `scores` | `list[MaskedModelScoringMetrics]` | One score object per input sequence |
 
-**`SequenceScores` fields:**
+**`MaskedModelScoringMetrics` fields:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `metrics` | `dict[str, float]` | Scoring metrics (e.g., pseudo-log-likelihood) |
+| `pseudo_log_likelihood`, `confidence` | `float` | Scoring metrics (attribute or mapping access: `score.pseudo_log_likelihood` or `score["pseudo_log_likelihood"]`) |
 
 ## Interpreting Results
 

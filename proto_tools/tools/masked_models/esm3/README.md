@@ -130,10 +130,10 @@ Supported export formats: `fasta`, `txt`, `json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `List[SequenceScores]` | Per-sequence metrics and optional logits |
+| `scores` | `List[MaskedModelScoringMetrics]` | Per-sequence metrics and optional logits |
 
-Each `SequenceScores` entry includes:
-- `metrics`: `log_likelihood`, `avg_log_likelihood`, `perplexity`
+Each `MaskedModelScoringMetrics` entry includes:
+- `log_likelihood`, `avg_log_likelihood`, `perplexity` — access via attribute (`score.perplexity`) or mapping (`score["perplexity"]`)
 - `logits`: per-position logits if `return_logits=True`
 - `vocab`: list of 20 standard amino acids if `return_logits=True`
 

@@ -11,7 +11,7 @@
       "sequence_recovery": 0.5267857313156128,
       "ligand_interface_sequence_recovery": 0.5384615659713745,
       "model_type": "ligand_mpnn",
-      "checkpoint_path": "/raid/projects/viggiano/codebases/proto-bio/proto_model_cache/ligandmpnn/ligandmpnn_v_32_010_25.pt",
+      "checkpoint_path": "/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/ligandmpnn/ligandmpnn_v_32_010_25.pt",
       "is_legacy_weights": true
     },
     {
@@ -21,7 +21,7 @@
       "sequence_recovery": 0.5446428656578064,
       "ligand_interface_sequence_recovery": 0.5769230723381042,
       "model_type": "ligand_mpnn",
-      "checkpoint_path": "/raid/projects/viggiano/codebases/proto-bio/proto_model_cache/ligandmpnn/ligandmpnn_v_32_010_25.pt",
+      "checkpoint_path": "/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/ligandmpnn/ligandmpnn_v_32_010_25.pt",
       "is_legacy_weights": true
     }
   ]

@@ -43,8 +43,8 @@ from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelSampleConfig,
     CausalModelSampleInput,
     CausalModelSampleOutput,
+    CausalModelScoringMetrics,
     CausalModelScoringOutput,
-    SequenceScores,
 )
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -124,7 +124,8 @@ def test_scoring_config_contract(input_cls, config_cls, output_cls):
 def test_scoring_output_contract(input_cls, config_cls, output_cls):
     """Output inherits base, has scores field, supports csv/json export."""
     assert issubclass(output_cls, CausalModelScoringOutput)
-    scores = [SequenceScores(metrics={"log_likelihood": -1.5, "perplexity": 4.48})]
+    scores = [CausalModelScoringMetrics(log_likelihood=-1.5, perplexity=4.48)]
     output = output_cls(scores=scores)
-    assert output.scores[0].metrics["log_likelihood"] == -1.5
+    assert output.scores[0]["log_likelihood"] == -1.5
+    assert output.scores[0].log_likelihood == -1.5
     assert {"csv", "json"} <= set(output.output_format_options)

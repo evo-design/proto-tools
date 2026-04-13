@@ -9,7 +9,7 @@ import json
 import warnings
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,6 +20,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 # ============================================================================
@@ -107,7 +108,7 @@ class SequenceEmbedding(BaseModel):
     single object so the caching/dedup system in tool_registry can correctly
     expand all parallel fields together via ``iterable_output_field="results"``.
 
-    Follows the same pattern as ``SequenceScores`` for scoring tools.
+    Follows the same pattern as ``MaskedModelScoringMetrics`` for scoring tools.
 
     Attributes:
         mean_embedding (list[float]): Mean-pooled embedding vector for one sequence.
@@ -236,22 +237,30 @@ class MaskedModelScoringConfig(BaseConfig):
     )
 
 
-class SequenceScores(BaseModel):
-    """Individual sequence score with flexible metrics dict.
+class MaskedModelScoringMetrics(Metrics):
+    """Per-sequence scoring metrics for masked-model LM scorers (ESM2, ESM3, AbLang).
 
-    Represents scoring metrics for a single sequence. Metrics can be accessed
-    via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
+    All three masked-model scorers emit the same scalar set. Shared here rather
+    than per-tool because the metric spec is identical across them.
+
+    Metrics documented in ``metric_spec``:
+        log_likelihood (float): Sum of per-position log-likelihoods. Always present.
+        avg_log_likelihood (float): Mean per-position log-likelihood. Always present.
+        perplexity (float): exp(-avg_log_likelihood). Always present. Range ``[1, ∞)``.
 
     Attributes:
-        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
-        logits (list[list[float]] | None): Optional per-position logits array.
-        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        logits (list[list[float]] | None): Per-position logits array
+            ``(seq_len, vocab_size)``. ``None`` unless ``return_logits=True``.
+        vocab (list[str] | None): Token ordering for ``logits``.
     """
 
-    metrics: dict[str, float] = Field(
-        default_factory=dict,
-        description="Dictionary of scalar scoring metrics",
-    )
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+    }
+    primary_metric: str | None = "perplexity"
+
     logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
@@ -261,37 +270,21 @@ class SequenceScores(BaseModel):
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
 
-    def __getattr__(self, name: str) -> Any:
-        """Allow attribute-style access to metrics."""
-        metrics = object.__getattribute__(self, "metrics")
-        if name in metrics:
-            return metrics[name]
-        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
-
-    def add_metric(self, name: str, value: float) -> None:
-        """Add a metric to the output."""
-        self.metrics[name] = value
-
-    def __iter__(self) -> Iterator[float]:  # type: ignore[override]
-        return iter(self.metrics.values())
-
-    def __len__(self) -> int:
-        return len(self.metrics)
-
-    def __getitem__(self, index: int) -> float:
-        return list(self.metrics.values())[index]
-
 
 class MaskedModelScoringOutput(BaseToolOutput):
     """Standardized output for masked model sequence scoring tools.
 
     Attributes:
-        scores (list[SequenceScores]): List of scoring outputs, one per input
-            sequence. Each entry contains metrics (log_likelihood,
-            avg_log_likelihood, perplexity) and optional per-position logits.
+        scores (list[MaskedModelScoringMetrics]): List of scoring outputs,
+            one per input sequence. Each entry is a ``Metrics`` subclass with
+            scalar metrics (accessed via ``score.perplexity`` or
+            ``score["perplexity"]``) plus declared ``logits`` / ``vocab``
+            fields that carry raw model outputs when requested.
     """
 
-    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence")
+    scores: list[MaskedModelScoringMetrics] = Field(
+        description="List of scoring outputs, one per input sequence",
+    )
 
     @property
     def vocab(self) -> list[str] | None:
@@ -301,10 +294,10 @@ class MaskedModelScoringOutput(BaseToolOutput):
     def __len__(self) -> int:
         return len(self.scores)
 
-    def __getitem__(self, index: int) -> SequenceScores:
+    def __getitem__(self, index: int) -> MaskedModelScoringMetrics:
         return self.scores[index]
 
-    def __iter__(self) -> Iterator[SequenceScores]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[MaskedModelScoringMetrics]:  # type: ignore[override]
         return iter(self.scores)
 
     @property
@@ -329,11 +322,11 @@ class MaskedModelScoringOutput(BaseToolOutput):
 
             data = []
             for s in self.scores:
-                score_data = dict(s.metrics)
+                score_data: dict[str, Any] = dict(s.items())
                 if s.logits is not None:
-                    score_data["logits"] = s.logits  # type: ignore[assignment]
+                    score_data["logits"] = s.logits
                 if s.vocab is not None:
-                    score_data["vocab"] = s.vocab  # type: ignore[assignment]
+                    score_data["vocab"] = s.vocab
                 data.append(score_data)
 
             with open(path, "w") as f:
@@ -341,11 +334,11 @@ class MaskedModelScoringOutput(BaseToolOutput):
 
         elif file_format == "csv":
             if self.scores:
-                fieldnames = list(self.scores[0].metrics.keys())
+                fieldnames = list(self.scores[0].keys())
                 with open(path, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     for s in self.scores:
-                        writer.writerow(s.metrics)
+                        writer.writerow(dict(s.items()))
         else:
             raise ValueError(f"Unsupported format: {file_format}")

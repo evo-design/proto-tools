@@ -13,8 +13,8 @@ from proto_tools.tools.masked_models.ablang.ablang_embeddings import (
 )
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
+    MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
-    SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
@@ -140,10 +140,12 @@ def run_ablang_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        AbLangScoringOutput: Contains SequenceScores for each input sequence with:
+        AbLangScoringOutput: Contains a ``MaskedModelScoringMetrics`` for each input
+            sequence with:
 
-            - ``metrics``: Dict with ``pseudo_log_likelihood`` (and ``confidence``
-              if using confidence mode)
+            - ``pseudo_log_likelihood`` (and ``confidence`` if using confidence mode);
+              access via attribute ``score.pseudo_log_likelihood`` or mapping
+              ``score["pseudo_log_likelihood"]``
             - ``logits``: ``None`` (not returned for scoring)
             - ``vocab``: ``None``
 
@@ -151,7 +153,7 @@ def run_ablang_score(
         >>> inputs = AbLangScoringInput(sequences=["EVQLVESGGGLVQPGG"])
         >>> config = AbLangScoringConfig(model_choice="ablang1-heavy")
         >>> result = run_ablang_score(inputs, config)
-        >>> print(f"PLL: {result.scores[0].metrics['pseudo_log_likelihood']}")
+        >>> print(f"PLL: {result.scores[0]['pseudo_log_likelihood']}")
 
     Note:
         - Lower pseudo-log-likelihood (more negative) indicates lower model confidence
@@ -174,13 +176,6 @@ def run_ablang_score(
         config=config,
     )
 
-    sequence_scores = [
-        SequenceScores(
-            metrics=metrics,
-            logits=None,
-            vocab=None,
-        )
-        for metrics in result["metrics"]
-    ]
+    sequence_scores = [MaskedModelScoringMetrics(**metrics) for metrics in result["metrics"]]
 
     return AbLangScoringOutput(scores=sequence_scores)

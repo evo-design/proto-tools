@@ -8,8 +8,8 @@ from typing import Any, Literal
 
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
+    MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
-    SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, ConfigField, ToolInstance
@@ -143,10 +143,11 @@ def run_esm2_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ESM2ScoringOutput: Contains SequenceScores for each input sequence with:
+        ESM2ScoringOutput: Contains a ``MaskedModelScoringMetrics`` for each input
+            sequence with:
 
-            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
-              ``perplexity``
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
+              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, 20) if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 20 standard amino acid characters if
@@ -157,7 +158,7 @@ def run_esm2_score(
         >>> inputs = MaskedModelInput(sequences=["MVLSPADKTNVKAAW", "GSSGSSGSS"])
         >>> config = ESM2ScoringConfig(batch_size=32)
         >>> result = run_esm2_score(inputs, config)
-        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+        >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
         >>>
         >>> # Scoring with logits for downstream analysis
         >>> config = ESM2ScoringConfig(batch_size=32, return_logits=True)
@@ -193,8 +194,8 @@ def run_esm2_score(
     )
 
     sequence_scores = [
-        SequenceScores(
-            metrics=metrics,
+        MaskedModelScoringMetrics(
+            **metrics,
             logits=result["logits"][i] if result["logits"] is not None else None,
             vocab=result["vocab"],
         )

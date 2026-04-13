@@ -8,7 +8,7 @@ and parses the two TM-scores from stdout.
 import json
 from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -20,6 +20,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
 
@@ -46,16 +47,32 @@ class TMalignConfig(BaseConfig):
     """
 
 
+class TMalignMetrics(Metrics):
+    """Pairwise alignment scores emitted by TMalign.
+
+    Metrics documented in ``metric_spec``:
+        tm_score_chain_1 (float): TM-score normalized by the length of
+            Chain 1 (query). Always present. Range 0-1.
+        tm_score_chain_2 (float): TM-score normalized by the length of
+            Chain 2 (reference). Always present. Range 0-1.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "tm_score_chain_1": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "tm_score_chain_2": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+    }
+
+
 class TMalignOutput(BaseToolOutput):
     """Output from TMalign pairwise structure alignment.
 
     Attributes:
-        tm_score_chain_1 (float): TM-score normalized by the length of Chain 1 (query).
-        tm_score_chain_2 (float): TM-score normalized by the length of Chain 2 (reference).
+        metrics (TMalignMetrics): Pairwise alignment scores. Access metrics via
+            ``output.metrics.tm_score_chain_1`` or ``output.tm_score_chain_1``
+            (the forwarded shortcut from :class:`BaseToolOutput`).
     """
 
-    tm_score_chain_1: float = Field(description="TM-score normalized by length of Chain 1 (query)")
-    tm_score_chain_2: float = Field(description="TM-score normalized by length of Chain 2 (reference)")
+    metrics: TMalignMetrics = Field(default_factory=TMalignMetrics, description="Pairwise alignment scores")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -73,8 +90,8 @@ class TMalignOutput(BaseToolOutput):
         with open(path, "w") as f:
             json.dump(
                 {
-                    "tm_score_chain_1": self.tm_score_chain_1,
-                    "tm_score_chain_2": self.tm_score_chain_2,
+                    "tm_score_chain_1": self.metrics["tm_score_chain_1"],
+                    "tm_score_chain_2": self.metrics["tm_score_chain_2"],
                 },
                 f,
                 indent=2,
@@ -123,7 +140,9 @@ def run_tmalign(inputs: TMalignInput, config: TMalignConfig, instance: Any = Non
     )
 
     return TMalignOutput(
-        tm_score_chain_1=output_data["tm_score_chain_1"],
-        tm_score_chain_2=output_data["tm_score_chain_2"],
+        metrics=TMalignMetrics(
+            tm_score_chain_1=output_data["tm_score_chain_1"],
+            tm_score_chain_2=output_data["tm_score_chain_2"],
+        ),
         metadata={"tool": "tmalign"},
     )

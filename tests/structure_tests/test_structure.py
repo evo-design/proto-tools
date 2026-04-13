@@ -12,7 +12,7 @@ import pytest
 from pydantic import BaseModel
 
 from proto_tools.entities.structures import BFactorType, Structure
-from proto_tools.entities.structures.structure import StructureMetrics, _approx_equal_metric
+from proto_tools.entities.structures.structure import _approx_equal_metric
 from proto_tools.entities.structures.utils import (
     adjacent_distances,
     convert_cif_str_to_pdb_str,
@@ -26,6 +26,7 @@ from proto_tools.entities.structures.utils import (
     pairwise_distances,
     pdb_file_to_atomarray,
 )
+from proto_tools.utils.tool_io import Metrics
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -274,7 +275,9 @@ def test_visualize(protein_from_pdb_file):
 def test_metrics_survive_round_trip():
     protein = Structure.from_file(_TEST_PDB_FILE, metrics={"plddt": 85.2, "ptm": 0.9})
     reconstructed = Structure.model_validate(protein.model_dump())
-    assert reconstructed.metrics == {"plddt": 85.2, "ptm": 0.9}
+    assert reconstructed.metrics["plddt"] == 85.2
+    assert reconstructed.metrics["ptm"] == 0.9
+    assert set(reconstructed.metrics.keys()) == {"plddt", "ptm"}
 
 
 def test_structure_approx_equal_matching():
@@ -283,9 +286,18 @@ def test_structure_approx_equal_matching():
     a.approx_equal(b)
 
 
-def test_structure_getattr_metrics():
+def test_structure_metrics_access_goes_through_metrics_field():
+    """Metric access must go through ``.metrics`` (attribute or mapping style).
+
+    The old ``Structure.__getattr__`` delegation that allowed ``structure.ptm``
+    as a shortcut for ``structure.metrics["ptm"]`` is deliberately removed.
+    """
     protein = Structure.from_file(_TEST_PDB_FILE, metrics={"ptm": 0.9})
-    assert protein.ptm == 0.9
+    assert protein.metrics.ptm == 0.9
+    assert protein.metrics["ptm"] == 0.9
+    # no bypass
+    with pytest.raises(AttributeError):
+        _ = protein.ptm
     with pytest.raises(AttributeError):
         _ = protein.nonexistent_field
 
@@ -393,112 +405,41 @@ def test_to_pdb_with_chain_mapping_does_not_mutate_cached_gemmi_struct():
     assert chains_before == chains_after == ["Heavy", "Light"]
 
 
-# ── StructureMetrics ─────────────────────────────────────────────────────────
+# ── Metrics container (from tool_io) ─────────────────────────────────────────
 
 
 def test_metrics_init_strips_none():
-    m = StructureMetrics(ptm=0.9, plddt=None)
+    m = Metrics(ptm=0.9, plddt=None)
     assert "ptm" in m
     assert "plddt" not in m
 
 
 def test_metrics_dict_protocol():
-    m = StructureMetrics(ptm=0.9, iptm=0.8)
+    m = Metrics(ptm=0.9, iptm=0.8)
     assert m["ptm"] == 0.9
     assert len(m) == 2
     assert set(m) == {"ptm", "iptm"}
     assert 42 not in m
-    assert len(StructureMetrics()) == 0
+    assert len(Metrics()) == 0
     with pytest.raises(KeyError):
         m["missing"]
 
 
-@pytest.mark.parametrize(
-    "other,expected",
-    [
-        (StructureMetrics(ptm=0.9), True),
-        ({"ptm": 0.9}, True),
-        (StructureMetrics(ptm=0.8), False),
-        (42, NotImplemented),
-    ],
-    ids=["metrics-equal", "dict-equal", "metrics-unequal", "other-type"],
-)
-def test_metrics_eq(other, expected):
-    m = StructureMetrics(ptm=0.9)
-    result = m.__eq__(other)
-    assert result == expected
-
-
 def test_metrics_primary_value():
-    assert StructureMetrics(ptm=0.9, primary_metric="ptm").primary_value == 0.9
-    assert StructureMetrics(ptm=0.9).primary_value is None
+    assert Metrics(ptm=0.9, primary_metric="ptm").primary_value == 0.9
+    assert Metrics(ptm=0.9).primary_value is None
+    # primary_metric set but the named metric isn't in the container
+    assert Metrics(primary_metric="missing").primary_value is None
 
 
-@pytest.mark.parametrize(
-    "value,expected",
-    [(1.0, [1.0]), ([1.0, [2.0, 3.0]], [1.0, 2.0, 3.0]), ("not numeric", [])],
-    ids=["scalar", "nested-list", "non-numeric"],
-)
-def test_metrics_flatten_scalars(value, expected):
-    assert StructureMetrics._flatten_scalars(value) == expected
-
-
-_FLOAT_SPEC = {"type": float, "min": 0.0, "max": 1.0}
-_LIST_SPEC = {"type": list, "min": 0.0, "max": 1.0}
-_INT_SPEC = {"type": int, "min": 0, "max": 10}
-_BOOL_SPEC = {"type": bool, "min": None, "max": None}
-
-
-@pytest.mark.parametrize(
-    "spec,value,error_match",
-    [
-        (_FLOAT_SPEC, 0.5, None),
-        (_FLOAT_SPEC, 1.5, "above max"),
-        (_FLOAT_SPEC, -0.1, "below min"),
-        (_FLOAT_SPEC, "bad", "expected numeric"),
-        (_LIST_SPEC, [0.5, 0.8], None),
-        (_LIST_SPEC, [0.5, 1.5], r"element .* above max"),
-        (_LIST_SPEC, 0.5, "expected list"),
-        (_INT_SPEC, 5, None),
-        (_INT_SPEC, True, "expected int"),
-        (_INT_SPEC, -1, "below min"),
-        (_BOOL_SPEC, True, None),
-        (_BOOL_SPEC, 1, "expected bool"),
-    ],
-    ids=[
-        "float-ok",
-        "float-above-max",
-        "float-below-min",
-        "float-wrong-type",
-        "list-ok",
-        "list-element-above-max",
-        "list-wrong-type",
-        "int-ok",
-        "int-bool-rejected",
-        "int-below-min",
-        "bool-ok",
-        "bool-wrong-type",
-    ],
-)
-def test_metrics_check_value(spec, value, error_match):
-    m = StructureMetrics(x=value if not isinstance(value, str) else 0.5)
-    if error_match is None:
-        m._check_value("x", value, spec)
-    else:
-        with pytest.raises(AssertionError, match=error_match):
-            m._check_value("x", value, spec)
-
-
-def test_metrics_validate_against_spec():
-    spec = {
-        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "optional", "type": float, "min": 0.0, "max": 1.0},
-    }
-    StructureMetrics(ptm=0.9, iptm=0.8).validate_against_spec(spec)
-    with pytest.raises(AssertionError, match="Guaranteed metric"):
-        StructureMetrics(iptm=0.8).validate_against_spec(spec)
-    with pytest.raises(AssertionError, match="Undeclared metric"):
-        StructureMetrics(ptm=0.9, extra=1.0).validate_against_spec(spec)
+def test_metrics_update():
+    m = Metrics(ptm=0.9, iptm=0.7)
+    m.update({"iptm": 0.8, "new_key": 0.5})
+    assert m["iptm"] == 0.8
+    assert m["new_key"] == 0.5
+    # update from another Metrics instance
+    m.update(Metrics(another=1.0))
+    assert m["another"] == 1.0
 
 
 # ── Structure methods ────────────────────────────────────────────────────────

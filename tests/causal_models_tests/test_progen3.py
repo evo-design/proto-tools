@@ -15,6 +15,7 @@ from proto_tools.tools.causal_models.progen3 import (
     run_progen3_sample,
     run_progen3_score,
 )
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 _SMALL_MODEL = "progen3-112m"
 
@@ -208,19 +209,14 @@ def test_progen3_score_basic():
     inputs = ProGen3ScoringInput(sequences=["MKTLVIVTGASGAGK"])
     config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL)
     result = run_progen3_score(inputs, config)
+    assert_metrics_in_spec(result)
 
     assert result.success
     assert result.tool_id == "progen3-score"
     assert len(result.scores) == 1
 
     score = result.scores[0]
-    assert "log_likelihood" in score.metrics
-    assert "avg_log_likelihood" in score.metrics
-    assert "perplexity" in score.metrics
-
-    assert isinstance(score.metrics["log_likelihood"], float)
-    assert score.metrics["log_likelihood"] < 0
-    assert score.metrics["perplexity"] >= 1.0
+    assert isinstance(score["log_likelihood"], float)
 
 
 @pytest.mark.uses_gpu
@@ -233,42 +229,42 @@ def test_progen3_score_batch():
         batch_size=2,
     )
     result = run_progen3_score(inputs, config)
+    assert_metrics_in_spec(result)
 
     assert result.success
     assert len(result.scores) == 3
 
-    for score in result.scores:
-        assert "log_likelihood" in score.metrics
-        assert "perplexity" in score.metrics
-        assert score.metrics["log_likelihood"] < 0
-        assert score.metrics["perplexity"] >= 1.0
-
 
 @pytest.mark.uses_gpu
 def test_progen3_score_per_position_structure():
-    """Per-position metrics have correct structure and length."""
+    """Per-position metrics have correct structure and length.
+
+    Per-position metrics live on the ``Metrics`` container as ``_pp``-suffixed
+    extras (e.g. ``log_likelihood_pp``) to avoid colliding with the scalar
+    metrics of the same stem name.
+    """
     seq = "MKTLVIVTGASGAGK"
     inputs = ProGen3ScoringInput(sequences=[seq])
     config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL)
     result = run_progen3_score(inputs, config)
 
     score = result.scores[0]
-    assert score.per_position_metrics is not None
+    assert "log_likelihood_pp" in score
 
-    for key in ("forward_log_likelihood", "reverse_log_likelihood", "log_likelihood"):
-        assert key in score.per_position_metrics, f"Missing key: {key}"
-        values = score.per_position_metrics[key]
+    for key in ("forward_log_likelihood_pp", "reverse_log_likelihood_pp", "log_likelihood_pp"):
+        assert key in score, f"Missing key: {key}"
+        values = score[key]
         assert len(values) == len(seq), f"{key} length {len(values)} != seq length {len(seq)}"
 
     # Forward has no left context at position 0
-    assert score.per_position_metrics["forward_log_likelihood"][0] is None
+    assert score["forward_log_likelihood_pp"][0] is None
     # Reverse has no right context at last position
-    assert score.per_position_metrics["reverse_log_likelihood"][-1] is None
+    assert score["reverse_log_likelihood_pp"][-1] is None
 
     # Interior positions should have values for all three
-    for key in ("forward_log_likelihood", "reverse_log_likelihood", "log_likelihood"):
+    for key in ("forward_log_likelihood_pp", "reverse_log_likelihood_pp", "log_likelihood_pp"):
         for j in range(1, len(seq) - 1):
-            assert score.per_position_metrics[key][j] is not None, f"{key}[{j}] is None for interior position"
+            assert score[key][j] is not None, f"{key}[{j}] is None for interior position"
 
 
 @pytest.mark.uses_gpu
@@ -287,9 +283,9 @@ def test_progen3_score_per_position_consistency():
     result = run_progen3_score(inputs, config)
 
     score = result.scores[0]
-    fwd = [v for v in score.per_position_metrics["forward_log_likelihood"] if v is not None]
-    rev = [v for v in score.per_position_metrics["reverse_log_likelihood"] if v is not None]
-    bidir = [v for v in score.per_position_metrics["log_likelihood"] if v is not None]
+    fwd = [v for v in score["forward_log_likelihood_pp"] if v is not None]
+    rev = [v for v in score["reverse_log_likelihood_pp"] if v is not None]
+    bidir = [v for v in score["log_likelihood_pp"] if v is not None]
 
     # All log-likelihoods should be negative
     assert all(v < 0 for v in fwd), "Forward LLs should be negative"
@@ -302,12 +298,12 @@ def test_progen3_score_per_position_consistency():
 
     # Bidirectional mean of interior positions should equal avg of fwd and rev at those positions
     for j in range(1, len(seq) - 1):
-        f = score.per_position_metrics["forward_log_likelihood"][j]
-        r = score.per_position_metrics["reverse_log_likelihood"][j]
-        b = score.per_position_metrics["log_likelihood"][j]
+        f = score["forward_log_likelihood_pp"][j]
+        r = score["reverse_log_likelihood_pp"][j]
+        b = score["log_likelihood_pp"][j]
         assert abs(b - (f + r) / 2) < 1e-6, f"Bidirectional[{j}] != avg(fwd, rev)"
 
     # Deterministic: scoring same sequence twice gives same per-position values
     result2 = run_progen3_score(inputs, config)
-    fwd2 = [v for v in result2.scores[0].per_position_metrics["forward_log_likelihood"] if v is not None]
+    fwd2 = [v for v in result2.scores[0]["forward_log_likelihood_pp"] if v is not None]
     assert all(abs(a - b) < 1e-4 for a, b in zip(fwd, fwd2, strict=True)), "Per-position scores not deterministic"

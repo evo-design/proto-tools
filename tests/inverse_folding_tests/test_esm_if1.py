@@ -18,8 +18,8 @@ from proto_tools.tools.inverse_folding.esm_if1 import (
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
+    InverseFoldingScoringMetrics,
     InverseFoldingStructureInput,
-    SequenceScores,
     SequenceStructurePair,
 )
 from tests.conftest import make_persistent_fixture
@@ -175,7 +175,7 @@ def test_esm_if1_score(pdb_structure: Structure):
     validate_output(output)
     assert output.tool_id == "esm-if1-score"
     assert len(output.scores) == 1
-    assert isinstance(output.scores[0], SequenceScores)
+    assert isinstance(output.scores[0], InverseFoldingScoringMetrics)
 
 
 @pytest.mark.uses_gpu

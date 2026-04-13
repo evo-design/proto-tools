@@ -16,6 +16,7 @@ from proto_tools.tools.causal_models.progen2 import (
 )
 from proto_tools.utils import PROTEIN_AMINO_ACIDS
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("progen2")
@@ -236,6 +237,7 @@ def test_progen2_score_tool():
 
     result = run_progen2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "progen2-score"
     assert len(result.vocab) == 30
@@ -248,9 +250,7 @@ def test_progen2_score_tool():
         assert isinstance(score.avg_log_likelihood, float)
         assert isinstance(score.perplexity, float)
 
-        assert score.log_likelihood < 0
         assert score.log_likelihood <= score.avg_log_likelihood <= 0
-        assert score.perplexity >= 1.0
 
         assert score.logits is not None
         assert len(score.logits) == len(seq) + 1  # +1 for start token
@@ -271,12 +271,12 @@ def test_progen2_score_different_sequences():
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     ppl1 = result.scores[0].perplexity
     ppl2 = result.scores[1].perplexity
 
     assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-    assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
@@ -340,13 +340,11 @@ def test_progen2_score_batched():
 
     result = run_progen2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 6
 
     for i, (seq, score) in enumerate(zip(sequences, result.scores, strict=False)):
-        assert score.log_likelihood < 0
-        assert score.perplexity >= 1.0
-
         assert score.logits is not None
         assert len(score.logits) == len(seq) + 1, f"Sequence {i}: wrong logits length"
 
@@ -383,6 +381,7 @@ def test_progen2_score_variable_length_sequences():
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", batch_size=2, verbose=False, return_logits=True)
 
     result = run_progen2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     for seq, score in zip(sequences, result.scores, strict=False):
         expected_len = len(seq) + 1  # +1 for start token
@@ -390,9 +389,6 @@ def test_progen2_score_variable_length_sequences():
             f"Sequence '{seq}' (len {len(seq)}): expected logits len {expected_len}, got {len(score.logits)}"
         )
         assert len(score.logits[0]) == 30, "ProGen2 vocab size should be 30"
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
 
 
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────
