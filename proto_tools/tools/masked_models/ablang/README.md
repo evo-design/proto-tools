@@ -5,6 +5,8 @@
 ## Overview
 AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on input format.
 
+This package also includes `ablang-germinal-gradient`, a Germinal-specific relaxed-sequence gradient backend that mirrors Germinal's existing `CustomAbLang` adapter. It is not a generic AbLang naturalness objective: it uses Germinal's shifted cross-entropy objective, Germinal's scFv chain handling, and an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into Germinal's AbLang order `ARNDCQEGHILKMFPSTWYV`.
+
 ## Background
 
 **Why an antibody-specific language model?**
@@ -22,6 +24,7 @@ Heavy and light chains co-evolve to form functional antibodies. The paired model
 | Tool | Description | Output |
 |------|-------------|--------|
 | `ablang-embedding` | Extract antibody embeddings | Embeddings, attention masks |
+| `ablang-germinal-gradient` | Germinal-specific AbLang relaxed-sequence gradient | Gradient, loss, metrics, vocab |
 | `ablang-sample` | Restore masked (`_`) positions | Completed sequences |
 | `ablang-score` | Score sequences via pseudo-log-likelihood | Per-sequence metrics |
 
@@ -78,6 +81,13 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 |-----------|------|-------------|
 | `sequences` | `list[str]` | Antibody sequences to score |
 
+### Germinal Gradient Tool
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `logits` | `list[list[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
+| `temperature` | `float` | Softmax temperature used to relax logits into probabilities |
+
 ## Configuration
 
 ### Embeddings Tool (`AbLangEmbeddingsConfig`)
@@ -103,6 +113,17 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 | `model_choice` | `str` | `"auto"` | Model checkpoint: `"auto"`, `"ablang1-heavy"`, `"ablang1-light"`, `"ablang2-paired"` |
 | `scoring_mode` | `str` | `"pseudo_log_likelihood"` | Scoring method: `"pseudo_log_likelihood"` or `"confidence"` |
 | `batch_size` | `int` | `1` | Sequences per forward pass |
+| `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
+
+### Germinal Gradient Tool (`AbLangGerminalGradientConfig`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `use_single_chain_variable_fragment` | `bool` | `False` | Use Germinal's paired single-chain variable fragment path instead of the single-domain heavy-chain antibody path |
+| `heavy_chain_first` | `bool` | `True` | Whether the paired layout is heavy chain, then linker, then light chain |
+| `heavy_chain_length` | `int \| null` | `null` | Number of heavy-chain residues in the full relaxed sequence; required when paired mode is enabled |
+| `light_chain_length` | `int \| null` | `null` | Number of light-chain residues in the full relaxed sequence; required when paired mode is enabled |
+| `seed` | `int \| null` | `0` | Optional PyTorch random seed used to mirror Germinal's adapter initialization |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
 ## Output Specification
@@ -135,6 +156,15 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 | Field | Type | Description |
 |-------|------|-------------|
 | `pseudo_log_likelihood`, `confidence` | `float` | Scoring metrics (attribute or mapping access: `score.pseudo_log_likelihood` or `score["pseudo_log_likelihood"]`) |
+
+### AbLangGerminalGradientOutput
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gradient` | `list[list[float]]` | Gradient matrix with the same shape as the input logits |
+| `loss` | `float` | Germinal's shifted cross-entropy loss |
+| `metrics` | `dict[str, Any]` | Auxiliary metrics such as `log_likelihood`, `linker_length`, `model_choice`, and `objective` |
+| `vocab` | `list[str]` | Amino-acid column order for both the input logits and the returned gradient; always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
 
 ## Interpreting Results
 
@@ -248,6 +278,14 @@ print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 1. **Default behavior**: With `model_choice="auto"` (the default), paired sequences (containing `|`) route to `ablang2-paired`, and single-chain sequences route to `ablang1-heavy`.
 
 2. **Light chains require explicit selection**: Auto-routing cannot distinguish heavy from light chains, so it defaults to heavy. Set `model_choice="ablang1-light"` when working with VL/VK sequences.
+
+**Germinal gradient backend:**
+
+1. **Germinal-only semantics**: `ablang-germinal-gradient` mirrors Germinal's upstream `CustomAbLang` adapter rather than a generic AbLang objective.
+
+2. **Vocab order**: The gradient tool accepts and returns logits in canonical protein order `ACDEFGHIKLMNPQRSTVWY`. Internally it maps to AbLang's token vocabulary for the forward pass.
+
+3. **Single-chain variable fragment linker behavior**: When `use_single_chain_variable_fragment=True`, the gradient excludes linker residues from the AbLang objective and returns exact zero rows for linker positions.
 
 **Chain type matching:**
 

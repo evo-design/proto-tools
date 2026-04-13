@@ -14,6 +14,7 @@ from proto_tools.utils.device import (
     number_of_available_gpus,
 )
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
+from proto_tools.utils.gradient_models import GradientInput, GradientOutput
 from proto_tools.utils.http_session import build_http_session
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
@@ -76,6 +77,9 @@ __all__ = [
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",
+    # Gradient models
+    "GradientInput",
+    "GradientOutput",
     # MSA
     "extract_msa_sequences",
     # I/O
