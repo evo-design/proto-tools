@@ -43,13 +43,14 @@ from proto_tools.tools.masked_models.esm3 import (
     run_esm3_score,
 )
 from proto_tools.tools.masked_models.masking import MaskingMethod, MaskingStrategy
-from proto_tools.tools.masked_models.shared_data_models import SequenceEmbedding
+from proto_tools.tools.masked_models.shared_data_models import MaskedModelScoringMetrics, SequenceEmbedding
 
 __all__ = [
     # Masking strategies
     "MaskingStrategy",
     "MaskingMethod",
     # Shared data models
+    "MaskedModelScoringMetrics",
     "SequenceEmbedding",
     # AbLang - Embeddings
     "AbLangEmbeddingsConfig",

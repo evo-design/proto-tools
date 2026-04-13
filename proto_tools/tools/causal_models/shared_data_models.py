@@ -4,9 +4,9 @@ import csv
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.utils import (
     BaseConfig,
@@ -15,6 +15,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 # ============================================================================
@@ -80,26 +81,35 @@ class CausalModelScoringConfig(BaseConfig):
     )
 
 
-class SequenceScores(BaseModel):
-    """Individual sequence score with flexible metrics dict.
+class CausalModelScoringMetrics(Metrics):
+    """Per-sequence scoring metrics for causal-LM scorers (ProGen2/3, Evo1/2).
 
-    Represents scoring metrics for a single sequence. Metrics can be accessed
-    via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
+    All four causal-model scorers emit the same three scalar metrics. They may
+    also emit per-position metrics (e.g. ``forward_log_likelihood_pp``,
+    ``reverse_log_likelihood_pp``, ``log_likelihood_pp``) as list-valued extras;
+    those keys vary per tool and are not declared in the shared ``metric_spec``.
+    Per-position keys use the ``_pp`` suffix to avoid collisions with scalar
+    metrics of the same stem (e.g. scalar ``log_likelihood`` vs per-position
+    ``log_likelihood_pp``).
+
+    Metrics documented in ``metric_spec``:
+        log_likelihood (float): Sum of per-token log-likelihoods. Always present.
+        avg_log_likelihood (float): Mean per-token log-likelihood. Always present.
+        perplexity (float): exp(-avg_log_likelihood). Always present. Range ``[1, ∞)``.
 
     Attributes:
-        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
-        logits (list[list[float]] | None): Optional per-position logits array.
-        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
-        per_position_metrics (dict[str, list[float | None]] | None): Optional per-position
-            scoring metrics, keyed by metric name. Each value is a list of length
-            equal to the input sequence, with ``None`` at positions where that
-            metric is not available.
+        logits (list[list[float]] | None): Per-position logits array
+            ``(seq_len, vocab_size)``. ``None`` unless ``return_logits=True``.
+        vocab (list[str] | None): Token ordering for ``logits``.
     """
 
-    metrics: dict[str, float] = Field(
-        default_factory=dict,
-        description="Dictionary of scalar scoring metrics",
-    )
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+    }
+    primary_metric: str | None = "perplexity"
+
     logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
@@ -108,42 +118,22 @@ class SequenceScores(BaseModel):
         default=None,
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
-    per_position_metrics: dict[str, list[float | None]] | None = Field(
-        default=None,
-        description="Per-position scoring metrics, keyed by metric name",
-    )
-
-    def __getattr__(self, name: str) -> Any:
-        """Allow attribute-style access to metrics."""
-        metrics = object.__getattribute__(self, "metrics")
-        if name in metrics:
-            return metrics[name]
-        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
-
-    def add_metric(self, name: str, value: float) -> None:
-        """Add a metric to the output."""
-        self.metrics[name] = value
-
-    def __iter__(self) -> Iterator[float]:  # type: ignore[override]
-        return iter(self.metrics.values())
-
-    def __len__(self) -> int:
-        return len(self.metrics)
-
-    def __getitem__(self, index: int) -> float:
-        return list(self.metrics.values())[index]
 
 
 class CausalModelScoringOutput(BaseToolOutput):
     """Standardized output for causal model sequence scoring tools.
 
     Attributes:
-        scores (list[SequenceScores]): List of scoring outputs, one per input
-            sequence. Each entry contains metrics (log_likelihood,
-            avg_log_likelihood, perplexity) and optional per-position logits.
+        scores (list[CausalModelScoringMetrics]): List of scoring outputs, one per
+            input sequence. Each entry is a ``Metrics`` subclass with scalar
+            metrics (``log_likelihood``, ``avg_log_likelihood``, ``perplexity``)
+            and optional per-position ``_pp``-suffixed list extras; ``logits``
+            and ``vocab`` are declared fields for raw model outputs.
     """
 
-    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence")
+    scores: list[CausalModelScoringMetrics] = Field(
+        description="List of scoring outputs, one per input sequence",
+    )
 
     @property
     def vocab(self) -> list[str] | None:
@@ -153,10 +143,10 @@ class CausalModelScoringOutput(BaseToolOutput):
     def __len__(self) -> int:
         return len(self.scores)
 
-    def __getitem__(self, index: int) -> SequenceScores:
+    def __getitem__(self, index: int) -> CausalModelScoringMetrics:
         return self.scores[index]
 
-    def __iter__(self) -> Iterator[SequenceScores]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[CausalModelScoringMetrics]:  # type: ignore[override]
         return iter(self.scores)
 
     @property
@@ -181,26 +171,25 @@ class CausalModelScoringOutput(BaseToolOutput):
 
             data: list[dict[str, Any]] = []
             for s in self.scores:
-                score_data: dict[str, Any] = dict(s.metrics)
+                score_data: dict[str, Any] = dict(s.items())
                 if s.logits is not None:
                     score_data["logits"] = s.logits
                 if s.vocab is not None:
                     score_data["vocab"] = s.vocab
-                if s.per_position_metrics is not None:
-                    score_data["per_position_metrics"] = s.per_position_metrics
                 data.append(score_data)
 
             with open(path, "w") as f:
                 json.dump(data, f, indent=2, default=default)
 
         elif file_format == "csv":
+            # Only include scalar metrics in CSV; per-position (_pp) lists don't fit.
             if self.scores:
-                fieldnames = list(self.scores[0].metrics.keys())
+                scalar_keys = [k for k in self.scores[0] if not k.endswith("_pp")]
                 with open(path, "w", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer = csv.DictWriter(f, fieldnames=scalar_keys)
                     writer.writeheader()
                     for s in self.scores:
-                        writer.writerow(s.metrics)
+                        writer.writerow({k: s[k] for k in scalar_keys})
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 

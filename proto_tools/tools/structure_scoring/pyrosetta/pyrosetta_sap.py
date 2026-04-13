@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -21,6 +21,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -47,18 +48,29 @@ class ResidueSAP(BaseModel):
     sap_score: float = Field(description="Per-residue SAP contribution")
 
 
-class SAPResult(BaseModel):
+class PyRosettaSAPMetrics(Metrics):
     """SAP score for a single structure.
 
-    Attributes:
+    Metrics documented in ``metric_spec``:
         sap_score (float): Spatial Aggregation Propensity score. Higher values
-            indicate more aggregation-prone surface hydrophobicity.
-        per_residue (list[ResidueSAP]): Per-residue SAP contributions.
+            indicate more aggregation-prone surface hydrophobicity. Always present.
+
+    Attributes:
+        per_residue (list[ResidueSAP]): Per-residue SAP contributions. Declared
+            as a real field (not a metric) because each entry carries
+            chain/residue identifiers alongside the score.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "sap_score": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+        },
+    }
+    primary_metric: str | None = "sap_score"
 
-    sap_score: float = Field(description="SAP score (higher = more aggregation-prone)")
     per_residue: list[ResidueSAP] = Field(description="Per-residue SAP contributions")
 
 
@@ -97,11 +109,11 @@ class PyRosettaSAPOutput(BaseToolOutput):
     """Output from PyRosetta SAP scoring.
 
     Attributes:
-        results (list[SAPResult]): SAP scores with per-residue breakdown,
+        results (list[PyRosettaSAPMetrics]): SAP scores with per-residue breakdown,
             one per input structure.
     """
 
-    results: list[SAPResult] = Field(
+    results: list[PyRosettaSAPMetrics] = Field(
         default_factory=list,
         description="SAP scores with per-residue breakdown, one per input structure",
     )
@@ -123,7 +135,7 @@ class PyRosettaSAPOutput(BaseToolOutput):
         rows = [
             {
                 "structure_index": i,
-                "sap_score_total": result.sap_score,
+                "sap_score_total": result["sap_score"],
                 "chain_id": res.chain_id,
                 "residue_index": res.residue_index,
                 "residue_name": res.residue_name,
@@ -212,7 +224,7 @@ def run_pyrosetta_sap(
 
     warn_about_dropped_residues(output_data["results"])
     remap_per_residue_chain_ids(output_data["results"], pdb_to_mmcif_maps)
-    results = [SAPResult(**r) for r in output_data["results"]]
+    results = [PyRosettaSAPMetrics(**r) for r in output_data["results"]]
 
     return PyRosettaSAPOutput(
         metadata={"num_structures": len(inputs.inputs)},

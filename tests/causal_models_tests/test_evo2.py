@@ -15,6 +15,7 @@ from proto_tools.tools.causal_models.evo2 import (
     run_evo2_score,
 )
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("evo2")
@@ -190,12 +191,12 @@ def test_evo2_score_different_sequences(model_checkpoint):
     config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     ppl1 = result.scores[0].perplexity
     ppl2 = result.scores[1].perplexity
 
     assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-    assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
@@ -233,12 +234,11 @@ def test_evo2_score_batched_tool(model_checkpoint):
 
     result = run_evo2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 6
 
     for _seq, score in zip(sequences, result.scores, strict=False):
-        assert score.log_likelihood < 0
-        assert score.perplexity >= 1.0
         assert score.logits is not None, "Logits should be present when return_logits=True"
         assert len(score.logits) > 0
         assert len(score.logits[0]) >= 4
@@ -283,15 +283,13 @@ def test_evo2_score_variable_length_sequences(model_checkpoint):
     config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, batch_size=2, verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     for seq, score in zip(sequences, result.scores, strict=False):
         assert score.logits is not None, "Logits should be present when return_logits=True"
         assert len(score.logits) > 0, (
             f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"
         )
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
 
 
 @pytest.mark.uses_gpu
@@ -308,6 +306,7 @@ def test_evo2_score_tool(model_checkpoint):
 
     result = run_evo2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "evo2-score", "Tool ID should be correct"
     assert len(result.scores) == 2, "Should score 2 sequences"
@@ -319,8 +318,6 @@ def test_evo2_score_tool(model_checkpoint):
         assert isinstance(score.log_likelihood, float), "log_likelihood should be float"
         assert isinstance(score.avg_log_likelihood, float), "avg_log_likelihood should be float"
         assert isinstance(score.perplexity, float), "perplexity should be float"
-
-        assert score.perplexity >= 1.0, f"Perplexity should be >= 1.0, got {score.perplexity}"
         assert score.logits is not None, f"Sequence {i} should have logits"
 
 
@@ -336,9 +333,9 @@ def test_evo2_score_single_sequence(model_checkpoint):
 
     result = run_evo2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 1
-    assert result.scores[0].perplexity >= 1.0
 
 
 # ── Logits-specific tests (scoring) ──────────────────────────────────────────

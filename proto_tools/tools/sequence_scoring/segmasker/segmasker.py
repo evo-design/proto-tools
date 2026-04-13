@@ -5,7 +5,7 @@ Segmasker tool for detecting low-complexity regions in protein sequences.
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator
 
@@ -18,6 +18,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 class SegmaskerInput(BaseToolInput):
@@ -101,34 +102,38 @@ class SegmaskerConfig(BaseConfig):
     )
 
 
+class SegmaskerMetrics(Metrics):
+    """Per-sequence low-complexity metrics emitted by Segmasker.
+
+    Metrics documented in ``metric_spec``:
+        low_complexity_fraction (float): Fraction of the sequence classified as
+            low-complexity. Always present. Range ``[0.0, 1.0]``.
+        low_complexity_count (int): Number of positions classified as
+            low-complexity. Always present. Non-negative.
+        sequence_length (int): Length of the input sequence in amino acids.
+            Always present. Positive.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "low_complexity_fraction": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "low_complexity_count": {"availability": "always", "type": "int", "min": 0, "max": None},
+        "sequence_length": {"availability": "always", "type": "int", "min": 1, "max": None},
+    }
+    primary_metric: str | None = "low_complexity_fraction"
+
+
 class SegmaskerOutput(BaseToolOutput):
     """Output from Segmasker low-complexity region detection.
 
-    This class encapsulates the results of segmasker analysis, providing
-    low-complexity statistics for each input sequence.
-
     Attributes:
-        low_complexity_fractions (list[float]): Fraction of each sequence classified
-            as low-complexity. Range: 0.0-1.0 where:
-
-            - ``0.0``: No low-complexity regions detected
-            - ``0.1-0.3``: Moderate low-complexity content
-            - ``> 0.5``: High low-complexity content
-
-            Length matches the number of input sequences.
-
-        low_complexity_counts (list[int]): Number of positions classified as
-            low-complexity in each sequence. Equals ``low_complexity_fraction * length``.
-
-        sequence_lengths (list[int]): Length of each input sequence in amino acids.
-
+        results (list[SegmaskerMetrics]): Per-sequence low-complexity metrics,
+            index-aligned with ``inputs.sequences``.
     """
 
-    low_complexity_fractions: list[float] = Field(
-        description="Fraction of low-complexity regions for each sequence (0.0-1.0)"
+    results: list[SegmaskerMetrics] = Field(
+        default_factory=list,
+        description="Per-sequence low-complexity metrics",
     )
-    low_complexity_counts: list[int] = Field(description="Number of low-complexity positions for each sequence")
-    sequence_lengths: list[int] = Field(description="Length of each input sequence")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -149,13 +154,7 @@ class SegmaskerOutput(BaseToolOutput):
 
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        df = pd.DataFrame(
-            {
-                "sequence_length": self.sequence_lengths,
-                "low_complexity_count": self.low_complexity_counts,
-                "low_complexity_fraction": self.low_complexity_fractions,
-            }
-        )
+        df = pd.DataFrame([dict(r.items()) for r in self.results])
 
         if file_format == "csv":
             df.to_csv(path, index=False)
@@ -239,6 +238,20 @@ def run_segmasker(
         config=config,
     )
 
+    results = [
+        SegmaskerMetrics(
+            low_complexity_fraction=fraction,
+            low_complexity_count=count,
+            sequence_length=length,
+        )
+        for fraction, count, length in zip(
+            output_data["fractions"],
+            output_data["counts"],
+            output_data["lengths"],
+            strict=True,
+        )
+    ]
+
     return SegmaskerOutput(
         metadata={
             "num_sequences": len(inputs.sequences),
@@ -246,7 +259,5 @@ def run_segmasker(
             "locut": config.locut,
             "hicut": config.hicut,
         },
-        low_complexity_fractions=output_data["fractions"],
-        low_complexity_counts=output_data["counts"],
-        sequence_lengths=output_data["lengths"],
+        results=results,
     )

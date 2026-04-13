@@ -447,7 +447,7 @@ def build_position_score_fn(
                 ESM2EmbeddingsInput(sequences=sequences),
                 ESM2EmbeddingsConfig(**config_kwargs),
             )
-            return [r.logits for r in result.results]  # type: ignore[attr-defined]
+            return [r.logits for r in result.results]
 
         return position_score_fn
 
@@ -464,7 +464,7 @@ def build_position_score_fn(
                 ESM3EmbeddingsInput(sequences=sequences),
                 ESM3EmbeddingsConfig(**config_kwargs),
             )
-            return [r.logits for r in result.results]  # type: ignore[attr-defined]
+            return [r.logits for r in result.results]
 
         return position_score_fn
 

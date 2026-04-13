@@ -15,6 +15,7 @@ from proto_tools.tools.masked_models.esm3 import (
     run_esm3_score,
 )
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _GFP = "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITHGMDELYK"
@@ -78,6 +79,7 @@ def test_esm3_score_tool():
 
     result = run_esm3_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "esm3-score"
     assert len(result.scores) == 2
@@ -85,13 +87,6 @@ def test_esm3_score_tool():
     assert len(result.vocab) == 20, f"ESM3 vocab should have 20 tokens, got {len(result.vocab)}"
 
     for seq, score in zip(sequences, result.scores, strict=False):
-        assert "log_likelihood" in score.metrics
-        assert "avg_log_likelihood" in score.metrics
-        assert "perplexity" in score.metrics
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
-
         assert score.logits is not None
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
         assert len(score.logits) == len(seq), f"Logits length should be {len(seq)}, got {len(score.logits)}"
@@ -112,12 +107,12 @@ def test_esm3_score_different_sequences():
     config = ESM3ScoringConfig(verbose=False, return_logits=True)
 
     result = run_esm3_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     ppl1 = result.scores[0].perplexity
     ppl2 = result.scores[1].perplexity
 
     assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-    assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
@@ -145,12 +140,11 @@ def test_esm3_score_batched():
     config = ESM3ScoringConfig(batch_size=2, verbose=False, return_logits=True)
 
     result = run_esm3_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 4
 
     for seq, score in zip(sequences, result.scores, strict=False):
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
         logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
 

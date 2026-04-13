@@ -131,10 +131,10 @@ Export formats: `fasta`, `txt`, `json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `List[SequenceScores]` | Per-sequence metrics and optional logits |
+| `scores` | `List[CausalModelScoringMetrics]` | Per-sequence metrics and optional logits |
 
-Each `SequenceScores` entry contains:
-- `metrics`: dict with `log_likelihood`, `avg_log_likelihood`, `perplexity`
+Each `CausalModelScoringMetrics` entry contains:
+- `log_likelihood`, `avg_log_likelihood`, `perplexity` — access via attribute (`score.perplexity`) or mapping (`score["perplexity"]`)
 - `logits`: per-position logits (seq_len x vocab_size=512) if `return_logits=True`
 - `vocab`: byte-level vocabulary list (512 tokens) if `return_logits=True`
 
@@ -232,8 +232,8 @@ config = Evo2ScoringConfig(batch_size=2)
 
 result = run_evo2_score(inputs, config)
 for i, score in enumerate(result.scores):
-    print(f"Seq {i+1}: perplexity={score.metrics['perplexity']:.3f}, "
-          f"avg_ll={score.metrics['avg_log_likelihood']:.4f}")
+    print(f"Seq {i+1}: perplexity={score['perplexity']:.3f}, "
+          f"avg_ll={score['avg_log_likelihood']:.4f}")
 ```
 
 **Example 5: Score with logits for positional analysis**

@@ -201,7 +201,7 @@ module = [
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
-init_forbid_extra = true
+init_forbid_extra = false
 init_typed = true
 warn_required_dynamic_aliases = true
 
@@ -282,6 +282,7 @@ ignore = [
 "proto_tools/utils/install_binary.py" = ["T20", "S101", "S603", "S607"]
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
+"scripts/*.py" = ["T20", "S603", "S607"]  # dev helper scripts: prints are intentional, subprocess calls use literal argv
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]

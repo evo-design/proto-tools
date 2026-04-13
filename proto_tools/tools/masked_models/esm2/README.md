@@ -152,12 +152,12 @@ ESM2 is a masked language model (similar to BERT) trained on protein sequences. 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `List[SequenceScores]` | One score object per input sequence |
+| `scores` | `List[MaskedModelScoringMetrics]` | One score object per input sequence |
 
-**SequenceScores fields:**
+**`MaskedModelScoringMetrics` fields:**
 | Field | Type | Description |
 |-------|------|-------------|
-| `metrics` | `Dict[str, float]` | Includes `log_likelihood`, `avg_log_likelihood`, `perplexity` |
+| `log_likelihood`, `avg_log_likelihood`, `perplexity` | `float` | Scalar metrics (attribute or mapping access) |
 | `logits` | `List[List[float]]?` | Optional per-position logits (shape `[seq_len, 20]`) |
 | `vocab` | `List[str]?` | Amino acid order (AA-only) |
 

@@ -133,9 +133,9 @@ Export formats: `fasta` (default), `txt`, `json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scores` | `list[SequenceScores]` | One entry per input sequence |
-| `scores[i].metrics` | `dict` | `log_likelihood`, `avg_log_likelihood`, `perplexity` |
-| `scores[i].per_position_metrics` | `dict \| None` | `forward_log_likelihood`, `reverse_log_likelihood`, `log_likelihood` (bidirectional average) per position |
+| `scores` | `list[CausalModelScoringMetrics]` | One entry per input sequence |
+| `scores[i]["perplexity"]`, `"log_likelihood"`, `"avg_log_likelihood"` | `float` | Scalar metrics (also available as `.perplexity`, etc.) |
+| `scores[i]["log_likelihood_pp"]`, `"forward_log_likelihood_pp"`, `"reverse_log_likelihood_pp"` | `list[float \| None]` | Per-position log-likelihoods (``_pp`` extras); `None` at boundary positions |
 
 Export formats: `csv` (default), `json`
 
@@ -214,7 +214,7 @@ inputs = ProGen3ScoringInput(sequences=[
 ])
 result = run_progen3_score(inputs)
 for i, score in enumerate(result.scores):
-    print(f"Seq {i}: perplexity={score.metrics['perplexity']:.2f}")
+    print(f"Seq {i}: perplexity={score['perplexity']:.2f}")
 ```
 
 ```python

@@ -1,17 +1,17 @@
 """Structural quality metrics (longest alpha helix length, gyration radius)."""
 
 from proto_tools.tools.structure_scoring.structure_metrics.structure_metrics import (
-    StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,
     StructureMetricsOutput,
+    StructureQualityMetrics,
     run_structure_metrics,
 )
 
 __all__ = [
-    "StructureMetrics",
-    "StructureMetricsInput",
     "StructureMetricsConfig",
+    "StructureMetricsInput",
     "StructureMetricsOutput",
+    "StructureQualityMetrics",
     "run_structure_metrics",
 ]

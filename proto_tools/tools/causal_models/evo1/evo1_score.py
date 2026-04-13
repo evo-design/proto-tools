@@ -9,8 +9,8 @@ from typing import Any, Literal
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
     CausalModelScoringInput,
+    CausalModelScoringMetrics,
     CausalModelScoringOutput,
-    SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -106,10 +106,11 @@ def run_evo1_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        Evo1ScoringOutput: Contains SequenceScores for each input sequence with:
+        Evo1ScoringOutput: Contains a ``CausalModelScoringMetrics`` for each input
+            sequence with:
 
-            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
-              ``perplexity``
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
+              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, vocab_size=512) if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 512 byte-level tokens if ``return_logits=True``,
@@ -119,7 +120,7 @@ def run_evo1_score(
         >>> inputs = Evo1ScoringInput(sequences=["ATCGATCG", "GCTAGCTA"])
         >>> config = Evo1ScoringConfig(model_name="evo-1-8k-base")
         >>> result = run_evo1_score(inputs, config)
-        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+        >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
 
     Note:
         - Lower perplexity indicates higher model confidence in the sequence
@@ -153,8 +154,8 @@ def run_evo1_score(
         logits = logits.cpu().tolist()
 
     scores = [
-        SequenceScores(
-            metrics=metrics,
+        CausalModelScoringMetrics(
+            **metrics,
             logits=logits[i] if logits is not None else None,
             vocab=result["vocab"],
         )

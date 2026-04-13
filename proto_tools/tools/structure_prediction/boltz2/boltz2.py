@@ -15,13 +15,12 @@ import warnings
 from logging import getLogger
 from typing import Any, ClassVar
 
-from proto_tools.entities.structures import BFactorType, Structure, StructureMetrics
+from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
     complex_to_yaml,
     write_msa_csv,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -29,6 +28,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
 
@@ -63,14 +63,10 @@ class Boltz2Input(StructurePredictionInput):
     ALLOWS_CHAIN_MODIFICATIONS = False
 
 
-# Output:
-class Boltz2Output(StructurePredictionOutput):
-    """Boltz2 prediction output.
+class Boltz2Metrics(Metrics):
+    """Per-structure metrics emitted by Boltz2 prediction.
 
-    Attributes:
-        structures (list[Structure]): Predicted structures with confidence metrics.
-
-    Metrics:
+    Metrics documented in ``metric_spec``:
         confidence_score (float): Overall confidence score. Always present.
         ptm (float): Predicted TM-score. Always present.
         iptm (float): Interface predicted TM-score. Always present.
@@ -84,20 +80,30 @@ class Boltz2Output(StructurePredictionOutput):
         complex_ipde (float): Complex interface PDE. Depends on complex composition.
     """
 
-    METRICS: ClassVar[dict[str, MetricSpec]] = {
-        "confidence_score": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "chains_ptm": {"availability": "always", "type": list, "min": 0.0, "max": 1.0},
-        "pair_chains_iptm": {"availability": "always", "type": list, "min": 0.0, "max": 1.0},
-        "ligand_iptm": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
-        "protein_iptm": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
-        "complex_plddt": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
-        "complex_iplddt": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": 1.0},
-        "complex_pde": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": None},
-        "complex_ipde": {"availability": "depends on complex composition", "type": float, "min": 0.0, "max": None},
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "confidence_score": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "chains_ptm": {"availability": "always", "type": "list[float]", "min": 0.0, "max": 1.0},
+        "pair_chains_iptm": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
+        "ligand_iptm": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
+        "protein_iptm": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
+        "complex_plddt": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
+        "complex_iplddt": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": 1.0},
+        "complex_pde": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": None},
+        "complex_ipde": {"availability": "depends on complex composition", "type": "float", "min": 0.0, "max": None},
     }
-    PRIMARY_METRIC: ClassVar[str] = "confidence_score"
+    primary_metric: str | None = "confidence_score"
+
+
+# Output:
+class Boltz2Output(StructurePredictionOutput):
+    """Boltz2 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures, each carrying a
+            :class:`Boltz2Metrics` instance on ``.metrics``.
+    """
 
 
 # Config:
@@ -412,6 +418,6 @@ def run_boltz2_on_complex(
     return Structure(
         structure=cif_output,
         b_factor_type=BFactorType.PLDDT,
-        metrics=StructureMetrics(primary_metric="confidence_score", **metrics_dict),
+        metrics=Boltz2Metrics(**metrics_dict),
         source="boltz2-prediction",
     )

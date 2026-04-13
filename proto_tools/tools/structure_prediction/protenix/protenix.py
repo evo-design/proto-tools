@@ -15,15 +15,15 @@ import tempfile
 from logging import getLogger
 from typing import Any, ClassVar, Literal
 
-from proto_tools.entities.structures import BFactorType, Structure, StructureMetrics
+from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
 
@@ -128,14 +128,10 @@ class ProtenixInput(StructurePredictionInput):
         return [{"name": name, "sequences": sequences}]
 
 
-# Output:
-class ProtenixOutput(StructurePredictionOutput):
-    """Protenix prediction output.
+class ProtenixMetrics(Metrics):
+    """Per-structure metrics emitted by Protenix prediction.
 
-    Attributes:
-        structures (list[Structure]): Predicted structures with confidence metrics.
-
-    Metrics:
+    Metrics documented in ``metric_spec``:
         confidence_score (float): Protenix ranking score. Always present.
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Always present.
@@ -147,18 +143,33 @@ class ProtenixOutput(StructurePredictionOutput):
         has_clash (bool): Whether clashes were detected. Depends on model output.
     """
 
-    METRICS: ClassVar[dict[str, MetricSpec]] = {
-        "confidence_score": {"availability": "always", "type": float, "min": None, "max": None},
-        "ptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 1.0},
-        "gpde": {"availability": "always", "type": float, "min": 0.0, "max": None},
-        "chain_ptm": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
-        "chain_plddt": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
-        "chain_pair_iptm": {"availability": "depends on model output", "type": list, "min": 0.0, "max": 1.0},
-        "has_clash": {"availability": "depends on model output", "type": bool, "min": None, "max": None},
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "confidence_score": {"availability": "always", "type": "float", "min": None, "max": None},
+        "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "gpde": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "chain_ptm": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
+        "chain_plddt": {"availability": "depends on model output", "type": "list[float]", "min": 0.0, "max": 1.0},
+        "chain_pair_iptm": {
+            "availability": "depends on model output",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": 1.0,
+        },
+        "has_clash": {"availability": "depends on model output", "type": "bool", "min": None, "max": None},
     }
-    PRIMARY_METRIC: ClassVar[str] = "confidence_score"
+    primary_metric: str | None = "confidence_score"
+
+
+# Output:
+class ProtenixOutput(StructurePredictionOutput):
+    """Protenix prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures, each carrying a
+            :class:`ProtenixMetrics` instance on ``.metrics``.
+    """
 
 
 # Config:
@@ -431,13 +442,21 @@ def run_protenix(
     for _i, job_result in enumerate(output_data):
         raw_metrics = job_result.get("metrics", {})  # type: ignore[attr-defined]
 
-        metrics = StructureMetrics(
-            primary_metric="confidence_score",
-            confidence_score=float(raw_metrics.get("ranking_score", 0.0)),
-            ptm=float(raw_metrics.get("ptm", 0.0)),
-            iptm=float(raw_metrics.get("iptm", 0.0)),
-            avg_plddt=float(raw_metrics.get("plddt", 0.0)) / 100.0,
-            gpde=float(raw_metrics.get("gpde", 0.0)),
+        def _maybe_float(key: str, scale: float = 1.0, raw: dict[str, Any] = raw_metrics) -> float | None:
+            """Return ``float(raw[key]) * scale`` if the key is present, else ``None``.
+
+            ``None`` is stripped by ``Metrics._exclude_none_values`` so absent metrics
+            are truly absent in the output (vs. a silent ``0.0`` fallback that would
+            be indistinguishable from a legitimate 0.0 value).
+            """
+            return float(raw[key]) * scale if key in raw else None
+
+        metrics = ProtenixMetrics(
+            confidence_score=_maybe_float("ranking_score"),
+            ptm=_maybe_float("ptm"),
+            iptm=_maybe_float("iptm"),
+            avg_plddt=_maybe_float("plddt", scale=1 / 100.0),
+            gpde=_maybe_float("gpde"),
             chain_ptm=raw_metrics.get("chain_ptm"),
             chain_plddt=raw_metrics.get("chain_plddt"),
             chain_pair_iptm=raw_metrics.get("chain_pair_iptm"),

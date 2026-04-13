@@ -15,6 +15,7 @@ from proto_tools.tools.masked_models.esm2 import (
     run_esm2_score,
 )
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esm2")
@@ -79,6 +80,7 @@ def test_esm2_score_tool():
 
     result = run_esm2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert result.tool_id == "esm2-score"
     assert len(result.scores) == 2
@@ -86,13 +88,6 @@ def test_esm2_score_tool():
     assert len(result.vocab) == 20, f"ESM2 vocab should have 20 tokens, got {len(result.vocab)}"
 
     for seq, score in zip(sequences, result.scores, strict=False):
-        assert "log_likelihood" in score.metrics
-        assert "avg_log_likelihood" in score.metrics
-        assert "perplexity" in score.metrics
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
-
         assert score.logits is not None
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
         assert len(score.logits) == len(seq), f"Logits length should be {len(seq)}, got {len(score.logits)}"
@@ -113,12 +108,12 @@ def test_esm2_score_different_sequences():
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     ppl1 = result.scores[0].perplexity
     ppl2 = result.scores[1].perplexity
 
     assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-    assert ppl1 >= 1.0 and ppl2 >= 1.0
 
 
 @pytest.mark.uses_gpu
@@ -146,12 +141,11 @@ def test_esm2_score_batched():
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=2, verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 4
 
     for seq, score in zip(sequences, result.scores, strict=False):
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
         logits = np.array(score.logits)
         assert logits.shape[0] == len(seq)
         assert logits.shape[1] == 20
@@ -165,6 +159,7 @@ def test_esm2_score_variable_length():
     config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
 
     result = run_esm2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
 
     for seq, score in zip(sequences, result.scores, strict=False):
         assert isinstance(score.logits, list), f"Logits should be a list, got {type(score.logits)}"
@@ -172,9 +167,6 @@ def test_esm2_score_variable_length():
             f"Sequence '{seq}' (len {len(seq)}): logits len should be {len(seq)}, got {len(score.logits)}"
         )
         assert len(score.logits[0]) == 20, f"Logits vocab size should be 20, got {len(score.logits[0])}"
-
-        assert score.perplexity >= 1.0
-        assert score.log_likelihood < 0
 
 
 @pytest.mark.uses_gpu
@@ -185,9 +177,9 @@ def test_esm2_score_single_sequence():
 
     result = run_esm2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
     assert len(result.scores) == 1
-    assert result.scores[0].perplexity >= 1.0
     assert result.scores[0].logits is not None
 
 

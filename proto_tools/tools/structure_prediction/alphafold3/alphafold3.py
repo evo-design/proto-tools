@@ -17,10 +17,9 @@ from proto_tools.utils.progress import progress_bar
 logger = logging.getLogger(__name__)
 
 from proto_tools.entities.ligands import map_smiles_to_ccd_code
-from proto_tools.entities.structures.structure import BFactorType, Structure, StructureMetrics
+from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
-    MetricSpec,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -28,6 +27,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # Type alias for AlphaFold3 JSON format
 AlphaFold3JSON = dict[str, Any]
@@ -58,14 +58,10 @@ class AlphaFold3Input(StructurePredictionInput):
     ALLOWS_CHAIN_MODIFICATIONS = True
 
 
-# Output:
-class AlphaFold3Output(StructurePredictionOutput):
-    """AlphaFold3 prediction output.
+class AlphaFold3Metrics(Metrics):
+    """Per-structure metrics emitted by AlphaFold3 prediction.
 
-    Attributes:
-        structures (list[Structure]): Predicted structures with confidence metrics.
-
-    Metrics:
+    Metrics documented in ``metric_spec``:
         avg_plddt (float): Average predicted LDDT score (0-100). Always present.
         avg_pae (float): Average predicted aligned error. Always present.
         ptm (float): Predicted TM-score (0-1). Depends on model output.
@@ -73,14 +69,24 @@ class AlphaFold3Output(StructurePredictionOutput):
         ranking_score (float): AlphaFold3 ranking score. Depends on model output.
     """
 
-    METRICS: ClassVar[dict[str, MetricSpec]] = {
-        "avg_plddt": {"availability": "always", "type": float, "min": 0.0, "max": 100.0},
-        "avg_pae": {"availability": "always", "type": float, "min": 0.0, "max": None},
-        "ptm": {"availability": "depends on model output", "type": float, "min": 0.0, "max": 1.0},
-        "iptm": {"availability": "depends on model output", "type": float, "min": 0.0, "max": 1.0},
-        "ranking_score": {"availability": "depends on model output", "type": float, "min": None, "max": None},
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 100.0},
+        "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "ptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
+        "iptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
+        "ranking_score": {"availability": "depends on model output", "type": "float", "min": None, "max": None},
     }
-    PRIMARY_METRIC: ClassVar[str] = "avg_plddt"
+    primary_metric: str | None = "avg_plddt"
+
+
+# Output:
+class AlphaFold3Output(StructurePredictionOutput):
+    """AlphaFold3 prediction output.
+
+    Attributes:
+        structures (list[Structure]): Predicted structures, each carrying an
+            :class:`AlphaFold3Metrics` instance on ``.metrics``.
+    """
 
 
 # Config:
@@ -269,7 +275,7 @@ def run_alphafold3(
 
             # Extract results from dict
             pdb_path = output_data["structure_pdb"]
-            metrics = StructureMetrics(primary_metric="avg_plddt", **output_data["metrics"])
+            metrics = AlphaFold3Metrics(**output_data["metrics"])
 
             output_structures.append(
                 Structure.from_file(

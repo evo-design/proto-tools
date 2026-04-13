@@ -1,23 +1,23 @@
 {
   "tool_id": "pdb-fetch-fasta",
-  "execution_time": 0.1213679313659668,
-  "timestamp": "2026-04-06T18:38:51.532018",
+  "execution_time": 0.11749958992004395,
+  "timestamp": "2026-04-12T22:51:38.096310",
   "success": true,
   "warnings": [],
   "errors": [],
   "metadata": {},
   "chains": [
     {
-      "chain_id": "1",
-      "header": "1LBG_1|Chains A[auth E], B[auth F], C[auth G], D[auth H]|DNA (5'-D(*GP*AP*AP*TP*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
-      "sequence": "GAATTGTGAGCGCTCACAATT",
-      "is_protein": false
-    },
-    {
       "chain_id": "2",
       "header": "1LBG_2|Chains E[auth A], F[auth B], G[auth C], H[auth D]|PROTEIN (LACTOSE OPERON REPRESSOR)|Escherichia coli (562)",
       "sequence": "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNRVAQQLAGKQSLLIGVATSSLALHAPSQIVAAIKSRADQLGASVVVSMVERSGVEACKTAVHNLLAQRVSGLIINYPLDDQDAIAVEAACTNVPALFLDVSDQTPINSIIFSHEDGTRLGVEHLVALGHQQIALLAGPLSSVSARLRLAGWHKYLTRNQIQPIAEREGDWSAMSGFQQTMQMLNEGIVPTAMLVANDQMALGAMRAITESGLRVGADISVVGYDDTEDSSCYIPPLTTIKQDFRLLGQTSVDRLLQLSQGQAVKGNQLLPVSLVKRKTTLAPNTQTASPRALADSLMQLARQVSRLESGQ",
       "is_protein": true
+    },
+    {
+      "chain_id": "1",
+      "header": "1LBG_1|Chains A[auth E], B[auth F], C[auth G], D[auth H]|DNA (5'-D(*GP*AP*AP*TP*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
+      "sequence": "GAATTGTGAGCGCTCACAATT",
+      "is_protein": false
     }
   ],
   "source_url": "https://www.rcsb.org/fasta/entry/1LBG"

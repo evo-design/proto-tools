@@ -6,12 +6,13 @@ from pathlib import Path
 import pytest
 
 from proto_tools.tools.structure_scoring.structure_metrics import (
-    StructureMetrics,
     StructureMetricsConfig,
     StructureMetricsInput,
     StructureMetricsOutput,
+    StructureQualityMetrics,
     run_structure_metrics,
 )
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
 )
@@ -46,7 +47,7 @@ def test_config_extra_fields_rejected():
         StructureMetricsConfig(extra_field="should_be_rejected")
 
 
-# ── StructureMetrics data model ───────────────────────────────────────────────
+# ── StructureQualityMetrics data model ───────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -58,7 +59,7 @@ def test_config_extra_fields_rejected():
     ],
 )
 def test_structure_metrics_model_dump(longest_alpha_helix, gyration_radius):
-    m = StructureMetrics(
+    m = StructureQualityMetrics(
         pdb_path="/path/test.pdb",
         longest_alpha_helix=longest_alpha_helix,
         gyration_radius=gyration_radius,
@@ -77,12 +78,12 @@ def sample_output():
     return StructureMetricsOutput(
         metadata={"num_structures": 2},
         metrics=[
-            StructureMetrics(
+            StructureQualityMetrics(
                 pdb_path="/path/a.pdb",
                 longest_alpha_helix=15,
                 gyration_radius=28.3,
             ),
-            StructureMetrics(
+            StructureQualityMetrics(
                 pdb_path="/path/b.pdb",
                 longest_alpha_helix=45,
                 gyration_radius=52.1,
@@ -133,8 +134,7 @@ END
     pdb_path.write_text(pdb_content)
 
     result = run_structure_metrics(StructureMetricsInput(pdb_paths=[str(pdb_path)]))
+    assert_metrics_in_spec(result)
 
     assert isinstance(result, StructureMetricsOutput)
     assert len(result.metrics) == 1
-    assert result.metrics[0].gyration_radius >= 0.0
-    assert result.metrics[0].longest_alpha_helix >= 0

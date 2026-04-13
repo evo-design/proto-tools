@@ -61,15 +61,15 @@ from proto_tools.tools.inverse_folding.shared_data_models import (  # noqa: F401
     InverseFoldingConfig,
     InverseFoldingInput,
     InverseFoldingOutput,
+    InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
     InverseFoldingStructureInput,
-    SequenceScores,
     SequenceStructurePair,
 )
 
 __all__ = [
     # Shared Data Models
-    "SequenceScores",
+    "InverseFoldingScoringMetrics",
     "SequenceStructurePair",
     "InverseFoldingStructureInput",
     "InverseFoldingConfig",

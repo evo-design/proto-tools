@@ -7,7 +7,7 @@ import logging
 import string
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, ClassVar, Final, TypedDict
+from typing import Any, ClassVar, Final
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -315,22 +315,6 @@ class Chain(BaseModel):
     def __len__(self) -> int:
         """Returns the length of the sequence."""
         return len(self.sequence)
-
-
-class MetricSpec(TypedDict):
-    """Specification for a single structure prediction metric.
-
-    Attributes:
-        availability (str): When the metric is present (e.g., ``"always"``, ``"multi-chain input only"``).
-        type (type): Expected Python type (``float``, ``list``, or ``bool``).
-        min (float | None): Minimum valid value, or ``None`` if unbounded. For lists, applies to each element.
-        max (float | None): Maximum valid value, or ``None`` if unbounded. For lists, applies to each element.
-    """
-
-    availability: str
-    type: type
-    min: float | None
-    max: float | None
 
 
 class StructurePredictionComplex(BaseModel):
@@ -935,7 +919,7 @@ def _preprocess_structure_prediction_msas(
     # Build MSA dict keyed by sequence
     name_to_seq = {v: k for k, v in unique_seqs.items()}
     msas: dict[str, MSA] = {}
-    for result in colabfold_output.results:  # type: ignore[attr-defined]
+    for result in colabfold_output.results:
         if result.msa is not None:
             seq = name_to_seq[result.sequence_id]
             msas[seq] = result.msa

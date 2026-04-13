@@ -52,7 +52,13 @@ from proto_tools.tools.sequence_scoring.enformer import (
     EnformerOutput,
     run_enformer,
 )
-from proto_tools.tools.sequence_scoring.segmasker import SegmaskerConfig, SegmaskerInput, SegmaskerOutput, run_segmasker
+from proto_tools.tools.sequence_scoring.segmasker import (
+    SegmaskerConfig,
+    SegmaskerInput,
+    SegmaskerMetrics,
+    SegmaskerOutput,
+    run_segmasker,
+)
 
 __all__ = [
     "DEFAULT_ALPHAGENOME_MODEL_VERSION",
@@ -113,6 +119,7 @@ __all__ = [
     # Segmasker
     "SegmaskerInput",
     "SegmaskerConfig",
+    "SegmaskerMetrics",
     "SegmaskerOutput",
     "run_segmasker",
 ]

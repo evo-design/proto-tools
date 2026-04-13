@@ -188,7 +188,7 @@ def run_borzoi_ensemble(
             verbose=config.verbose,
         )
         replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
-        predictions.append(replicate_output.prediction)  # type: ignore[arg-type]
+        predictions.append(replicate_output.prediction)
 
     return BorzoiEnsembleOutput(
         sequence=inputs.sequence,

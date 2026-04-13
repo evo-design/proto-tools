@@ -8,7 +8,7 @@ multimer support, and parses the two TM-scores from stdout.
 import json
 from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -20,6 +20,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
 
@@ -46,16 +47,33 @@ class USalignConfig(BaseConfig):
     """
 
 
+class USalignMetrics(Metrics):
+    """Pairwise alignment scores emitted by USalign.
+
+    Metrics documented in ``metric_spec``:
+        tm_score_structure_1 (float): TM-score normalized by the length of
+            Structure 1 (query). Always present. Range 0-1.
+        tm_score_structure_2 (float): TM-score normalized by the length of
+            Structure 2 (reference). Always present. Range 0-1.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "tm_score_structure_1": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+        "tm_score_structure_2": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
+    }
+
+
 class USalignOutput(BaseToolOutput):
     """Output from USalign pairwise structure alignment.
 
     Attributes:
-        tm_score_structure_1 (float): TM-score normalized by the length of Structure 1 (query).
-        tm_score_structure_2 (float): TM-score normalized by the length of Structure 2 (reference).
+        metrics (USalignMetrics): Pairwise alignment scores. Access metrics via
+            ``output.metrics.tm_score_structure_1`` or
+            ``output.tm_score_structure_1`` (the forwarded shortcut from
+            :class:`BaseToolOutput`).
     """
 
-    tm_score_structure_1: float = Field(description="TM-score normalized by length of Structure 1 (query)")
-    tm_score_structure_2: float = Field(description="TM-score normalized by length of Structure 2 (reference)")
+    metrics: USalignMetrics = Field(default_factory=USalignMetrics, description="Pairwise alignment scores")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -73,8 +91,8 @@ class USalignOutput(BaseToolOutput):
         with open(path, "w") as f:
             json.dump(
                 {
-                    "tm_score_structure_1": self.tm_score_structure_1,
-                    "tm_score_structure_2": self.tm_score_structure_2,
+                    "tm_score_structure_1": self.metrics["tm_score_structure_1"],
+                    "tm_score_structure_2": self.metrics["tm_score_structure_2"],
                 },
                 f,
                 indent=2,
@@ -124,7 +142,9 @@ def run_usalign(inputs: USalignInput, config: USalignConfig, instance: Any = Non
     )
 
     return USalignOutput(
-        tm_score_structure_1=output_data["tm_score_structure_1"],
-        tm_score_structure_2=output_data["tm_score_structure_2"],
+        metrics=USalignMetrics(
+            tm_score_structure_1=output_data["tm_score_structure_1"],
+            tm_score_structure_2=output_data["tm_score_structure_2"],
+        ),
         metadata={"tool": "usalign"},
     )

@@ -151,7 +151,7 @@ def test_ablang_score_heavy():
 
     assert result.tool_id == "ablang-score"
     assert len(result.scores) == 1
-    assert "pseudo_log_likelihood" in result.scores[0].metrics
+    assert "pseudo_log_likelihood" in result.scores[0]
 
 
 @pytest.mark.uses_gpu
@@ -168,7 +168,7 @@ def test_ablang_score_light():
 
     assert result.tool_id == "ablang-score"
     assert len(result.scores) == 1
-    assert "pseudo_log_likelihood" in result.scores[0].metrics
+    assert "pseudo_log_likelihood" in result.scores[0]
 
 
 @pytest.mark.uses_gpu
@@ -185,7 +185,7 @@ def test_ablang_score_paired():
 
     assert result.tool_id == "ablang-score"
     assert len(result.scores) == 1
-    assert "pseudo_log_likelihood" in result.scores[0].metrics
+    assert "pseudo_log_likelihood" in result.scores[0]
 
 
 @pytest.mark.uses_gpu
@@ -203,8 +203,8 @@ def test_ablang_score_different_sequences():
     result = run_ablang_score(inputs=inputs, config=config)
 
     assert len(result.scores) == 2
-    pll1 = result.scores[0].metrics["pseudo_log_likelihood"]
-    pll2 = result.scores[1].metrics["pseudo_log_likelihood"]
+    pll1 = result.scores[0]["pseudo_log_likelihood"]
+    pll2 = result.scores[1]["pseudo_log_likelihood"]
     assert pll1 != pll2, f"Different sequences should have different scores: {pll1} vs {pll2}"
 
 
@@ -221,7 +221,7 @@ def test_ablang_score_confidence_mode():
     validate_output(result)
 
     assert len(result.scores) == 1
-    assert "confidence" in result.scores[0].metrics
+    assert "confidence" in result.scores[0]
 
 
 # ── Sampling tests ───────────────────────────────────────────────────────────
@@ -305,7 +305,7 @@ def test_ablang_batched_operations():
     )
     assert score_result.success
     assert len(score_result.scores) == 3
-    assert all("pseudo_log_likelihood" in s.metrics for s in score_result.scores)
+    assert all("pseudo_log_likelihood" in s for s in score_result.scores)
 
     # Sampling with batch_size=2
     masked_seqs = [s[:4] + "_" + s[5:] for s in seqs]

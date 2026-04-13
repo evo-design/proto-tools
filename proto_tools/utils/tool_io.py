@@ -7,11 +7,12 @@ import json
 import math
 import os
 from abc import ABC, abstractmethod
+from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.utils.compressed_array import is_compressed_array
 
@@ -65,6 +66,273 @@ def _extra_dict(info: Any) -> dict[str, Any]:
     """Return ``json_schema_extra`` as a plain dict, defaulting to ``{}``."""
     extra = info.json_schema_extra
     return extra if isinstance(extra, dict) else {}
+
+
+MetricValue = float | int | bool | list[float] | list[float | None] | list[list[float]]
+
+
+class MetricSpec(TypedDict, total=False):
+    """Declarative per-metric metadata describing range, type, and availability.
+
+    All fields are optional (``total=False``). Subclasses of :class:`Metrics`
+    declare a ``metric_spec: ClassVar[dict[str, MetricSpec]]`` mapping each
+    metric name to one of these dicts.
+
+    Attributes:
+        description (str): Human-readable description of the metric.
+        availability (str): When the metric is present in the output — e.g.
+            ``"always"``, ``"multi-chain input only"``, ``"depends on model output"``.
+        type (str): Expected value shape as a string — e.g. ``"float"``,
+            ``"int"``, ``"bool"``, ``"list[float]"``, ``"list[float|None]"``,
+            ``"list[list[float]]"``.
+        min (float | None): Minimum valid value (element-wise for list types);
+            ``None`` means unbounded below.
+        max (float | None): Maximum valid value (element-wise for list types);
+            ``None`` means unbounded above.
+        unit (str | None): Unit string for the value, e.g. ``"REU"``, ``"Å"``, ``"bits"``.
+    """
+
+    description: str
+    availability: str
+    type: str
+    min: float | None
+    max: float | None
+    unit: str | None
+
+
+class Metrics(BaseModel):
+    """Dual-access metric container for tool outputs.
+
+    Stores arbitrary metric values via Pydantic's ``extra="allow"``, so values
+    are accessible both as attributes (``m.plddt``) and as items (``m["plddt"]``).
+    Subclasses may declare additional Pydantic fields for raw model outputs
+    (logits, vocab, pdb_source, etc.) — those live in ``__dict__`` and do not
+    leak into metric iteration. ``items``, ``keys``, ``values``, and
+    ``__contains__`` walk ``__pydantic_extra__`` only.
+
+    Subclasses declare ``metric_spec`` to document ranges, types, and
+    availability. Validation against the spec is performed by test helpers
+    (``tests/tool_infra_tests/_metric_helpers.py``), not at construction.
+
+    Example:
+        >>> class ESM2Score(Metrics):
+        ...     metric_spec: ClassVar = {
+        ...         "perplexity": {"type": "float", "min": 1.0, "max": None},
+        ...         "log_likelihood": {"type": "float", "min": None, "max": 0.0},
+        ...     }
+        ...     logits: list[list[float]] | None = None  # raw model output
+        >>> s = ESM2Score(perplexity=3.14, log_likelihood=-10.5, logits=[[0.1]])
+        >>> s.perplexity
+        3.14
+        >>> s["perplexity"]
+        3.14
+        >>> s.logits
+        [[0.1]]
+        >>> list(s.items())
+        [('perplexity', 3.14), ('log_likelihood', -10.5)]
+        >>> "logits" in s
+        False
+
+    Attributes:
+        metric_spec (ClassVar[dict[str, MetricSpec]]): Per-subclass declarative
+            metadata describing each metric's type, range, and availability.
+            Empty on the base class; subclasses override.
+        primary_metric (str | None): Name of the metric that best summarizes
+            the result overall (e.g. ``"avg_plddt"`` for AlphaFold2). Used by
+            downstream UI and reporting to pick a headline value.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {}
+    primary_metric: str | None = None
+
+    def __init__(self, **data: Any) -> None:
+        """Accept arbitrary metric keyword arguments alongside declared fields.
+
+        ``extra="allow"`` permits any extra keyword — this explicit ``__init__``
+        signature tells type-checkers (mypy/pyright) that unknown kwargs are
+        fine when instantiating a ``Metrics`` subclass, which they otherwise
+        flag as ``call-arg`` errors.
+        """
+        super().__init__(**data)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _exclude_none_values(cls, data: Any) -> Any:
+        """Strip ``None``-valued *extras* so absent metrics are truly absent.
+
+        Callers that pass ``Metrics(chain_plddt=None)`` (e.g. when a model
+        didn't emit a per-chain metric) get ``"chain_plddt" in metrics == False``
+        rather than a sentinel ``None`` showing up in iteration. Declared
+        fields are left alone so explicit ``None`` goes through Pydantic's
+        normal default/assignment logic — otherwise an explicit
+        ``primary_metric=None`` on a subclass with a non-``None`` default
+        would silently fall back to the default.
+        """
+        if isinstance(data, dict):
+            declared = set(cls.model_fields)
+            return {k: v for k, v in data.items() if v is not None or k in declared}
+        return data
+
+    # ── Mapping-style access (walks __pydantic_extra__ only) ─────────────────
+
+    def __getitem__(self, key: str) -> MetricValue:
+        """Return the metric value for ``key``.
+
+        Args:
+            key (str): The metric name.
+
+        Returns:
+            MetricValue: The stored metric value.
+
+        Raises:
+            KeyError: If ``key`` is not present in the extras.
+        """
+        extra = self.__pydantic_extra__ or {}
+        if key not in extra:
+            raise KeyError(key)
+        return extra[key]  # type: ignore[no-any-return]  # Pydantic types extras as dict[str, Any]
+
+    def __setitem__(self, key: str, value: MetricValue) -> None:
+        """Set a metric value by name.
+
+        Args:
+            key (str): The metric name.
+            value (MetricValue): The metric value to store.
+        """
+        extra = self.__pydantic_extra__
+        if extra is None:
+            extra = {}
+            object.__setattr__(self, "__pydantic_extra__", extra)
+        extra[key] = value
+
+    def __contains__(self, key: object) -> bool:
+        """Whether ``key`` is a stored metric name."""
+        return key in (self.__pydantic_extra__ or {})
+
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
+        """Iterate over stored metric names (not values)."""
+        return iter(self.__pydantic_extra__ or {})
+
+    def __len__(self) -> int:
+        """Return the number of stored metrics."""
+        return len(self.__pydantic_extra__ or {})
+
+    def keys(self) -> KeysView[str]:
+        """Return a view over stored metric names."""
+        return (self.__pydantic_extra__ or {}).keys()
+
+    def values(self) -> ValuesView[MetricValue]:
+        """Return a view over stored metric values."""
+        return (self.__pydantic_extra__ or {}).values()
+
+    def items(self) -> ItemsView[str, MetricValue]:
+        """Return a view over (name, value) pairs of stored metrics."""
+        return (self.__pydantic_extra__ or {}).items()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return the metric value for ``key`` if present, else ``default``."""
+        return (self.__pydantic_extra__ or {}).get(key, default)
+
+    def update(self, other: "Metrics | Mapping[str, MetricValue]") -> None:
+        """Merge metrics from ``other`` into this container in place.
+
+        Args:
+            other (Metrics | Mapping[str, MetricValue]): Metrics to merge.
+                Existing keys are overwritten.
+        """
+        extra = self.__pydantic_extra__
+        if extra is None:
+            extra = {}
+            object.__setattr__(self, "__pydantic_extra__", extra)
+        src = other.__pydantic_extra__ or {} if isinstance(other, Metrics) else other
+        extra.update(src)
+
+    @property
+    def primary_value(self) -> MetricValue | None:
+        """Value of the metric named by ``primary_metric``, or ``None`` if unset.
+
+        Convenience shortcut for ``self[self.primary_metric]`` with a fallback
+        when either ``primary_metric`` is not declared or the named metric is
+        not present in the container.
+        """
+        if self.primary_metric and self.primary_metric in self:
+            return self[self.primary_metric]
+        return None
+
+    def validate_against_spec(self) -> None:
+        """Assert spec-declared metrics are present and in-range.
+
+        Two checks, in order:
+
+        1. **Presence**: every ``metric_spec`` entry whose ``availability`` is
+           ``"always"`` must be a stored key on this container. Absent
+           always-available metrics are a tool bug, not a quiet miss.
+        2. **Range**: each stored value whose name appears in ``metric_spec``
+           is checked element-wise against the spec's ``min``/``max`` bounds.
+           Keys not declared in the spec are skipped (permissive: tools may
+           emit undeclared metrics). ``None`` entries in list-valued metrics
+           (per-position gaps) are also skipped.
+
+        This is **not** called at construction time by design: tools stay
+        fast and emit whatever they emit. Validation is invoked explicitly
+        from tests (see ``tests/tool_infra_tests/_metric_helpers.py``).
+
+        Raises:
+            AssertionError: With a precise message naming the offending metric
+                and bound (or the missing always-available metric).
+        """
+        for name, spec in self.metric_spec.items():
+            if spec.get("availability") == "always" and name not in self:
+                raise AssertionError(
+                    f"Metric {name!r} declared as always-available but missing from {type(self).__name__}"
+                )
+        for name, value in self.items():
+            value_spec = self.metric_spec.get(name)
+            if value_spec is None:
+                continue
+            if isinstance(value, bool):
+                continue  # booleans have no min/max
+            if isinstance(value, (int, float)):
+                _check_scalar_in_spec(name, value, value_spec)
+            elif isinstance(value, list):
+                _check_list_in_spec(name, value, value_spec)
+
+
+def _check_scalar_in_spec(name: str, value: float | int, spec: MetricSpec) -> None:
+    """Validate a scalar metric value against its spec bounds."""
+    min_v = spec.get("min")
+    max_v = spec.get("max")
+    if min_v is not None and value < min_v:
+        raise AssertionError(f"Metric {name!r}={value} below declared min {min_v}")
+    if max_v is not None and value > max_v:
+        raise AssertionError(f"Metric {name!r}={value} above declared max {max_v}")
+
+
+def _check_list_in_spec(name: str, value: list[Any], spec: MetricSpec) -> None:
+    """Validate a list metric element-wise against its spec bounds.
+
+    Skips ``None`` entries (per-position metrics may have gaps where the
+    metric is undefined, e.g. bidirectional log-likelihoods at sequence
+    boundaries).
+    """
+    min_v = spec.get("min")
+    max_v = spec.get("max")
+    for i, entry in enumerate(value):
+        if entry is None:
+            continue
+        if isinstance(entry, list):
+            _check_list_in_spec(f"{name}[{i}]", entry, spec)
+            continue
+        if not isinstance(entry, (int, float, bool)):
+            continue
+        if isinstance(entry, bool):
+            continue
+        if min_v is not None and entry < min_v:
+            raise AssertionError(f"Metric {name!r} element at index {i} = {entry} below declared min {min_v}")
+        if max_v is not None and entry > max_v:
+            raise AssertionError(f"Metric {name!r} element at index {i} = {entry} above declared max {max_v}")
 
 
 class BaseToolInput(BaseModel):
@@ -190,20 +458,51 @@ class BaseToolOutput(BaseModel, ABC):
         },
     )
 
-    def __getattr__(self, name: str) -> None:
-        """Raise ToolExecutionError when accessing unset fields after failure."""
-        # Check if we're trying to access a model field that wasn't set
-        if name in self.__class__.model_fields:
-            # Check if tool execution failed
+    def __getattr__(self, name: str) -> Any:
+        """Fallback attribute lookup.
+
+        Three cases, in order:
+
+        1. **Failure-mode escalation** — if ``name`` is a declared field and
+           the tool run failed (``success is False``), raise
+           :class:`ToolExecutionError` with the captured error messages.
+        2. **Forwarding to Metrics** — walk set fields for any
+           :class:`Metrics`-typed value and return ``value[name]`` if
+           present. Lets ``output.plddt`` shortcut to
+           ``output.metrics["plddt"]`` when the output has a ``Metrics`` field.
+        3. **Not found** — raise :class:`AttributeError`.
+
+        Args:
+            name (str): Attribute name being looked up.
+
+        Returns:
+            Any: The forwarded value if found on a ``Metrics`` field.
+
+        Raises:
+            ToolExecutionError: If ``name`` is a declared field but the tool failed.
+            AttributeError: If ``name`` resolves nowhere.
+        """
+        model_fields = self.__class__.model_fields
+
+        # (1) Failure-mode escalation for declared fields.
+        if name in model_fields:
             success = object.__getattribute__(self, "__dict__").get("success", True)
             if success is False:
                 errors = object.__getattribute__(self, "__dict__").get("errors", [])
-
                 if errors:
                     raise ToolExecutionError("\nError Messages:\n" + "\n".join(errors))
                 raise ToolExecutionError("Tool failed with no error messages recorded")
 
-        # Default behavior for truly missing attributes
+        # (2) Forward to any Metrics-typed field whose container holds ``name``.
+        for field_name in model_fields:
+            try:
+                value = object.__getattribute__(self, field_name)
+            except AttributeError:
+                continue
+            if isinstance(value, Metrics) and name in value:
+                return value[name]
+
+        # (3) Not found.
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     def __str__(self) -> str:
@@ -375,10 +674,10 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
             raise AssertionError(f"At {path}: {e}") from None
     elif isinstance(a, BaseModel):
         # Generic fallback for nested Pydantic models: recurse field-by-field so
-        # float drift in nested ``metrics`` / ``per_position_metrics`` is compared
-        # with tolerance instead of falling through to bit-exact ``BaseModel.__eq__``.
-        # Classes that need custom comparison logic can override this by defining
-        # their own ``approx_equal`` method (handled by the branch above).
+        # float drift in nested ``Metrics`` containers is compared with tolerance
+        # instead of falling through to bit-exact ``BaseModel.__eq__``. Classes
+        # that need custom comparison logic can override this by defining their
+        # own ``approx_equal`` method (handled by the branch above).
         for field_name in type(a).model_fields:
             _approx_equal_values(
                 getattr(a, field_name),
@@ -387,6 +686,14 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
                 atol,
                 f"{path}.{field_name}",
             )
+        # ``extra="allow"`` models (e.g. ``Metrics`` subclasses) store metric values
+        # in ``__pydantic_extra__``. Compare those too so metric drift is caught.
+        extra_a = getattr(a, "__pydantic_extra__", None) or {}
+        extra_b = getattr(b, "__pydantic_extra__", None) or {}
+        if extra_a.keys() != extra_b.keys():
+            raise AssertionError(f"Extras keys differ at {path}: {set(extra_a) ^ set(extra_b)}")
+        for key in extra_a:
+            _approx_equal_values(extra_a[key], extra_b[key], rtol, atol, f"{path}.{key}")
     elif a != b:
         raise AssertionError(f"Value mismatch at {path}: {a!r} != {b!r}")
 
@@ -394,5 +701,9 @@ def _approx_equal_values(a: Any, b: Any, rtol: float, atol: float, path: str) ->
 __all__ = [
     "BaseToolInput",
     "BaseToolOutput",
+    "InputField",
+    "MetricSpec",
+    "MetricValue",
+    "Metrics",
     "ToolExecutionError",
 ]

@@ -11,6 +11,7 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
     run_pyrosetta_energy,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
@@ -44,6 +45,7 @@ def test_run_pyrosetta_energy_on_pdb():
         PyRosettaEnergyInput(inputs=[structure]),
         PyRosettaEnergyConfig(relax_cycles=1),
     )
+    assert_metrics_in_spec(result)
 
     assert result.success
     assert result.tool_id == "pyrosetta-energy"

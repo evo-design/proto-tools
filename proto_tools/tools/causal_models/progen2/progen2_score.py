@@ -9,8 +9,8 @@ from typing import Any, Literal
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
     CausalModelScoringInput,
+    CausalModelScoringMetrics,
     CausalModelScoringOutput,
-    SequenceScores,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -124,10 +124,11 @@ def run_progen2_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ProGen2ScoringOutput: Contains SequenceScores for each input sequence with:
+        ProGen2ScoringOutput: Contains a ``CausalModelScoringMetrics`` for each input
+            sequence with:
 
-            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
-              ``perplexity``
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
+              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, vocab_size=30) if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 30 tokens (special + amino acids) if
@@ -138,7 +139,7 @@ def run_progen2_score(
         >>> inputs = ProGen2ScoringInput(sequences=["MVLSPADKTN", "MKTLLILAVVAA"])
         >>> config = ProGen2ScoringConfig(model_checkpoint="progen2-large")
         >>> result = run_progen2_score(inputs, config)
-        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+        >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
         >>>
         >>> # Scoring with logits for downstream analysis
         >>> config = ProGen2ScoringConfig(return_logits=True)
@@ -176,8 +177,8 @@ def run_progen2_score(
     logits = result.get("logits")
 
     scores = [
-        SequenceScores(
-            metrics=metrics,
+        CausalModelScoringMetrics(
+            **metrics,
             logits=logits[i] if logits is not None else None,
             vocab=result["vocab"],
         )

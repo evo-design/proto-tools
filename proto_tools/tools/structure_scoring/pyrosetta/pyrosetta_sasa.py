@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -22,6 +22,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +48,34 @@ class ResidueSASA(BaseModel):
     sasa: float = Field(description="SASA in Angstroms squared")
 
 
-class SASAResult(BaseModel):
+class PyRosettaSASAMetrics(Metrics):
     """SASA result for a single structure.
 
+    Metrics documented in ``metric_spec``:
+        total_sasa (float): Total solvent accessible surface area in Å². When
+            ``chain_ids`` is set on the input, this is the sum over the selected
+            residues only, not the whole-pose SASA. (Contrast with
+            ``pyrosetta-energy``, whose ``total_energy`` is always the whole-pose
+            total regardless of chain selection — SASA can be meaningfully
+            summed over a residue subset, energy cannot.)
+
     Attributes:
-        total_sasa (float): Total solvent accessible surface area in Angstroms
-            squared. When ``chain_ids`` is set on the input, this is the sum
-            over the selected residues only, not the whole-pose SASA. (Contrast
-            with ``pyrosetta-energy``, whose ``total_energy`` is always the
-            whole-pose total regardless of chain selection — SASA can be
-            meaningfully summed over a residue subset, energy cannot.)
-        per_residue (list[ResidueSASA]): Per-residue SASA breakdown, filtered
-            to the selected residues when chain selection is active.
+        per_residue (list[ResidueSASA]): Per-residue SASA breakdown. Declared
+            as a real field (not a metric) because each entry carries
+            chain/residue identifiers alongside the SASA value.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "total_sasa": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "unit": "Å²",
+        },
+    }
+    primary_metric: str | None = "total_sasa"
 
-    total_sasa: float = Field(
-        description="Total SASA in Angstroms squared (sum over selected residues when chain_ids is set)"
-    )
     per_residue: list[ResidueSASA] = Field(description="Per-residue SASA breakdown")
 
 
@@ -113,10 +123,10 @@ class PyRosettaSASAOutput(BaseToolOutput):
     """Output from PyRosetta SASA computation.
 
     Attributes:
-        results (list[SASAResult]): SASA results, one per input structure.
+        results (list[PyRosettaSASAMetrics]): SASA results, one per input structure.
     """
 
-    results: list[SASAResult] = Field(
+    results: list[PyRosettaSASAMetrics] = Field(
         default_factory=list,
         description="SASA results, one per input structure",
     )
@@ -142,7 +152,7 @@ class PyRosettaSASAOutput(BaseToolOutput):
                 "residue_index": res.residue_index,
                 "residue_name": res.residue_name,
                 "sasa": res.sasa,
-                "total_sasa": result.total_sasa,
+                "total_sasa": result["total_sasa"],
             }
             for i, result in enumerate(self.results)
             for res in result.per_residue
@@ -224,7 +234,7 @@ def run_pyrosetta_sasa(
 
     warn_about_dropped_residues(output_data["results"])
     remap_per_residue_chain_ids(output_data["results"], pdb_to_mmcif_maps)
-    results = [SASAResult(**r) for r in output_data["results"]]
+    results = [PyRosettaSASAMetrics(**r) for r in output_data["results"]]
 
     return PyRosettaSASAOutput(
         metadata={

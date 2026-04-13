@@ -1,17 +1,31 @@
 """Structure alignment tools."""
 
-from proto_tools.tools.structure_alignment.tmalign import TMalignConfig, TMalignInput, TMalignOutput, run_tmalign
-from proto_tools.tools.structure_alignment.usalign import USalignConfig, USalignInput, USalignOutput, run_usalign
+from proto_tools.tools.structure_alignment.tmalign import (
+    TMalignConfig,
+    TMalignInput,
+    TMalignMetrics,
+    TMalignOutput,
+    run_tmalign,
+)
+from proto_tools.tools.structure_alignment.usalign import (
+    USalignConfig,
+    USalignInput,
+    USalignMetrics,
+    USalignOutput,
+    run_usalign,
+)
 
 __all__ = [
     # TMalign
-    "TMalignInput",
     "TMalignConfig",
+    "TMalignInput",
+    "TMalignMetrics",
     "TMalignOutput",
     "run_tmalign",
     # USalign
-    "USalignInput",
     "USalignConfig",
+    "USalignInput",
+    "USalignMetrics",
     "USalignOutput",
     "run_usalign",
 ]

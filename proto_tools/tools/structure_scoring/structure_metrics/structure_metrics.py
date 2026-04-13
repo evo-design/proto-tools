@@ -4,9 +4,9 @@ Used to filter out disordered or artifactual predicted protein structures.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -16,17 +16,45 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 # ============================================================================
 # Data Models
 # ============================================================================
-class StructureMetrics(BaseModel):
-    """Metrics for a single predicted structure."""
+class StructureQualityMetrics(Metrics):
+    """Structural quality metrics for a single PDB.
+
+    Metrics documented in ``metric_spec``:
+        longest_alpha_helix (int): Length of the longest alpha helix (residues).
+            Always present.
+        gyration_radius (float): Radius of gyration of the structure (Å).
+            Always present.
+
+    Attributes:
+        pdb_path (str): Path to the PDB file that produced these metrics.
+            Declared as a real field (not a metric) so it stays out of
+            metric iteration.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "longest_alpha_helix": {
+            "availability": "always",
+            "type": "int",
+            "min": 0,
+            "max": None,
+            "unit": "residues",
+        },
+        "gyration_radius": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "unit": "Å",
+        },
+    }
 
     pdb_path: str = Field(description="Path to the PDB file analyzed")
-    longest_alpha_helix: int = Field(description="Length of the longest alpha helix (in residues)")
-    gyration_radius: float = Field(description="Radius of gyration of the structure (in Angstroms)")
 
 
 # Input:
@@ -53,11 +81,11 @@ class StructureMetricsOutput(BaseToolOutput):
     """Output from structure metrics computation.
 
     Attributes:
-        metrics (list[StructureMetrics]): Per-structure metrics including
-            longest alpha helix length and gyration radius.
+        metrics (list[StructureQualityMetrics]): Per-structure quality metrics,
+            index-aligned with ``inputs.pdb_paths``.
     """
 
-    metrics: list[StructureMetrics] = Field(
+    metrics: list[StructureQualityMetrics] = Field(
         default_factory=list,
         description="Per-structure quality metrics",
     )
@@ -154,7 +182,7 @@ def run_structure_metrics(
         config=config,
     )
 
-    metrics = [StructureMetrics(**m) for m in output_data["metrics"]]
+    metrics = [StructureQualityMetrics(**m) for m in output_data["metrics"]]
 
     return StructureMetricsOutput(
         metadata={"num_structures": len(inputs.pdb_paths)},

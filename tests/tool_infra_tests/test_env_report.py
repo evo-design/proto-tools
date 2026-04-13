@@ -10,6 +10,7 @@ Only runs with ``pytest --env-report``; deselected during normal test runs.
 import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.pytest_helpers import (
     CHIMERA_ONLY_KEYS,
     EXCLUDED_CATEGORIES,
@@ -76,3 +77,4 @@ def test_tool_env_report(spec: ToolSpec, tmp_path):
 
     result = spec.function(inputs, config)
     assert result.success, f"Tool {spec.key} failed: {result.errors}"
+    assert_metrics_in_spec(result)

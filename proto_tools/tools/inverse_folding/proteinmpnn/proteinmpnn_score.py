@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from proto_tools.tools.inverse_folding.shared_data_models import (
+    InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
-    SequenceScores,
     SequenceStructurePair,
 )
 from proto_tools.tools.tool_registry import tool
@@ -155,10 +155,11 @@ def run_proteinmpnn_score(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ProteinMPNNScoringOutput: Contains SequenceScores for each input pair with:
+        ProteinMPNNScoringOutput: Contains an ``InverseFoldingScoringMetrics`` for
+            each input pair with:
 
-            - ``metrics``: Dict with ``log_likelihood``, ``avg_log_likelihood``,
-              ``perplexity``
+            - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
+              attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
             - ``logits``: Per-position logits tensor (seq_len, 21) if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 21 amino acid characters (AlphaFold ordering) if
@@ -171,7 +172,7 @@ def run_proteinmpnn_score(
         >>> inputs = ProteinMPNNScoringInput(sequence_structure_pairs=[pair])
         >>> config = ProteinMPNNScoringConfig()
         >>> result = run_proteinmpnn_score(inputs, config)
-        >>> print(f"Perplexity: {result.scores[0].metrics['perplexity']}")
+        >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
         >>>
         >>> # Scoring with logits
         >>> config = ProteinMPNNScoringConfig(return_logits=True)
@@ -215,8 +216,8 @@ def run_proteinmpnn_score(
             config=config,
         )
         scores.append(
-            SequenceScores(
-                metrics=result["metrics"],
+            InverseFoldingScoringMetrics(
+                **result["metrics"],
                 logits=result["logits"],
                 vocab=result["vocab"],
             )

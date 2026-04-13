@@ -8,7 +8,7 @@ import json
 from abc import ABC
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -20,6 +20,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
 )
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 
 class SequenceStructurePair(BaseModel):
@@ -369,22 +370,32 @@ class InverseFoldingOutput(BaseToolOutput):
 # ============================================================================
 # Scoring Data Models
 # ============================================================================
-class SequenceScores(BaseModel):
-    """Individual sequence score with flexible metrics dict.
+class InverseFoldingScoringMetrics(Metrics):
+    """Per-sequence scoring metrics for inverse-folding scorers.
 
-    Represents scoring metrics for a single sequence. Metrics can be accessed
-    via dict-style (score.metrics["perplexity"]) or attribute-style (score.perplexity).
+    Shared across ProteinMPNN, LigandMPNN, and FAMPnn scoring — all three emit
+    the same scalar set against a given sequence-structure pair.
+
+    Metrics documented in ``metric_spec``:
+        log_likelihood (float): Sum of per-position log-likelihoods given the
+            target structure. Always present.
+        avg_log_likelihood (float): Mean per-position log-likelihood.
+            Always present.
+        perplexity (float): exp(-avg_log_likelihood). Always present. Range ``[1, ∞)``.
 
     Attributes:
-        metrics (dict[str, float]): Dictionary of scalar scoring metrics.
-        logits (list[list[float]] | None): Optional per-position logits array.
-        vocab (list[str] | None): Optional token ordering for logits; logits[:, j] corresponds to vocab[j].
+        logits (list[list[float]] | None): Per-position logits array
+            ``(seq_len, vocab_size)``. ``None`` unless the tool returns logits.
+        vocab (list[str] | None): Token ordering for ``logits``.
     """
 
-    metrics: dict[str, float] = Field(
-        default_factory=dict,
-        description="Dictionary of scalar scoring metrics",
-    )
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "avg_log_likelihood": {"availability": "always", "type": "float", "min": None, "max": 0.0},
+        "perplexity": {"availability": "always", "type": "float", "min": 1.0, "max": None},
+    }
+    primary_metric: str | None = "perplexity"
+
     logits: list[list[float]] | None = Field(
         default=None,
         description="Per-position logits array as nested list (seq_len, vocab_size)",
@@ -394,34 +405,23 @@ class SequenceScores(BaseModel):
         description="Token ordering for logits: logits[:, j] corresponds to vocab[j]",
     )
 
-    def __getattr__(self, name: str) -> Any:
-        """Allow attribute-style access to metrics."""
-        metrics = object.__getattribute__(self, "metrics")
-        if name in metrics:
-            return metrics[name]
-        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
-
-    def add_metric(self, name: str, value: float) -> None:
-        """Add a metric to the output."""
-        self.metrics[name] = value
-
-    def __iter__(self) -> Iterator[float]:  # type: ignore[override]
-        return iter(self.metrics.values())
-
 
 class InverseFoldingScoringOutput(BaseToolOutput):
     """Standardized output for inverse folding scoring tools.
 
     Contains scoring results for sequence-structure pairs evaluated by
-    ProteinMPNN or LigandMPNN scoring.
+    ProteinMPNN, LigandMPNN, or FAMPnn scoring.
 
     Attributes:
-        scores (list[SequenceScores]): List of scoring outputs, one per input
-            sequence-structure pair. Each entry contains metrics (log_likelihood,
-            avg_log_likelihood, perplexity) and optional per-position logits.
+        scores (list[InverseFoldingScoringMetrics]): List of scoring outputs,
+            one per input sequence-structure pair. Each entry is a ``Metrics``
+            subclass with scalar metrics (accessed via ``score.perplexity`` or
+            ``score["perplexity"]``) plus declared ``logits`` / ``vocab`` fields.
     """
 
-    scores: list[SequenceScores] = Field(description="List of scoring outputs, one per input sequence-structure pair")
+    scores: list[InverseFoldingScoringMetrics] = Field(
+        description="List of scoring outputs, one per input sequence-structure pair",
+    )
 
     @property
     def vocab(self) -> list[str] | None:
@@ -431,10 +431,10 @@ class InverseFoldingScoringOutput(BaseToolOutput):
     def __len__(self) -> int:
         return len(self.scores)
 
-    def __getitem__(self, index: int) -> SequenceScores:
+    def __getitem__(self, index: int) -> InverseFoldingScoringMetrics:
         return self.scores[index]
 
-    def __iter__(self) -> Iterator[SequenceScores]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[InverseFoldingScoringMetrics]:  # type: ignore[override]
         return iter(self.scores)
 
     @property
@@ -459,11 +459,11 @@ class InverseFoldingScoringOutput(BaseToolOutput):
 
             data = []
             for s in self.scores:
-                score_data = dict(s.metrics)
+                score_data: dict[str, Any] = dict(s.items())
                 if s.logits is not None:
-                    score_data["logits"] = s.logits  # type: ignore[assignment]
+                    score_data["logits"] = s.logits
                 if s.vocab is not None:
-                    score_data["vocab"] = s.vocab  # type: ignore[assignment]
+                    score_data["vocab"] = s.vocab
                 data.append(score_data)
 
             with open(path, "w") as f:
@@ -471,11 +471,11 @@ class InverseFoldingScoringOutput(BaseToolOutput):
 
         elif file_format == "csv":
             if self.scores:
-                fieldnames = list(self.scores[0].metrics.keys())
+                fieldnames = list(self.scores[0].keys())
                 with open(path, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     for s in self.scores:
-                        writer.writerow(s.metrics)
+                        writer.writerow(dict(s.items()))
         else:
             raise ValueError(f"Unsupported format: {file_format}")

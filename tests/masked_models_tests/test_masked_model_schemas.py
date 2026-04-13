@@ -8,9 +8,9 @@ from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
     MaskedModelOutput,
     MaskedModelScoringInput,
+    MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
     SequenceEmbedding,
-    SequenceScores,
 )
 
 # ── Input normalization ─────────────────────────────────────────────────────
@@ -30,13 +30,14 @@ def test_scoring_input_rejects_empty():
         MaskedModelScoringInput(sequences=[])
 
 
-# ── SequenceScores attribute access ─────────────────────────────────────────
+# ── MaskedModelScoringMetrics attribute access ──────────────────────────────
 
 
-def test_sequence_scores_attribute_access():
-    scores = SequenceScores(metrics={"perplexity": 1.5})
+def test_scoring_metrics_attribute_access():
+    scores = MaskedModelScoringMetrics(perplexity=1.5)
     assert scores.perplexity == 1.5
-    with pytest.raises(AttributeError, match="no attribute"):
+    assert scores["perplexity"] == 1.5
+    with pytest.raises(AttributeError):
         _ = scores.nonexistent
 
 
@@ -66,7 +67,7 @@ def test_embedding_export_empty_warns():
 @pytest.mark.parametrize("fmt", ["csv", "json"])
 def test_scoring_export(fmt, tmp_path):
     output = MaskedModelScoringOutput(
-        scores=[SequenceScores(metrics={"perplexity": 1.5, "log_likelihood": -3.2})],
+        scores=[MaskedModelScoringMetrics(perplexity=1.5, log_likelihood=-3.2)],
     )
     output.export("scores", export_path=tmp_path, file_format=fmt)
     exported = tmp_path / f"scores.{fmt}"
