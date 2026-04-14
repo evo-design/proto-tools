@@ -104,7 +104,8 @@ def run_ablang_gradient(
     )
     payload = {
         "operation": "compute_gradient",
-        **inputs.model_dump(),
+        "logits": inputs.logits,
+        "temperature": inputs.temperature,
         "model_choice": config.model_choice,
         "chain_break_position": config.chain_break_position,
         "seed": config.seed,
