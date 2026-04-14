@@ -27,6 +27,13 @@ _STANDALONE_HELPERS_SOURCE = (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clear_proto_home_cache():
+    """Clear cached value computed with patched expanduser."""
+    yield
+    get_proto_home.cache_clear()
+
+
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 @pytest.fixture
 def echo_script(tmp_path: Path) -> Path:
