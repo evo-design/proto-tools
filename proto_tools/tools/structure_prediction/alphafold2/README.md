@@ -4,7 +4,7 @@
 
 ## Overview
 
-AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper (`alphafold2-prediction`). It supports optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search for improved accuracy, and can predict both monomeric and multimeric protein structures.
+AlphaFold2 predicts 3D protein structures from amino acid sequences using the original DeepMind model via the ColabDesign JAX wrapper. It supports structure prediction (`alphafold2-prediction`) with optional [multiple sequence alignment](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSA) generation via ColabFold search, and relaxed-sequence gradient computation (`alphafold2-gradient`) for Germinal-style binder redesign against a frozen target structure.
 
 ## Background
 
@@ -40,6 +40,9 @@ The model was trained on experimentally determined structures from the [Protein 
 2. **Model inference:** The ColabDesign JAX wrapper runs the AlphaFold2 neural network with the specified number of recycling iterations and model parameters.
 3. **Output processing:** Raw predictions are converted to Structure objects with PDB coordinates, confidence metrics (pLDDT, pTM, ipTM, PAE), and metadata.
 
+**Gradient computation (`alphafold2-gradient`):**
+The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb_path`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, IgLM support, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
+
 **Key assumptions:**
 - Input sequences are valid protein sequences (standard amino acids plus 'X' for unknown)
 - The protein folds into a stable 3D structure (not intrinsically disordered)
@@ -70,7 +73,16 @@ The model was trained on experimentally determined structures from the [Protein 
 |-------|------|-------------|
 | `chains` | `List[Chain]` | Chains in the complex. Each chain has `sequence` (str) and optional `entity_type` (auto-detected as "protein"). |
 
+### Gradient Tool
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `logits` | `list[list[float]]` | Relaxed binder logits with shape `(binder_length, 20)` in canonical AA order |
+| `temperature` | `float` | Softmax temperature used to relax logits into probabilities |
+
 ## Configuration
+
+### Prediction Tool (`AlphaFold2Config`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -81,6 +93,29 @@ The model was trained on experimentally determined structures from the [Protein 
 | `seed` | `Optional[int]` | `None` | Random seed for reproducibility. |
 | `device` | `str` | `"cuda"` | Device for inference (`"cuda"` or `"cpu"`). |
 | `colabfold_search_config` | `Optional[ColabfoldSearchConfig]` | `None` | Advanced ColabFold MSA search settings. Uses defaults if None. |
+
+### Gradient Tool (`AlphaFold2GradientConfig`)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `target_pdb_path` | `str` | *required* | PDB containing the frozen target and binder template complex. |
+| `target_chain` | `str` | `"A"` | Target chain ID(s) in the PDB. |
+| `target_hotspot` | `str \| None` | `None` | Optional hotspot residue specification for interface contacts. |
+| `binder_chain` | `str` | `"H"` | Binder-template chain ID. |
+| `design_positions` | `list[int] \| None` | `None` | Zero-based binder positions for loss focus (e.g. CDR loops). Only active when `backend="germinal"`. |
+| `bias_redesign` | `float \| None` | `None` | Soft bias toward wildtype at non-design positions. Only active when `backend="germinal"`. |
+| `omit_aas` | `str \| None` | `None` | Comma-separated amino acids to ban, e.g. `"C,W"`. |
+| `num_recycles` | `int` | `3` | Recycling iterations (0-48). |
+| `model_num` | `int` | `1` | Which AF2 parameter set to use (1-5). |
+| `sample_models` | `bool` | `False` | Randomly sample from the five AF2 model parameter sets each forward pass. |
+| `soft` | `float` | `1.0` | ColabDesign softmax blending (0=logits, 1=full softmax). Controls `soft_seq()`. |
+| `backend` | `str` | `"base"` | ColabDesign backend: `"base"` (upstream) or `"germinal"` (with alpha=2.0, bias, IgLM, framework contacts). |
+| `loss_weights` | `dict[str, float]` | `{}` | Binder-objective weights. Stock: `plddt`, `i_plddt`, `pae`, `i_pae`, `con`, `i_con`, `exp_res`, `rmsd`, `dgram_cce`, `fape`. Extension callbacks (Germinal backend): `rg`, `i_ptm`, `NC`, `helix`, `beta_strand`. |
+| `intra_contact_num` | `int` | `2` | Intra-molecular contacts per residue. Only active when `backend="germinal"`. |
+| `intra_contact_cutoff` | `float` | `14.0` | Intra-molecular distance cutoff (Å). Only active when `backend="germinal"`. |
+| `inter_contact_num` | `int` | `10` | Inter-molecular contacts per residue. Only active when `backend="germinal"`. |
+| `inter_contact_cutoff` | `float` | `20.0` | Inter-molecular distance cutoff (Å). Only active when `backend="germinal"`. |
+| `device` | `str` | `"cuda"` | Device for inference. |
 
 ### Parameter Guides
 
@@ -138,6 +173,17 @@ Structure(
 | `avg_pae` | `Optional[float]` | `0.0 - 30+` | Average predicted aligned error in Angstroms. Lower = more confident relative positioning. |
 
 **Supported export formats:** `pdb`, `cif`, `json`
+
+### AlphaFold2GradientOutput
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gradient` | `list[list[float]]` | Gradient matrix matching the input logits shape |
+| `loss` | `float` | Backend-local scalar objective value |
+| `metrics` | `dict[str, Any]` | Auxiliary metrics (pLDDT, pTM, structural losses, etc.) |
+| `vocab` | `list[str]` | Canonical amino-acid column order for the gradient |
+
+**Supported export formats:** `json`
 
 ## Interpreting Results
 
@@ -231,6 +277,32 @@ with ToolInstance.persist():
         s = result.structures[0]
         status = "PASS" if s.avg_plddt > 0.8 else "REVIEW"
         print(f"pLDDT={s.avg_plddt:.2f} [{status}]: {seq[:30]}...")
+```
+
+**Example 5: Compute gradients for Germinal-style binder design**
+```python
+from proto_tools.tools.structure_prediction.alphafold2 import (
+    AlphaFold2GradientConfig, AlphaFold2GradientInput, run_alphafold2_gradient,
+)
+from pathlib import Path
+
+# Relaxed logits for a 10-residue binder (uniform initialization)
+inputs = AlphaFold2GradientInput(
+    logits=[[0.0] * 20] * 10,
+    temperature=1.0,
+)
+config = AlphaFold2GradientConfig(
+    target_pdb_path=str(Path("target_complex.pdb").resolve()),
+    target_chain="A",
+    binder_chain="B",
+    num_recycles=3,
+    loss_weights={"plddt": 1.0, "i_plddt": 1.0, "i_con": 0.2},
+)
+
+result = run_alphafold2_gradient(inputs, config)
+print(f"Loss: {result.loss:.4f}")
+print(f"Gradient shape: {len(result.gradient)} x {len(result.gradient[0])}")
+print(f"Metrics: {result.metrics}")
 ```
 
 ## Best Practices & Gotchas

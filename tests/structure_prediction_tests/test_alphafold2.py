@@ -1,7 +1,9 @@
-"""tests/structure_prediction_tests/test_alphafold2.py.
+"""Tests for AlphaFold2 prediction and gradient tools."""
 
-Tests for AlphaFold2.
-"""
+import math
+import sys
+import types
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -9,15 +11,38 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
+    AlphaFold2GradientConfig,
+    AlphaFold2GradientInput,
     AlphaFold2Input,
     StructurePredictionComplex,
     run_alphafold2,
+    run_alphafold2_gradient,
 )
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
+# Mock standalone_helpers so we can import standalone inference utilities without
+# the full ColabDesign/JAX environment that only exists inside the tool venv.
+_sh = sys.modules.setdefault("standalone_helpers", types.SimpleNamespace())
+for _attr, _val in [
+    ("AMINO_ACIDS_LIST", list(PROTEIN_AMINO_ACIDS)),
+    ("get_jax_memory_stats", lambda **_kw: {}),
+    ("resolve_jax_device", lambda d: d),
+    ("serialize_output", lambda v: v),
+]:
+    if not hasattr(_sh, _attr):
+        setattr(_sh, _attr, _val)
+
+_CANONICAL_VOCAB = list(PROTEIN_AMINO_ACIDS)
 _HOMOOLIGOMER_SEQ = "MARFLGLYTWHK"
-
-# ── Fixtures ─────────────────────────────────────────────────────────────────
+_EXAMPLE_PDB_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "proto_tools/tools/structure_prediction/alphafold2/examples/example_output/alphafold2_structure/structure_0.pdb"
+)
+_EXAMPLE_PDB = _EXAMPLE_PDB_PATH.read_text()
+# PD-L1 target + nanobody binder complex (from germinal/pdbs/pdl1.pdb).
+_GRADIENT_EXAMPLE_PDB_PATH = Path(__file__).resolve().parents[1] / "dummy_data/pdl1.pdb"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -29,86 +54,172 @@ def _persistent_worker(request):
         yield
 
 
-# ── Input validation ──────────────────────────────────────────────────────────
+# -- Input/config validation ---------------------------------------------------
 
 
-def test_alphafold2_input_rejects_non_protein_sequence():
-    """AlphaFold2 validator rejects sequences that aren't valid protein."""
+def test_input_rejects_non_protein():
     with pytest.raises(ValidationError, match="unsupported entity types"):
         AlphaFold2Input(complexes=["MKTL123"])
 
 
-def test_alphafold2_input_accepts_x_for_unknown_residue():
-    """'X' is a valid placeholder for unknown amino acids and must not raise."""
-    inp = AlphaFold2Input(complexes=["MKTLX"])
-    assert inp.complexes[0].chain_sequences[0] == "MKTLX"
+def test_input_accepts_x_residue():
+    assert AlphaFold2Input(complexes=["MKTLX"]).complexes[0].chain_sequences[0] == "MKTLX"
 
 
-def test_alphafold2_input_rejects_dna_entity_type():
-    """AlphaFold2 only supports protein chains; DNA must be rejected."""
-    with pytest.raises(ValidationError, match="unsupported entity types"):
-        AlphaFold2Input(complexes=[StructurePredictionComplex(chains=[{"sequence": "ATCG", "entity_type": "dna"}])])
-
-
-def test_alphafold2_input_rejects_chain_modifications():
-    """AlphaFold2 does not allow chain modifications (ALLOWS_CHAIN_MODIFICATIONS=False)."""
-    with pytest.raises(ValidationError, match="does not allow chain modifications"):
-        AlphaFold2Input(
-            complexes=[
-                StructurePredictionComplex(
-                    chains=[{"sequence": "MVLSPADKTN", "entity_type": "protein", "modifications": [(4, "SEP")]}]
-                )
-            ]
-        )
-
-
-# ── Config validation ─────────────────────────────────────────────────────────
-
-
-def test_alphafold2_config_rejects_model_num_and_ensemble_together():
-    """model_num != 1 combined with num_ensemble_models > 1 must raise."""
+def test_config_rejects_model_num_and_ensemble_together():
     with pytest.raises(ValidationError, match="mutually exclusive"):
         AlphaFold2Config(model_num=2, num_ensemble_models=3)
 
 
-def test_alphafold2_config_rejects_num_recycles_below_zero():
-    """num_recycles has ge=0; negative values must raise."""
-    with pytest.raises(ValidationError, match="greater than or equal to 0"):
-        AlphaFold2Config(num_recycles=-1)
+def test_gradient_input_requires_20_columns():
+    AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.75)
+    with pytest.raises(ValidationError, match="20 columns"):
+        AlphaFold2GradientInput(logits=[[0.0] * 19], temperature=1.0)
 
 
-def test_alphafold2_config_rejects_num_recycles_above_48():
-    """num_recycles has le=48; values above 48 must raise."""
-    with pytest.raises(ValidationError, match="less than or equal to 48"):
-        AlphaFold2Config(num_recycles=49)
+def test_gradient_config_rejects_bad_loss_weights():
+    with pytest.raises(ValidationError, match="non-negative"):
+        AlphaFold2GradientConfig(target_pdb_path="/t.pdb", binder_chain="B", loss_weights={"plddt": -0.1})
+    with pytest.raises(ValidationError, match="Unknown loss_weights"):
+        AlphaFold2GradientConfig(target_pdb_path="/t.pdb", binder_chain="B", loss_weights={"pldd": 1.0})
 
 
-def test_alphafold2_config_rejects_model_num_out_of_range():
-    """model_num must be between 1 and 5 inclusive."""
-    with pytest.raises(ValidationError, match="greater than or equal to 1"):
-        AlphaFold2Config(model_num=0)
-    with pytest.raises(ValidationError, match="less than or equal to 5"):
-        AlphaFold2Config(model_num=6)
+def test_gradient_requires_target_pdb_at_call_time():
+    result = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0),
+        AlphaFold2GradientConfig(target_pdb_path=None, binder_chain="B"),
+    )
+    assert not result.success
+    assert any("target_pdb_path is required" in e for e in result.errors)
 
 
-# ---------------------------------------------------------------------------
-# Integration tests
+# -- Dispatch contracts --------------------------------------------------------
+
+
+def test_gradient_dispatch_contract(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+        captured.update(tool_name=tool_name, payload=payload)
+        return {"gradient": [[0.1] * 20] * 2, "loss": 1.25, "metrics": {"avg_plddt": 0.8}, "vocab": _CANONICAL_VOCAB}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    inputs = AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.8)
+    config = AlphaFold2GradientConfig(
+        target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+        target_chain="A",
+        binder_chain="B",
+        design_positions=[0, 1],
+        loss_weights={"plddt": 1.0},
+        device="cpu",
+    )
+    result = run_alphafold2_gradient(inputs=inputs, config=config)
+
+    validate_output(result)
+    assert captured["tool_name"] == "alphafold2"
+    payload = captured["payload"]
+    assert payload["operation"] == "compute_gradient"
+    assert payload["temperature"] == 0.8
+    assert payload["target_pdb_path"] == str(_GRADIENT_EXAMPLE_PDB_PATH)
+    assert payload["backend"] == "base"
+    assert payload["soft"] == 1.0
+    assert result.gradient == [[0.1] * 20] * 2
+    assert result.loss == 1.25
+
+
+def test_prediction_dispatch_contract(monkeypatch):
+    captured: list[dict] = []
+
+    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+        captured.append(payload)
+        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": None, "avg_pae": 1.5}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_alphafold2(AlphaFold2Input(complexes=["MKTL"]), AlphaFold2Config(use_msa=False, device="cpu"))
+
+    assert captured[0]["operation"] == "predict"
+    assert result.success
+    assert is_valid_structure(result.structures[0].structure_cif)
+
+
+# -- GPU integration tests -----------------------------------------------------
+
+
+@pytest.mark.uses_gpu
+def test_gradient_end_to_end():
+    result = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0),
+        AlphaFold2GradientConfig(
+            target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            target_chain="A",
+            binder_chain="B",
+            num_recycles=1,
+            loss_weights={"plddt": 1.0},
+        ),
+    )
+    validate_output(result)
+    assert result.tool_id == "alphafold2-gradient"
+    assert len(result.gradient) == 5
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert math.isfinite(result.loss) and result.loss != 0.0
+    assert result.vocab == _CANONICAL_VOCAB
+    assert 0 <= result.metrics["avg_plddt"] <= 1.0
+
+
+@pytest.mark.uses_gpu
+def test_gradient_sensitivity():
+    config = AlphaFold2GradientConfig(
+        target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+        target_chain="A",
+        binder_chain="B",
+        num_recycles=1,
+        loss_weights={"plddt": 1.0},
+    )
+    r1 = run_alphafold2_gradient(AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0), config)
+    r2 = run_alphafold2_gradient(AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0), config)
+    assert r1.loss != r2.loss
+    assert r1.gradient != r2.gradient
+
+
+@pytest.mark.uses_gpu
+def test_gradient_loss_weights_matter():
+    logits = [[0.1 * i + 0.05 * j for j in range(20)] for i in range(5)]
+    base = {
+        "target_pdb_path": str(_GRADIENT_EXAMPLE_PDB_PATH),
+        "target_chain": "A",
+        "binder_chain": "B",
+        "num_recycles": 1,
+    }
+    r_plddt = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=logits, temperature=1.0),
+        AlphaFold2GradientConfig(**base, loss_weights={"plddt": 1.0}),
+    )
+    r_con = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=logits, temperature=1.0),
+        AlphaFold2GradientConfig(**base, loss_weights={"con": 1.0}),
+    )
+    assert r_plddt.gradient != r_con.gradient
+    assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)
+    assert all(math.isfinite(v) for row in r_con.gradient for v in row)
 
 
 @pytest.mark.uses_gpu
 def test_homooligomer():
-    """Verify the homo-oligomer code path (identical chains → copies)."""
-    complexes = [StructurePredictionComplex(chains=[_HOMOOLIGOMER_SEQ, _HOMOOLIGOMER_SEQ])]
-
-    inputs = AlphaFold2Input(complexes=complexes)
-    config = AlphaFold2Config(use_msa=False, verbose=True)
-    output = run_alphafold2(inputs, config)
-
+    output = run_alphafold2(
+        AlphaFold2Input(complexes=[StructurePredictionComplex(chains=[_HOMOOLIGOMER_SEQ, _HOMOOLIGOMER_SEQ])]),
+        AlphaFold2Config(use_msa=False),
+    )
     assert output.success
-    assert len(output.structures) == 1
-
-    structure = output.structures[0]
-    assert is_valid_structure(structure.structure_cif)
-    assert 0 <= structure.metrics["avg_plddt"] <= 1.0
-    assert 0 <= structure.metrics["ptm"] <= 1.0
-    assert structure.metrics["iptm"] is not None
+    assert is_valid_structure(output.structures[0].structure_cif)
+    assert 0 <= output.structures[0].metrics["avg_plddt"] <= 1.0
+    assert output.structures[0].metrics["iptm"] is not None

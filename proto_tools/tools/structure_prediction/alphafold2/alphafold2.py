@@ -1,6 +1,4 @@
-"""proto_tools/tools/structure_prediction/alphafold2/alphafold2.py.
-
-Protein structure prediction using AlphaFold2 via ColabDesign.
+"""Protein structure prediction using AlphaFold2 via ColabDesign.
 
 This module provides standardized interfaces for protein structure prediction
 using the original AlphaFold2 model through the ColabDesign JAX wrapper.
@@ -305,6 +303,7 @@ def run_alphafold2(
 
         # Prepare input data for standalone dispatch
         input_data = {
+            "operation": "predict",
             "complex_data": complex_data,
             "num_recycles": config.num_recycles,
             "model_num": config.model_num,

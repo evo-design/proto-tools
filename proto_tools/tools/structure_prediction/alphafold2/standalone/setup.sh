@@ -11,9 +11,14 @@ pip install uv
 proto_install_cuda_toolkit "${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
 proto_install_jax ALPHAFOLD2
 
-echo "Installing ColabDesign and dependencies..."
+echo "Installing default ColabDesign and dependencies..."
 uv pip install "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@gamma"
 uv pip install biopython ipython
+
+echo "Installing Germinal ColabDesign fork (gradient backend with IgLM, alpha/bias, gradient merging)..."
+GERMINAL_DIR="${TOOL_VENV_PATH:-$VIRTUAL_ENV}/data/colabdesign_germinal"
+mkdir -p "$GERMINAL_DIR"
+uv pip install --target "$GERMINAL_DIR" "colabdesign @ git+https://github.com/SantiagoMille/germinal.git#subdirectory=colabdesign"
 
 # Download AF2 parameters (~3.5GB)
 proto_resolve_weights_dir alphafold2
