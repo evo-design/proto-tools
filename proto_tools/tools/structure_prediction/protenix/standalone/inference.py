@@ -357,14 +357,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model(  # type: ignore[return-value]
             input_json_path=input_dict["input_json_path"],
             output_dir=input_dict["output_dir"],
-            device=input_dict.get("device", "cuda"),
-            model_name=input_dict.get("model_name", "protenix_base_default_v1.0.0"),
-            seeds=input_dict.get("seeds", "0"),
-            num_diffusion_samples=input_dict.get("num_diffusion_samples", 5),
-            num_diffusion_steps=input_dict.get("num_diffusion_steps", 200),
-            num_pairformer_cycles=input_dict.get("num_pairformer_cycles", 10),
-            use_msa=input_dict.get("use_msa", True),
-            verbose=input_dict.get("verbose", False),
+            device=input_dict["device"],
+            model_name=input_dict["model_name"],
+            seeds=input_dict["seeds"],
+            num_diffusion_samples=input_dict["num_diffusion_samples"],
+            num_diffusion_steps=input_dict["num_diffusion_steps"],
+            num_pairformer_cycles=input_dict["num_pairformer_cycles"],
+            use_msa=input_dict["use_msa"],
+            verbose=input_dict["verbose"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

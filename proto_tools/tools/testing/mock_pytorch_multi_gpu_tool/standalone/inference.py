@@ -171,11 +171,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    data = input_dict.get("data", [1.0, 2.0, 3.0, 4.0])
-    device = input_dict.get("device", "cuda:0,cuda:1")
-    hidden_size = input_dict.get("hidden_size", 128)
-    memory_mb = input_dict.get("memory_mb", 512)
-    seed = input_dict.get("seed")
+    data = input_dict["data"]
+    device = input_dict["device"]
+    hidden_size = input_dict["hidden_size"]
+    memory_mb = input_dict["memory_mb"]
+    seed = input_dict["seed"]
     set_torch_seed(seed)
 
     if _model is None:

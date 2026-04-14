@@ -296,8 +296,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             batch_data=input_dict["batch_data"],
             residue_idx_offset=input_dict["residue_idx_offset"],
             chain_linker=input_dict["chain_linker"],
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
         return {"results": results}
     raise ValueError(f"Unknown operation: {operation}")

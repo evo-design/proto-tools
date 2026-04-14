@@ -549,7 +549,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     kwargs = dict(input_dict)
     operation = kwargs.pop("operation")
-    model_version = kwargs.pop("model_version", "all_folds")
+    model_version = kwargs.pop("model_version")
     # Tool orchestration metadata (not part of model call signature).
     kwargs.pop("timeout", None)
 

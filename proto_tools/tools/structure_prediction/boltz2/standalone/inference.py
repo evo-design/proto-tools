@@ -201,13 +201,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model(
             input_yaml_path=input_dict["input_yaml_path"],
             output_dir=input_dict["output_dir"],
-            device=input_dict.get("device", "cuda"),
-            recycling_steps=input_dict.get("recycling_steps", 10),
-            sampling_steps=input_dict.get("sampling_steps", 200),
-            diffusion_samples=input_dict.get("diffusion_samples", 25),
-            num_workers=input_dict.get("num_workers", 4),
-            seed=input_dict.get("seed"),
-            verbose=input_dict.get("verbose", False),
+            device=input_dict["device"],
+            recycling_steps=input_dict["recycling_steps"],
+            sampling_steps=input_dict["sampling_steps"],
+            diffusion_samples=input_dict["diffusion_samples"],
+            num_workers=input_dict["num_workers"],
+            seed=input_dict["seed"],
+            verbose=input_dict["verbose"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

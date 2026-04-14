@@ -161,7 +161,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     kwargs = dict(input_dict)
     operation = kwargs.pop("operation")
-    kwargs.pop("device", None)  # ViennaRNA is CPU-only, doesn't use device
+    kwargs.pop("device")  # ViennaRNA is CPU-only, doesn't use device
     if operation == "predict":
         return _model(**kwargs)
     raise ValueError(f"Unknown operation: {operation}")

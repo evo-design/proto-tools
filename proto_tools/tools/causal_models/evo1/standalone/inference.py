@@ -283,7 +283,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = Evo1Model(
             model_name=input_dict["model_name"],
-            device=input_dict.get("device", "cuda"),
+            device=input_dict["device"],
         )
 
     operation = input_dict["operation"]
@@ -291,21 +291,21 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         return _model.sample(
             prompts=input_dict["prompts"],
-            num_tokens=input_dict.get("num_tokens", 100),
-            top_k=input_dict.get("top_k", 4),
-            temperature=input_dict.get("temperature", 1.0),
-            top_p=input_dict.get("top_p", 1.0),
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            verbose=input_dict.get("verbose", False),
-            seed=input_dict.get("seed"),
+            num_tokens=input_dict["num_tokens"],
+            top_k=input_dict["top_k"],
+            temperature=input_dict["temperature"],
+            top_p=input_dict["top_p"],
+            batch_size=input_dict["batch_size"],
+            verbose=input_dict["verbose"],
+            seed=input_dict["seed"],
         )
     if operation == "score":
         result = _model.score(
             sequences=input_dict["sequences"],
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            return_logits=input_dict.get("return_logits", False),
-            verbose=input_dict.get("verbose", False),
-            seed=input_dict.get("seed"),
+            batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
+            verbose=input_dict["verbose"],
+            seed=input_dict["seed"],
         )
         if result["logits"] is not None:
             result["logits"] = [t.tolist() for t in result["logits"]]

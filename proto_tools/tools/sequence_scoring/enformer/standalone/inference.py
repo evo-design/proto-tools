@@ -114,13 +114,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         prediction = _model(
             sequence=input_dict["sequence"],
             output_tracks=input_dict["output_tracks"],
-            species=input_dict.get("species", "human"),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
+            species=input_dict["species"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
         return {
             "prediction": prediction,
-            "applied_species": input_dict.get("species", "human"),
+            "applied_species": input_dict["species"],
         }
     raise ValueError(f"Unknown operation: {operation}")
 

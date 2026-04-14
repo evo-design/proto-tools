@@ -163,9 +163,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     if _model is None:
-        species = input_dict.get("species", "human")
-        replicate = input_dict.get("replicate", "0")
-        use_flash_attn = input_dict.get("use_flash_attn", True)
+        species = input_dict["species"]
+        replicate = input_dict["replicate"]
+        use_flash_attn = input_dict["use_flash_attn"]
 
         # Auto-detect flash-attn availability
         if use_flash_attn:
@@ -186,9 +186,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         prediction = _model(
             sequence=input_dict["sequence"],
             output_tracks=input_dict["output_tracks"],
-            avg_output_tracks=input_dict.get("avg_output_tracks", True),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
+            avg_output_tracks=input_dict["avg_output_tracks"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
         return {
             "prediction": prediction,

@@ -473,29 +473,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation in ("embeddings", "inference"):
         return _model(
             sequences=input_dict["sequences"],
-            batch_size=input_dict.get("batch_size", 128),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            return_logits=input_dict.get("return_logits", False),
+            batch_size=input_dict["batch_size"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
         )
     if operation == "sample":
         return _model.sample(
             sequences=input_dict["sequences"],
-            temperature=input_dict.get("temperature", 1.0),
-            batch_size=input_dict.get("batch_size", 1),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            temperature=input_dict["temperature"],
+            batch_size=input_dict["batch_size"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
     if operation == "score":
         return _model.score(
             sequences=input_dict["sequences"],
-            batch_size=input_dict.get("batch_size", 32),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            batch_size=input_dict["batch_size"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

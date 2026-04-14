@@ -207,17 +207,17 @@ def _predict_structure(
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for ToolInstance one-shot execution."""
     # Configure device before any JAX imports
-    _configure_device(input_dict.get("device", "cuda"))
+    _configure_device(input_dict["device"])
 
     return _predict_structure(
         complex_data=input_dict["complex_data"],
-        num_recycles=input_dict.get("num_recycles", 3),
-        model_num=input_dict.get("model_num", 1),
-        num_ensemble_models=input_dict.get("num_ensemble_models", 1),
-        seed=input_dict.get("seed"),
+        num_recycles=input_dict["num_recycles"],
+        model_num=input_dict["model_num"],
+        num_ensemble_models=input_dict["num_ensemble_models"],
+        seed=input_dict["seed"],
         msa_a3m_content=input_dict.get("msa_a3m_content"),
-        device=input_dict.get("device", "cuda"),
-        verbose=input_dict.get("verbose", False),
+        device=input_dict["device"],
+        verbose=input_dict["verbose"],
     )
 
 

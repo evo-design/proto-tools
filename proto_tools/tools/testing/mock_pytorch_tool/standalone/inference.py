@@ -99,11 +99,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
 
     # Extract parameters
-    data_items = input_dict.get("data_items", [[1.0, 2.0, 3.0, 4.0]])
-    device = input_dict.get("device", "cuda")
-    hidden_size = input_dict.get("hidden_size", 128)
-    memory_mb = input_dict.get("memory_mb", 512)
-    seed = input_dict.get("seed")
+    data_items = input_dict["data_items"]
+    device = input_dict["device"]
+    hidden_size = input_dict["hidden_size"]
+    memory_mb = input_dict["memory_mb"]
+    seed = input_dict["seed"]
     set_torch_seed(seed)
 
     # Initialize model if needed

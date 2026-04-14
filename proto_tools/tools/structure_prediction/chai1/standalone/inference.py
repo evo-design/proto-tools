@@ -150,7 +150,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = Chai1Model()
 
-    seed = input_dict.get("seed")
+    seed = input_dict["seed"]
     set_torch_seed(seed)
 
     if seed is not None:
@@ -173,15 +173,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model(
             fasta_file=Path(input_dict["fasta_file"]),
             output_dir=Path(input_dict["output_dir"]),
-            use_esm_embeddings=input_dict.get("use_esm_embeddings", True),
+            use_esm_embeddings=input_dict["use_esm_embeddings"],
             msa_directory=(Path(input_dict["msa_directory"]) if input_dict.get("msa_directory") else None),
-            num_trunk_recycles=input_dict.get("num_trunk_recycles", 3),
-            num_diffn_timesteps=input_dict.get("num_diffn_timesteps", 200),
-            num_diffn_samples=input_dict.get("num_diffn_samples", 1),
-            num_trunk_samples=input_dict.get("num_trunk_samples", 1),
+            num_trunk_recycles=input_dict["num_trunk_recycles"],
+            num_diffn_timesteps=input_dict["num_diffn_timesteps"],
+            num_diffn_samples=input_dict["num_diffn_samples"],
+            num_trunk_samples=input_dict["num_trunk_samples"],
             seed=sampling_seed,
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

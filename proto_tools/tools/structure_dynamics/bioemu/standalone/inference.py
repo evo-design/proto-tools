@@ -154,8 +154,9 @@ class BioEmuModel:
 def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     sequences = input_data["sequences"]
-    output_dir = input_data.get("output_dir")
-    seed = input_data.get("seed")
+    output_dir = input_data["output_dir"]
+    seed = input_data["seed"]
+    verbose = input_data["verbose"]
 
     model = BioEmuModel()
     results: list[dict[str, Any]] = []
@@ -171,18 +172,18 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
 
         result = model(
             sequence=sequence,
-            num_samples=input_data.get("num_samples", 500),
-            model_name=input_data.get("model_name", "bioemu-v1.1"),
-            filter_samples=input_data.get("filter_samples", True),
-            batch_size=input_data.get("batch_size", 10),
-            device=input_data.get("device", "cuda"),
+            num_samples=input_data["num_samples"],
+            model_name=input_data["model_name"],
+            filter_samples=input_data["filter_samples"],
+            batch_size=input_data["batch_size"],
+            device=input_data["device"],
             output_dir=per_sequence_output_dir,
             seed=per_seq_seed,
-            verbose=input_data.get("verbose", False),
+            verbose=verbose,
         )
         results.append(result)
 
-    model.unload(verbose=input_data.get("verbose", False))
+    model.unload(verbose=verbose)
     return {"results": results}
 
 

@@ -295,17 +295,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     kwargs = dict(input_dict)
     kwargs.pop("operation")
-    device = kwargs.pop("device", "cuda")  # Extract device for subprocess environment
+    device = kwargs.pop("device")
     rfdiffusion3_input_json = kwargs.pop("input_json_path")
     rfdiffusion3_output_dir = kwargs.pop("output_dir")
-    seed = kwargs.pop("seed", None)
+    seed = kwargs.pop("seed")
 
     return _model(
         input_json_path=rfdiffusion3_input_json,
         output_dir=rfdiffusion3_output_dir,
         device=device,
         seed=seed,
-        verbose=kwargs.pop("verbose", False),
+        verbose=kwargs.pop("verbose"),
         **kwargs,
     )
 

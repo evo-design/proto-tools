@@ -389,28 +389,27 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         return _model.sample(
             prompts=input_dict["prompts"],
-            temperature=input_dict.get("temperature", 0.2),
-            top_p=input_dict.get("top_p", 0.95),
-            top_k=input_dict.get("top_k", 0),
-            max_length=input_dict.get("max_length", 256),
-            num_return_sequences=input_dict.get("num_return_sequences", 1),
-            truncate_at_stop=input_dict.get("truncate_at_stop", True),
-            strip_special_tokens=input_dict.get("strip_special_tokens", True),
-            prepend_prompt=input_dict.get("prepend_prompt", True),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            temperature=input_dict["temperature"],
+            top_p=input_dict["top_p"],
+            top_k=input_dict["top_k"],
+            max_length=input_dict["max_length"],
+            truncate_at_stop=input_dict["truncate_at_stop"],
+            strip_special_tokens=input_dict["strip_special_tokens"],
+            prepend_prompt=input_dict["prepend_prompt"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
     if operation == "score":
         return _model.score(
             sequences=input_dict["sequences"],
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

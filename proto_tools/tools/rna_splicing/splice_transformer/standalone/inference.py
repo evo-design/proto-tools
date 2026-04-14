@@ -220,7 +220,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
     if _model is None:
         _model = SpliceTransformerModel(
-            context_length=input_dict.get("context_length", 4000),
+            context_length=input_dict["context_length"],
         )
 
     operation = input_dict["operation"]
@@ -229,8 +229,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             target_seqs=input_dict["target_seqs"],
             left_contexts=input_dict["left_contexts"],
             right_contexts=input_dict["right_contexts"],
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
         )
         return {"prediction": prediction}
     raise ValueError(f"Unknown operation: {operation}")

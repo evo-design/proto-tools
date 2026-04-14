@@ -455,18 +455,18 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sasa":
         return _scorer.compute_sasa(
             pdb_contents,
-            probe_radius=input_dict.get("probe_radius", 1.4),
+            probe_radius=input_dict["probe_radius"],
             chain_ids_list=chain_ids_list,
         )
     if operation == "energy":
         return _scorer.compute_energy(
             pdb_contents,
-            scorefxn_name=input_dict.get("scorefxn", "ref2015"),
-            relax=input_dict.get("relax", True),
-            relax_cycles=input_dict.get("relax_cycles", 5),
-            constrain_to_start=input_dict.get("constrain_to_start", True),
+            scorefxn_name=input_dict["scorefxn"],
+            relax=input_dict["relax"],
+            relax_cycles=input_dict["relax_cycles"],
+            constrain_to_start=input_dict["constrain_to_start"],
             chain_ids_list=chain_ids_list,
-            seed=input_dict.get("seed"),
+            seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

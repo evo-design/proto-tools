@@ -498,21 +498,21 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         result = _model.sample(
             prompts=input_dict["prompts"],
-            top_k=input_dict.get("top_k", 4),
-            top_p=input_dict.get("top_p", 1.0),
-            temperature=input_dict.get("temperature", 1.0),
-            device=input_dict.get("device", "cuda"),
-            num_tokens=input_dict.get("num_tokens", 32),
-            cached_generation=input_dict.get("cached_generation", True),
+            top_k=input_dict["top_k"],
+            top_p=input_dict["top_p"],
+            temperature=input_dict["temperature"],
+            device=input_dict["device"],
+            num_tokens=input_dict["num_tokens"],
+            cached_generation=input_dict["cached_generation"],
             force_prompt_threshold=input_dict.get("force_prompt_threshold"),
             max_seqlen=input_dict.get("max_seqlen"),
-            print_generation=input_dict.get("print_generation", True),
-            verbose=input_dict.get("verbose", False),
-            stop_at_eos=input_dict.get("stop_at_eos", True),
+            print_generation=input_dict["print_generation"],
+            verbose=input_dict["verbose"],
+            stop_at_eos=input_dict["stop_at_eos"],
             old_kv_cache=None,  # KV caching not supported in venv mode
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
         # KV caches are vortex GPU objects, not JSON-serializable
         result["kv_caches"] = None
@@ -520,11 +520,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "score":
         return _model.score(
             sequences=input_dict["sequences"],
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size"),  # type: ignore[arg-type]
-            return_logits=input_dict.get("return_logits", False),
-            seed=input_dict.get("seed"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            batch_size=input_dict["batch_size"],
+            return_logits=input_dict["return_logits"],
+            seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

@@ -227,24 +227,24 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if operation == "sample":
             return _model.sample(
                 pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict.get("chain_ids", []),
-                batch_size=input_dict.get("batch_size", 1),
-                temperature=input_dict.get("temperature", DEFAULT_TEMPERATURE),
+                chain_ids=input_dict["chain_ids"],
+                batch_size=input_dict["batch_size"],
+                temperature=input_dict["temperature"],
                 fixed_positions=input_dict.get("fixed_positions"),
                 excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                seed=input_dict.get("seed"),
-                device=input_dict.get("device", "cuda"),
-                verbose=input_dict.get("verbose", False),
+                seed=input_dict["seed"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
             )
         if operation == "score":
             return _model.score(
                 pdb_structure=pdb_structure,  # type: ignore[arg-type]
-                chain_ids=input_dict.get("chain_ids", []),
-                sequence=input_dict.get("sequence"),  # type: ignore[arg-type]
+                chain_ids=input_dict["chain_ids"],
+                sequence=input_dict["sequence"],
                 fixed_positions=input_dict.get("fixed_positions"),
-                seed=input_dict.get("seed"),
-                device=input_dict.get("device", "cuda"),
-                verbose=input_dict.get("verbose", False),
+                seed=input_dict["seed"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
             )
         raise ValueError(f"Unknown operation: {operation}")
 

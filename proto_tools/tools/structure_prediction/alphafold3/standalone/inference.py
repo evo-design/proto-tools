@@ -265,18 +265,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     # Create model on first call and set paths
     if _model is None:
         _model = AlphaFold3Model()
-        _model.repo_path = input_dict.get("repo_path")
-        _model.sif_path = input_dict.get("sif_path")
-        _model.model_dir = input_dict.get("model_dir")
-        _model.db_dir = input_dict.get("db_dir")
+        _model.repo_path = input_dict["repo_path"]
+        _model.sif_path = input_dict["sif_path"]
+        _model.model_dir = input_dict["model_dir"]
+        _model.db_dir = input_dict["db_dir"]
 
     # Delegate to model (MSAs already generated in main process)
-    # device must be provided by DeviceManager (no default)
     return _model(
         input_json_path=input_dict["input_json_path"],
         output_dir=input_dict["output_dir"],
         device=input_dict["device"],
-        verbose=input_dict.get("verbose", False),
+        verbose=input_dict["verbose"],
     )
 
 

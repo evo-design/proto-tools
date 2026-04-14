@@ -87,9 +87,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = MockCLIMultiGPUToolModel()
 
-    data = input_dict.get("data", [1.0, 2.0, 3.0, 4.0])
-    device = input_dict.get("device", "cuda:0,cuda:1")
-    scale_factor = input_dict.get("scale_factor", 2.0)
+    data = input_dict["data"]
+    device = input_dict["device"]
+    scale_factor = input_dict["scale_factor"]
 
     return _model(data=data, scale_factor=scale_factor, device=device)
 

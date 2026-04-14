@@ -412,24 +412,24 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "sample":
         return _model.sample(
             prompts=input_dict["prompts"],
-            temperature=input_dict.get("temperature", 0.2),
-            top_p=input_dict.get("top_p", 0.95),
-            max_new_tokens=input_dict.get("max_new_tokens", 256),
-            min_new_tokens=input_dict.get("min_new_tokens", 1),
-            num_sequences=input_dict.get("num_sequences", 1),
-            batch_size=input_dict.get("batch_size", 1),
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            seed=input_dict.get("seed"),
+            temperature=input_dict["temperature"],
+            top_p=input_dict["top_p"],
+            max_new_tokens=input_dict["max_new_tokens"],
+            min_new_tokens=input_dict["min_new_tokens"],
+            num_sequences=input_dict["num_sequences"],
+            batch_size=input_dict["batch_size"],
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            seed=input_dict["seed"],
         )
     if operation == "score":
         return _model.score(
             sequences=input_dict["sequences"],
-            device=input_dict.get("device", "cuda"),
-            verbose=input_dict.get("verbose", False),
-            batch_size=input_dict.get("batch_size", 1),
-            reduction=input_dict.get("reduction", "mean"),
-            seed=input_dict.get("seed"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+            batch_size=input_dict["batch_size"],
+            reduction=input_dict["reduction"],
+            seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 
