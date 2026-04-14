@@ -1,7 +1,5 @@
 """Germinal-specific AbLang relaxed-sequence gradient tool."""
 
-from __future__ import annotations
-
 import logging
 from typing import Any
 
@@ -62,13 +60,6 @@ class AbLangGerminalGradientConfig(BaseConfig):
         description="Number of light-chain residues. Required when scFv mode is enabled.",
         advanced=True,
     )
-    seed: int | None = ConfigField(
-        title="Seed",
-        default=0,
-        description="PyTorch random seed for Germinal adapter initialization.",
-        advanced=True,
-        include_in_key=False,
-    )
     device: str = ConfigField(
         title="Device",
         default="cuda",
@@ -97,7 +88,14 @@ class AbLangGerminalGradientConfig(BaseConfig):
 
 def example_input() -> AbLangGerminalGradientInput:
     """Minimal valid input for testing and examples."""
-    return AbLangGerminalGradientInput(logits=[[0.0] * len(PROTEIN_AMINO_ACIDS)] * 4)
+    aa_index = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
+    n_aas = len(PROTEIN_AMINO_ACIDS)
+    logits = []
+    for residue in "EVQLVESG":
+        row = [0.0] * n_aas
+        row[aa_index[residue]] = 2.0
+        logits.append(row)
+    return AbLangGerminalGradientInput(logits=logits)
 
 
 @tool(
