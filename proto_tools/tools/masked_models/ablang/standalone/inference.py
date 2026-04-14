@@ -334,7 +334,7 @@ class AbLangModel:
         return {"sequences": restored_sequences}
 
     # ========================================================================
-    # Germinal Gradient
+    # Gradient
     # ========================================================================
 
     def _canonical_amino_acid_to_vocab_matrix(self) -> Any:
@@ -354,78 +354,22 @@ class AbLangModel:
             mapping_matrix[idx, self._ablang_vocab[amino_acid]] = 1.0
         return mapping_matrix
 
-    def _one_hot_from_logits(
-        self,
-        relaxed_logits: Any,
-        *,
-        temperature: float,
-    ) -> tuple[Any, Any]:
-        """Build Germinal's straight-through AbLang token relaxation."""
-        import torch.nn.functional as F
-
-        probabilities = F.softmax(relaxed_logits / temperature, dim=-1)
-        mapped_probabilities = probabilities @ self._canonical_amino_acid_to_vocab_matrix()
-
-        vocab_size = mapped_probabilities.size(-1)
-        token_ids = mapped_probabilities.argmax(dim=-1)
-        hard = F.one_hot(token_ids, num_classes=vocab_size).float()
-        one_hot = hard + (mapped_probabilities - mapped_probabilities.detach())
-        return one_hot, token_ids
-
-    def _insert_chain_separator(
-        self,
-        embeddings: Any,
-        token_ids: Any,
-        *,
-        insert_position: int,
-    ) -> tuple[Any, Any]:
-        """Insert the paired-chain separator exactly as Germinal does."""
-        import torch
-
-        if self._ablang_vocab is None:
-            raise RuntimeError("AbLang vocabulary not initialized. Call load() first.")
-
-        separator_embed = self.model.AbLang.get_aa_embeddings().weight[self._ablang_vocab["|"]]
-        updated_embeddings = torch.cat(
-            (
-                embeddings[:insert_position],
-                separator_embed.unsqueeze(0),
-                embeddings[insert_position:],
-            ),
-            dim=0,
-        )
-        updated_token_ids = torch.cat(
-            (
-                token_ids[:insert_position],
-                torch.tensor([self._ablang_vocab["|"]], device=self.device, dtype=torch.long),
-                token_ids[insert_position:],
-            ),
-            dim=0,
-        )
-        return updated_embeddings, updated_token_ids
-
-    def compute_germinal_gradient(
+    def compute_gradient(
         self,
         logits_list: list[list[float]],
-        temperature: float,
         *,
-        use_single_chain_variable_fragment: bool = False,
-        heavy_chain_first: bool = True,
-        heavy_chain_length: int | None = None,
-        light_chain_length: int | None = None,
+        chain_break_position: int | None = None,
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Differentiate Germinal's existing AbLang objective with respect to relaxed logits.
+        """Compute shifted cross-entropy gradient with respect to a sequence distribution.
 
-        Shape notation used in inline comments:
-            L   = input sequence length (full logits rows)
-            La  = active residues (L minus linker, or L if not scFv)
-            V   = AbLang AA vocab size (21 for ablang2, 20 for ablang1 after :-2 trim)
-            D   = embedding dimension
-            Ls  = sequence length sent to model (La for VHH, La+1 for scFv separator)
-            Vm  = full model output vocab size
+        Shape notation:
+            L  = input sequence length
+            V  = AbLang vocab size (21 for ablang2, 19 for ablang1 after :-2 trim)
+            D  = embedding dimension
+            Vm = model output vocab size
         """
         import torch
         import torch.nn.functional as F
@@ -434,94 +378,70 @@ class AbLangModel:
         if seed is not None:
             torch.manual_seed(seed)
 
-        logits = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=True)  # (L, 20)
-        sequence_length = int(logits.shape[0])
-        active_logits = logits  # (La, 20) — same as logits unless scFv strips the linker
-        first_chain_length = 0
-        second_chain_length = 0
-        linker_length = 0
+        seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=True)  # (L, 20)
+        sequence_length = int(seq_dist.shape[0])
 
-        if use_single_chain_variable_fragment:
-            if heavy_chain_length is None or light_chain_length is None:
-                raise ValueError(
-                    "heavy_chain_length and light_chain_length are required when "
-                    "use_single_chain_variable_fragment=True"
-                )
-            if heavy_chain_length + light_chain_length > sequence_length:
-                raise ValueError(
-                    "heavy_chain_length + light_chain_length cannot exceed the full relaxed sequence length"
-                )
-            linker_length = sequence_length - heavy_chain_length - light_chain_length
-            first_chain_length, second_chain_length = (
-                (heavy_chain_length, light_chain_length)
-                if heavy_chain_first
-                else (light_chain_length, heavy_chain_length)
-            )
-            active_logits = torch.cat([logits[:first_chain_length], logits[-second_chain_length:]], dim=0)  # (La, 20)
-
-        one_hot, residue_token_ids = self._one_hot_from_logits(  # (La, V), (La,)
-            active_logits,
-            temperature=temperature,
-        )
+        mapped = seq_dist @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
+        residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,) — labels only, no gradient
 
         if self._is_ablang1:
             embed_layer = self.model.AbRep.AbEmbeddings.AAEmbeddings
-            residue_embeddings = one_hot[:, :-2] @ embed_layer.weight  # (La, V-2) @ (V-2, D) -> (La, D)
+            residue_embeddings = mapped[:, :-2] @ embed_layer.weight  # (L, V-2) @ (V-2, D) -> (L, D)
         else:
             embed_layer = self.model.AbLang.get_aa_embeddings()
-            residue_embeddings = one_hot @ embed_layer.weight  # (La, V) @ (V, D) -> (La, D)
+            residue_embeddings = mapped @ embed_layer.weight  # (L, V) @ (V, D) -> (L, D)
 
-        residue_token_ids = residue_token_ids.detach()  # (La,)
-        if use_single_chain_variable_fragment:
-            residue_embeddings, residue_token_ids = self._insert_chain_separator(  # (La+1, D), (La+1,)
-                residue_embeddings,
-                residue_token_ids,
-                insert_position=first_chain_length,
-            )
+        # For paired sequences, splice the "|" chain separator between the two chains
+        # so AbLang sees the same token layout it was trained on (e.g. "VH|VL").
+        if chain_break_position is not None:
+            assert self._ablang_vocab is not None
+            sep_id = self._ablang_vocab["|"]
+            sep_embed = embed_layer.weight[sep_id].unsqueeze(0)  # (1, D)
+            residue_embeddings = torch.cat(
+                (residue_embeddings[:chain_break_position], sep_embed, residue_embeddings[chain_break_position:]),
+                dim=0,
+            )  # (L+1, D)
+            residue_token_ids = torch.cat(
+                (
+                    residue_token_ids[:chain_break_position],
+                    torch.tensor([sep_id], device=self.device, dtype=torch.long),
+                    residue_token_ids[chain_break_position:],
+                ),
+                dim=0,
+            )  # (L+1,)
 
-        token_ids = residue_token_ids.unsqueeze(0).to(self.device)  # (1, Ls)
-        input_embeddings = residue_embeddings.unsqueeze(0)  # (1, Ls, D)
+        token_ids = residue_token_ids.unsqueeze(0).to(self.device)  # (1, L + 1)
+        input_embeddings = residue_embeddings.unsqueeze(0)  # (1, L + 1, D)
 
         def _embedding_hook(_module: Any, _input: Any, _output: Any) -> Any:
             return input_embeddings
 
         hook_handle = embed_layer.register_forward_hook(_embedding_hook)
         try:
-            logits_out = self.model.AbLang(token_ids)  # (1, Ls, Vm)
+            logits_out = self.model.AbLang(token_ids)  # (1, L + 1, Vm)
         finally:
             hook_handle.remove()
 
-        shift_logits = logits_out[:, :-1, :]  # (1, Ls-1, Vm)
-        shift_labels = token_ids[:, 1:]  # (1, Ls-1)
+        shift_logits = logits_out[:, :-1, :]
+        shift_labels = token_ids[:, 1:]
         position_losses = F.cross_entropy(
             shift_logits.reshape(-1, shift_logits.size(-1)),
             shift_labels.reshape(-1),
             reduction="none",
-        ).reshape(shift_labels.shape)  # (1, Ls-1)
-        position_losses = position_losses[:, 1:-1]  # (1, Ls-3) — strip boundary tokens
+        ).reshape(shift_labels.shape)
+        position_losses = position_losses[:, 1:-1]  # strip boundary tokens
         loss = position_losses.mean()
-        (gradient,) = torch.autograd.grad(loss, active_logits)  # (La, 20)
-
-        full_gradient = gradient  # (La, 20) — promoted to (L, 20) below if scFv pads the linker
-        if use_single_chain_variable_fragment:
-            zeros = torch.zeros((linker_length, logits.shape[1]), device=self.device, dtype=gradient.dtype)
-            full_gradient = torch.cat(
-                [gradient[:first_chain_length], zeros, gradient[-second_chain_length:]],
-                dim=0,
-            )  # (L, 20)
+        (gradient,) = torch.autograd.grad(loss, seq_dist)  # (L, 20)
 
         loss_value = loss.item()
         return {
-            "gradient": full_gradient.detach().cpu().tolist(),
+            "gradient": gradient.detach().cpu().tolist(),
             "loss": loss_value,
             "metrics": {
                 "log_likelihood": -loss_value,
                 "sequence_length": sequence_length,
-                "effective_sequence_length": int(active_logits.shape[0]),
-                "linker_length": linker_length,
-                "use_single_chain_variable_fragment": use_single_chain_variable_fragment,
                 "model_choice": self.model_choice,
-                "objective": "germinal_shifted_cross_entropy",
+                "objective": "shifted_cross_entropy",
             },
             "vocab": list(STANDARD_AMINO_ACIDS),
         }
@@ -542,12 +462,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
     operation = input_dict["operation"]
-    if operation == "compute_germinal_gradient":
-        # Matches Germinal's _init_model(): VHH → ablang1-heavy, scFv → ablang2-paired.
-        # ablang1-light is unused — Germinal has no single-light-chain design path.
-        model_choice = "ablang2-paired" if input_dict["use_single_chain_variable_fragment"] else "ablang1-heavy"
-    else:
-        model_choice = input_dict["model_choice"]
+    model_choice = input_dict["model_choice"]
     if _model is None or _model.model_choice != model_choice:
         if _model is not None and _model._loaded:
             _model.unload()
@@ -575,14 +490,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )
-    if operation == "compute_germinal_gradient":
-        return _model.compute_germinal_gradient(
+    if operation == "compute_gradient":
+        return _model.compute_gradient(
             logits_list=input_dict["logits"],
-            temperature=input_dict["temperature"],
-            use_single_chain_variable_fragment=input_dict["use_single_chain_variable_fragment"],
-            heavy_chain_first=input_dict["heavy_chain_first"],
-            heavy_chain_length=input_dict.get("heavy_chain_length"),
-            light_chain_length=input_dict.get("light_chain_length"),
+            chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
