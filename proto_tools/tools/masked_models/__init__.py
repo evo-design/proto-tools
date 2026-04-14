@@ -4,9 +4,9 @@ from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsConfig,
     AbLangEmbeddingsInput,
     AbLangEmbeddingsOutput,
-    AbLangGerminalGradientConfig,
-    AbLangGerminalGradientInput,
-    AbLangGerminalGradientOutput,
+    AbLangGradientConfig,
+    AbLangGradientInput,
+    AbLangGradientOutput,
     AbLangSampleConfig,
     AbLangSampleInput,
     AbLangSampleOutput,
@@ -14,7 +14,7 @@ from proto_tools.tools.masked_models.ablang import (
     AbLangScoringInput,
     AbLangScoringOutput,
     run_ablang_embeddings,
-    run_ablang_germinal_gradient,
+    run_ablang_gradient,
     run_ablang_sample,
     run_ablang_score,
 )
@@ -61,11 +61,11 @@ __all__ = [
     "AbLangEmbeddingsInput",
     "AbLangEmbeddingsOutput",
     "run_ablang_embeddings",
-    # AbLang - Germinal Gradient
-    "AbLangGerminalGradientConfig",
-    "AbLangGerminalGradientInput",
-    "AbLangGerminalGradientOutput",
-    "run_ablang_germinal_gradient",
+    # AbLang - Gradient
+    "AbLangGradientConfig",
+    "AbLangGradientInput",
+    "AbLangGradientOutput",
+    "run_ablang_gradient",
     # AbLang - Sampling
     "AbLangSampleConfig",
     "AbLangSampleInput",

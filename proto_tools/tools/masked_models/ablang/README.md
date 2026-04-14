@@ -5,7 +5,7 @@
 ## Overview
 AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on input format.
 
-This package also includes `ablang-germinal-gradient`, a Germinal-specific relaxed-sequence gradient backend that mirrors Germinal's existing `CustomAbLang` adapter. It is not a generic AbLang naturalness objective: it uses Germinal's shifted cross-entropy objective, Germinal's scFv chain handling, and an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into Germinal's AbLang order `ARNDCQEGHILKMFPSTWYV`.
+This package also includes `ablang-gradient`, a relaxed-sequence gradient tool that computes a shifted cross-entropy objective over relaxed antibody logits. It supports all three model variants and uses an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into AbLang's token vocabulary order `ARNDCQEGHILKMFPSTWYV`.
 
 ## Background
 
@@ -24,7 +24,7 @@ Heavy and light chains co-evolve to form functional antibodies. The paired model
 | Tool | Description | Output |
 |------|-------------|--------|
 | `ablang-embedding` | Extract antibody embeddings | Embeddings, attention masks |
-| `ablang-germinal-gradient` | Germinal-specific AbLang relaxed-sequence gradient | Gradient, loss, metrics, vocab |
+| `ablang-gradient` | AbLang relaxed-sequence gradient | Gradient, loss, metrics, vocab |
 | `ablang-sample` | Restore masked (`_`) positions | Completed sequences |
 | `ablang-score` | Score sequences via pseudo-log-likelihood | Per-sequence metrics |
 
@@ -81,7 +81,7 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 |-----------|------|-------------|
 | `sequences` | `list[str]` | Antibody sequences to score |
 
-### Germinal Gradient Tool
+### Gradient Tool
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -115,15 +115,13 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 | `batch_size` | `int` | `1` | Sequences per forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
-### Germinal Gradient Tool (`AbLangGerminalGradientConfig`)
+### Gradient Tool (`AbLangGradientConfig`)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `use_single_chain_variable_fragment` | `bool` | `False` | Use Germinal's paired single-chain variable fragment path instead of the single-domain heavy-chain antibody path |
-| `heavy_chain_first` | `bool` | `True` | Whether the paired layout is heavy chain, then linker, then light chain |
-| `heavy_chain_length` | `int \| null` | `null` | Number of heavy-chain residues in the full relaxed sequence; required when paired mode is enabled |
-| `light_chain_length` | `int \| null` | `null` | Number of light-chain residues in the full relaxed sequence; required when paired mode is enabled |
-| `seed` | `int \| null` | `0` | Optional PyTorch random seed used to mirror Germinal's adapter initialization |
+| `model_choice` | `str` | `"ablang1-heavy"` | AbLang model variant: `"ablang1-heavy"`, `"ablang1-light"`, or `"ablang2-paired"` |
+| `chain_break_position` | `int \| null` | `null` | Number of residues in the first chain (position at which to insert the chain separator). Required when `model_choice="ablang2-paired"` |
+| `seed` | `int \| null` | `0` | Optional PyTorch random seed for reproducibility |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
 ## Output Specification
@@ -157,13 +155,13 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 |-------|------|-------------|
 | `pseudo_log_likelihood`, `confidence` | `float` | Scoring metrics (attribute or mapping access: `score.pseudo_log_likelihood` or `score["pseudo_log_likelihood"]`) |
 
-### AbLangGerminalGradientOutput
+### AbLangGradientOutput
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `gradient` | `list[list[float]]` | Gradient matrix with the same shape as the input logits |
-| `loss` | `float` | Germinal's shifted cross-entropy loss |
-| `metrics` | `dict[str, Any]` | Auxiliary metrics such as `log_likelihood`, `linker_length`, `model_choice`, and `objective` |
+| `loss` | `float` | Shifted cross-entropy loss |
+| `metrics` | `dict[str, Any]` | Auxiliary metrics: `log_likelihood`, `sequence_length`, `model_choice`, and `objective` |
 | `vocab` | `list[str]` | Amino-acid column order for both the input logits and the returned gradient; always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
 
 ## Interpreting Results
@@ -279,13 +277,13 @@ print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 
 2. **Light chains require explicit selection**: Auto-routing cannot distinguish heavy from light chains, so it defaults to heavy. Set `model_choice="ablang1-light"` when working with VL/VK sequences.
 
-**Germinal gradient backend:**
+**Gradient tool:**
 
-1. **Germinal-only semantics**: `ablang-germinal-gradient` mirrors Germinal's upstream `CustomAbLang` adapter rather than a generic AbLang objective.
+1. **Vocab order**: The gradient tool accepts and returns logits in canonical protein order `ACDEFGHIKLMNPQRSTVWY`. Internally it maps to AbLang's token vocabulary for the forward pass.
 
-2. **Vocab order**: The gradient tool accepts and returns logits in canonical protein order `ACDEFGHIKLMNPQRSTVWY`. Internally it maps to AbLang's token vocabulary for the forward pass.
+2. **Paired sequences**: For paired sequences (heavy + light), set `model_choice="ablang2-paired"` and provide `chain_break_position` to indicate where the first chain ends and the second begins.
 
-3. **Single-chain variable fragment linker behavior**: When `use_single_chain_variable_fragment=True`, the gradient excludes linker residues from the AbLang objective and returns exact zero rows for linker positions.
+3. **Model variant selection**: Use `ablang1-heavy` for heavy-chain-only sequences, `ablang1-light` for light-chain-only sequences, and `ablang2-paired` for paired heavy+light sequences.
 
 **Chain type matching:**
 
