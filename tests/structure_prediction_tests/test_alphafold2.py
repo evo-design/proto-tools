@@ -79,18 +79,18 @@ def test_gradient_input_requires_20_columns():
 
 def test_gradient_config_rejects_bad_loss_weights():
     with pytest.raises(ValidationError, match="non-negative"):
-        AlphaFold2GradientConfig(target_pdb_path="/t.pdb", binder_chain="B", loss_weights={"plddt": -0.1})
+        AlphaFold2GradientConfig(target_pdb="/t.pdb", binder_chain="B", loss_weights={"plddt": -0.1})
     with pytest.raises(ValidationError, match="Unknown loss_weights"):
-        AlphaFold2GradientConfig(target_pdb_path="/t.pdb", binder_chain="B", loss_weights={"pldd": 1.0})
+        AlphaFold2GradientConfig(target_pdb="/t.pdb", binder_chain="B", loss_weights={"pldd": 1.0})
 
 
 def test_gradient_requires_target_pdb_at_call_time():
     result = run_alphafold2_gradient(
         AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0),
-        AlphaFold2GradientConfig(target_pdb_path=None, binder_chain="B"),
+        AlphaFold2GradientConfig(target_pdb=None, binder_chain="B"),
     )
     assert not result.success
-    assert any("target_pdb_path is required" in e for e in result.errors)
+    assert any("target_pdb is required" in e for e in result.errors)
 
 
 # -- Dispatch contracts --------------------------------------------------------
@@ -110,7 +110,7 @@ def test_gradient_dispatch_contract(monkeypatch):
 
     inputs = AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.8)
     config = AlphaFold2GradientConfig(
-        target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
         target_chain="A",
         binder_chain="B",
         design_positions=[0, 1],
@@ -124,7 +124,7 @@ def test_gradient_dispatch_contract(monkeypatch):
     payload = captured["payload"]
     assert payload["operation"] == "compute_gradient"
     assert payload["temperature"] == 0.8
-    assert payload["target_pdb_path"] == str(_GRADIENT_EXAMPLE_PDB_PATH)
+    assert payload["target_pdb"] == str(_GRADIENT_EXAMPLE_PDB_PATH)
     assert payload["backend"] == "base"
     assert payload["soft"] == 1.0
     assert result.gradient == [[0.1] * 20] * 2
@@ -158,7 +158,7 @@ def test_gradient_end_to_end():
     result = run_alphafold2_gradient(
         AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0),
         AlphaFold2GradientConfig(
-            target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
             target_chain="A",
             binder_chain="B",
             num_recycles=1,
@@ -179,7 +179,7 @@ def test_gradient_end_to_end():
 @pytest.mark.uses_gpu
 def test_gradient_sensitivity():
     config = AlphaFold2GradientConfig(
-        target_pdb_path=str(_GRADIENT_EXAMPLE_PDB_PATH),
+        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
         target_chain="A",
         binder_chain="B",
         num_recycles=1,
@@ -195,7 +195,7 @@ def test_gradient_sensitivity():
 def test_gradient_loss_weights_matter():
     logits = [[0.1 * i + 0.05 * j for j in range(20)] for i in range(5)]
     base = {
-        "target_pdb_path": str(_GRADIENT_EXAMPLE_PDB_PATH),
+        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
         "target_chain": "A",
         "binder_chain": "B",
         "num_recycles": 1,

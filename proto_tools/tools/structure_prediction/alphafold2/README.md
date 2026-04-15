@@ -41,7 +41,7 @@ The model was trained on experimentally determined structures from the [Protein 
 3. **Output processing:** Raw predictions are converted to Structure objects with PDB coordinates, confidence metrics (pLDDT, pTM, ipTM, PAE), and metadata.
 
 **Gradient computation (`alphafold2-gradient`):**
-The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb_path`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, IgLM support, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
+The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, IgLM support, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
 
 **Key assumptions:**
 - Input sequences are valid protein sequences (standard amino acids plus 'X' for unknown)
@@ -98,7 +98,7 @@ The gradient tool enables differentiable binder design by computing gradients of
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target_pdb_path` | `str` | *required* | PDB containing the frozen target and binder template complex. |
+| `target_pdb` | `str` | *required* | PDB containing the frozen target and binder template complex. |
 | `target_chain` | `str` | `"A"` | Target chain ID(s) in the PDB. |
 | `target_hotspot` | `str \| None` | `None` | Optional hotspot residue specification for interface contacts. |
 | `binder_chain` | `str` | `"H"` | Binder-template chain ID. |
@@ -292,7 +292,7 @@ inputs = AlphaFold2GradientInput(
     temperature=1.0,
 )
 config = AlphaFold2GradientConfig(
-    target_pdb_path=str(Path("target_complex.pdb").resolve()),
+    target_pdb=str(Path("target_complex.pdb").resolve()),
     target_chain="A",
     binder_chain="B",
     num_recycles=3,

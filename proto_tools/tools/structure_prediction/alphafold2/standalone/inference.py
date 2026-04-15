@@ -522,7 +522,7 @@ class AlphaFold2Model:
         logits: list[list[float]],
         temperature: float = 1.0,
         soft: float = 1.0,
-        target_pdb_path: str,
+        target_pdb: str,
         target_chain: str = "A",
         target_hotspot: str | None = None,
         binder_chain: str,
@@ -551,8 +551,8 @@ class AlphaFold2Model:
         - Extension losses (rg, i_ptm, helix, beta_strand, NC) are registered
           as callbacks based on ``loss_weights``.
         """
-        if target_pdb_path is None:
-            raise ValueError("target_pdb_path is required for binder gradient computation.")
+        if target_pdb is None:
+            raise ValueError("target_pdb is required for binder gradient computation.")
 
         self._ensure_loaded(device, backend=backend, verbose=verbose)
         key = ("binder", True, False, "last", self._backend)
@@ -568,7 +568,7 @@ class AlphaFold2Model:
         # Germinal's prep_inputs handles position resolution, bias
         # initialization, template setup.
         prep_kwargs: dict[str, Any] = {
-            "pdb_filename": target_pdb_path,
+            "pdb_filename": target_pdb,
             "target_chain": target_chain,
             "binder_len": len(logits),
             "binder_chain": binder_chain,
@@ -666,7 +666,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             logits=input_dict["logits"],
             temperature=input_dict["temperature"],
             soft=input_dict.get("soft", 1.0),
-            target_pdb_path=input_dict["target_pdb_path"],
+            target_pdb=input_dict["target_pdb"],
             target_chain=input_dict["target_chain"],
             target_hotspot=input_dict.get("target_hotspot"),
             binder_chain=input_dict["binder_chain"],

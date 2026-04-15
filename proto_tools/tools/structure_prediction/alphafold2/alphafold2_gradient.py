@@ -57,7 +57,7 @@ class AlphaFold2GradientConfig(BaseConfig):
     loss callbacks, and CDR position-aware losses).
 
     Attributes:
-        target_pdb_path (str | None): Path to target+binder template PDB.
+        target_pdb (str | None): Target+binder template PDB (file path or PDB string).
         target_chain (str): Frozen target chain ID(s).
         target_hotspot (str | None): Comma-separated hotspot residues on the target.
         binder_chain (str): Binder chain ID in the template PDB.
@@ -82,10 +82,10 @@ class AlphaFold2GradientConfig(BaseConfig):
         inter_contact_cutoff (float): Interface distance cutoff (Å). Germinal only.
     """
 
-    target_pdb_path: str | None = ConfigField(
+    target_pdb: str | None = ConfigField(
         title="Target PDB",
         default=None,
-        description="Path to target PDB with the frozen target and binder template complex.",
+        description="Target+binder template PDB (file path or PDB-format string).",
     )
     target_chain: str = ConfigField(
         title="Target Chain",
@@ -245,8 +245,8 @@ def run_alphafold2_gradient(
     instance: Any = None,
 ) -> AlphaFold2GradientOutput:
     """Compute one AlphaFold2/ColabDesign binder-design gradient step."""
-    if config.target_pdb_path is None:
-        raise ValueError("target_pdb_path is required for binder gradient computation.")
+    if config.target_pdb is None:
+        raise ValueError("target_pdb is required for binder gradient computation.")
     logger.debug("Using local for AlphaFold2 binder gradient: model=%d", config.model_num)
     result = ToolInstance.dispatch(
         "alphafold2",
@@ -255,7 +255,7 @@ def run_alphafold2_gradient(
             "logits": inputs.logits,
             "temperature": inputs.temperature,
             "soft": config.soft,
-            "target_pdb_path": config.target_pdb_path,
+            "target_pdb": config.target_pdb,
             "target_chain": config.target_chain,
             "target_hotspot": config.target_hotspot,
             "binder_chain": config.binder_chain,
