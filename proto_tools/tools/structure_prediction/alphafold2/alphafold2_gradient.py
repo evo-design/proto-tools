@@ -8,6 +8,7 @@ extension loss callbacks (rg, i_ptm, helix, beta_strand, NC).
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import model_validator
@@ -20,6 +21,7 @@ from proto_tools.utils import (
     ConfigField,
     GradientInput,
     GradientOutput,
+    InputField,
     ToolInstance,
 )
 
@@ -45,7 +47,45 @@ _VALID_LOSS_KEYS = frozenset(
     }
 )
 
-AlphaFold2GradientInput = GradientInput
+_BINDER_FIXTURE_PDB = Path(__file__).resolve().parents[4] / "tests" / "dummy_data" / "pdl1.pdb"
+
+
+class AlphaFold2GradientInput(GradientInput):
+    """Input for AlphaFold2 binder-design gradient computation.
+
+    Extends GradientInput with target-template structural data required
+    for binder redesign against a frozen target.
+
+    Attributes:
+        logits (list[list[float]]): Inherited — relaxed sequence logits (L x 20).
+        temperature (float): Inherited — softmax temperature.
+        target_pdb (str): Target+binder template PDB (file path or PDB-format string).
+        target_chain (str): Chain ID(s) of the frozen target in the PDB.
+        target_hotspot (str | None): Comma-separated hotspot residue indices on the target.
+        binder_chain (str): Binder chain ID in the template PDB.
+        design_positions (list[int] | None): Zero-based binder residue indices
+            for loss focus (e.g. CDR loops). Germinal backend only.
+    """
+
+    target_pdb: str = InputField(
+        description="Target+binder template PDB (file path or PDB-format string).",
+    )
+    target_chain: str = InputField(
+        default="A",
+        description="Chain ID(s) of the frozen target in the PDB.",
+    )
+    target_hotspot: str | None = InputField(
+        default=None,
+        description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
+    )
+    binder_chain: str = InputField(
+        default="H",
+        description="Binder chain ID for template-based binder redesign.",
+    )
+    design_positions: list[int] | None = InputField(
+        default=None,
+        description="Zero-based binder residue indices for loss focus (e.g. CDR loops).",
+    )
 
 
 class AlphaFold2GradientConfig(BaseConfig):
@@ -57,12 +97,6 @@ class AlphaFold2GradientConfig(BaseConfig):
     loss callbacks, and CDR position-aware losses).
 
     Attributes:
-        target_pdb (str | None): Target+binder template PDB (file path or PDB string).
-        target_chain (str): Frozen target chain ID(s).
-        target_hotspot (str | None): Comma-separated hotspot residues on the target.
-        binder_chain (str): Binder chain ID in the template PDB.
-        design_positions (list[int] | None): Binder residue indices for loss focus
-            (e.g. CDR loops). Germinal backend only.
         bias_redesign (float | None): Persistent softmax bias toward wildtype at
             non-design positions. Germinal backend only.
         omit_aas (str | None): Amino acids to ban (e.g. ``"C,W"``).
@@ -82,32 +116,6 @@ class AlphaFold2GradientConfig(BaseConfig):
         inter_contact_cutoff (float): Interface distance cutoff (Å). Germinal only.
     """
 
-    target_pdb: str | None = ConfigField(
-        title="Target PDB",
-        default=None,
-        description="Target+binder template PDB (file path or PDB-format string).",
-    )
-    target_chain: str = ConfigField(
-        title="Target Chain",
-        default="A",
-        description="Chain ID(s) of the frozen target in the PDB.",
-    )
-    target_hotspot: str | None = ConfigField(
-        title="Target Hotspot",
-        default=None,
-        description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
-    )
-    binder_chain: str = ConfigField(
-        title="Binder Chain",
-        default="H",
-        description="Binder chain ID for template-based binder redesign.",
-    )
-    design_positions: list[int] | None = ConfigField(
-        title="Design Positions",
-        default=None,
-        description="Zero-based binder residue indices for loss focus (e.g. CDR loops).",
-        advanced=True,
-    )
     bias_redesign: float | None = ConfigField(
         title="Bias Redesign",
         default=None,
@@ -216,7 +224,7 @@ AlphaFold2GradientOutput = GradientOutput
 
 
 def example_input() -> AlphaFold2GradientInput:
-    """Minimal valid input — short VHH-like binder with biased logits."""
+    """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     aa_index = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
     n_aas = len(PROTEIN_AMINO_ACIDS)
     logits = []
@@ -224,7 +232,11 @@ def example_input() -> AlphaFold2GradientInput:
         row = [0.0] * n_aas
         row[aa_index[residue]] = 2.0
         logits.append(row)
-    return AlphaFold2GradientInput(logits=logits)
+    return AlphaFold2GradientInput(
+        logits=logits,
+        target_pdb=str(_BINDER_FIXTURE_PDB),
+        binder_chain="B",
+    )
 
 
 @tool(
@@ -245,8 +257,6 @@ def run_alphafold2_gradient(
     instance: Any = None,
 ) -> AlphaFold2GradientOutput:
     """Compute one AlphaFold2/ColabDesign binder-design gradient step."""
-    if config.target_pdb is None:
-        raise ValueError("target_pdb is required for binder gradient computation.")
     logger.debug("Using local for AlphaFold2 binder gradient: model=%d", config.model_num)
     result = ToolInstance.dispatch(
         "alphafold2",
@@ -255,11 +265,11 @@ def run_alphafold2_gradient(
             "logits": inputs.logits,
             "temperature": inputs.temperature,
             "soft": config.soft,
-            "target_pdb": config.target_pdb,
-            "target_chain": config.target_chain,
-            "target_hotspot": config.target_hotspot,
-            "binder_chain": config.binder_chain,
-            "design_positions": config.design_positions,
+            "target_pdb": inputs.target_pdb,
+            "target_chain": inputs.target_chain,
+            "target_hotspot": inputs.target_hotspot,
+            "binder_chain": inputs.binder_chain,
+            "design_positions": inputs.design_positions,
             "bias_redesign": config.bias_redesign,
             "omit_aas": config.omit_aas,
             "num_recycles": config.num_recycles,

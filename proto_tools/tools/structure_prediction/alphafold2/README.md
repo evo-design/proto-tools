@@ -73,12 +73,17 @@ The gradient tool enables differentiable binder design by computing gradients of
 |-------|------|-------------|
 | `chains` | `List[Chain]` | Chains in the complex. Each chain has `sequence` (str) and optional `entity_type` (auto-detected as "protein"). |
 
-### Gradient Tool
+### Gradient Tool (`AlphaFold2GradientInput`)
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `logits` | `list[list[float]]` | Relaxed binder logits with shape `(binder_length, 20)` in canonical AA order |
-| `temperature` | `float` | Softmax temperature used to relax logits into probabilities |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `logits` | `list[list[float]]` | *required* | Relaxed sequence logits with shape (L, 20). |
+| `temperature` | `float` | `1.0` | Softmax temperature for relaxing logits. |
+| `target_pdb` | `str` | *required* | PDB containing the frozen target and binder template complex. |
+| `target_chain` | `str` | `"A"` | Target chain ID(s) in the PDB. |
+| `target_hotspot` | `str \| None` | `None` | Optional hotspot residue specification for interface contacts. |
+| `binder_chain` | `str` | `"H"` | Binder-template chain ID. |
+| `design_positions` | `list[int] \| None` | `None` | Zero-based binder positions for loss focus (e.g. CDR loops). Only active when `backend="germinal"`. |
 
 ## Configuration
 
@@ -98,11 +103,6 @@ The gradient tool enables differentiable binder design by computing gradients of
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target_pdb` | `str` | *required* | PDB containing the frozen target and binder template complex. |
-| `target_chain` | `str` | `"A"` | Target chain ID(s) in the PDB. |
-| `target_hotspot` | `str \| None` | `None` | Optional hotspot residue specification for interface contacts. |
-| `binder_chain` | `str` | `"H"` | Binder-template chain ID. |
-| `design_positions` | `list[int] \| None` | `None` | Zero-based binder positions for loss focus (e.g. CDR loops). Only active when `backend="germinal"`. |
 | `bias_redesign` | `float \| None` | `None` | Soft bias toward wildtype at non-design positions. Only active when `backend="germinal"`. |
 | `omit_aas` | `str \| None` | `None` | Comma-separated amino acids to ban, e.g. `"C,W"`. |
 | `num_recycles` | `int` | `3` | Recycling iterations (0-48). |
@@ -290,11 +290,11 @@ from pathlib import Path
 inputs = AlphaFold2GradientInput(
     logits=[[0.0] * 20] * 10,
     temperature=1.0,
-)
-config = AlphaFold2GradientConfig(
     target_pdb=str(Path("target_complex.pdb").resolve()),
     target_chain="A",
     binder_chain="B",
+)
+config = AlphaFold2GradientConfig(
     num_recycles=3,
     loss_weights={"plddt": 1.0, "i_plddt": 1.0, "i_con": 0.2},
 )

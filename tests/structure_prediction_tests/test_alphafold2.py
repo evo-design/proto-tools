@@ -72,25 +72,21 @@ def test_config_rejects_model_num_and_ensemble_together():
 
 
 def test_gradient_input_requires_20_columns():
-    AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.75)
+    AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], target_pdb="/t.pdb", temperature=0.75)
     with pytest.raises(ValidationError, match="20 columns"):
-        AlphaFold2GradientInput(logits=[[0.0] * 19], temperature=1.0)
+        AlphaFold2GradientInput(logits=[[0.0] * 19], target_pdb="/t.pdb", temperature=1.0)
 
 
 def test_gradient_config_rejects_bad_loss_weights():
     with pytest.raises(ValidationError, match="non-negative"):
-        AlphaFold2GradientConfig(target_pdb="/t.pdb", binder_chain="B", loss_weights={"plddt": -0.1})
+        AlphaFold2GradientConfig(loss_weights={"plddt": -0.1})
     with pytest.raises(ValidationError, match="Unknown loss_weights"):
-        AlphaFold2GradientConfig(target_pdb="/t.pdb", binder_chain="B", loss_weights={"pldd": 1.0})
+        AlphaFold2GradientConfig(loss_weights={"pldd": 1.0})
 
 
-def test_gradient_requires_target_pdb_at_call_time():
-    result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0),
-        AlphaFold2GradientConfig(target_pdb=None, binder_chain="B"),
-    )
-    assert not result.success
-    assert any("target_pdb is required" in e for e in result.errors)
+def test_gradient_input_requires_target_pdb():
+    with pytest.raises(ValidationError, match="target_pdb"):
+        AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0)
 
 
 # -- Dispatch contracts --------------------------------------------------------
@@ -108,12 +104,15 @@ def test_gradient_dispatch_contract(monkeypatch):
         fake_dispatch,
     )
 
-    inputs = AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.8)
-    config = AlphaFold2GradientConfig(
+    inputs = AlphaFold2GradientInput(
+        logits=[[0.0] * 20, [1.0] * 20],
+        temperature=0.8,
         target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
         target_chain="A",
         binder_chain="B",
         design_positions=[0, 1],
+    )
+    config = AlphaFold2GradientConfig(
         loss_weights={"plddt": 1.0},
         device="cpu",
     )
@@ -156,11 +155,14 @@ def test_prediction_dispatch_contract(monkeypatch):
 @pytest.mark.uses_gpu
 def test_gradient_end_to_end():
     result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0),
-        AlphaFold2GradientConfig(
+        AlphaFold2GradientInput(
+            logits=[[0.0] * 20] * 5,
+            temperature=1.0,
             target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
             target_chain="A",
             binder_chain="B",
+        ),
+        AlphaFold2GradientConfig(
             num_recycles=1,
             loss_weights={"plddt": 1.0},
         ),
@@ -178,15 +180,18 @@ def test_gradient_end_to_end():
 
 @pytest.mark.uses_gpu
 def test_gradient_sensitivity():
-    config = AlphaFold2GradientConfig(
-        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-        target_chain="A",
-        binder_chain="B",
-        num_recycles=1,
-        loss_weights={"plddt": 1.0},
+    target_kwargs = {
+        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
+        "target_chain": "A",
+        "binder_chain": "B",
+    }
+    config = AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
+    r1 = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs), config
     )
-    r1 = run_alphafold2_gradient(AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0), config)
-    r2 = run_alphafold2_gradient(AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0), config)
+    r2 = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0, **target_kwargs), config
+    )
     assert r1.loss != r2.loss
     assert r1.gradient != r2.gradient
 
@@ -194,19 +199,18 @@ def test_gradient_sensitivity():
 @pytest.mark.uses_gpu
 def test_gradient_loss_weights_matter():
     logits = [[0.1 * i + 0.05 * j for j in range(20)] for i in range(5)]
-    base = {
+    target_kwargs = {
         "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
         "target_chain": "A",
         "binder_chain": "B",
-        "num_recycles": 1,
     }
     r_plddt = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0),
-        AlphaFold2GradientConfig(**base, loss_weights={"plddt": 1.0}),
+        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
     r_con = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0),
-        AlphaFold2GradientConfig(**base, loss_weights={"con": 1.0}),
+        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"con": 1.0}),
     )
     assert r_plddt.gradient != r_con.gradient
     assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)

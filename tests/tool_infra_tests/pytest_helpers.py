@@ -51,13 +51,5 @@ def build_inputs_and_config(
     if spec.key == "blast-create-db":
         config_kwargs.setdefault("out_prefix", str(tmp_path / "blast_db"))
 
-    if spec.key == "alphafold2-gradient":
-        # Temporary: target-template fields currently live on Config instead
-        # of Input, breaking the repo convention (every other structural tool
-        # carries its PDB in Input). See #459 for the proper refactor.
-        fixture_pdb = Path(__file__).resolve().parents[1] / "dummy_data" / "pdl1.pdb"
-        config_kwargs.setdefault("target_pdb", str(fixture_pdb))
-        config_kwargs.setdefault("binder_chain", "B")
-
     config = spec.config_model.minimal(**config_kwargs)
     return inputs, config
