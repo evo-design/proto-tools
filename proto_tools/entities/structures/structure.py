@@ -294,6 +294,32 @@ class Structure(BaseModel):
         return self._gemmi_struct  # type: ignore[no-any-return]
 
     @property
+    def per_residue_plddt(self) -> list[float] | None:
+        """Per-residue pLDDT values extracted from the B-factor column, normalized to 0-1.
+
+        Returns ``None`` when ``b_factor_type`` does not represent pLDDT (e.g.,
+        experimental structures with temperature factors). Values are normalized
+        to the 0-1 range regardless of the original tool scale (ESMFold uses 0-1
+        natively; AlphaFold3 uses 0-100).
+
+        Returns:
+            list[float] | None: Per-residue pLDDT values in 0-1 range, or None if
+                B-factors do not represent pLDDT.
+        """
+        if self.b_factor_type not in (BFactorType.PLDDT, BFactorType.NORMALIZED_PLDDT):
+            return None
+        values: list[float] = []
+        for model in self.gemmi_struct:
+            for chain in model:
+                for residue in chain:
+                    b_factors = [atom.b_iso for atom in residue]
+                    if b_factors:
+                        values.append(sum(b_factors) / len(b_factors))
+        if self.b_factor_type == BFactorType.PLDDT:
+            values = [v / 100.0 for v in values]
+        return values or None
+
+    @property
     def structure_pdb(self) -> str:
         """Get the structure content as a PDB string, converting from CIF if needed."""
         if self.structure_format == "cif":

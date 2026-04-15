@@ -606,3 +606,44 @@ def test_warn_cif_to_pdb_metadata_markers(test_cif_file_content):
 def test_convert_cif_to_pdb_unparseable():
     with pytest.raises(ValueError, match="Failed to convert CIF to PDB"):
         convert_cif_str_to_pdb_str("this is not valid CIF content at all")
+
+
+# ── per_residue_plddt property ────────────────────────────────────────────────
+
+
+def _pdb_line(serial: int, chain: str, resseq: int, bfactor: float) -> str:
+    x = float((serial - 1) * 3.8)
+    return (
+        f"ATOM  {serial:5d}  CA  ALA {chain}{resseq:4d}    {x:8.3f}   0.000   0.000  1.00{bfactor:6.2f}           C  "
+    )
+
+
+def test_per_residue_plddt_normalizes_and_spans_chains():
+    """PLDDT (0-100) B-factors are normalized to 0-1; all chains included."""
+    pdb = "\n".join(
+        [
+            _pdb_line(1, "A", 1, 95.0),
+            _pdb_line(2, "A", 2, 80.0),
+            _pdb_line(3, "B", 1, 60.0),
+            "END",
+        ]
+    )
+    s = Structure(structure=pdb, b_factor_type=BFactorType.PLDDT)
+    assert s.per_residue_plddt == pytest.approx([0.95, 0.80, 0.60], abs=1e-2)
+
+    # NORMALIZED_PLDDT (already 0-1) should not rescale
+    pdb_norm = "\n".join(
+        [
+            _pdb_line(1, "A", 1, 0.95),
+            _pdb_line(2, "A", 2, 0.80),
+            "END",
+        ]
+    )
+    s_norm = Structure(structure=pdb_norm, b_factor_type=BFactorType.NORMALIZED_PLDDT)
+    assert s_norm.per_residue_plddt == pytest.approx([0.95, 0.80], abs=1e-2)
+
+
+def test_per_residue_plddt_none_for_non_plddt():
+    """Returns None when B-factors don't represent pLDDT."""
+    pdb = "\n".join([_pdb_line(1, "A", 1, 15.0), "END"])
+    assert Structure(structure=pdb, b_factor_type=BFactorType.UNSPECIFIED).per_residue_plddt is None
