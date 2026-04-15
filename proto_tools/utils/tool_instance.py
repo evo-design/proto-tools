@@ -54,6 +54,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from collections.abc import Generator
@@ -95,6 +96,72 @@ def _active_cache() -> dict[str, "ToolInstance"]:
     """Return the scope-local cache if inside scope(), else the global cache."""
     override = _scope_override.get()
     return override if override is not None else _instances
+
+
+def _run_setup_script(
+    setup_script: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    log_path: Path,
+    tool_name: str,
+) -> tuple[int, str]:
+    """Run ``setup.sh``, capturing stdout+stderr to ``log_path``.
+
+    Honors two environment variables on the caller side:
+
+    - ``PROTO_ENV_VERBOSE=1`` mirrors each line of the subprocess output to
+      this process's stderr as it arrives, so users see install progress
+      live instead of waiting for the subprocess to finish.
+    - ``PROTO_ENV_LOG_DIR=<path>`` copies the completed log to
+      ``<PROTO_ENV_LOG_DIR>/<tool_name>_setup.log`` after the subprocess
+      exits. Useful for inspecting setup output when the env directory
+      itself is ephemeral — e.g. pointing ``PROTO_ENV_LOG_DIR`` at a
+      persistent scratch path so a failed build's log is retrievable
+      even after the env is rolled back.
+
+    Args:
+        setup_script (Path): Absolute path to ``setup.sh``.
+        cwd (Path): Working directory for the subprocess.
+        env (dict[str, str]): Environment variables for the subprocess.
+        log_path (Path): Where to write the setup log. The parent
+            directory must already exist.
+        tool_name (str): Used to name the mirrored log file when
+            ``PROTO_ENV_LOG_DIR`` is set.
+
+    Returns:
+        tuple[int, str]: Process return code and the full combined
+            stdout+stderr as a string.
+    """
+    verbose = os.environ.get("PROTO_ENV_VERBOSE") == "1"
+    mirror_dir = os.environ.get("PROTO_ENV_LOG_DIR")
+
+    proc = subprocess.Popen(
+        ["bash", str(setup_script)],
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    assert proc.stdout is not None  # stdout=PIPE guarantees this
+
+    with open(log_path, "wb") as log_file:
+        for line in iter(proc.stdout.readline, b""):
+            log_file.write(line)
+            log_file.flush()
+            if verbose:
+                sys.stderr.buffer.write(line)
+                sys.stderr.buffer.flush()
+    proc.wait()
+
+    if mirror_dir:
+        mirror_path = Path(mirror_dir)
+        mirror_path.mkdir(parents=True, exist_ok=True)
+        with suppress(OSError):
+            shutil.copy2(log_path, mirror_path / f"{tool_name}_setup.log")
+
+    combined_output = log_path.read_text(errors="replace") if log_path.exists() else ""
+    return proc.returncode, combined_output
 
 
 class ToolInstance:
@@ -1437,17 +1504,15 @@ class ToolInstance:
             with suppress(Exception):
                 shutil.copy2(sh_source, sh_target)
 
-        proc = subprocess.Popen(
-            ["bash", str(self.setup_script)],
+        returncode, combined_output = _run_setup_script(
+            self.setup_script,
             cwd=self.setup_script.parent,
             env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            log_path=self.env_path / "setup.log",
+            tool_name=self.tool_name,
         )
-        raw_output, _ = proc.communicate()
-        combined_output = raw_output.decode("utf-8", errors="replace") if raw_output else ""
 
-        if proc.returncode == 0:
+        if returncode == 0:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.tool_name)
         else:
@@ -1455,14 +1520,14 @@ class ToolInstance:
             logger.error(
                 "Environment setup failed for %s (exit %d):\n%s",
                 self.tool_name,
-                proc.returncode,
+                returncode,
                 tail,
             )
             if combined_output:
                 logger.debug("Full setup output for %s:\n%s", self.tool_name, combined_output)
             status_file.write_text(
                 f"FAILED\n\n"
-                f"Return code: {proc.returncode}\n"
+                f"Return code: {returncode}\n"
                 f"Command: {self.setup_script}\n"
                 f"Setup hash: {self._setup_hash()}\n"
                 f"Timestamp: {datetime.datetime.now()}\n\n"
@@ -1471,8 +1536,7 @@ class ToolInstance:
             self._build_failures[self.tool_name] = tail
             hint = f"\n{tail}" if tail else ""
             raise RuntimeError(
-                f"'{self.tool_name}' may not be compatible with your "
-                f"system. setup.sh failed (exit {proc.returncode}).{hint}"
+                f"'{self.tool_name}' may not be compatible with your system. setup.sh failed (exit {returncode}).{hint}"
             )
 
 
