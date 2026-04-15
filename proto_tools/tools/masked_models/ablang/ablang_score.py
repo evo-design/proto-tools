@@ -1,16 +1,10 @@
 """AbLang scoring tool."""
 
-from __future__ import annotations
-
 import logging
 from typing import Any, Literal
 
-from pydantic import field_validator
-
-from proto_tools.tools.masked_models.ablang.ablang_embeddings import (
-    ABLANG_MODEL_CHOICES,
-    _resolve_model_choice,
-)
+from proto_tools.entities.antibody import Antibody
+from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelScoringMetrics,
@@ -31,27 +25,13 @@ class AbLangScoringInput(BaseToolInput):
     """Input for AbLang antibody sequence scoring.
 
     Attributes:
-        sequences (list[str]): Antibody sequence(s) to score. Format depends
-            on the model choice:
-
-            - ``ablang1-heavy``: Heavy chain sequences
-            - ``ablang1-light``: Light chain sequences
-            - ``ablang2-paired``: Paired ``"heavy|light"`` format
+        antibodies (list[Antibody]): Antibody sequence(s) to score.
     """
 
-    sequences: list[str] = InputField(
-        description="Antibody sequence(s) to score. For paired models, use 'heavy|light' format.",
+    antibodies: list[Antibody] = InputField(
+        description="Antibody sequence(s) to score.",
+        min_length=1,
     )
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
-        """Convert single string to list."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
 
 
 # Output:
@@ -62,23 +42,12 @@ class AbLangScoringConfig(MaskedModelConfig):
     """Configuration for AbLang antibody sequence scoring.
 
     Computes pseudo-log-likelihood scores by masking each position individually
-    and computing P(x_i | x_{-i}). Uses the AbLang antibody language model
-    for antibody-specific scoring.
+    and computing P(x_i | x_{-i}). The model variant is selected automatically
+    based on which chains are provided on each ``Antibody``.
 
     Attributes:
-        model_choice (ABLANG_MODEL_CHOICES): AbLang model variant to use:
-
-            - ``"auto"``: Automatically select based on input format (default).
-              Paired sequences (``"heavy|light"``) use ``ablang2-paired``,
-              single-chain sequences use ``ablang1-heavy``.
-            - ``"ablang1-heavy"``: Heavy chain only
-            - ``"ablang1-light"``: Light chain only
-            - ``"ablang2-paired"``: Paired heavy+light chains
-
         batch_size (int): Number of sequences per forward pass. Default: ``1``.
-
         device (str): Device to run on. Default: ``"cuda"``.
-
         scoring_mode (Literal["pseudo_log_likelihood", "confidence"]): Scoring method to use:
 
             - ``"pseudo_log_likelihood"``: Mask each position individually for
@@ -86,12 +55,6 @@ class AbLangScoringConfig(MaskedModelConfig):
             - ``"confidence"``: Single forward pass confidence score (faster)
     """
 
-    model_choice: ABLANG_MODEL_CHOICES = ConfigField(
-        title="Model Choice",
-        default="auto",
-        description="Model variant: 'auto', 'ablang1-heavy', 'ablang1-light', or 'ablang2-paired'",
-        reload_on_change=True,
-    )
     scoring_mode: Literal["pseudo_log_likelihood", "confidence"] = ConfigField(
         title="Scoring Mode",
         default="pseudo_log_likelihood",
@@ -104,7 +67,7 @@ class AbLangScoringConfig(MaskedModelConfig):
 # ============================================================================
 def example_input() -> AbLangScoringInput:
     """Minimal valid input for testing and examples."""
-    return AbLangScoringInput(sequences=["EVQLVESGGGLVQPGG"])
+    return AbLangScoringInput(antibodies=[Antibody(heavy_chain="EVQLVESGGGLVQPGG")])
 
 
 @tool(
@@ -117,7 +80,7 @@ def example_input() -> AbLangScoringInput:
     description="Score antibody sequences using AbLang language model",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_field="antibodies",
     iterable_output_field="scores",
     cacheable=True,
 )
@@ -126,48 +89,17 @@ def run_ablang_score(
     config: AbLangScoringConfig,
     instance: Any = None,
 ) -> AbLangScoringOutput:
-    """Score antibody sequences using AbLang language model.
-
-    Computes pseudo-log-likelihood scores for antibody sequences using AbLang's
-    masked language modeling objective. Lower perplexity indicates the sequence
-    is more consistent with natural antibody repertoires.
-
-    Args:
-        inputs (AbLangScoringInput): Validated input containing antibody
-            sequences to score.
-        config (AbLangScoringConfig): Scoring configuration specifying model
-            variant, scoring mode, and device.
-        instance (Any): Optional ToolInstance for subprocess execution.
-
-    Returns:
-        AbLangScoringOutput: Contains a ``MaskedModelScoringMetrics`` for each input
-            sequence with:
-
-            - ``pseudo_log_likelihood`` (and ``confidence`` if using confidence mode);
-              access via attribute ``score.pseudo_log_likelihood`` or mapping
-              ``score["pseudo_log_likelihood"]``
-            - ``logits``: ``None`` (not returned for scoring)
-            - ``vocab``: ``None``
-
-    Examples:
-        >>> inputs = AbLangScoringInput(sequences=["EVQLVESGGGLVQPGG"])
-        >>> config = AbLangScoringConfig(model_choice="ablang1-heavy")
-        >>> result = run_ablang_score(inputs, config)
-        >>> print(f"PLL: {result.scores[0]['pseudo_log_likelihood']}")
-
-    Note:
-        - Lower pseudo-log-likelihood (more negative) indicates lower model confidence
-        - The ``confidence`` mode is faster but less accurate than ``pseudo_log_likelihood``
-    """
-    resolved_model = _resolve_model_choice(config.model_choice, inputs.sequences)
-    logger.debug(f"Using local venv for AbLang scoring: {resolved_model}")
+    """Score antibody sequences using AbLang language model."""
+    sequences = [ab.to_sequence() for ab in inputs.antibodies]
+    model_choice = _resolve_model_choice(inputs.antibodies)
+    logger.debug("Using local venv for AbLang scoring: %s", model_choice)
     result = ToolInstance.dispatch(
         "ablang",
         {
             "operation": "score",
-            "sequences": inputs.sequences,
+            "sequences": sequences,
             "batch_size": config.batch_size,
-            "model_choice": resolved_model,
+            "model_choice": model_choice,
             "device": config.device,
             "verbose": config.verbose,
             "scoring_mode": config.scoring_mode,

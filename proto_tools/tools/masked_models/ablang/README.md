@@ -3,9 +3,9 @@
 # AbLang
 
 ## Overview
-AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on input format.
+AbLang is an antibody-specific language model family from the Oxford Protein Informatics Group (OPIG), trained on antibody sequences from the Observed Antibody Space (OAS). Built on a BERT/MLM architecture, it provides antibody sequence embeddings, pseudo-log-likelihood scoring, and masked residue restoration. The tool wraps three model variants — ablang1-heavy, ablang1-light, and ablang2-paired — with automatic model routing based on which chains are provided on the `Antibody` input.
 
-This package also includes `ablang-gradient`, a relaxed-sequence gradient tool that computes a shifted cross-entropy objective over relaxed antibody logits. It supports all three model variants and uses an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into AbLang's token vocabulary order `ARNDCQEGHILKMFPSTWYV`.
+This package also includes `ablang-gradient`, a relaxed-sequence gradient tool that computes a shifted cross-entropy objective over relaxed antibody logits (via `AntibodyLogits`). It supports all three model variants and uses an internal mapping from proto-language's canonical protein order `ACDEFGHIKLMNPQRSTVWY` into AbLang's token vocabulary order `ARNDCQEGHILKMFPSTWYV`.
 
 ## Background
 
@@ -17,7 +17,7 @@ General protein language models like ESM2 are trained on diverse protein familie
 - **Species-specific signatures**: Human, mouse, and other germline patterns
 
 **Why paired models matter:**
-Heavy and light chains co-evolve to form functional antibodies. The paired model (`ablang2-paired`) processes both chains together using a pipe (`|`) separator, capturing inter-chain dependencies that single-chain models miss.
+Heavy and light chains co-evolve to form functional antibodies. The paired model (`ablang2-paired`) processes both chains together, capturing inter-chain dependencies that single-chain models miss.
 
 ## Tool Catalog
 
@@ -30,24 +30,21 @@ Heavy and light chains co-evolve to form functional antibodies. The paired model
 
 ## Model Variants
 
+All AbLang tools accept `Antibody` objects as input (from `proto_tools.entities.antibody`). The model variant is selected automatically based on which chains are provided:
+
+| Input | Model Selected |
+|-------|---------------|
+| `Antibody(heavy_chain="EVQL...")` | `ablang1-heavy` |
+| `Antibody(light_chain="DIQM...")` | `ablang1-light` |
+| `Antibody(heavy_chain="EVQL...", light_chain="DIQM...")` | `ablang2-paired` |
+
+At least one chain must be provided. For the gradient tool, use `AntibodyLogits` which accepts logit distributions instead of sequence strings.
+
 | Checkpoint | Chain Type | Embedding Dim | Use Case |
 |------------|-----------|---------------|----------|
 | `ablang1-heavy` | Heavy chain only | 768 | When only VH sequences are available |
 | `ablang1-light` | Light chain only | 768 | When only VL/VK sequences are available |
-| `ablang2-paired` | Heavy + light (pipe-separated) | 480 | When both chains are available (recommended) |
-
-**Automatic model routing (`model_choice="auto"`, the default):**
-
-When `model_choice` is set to `"auto"` (the default), the tool automatically selects the best model based on your input:
-1. **Paired sequences** (containing `|`): Routes to `ablang2-paired`
-2. **Single-chain sequences**: Routes to `ablang1-heavy`
-
-To use `ablang1-light`, set `model_choice="ablang1-light"` explicitly.
-
-**Manual model selection guidance:**
-1. **Default choice**: Leave `model_choice="auto"` — it handles most cases correctly.
-2. **Light chains**: Explicitly set `model_choice="ablang1-light"` when working with VL/VK sequences.
-3. **Paired input format**: For the paired model, join heavy and light chains with a pipe separator: `"EVQLVES...|DIQMTQ..."`.
+| `ablang2-paired` | Heavy + light | 480 | When both chains are available (recommended) |
 
 ## Execution Modes
 
@@ -63,29 +60,19 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 ## Input Parameters
 
-### Embeddings Tool
+### Embeddings, Sampling, and Scoring Tools
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `sequences` | `list[str]` | Antibody sequences (amino acid strings) |
+| `antibodies` | `list[Antibody]` | Antibody objects with `heavy_chain` and/or `light_chain` sequences |
 
-### Sampling Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `list[str]` | Antibody sequences with `_` at positions to restore |
-
-### Scoring Tool
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sequences` | `list[str]` | Antibody sequences to score |
+For the sampling tool, chain sequences should contain `_` at positions to restore.
 
 ### Gradient Tool
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `logits` | `list[list[float]]` | Relaxed sequence logits with shape `(L, 20)` in canonical protein order `ACDEFGHIKLMNPQRSTVWY` |
+| `antibody` | `AntibodyLogits` | Antibody with `heavy_chain` and/or `light_chain` as logit matrices with shape `(L, 20)` in canonical protein order |
 | `temperature` | `float` | Softmax temperature used to relax logits into probabilities |
 
 ## Configuration
@@ -94,7 +81,6 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_choice` | `str` | `"auto"` | Model checkpoint: `"auto"`, `"ablang1-heavy"`, `"ablang1-light"`, `"ablang2-paired"` |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
@@ -102,7 +88,6 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_choice` | `str` | `"auto"` | Model variant: `"auto"`, `"ablang1-heavy"`, `"ablang1-light"`, `"ablang2-paired"` |
 | `batch_size` | `int` | `1` | Sequences per forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
@@ -110,7 +95,6 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_choice` | `str` | `"auto"` | Model checkpoint: `"auto"`, `"ablang1-heavy"`, `"ablang1-light"`, `"ablang2-paired"` |
 | `scoring_mode` | `str` | `"pseudo_log_likelihood"` | Scoring method: `"pseudo_log_likelihood"` or `"confidence"` |
 | `batch_size` | `int` | `1` | Sequences per forward pass |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
@@ -119,8 +103,6 @@ AbLang is a masked language model (BERT architecture) trained on antibody sequen
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model_choice` | `str` | `"ablang1-heavy"` | AbLang model variant: `"ablang1-heavy"`, `"ablang1-light"`, or `"ablang2-paired"` |
-| `chain_break_position` | `int \| null` | `null` | Number of residues in the first chain (position at which to insert the chain separator). Required when `model_choice="ablang2-paired"` |
 | `seed` | `int \| null` | `0` | Optional PyTorch random seed for reproducibility |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
@@ -181,22 +163,21 @@ These thresholds are heuristics. Use them comparatively and validate for your ta
 
 ## Quick Start Examples
 
-**Example 1: Auto-routed embeddings (recommended)**
+**Example 1: Heavy chain embeddings**
 ```python
+from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsInput, run_ablang_embeddings,
 )
 import numpy as np
 
-# Heavy chain sequences — auto-routes to ablang1-heavy
-sequences = [
-    "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG",
-    "QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG",
+antibodies = [
+    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG"),
+    Antibody(heavy_chain="QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG"),
 ]
 
-result = run_ablang_embeddings(AbLangEmbeddingsInput(sequences=sequences))
+result = run_ablang_embeddings(AbLangEmbeddingsInput(antibodies=antibodies))
 
-# Compare embeddings
 emb1 = np.array(result.results[0].mean_embedding)
 emb2 = np.array(result.results[1].mean_embedding)
 cosine_sim = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
@@ -204,32 +185,33 @@ print(f"Model used: {result.metadata['model_choice']}")  # ablang1-heavy
 print(f"Cosine similarity: {cosine_sim:.3f}")
 ```
 
-**Example 2: Paired heavy+light chain embeddings (auto-routed)**
+**Example 2: Paired heavy+light chain embeddings**
 ```python
+from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsInput, run_ablang_embeddings,
 )
 
-# Paired sequences with pipe separator — auto-routes to ablang2-paired
-sequences = [
-    "EVQLVESGGGLVQPGG|DIQMTQSPSSLSASVG",
-    "QVQLVESGGGVVQPGR|EIVLTQSPATLSLSPG",
+antibodies = [
+    Antibody(heavy_chain="EVQLVESGGGLVQPGG", light_chain="DIQMTQSPSSLSASVG"),
+    Antibody(heavy_chain="QVQLVESGGGVVQPGR", light_chain="EIVLTQSPATLSLSPG"),
 ]
 
-result = run_ablang_embeddings(AbLangEmbeddingsInput(sequences=sequences))
+result = run_ablang_embeddings(AbLangEmbeddingsInput(antibodies=antibodies))
 print(f"Model used: {result.metadata['model_choice']}")  # ablang2-paired
 print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 480
 ```
 
 **Example 3: Score antibody sequences**
 ```python
+from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang import (
     AbLangScoringInput, AbLangScoringConfig, run_ablang_score,
 )
 
-inputs = AbLangScoringInput(sequences=[
-    "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG",
-    "QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG",
+inputs = AbLangScoringInput(antibodies=[
+    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPG"),
+    Antibody(heavy_chain="QVQLVESGGGVVQPGRSLRLSCAASGFTFSSYGMHWVRQAPG"),
 ])
 config = AbLangScoringConfig(scoring_mode="pseudo_log_likelihood")
 
@@ -240,31 +222,29 @@ for i, score in enumerate(result.scores):
 
 **Example 4: Restore masked CDR positions**
 ```python
+from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang import (
     AbLangSampleInput, run_ablang_sample,
 )
 
-# Mask CDR3 positions with _
-inputs = AbLangSampleInput(sequences=[
-    "EVQLVESGGGLVQPGGSLRLSCAASGFTFS___MSWVRQAPG",
+inputs = AbLangSampleInput(antibodies=[
+    Antibody(heavy_chain="EVQLVESGGGLVQPGGSLRLSCAASGFTFS___MSWVRQAPG"),
 ])
 
 result = run_ablang_sample(inputs)
-print(f"Original: {inputs.sequences[0]}")
 print(f"Restored: {result.sequences[0]}")
 ```
 
-**Example 5: Explicit light chain model selection**
+**Example 5: Light chain embeddings**
 ```python
+from proto_tools.entities.antibody import Antibody
 from proto_tools.tools.masked_models.ablang import (
-    AbLangEmbeddingsInput, AbLangEmbeddingsConfig, run_ablang_embeddings,
+    AbLangEmbeddingsInput, run_ablang_embeddings,
 )
 
-# Light chain — must specify model_choice explicitly (auto defaults to heavy)
-inputs = AbLangEmbeddingsInput(sequences=["DIQMTQSPSSLSASVGDRVTITC"])
-config = AbLangEmbeddingsConfig(model_choice="ablang1-light")
+inputs = AbLangEmbeddingsInput(antibodies=[Antibody(light_chain="DIQMTQSPSSLSASVGDRVTITC")])
 
-result = run_ablang_embeddings(inputs, config)
+result = run_ablang_embeddings(inputs)
 print(f"Model used: {result.metadata['model_choice']}")  # ablang1-light
 print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 ```
@@ -273,23 +253,17 @@ print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 
 **Auto-routing:**
 
-1. **Default behavior**: With `model_choice="auto"` (the default), paired sequences (containing `|`) route to `ablang2-paired`, and single-chain sequences route to `ablang1-heavy`.
-
-2. **Light chains require explicit selection**: Auto-routing cannot distinguish heavy from light chains, so it defaults to heavy. Set `model_choice="ablang1-light"` when working with VL/VK sequences.
+1. **No `model_choice` needed**: The model variant is selected automatically from which chains are provided on the `Antibody` input. Provide `heavy_chain` for ablang1-heavy, `light_chain` for ablang1-light, or both for ablang2-paired.
 
 **Gradient tool:**
 
 1. **Vocab order**: The gradient tool accepts and returns logits in canonical protein order `ACDEFGHIKLMNPQRSTVWY`. Internally it maps to AbLang's token vocabulary for the forward pass.
 
-2. **Paired sequences**: For paired sequences (heavy + light), set `model_choice="ablang2-paired"` and provide `chain_break_position` to indicate where the first chain ends and the second begins.
-
-3. **Model variant selection**: Use `ablang1-heavy` for heavy-chain-only sequences, `ablang1-light` for light-chain-only sequences, and `ablang2-paired` for paired heavy+light sequences.
+2. **Paired sequences**: Provide both `heavy_chain` and `light_chain` on `AntibodyLogits` — the tool concatenates them and inserts the chain separator automatically.
 
 **Chain type matching:**
 
-1. **Match checkpoint to input**: Use `ablang1-heavy` for heavy chains, `ablang1-light` for light chains, and `ablang2-paired` for paired sequences. Mismatching will produce poor results.
-
-2. **Paired format**: For `ablang2-paired`, join heavy and light chains with a pipe separator (`|`). Do not include spaces around the pipe.
+1. **Match chains to purpose**: Use `heavy_chain` for heavy chains, `light_chain` for light chains. The model variant is auto-selected to match.
 
 **Batch processing:**
 
@@ -303,11 +277,7 @@ print(f"Embedding dim: {len(result.results[0].mean_embedding)}")  # 768
 
 1. **Wrong mask character**: Use `_` (underscore) for masked positions in the sampling tool, not `*`, `<mask>`, or `X`.
 
-2. **Wrong checkpoint for chain type**: Using `ablang1-heavy` with light chain sequences will produce meaningless results.
-
-3. **Missing pipe in paired mode**: The paired model expects `heavy|light` format. Passing unpaired sequences to `ablang2-paired` will produce incorrect embeddings.
-
-4. **Mixing checkpoints**: Embeddings from different checkpoints (heavy vs. light vs. paired) are NOT comparable.
+2. **Mixing checkpoints**: Embeddings from different model variants (heavy vs. light vs. paired) are NOT comparable.
 
 ## References
 

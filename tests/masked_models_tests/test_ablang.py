@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.antibody import Antibody, AntibodyLogits
 from proto_tools.tools.masked_models.ablang import (
     AbLangEmbeddingsConfig,
     AbLangEmbeddingsInput,
@@ -59,67 +60,32 @@ VL_SEQ = "SYELTQPPSVSVSPGQTARITCSANALPNQYAYWYQQKPGRAPVMVIYKDTQRPSGIPQRFSSSTSGTTV
 # ── Input validation ─────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ("input_cls", "sequence"),
-    [
-        (AbLangEmbeddingsInput, "EVQLVESGGGLVQPGG"),
-        (AbLangScoringInput, "EVQLVESGGGLVQPGG"),
-        (AbLangSampleInput, "EVQL_ESGGGLVQPGG"),
-    ],
-)
-def test_ablang_input_normalizes_single_string(input_cls, sequence):
-    inp = input_cls(sequences=sequence)
-    assert isinstance(inp.sequences, list)
-    assert inp.sequences == [sequence]
-
-
-@pytest.mark.parametrize("input_cls", [AbLangEmbeddingsInput, AbLangScoringInput, AbLangSampleInput])
-def test_ablang_empty_input_raises(input_cls):
-    with pytest.raises(ValueError, match="sequences must not be empty"):
-        input_cls(sequences=[])
-
-
-def test_ablang_gradient_input_requires_20_aa_columns():
-    logits = [[0.0] * 20, [1.0] * 20]
-    inp = AbLangGradientInput(logits=logits, temperature=0.5)
-    assert inp.logits == logits
+def test_ablang_gradient_input_validation():
+    inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]), temperature=0.5)
+    assert inp.antibody.heavy_chain == [[0.0] * 20, [1.0] * 20]
 
     with pytest.raises(ValidationError, match="20 columns"):
-        AbLangGradientInput(logits=[[0.0] * 19], temperature=1.0)
+        AntibodyLogits(heavy_chain=[[0.0] * 19])
+    with pytest.raises(ValidationError, match="20 columns"):
+        AntibodyLogits(heavy_chain=[[0.0] * 20], light_chain=[[0.0] * 19])
+    with pytest.raises(ValidationError, match="At least one"):
+        AntibodyLogits()
 
-
-def test_ablang_gradient_config_validates_paired_config():
-    config = AbLangGradientConfig(
-        model_choice="ablang2-paired",
-        chain_break_position=4,
-    )
-    assert config.chain_break_position == 4
-
-    with pytest.raises(
-        ValidationError,
-        match="chain_break_position is required when model_choice='ablang2-paired'",
-    ):
-        AbLangGradientConfig(model_choice="ablang2-paired")
-
-    with pytest.raises(
-        ValidationError,
-        match="chain_break_position is only supported when model_choice='ablang2-paired'",
-    ):
-        AbLangGradientConfig(model_choice="ablang1-heavy", chain_break_position=4)
+    paired = AntibodyLogits(heavy_chain=[[0.0] * 20] * 3, light_chain=[[0.0] * 20] * 2)
+    assert len(paired.heavy_chain) == 3
+    assert len(paired.light_chain) == 2
 
 
 def test_ablang_gradient_dispatch_contract(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_dispatch(tool_name, payload, *, instance=None, config=None):
-        captured["tool_name"] = tool_name
         captured["payload"] = payload
-        captured["instance"] = instance
-        captured["config"] = config
+        n = len(payload.get("logits", []))
         return {
-            "gradient": [[0.1] * 20, [0.2] * 20],
-            "loss": 0.75,
-            "metrics": {"log_likelihood": -0.75, "model_choice": "ablang2-paired"},
+            "gradient": [[0.0] * 20] * n,
+            "loss": 0.5,
+            "metrics": {"log_likelihood": -0.5, "model_choice": payload.get("model_choice")},
             "vocab": list(PROTEIN_AMINO_ACIDS),
         }
 
@@ -128,31 +94,25 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
         fake_dispatch,
     )
 
-    inputs = AbLangGradientInput(logits=[[0.0] * 20, [1.0] * 20], temperature=0.8)
-    config = AbLangGradientConfig(
-        model_choice="ablang2-paired",
-        chain_break_position=1,
-        seed=17,
-        device="cpu",
-    )
-    result = run_ablang_gradient(inputs=inputs, config=config)
+    heavy, light = [[0.0] * 20], [[1.0] * 20]
 
-    validate_output(result)
-    assert captured["tool_name"] == "ablang"
-    assert captured["payload"] == {
-        "operation": "compute_gradient",
-        "logits": inputs.logits,
-        "temperature": 0.8,
-        "model_choice": "ablang2-paired",
-        "chain_break_position": 1,
-        "seed": 17,
-        "device": "cpu",
-        "verbose": False,
-    }
-    assert result.gradient == [[0.1] * 20, [0.2] * 20]
-    assert result.loss == 0.75
-    assert result.metrics["log_likelihood"] == -0.75
-    assert result.vocab == _CANONICAL_VOCAB
+    # Paired: chains concatenated, model auto-selected
+    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy, light_chain=light)))
+    assert captured["payload"]["logits"] == heavy + light
+    assert captured["payload"]["chain_break_position"] == 1
+    assert captured["payload"]["model_choice"] == "ablang2-paired"
+
+    # Heavy only
+    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy)))
+    assert captured["payload"]["logits"] == heavy
+    assert captured["payload"]["chain_break_position"] is None
+    assert captured["payload"]["model_choice"] == "ablang1-heavy"
+
+    # Light only
+    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(light_chain=light)))
+    assert captured["payload"]["logits"] == light
+    assert captured["payload"]["chain_break_position"] is None
+    assert captured["payload"]["model_choice"] == "ablang1-light"
 
 
 # ── Gradient unit tests (CPU, fake model) ────────────────────────────────────
@@ -361,8 +321,8 @@ def test_ablang_embeddings_heavy():
     """Test ablang1-heavy embeddings with multiple variable-length sequences."""
     seqs = [VH_SEQ, VH_SEQ[:50]]
     result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=seqs),
-        AbLangEmbeddingsConfig(model_choice="ablang1-heavy", batch_size=2),
+        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=s) for s in seqs]),
+        AbLangEmbeddingsConfig(batch_size=2),
     )
     validate_output(result)
 
@@ -383,8 +343,7 @@ def test_ablang_embeddings_heavy():
 def test_ablang_embeddings_light():
     """Test ablang1-light embeddings produce correct 768-dim vectors."""
     result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=[VL_SEQ]),
-        AbLangEmbeddingsConfig(model_choice="ablang1-light"),
+        AbLangEmbeddingsInput(antibodies=[Antibody(light_chain=VL_SEQ)]),
     )
     validate_output(result)
 
@@ -399,8 +358,7 @@ def test_ablang_embeddings_light():
 def test_ablang_embeddings_paired():
     """Test ablang2-paired embeddings produce correct 480-dim vectors."""
     result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=[PAIRED_SEQ]),
-        AbLangEmbeddingsConfig(model_choice="ablang2-paired"),
+        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL)]),
     )
     validate_output(result)
 
@@ -415,16 +373,14 @@ def test_ablang_embeddings_paired():
 def test_ablang_embeddings_auto_routing():
     """Test that auto model routing selects correct model and embedding dim."""
     single_result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=[VH_SEQ]),
-        AbLangEmbeddingsConfig(model_choice="auto"),
+        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=VH_SEQ)]),
     )
     assert single_result.success
     assert single_result.metadata["model_choice"] == "ablang1-heavy"
     assert len(single_result.results[0].mean_embedding) == 768
 
     paired_result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=[PAIRED_SEQ]),
-        AbLangEmbeddingsConfig(model_choice="auto"),
+        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL)]),
     )
     assert paired_result.success
     assert paired_result.metadata["model_choice"] == "ablang2-paired"
@@ -438,8 +394,8 @@ def test_ablang_embeddings_auto_routing():
 def test_ablang_score_heavy():
     """Test ablang1-heavy PLL: natural VH scores higher than poly-A."""
     result = run_ablang_score(
-        AbLangScoringInput(sequences=[VH_SEQ, "A" * 20]),
-        AbLangScoringConfig(model_choice="ablang1-heavy", scoring_mode="pseudo_log_likelihood"),
+        AbLangScoringInput(antibodies=[Antibody(heavy_chain=VH_SEQ), Antibody(heavy_chain="A" * 20)]),
+        AbLangScoringConfig(scoring_mode="pseudo_log_likelihood"),
     )
     validate_output(result)
 
@@ -456,8 +412,8 @@ def test_ablang_score_heavy():
 def test_ablang_score_light():
     """Test ablang1-light PLL: natural VL scores higher than poly-A."""
     result = run_ablang_score(
-        AbLangScoringInput(sequences=[VL_SEQ, "A" * 20]),
-        AbLangScoringConfig(model_choice="ablang1-light", scoring_mode="pseudo_log_likelihood"),
+        AbLangScoringInput(antibodies=[Antibody(light_chain=VL_SEQ), Antibody(light_chain="A" * 20)]),
+        AbLangScoringConfig(scoring_mode="pseudo_log_likelihood"),
     )
     validate_output(result)
 
@@ -473,8 +429,8 @@ def test_ablang_score_light():
 def test_ablang_score_paired():
     """Test ablang2-paired PLL produces finite negative scores."""
     result = run_ablang_score(
-        AbLangScoringInput(sequences=[PAIRED_SEQ]),
-        AbLangScoringConfig(model_choice="ablang2-paired", scoring_mode="pseudo_log_likelihood"),
+        AbLangScoringInput(antibodies=[Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL)]),
+        AbLangScoringConfig(scoring_mode="pseudo_log_likelihood"),
     )
     validate_output(result)
 
@@ -484,11 +440,15 @@ def test_ablang_score_paired():
 
 @pytest.mark.uses_gpu
 def test_ablang_score_confidence_mode():
-    """Test confidence scoring returns finite scores for all three models."""
-    for model, seq in [("ablang1-heavy", VH_SEQ), ("ablang1-light", VL_SEQ), ("ablang2-paired", PAIRED_SEQ)]:
+    """Test confidence scoring returns finite scores for all chain configurations."""
+    for ab in [
+        Antibody(heavy_chain=VH_SEQ),
+        Antibody(light_chain=VL_SEQ),
+        Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL),
+    ]:
         result = run_ablang_score(
-            AbLangScoringInput(sequences=[seq]),
-            AbLangScoringConfig(model_choice=model, scoring_mode="confidence"),
+            AbLangScoringInput(antibodies=[ab]),
+            AbLangScoringConfig(scoring_mode="confidence"),
         )
         validate_output(result)
         assert math.isfinite(result.scores[0]["confidence"])
@@ -503,8 +463,7 @@ def test_ablang_sample_heavy():
     mask_pos = 4
     masked_seq = VH_SEQ[:mask_pos] + "_" + VH_SEQ[mask_pos + 1 :]
     result = run_ablang_sample(
-        AbLangSampleInput(sequences=[masked_seq]),
-        AbLangSampleConfig(model_choice="ablang1-heavy"),
+        AbLangSampleInput(antibodies=[Antibody(heavy_chain=masked_seq)]),
     )
     validate_output(result)
 
@@ -523,8 +482,7 @@ def test_ablang_sample_light():
     mask_pos = 4
     masked_seq = VL_SEQ[:mask_pos] + "_" + VL_SEQ[mask_pos + 1 :]
     result = run_ablang_sample(
-        AbLangSampleInput(sequences=[masked_seq]),
-        AbLangSampleConfig(model_choice="ablang1-light"),
+        AbLangSampleInput(antibodies=[Antibody(light_chain=masked_seq)]),
     )
     validate_output(result)
 
@@ -541,17 +499,15 @@ def test_ablang_sample_paired():
     """Test ablang2-paired restoration: valid AAs, length preserved, unmasked unchanged."""
     mask_pos = 4
     masked_heavy = HEAVY_FULL[:mask_pos] + "_" + HEAVY_FULL[mask_pos + 1 :]
-    masked_paired = masked_heavy + "|" + LIGHT_FULL
     result = run_ablang_sample(
-        AbLangSampleInput(sequences=[masked_paired]),
-        AbLangSampleConfig(model_choice="ablang2-paired"),
+        AbLangSampleInput(antibodies=[Antibody(heavy_chain=masked_heavy, light_chain=LIGHT_FULL)]),
     )
     validate_output(result)
 
     restored = result.sequences[0]
     residues_only = restored.replace("|", "")
     assert "_" not in restored
-    assert len(restored) == len(masked_paired)
+    assert len(restored) == len(masked_heavy) + 1 + len(LIGHT_FULL)
     assert set(residues_only) <= _VALID_AAS
     assert restored[:mask_pos] == HEAVY_FULL[:mask_pos]
     assert restored[mask_pos + 1 : len(HEAVY_FULL)] == HEAVY_FULL[mask_pos + 1 :]
@@ -565,8 +521,7 @@ def test_ablang_gradient_single_chain():
     """Test single-chain gradient: shape, finiteness, and metric consistency."""
     seq_len = 10
     result = run_ablang_gradient(
-        AbLangGradientInput(logits=[[0.0] * 20] * seq_len, temperature=0.6),
-        AbLangGradientConfig(model_choice="ablang1-heavy"),
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * seq_len), temperature=0.6),
     )
     validate_output(result)
 
@@ -584,28 +539,26 @@ def test_ablang_gradient_single_chain():
 
 
 @pytest.mark.uses_gpu
-def test_ablang_gradient_paired_with_chain_break():
-    """Test paired-chain gradient with chain_break_position."""
+def test_ablang_gradient_paired_chains():
+    """Test paired-chain gradient with separate heavy and light chain inputs."""
     heavy_len = 4
     light_len = 5
-    seq_len = heavy_len + light_len
 
     result = run_ablang_gradient(
-        AbLangGradientInput(logits=[[0.0] * 20] * seq_len, temperature=0.6),
-        AbLangGradientConfig(
-            model_choice="ablang2-paired",
-            chain_break_position=heavy_len,
+        AbLangGradientInput(
+            antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * heavy_len, light_chain=[[0.0] * 20] * light_len),
+            temperature=0.6,
         ),
     )
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.gradient) == seq_len
+    assert len(result.gradient) == heavy_len + light_len
     assert all(len(row) == 20 for row in result.gradient)
     assert all(math.isfinite(v) for row in result.gradient for v in row)
     assert any(v != 0.0 for row in result.gradient for v in row)
     assert result.vocab == _CANONICAL_VOCAB
-    assert result.metrics["sequence_length"] == seq_len
+    assert result.metrics["sequence_length"] == heavy_len + light_len
     assert result.metrics["model_choice"] == "ablang2-paired"
     assert result.metrics["objective"] == "shifted_cross_entropy"
 
@@ -617,16 +570,16 @@ def test_ablang_gradient_descent_reduces_loss():
     initial_logits = [[0.0] * 20] * seq_len
 
     result_0 = run_ablang_gradient(
-        AbLangGradientInput(logits=initial_logits, temperature=0.7),
-        AbLangGradientConfig(model_choice="ablang1-heavy", seed=42),
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=initial_logits), temperature=0.7),
+        AbLangGradientConfig(seed=42),
     )
 
     lr = 10.0
     stepped_logits = [[initial_logits[i][j] - lr * result_0.gradient[i][j] for j in range(20)] for i in range(seq_len)]
 
     result_1 = run_ablang_gradient(
-        AbLangGradientInput(logits=stepped_logits, temperature=0.7),
-        AbLangGradientConfig(model_choice="ablang1-heavy", seed=42),
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=stepped_logits), temperature=0.7),
+        AbLangGradientConfig(seed=42),
     )
 
     assert result_1.loss < result_0.loss
@@ -638,28 +591,28 @@ def test_ablang_gradient_descent_reduces_loss():
 @pytest.mark.uses_gpu
 def test_ablang_batched_operations():
     """Test that batch_size > 1 works for embeddings, scoring, and sampling."""
-    seqs = [VH_SEQ, VH_SEQ[:50], VH_SEQ[:80]]
+    antibodies = [Antibody(heavy_chain=s) for s in [VH_SEQ, VH_SEQ[:50], VH_SEQ[:80]]]
 
     emb_result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(sequences=seqs),
-        AbLangEmbeddingsConfig(model_choice="ablang1-heavy", batch_size=2),
+        AbLangEmbeddingsInput(antibodies=antibodies),
+        AbLangEmbeddingsConfig(batch_size=2),
     )
     assert emb_result.success
     assert len(emb_result.results) == 3
     assert all(len(r.mean_embedding) == 768 for r in emb_result.results)
 
     score_result = run_ablang_score(
-        AbLangScoringInput(sequences=seqs),
-        AbLangScoringConfig(model_choice="ablang1-heavy", batch_size=2),
+        AbLangScoringInput(antibodies=antibodies),
+        AbLangScoringConfig(batch_size=2),
     )
     assert score_result.success
     assert len(score_result.scores) == 3
     assert all("pseudo_log_likelihood" in s for s in score_result.scores)
 
-    masked_seqs = [s[:4] + "_" + s[5:] for s in seqs]
+    masked_abs = [Antibody(heavy_chain=s[:4] + "_" + s[5:]) for s in [VH_SEQ, VH_SEQ[:50], VH_SEQ[:80]]]
     sample_result = run_ablang_sample(
-        AbLangSampleInput(sequences=masked_seqs),
-        AbLangSampleConfig(model_choice="ablang1-heavy", batch_size=2),
+        AbLangSampleInput(antibodies=masked_abs),
+        AbLangSampleConfig(batch_size=2),
     )
     assert sample_result.success
     assert len(sample_result.sequences) == 3

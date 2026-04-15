@@ -1,22 +1,17 @@
 """AbLang sampling (restore) tool."""
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field
 
-from proto_tools.tools.masked_models.ablang.ablang_embeddings import (
-    ABLANG_MODEL_CHOICES,
-    _resolve_model_choice,
-)
+from proto_tools.entities.antibody import Antibody
+from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import (
     BaseToolInput,
@@ -33,62 +28,31 @@ logger = logging.getLogger(__name__)
 class AbLangSampleInput(BaseToolInput):
     """Input for AbLang antibody sequence restoration/sampling.
 
-    Sequences should contain underscores (``_``) at positions to be restored
-    (predicted) by the model. The model will replace masked positions with
-    its most likely amino acid predictions.
+    Chain sequences should contain underscores (``_``) at positions to be
+    restored (predicted) by the model.
 
     Attributes:
-        sequences (list[str]): Antibody sequence(s) with ``_`` at positions to
-            restore. Format depends on the model choice:
-
-            - ``ablang1-heavy``: Heavy chain with masked positions
-              (e.g., ``"EVQL_ESGGGLVQPGG"``)
-            - ``ablang1-light``: Light chain with masked positions
-            - ``ablang2-paired``: Paired format ``"heavy_seq|light_seq"``
+        antibodies (list[Antibody]): Antibody sequence(s) with ``_`` at
+            positions to restore.
     """
 
-    sequences: list[str] = InputField(
-        description="Antibody sequence(s) with '_' at positions to restore. For paired models, use 'heavy|light' format.",
+    antibodies: list[Antibody] = InputField(
+        description="Antibody sequence(s) with '_' at positions to restore.",
+        min_length=1,
     )
-
-    @field_validator("sequences", mode="before")
-    @classmethod
-    def normalize_sequences(cls, v: Any) -> Any:
-        """Convert single string to list."""
-        if isinstance(v, str):
-            return [v]
-        if not v:
-            raise ValueError("sequences must not be empty")
-        return v
 
 
 class AbLangSampleConfig(MaskedModelConfig):
     """Configuration for AbLang antibody sequence restoration.
 
     Controls the restoration of masked positions in antibody sequences
-    using AbLang's learned antibody language model distribution.
+    using AbLang's learned antibody language model distribution. The model
+    variant is selected automatically based on which chains are provided.
 
     Attributes:
-        model_choice (ABLANG_MODEL_CHOICES): AbLang model variant to use:
-
-            - ``"auto"``: Automatically select based on input format (default).
-              Paired sequences (``"heavy|light"``) use ``ablang2-paired``,
-              single-chain sequences use ``ablang1-heavy``.
-            - ``"ablang1-heavy"``: Heavy chain only
-            - ``"ablang1-light"``: Light chain only
-            - ``"ablang2-paired"``: Paired heavy+light chains
-
         batch_size (int): Number of sequences per forward pass. Default: ``1``.
-
         device (str): Device to run on. Default: ``"cuda"``.
     """
-
-    model_choice: ABLANG_MODEL_CHOICES = ConfigField(
-        title="Model Choice",
-        default="auto",
-        description="Model variant: 'auto', 'ablang1-heavy', 'ablang1-light', or 'ablang2-paired'",
-        reload_on_change=True,
-    )
 
 
 class AbLangSampleOutput(BaseToolOutput):
@@ -139,7 +103,7 @@ class AbLangSampleOutput(BaseToolOutput):
 # ============================================================================
 def example_input() -> AbLangSampleInput:
     """Minimal valid input for testing and examples."""
-    return AbLangSampleInput(sequences=["EVQL_ESGGGLVQPGG"])
+    return AbLangSampleInput(antibodies=[Antibody(heavy_chain="EVQL_ESGGGLVQPGG")])
 
 
 @tool(
@@ -152,54 +116,26 @@ def example_input() -> AbLangSampleInput:
     description="Restore masked antibody sequence positions using AbLang",
     uses_gpu=True,
     example_input=example_input,
-    iterable_input_field="sequences",
+    iterable_input_field="antibodies",
     iterable_output_field="sequences",
+    cacheable=True,
 )
 def run_ablang_sample(
     inputs: AbLangSampleInput,
     config: AbLangSampleConfig,
     instance: Any = None,
 ) -> AbLangSampleOutput:
-    """Restore masked positions in antibody sequences using AbLang.
-
-    Uses AbLang's learned antibody sequence distribution to predict the most
-    likely amino acids at masked (``_``) positions. This is useful for:
-
-    - Restoring missing or uncertain regions in antibody sequences
-    - Predicting CDR loop sequences given framework context
-    - Generating antibody sequence variants
-
-    Args:
-        inputs (AbLangSampleInput): Validated input containing antibody
-            sequences with ``_`` at positions to restore.
-        config (AbLangSampleConfig): Configuration specifying model variant
-            and device.
-        instance (Any): Optional ToolInstance for subprocess execution.
-
-    Returns:
-        AbLangSampleOutput: Restored sequences with masked positions filled
-            by model predictions.
-
-    Examples:
-        >>> inputs = AbLangSampleInput(sequences=["EVQL_ESGGGLVQPGG"])
-        >>> config = AbLangSampleConfig(model_choice="ablang1-heavy")
-        >>> result = run_ablang_sample(inputs, config)
-        >>> print(f"Restored: {result.sequences[0]}")
-
-    Note:
-        - Positions marked with ``_`` will be replaced by model predictions
-        - For paired models, both chains can have masked positions
-        - Restoration uses greedy decoding (most likely amino acid per position)
-    """
-    resolved_model = _resolve_model_choice(config.model_choice, inputs.sequences)
-    logger.debug(f"Using local venv for AbLang sampling: {resolved_model}")
+    """Restore masked positions in antibody sequences using AbLang."""
+    sequences = [ab.to_sequence() for ab in inputs.antibodies]
+    model_choice = _resolve_model_choice(inputs.antibodies)
+    logger.debug("Using local venv for AbLang sampling: %s", model_choice)
     result = ToolInstance.dispatch(
         "ablang",
         {
             "operation": "sample",
-            "sequences": inputs.sequences,
+            "sequences": sequences,
             "batch_size": config.batch_size,
-            "model_choice": resolved_model,
+            "model_choice": model_choice,
             "device": config.device,
             "verbose": config.verbose,
         },
@@ -209,8 +145,8 @@ def run_ablang_sample(
 
     return AbLangSampleOutput(
         metadata={
-            "model_choice": resolved_model,
-            "num_sequences": len(inputs.sequences),
+            "model_choice": model_choice,
+            "num_sequences": len(sequences),
         },
         sequences=result["sequences"],
     )

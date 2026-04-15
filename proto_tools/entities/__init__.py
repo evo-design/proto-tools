@@ -1,5 +1,6 @@
-"""Entities: structures and ligands."""
+"""Entities: antibodies, structures, and ligands."""
 
+from proto_tools.entities.antibody import Antibody, AntibodyLogits
 from proto_tools.entities.ligands import (
     CCD_DATABASE_PATH,
     Fragment,
@@ -33,6 +34,9 @@ from proto_tools.entities.structures import (
 )
 
 __all__ = [
+    # Antibodies
+    "Antibody",
+    "AntibodyLogits",
     # Structures
     "Structure",
     "StructureEnsemble",

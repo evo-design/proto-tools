@@ -365,6 +365,19 @@ class AbLangModel:
     ) -> dict[str, Any]:
         """Compute shifted cross-entropy gradient with respect to a sequence distribution.
 
+        Args:
+            logits_list (list[list[float]]): Concatenated chain logits, shape (L, 20).
+            chain_break_position (int | None): 0-indexed insertion point for the ``|``
+                chain separator. For paired sequences this equals the number of residues
+                in the first chain (e.g. 4 means insert separator before index 4).
+            seed (int | None): Random seed for reproducibility.
+            device (str): Execution device.
+            verbose (bool): Whether to log progress.
+
+        Returns:
+            dict[str, Any]: Gradient bundle with keys ``gradient``, ``loss``,
+                ``metrics``, and ``vocab``.
+
         Shape notation:
             L  = input sequence length
             V  = AbLang vocab size (21 for ablang2, 19 for ablang1 after :-2 trim)
