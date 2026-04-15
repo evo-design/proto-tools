@@ -22,19 +22,20 @@ class AbLangGradientInput(BaseToolInput):
     """Input for the AbLang gradient tool.
 
     Attributes:
-        antibody (AntibodyLogits): Antibody with relaxed logit distributions.
+        antibody (AntibodyLogits): Antibody with relaxed sequence distributions.
             The model variant is selected automatically based on which chains
             are provided.
-        temperature (float): Softmax temperature for relaxing logits into a
-            continuous sequence distribution.
+        temperature (float | None): Optional softmax temperature. When set, applies
+            ``softmax(input / temperature)`` before computing the gradient. When
+            ``None`` (default), the input is used as-is.
     """
 
     antibody: AntibodyLogits = InputField(
-        description="Antibody with relaxed logit distributions over amino acids.",
+        description="Antibody with relaxed sequence distributions over amino acids.",
     )
-    temperature: float = InputField(
-        default=1.0,
-        description="Softmax temperature used to convert logits into a relaxed amino-acid probability distribution.",
+    temperature: float | None = InputField(
+        default=None,
+        description="Softmax temperature. Applies softmax(input / T) when set.",
         gt=0.0,
     )
 
@@ -46,9 +47,17 @@ class AbLangGradientConfig(BaseConfig):
     """Configuration for the AbLang shifted cross-entropy gradient tool.
 
     Attributes:
+        use_ste (bool): When ``True``, uses a Straight-Through Estimator: hard one-hot
+            tokens in the forward pass with gradients flowing through soft probabilities.
+            When ``False`` (default), uses soft blended embeddings directly.
         device (str): Execution device for the model, for example 'cuda' or 'cpu'.
     """
 
+    use_ste: bool = ConfigField(
+        title="Straight-Through Estimator",
+        default=False,
+        description="Hard one-hot forward pass with soft-probability gradients.",
+    )
     device: str = ConfigField(
         title="Device",
         default="cuda",
@@ -108,6 +117,7 @@ def run_ablang_gradient(
         "operation": "compute_gradient",
         "logits": logits,
         "temperature": inputs.temperature,
+        "use_ste": config.use_ste,
         "model_choice": model_choice,
         "chain_break_position": chain_break_position,
         "seed": config.seed,

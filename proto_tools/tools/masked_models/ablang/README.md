@@ -72,8 +72,8 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `antibody` | `AntibodyLogits` | Antibody with `heavy_chain` and/or `light_chain` as logit matrices with shape `(L, 20)` in canonical protein order |
-| `temperature` | `float` | Softmax temperature used to relax logits into probabilities |
+| `antibody` | `AntibodyLogits` | Antibody with `heavy_chain` and/or `light_chain` as distribution or logit matrices with shape `(L, 20)` in canonical protein order |
+| `temperature` | `float \| null` | Optional softmax temperature. When set, applies `softmax(input / temperature)` before gradient computation. When `null` (default), input is used as-is — callers provide a pre-computed distribution |
 
 ## Configuration
 
@@ -103,7 +103,8 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `seed` | `int \| null` | `0` | Optional PyTorch random seed for reproducibility |
+| `use_ste` | `bool` | `false` | When true, uses a Straight-Through Estimator: hard one-hot tokens in the forward pass with gradients flowing through soft probabilities. When false, uses soft blended embeddings |
+| `seed` | `int \| null` | `null` | Optional PyTorch random seed for reproducibility |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
 ## Output Specification

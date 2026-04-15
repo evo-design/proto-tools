@@ -61,8 +61,17 @@ VL_SEQ = "SYELTQPPSVSVSPGQTARITCSANALPNQYAYWYQQKPGRAPVMVIYKDTQRPSGIPQRFSSSTSGTTV
 
 
 def test_ablang_gradient_input_validation():
-    inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]), temperature=0.5)
+    inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]))
     assert inp.antibody.heavy_chain == [[0.0] * 20, [1.0] * 20]
+    assert inp.temperature is None
+
+    inp_with_temp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.6)
+    assert inp_with_temp.temperature == 0.6
+
+    with pytest.raises(ValidationError):
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=-0.5)
+    with pytest.raises(ValidationError):
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.0)
 
     with pytest.raises(ValidationError, match="20 columns"):
         AntibodyLogits(heavy_chain=[[0.0] * 19])
@@ -101,12 +110,15 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["logits"] == heavy + light
     assert captured["payload"]["chain_break_position"] == 1
     assert captured["payload"]["model_choice"] == "ablang2-paired"
+    assert captured["payload"]["temperature"] is None
+    assert captured["payload"]["use_ste"] is False
 
-    # Heavy only
-    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy)))
+    # Heavy only, with temperature
+    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
     assert captured["payload"]["logits"] == heavy
     assert captured["payload"]["chain_break_position"] is None
     assert captured["payload"]["model_choice"] == "ablang1-heavy"
+    assert captured["payload"]["temperature"] == 0.6
 
     # Light only
     run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(light_chain=light)))
@@ -177,6 +189,8 @@ def _build_fake_paired_model() -> tuple:
 def _manual_expected_gradient(
     logits_list: list[list[float]],
     *,
+    temperature: float | None = None,
+    use_ste: bool = False,
     chain_break_position: int | None,
     weight: Any,
     projection: Any,
@@ -187,12 +201,19 @@ def _manual_expected_gradient(
 
     seq_dist = torch.tensor(logits_list, dtype=torch.float32, requires_grad=True)
 
+    x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+
     mapping = torch.zeros((len(_CANONICAL_VOCAB), _ABLANG_VOCAB_SIZE), dtype=torch.float32)
     for idx, aa in enumerate(_CANONICAL_VOCAB):
         mapping[idx, ABLANG_VOCAB_ORDER.index(aa)] = 1.0
-    mapped = seq_dist @ mapping
+    mapped = x @ mapping
 
     token_ids = mapped.argmax(dim=-1).detach()
+
+    if use_ste:
+        hard = F.one_hot(token_ids, num_classes=_ABLANG_VOCAB_SIZE).float()
+        mapped = hard + (mapped - mapped.detach())
+
     residue_embeddings = mapped @ weight
 
     if chain_break_position is not None:
@@ -239,13 +260,24 @@ _UNIT_LOGITS = [
 
 
 @pytest.mark.parametrize("chain_break_position", [2, None])
-def test_compute_gradient_matches_objective_math(chain_break_position: int | None) -> None:
-    """Validate the exact shifted-cross-entropy math with and without chain separator."""
+@pytest.mark.parametrize(
+    ("temperature", "use_ste"),
+    [(None, False), (0.6, False), (None, True), (0.6, True)],
+    ids=["default", "temp_only", "ste_only", "temp_and_ste"],
+)
+def test_compute_gradient_matches_objective_math(
+    chain_break_position: int | None,
+    temperature: float | None,
+    use_ste: bool,
+) -> None:
+    """Validate the exact shifted-cross-entropy math across temperature/STE combinations."""
     torch = pytest.importorskip("torch")
     model, weight, projection = _build_fake_paired_model()
 
     result = model.compute_gradient(
         logits_list=_UNIT_LOGITS,
+        temperature=temperature,
+        use_ste=use_ste,
         chain_break_position=chain_break_position,
         seed=None,
         device="cpu",
@@ -253,6 +285,8 @@ def test_compute_gradient_matches_objective_math(chain_break_position: int | Non
 
     expected_gradient, expected_loss = _manual_expected_gradient(
         _UNIT_LOGITS,
+        temperature=temperature,
+        use_ste=use_ste,
         chain_break_position=chain_break_position,
         weight=weight,
         projection=projection,
@@ -300,7 +334,8 @@ def test_dispatch_routes_gradient_to_expected_checkpoint(
         {
             "operation": "compute_gradient",
             "logits": [[0.0] * 20],
-            "temperature": 1.0,
+            "temperature": None,
+            "use_ste": False,
             "model_choice": model_choice,
             "chain_break_position": 1 if model_choice == "ablang2-paired" else None,
             "seed": None,

@@ -358,6 +358,8 @@ class AbLangModel:
         self,
         logits_list: list[list[float]],
         *,
+        temperature: float | None = None,
+        use_ste: bool = False,
         chain_break_position: int | None = None,
         seed: int | None = None,
         device: str = "cuda",
@@ -366,17 +368,16 @@ class AbLangModel:
         """Compute shifted cross-entropy gradient with respect to a sequence distribution.
 
         Args:
-            logits_list (list[list[float]]): Concatenated chain logits, shape (L, 20).
-            chain_break_position (int | None): 0-indexed insertion point for the ``|``
-                chain separator. For paired sequences this equals the number of residues
-                in the first chain (e.g. 4 means insert separator before index 4).
+            logits_list (list[list[float]]): Distribution or logits, shape (L, 20).
+            temperature (float | None): When set, applies ``softmax(input / temperature)``.
+            use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
+            chain_break_position (int | None): Where to insert the ``|`` chain separator.
             seed (int | None): Random seed for reproducibility.
             device (str): Execution device.
             verbose (bool): Whether to log progress.
 
         Returns:
-            dict[str, Any]: Gradient bundle with keys ``gradient``, ``loss``,
-                ``metrics``, and ``vocab``.
+            dict[str, Any]: Keys: ``gradient``, ``loss``, ``metrics``, ``vocab``.
 
         Shape notation:
             L  = input sequence length
@@ -394,8 +395,14 @@ class AbLangModel:
         seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=True)  # (L, 20)
         sequence_length = int(seq_dist.shape[0])
 
-        mapped = seq_dist @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
+        x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+
+        mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
         residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,) — labels only, no gradient
+
+        if use_ste:
+            hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
+            mapped = hard + (mapped - mapped.detach())  # STE: hard forward, soft backward
 
         if self._is_ablang1:
             embed_layer = self.model.AbRep.AbEmbeddings.AAEmbeddings
@@ -506,6 +513,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "compute_gradient":
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
+            temperature=input_dict["temperature"],
+            use_ste=input_dict["use_ste"],
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             device=input_dict["device"],
