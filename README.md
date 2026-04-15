@@ -88,6 +88,9 @@ To use these models:
    export HF_TOKEN=hf_...
    ```
 
+> [!TIP]
+> **You're all set up!** To learn what features are available in the library, check out the [tutorial series](tutorials/) — four short notebooks covering the universal tool pattern, persistent execution, device management, and parallel multi-GPU runs.
+
 ## Available Tools 🔬
 
 <pre>
@@ -185,7 +188,16 @@ with ToolInstance.persist():
         result = run_esmfold(ESMFoldInput(complexes=[seq]), ESMFoldConfig())
 ```
 
-See `notes/tool_instance_example.ipynb` for a full walkthrough with timing comparisons.
+## Tutorials
+
+Runnable walkthroughs of the core framework features live in [`tutorials/`](tutorials/):
+
+1. [Getting Started](tutorials/01_getting_started.ipynb) — the universal tool pattern (CPU-only)
+2. [Tool Persistence](tutorials/02_tool_persistence.ipynb) — keep models warm across calls
+3. [Device Management](tutorials/03_device_management.ipynb) — GPU allocation, LRU eviction, CPU offload
+4. [Parallel Execution](tutorials/04_parallel_execution.ipynb) — fan out work across every GPU with `ToolPool`
+
+Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
 ## MCP Servers
 
