@@ -504,6 +504,32 @@ def test_missing_whitelist_vars_not_added(monkeypatch):
     assert "HTTPS_PROXY" not in env
 
 
+def test_uv_pip_cache_defaults_under_proto_home(monkeypatch, tmp_path: Path):
+    """UV_CACHE_DIR and PIP_CACHE_DIR default to PROTO_HOME/{uv,pip}_cache."""
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    monkeypatch.delenv("UV_CACHE_DIR", raising=False)
+    monkeypatch.delenv("PIP_CACHE_DIR", raising=False)
+    get_proto_home.cache_clear()
+
+    env = _build_subprocess_env(device="cpu")
+
+    assert env["UV_CACHE_DIR"] == str(tmp_path / "uv_cache")
+    assert env["PIP_CACHE_DIR"] == str(tmp_path / "pip_cache")
+
+
+def test_uv_pip_cache_user_override_preserved(monkeypatch, tmp_path: Path):
+    """User-set UV_CACHE_DIR / PIP_CACHE_DIR win over the PROTO_HOME default."""
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    monkeypatch.setenv("UV_CACHE_DIR", "/custom/uv")
+    monkeypatch.setenv("PIP_CACHE_DIR", "/custom/pip")
+    get_proto_home.cache_clear()
+
+    env = _build_subprocess_env(device="cpu")
+
+    assert env["UV_CACHE_DIR"] == "/custom/uv"
+    assert env["PIP_CACHE_DIR"] == "/custom/pip"
+
+
 @pytest.mark.parametrize("device, expect_cuda", [("cpu", False), ("cuda", True)])
 def test_path_ordering(monkeypatch, tmp_path: Path, device, expect_cuda):
     """PATH: venv/bin > (cuda if GPU) > parent PATH > system dirs."""

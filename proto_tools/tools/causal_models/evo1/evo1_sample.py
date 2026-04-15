@@ -151,6 +151,7 @@ def run_evo1_sample(
     result = ToolInstance.dispatch(
         "evo1",
         {
+            "operation": "sample",
             "model_name": config.model_name,
             "prompts": inputs.prompts,
             "num_tokens": config.num_tokens,

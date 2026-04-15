@@ -17,8 +17,26 @@ Everything lives under `PROTO_HOME` regardless of install mode:
 PROTO_HOME/                   (default: ~/.proto/)
 ├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
 ├── proto_tool_envs/          micromamba-managed tool venvs
+├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
+├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
 └── .micromamba/              micromamba binary + package cache
 ```
+
+## uv / pip package caches
+
+Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels. By default, proto-tools routes both caches under `PROTO_HOME` so all disk usage is consolidated and cleanable atomically.
+
+- `UV_CACHE_DIR` — defaults to `PROTO_HOME/uv_cache/` (extracted archives + HTTP cache for `uv`)
+- `PIP_CACHE_DIR` — defaults to `PROTO_HOME/pip_cache/` (HTTP + wheel cache for `pip`)
+
+Both are injected by `persistent_worker._build_subprocess_env()` via `setdefault`, so any value set in your shell overrides the default. To share the cache across projects, set them explicitly:
+
+```bash
+export UV_CACHE_DIR=~/.cache/uv
+export PIP_CACHE_DIR=~/.cache/pip
+```
+
+The cache and tool envs share a filesystem by default, which lets `uv` hard-link from the cache into envs (saves bulk — the extracted archive is not duplicated). Wiping `PROTO_HOME/proto_tool_envs/` preserves the cache, so the next rebuild is fast.
 
 ## Modes
 
