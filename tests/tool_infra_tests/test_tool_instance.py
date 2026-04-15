@@ -22,6 +22,7 @@ from proto_tools.utils.tool_instance import (
     _active_cache,
     _instances,
     _persist_mode,
+    _run_setup_script,
     _scope_override,
 )
 
@@ -1245,10 +1246,6 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     (tmp_path / "python_version.txt").write_text("default: 3.12\n")
     inst._tool_env_vars = {"passthrough": [], "set": []}
 
-    mock_proc = MagicMock()
-    mock_proc.returncode = 42
-    mock_proc.communicate.return_value = ("", "setup failed!")
-
     def _create_env_dir(*args, **kwargs):
         """Simulate 'python -m venv' creating the directory."""
         inst.env_path.mkdir(parents=True, exist_ok=True)
@@ -1264,8 +1261,8 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
             side_effect=_create_env_dir,
         ),
         patch(
-            "proto_tools.utils.tool_instance.subprocess.Popen",
-            return_value=mock_proc,
+            "proto_tools.utils.tool_instance._run_setup_script",
+            return_value=(42, "setup failed!"),
         ),
         pytest.raises(RuntimeError, match="may not be compatible"),
     ):
@@ -1575,3 +1572,111 @@ def test_init_empty_env_vars_for_tool_without_file():
     """Tools without env_vars.txt should get empty lists."""
     inst = ToolInstance("tmalign")
     assert inst._tool_env_vars == {"passthrough": [], "set": []}
+
+
+# ── _run_setup_script (PROTO_ENV_VERBOSE / PROTO_ENV_LOG_DIR) ──────────────
+
+
+def _make_setup_script(tmp_path: Path, body: str) -> Path:
+    """Write a minimal setup.sh-compatible bash script at tmp_path/setup.sh."""
+    script = tmp_path / "setup.sh"
+    script.write_text(f"#!/bin/bash\n{body}\n")
+    script.chmod(0o755)
+    return script
+
+
+def test_run_setup_script_writes_log_and_returns_output(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
+    monkeypatch.delenv("PROTO_ENV_LOG_DIR", raising=False)
+    script = _make_setup_script(tmp_path, 'echo "hello from setup"; echo "stderr line" >&2')
+    log_path = tmp_path / "setup.log"
+
+    rc, combined = _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=log_path,
+        tool_name="fake",
+    )
+
+    assert rc == 0
+    assert "hello from setup" in combined
+    assert "stderr line" in combined  # stderr merged into stdout via stderr=STDOUT
+    assert log_path.exists()
+    assert log_path.read_text() == combined
+
+
+def test_run_setup_script_verbose_mirrors_to_stderr(tmp_path, monkeypatch, capfd):
+    monkeypatch.setenv("PROTO_ENV_VERBOSE", "1")
+    monkeypatch.delenv("PROTO_ENV_LOG_DIR", raising=False)
+    script = _make_setup_script(tmp_path, 'echo "VERBOSE_MARKER_42"')
+    log_path = tmp_path / "setup.log"
+
+    rc, _ = _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=log_path,
+        tool_name="fake",
+    )
+
+    assert rc == 0
+    captured = capfd.readouterr()
+    assert "VERBOSE_MARKER_42" in captured.err
+
+
+def test_run_setup_script_quiet_by_default(tmp_path, monkeypatch, capfd):
+    monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
+    monkeypatch.delenv("PROTO_ENV_LOG_DIR", raising=False)
+    script = _make_setup_script(tmp_path, 'echo "SHOULD_NOT_APPEAR_IN_STDERR"')
+    log_path = tmp_path / "setup.log"
+
+    _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=log_path,
+        tool_name="fake",
+    )
+
+    captured = capfd.readouterr()
+    assert "SHOULD_NOT_APPEAR_IN_STDERR" not in captured.err
+
+
+def test_run_setup_script_mirrors_log_to_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
+    mirror = tmp_path / "mirror"
+    monkeypatch.setenv("PROTO_ENV_LOG_DIR", str(mirror))
+    script = _make_setup_script(tmp_path, 'echo "MIRROR_MARKER_99"')
+    log_path = tmp_path / "setup.log"
+
+    _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=log_path,
+        tool_name="fake",
+    )
+
+    mirrored = mirror / "fake_setup.log"
+    assert mirrored.exists()
+    assert "MIRROR_MARKER_99" in mirrored.read_text()
+
+
+def test_run_setup_script_propagates_nonzero_exit(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROTO_ENV_VERBOSE", raising=False)
+    monkeypatch.delenv("PROTO_ENV_LOG_DIR", raising=False)
+    script = _make_setup_script(tmp_path, 'echo "before fail"; exit 7')
+    log_path = tmp_path / "setup.log"
+
+    rc, combined = _run_setup_script(
+        script,
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin"},
+        log_path=log_path,
+        tool_name="fake",
+    )
+
+    assert rc == 7
+    assert "before fail" in combined
+    assert "before fail" in log_path.read_text()

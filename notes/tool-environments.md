@@ -86,6 +86,17 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
 
+## Debugging Env Setup (`PROTO_ENV_VERBOSE`, `PROTO_ENV_LOG_DIR`)
+
+When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two env vars opt into richer visibility:
+
+- `PROTO_ENV_VERBOSE=1` — streams each line of `setup.sh`'s output live to the caller's stderr as the subprocess runs. Useful for watching long installs (PyTorch, flash-attn, transformer-engine, etc.) in real time and for diagnosing hangs.
+- `PROTO_ENV_LOG_DIR=<path>` — after `setup.sh` exits (success or failure), copies the complete log to `<PROTO_ENV_LOG_DIR>/<tool_name>_setup.log`. Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
+
+Regardless of either flag, the combined output is always written to `<env_path>/setup.log` during setup, so you can inspect it after the fact from any env that still has its files on disk.
+
+Both variables default to off — setup output stays quiet unless a caller opts in. See `tests/tool_infra_tests/test_tool_instance.py::test_run_setup_script_*` for the behavior contract.
+
 ## env_vars.txt
 
 Each tool's `standalone/env_vars.txt` supports two sections:
