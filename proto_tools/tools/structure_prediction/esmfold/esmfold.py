@@ -319,6 +319,7 @@ def run_esmfold(
 
         # Prepare input data for inference script
         input_data = {
+            "operation": "predict",
             "batch_data": sub_batch,
             "residue_idx_offset": config.residue_idx_offset,
             "chain_linker": config.chain_linker,

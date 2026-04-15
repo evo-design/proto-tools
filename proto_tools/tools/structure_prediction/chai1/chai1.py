@@ -363,6 +363,7 @@ def run_chai1_on_complex(
 
         # Prepare input data for inference script
         input_data = {
+            "operation": "predict",
             "fasta_file": input_file,
             "output_dir": output_dir,
             "use_esm_embeddings": config.use_esm_embeddings,

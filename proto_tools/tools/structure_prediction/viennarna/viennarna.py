@@ -254,6 +254,7 @@ def run_viennarna(
 
     # Prepare input data for inference script
     input_data = {
+        "operation": "predict",
         "sequences": inputs.sequences,
         "temperature": config.temperature,
         "use_dna_params": config.use_dna_params,

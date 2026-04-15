@@ -318,6 +318,7 @@ def run_splice_transformer(
     logger.debug(f"Using local device for SpliceTransformer inference (context_length={config.context_length})")
 
     input_data = {
+        "operation": "predict",
         "target_seqs": inputs.target_seqs,
         "left_contexts": inputs.left_contexts,
         "right_contexts": inputs.right_contexts,

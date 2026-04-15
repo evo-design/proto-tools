@@ -214,6 +214,7 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) 
     result = ToolInstance.dispatch(
         "borzoi",
         {
+            "operation": "predict",
             "sequence": inputs.sequence,
             "output_tracks": config.output_tracks,
             "species": config.species,
