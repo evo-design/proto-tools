@@ -415,6 +415,7 @@ def run_protenix(
         # caller's seed instead of the field default ``[0]``.
         seeds_str = str(config.seed) if config.seed is not None else ",".join(str(s) for s in config.seeds)
         input_data = {
+            "operation": "predict",
             "input_json_path": input_json_path,
             "output_dir": output_dir,
             "model_name": config.model_name,

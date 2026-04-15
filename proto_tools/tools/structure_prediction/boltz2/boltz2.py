@@ -381,6 +381,7 @@ def run_boltz2_on_complex(
 
         # Prepare input data for inference script
         input_data = {
+            "operation": "predict",
             "input_yaml_path": str(input_yaml_path),
             "output_dir": str(output_dir),
             "recycling_steps": config.recycling_steps,

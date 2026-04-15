@@ -262,6 +262,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     output = ToolInstance.dispatch(
         "bioemu",
         {
+            "operation": "sample",
             "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
             "msa_a3m_contents": msa_a3m_contents,
             "num_samples": config.num_samples,

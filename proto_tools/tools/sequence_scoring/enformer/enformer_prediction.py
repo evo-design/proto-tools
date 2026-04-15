@@ -178,6 +178,7 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
     result = ToolInstance.dispatch(
         "enformer",
         {
+            "operation": "predict",
             "sequence": inputs.sequence,
             "output_tracks": config.output_tracks,
             "species": config.species,
