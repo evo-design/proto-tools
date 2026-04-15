@@ -147,6 +147,7 @@ def run_proteinmpnn_sample(
                 "device": config.device,
                 "model_choice": config.model_choice,
                 "verbose": config.verbose,
+                "return_logits": False,
             }
             result = ToolInstance.dispatch(
                 "proteinmpnn",

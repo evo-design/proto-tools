@@ -109,6 +109,9 @@ _BASE_PASSTHROUGH = {
     # Model weights management
     "PROTO_HOME",
     "PROTO_MODEL_CACHE",
+    # uv/pip package caches: let user-set values override our defaults
+    "UV_CACHE_DIR",
+    "PIP_CACHE_DIR",
     # Network proxy: tools download model weights and need proxy config
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -243,13 +246,20 @@ def _build_subprocess_env(
     env.setdefault("UV_HTTP_TIMEOUT", "300")
     env.setdefault("PIP_DEFAULT_TIMEOUT", "300")
 
+    # Route uv/pip caches under PROTO_HOME so all proto-tools disk usage
+    # is consolidated and cleanable atomically. Respects user overrides
+    # (UV_CACHE_DIR / PIP_CACHE_DIR are copied in from _BASE_PASSTHROUGH
+    # above; setdefault only fills when unset).
+    from proto_tools.utils.proto_home import get_proto_home
+
+    env.setdefault("UV_CACHE_DIR", str(get_proto_home() / "uv_cache"))
+    env.setdefault("PIP_CACHE_DIR", str(get_proto_home() / "pip_cache"))
+
     # Prevent JAX from preallocating GPU memory at import time (harmless for PyTorch)
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
     env["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     # Always propagate PROTO_HOME so standalone helpers resolve the same root
-    from proto_tools.utils.proto_home import get_proto_home
-
     if "PROTO_HOME" not in env:
         env["PROTO_HOME"] = str(get_proto_home())
 

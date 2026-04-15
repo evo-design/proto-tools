@@ -110,6 +110,7 @@ def run_ligandmpnn_sample(
         while remaining > 0:
             chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
             input_dict = {
+                "operation": "sample",
                 "pdb_contents": inp.structure_pdb,
                 "chain_ids": inp.chain_ids,
                 "batch_size": chunk,
