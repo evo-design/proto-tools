@@ -8,6 +8,7 @@ automatic schema generation for API/frontend integration.
 
 import inspect
 import logging
+import re
 import time
 import traceback
 import warnings
@@ -17,6 +18,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, ClassVar
 
+import yaml
 from pydantic import BaseModel, Field, field_serializer
 
 logger = logging.getLogger(__name__)
@@ -744,6 +746,52 @@ class ToolRegistry:
         return citations
 
     @classmethod
+    def get_doi(cls, key: str) -> str | None:
+        """Extract DOI from a tool's cite.bib, if available.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
+
+        Returns:
+            str | None: DOI string (e.g., '10.1038/s41586-024-07487-w'), or None
+                if no citation exists or the citation has no DOI field
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        citation = cls.get_citation(key)
+        if citation is None:
+            return None
+        match = re.search(r'doi\s*=\s*[{"]([^}"]+)[}"]', citation)
+        return match.group(1) if match else None
+
+    @classmethod
+    def get_links(cls, key: str) -> dict[str, str] | None:
+        """Get links.yaml metadata for a tool.
+
+        Returns parsed contents of the tool's links.yaml file, which may contain
+        github, image, and organizations fields.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
+
+        Returns:
+            dict[str, str] | None: Parsed YAML dict, or None if no links.yaml exists
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        cls.get(key)
+        links_file = _find_links_file(key)
+        if links_file is None:
+            return None
+        with open(links_file) as f:
+            data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                return None
+            return data
+
+    @classmethod
     def _check_duplicate(cls, key: str, attempted_name: str | None = None) -> None:
         """Check for duplicate registration.
 
@@ -883,41 +931,47 @@ def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
         )
 
 
-def _find_citation_file(tool_key: str) -> Path | None:
-    """Find cite.bib for a tool by searching tool directories.
+def _find_tool_metadata_file(tool_key: str, filename: str) -> Path | None:
+    """Find a metadata file (cite.bib, links.yaml, etc.) in tool directories.
 
-    Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/).
-    Handles underscore/hyphen normalization.
+    Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/)
+    and checks for the given filename.
 
     Args:
         tool_key (str): Tool registry key (e.g., 'evo2-sample', 'blast-search')
+        filename (str): Name of file to find (e.g., 'cite.bib', 'links.yaml')
 
     Returns:
-        Path | None: Path to cite.bib file, or None if not found
+        Path | None: Path to the file, or None if not found
     """
-    # Normalize key: replace hyphens with underscores for directory matching
     # Tool keys are kebab-case but directories are snake_case
     normalized_key = tool_key.replace("-", "_")
 
-    # Search all category directories
     for category_dir in TOOLS_DIR.iterdir():
         if not category_dir.is_dir() or category_dir.name.startswith("_"):
             continue
 
-        # Search tool directories within category
         for tool_dir in category_dir.iterdir():
             if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
                 continue
 
-            # Check if the tool key starts with this tool directory name
             # e.g., 'evo2_sample' starts with 'evo2', 'blast_search' starts with 'blast'
-            tool_name = tool_dir.name
-            if normalized_key.startswith(tool_name):
-                cite_path = tool_dir / "cite.bib"
-                if cite_path.exists():
-                    return cite_path
+            if normalized_key.startswith(tool_dir.name):
+                file_path = tool_dir / filename
+                if file_path.exists():
+                    return file_path
 
     return None
+
+
+def _find_citation_file(tool_key: str) -> Path | None:
+    """Find cite.bib for a tool by searching tool directories."""
+    return _find_tool_metadata_file(tool_key, "cite.bib")
+
+
+def _find_links_file(tool_key: str) -> Path | None:
+    """Find links.yaml for a tool by searching tool directories."""
+    return _find_tool_metadata_file(tool_key, "links.yaml")
 
 
 # Alias for simpler decorator syntax: @tool(...) instead of @ToolRegistry.register(...)

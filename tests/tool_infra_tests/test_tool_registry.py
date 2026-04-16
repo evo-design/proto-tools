@@ -1322,3 +1322,42 @@ def test_preprocess_default_noop(clean_registry):
     config = MockToolConfig(param1="x")
     result = run_tool(inputs, config)
     assert result.result == "unchanged"
+
+
+# ── get_links / get_doi ──────────────────────────────────────────────────────
+
+
+def test_get_links():
+    """get_links parses links.yaml, handles partial data, and rejects unknown tools."""
+    # Full metadata
+    links = ToolRegistry.get_links("alphafold3-prediction")
+    assert links is not None
+    assert "github" in links and "image" in links and "organizations" in links
+
+    # Partial metadata (no github key)
+    links = ToolRegistry.get_links("blast-search")
+    assert links is not None and "github" not in links
+
+    # No links.yaml
+    assert ToolRegistry.get_links("sequence-fetch") is None
+
+    # Unknown tool
+    with pytest.raises(ValueError, match="nonexistent-tool"):
+        ToolRegistry.get_links("nonexistent-tool")
+
+
+def test_get_doi():
+    """get_doi extracts DOI from both brace and quoted BibTeX formats."""
+    # Curly-brace format: doi={...}
+    assert ToolRegistry.get_doi("alphafold3-prediction") == "10.1038/s41586-024-07487-w"
+
+    # Quoted format: doi="..."
+    assert ToolRegistry.get_doi("evo2-sample") is not None
+
+    # No DOI field / no citation file
+    assert ToolRegistry.get_doi("minced-crispr") is None
+    assert ToolRegistry.get_doi("random-protein-sample") is None
+
+    # Unknown tool
+    with pytest.raises(ValueError, match="nonexistent-tool"):
+        ToolRegistry.get_doi("nonexistent-tool")
