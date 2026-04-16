@@ -6,15 +6,13 @@ This guide covers the conventions and workflows used in this project.
 
 ## Development Setup
 
-We recommend using the provided `environment.yml`, which sets up Python, compilers, build tools, and system libraries that some tool environments need when compiling from source:
+All you need is Python 3.10+ and pip:
 
 ```bash
-conda env create -f environment.yml
-conda activate proto-tools
 pip install -e ".[dev]"
 ```
 
-Most newer systems will already have compilers and build tools available at a system level, which should allow you to just `pip install -e ".[dev]"` in any Python 3.10+ environment.
+System tools that standalone tool environments need (git, curl, gcc) are automatically provisioned on first use via a shared foundation environment — no manual setup required.
 
 ### Storage for developers
 

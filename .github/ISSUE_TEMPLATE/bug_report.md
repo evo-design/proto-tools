@@ -37,4 +37,4 @@ paste error here
 - **OS:** <!-- e.g., Ubuntu 22.04, CentOS 7.9, macOS 14.5 -->
 - **Python version:** <!-- e.g., 3.11.9 -->
 - **GPU:** <!-- e.g., H100, A100, None -->
-- **Install method:** <!-- e.g., pip install -e ".", conda env from environment.yml -->
+- **Install method:** <!-- e.g., pip install -e ".", pip install proto-tools -->

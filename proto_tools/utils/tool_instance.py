@@ -1164,6 +1164,7 @@ class ToolInstance:
             last_err: Exception | None = None
             set_substatus("Downloading micromamba")
             for url in urls:
+                # Attempt 1: curl + tar subprocess (fast, well-tested)
                 try:
                     result = subprocess.run(
                         ["curl", "-Ls", "--retry", "2", "--retry-delay", "3", url],
@@ -1179,11 +1180,109 @@ class ToolInstance:
                     mamba_bin.chmod(0o755)
                     logger.info("Micromamba installed successfully from %s", url)
                     return mamba_bin
-                except subprocess.CalledProcessError as e:  # noqa: PERF203 -- retry loop
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    logger.info("curl/tar download failed (%s), trying urllib fallback", e)
+
+                # Attempt 2: Python stdlib fallback (no external deps required)
+                try:
+                    import io
+                    import tarfile as _tarfile
+                    import urllib.request as _urllib_request
+
+                    with _urllib_request.urlopen(url, timeout=120) as resp:  # noqa: S310
+                        data = resp.read()
+                    with _tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tar:
+                        member = tar.getmember("bin/micromamba")
+                        tar.extract(member, path=str(mamba_root), filter="data")
+                    mamba_bin.chmod(0o755)
+                    logger.info("Micromamba installed via urllib fallback from %s", url)
+                    return mamba_bin
+                except Exception as e:
                     last_err = e
                     logger.warning("Failed to download micromamba from %s: %s", url, e)
                     continue
             raise RuntimeError(f"Failed to download/extract micromamba from all sources: {last_err}")
+
+    # ============================================================================
+    # Foundation environment — shared system tools for all standalone envs
+    # ============================================================================
+
+    @staticmethod
+    def _get_foundation_env_path() -> Path:
+        """Return ``PROTO_HOME/.foundation_env/``."""
+        from proto_tools.utils.proto_home import get_proto_home
+
+        return get_proto_home() / ".foundation_env"
+
+    @staticmethod
+    def _ensure_foundation_env() -> Path:
+        """Ensure the foundation environment exists with system tools.
+
+        Creates a shared micromamba environment at ``PROTO_HOME/.foundation_env/``
+        containing git, curl, gcc, and gxx from conda-forge. All standalone tool
+        setup scripts get this env's ``bin/`` prepended to PATH so they can use
+        these tools regardless of the host system.
+
+        Uses a file lock to prevent concurrent creation when multiple processes
+        race to set up the foundation env.
+
+        Returns:
+            Path: Path to the foundation env root directory.
+        """
+        foundation_path = ToolInstance._get_foundation_env_path()
+        marker = foundation_path / ".ready"
+
+        if marker.exists():
+            return foundation_path
+
+        from filelock import FileLock
+
+        # Only create parent dir — micromamba create needs the prefix to not
+        # exist (or be a valid conda env). The lock file lives in the parent.
+        foundation_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = FileLock(foundation_path.parent / ".foundation_env.lock", timeout=600)
+        with lock:
+            # Re-check after acquiring lock — another process may have created it
+            if marker.exists():
+                return foundation_path
+
+            mamba_bin = ToolInstance._ensure_micromamba()
+            mamba_root = ToolInstance._get_micromamba_root()
+
+            logger.info("Creating foundation environment at %s...", foundation_path)
+            set_substatus("Setting up foundation environment (git, curl, gcc)")
+
+            mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
+            try:
+                subprocess.run(
+                    [
+                        str(mamba_bin),
+                        "create",
+                        "-y",
+                        "-p",
+                        str(foundation_path),
+                        "git",
+                        "curl",
+                        "gcc",
+                        "gxx",
+                        "-c",
+                        "conda-forge",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    env=mamba_env,
+                )
+            except subprocess.CalledProcessError as e:
+                stderr = e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
+                logger.error("Failed to create foundation environment:\n%s", stderr)
+                raise RuntimeError(
+                    f"Failed to create foundation environment at {foundation_path}. "
+                    f"Check network connectivity and disk space."
+                ) from e
+
+            marker.touch()
+            logger.info("Foundation environment ready at %s", foundation_path)
+            return foundation_path
 
     @staticmethod
     def _validate_python_version(version_str: str, source: str) -> str:
@@ -1486,15 +1585,34 @@ class ToolInstance:
         # Run setup.sh directly (not via micromamba run, which overwrites PATH
         # and strips conda prefix — breaking access to git, curl, gcc, etc.)
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
+
+        # Ensure foundation environment (provides git, curl, gcc, g++)
+        foundation_path = self._ensure_foundation_env()
+
         env = _build_subprocess_env(
             self.device,
             tool_env_path=self.env_path,
             tool_env_vars=self._tool_env_vars,
         )
+
+        # Prepend foundation env bin/ so setup scripts always have access to
+        # git, curl, gcc. Priority: tool_env/bin > foundation_env/bin > rest
+        foundation_bin = str(foundation_path / "bin")
+        path_parts = env["PATH"].split(":")
+        if foundation_bin not in path_parts:
+            tool_bin = str(self.env_path / "bin")
+            if tool_bin in path_parts:
+                idx = path_parts.index(tool_bin) + 1
+                path_parts.insert(idx, foundation_bin)
+            else:
+                path_parts.insert(0, foundation_bin)
+            env["PATH"] = ":".join(path_parts)
+
         env["VENV_PATH"] = str(self.env_path.absolute())
         env["PYTHON_EXE"] = str(self.env_path.absolute() / "bin" / "python")
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
+        env["FOUNDATION_ENV_PATH"] = str(foundation_path.absolute())
         env["PACKAGE_ROOT"] = str(Path(__file__).parent.parent.parent.absolute())
 
         # Copy standalone_helpers.sh so setup.sh can source it
