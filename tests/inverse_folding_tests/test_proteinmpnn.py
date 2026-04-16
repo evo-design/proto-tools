@@ -27,6 +27,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     SequenceStructurePair,
 )
 from tests.conftest import make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -180,18 +181,9 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     assert output.success
 
     validate_output(output)
+    assert_metrics_in_spec(output)
 
     score = output.scores[0]
-
-    # Validate metrics via attribute access
-    assert isinstance(score.log_likelihood, float)
-    assert isinstance(score.avg_log_likelihood, float)
-    assert isinstance(score.perplexity, float)
-
-    # Validate metrics via mapping access
-    assert isinstance(score["log_likelihood"], float)
-    assert isinstance(score["avg_log_likelihood"], float)
-    assert isinstance(score["perplexity"], float)
 
     # Validate logits shape
     logits_arr = np.array(score.logits)

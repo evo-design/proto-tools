@@ -262,14 +262,18 @@ class Metrics(BaseModel):
         return None
 
     def validate_against_spec(self) -> None:
-        """Assert spec-declared metrics are present and in-range.
+        """Assert spec-declared metrics are present, correctly typed, and in-range.
 
-        Two checks, in order:
+        Three checks, in order:
 
         1. **Presence**: every ``metric_spec`` entry whose ``availability`` is
            ``"always"`` must be a stored key on this container. Absent
            always-available metrics are a tool bug, not a quiet miss.
-        2. **Range**: each stored value whose name appears in ``metric_spec``
+        2. **Type**: when the spec declares a ``type`` string (e.g. ``"float"``,
+           ``"list[float|None]"``), the runtime value must match. Type
+           mismatches raise immediately — they indicate a tool bug (e.g.
+           emitting a numpy scalar instead of a native Python type).
+        3. **Range**: each stored value whose name appears in ``metric_spec``
            is checked element-wise against the spec's ``min``/``max`` bounds.
            Keys not declared in the spec are skipped (permissive: tools may
            emit undeclared metrics). ``None`` entries in list-valued metrics
@@ -292,16 +296,39 @@ class Metrics(BaseModel):
             value_spec = self.metric_spec.get(name)
             if value_spec is None:
                 continue
-            if isinstance(value, bool):
-                continue  # booleans have no min/max
-            if isinstance(value, (int, float)):
-                _check_scalar_in_spec(name, value, value_spec)
-            elif isinstance(value, list):
-                _check_list_in_spec(name, value, value_spec)
+            type_str = value_spec.get("type")
+            if type_str is not None:
+                # Spec-driven dispatch: type check + bounds in one pass
+                if type_str == "bool":
+                    if not isinstance(value, bool):
+                        raise AssertionError(
+                            f"Metric {name!r} has type {type(value).__name__} but spec declares 'bool'"
+                        )
+                elif type_str in ("float", "int"):
+                    _check_scalar_in_spec(name, value, value_spec)
+                elif type_str.startswith("list"):
+                    _check_list_in_spec(name, value, value_spec)
+                else:
+                    raise AssertionError(f"Metric {name!r} has unrecognized spec type {type_str!r}")
+            else:
+                # Legacy fallback: runtime type dispatch (no type checking, bounds only)
+                if isinstance(value, bool):
+                    continue
+                if isinstance(value, (int, float)):
+                    _check_scalar_in_spec(name, value, value_spec)
+                elif isinstance(value, list):
+                    _check_list_in_spec(name, value, value_spec)
 
 
-def _check_scalar_in_spec(name: str, value: float | int, spec: MetricSpec) -> None:
-    """Validate a scalar metric value against its spec bounds."""
+def _check_scalar_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
+    """Validate a scalar metric's type and bounds against its spec."""
+    type_str = spec.get("type")
+    if type_str == "float" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+        raise AssertionError(f"Metric {name!r} has type {type(value).__name__} but spec declares 'float'")
+    if type_str == "int" and (not isinstance(value, int) or isinstance(value, bool)):
+        raise AssertionError(f"Metric {name!r} has type {type(value).__name__} but spec declares 'int'")
+    if not isinstance(value, (int, float)):
+        return  # non-numeric reached via legacy path; nothing to bound-check
     min_v = spec.get("min")
     max_v = spec.get("max")
     if min_v is not None and value < min_v:
@@ -310,25 +337,62 @@ def _check_scalar_in_spec(name: str, value: float | int, spec: MetricSpec) -> No
         raise AssertionError(f"Metric {name!r}={value} above declared max {max_v}")
 
 
-def _check_list_in_spec(name: str, value: list[Any], spec: MetricSpec) -> None:
-    """Validate a list metric element-wise against its spec bounds.
+def _check_list_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
+    """Validate a list metric's type and element-wise bounds against its spec.
 
-    Skips ``None`` entries (per-position metrics may have gaps where the
-    metric is undefined, e.g. bidirectional log-likelihoods at sequence
-    boundaries).
+    When the spec declares a ``type`` string, element types are enforced:
+
+    - ``"list[float]"``: elements must be numeric (``int`` or ``float``).
+    - ``"list[float|None]"``: elements may be numeric or ``None``.
+    - ``"list[list[float]]"``: elements must be lists of numerics.
+
+    When no ``type`` is declared, falls back to permissive bounds-only
+    checking (skips non-numeric entries silently).
+
+    ``None`` entries in ``list[float|None]`` metrics are skipped during
+    bounds checking (per-position gaps where the metric is undefined).
     """
+    type_str = spec.get("type")
+    if not isinstance(value, list):
+        raise AssertionError(
+            f"Metric {name!r} has type {type(value).__name__} but spec declares {type_str or 'list'!r}"
+        )
+    strict = type_str is not None
+    allow_none = type_str == "list[float|None]"
+    expect_inner_list = type_str is not None and type_str.startswith("list[list")
+    # Pre-compute the unwrapped inner spec for list[list[float]] to avoid per-element allocation
+    inner_spec: MetricSpec | None = (
+        {"type": "list[float]", "min": spec.get("min"), "max": spec.get("max")} if expect_inner_list else None
+    )
     min_v = spec.get("min")
     max_v = spec.get("max")
     for i, entry in enumerate(value):
         if entry is None:
+            if strict and not allow_none:
+                raise AssertionError(f"Metric {name!r} element at index {i} is None but spec declares {type_str!r}")
             continue
         if isinstance(entry, list):
-            _check_list_in_spec(f"{name}[{i}]", entry, spec)
-            continue
-        if not isinstance(entry, (int, float, bool)):
+            if strict and not expect_inner_list:
+                raise AssertionError(f"Metric {name!r} element at index {i} is a list but spec declares {type_str!r}")
+            _check_list_in_spec(f"{name}[{i}]", entry, inner_spec if inner_spec is not None else spec)
             continue
         if isinstance(entry, bool):
+            if strict:
+                raise AssertionError(
+                    f"Metric {name!r} element at index {i} has type bool but spec declares {type_str!r}"
+                )
             continue
+        if not isinstance(entry, (int, float)):
+            if strict:
+                raise AssertionError(
+                    f"Metric {name!r} element at index {i} has type {type(entry).__name__} "
+                    f"but spec declares {type_str!r}"
+                )
+            continue
+        if expect_inner_list:
+            raise AssertionError(
+                f"Metric {name!r} element at index {i} is {type(entry).__name__} but spec expects inner list"
+            )
         if min_v is not None and entry < min_v:
             raise AssertionError(f"Metric {name!r} element at index {i} = {entry} below declared min {min_v}")
         if max_v is not None and entry > max_v:

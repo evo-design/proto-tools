@@ -315,9 +315,6 @@ def test_evo2_score_tool(model_checkpoint):
     assert result.vocab[71] == "G" and result.vocab[84] == "T"
 
     for i, score in enumerate(result.scores):
-        assert isinstance(score.log_likelihood, float), "log_likelihood should be float"
-        assert isinstance(score.avg_log_likelihood, float), "avg_log_likelihood should be float"
-        assert isinstance(score.perplexity, float), "perplexity should be float"
         assert score.logits is not None, f"Sequence {i} should have logits"
 
 

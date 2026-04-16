@@ -246,10 +246,6 @@ def test_progen2_score_tool():
     assert len(result.scores) == 2
 
     for seq, score in zip(sequences, result.scores, strict=False):
-        assert isinstance(score.log_likelihood, float)
-        assert isinstance(score.avg_log_likelihood, float)
-        assert isinstance(score.perplexity, float)
-
         assert score.log_likelihood <= score.avg_log_likelihood <= 0
 
         assert score.logits is not None

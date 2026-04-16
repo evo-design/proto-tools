@@ -1,9 +1,8 @@
 """Unit tests for the ``Metrics`` container in ``proto_tools/utils/tool_io.py``.
 
 Covers dual attribute/mapping access, ``None``-stripping at construction,
-``primary_value``, ``update``, and the two halves of ``validate_against_spec``
-(presence of always-available metrics, and element-wise ``min``/``max`` bounds
-including list-valued and gap-tolerant per-position metrics).
+``primary_value``, ``update``, and ``validate_against_spec`` (presence, type
+enforcement, and element-wise bounds).
 """
 
 from __future__ import annotations
@@ -25,6 +24,30 @@ class _SampleMetrics(Metrics):
         "per_position": {"availability": "always", "type": "list[float|None]", "min": -10.0, "max": 0.0},
     }
     primary_metric: str | None = "perplexity"
+
+
+class _IntMetrics(Metrics):
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "count": {"availability": "always", "type": "int", "min": 0, "max": None},
+    }
+
+
+class _BoolMetrics(Metrics):
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "flag": {"availability": "always", "type": "bool", "min": None, "max": None},
+    }
+
+
+class _ListMetrics(Metrics):
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "scores": {"availability": "always", "type": "list[float]", "min": 0.0, "max": 1.0},
+    }
+
+
+class _MatrixMetrics(Metrics):
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "matrix": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
+    }
 
 
 # ── Dual access ──────────────────────────────────────────────────────────────
@@ -53,7 +76,6 @@ def test_get_returns_default_for_missing():
 
 
 def test_none_values_stripped_at_construction():
-    """``None``-valued extras should be absent, not stored as ``None`` sentinels."""
     m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0], optional_score=None)
     assert "optional_score" not in m
 
@@ -85,8 +107,6 @@ def test_primary_value_resolves_to_named_metric():
 
 
 def test_primary_value_none_when_metric_missing():
-    """``primary_value`` returns ``None`` if the named metric isn't present."""
-
     class _NoPrimary(Metrics):
         metric_spec: ClassVar[dict[str, MetricSpec]] = {}
         primary_metric: str | None = "missing_key"
@@ -105,20 +125,13 @@ def test_getitem_raises_keyerror_for_missing():
 
 def test_validate_passes_when_all_always_metrics_present():
     m = _SampleMetrics(perplexity=2.5, log_likelihood=-3.0, per_position=[-1.0, -2.0])
-    m.validate_against_spec()  # should not raise
+    m.validate_against_spec()
 
 
 def test_validate_raises_when_always_metric_missing():
-    """Omitting a metric declared ``availability='always'`` should fail."""
-    m = _SampleMetrics(perplexity=2.5, per_position=[-1.0])  # missing log_likelihood
+    m = _SampleMetrics(perplexity=2.5, per_position=[-1.0])
     with pytest.raises(AssertionError, match=r"log_likelihood.*always-available"):
         m.validate_against_spec()
-
-
-def test_validate_skips_optional_availability_when_absent():
-    """Optional metrics (non-always availability) may be absent without failure."""
-    m = _SampleMetrics(perplexity=2.5, log_likelihood=-3.0, per_position=[-1.0])
-    m.validate_against_spec()  # ``optional_score`` absent, OK
 
 
 # ── validate_against_spec: bounds ────────────────────────────────────────────
@@ -137,26 +150,8 @@ def test_validate_raises_above_max():
 
 
 def test_validate_skips_undeclared_metrics():
-    """Metric keys not in ``metric_spec`` shouldn't trip the bounds check."""
-    m = _SampleMetrics(
-        perplexity=2.0,
-        log_likelihood=-1.0,
-        per_position=[-1.0],
-        undeclared=999.0,  # no spec entry → skipped
-    )
+    m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0], undeclared=999.0)
     m.validate_against_spec()
-
-
-def test_validate_skips_bool_values():
-    """Booleans have no min/max semantics and should be skipped."""
-
-    class _BoolMetrics(Metrics):
-        metric_spec: ClassVar[dict[str, MetricSpec]] = {
-            "flag": {"availability": "always", "type": "bool", "min": None, "max": None},
-        }
-
-    _BoolMetrics(flag=True).validate_against_spec()
-    _BoolMetrics(flag=False).validate_against_spec()
 
 
 def test_validate_list_metric_element_wise():
@@ -166,19 +161,60 @@ def test_validate_list_metric_element_wise():
 
 
 def test_validate_list_metric_tolerates_none_gaps():
-    """Per-position lists may contain ``None`` for gap positions; these must be skipped."""
     m = _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[None, -1.0, None, -2.0])
     m.validate_against_spec()
 
 
-def test_validate_nested_list_metric_element_wise():
-    """``list[list[float]]`` metrics validate recursively."""
-
-    class _MatrixMetrics(Metrics):
-        metric_spec: ClassVar[dict[str, MetricSpec]] = {
-            "matrix": {"availability": "always", "type": "list[list[float]]", "min": 0.0, "max": 1.0},
-        }
-
+def test_validate_nested_list_bounds():
     _MatrixMetrics(matrix=[[0.1, 0.5], [0.2, 0.9]]).validate_against_spec()
     with pytest.raises(AssertionError, match="matrix"):
         _MatrixMetrics(matrix=[[0.1, 0.5], [0.2, 1.5]]).validate_against_spec()
+
+
+# ── validate_against_spec: types ────────────────────────────────────────────
+
+
+def test_validate_type_scalar():
+    """Type enforcement for float, int, and bool — including the bool-subclasses-int trap."""
+    # int accepted for "float" spec
+    _SampleMetrics(perplexity=2.5, log_likelihood=-3, per_position=[-1.0]).validate_against_spec()
+    # wrong types rejected for each scalar spec
+    with pytest.raises(AssertionError, match=r"'float'"):
+        _SampleMetrics(perplexity="bad", log_likelihood=-1.0, per_position=[-1.0]).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"bool.*'float'"):
+        _SampleMetrics(perplexity=True, log_likelihood=-1.0, per_position=[-1.0]).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"float.*'int'"):
+        _IntMetrics(count=3.14).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"bool.*'int'"):
+        _IntMetrics(count=True).validate_against_spec()
+    _BoolMetrics(flag=True).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"int.*'bool'"):
+        _BoolMetrics(flag=1).validate_against_spec()
+
+
+def test_validate_type_list():
+    """Type enforcement for list[float], list[float|None], and list[list[float]]."""
+    with pytest.raises(AssertionError, match=r"None.*'list\[float\]'"):
+        _ListMetrics(scores=[0.5, None, 0.9]).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"'list\[float\]'"):
+        _ListMetrics(scores=0.5).validate_against_spec()
+    # list[float|None] accepts None but rejects non-numeric types
+    with pytest.raises(AssertionError, match=r"str.*'list\[float\|None\]'"):
+        _SampleMetrics(perplexity=2.0, log_likelihood=-1.0, per_position=[-1.0, "bad"]).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"matrix\[1\].*str"):
+        _MatrixMetrics(matrix=[[0.1], ["bad"]]).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"expects inner list"):
+        _MatrixMetrics(matrix=[0.5, 0.6]).validate_against_spec()
+
+
+def test_validate_type_legacy_fallback():
+    """Specs without a ``type`` field fall back to bounds-only checking."""
+
+    class _LegacyMetrics(Metrics):
+        metric_spec: ClassVar[dict[str, MetricSpec]] = {
+            "score": {"availability": "always", "min": 0.0, "max": 1.0},
+        }
+
+    _LegacyMetrics(score=0.5).validate_against_spec()
+    with pytest.raises(AssertionError, match=r"score.*above declared max"):
+        _LegacyMetrics(score=1.5).validate_against_spec()

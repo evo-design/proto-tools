@@ -215,9 +215,6 @@ def test_progen3_score_basic():
     assert result.tool_id == "progen3-score"
     assert len(result.scores) == 1
 
-    score = result.scores[0]
-    assert isinstance(score["log_likelihood"], float)
-
 
 @pytest.mark.uses_gpu
 def test_progen3_score_batch():

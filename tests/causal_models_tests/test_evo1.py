@@ -243,11 +243,6 @@ def test_evo1_score_tool():
     assert result.tool_id == "evo1-score"
     assert len(result.scores) == 2
 
-    for score in result.scores:
-        assert isinstance(score.log_likelihood, float)
-        assert isinstance(score.avg_log_likelihood, float)
-        assert isinstance(score.perplexity, float)
-
     score = result.scores[0]
     expected_perplexity = np.exp(-score.avg_log_likelihood)
     np.testing.assert_allclose(score.perplexity, expected_perplexity, rtol=1e-5)
@@ -282,5 +277,4 @@ def test_evo1_score_batched():
     assert len(result.scores) == 6
 
     for score in result.scores:
-        assert isinstance(score.log_likelihood, float)
         assert score.logits is not None
