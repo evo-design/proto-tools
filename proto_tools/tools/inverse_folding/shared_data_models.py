@@ -45,8 +45,9 @@ class InverseFoldingStructureInput(BaseModel):
     positions. The structure is automatically loaded and validated on construction.
 
     Attributes:
-        structure (Structure): The protein structure. Accepts file path, PDB content string, or
-            Structure object. Automatically converted to Structure.
+        structure (Structure): The protein structure. Accepts file path, PDB content string,
+            Structure object, or a dict in the shape produced by ``Structure.model_dump(mode='json')``
+            (for HTTP/JSON round-trips). Automatically converted to Structure.
         chain_ids (list[str] | None): Optional list of chain IDs to design. If None, all chains in the
             structure are designed.
         fixed_positions (dict[str, list[int]] | None): Optional dictionary mapping chain IDs to residue positions
@@ -100,6 +101,8 @@ class InverseFoldingStructureInput(BaseModel):
                 resolved_structure = Structure.from_file(structure)
             else:
                 resolved_structure = Structure(structure=str(structure))
+        elif isinstance(structure, dict):
+            resolved_structure = Structure(**structure)
         else:
             raise ValueError(f"Unsupported structure type: {type(structure)}")
 

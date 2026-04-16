@@ -16,6 +16,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
     InverseFoldingStructureInput,
+    SequenceStructurePair,
 )
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
@@ -201,3 +202,33 @@ def test_output_export_json(tmp_path):
     output.export("designs", export_path=tmp_path, file_format="json")
     json_files = list((tmp_path / "designs").glob("*.json"))
     assert len(json_files) == 1
+
+
+# ── JSON round-trip (HTTP gateway contract) ─────────────────────────────────────
+
+
+def test_proteinmpnn_sample_input_roundtrip():
+    """Validator dict branch + constraint preservation through JSON round-trip."""
+    from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import ProteinMPNNSampleInput
+
+    original = ProteinMPNNSampleInput(
+        inputs=[
+            InverseFoldingStructureInput(
+                structure=TEST_PDB_FILE,
+                chain_ids=["A"],
+                fixed_positions={"A": [1, 2, 3]},
+            )
+        ]
+    )
+    restored = ProteinMPNNSampleInput(**original.model_dump(mode="json"))
+    assert restored.inputs[0].structure.structure == original.inputs[0].structure.structure
+    assert restored.inputs[0].chain_ids == ["A"]
+    assert restored.inputs[0].fixed_positions == {"A": [1, 2, 3]}
+
+
+def test_sequence_structure_pair_roundtrip():
+    """Scoring path has no custom validator — pin that native Pydantic coercion works."""
+    original = SequenceStructurePair(sequence="MVLSP", structure=Structure.from_file(TEST_PDB_FILE))
+    restored = SequenceStructurePair(**original.model_dump(mode="json"))
+    assert restored.sequence == "MVLSP"
+    assert restored.structure.structure == original.structure.structure
