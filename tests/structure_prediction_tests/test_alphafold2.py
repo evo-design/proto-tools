@@ -1,5 +1,6 @@
 """Tests for AlphaFold2 prediction and gradient tools."""
 
+import json
 import math
 import sys
 import types
@@ -8,11 +9,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities.structures import is_valid_structure
+from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
+    AlphaFold2GradientOutput,
     AlphaFold2Input,
     StructurePredictionComplex,
     run_alphafold2,
@@ -97,7 +99,13 @@ def test_gradient_dispatch_contract(monkeypatch):
 
     def fake_dispatch(tool_name, payload, *, instance=None, config=None):
         captured.update(tool_name=tool_name, payload=payload)
-        return {"gradient": [[0.1] * 20] * 2, "loss": 1.25, "metrics": {"avg_plddt": 0.8}, "vocab": _CANONICAL_VOCAB}
+        return {
+            "gradient": [[0.1] * 20] * 2,
+            "loss": 1.25,
+            "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5},
+            "vocab": _CANONICAL_VOCAB,
+            "pdb": _EXAMPLE_PDB,
+        }
 
     monkeypatch.setattr(
         "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
@@ -130,6 +138,29 @@ def test_gradient_dispatch_contract(monkeypatch):
     assert payload["starting_binder_seq"] is None
     assert result.gradient == [[0.1] * 20] * 2
     assert result.loss == 1.25
+    assert result.structure.source == "alphafold2-gradient"
+    assert result.structure.b_factor_type.value == "pLDDT"
+    assert is_valid_structure(result.structure.structure)
+    # per_residue_plddt must be normalized to [0, 1] for downstream consumers
+    # (proto-language's pLDDT-weighted semigreedy uses `1 - plddt` for sampling).
+    plddt = result.structure.per_residue_plddt
+    assert plddt is not None
+    assert all(0.0 <= v <= 1.0 for v in plddt)
+
+
+@pytest.mark.parametrize("name", ["step", "step_v1.5"])
+def test_gradient_export_writes_pdb_sidecar(tmp_path, name):
+    AlphaFold2GradientOutput(
+        gradient=[[0.1] * 20] * 2,
+        loss=1.25,
+        metrics={"avg_plddt": 0.8},
+        vocab=_CANONICAL_VOCAB,
+        structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
+    ).export(name, export_path=tmp_path)
+
+    payload = json.loads((tmp_path / f"{name}.json").read_text())
+    assert payload["structure_pdb"] == f"{name}.pdb"
+    assert is_valid_structure((tmp_path / f"{name}.pdb").read_text())
 
 
 def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
@@ -179,7 +210,12 @@ def test_prediction_dispatch_contract(monkeypatch):
 
     assert captured[0]["operation"] == "predict"
     assert result.success
-    assert is_valid_structure(result.structures[0].structure_cif)
+    structure = result.structures[0]
+    assert is_valid_structure(structure.structure_cif)
+    assert structure.b_factor_type.value == "pLDDT"
+    # Structure.per_residue_plddt must normalize 0-100 B-factors to [0, 1].
+    plddt = structure.per_residue_plddt
+    assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
 
 
 # -- GPU integration tests -----------------------------------------------------
@@ -209,6 +245,12 @@ def test_gradient_end_to_end():
     assert math.isfinite(result.loss) and result.loss != 0.0
     assert result.vocab == _CANONICAL_VOCAB
     assert 0 <= result.metrics["avg_plddt"] <= 1.0
+    # Structure must be populated with per-residue pLDDT normalized to [0, 1]
+    # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
+    assert result.structure.source == "alphafold2-gradient"
+    assert is_valid_structure(result.structure.structure)
+    plddt = result.structure.per_residue_plddt
+    assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
 
 
 @pytest.mark.uses_gpu

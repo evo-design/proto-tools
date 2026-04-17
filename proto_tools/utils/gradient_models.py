@@ -84,10 +84,8 @@ class GradientOutput(BaseToolOutput):
         """Export the gradient bundle as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
-        path = Path(export_path).with_suffix(".json")
-        with open(path, "w") as f:
-            json.dump(
-                self.model_dump(include={"gradient", "loss", "metrics", "vocab"}),
-                f,
-                indent=2,
-            )
+        # Suffix-additive so dotted names (e.g. "step_v1.5") aren't truncated.
+        base = Path(export_path)
+        json_path = base.parent / f"{base.name}.json"
+        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"})
+        json_path.write_text(json.dumps(payload, indent=2))
