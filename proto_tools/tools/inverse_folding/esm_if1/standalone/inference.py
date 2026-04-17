@@ -229,6 +229,7 @@ class ESMIF1Model:
         )
 
         metrics = {
+            "log_likelihood": float(avg_ll) * len(sequence),
             "avg_log_likelihood": float(avg_ll),
             "perplexity": float(math.exp(-avg_ll)),
         }

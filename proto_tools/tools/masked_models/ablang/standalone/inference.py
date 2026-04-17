@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sys
 from typing import Any
 
@@ -290,7 +291,16 @@ class AbLangModel:
             else:
                 scores = self.model(formatted, mode=scoring_mode)
 
-            all_metrics.extend([{scoring_mode: float(s)} for s in scores])
+            for j, s in enumerate(scores):
+                score_val = float(s)
+                m: dict[str, float] = {scoring_mode: score_val}
+                if scoring_mode == "pseudo_log_likelihood":
+                    seq_len = len(batch[j])
+                    avg_ll = score_val / seq_len if seq_len > 0 else 0.0
+                    m["log_likelihood"] = score_val
+                    m["avg_log_likelihood"] = avg_ll
+                    m["perplexity"] = math.exp(-avg_ll)
+                all_metrics.append(m)
 
         return {"metrics": all_metrics}
 
