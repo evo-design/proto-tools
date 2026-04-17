@@ -258,8 +258,6 @@ result = run_{tool}({Tool}Input(...), {Tool}Config(...))
 # Config is optional; omit to use all defaults: run_{tool}({Tool}Input(...))
 ```
 
-For script patterns, batch persistence, GPU tools, and citations, see `notes/usage-guide.md`.
-
 ## Skills & Commands
 
 - **`implement-tool`**: Full lifecycle for implementing a new tool wrapper
@@ -274,4 +272,3 @@ For script patterns, batch persistence, GPU tools, and citations, see `notes/usa
 | `utils/device_manager.py` | DeviceManager API (auto-generated reference pages from docstrings) |
 | `utils/tool_instance.py` | ToolInstance API (auto-generated reference pages from docstrings) |
 | `notes/testing.md` | Test structure, assertions, markers, naming conventions |
-| `notes/usage-guide.md` | Script patterns, batch persistence, GPU tools, citations |
