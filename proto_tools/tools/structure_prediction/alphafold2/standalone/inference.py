@@ -530,8 +530,10 @@ class AlphaFold2Model:
         bias_redesign: float | None = None,
         omit_aas: str | None = None,
         num_recycles: int = 3,
+        recycle_mode: str = "last",
         model_num: int = 1,
         sample_models: bool = False,
+        starting_binder_seq: str | None = None,
         loss_weights: dict[str, float] | None = None,
         intra_contact_num: int = 2,
         intra_contact_cutoff: float = 14.0,
@@ -555,12 +557,12 @@ class AlphaFold2Model:
             raise ValueError("target_pdb is required for binder gradient computation.")
 
         self._ensure_loaded(device, backend=backend, verbose=verbose)
-        key = ("binder", True, False, "last", self._backend)
+        key = ("binder", True, False, recycle_mode, self._backend)
         af_model = self._get_model(
             protocol="binder",
             use_multimer=True,
             use_msa=False,
-            recycle_mode="last",
+            recycle_mode=recycle_mode,
             verbose=verbose,
         )
         self._restore_model_defaults(key, af_model)
@@ -584,13 +586,17 @@ class AlphaFold2Model:
         if omit_aas:
             prep_kwargs["rm_aa"] = omit_aas
 
-        # Germinal-specific prep_inputs kwargs (bias_redesign, pos) are only
-        # supported by the Germinal ColabDesign fork.
+        # Germinal-specific prep_inputs kwargs (bias_redesign, pos,
+        # starting_binder_seq) are only supported by the Germinal ColabDesign fork.
         if backend == "germinal":
             if design_positions is not None:
                 prep_kwargs["pos"] = design_positions
             if bias_redesign is not None:
                 prep_kwargs["bias_redesign"] = bias_redesign
+            if starting_binder_seq is not None:
+                if len(starting_binder_seq) != len(logits):
+                    raise ValueError(f"starting_binder_seq len {len(starting_binder_seq)} != logits len {len(logits)}")
+                prep_kwargs["starting_binder_seq"] = starting_binder_seq
 
         af_model.prep_inputs(**prep_kwargs)
 
@@ -674,8 +680,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             bias_redesign=input_dict.get("bias_redesign"),
             omit_aas=input_dict.get("omit_aas"),
             num_recycles=input_dict["num_recycles"],
+            recycle_mode=input_dict.get("recycle_mode", "last"),
             model_num=input_dict["model_num"],
             sample_models=input_dict.get("sample_models", False),
+            starting_binder_seq=input_dict.get("starting_binder_seq"),
             loss_weights=input_dict.get("loss_weights"),
             intra_contact_num=input_dict.get("intra_contact_num", 2),
             intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
