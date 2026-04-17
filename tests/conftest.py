@@ -991,6 +991,48 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _force_verbose_tools():
+    """Force verbose=True on all tool configs so subprocess stderr streams into test logs."""
+    from proto_tools.utils.base_config import BaseConfig
+
+    def _all_subclasses(cls):
+        result = set()
+        for sub in cls.__subclasses__():
+            result.add(sub)
+            result.update(_all_subclasses(sub))
+        return result
+
+    all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
+
+    originals = {}
+    for cls in all_classes:
+        fi = cls.model_fields.get("verbose")
+        if fi is not None:
+            originals[cls] = fi.default
+            fi.default = True
+
+    for cls in all_classes:
+        cls.model_rebuild(force=True)
+
+    old_env_verbose = os.environ.get("PROTO_ENV_VERBOSE")
+    os.environ["PROTO_ENV_VERBOSE"] = "1"
+
+    yield
+
+    for cls, original in originals.items():
+        fi = cls.model_fields.get("verbose")
+        if fi is not None:
+            fi.default = original
+    for cls in all_classes:
+        cls.model_rebuild(force=True)
+
+    if old_env_verbose is None:
+        os.environ.pop("PROTO_ENV_VERBOSE", None)
+    else:
+        os.environ["PROTO_ENV_VERBOSE"] = old_env_verbose
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _cleanup_tool_instances():
     """Final safety net: kill any stray ToolInstance workers at session end."""
     yield

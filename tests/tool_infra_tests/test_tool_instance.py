@@ -904,7 +904,7 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     inst.run.assert_called_once_with(
         {"op": "score", "device": "cpu"},
         script_path=None,
-        verbose=False,
+        verbose=cfg.verbose,
         timeout=600,
         reload_on={"model_checkpoint"},
     )
@@ -1009,7 +1009,7 @@ def test_dispatch_reads_timeout_from_config(mock_init: MagicMock, mock_oneshot: 
         "esm2",
         {"op": "score"},
         script_path=None,
-        verbose=False,
+        verbose=cfg.verbose,
         timeout=60,
     )
 
