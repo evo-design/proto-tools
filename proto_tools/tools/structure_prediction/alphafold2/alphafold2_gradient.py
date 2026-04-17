@@ -7,13 +7,16 @@ alpha=2.0 logit scaling, persistent bias, framework contact penalties, and
 extension loss callbacks (rg, i_ptm, helix, beta_strand, NC).
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from typing_extensions import Self
 
+from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     PROTEIN_AMINO_ACIDS,
@@ -244,7 +247,32 @@ class AlphaFold2GradientConfig(BaseConfig):
         return self
 
 
-AlphaFold2GradientOutput = GradientOutput
+class AlphaFold2GradientOutput(GradientOutput):
+    """Gradient output extended with the predicted target+binder complex.
+
+    Attributes:
+        gradient (list[list[float]]): Gradient matrix matching the input logits shape.
+        loss (float): Scalar objective value.
+        metrics (dict[str, Any]): Scalar auxiliary metrics (avg_plddt, ptm, iptm, avg_pae).
+        vocab (list[str]): Amino-acid column ordering.
+        structure (Structure): Predicted complex from the gradient-step forward pass.
+            B-factors are at the raw 0-100 PDB scale; ``b_factor_type=PLDDT`` means
+            ``Structure.per_residue_plddt`` normalizes them to ``[0, 1]``.
+    """
+
+    structure: Structure = Field(description="Predicted target+binder complex with per-residue pLDDT in B-factors.")
+
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        """Write the gradient bundle as JSON alongside the structure as a PDB sidecar."""
+        if file_format != "json":
+            raise ValueError(f"Unsupported format: {file_format}")
+        # Suffix-additive so dotted names (e.g. "step_v1.5") aren't truncated.
+        base = Path(export_path)
+        pdb_path = base.parent / f"{base.name}.pdb"
+        json_path = base.parent / f"{base.name}.json"
+        self.structure.write_pdb(pdb_path)
+        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}) | {"structure_pdb": pdb_path.name}
+        json_path.write_text(json.dumps(payload, indent=2))
 
 
 def example_input() -> AlphaFold2GradientInput:
@@ -315,9 +343,21 @@ def run_alphafold2_gradient(
         config=config,
     )
 
+    metrics = result["metrics"]
     return AlphaFold2GradientOutput(
         gradient=result["gradient"],
         loss=result["loss"],
-        metrics=result["metrics"],
+        metrics=metrics,
         vocab=result["vocab"],
+        structure=Structure(
+            structure=result["pdb"],
+            b_factor_type=BFactorType.PLDDT,
+            metrics=AlphaFold2Metrics(
+                avg_plddt=metrics["avg_plddt"],
+                ptm=metrics["ptm"],
+                iptm=metrics.get("iptm"),
+                avg_pae=metrics["avg_pae"],
+            ),
+            source="alphafold2-gradient",
+        ),
     )

@@ -448,10 +448,10 @@ class AlphaFold2Model:
         metrics = _extract_metrics(aux)
         return {
             "pdb": af_model.save_pdb(),
-            "avg_plddt": metrics.get("avg_plddt", 0.0),
-            "ptm": metrics.get("ptm", 0.0),
+            "avg_plddt": metrics["avg_plddt"],
+            "ptm": metrics["ptm"],
             "iptm": metrics.get("iptm"),
-            "avg_pae": metrics.get("avg_pae"),
+            "avg_pae": metrics["avg_pae"],
         }
 
     # -------------------------------------------------------------------------
@@ -500,12 +500,16 @@ class AlphaFold2Model:
         full_seq[0, full_len - binder_len :] = np.asarray(af_logits)
         af_model._params["seq"] = full_seq
 
-        # Forward+backward via ColabDesign's recycling pipeline.
+        # run() populates af_model.aux["all"], which save_pdb() requires.
+        # num_recycles is read from opt, already set above.
         model_nums = [int(np.random.choice(5))] if sample_models else [model_num - 1]
         af_model._args["clear_prev"] = True
-        aux = af_model._recycle(af_model._model_params[model_nums[0]], backprop=True)
+        af_model.run(backprop=True, model_nums=model_nums)
+        aux = af_model.aux
 
         # Extract binder gradient, reordering back to proto canonical order.
+        # Shape (batch, L, alphabet) expected; fail loudly if ColabDesign's layout shifts.
+        assert aux["grad"]["seq"].ndim == 3, f"unexpected grad shape {aux['grad']['seq'].shape}"
         full_grad = aux["grad"]["seq"][0][:, AF2_TO_PROTO]
         seq_grad = full_grad[full_len - binder_len :]
 
@@ -514,6 +518,7 @@ class AlphaFold2Model:
             "loss": float(serialize_output(aux["loss"])),
             "metrics": _extract_metrics(aux),
             "vocab": AMINO_ACIDS_LIST,
+            "pdb": af_model.save_pdb(get_best=False, save_all=False),
         }
 
     def compute_binder_gradient(

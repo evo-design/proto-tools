@@ -333,7 +333,8 @@ def run_alphafold2(
         structure_outputs.append(
             Structure(
                 structure=output_data["pdb"],
-                b_factor_type=BFactorType.NORMALIZED_PLDDT,
+                # ColabDesign's save_pdb writes B-factors as 100 * plddt (0-100 scale).
+                b_factor_type=BFactorType.PLDDT,
                 metrics=metrics,
                 source="alphafold2-prediction",
             )
