@@ -126,8 +126,41 @@ def test_gradient_dispatch_contract(monkeypatch):
     assert payload["target_pdb"] == str(_GRADIENT_EXAMPLE_PDB_PATH)
     assert payload["backend"] == "base"
     assert payload["soft"] == 1.0
+    assert payload["recycle_mode"] == "last"
+    assert payload["starting_binder_seq"] is None
     assert result.gradient == [[0.1] * 20] * 2
     assert result.loss == 1.25
+
+
+def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+        captured.update(payload=payload)
+        return {"gradient": [[0.0] * 20] * 3, "loss": 0.0, "metrics": {}, "vocab": _CANONICAL_VOCAB}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            logits=[[0.0] * 20] * 3,
+            temperature=1.0,
+            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            binder_chain="B",
+        ),
+        AlphaFold2GradientConfig(
+            recycle_mode="average",
+            starting_binder_seq="EVQ",
+            backend="germinal",
+            device="cpu",
+        ),
+    )
+    assert captured["payload"]["recycle_mode"] == "average"
+    assert captured["payload"]["starting_binder_seq"] == "EVQ"
+    assert captured["payload"]["backend"] == "germinal"
 
 
 def test_prediction_dispatch_contract(monkeypatch):
@@ -176,6 +209,22 @@ def test_gradient_end_to_end():
     assert math.isfinite(result.loss) and result.loss != 0.0
     assert result.vocab == _CANONICAL_VOCAB
     assert 0 <= result.metrics["avg_plddt"] <= 1.0
+
+
+@pytest.mark.uses_gpu
+def test_gradient_recycle_mode_threads_through():
+    """Non-default recycle_mode must reach ``_get_model`` without tripping the cache."""
+    target_kwargs = {
+        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
+        "target_chain": "A",
+        "binder_chain": "B",
+    }
+    result = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientConfig(num_recycles=2, recycle_mode="first", loss_weights={"plddt": 1.0}),
+    )
+    validate_output(result)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
 
 
 @pytest.mark.uses_gpu

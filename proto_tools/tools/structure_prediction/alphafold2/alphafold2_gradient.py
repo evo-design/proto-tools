@@ -101,12 +101,19 @@ class AlphaFold2GradientConfig(BaseConfig):
             non-design positions. Germinal backend only.
         omit_aas (str | None): Amino acids to ban (e.g. ``"C,W"``).
         num_recycles (int): AF2 recycling iterations.
+        recycle_mode (Literal["last", "sample", "average", "first"]): Which recycle's
+            output the gradient is taken at. ``"last"`` matches Germinal's VHH default;
+            ``"average"`` averages across recycles; ``"sample"`` picks one uniformly;
+            ``"first"`` uses only recycle 0.
         model_num (int): AF2 parameter set (1-5).
         sample_models (bool): Randomly sample model sets each forward pass.
         soft (float): ColabDesign softmax blending (0=raw logits, 1=full softmax).
             Passed per-step by the gradient optimizer.
         backend (Literal["base", "germinal"]): ``"base"`` (upstream ColabDesign) or ``"germinal"``
             (Germinal fork with alpha, bias, framework contacts, extension losses).
+        starting_binder_seq (str | None): Optional one-letter AA string used to seed
+            the binder before gradient updates. Germinal backend only; length must
+            equal ``len(logits)``.
         loss_weights (dict[str, float]): Binder-objective weights. Base keys:
             plddt, i_plddt, pae, i_pae, con, i_con, exp_res, rmsd, dgram_cce,
             fape. Germinal extension keys: rg, i_ptm, NC, helix, beta_strand.
@@ -137,6 +144,15 @@ class AlphaFold2GradientConfig(BaseConfig):
         description="Number of recycling iterations (higher=more refined but slower).",
         advanced=True,
     )
+    # No reload_on_change: inference.py:_get_model caches one AF2 model per
+    # recycle_mode in self._models, so mode switches reuse the persistent
+    # worker instead of triggering a subprocess restart + JAX re-warmup.
+    recycle_mode: Literal["last", "sample", "average", "first"] = ConfigField(
+        title="Recycle Mode",
+        default="last",
+        description="Which recycle's output yields the gradient ('last' matches Germinal VHH).",
+        advanced=True,
+    )
     model_num: int = ConfigField(
         title="Model Number",
         default=1,
@@ -165,6 +181,12 @@ class AlphaFold2GradientConfig(BaseConfig):
         title="Backend",
         default="base",
         description="ColabDesign backend: 'base' (upstream) or 'germinal' (with alpha, bias, IgLM).",
+        advanced=True,
+    )
+    starting_binder_seq: str | None = ConfigField(
+        title="Starting Binder Sequence",
+        default=None,
+        description="Warm-start binder AA sequence (Germinal backend only; length must equal len(logits)).",
         advanced=True,
     )
     loss_weights: dict[str, float] = ConfigField(
@@ -217,6 +239,8 @@ class AlphaFold2GradientConfig(BaseConfig):
         unknown_keys = set(self.loss_weights) - _VALID_LOSS_KEYS
         if unknown_keys:
             raise ValueError(f"Unknown loss_weights keys: {unknown_keys}. Valid keys: {sorted(_VALID_LOSS_KEYS)}")
+        if self.starting_binder_seq is not None and self.backend != "germinal":
+            raise ValueError("starting_binder_seq requires backend='germinal'.")
         return self
 
 
@@ -273,8 +297,10 @@ def run_alphafold2_gradient(
             "bias_redesign": config.bias_redesign,
             "omit_aas": config.omit_aas,
             "num_recycles": config.num_recycles,
+            "recycle_mode": config.recycle_mode,
             "model_num": config.model_num,
             "sample_models": config.sample_models,
+            "starting_binder_seq": config.starting_binder_seq,
             "loss_weights": config.loss_weights,
             "intra_contact_num": config.intra_contact_num,
             "intra_contact_cutoff": config.intra_contact_cutoff,
