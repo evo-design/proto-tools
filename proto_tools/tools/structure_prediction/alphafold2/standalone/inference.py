@@ -518,7 +518,7 @@ class AlphaFold2Model:
             "loss": float(serialize_output(aux["loss"])),
             "metrics": _extract_metrics(aux),
             "vocab": AMINO_ACIDS_LIST,
-            "pdb": af_model.save_pdb(get_best=False, save_all=False),
+            "pdb": af_model.save_pdb(get_best=False),
         }
 
     def compute_binder_gradient(
