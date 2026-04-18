@@ -238,7 +238,7 @@ class AlphaFold3Model:
             "metrics": alphafold3_scores,
         }
 
-    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[empty-body]
+    def to_device(self, device: str) -> None:
         """Passthrough for CLI tool - Singularity handles device via environment."""
 
 

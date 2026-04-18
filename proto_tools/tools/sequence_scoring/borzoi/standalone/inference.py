@@ -81,7 +81,7 @@ class BorzoiModel:
         self.load(new_device)
         return self.model
 
-    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
+    def to_device(self, device: str) -> None:
         """Move model to a different device.
 
         GPU→GPU and GPU→CPU use standard .to(). CPU→GPU requires a full
@@ -93,7 +93,7 @@ class BorzoiModel:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device == device:
-            return  # type: ignore[return-value]
+            return
 
         if self.device == "cpu" and device.startswith("cuda"):
             # CPU→GPU: reload needed for flash-attn/Triton

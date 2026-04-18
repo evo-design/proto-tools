@@ -481,13 +481,15 @@ class ESM3Model:
         if verbose:
             logger.info("ESM3 model loaded successfully")
 
-    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
+    def to_device(self, device: str) -> None:
         """Move model to a different device."""
+        from standalone_helpers import move_model_to_device
+
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device != device:
-            self.model = self.model.to(device)  # type: ignore[attr-defined]
+            self.model = move_model_to_device(self.model, self.device, device)
             self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)  # type: ignore[attr-defined]
             self.device = device
 
