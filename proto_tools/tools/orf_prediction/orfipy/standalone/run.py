@@ -113,7 +113,7 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
             "--outdir",
             str(outdir),
             "--procs",
-            str(config.get("threads", 4)),
+            "1",
             "--start",
             config.get("start_codons", "ATG,GTG,TTG"),
             "--stop",
@@ -135,15 +135,20 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
         if config.get("translation_table") is not None:
             cmd.extend(["--table", str(config["translation_table"])])
 
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=temp_dir_str, timeout=300)
         if proc.returncode != 0:
             raise RuntimeError(f"Orfipy failed with code {proc.returncode}: {proc.stderr}")
 
         # Parse all results and group by parent sequence
         from Bio import SeqIO
 
-        aa_records = list(SeqIO.parse(str(aa_path), "fasta")) if aa_path.exists() else []  # type: ignore[no-untyped-call]
-        nt_records = list(SeqIO.parse(str(nt_path), "fasta")) if nt_path.exists() else []  # type: ignore[no-untyped-call]
+        aa_records, nt_records = [], []
+        if aa_path.exists():
+            with open(aa_path) as h:
+                aa_records = list(SeqIO.parse(h, "fasta"))  # type: ignore[no-untyped-call]
+        if nt_path.exists():
+            with open(nt_path) as h:
+                nt_records = list(SeqIO.parse(h, "fasta"))  # type: ignore[no-untyped-call]
 
         if len(aa_records) != len(nt_records):
             raise ValueError(
