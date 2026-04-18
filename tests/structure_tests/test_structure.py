@@ -694,3 +694,149 @@ def test_select_chain_preserves_cif_format_for_multi_char_chains(test_cif_file_c
     out = s.select_chain(chain_name)
     assert out.structure_format == "cif"
     assert any(c.name == chain_name for m in out.gemmi_struct for c in m)
+
+
+# ============================================================================
+# Interface & Clash Analysis
+# ============================================================================
+
+
+@pytest.fixture
+def pdl1_complex() -> Structure:
+    """PDL1 target + VHH binder: two-chain crystal structure, no clashes at 2.5 Å."""
+    return Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb")
+
+
+@pytest.fixture
+def multi_char_chain_structure(test_cif_file_content) -> Structure:
+    """CIF-backed Structure with a multi-char chain ID — triggers the PDB-conversion truncation guard."""
+    struct = gemmi.make_structure_from_block(gemmi.cif.read_string(test_cif_file_content)[0])
+    struct[0][0].name = "Heavy"
+    return Structure(structure=struct.make_mmcif_document().as_string(), structure_format="cif")
+
+
+def _synthetic_pdb(*atom_lines: str) -> Structure:
+    return Structure(structure="\n".join([*atom_lines, "END", ""]), structure_format="pdb")
+
+
+@pytest.mark.parametrize(
+    ("atoms", "expected"),
+    [
+        pytest.param(
+            (
+                "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+                "ATOM      2  CA  ALA A   2       1.500   0.000   0.000  1.00 50.00           C",
+            ),
+            0,
+            id="bonded-neighbors-in-same-chain-excluded",
+        ),
+        pytest.param(
+            (
+                "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+                "ATOM      2  CA  ALA B   1       1.500   0.000   0.000  1.00 50.00           C",
+            ),
+            1,
+            id="cross-chain-pair-counted",
+        ),
+    ],
+)
+def test_ca_clash_score_exclusion_rules(atoms, expected):
+    """Two minimal cases isolate the exclusion rule (bonded) vs. the positive case (cross-chain)."""
+    assert _synthetic_pdb(*atoms).ca_clash_score(threshold=2.5) == expected
+
+
+def test_ca_clash_score_clean_complex_is_zero(pdl1_complex):
+    """Regression baseline: a real, well-resolved complex has no Ca-Ca clashes at 2.5 Å."""
+    assert pdl1_complex.ca_clash_score(threshold=2.5) == 0
+
+
+def test_interface_contact_residues_shape_and_monotonicity(pdl1_complex):
+    """Return contract: 1-indexed sorted keys, single-letter AA values; tighter cutoff ⊆ looser."""
+    loose = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=4.0)
+    tight = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=3.0)
+    assert loose, "PDL1 binder should contact target at 4.0 Å"
+    assert list(loose) == sorted(loose) and all(pos >= 1 for pos in loose)
+    assert all(len(aa) == 1 and aa.isalpha() for aa in loose.values())
+    assert set(tight) <= set(loose)
+
+
+def test_interface_contact_residues_missing_target_is_empty(pdl1_complex):
+    """A nonexistent target chain yields {} rather than raising."""
+    assert pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="Z", cutoff=4.0) == {}
+
+
+def test_interface_contact_residues_pools_multi_chain_target():
+    """``target_chain="B,C"`` splits and unions atoms across both chains."""
+    # A at origin; B at (10,10,10) is out of range; C at (2,0,0) is 2 Å from A.
+    contacts = _synthetic_pdb(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      2  CA  ALA B   1      10.000  10.000  10.000  1.00 50.00           C",
+        "ATOM      3  CA  ALA C   1       2.000   0.000   0.000  1.00 50.00           C",
+    ).interface_contact_residues(binder_chain="A", target_chain="B,C", cutoff=4.0)
+    assert contacts == {1: "A"}
+
+
+@pytest.mark.parametrize(
+    ("binder", "target", "match"),
+    [
+        pytest.param("Heavy", "A", "single character", id="multi-char-binder"),
+        pytest.param("B", "AA,BB", "single character", id="multi-char-target"),
+        pytest.param("A", "A", "must not also appear", id="self-contact"),
+        pytest.param("A", "B,A", "must not also appear", id="binder-in-target-list"),
+    ],
+)
+def test_interface_contact_residues_rejects_invalid_chain_args(pdl1_complex, binder, target, match):
+    """Multi-char chain IDs and binder∈target are both silent-nonsense — fail fast."""
+    with pytest.raises(ValueError, match=match):
+        pdl1_complex.interface_contact_residues(binder_chain=binder, target_chain=target, cutoff=4.0)
+
+
+def test_ca_clash_score_rejects_multi_char_chain_id_on_structure(multi_char_chain_structure):
+    """Guard protects the bonded-neighbor exclusion from silently mis-firing on collided chain IDs."""
+    with pytest.raises(ValueError, match="single character"):
+        multi_char_chain_structure.ca_clash_score(threshold=2.5)
+
+
+# ============================================================================
+# Structure.concat
+# ============================================================================
+
+
+def test_concat_roundtrips_split_chains(pdl1_complex):
+    """A complex split by select_chain → concat preserves chain set, residue count, clash score, and b_factor_type."""
+    merged = Structure.concat([pdl1_complex.select_chain("A"), pdl1_complex.select_chain("B")])
+    assert set(merged.get_chain_ids()) == {"A", "B"}
+    assert merged.num_residues == pdl1_complex.num_residues
+    assert merged.ca_clash_score() == pdl1_complex.ca_clash_score()
+    assert merged.b_factor_type == pdl1_complex.b_factor_type
+
+
+def test_concat_rejects_duplicate_chain_ids(pdl1_complex):
+    """Two inputs with the same chain ID collide — concat raises rather than producing an invalid PDB."""
+    a = pdl1_complex.select_chain("A")
+    with pytest.raises(ValueError, match="Duplicate chain ID"):
+        Structure.concat([a, a])
+
+
+def test_concat_rejects_b_factor_type_mismatch():
+    """Mixing b_factor_types (pLDDT + temperature factors) would misbrand the result."""
+    a = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C\nEND\n"
+    b = "ATOM      1  CA  ALA B   1       0.000   0.000   0.000  1.00 50.00           C\nEND\n"
+    with pytest.raises(ValueError, match="b_factor_type mismatch"):
+        Structure.concat(
+            [
+                Structure(structure=a, structure_format="pdb", b_factor_type=BFactorType.PLDDT),
+                Structure(structure=b, structure_format="pdb", b_factor_type=BFactorType.TEMPERATURE_FACTOR),
+            ]
+        )
+
+
+def test_concat_rejects_empty_input():
+    with pytest.raises(ValueError, match="at least one"):
+        Structure.concat([])
+
+
+def test_concat_rejects_multi_char_chain_id(multi_char_chain_structure):
+    """Concat emits PDB, which can't represent multi-char chain IDs — fail fast."""
+    with pytest.raises(ValueError, match="single character"):
+        Structure.concat([multi_char_chain_structure])

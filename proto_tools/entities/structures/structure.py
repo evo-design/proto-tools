@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import math
 from enum import Enum
+from io import StringIO
 from pathlib import Path
 from typing import Any, Literal
 
 import gemmi
+import numpy as np
 import py3Dmol
+from biotite.structure import CellList
 from IPython.display import HTML, display
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -19,6 +22,7 @@ from proto_tools.entities.structures.utils import (
     is_valid_structure,
     load_structure_file,
     looks_like_structure_path,
+    pdb_file_to_atomarray,
 )
 from proto_tools.utils.tool_io import Metrics, MetricValue
 
@@ -355,6 +359,56 @@ class Structure(BaseModel):
             metrics=self.metrics.model_copy(deep=True),
         )
 
+    @classmethod
+    def concat(cls, structures: list[Structure]) -> Structure:
+        """Merge Structures with distinct chain IDs into a single multi-chain Structure.
+
+        Coordinates are preserved as-is. Callers are responsible for ensuring inputs
+        share a coordinate frame — e.g., Structures produced by ``select_chain`` on a
+        common source trivially do, as do chains predicted jointly by the same model.
+        Uses model 0 from each input; additional models are ignored.
+
+        Args:
+            structures (list[Structure]): Non-empty list to merge, in order.
+
+        Returns:
+            Structure: New Structure with all chains combined. ``b_factor_type`` is
+                inherited from the first input; ``source`` and ``metrics`` are not
+                carried over (merging them ambiguously would hide provenance).
+
+        Raises:
+            ValueError: If ``structures`` is empty, ``b_factor_type`` differs across
+                inputs, any chain ID appears in more than one input, or any chain
+                ID is multi-character (the merged output is PDB, which can't represent
+                multi-char chain IDs safely).
+        """
+        if not structures:
+            raise ValueError("concat requires at least one Structure")
+        b_factor_type = structures[0].b_factor_type
+        merged = gemmi.Structure()
+        merged.add_model(gemmi.Model(1))
+        seen: set[str] = set()
+        for struct in structures:
+            if struct.b_factor_type != b_factor_type:
+                raise ValueError(f"concat b_factor_type mismatch: {struct.b_factor_type} vs {b_factor_type}")
+            if len(struct.gemmi_struct) == 0:
+                continue
+            for chain in struct.gemmi_struct[0]:
+                if len(chain.name) != 1:
+                    raise ValueError(f"Chain {chain.name!r} must be a single character.")
+                if chain.name in seen:
+                    raise ValueError(f"Duplicate chain ID {chain.name!r} across concat inputs")
+                seen.add(chain.name)
+                new_chain = gemmi.Chain(chain.name)
+                for residue in chain:
+                    new_chain.add_residue(residue)
+                merged[0].add_chain(new_chain)
+        return cls(
+            structure=merged.make_pdb_string(),
+            structure_format="pdb",
+            b_factor_type=b_factor_type,
+        )
+
     @property
     def structure_pdb(self) -> str:
         """Get the structure content as a PDB string, converting from CIF if needed."""
@@ -604,6 +658,102 @@ class Structure(BaseModel):
     def num_residues(self) -> int:
         """Total number of residues across all chains."""
         return sum(len(chain) for chain in self.get_chain_sequences().values())
+
+    # ============================================================================
+    # Interface & Clash Analysis
+    # ============================================================================
+
+    def ca_clash_score(self, threshold: float = 2.5) -> int:
+        """Count Ca-Ca atom pairs with distance ≤ threshold, excluding bonded neighbors.
+
+        "Bonded" means same chain, ``|res_id_i - res_id_j| == 1`` — numeric, so a
+        chain break with sequential numbering is mis-excluded.
+
+        Args:
+            threshold (float): Distance cutoff in Å. Defaults to 2.5 (Germinal VHH clash gate).
+
+        Returns:
+            int: Number of clashing Ca-Ca pairs.
+
+        Raises:
+            ValueError: If any chain in the structure has a multi-character chain ID
+                (the PDB conversion path truncates these, which could silently collide
+                distinct chains onto one ID and mis-fire the bonded-neighbor exclusion).
+        """
+        for chain in self.gemmi_struct[0]:  # Guard the first model — same one pdb_file_to_atomarray reads.
+            if len(chain.name) != 1:
+                raise ValueError(f"Chain {chain.name!r} must be a single character.")
+        atom_array = pdb_file_to_atomarray(StringIO(self.structure_pdb))
+        ca_mask = atom_array.atom_name == "CA"
+        ca_coords = atom_array.coord[ca_mask]
+        ca_chain = atom_array.chain_id[ca_mask]
+        ca_res = atom_array.res_id[ca_mask]
+        if len(ca_coords) < 2:
+            return 0
+
+        cells = CellList(ca_coords, cell_size=threshold)
+        clashes = 0
+        for i, coord in enumerate(ca_coords):
+            for j in cells.get_atoms(coord, radius=threshold):
+                if j <= i:
+                    continue  # triu — skips self-pair (get_atoms includes i at d=0) and double-counting.
+                if ca_chain[i] == ca_chain[j] and abs(int(ca_res[i]) - int(ca_res[j])) == 1:
+                    continue  # bonded neighbors
+                clashes += 1
+        return clashes
+
+    def interface_contact_residues(
+        self,
+        binder_chain: str,
+        target_chain: str,
+        cutoff: float = 4.0,
+    ) -> dict[int, str]:
+        """Binder residues with any heavy atom within ``cutoff`` Å of a target heavy atom.
+
+        Hydrogens are excluded on both sides. ``target_chain`` may be comma-separated
+        for multi-chain targets.
+
+        Args:
+            binder_chain (str): Chain ID of the binder.
+            target_chain (str): Chain ID(s) of the target. Comma-separated for multi-chain.
+            cutoff (float): Heavy-atom distance cutoff in Å. Defaults to 4.0 (Germinal
+                ``hotspot_residues`` default; the VHH pipeline uses 3.0 via
+                ``vhh.yaml:122 atom_distance_cutoff``).
+
+        Returns:
+            dict[int, str]: Map from 1-indexed binder residue number to single-letter AA
+                code for every residue with at least one heavy atom within ``cutoff``.
+
+        Raises:
+            ValueError: If any chain ID is more than 1 character, or if ``binder_chain``
+                appears in ``target_chain`` (self-contact is not meaningful).
+        """
+        target_chains = [c.strip() for c in target_chain.split(",")]
+        for cid in [binder_chain, *target_chains]:
+            if len(cid) != 1:
+                raise ValueError(f"Chain ID {cid!r} must be a single character.")
+        if binder_chain in target_chains:
+            raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_chain.")
+        atom_array = pdb_file_to_atomarray(StringIO(self.structure_pdb))
+        heavy_mask = atom_array.element != "H"
+
+        binder_mask = heavy_mask & (atom_array.chain_id == binder_chain)
+        target_mask = heavy_mask & np.isin(atom_array.chain_id, target_chains)
+        binder_atoms = atom_array[binder_mask]
+        target_atoms = atom_array[target_mask]
+        if len(binder_atoms) == 0 or len(target_atoms) == 0:
+            return {}
+
+        cells = CellList(binder_atoms.coord, cell_size=cutoff)
+        touched: set[int] = set()
+        for coord in target_atoms.coord:
+            for idx in cells.get_atoms(coord, radius=cutoff):
+                touched.add(int(binder_atoms.res_id[idx]))
+
+        res_map = self.get_residue_position_map().get(binder_chain, [])
+        aa_by_pos = {pos: aa for aa, pos in res_map}
+        # get_residue_position_map is polymer-only — HETATM/ligand residues in `touched` are dropped here.
+        return {pos: aa_by_pos[pos] for pos in sorted(touched) if pos in aa_by_pos}
 
     # ============================================================================
     # Approximate Comparison
