@@ -7,11 +7,11 @@ from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    PROTEIN_AMINO_ACIDS,
     BaseConfig,
     ConfigField,
     GradientOutput,
     ToolInstance,
+    one_hot_protein_logits,
 )
 from proto_tools.utils.tool_io import BaseToolInput, InputField
 
@@ -69,14 +69,7 @@ class AbLangGradientConfig(BaseConfig):
 
 def example_input() -> AbLangGradientInput:
     """Minimal valid input for testing and examples."""
-    aa_index = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
-    n_aas = len(PROTEIN_AMINO_ACIDS)
-    logits = []
-    for residue in "EVQLVESG":
-        row = [0.0] * n_aas
-        row[aa_index[residue]] = 2.0
-        logits.append(row)
-    return AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=logits))
+    return AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot_protein_logits("EVQLVESG", sharpness=2.0)))
 
 
 @tool(

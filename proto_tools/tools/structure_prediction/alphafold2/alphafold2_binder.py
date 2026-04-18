@@ -20,13 +20,13 @@ from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    PROTEIN_AMINO_ACIDS,
     BaseConfig,
     ConfigField,
     GradientInput,
     GradientOutput,
     InputField,
     ToolInstance,
+    one_hot_protein_logits,
 )
 
 logger = logging.getLogger(__name__)
@@ -293,15 +293,8 @@ class AlphaFold2BinderOutput(GradientOutput):
 
 def example_input() -> AlphaFold2BinderInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
-    aa_index = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
-    n_aas = len(PROTEIN_AMINO_ACIDS)
-    logits = []
-    for residue in "EVQLVESG":
-        row = [0.0] * n_aas
-        row[aa_index[residue]] = 2.0
-        logits.append(row)
     return AlphaFold2BinderInput(
-        logits=logits,
+        logits=one_hot_protein_logits("EVQLVESG", sharpness=2.0),
         target_pdb=str(_BINDER_FIXTURE_PDB),
         binder_chain="B",
     )

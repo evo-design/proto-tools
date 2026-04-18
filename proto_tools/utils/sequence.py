@@ -14,6 +14,31 @@ RNA_NUCLEOTIDES = "ACGU"
 PROTEIN_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
+_PROTEIN_AA_INDEX = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
+
+
+def one_hot_protein_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:
+    """One-hot encode a protein sequence as logits (L x 20) in ``PROTEIN_AMINO_ACIDS`` order.
+
+    Default ``sharpness=20.0`` saturates a downstream softmax to ≈ one-hot; use a milder
+    value (e.g. ``2.0``) for a biased-but-not-saturated seed.
+
+    Args:
+        sequence (str): Protein sequence; each character must be in ``PROTEIN_AMINO_ACIDS``.
+        sharpness (float): Value placed on the one-hot column; all other columns are 0.
+
+    Returns:
+        list[list[float]]: Logits matrix with shape ``(len(sequence), 20)``.
+    """
+    n = len(PROTEIN_AMINO_ACIDS)
+    rows: list[list[float]] = []
+    for aa in sequence:
+        row = [0.0] * n
+        row[_PROTEIN_AA_INDEX[aa]] = sharpness
+        rows.append(row)
+    return rows
+
+
 def calculate_gc_content(sequence: str) -> float:
     """Calculate the GC content percentage of a DNA/RNA sequence.
 
