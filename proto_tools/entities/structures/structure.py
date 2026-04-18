@@ -319,6 +319,42 @@ class Structure(BaseModel):
             values = [v / 100.0 for v in values]
         return values or None
 
+    def select_chain(self, chain_id: str) -> Structure:
+        """Return a new Structure with only the requested chain.
+
+        Preserves ``b_factor_type``, ``source``, a deep copy of ``metrics``, and
+        the original ``structure_format``.
+
+        Args:
+            chain_id (str): Chain identifier to retain.
+
+        Returns:
+            Structure: New Structure containing only the requested chain.
+
+        Raises:
+            ValueError: If ``chain_id`` is not present in this Structure.
+        """
+        if not any(chain.name == chain_id for model in self.gemmi_struct for chain in model):
+            raise ValueError(f"Chain {chain_id!r} not present in Structure")
+        struct = self.gemmi_struct.clone()
+        for model in struct:
+            for i in range(len(model) - 1, -1, -1):
+                if model[i].name != chain_id:
+                    del model[i]
+        if self.structure_format == "cif":
+            serialized = struct.make_mmcif_document().as_string()
+            new_format: Literal["pdb", "cif"] = "cif"
+        else:
+            serialized = struct.make_pdb_string()
+            new_format = "pdb"
+        return Structure(
+            structure=serialized,
+            structure_format=new_format,
+            b_factor_type=self.b_factor_type,
+            source=self.source,
+            metrics=self.metrics.model_copy(deep=True),
+        )
+
     @property
     def structure_pdb(self) -> str:
         """Get the structure content as a PDB string, converting from CIF if needed."""

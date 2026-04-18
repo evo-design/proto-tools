@@ -470,12 +470,15 @@ class AlphaFold2Model:
         sample_models: bool,
         loss_weights: dict[str, float] | None,
         seed: int | None,
+        backprop: bool = True,
     ) -> dict[str, Any]:
-        """Run one forward+backward pass and return the binder gradient.
+        """Run one binder-design AF2 pass and return loss, metrics, Structure, and optionally gradient.
 
         Germinal's ``soft_seq()`` handles alpha=2.0 scaling and persistent bias
-        internally. JAX autograd chain-rules through the full expression, so the
-        returned gradient is exact ``∂loss/∂logits``.
+        internally. When ``backprop=True``, JAX autograd chain-rules through the
+        full expression and the returned gradient is exact ``∂loss/∂logits``.
+        When ``backprop=False``, the forward pass runs through ``model["fn"]``
+        (no grad_fn) and ``gradient`` is ``None`` in the returned dict.
         """
         import numpy as np
 
@@ -504,17 +507,20 @@ class AlphaFold2Model:
         # num_recycles is read from opt, already set above.
         model_nums = [int(np.random.choice(5))] if sample_models else [model_num - 1]
         af_model._args["clear_prev"] = True
-        af_model.run(backprop=True, model_nums=model_nums)
+        af_model.run(backprop=backprop, model_nums=model_nums)
         aux = af_model.aux
 
-        # Extract binder gradient, reordering back to proto canonical order.
-        # Shape (batch, L, alphabet) expected; fail loudly if ColabDesign's layout shifts.
-        assert aux["grad"]["seq"].ndim == 3, f"unexpected grad shape {aux['grad']['seq'].shape}"
-        full_grad = aux["grad"]["seq"][0][:, AF2_TO_PROTO]
-        seq_grad = full_grad[full_len - binder_len :]
+        gradient: list[list[float]] | None = None
+        if backprop:
+            # Extract binder gradient, reordering back to proto canonical order.
+            # Shape (batch, L, alphabet) expected; fail loudly if ColabDesign's layout shifts.
+            assert aux["grad"]["seq"].ndim == 3, f"unexpected grad shape {aux['grad']['seq'].shape}"
+            full_grad = aux["grad"]["seq"][0][:, AF2_TO_PROTO]
+            seq_grad = full_grad[full_len - binder_len :]
+            gradient = serialize_output(seq_grad)
 
         return {
-            "gradient": serialize_output(seq_grad),
+            "gradient": gradient,
             "loss": float(serialize_output(aux["loss"])),
             "metrics": _extract_metrics(aux),
             "vocab": AMINO_ACIDS_LIST,
@@ -546,10 +552,11 @@ class AlphaFold2Model:
         inter_contact_cutoff: float = 20.0,
         seed: int | None = None,
         backend: str = "base",
+        compute_gradient: bool = True,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Compute AF2 binder gradients against a frozen target.
+        """Run AF2 binder design against a frozen target (forward, optionally backward).
 
         When ``backend="germinal"``, uses Germinal's ColabDesign fork for the full setup:
         - ``prep_inputs()`` handles position resolution, bias initialization,
@@ -633,6 +640,7 @@ class AlphaFold2Model:
             sample_models=sample_models,
             loss_weights=loss_weights,
             seed=seed,
+            backprop=compute_gradient,
         )
 
     def to_device(self, device: str, verbose: bool = False) -> None:
@@ -696,6 +704,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 20.0),
             seed=input_dict["seed"],
             backend=input_dict.get("backend", "base"),
+            compute_gradient=input_dict.get("compute_gradient", True),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )

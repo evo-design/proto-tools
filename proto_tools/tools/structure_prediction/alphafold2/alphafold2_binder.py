@@ -1,10 +1,11 @@
-"""AlphaFold2/ColabDesign binder-design gradient tool.
+"""AlphaFold2/ColabDesign binder-design tool.
 
-Computes structure-prediction gradients for binder redesign against a frozen
-target. Supports two ColabDesign backends: ``"base"`` (upstream) for generic
-use, and ``"germinal"`` for Germinal-faithful antibody optimization with
-alpha=2.0 logit scaling, persistent bias, framework contact penalties, and
-extension loss callbacks (rg, i_ptm, helix, beta_strand, NC).
+Binder design against a frozen target template. Backends: ``"base"`` (upstream
+ColabDesign) or ``"germinal"`` (fork with alpha=2.0 logit scaling, persistent
+bias, framework contact penalties, and extension losses: rg, i_ptm, helix,
+beta_strand, NC). ``compute_gradient=True`` (default) runs forward+backward
+and returns the gradient w.r.t. logits; ``False`` runs forward only with
+``gradient=None``. Loss, metrics, and Structure are identical in both modes.
 """
 
 import json
@@ -53,8 +54,8 @@ _VALID_LOSS_KEYS = frozenset(
 _BINDER_FIXTURE_PDB = Path(__file__).resolve().parents[4] / "tests" / "dummy_data" / "pdl1.pdb"
 
 
-class AlphaFold2GradientInput(GradientInput):
-    """Input for AlphaFold2 binder-design gradient computation.
+class AlphaFold2BinderInput(GradientInput):
+    """Input for AlphaFold2 binder-design (forward scoring or gradient).
 
     Extends GradientInput with target-template structural data required
     for binder redesign against a frozen target.
@@ -91,8 +92,8 @@ class AlphaFold2GradientInput(GradientInput):
     )
 
 
-class AlphaFold2GradientConfig(BaseConfig):
-    """Configuration for AlphaFold2/ColabDesign binder-design gradients.
+class AlphaFold2BinderConfig(BaseConfig):
+    """Configuration for AlphaFold2/ColabDesign binder design (forward or backward).
 
     Binder protocol only — designs a binder against a frozen target structure.
     Set ``backend="germinal"`` to enable Germinal-specific features (alpha=2.0
@@ -105,7 +106,7 @@ class AlphaFold2GradientConfig(BaseConfig):
         omit_aas (str | None): Amino acids to ban (e.g. ``"C,W"``).
         num_recycles (int): AF2 recycling iterations.
         recycle_mode (Literal["last", "sample", "average", "first"]): Which recycle's
-            output the gradient is taken at. ``"last"`` matches Germinal's VHH default;
+            output is used for loss/gradient. ``"last"`` matches Germinal's VHH default;
             ``"average"`` averages across recycles; ``"sample"`` picks one uniformly;
             ``"first"`` uses only recycle 0.
         model_num (int): AF2 parameter set (1-5).
@@ -124,6 +125,8 @@ class AlphaFold2GradientConfig(BaseConfig):
         intra_contact_cutoff (float): Intra-chain distance cutoff (Å). Germinal only.
         inter_contact_num (int): Interface contacts per residue. Germinal only.
         inter_contact_cutoff (float): Interface distance cutoff (Å). Germinal only.
+        compute_gradient (bool): Run backward pass and return gradient; ``False``
+            for forward-only scoring (returns ``gradient=None``).
     """
 
     bias_redesign: float | None = ConfigField(
@@ -153,7 +156,7 @@ class AlphaFold2GradientConfig(BaseConfig):
     recycle_mode: Literal["last", "sample", "average", "first"] = ConfigField(
         title="Recycle Mode",
         default="last",
-        description="Which recycle's output yields the gradient ('last' matches Germinal VHH).",
+        description="Which recycle's output is used for loss/gradient ('last' matches Germinal VHH).",
         advanced=True,
     )
     model_num: int = ConfigField(
@@ -184,6 +187,12 @@ class AlphaFold2GradientConfig(BaseConfig):
         title="Backend",
         default="base",
         description="ColabDesign backend: 'base' (upstream) or 'germinal' (with alpha, bias, IgLM).",
+        advanced=True,
+    )
+    compute_gradient: bool = ConfigField(
+        title="Compute Gradient",
+        default=True,
+        description="Run backward pass and return gradient; set False for forward-only scoring.",
         advanced=True,
     )
     starting_binder_seq: str | None = ConfigField(
@@ -247,19 +256,26 @@ class AlphaFold2GradientConfig(BaseConfig):
         return self
 
 
-class AlphaFold2GradientOutput(GradientOutput):
-    """Gradient output extended with the predicted target+binder complex.
+class AlphaFold2BinderOutput(GradientOutput):
+    """Binder-design output: loss, metrics, Structure, and optionally the gradient.
 
     Attributes:
-        gradient (list[list[float]]): Gradient matrix matching the input logits shape.
+        gradient (list[list[float]] | None): Gradient matrix matching the input logits shape,
+            or ``None`` when ``compute_gradient=False``.
         loss (float): Scalar objective value.
-        metrics (dict[str, Any]): Scalar auxiliary metrics (avg_plddt, ptm, iptm, avg_pae).
+        metrics (dict[str, Any]): Scalar auxiliary metrics (avg_plddt, ptm, iptm, avg_pae,
+            plus per-loss values for every weighted ColabDesign loss term).
         vocab (list[str]): Amino-acid column ordering.
-        structure (Structure): Predicted complex from the gradient-step forward pass.
+        structure (Structure): Predicted target+binder complex from the forward pass.
             B-factors are at the raw 0-100 PDB scale; ``b_factor_type=PLDDT`` means
             ``Structure.per_residue_plddt`` normalizes them to ``[0, 1]``.
     """
 
+    # Narrow to Optional for compute_gradient=False mode; only GradientOutput subclass that does this.
+    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+        default=None,
+        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
+    )
     structure: Structure = Field(description="Predicted target+binder complex with per-residue pLDDT in B-factors.")
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
@@ -275,7 +291,7 @@ class AlphaFold2GradientOutput(GradientOutput):
         json_path.write_text(json.dumps(payload, indent=2))
 
 
-def example_input() -> AlphaFold2GradientInput:
+def example_input() -> AlphaFold2BinderInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     aa_index = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
     n_aas = len(PROTEIN_AMINO_ACIDS)
@@ -284,7 +300,7 @@ def example_input() -> AlphaFold2GradientInput:
         row = [0.0] * n_aas
         row[aa_index[residue]] = 2.0
         logits.append(row)
-    return AlphaFold2GradientInput(
+    return AlphaFold2BinderInput(
         logits=logits,
         target_pdb=str(_BINDER_FIXTURE_PDB),
         binder_chain="B",
@@ -292,24 +308,32 @@ def example_input() -> AlphaFold2GradientInput:
 
 
 @tool(
-    key="alphafold2-gradient",
-    label="AlphaFold2 Gradient",
+    key="alphafold2-binder",
+    label="AlphaFold2 Binder",
     category="structure_prediction",
-    input_class=AlphaFold2GradientInput,
-    config_class=AlphaFold2GradientConfig,
-    output_class=AlphaFold2GradientOutput,
-    description="Compute AF2 binder-design gradients w.r.t. relaxed logits (base or Germinal backend)",
+    input_class=AlphaFold2BinderInput,
+    config_class=AlphaFold2BinderConfig,
+    output_class=AlphaFold2BinderOutput,
+    description="AF2 binder design against a fixed target: loss + predicted Structure, optionally the gradient w.r.t. logits (base or Germinal backend)",
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
 )
-def run_alphafold2_gradient(
-    inputs: AlphaFold2GradientInput,
-    config: AlphaFold2GradientConfig,
+def run_alphafold2_binder(
+    inputs: AlphaFold2BinderInput,
+    config: AlphaFold2BinderConfig,
     instance: Any = None,
-) -> AlphaFold2GradientOutput:
-    """Compute one AlphaFold2/ColabDesign binder-design gradient step."""
-    logger.debug("Using local for AlphaFold2 binder gradient: model=%d", config.model_num)
+) -> AlphaFold2BinderOutput:
+    """Run one AlphaFold2/ColabDesign binder-design step.
+
+    ``compute_gradient=False`` runs forward only (gradient=None); loss, metrics,
+    and Structure are identical to gradient mode.
+    """
+    logger.debug(
+        "Running AlphaFold2 binder design: model=%d, compute_gradient=%s",
+        config.model_num,
+        config.compute_gradient,
+    )
     result = ToolInstance.dispatch(
         "alphafold2",
         {
@@ -336,6 +360,7 @@ def run_alphafold2_gradient(
             "inter_contact_cutoff": config.inter_contact_cutoff,
             "seed": config.seed,
             "backend": config.backend,
+            "compute_gradient": config.compute_gradient,
             "device": config.device,
             "verbose": config.verbose,
         },
@@ -344,7 +369,7 @@ def run_alphafold2_gradient(
     )
 
     metrics = result["metrics"]
-    return AlphaFold2GradientOutput(
+    return AlphaFold2BinderOutput(
         gradient=result["gradient"],
         loss=result["loss"],
         metrics=metrics,
@@ -358,6 +383,6 @@ def run_alphafold2_gradient(
                 iptm=metrics.get("iptm"),
                 avg_pae=metrics["avg_pae"],
             ),
-            source="alphafold2-gradient",
+            source="alphafold2-binder",
         ),
     )

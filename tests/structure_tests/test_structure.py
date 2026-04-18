@@ -647,3 +647,50 @@ def test_per_residue_plddt_none_for_non_plddt():
     """Returns None when B-factors don't represent pLDDT."""
     pdb = "\n".join([_pdb_line(1, "A", 1, 15.0), "END"])
     assert Structure(structure=pdb, b_factor_type=BFactorType.UNSPECIFIED).per_residue_plddt is None
+
+
+# ── select_chain ──────────────────────────────────────────────────────────────
+
+
+def test_select_chain_keeps_only_requested_chain_and_preserves_metadata():
+    pdb = "\n".join(
+        [
+            _pdb_line(1, "A", 1, 95.0),
+            _pdb_line(2, "A", 2, 80.0),
+            _pdb_line(3, "B", 1, 60.0),
+            _pdb_line(4, "B", 2, 55.0),
+            "END",
+        ]
+    )
+    s = Structure(structure=pdb, b_factor_type=BFactorType.PLDDT, source="test")
+    b = s.select_chain("B")
+    assert b.per_residue_plddt == pytest.approx([0.60, 0.55], abs=1e-2)
+    assert b.b_factor_type == BFactorType.PLDDT
+    assert b.source == "test"
+    assert b.structure_format == "pdb"  # PDB in → PDB out
+    # Cloned — original not mutated.
+    assert s.per_residue_plddt == pytest.approx([0.95, 0.80, 0.60, 0.55], abs=1e-2)
+
+
+def test_select_chain_raises_on_missing_chain():
+    pdb = "\n".join([_pdb_line(1, "A", 1, 95.0), "END"])
+    with pytest.raises(ValueError, match="not present"):
+        Structure(structure=pdb, b_factor_type=BFactorType.PLDDT).select_chain("Z")
+
+
+def test_select_chain_metrics_are_deep_copied():
+    pdb = "\n".join([_pdb_line(1, "A", 1, 90.0), _pdb_line(2, "B", 1, 80.0), "END"])
+    s = Structure(structure=pdb, b_factor_type=BFactorType.PLDDT)
+    s.add_metric("plddt", 0.90)
+    b = s.select_chain("B")
+    b.add_metric("plddt", 0.50)
+    assert s.metrics["plddt"] == 0.90 and b.metrics["plddt"] == 0.50
+
+
+def test_select_chain_preserves_cif_format_for_multi_char_chains(test_cif_file_content):
+    """CIF-sourced Structures round-trip through select_chain without dropping multi-char chain names."""
+    s = Structure(structure=test_cif_file_content, structure_format="cif")
+    chain_name = next(c.name for m in s.gemmi_struct for c in m)
+    out = s.select_chain(chain_name)
+    assert out.structure_format == "cif"
+    assert any(c.name == chain_name for m in out.gemmi_struct for c in m)
