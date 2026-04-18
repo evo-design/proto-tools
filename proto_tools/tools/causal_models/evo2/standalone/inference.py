@@ -371,7 +371,7 @@ class Evo2Model:
         self.load(new_device)
         return self.model.model  # type: ignore[attr-defined]
 
-    def to_device(self, device: str) -> Any:
+    def to_device(self, device: str) -> None:
         """Move model to a different device.
 
         GPU → CPU uses standard PyTorch ``.to("cpu")``.
