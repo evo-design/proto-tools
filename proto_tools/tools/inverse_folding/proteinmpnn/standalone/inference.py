@@ -35,11 +35,10 @@ class ProteinMPNNModel:
     def __init__(self) -> None:
         """Initialize ProteinMPNNModel."""
         self._loaded = False
-        self._model_choice = None
+        self._model_choice: str | None = None
         self.device: str | None = None
-        self.params = None
-        self.model = None
-        self.jax = None
+        self.params: Any = None
+        self.model: Any = None
 
     def sample(
         self,
@@ -82,7 +81,7 @@ class ProteinMPNNModel:
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
             self.load(device, model_choice, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         fix_pos = (
@@ -92,7 +91,7 @@ class ProteinMPNNModel:
         )
 
         # Load the PDB file
-        self.model.prep_inputs(  # type: ignore[attr-defined]
+        self.model.prep_inputs(
             pdb_structure,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
@@ -100,7 +99,7 @@ class ProteinMPNNModel:
         )
 
         # Sample sequences
-        sequences = self.model.sample_parallel(  # type: ignore[attr-defined]
+        sequences = self.model.sample_parallel(
             batch=batch_size,
             temperature=temperature,
             key=key,
@@ -152,7 +151,7 @@ class ProteinMPNNModel:
         # Lazy load the model (reload if model_choice changed)
         if not self._loaded or self._model_choice != model_choice:
             self.load(device, model_choice, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         fix_pos = (
@@ -162,14 +161,14 @@ class ProteinMPNNModel:
         )
 
         # Prepare input
-        self.model.prep_inputs(  # type: ignore[attr-defined]
+        self.model.prep_inputs(
             pdb_structure,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
         )
 
         # Score the sequence (model returns "score" (negative avg log likelihood), "logits")
-        output = self.model.score(  # type: ignore[attr-defined]
+        output = self.model.score(
             seq=sequence,
             key=key,
         )
@@ -202,18 +201,14 @@ class ProteinMPNNModel:
         if self.verbose:
             logger.info(f"Loading {model_choice} (model_name={model_name}) on {device}")
 
-        import jax
-
-        self.jax = jax
-
         # Lazy import ProteinMPNN from ColabDesign
         from colabdesign.mpnn import mk_mpnn_model
 
         # Load the Flax module (params land on CPU by default)
         self.model = mk_mpnn_model(model_name=model_name)
-        self.params = self.model._model.params  # type: ignore[attr-defined]
+        self.params = self.model._model.params
         self.device = "cpu"
-        self._model_choice = model_choice  # type: ignore[assignment]
+        self._model_choice = model_choice
 
         # Move the model parameters to the selected device
         self.to_device(device)
@@ -222,13 +217,13 @@ class ProteinMPNNModel:
         if self.verbose:
             logger.info(f"{model_choice} model loaded successfully")
 
-    def to_device(self, device: str) -> dict[str, Any]:
+    def to_device(self, device: str) -> None:
         """Move the model params to the selected device via move_model_to_device."""
         from standalone_helpers import move_model_to_device
 
         if self.model is None:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
-        if self.device == device:  # type: ignore[unreachable]
+        if self.device == device:
             return
 
         if self.verbose:
