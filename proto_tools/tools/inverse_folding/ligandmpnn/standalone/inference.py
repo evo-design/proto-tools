@@ -113,7 +113,7 @@ class LigandMPNNModel:
         self.unload()
         return {"sequences": sequences, "metrics": metrics}
 
-    def score(  # type: ignore[empty-body]
+    def score(
         self,
         pdb_structure: str,
         chain_ids: list[str],
@@ -143,7 +143,9 @@ class LigandMPNNModel:
                 - logits: Per-position logits array (seq_len, vocab_size)
                 - metrics: Dict with log_likelihood, avg_log_likelihood, perplexity
         """
-        # TODO: Implement LigandMPNN scoring
+        raise NotImplementedError(
+            "LigandMPNN scoring is not yet implemented. Use proteinmpnn-score for protein-only contexts."
+        )
 
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load the LigandMPNN model via Foundry."""

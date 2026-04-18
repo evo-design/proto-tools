@@ -77,7 +77,7 @@ class LigandMPNNScoringConfig(BaseConfig):
 # ============================================================================
 # Tool Implementation
 # ============================================================================
-def run_ligandmpnn_score(  # type: ignore[return]
+def run_ligandmpnn_score(
     inputs: LigandMPNNScoringInput,
     config: LigandMPNNScoringConfig,
 ) -> LigandMPNNScoringOutput:
@@ -106,4 +106,6 @@ def run_ligandmpnn_score(  # type: ignore[return]
         >>> print(f"Perplexity: {result.scores[0].perplexity}")
     """
     _ = (inputs, config)
-    # TODO: Implement LigandMPNN scoring
+    raise NotImplementedError(
+        "LigandMPNN scoring is not yet implemented. Use proteinmpnn-score for protein-only contexts."
+    )
