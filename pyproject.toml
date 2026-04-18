@@ -314,4 +314,4 @@ where = ["."]
 include = ["proto_tools*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib"]
+"*" = ["*.sh", "*.txt", "*.csv", "*.smi", "*.cif", "*.bib", "*.yaml"]
