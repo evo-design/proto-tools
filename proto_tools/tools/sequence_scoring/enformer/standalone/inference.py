@@ -47,7 +47,7 @@ class EnformerModel:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def to_device(self, device: str) -> dict[str, Any]:  # type: ignore[return]
+    def to_device(self, device: str) -> None:
         """Move model to a different device."""
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")

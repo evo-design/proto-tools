@@ -643,7 +643,7 @@ class FAMPNNModel:
         if verbose:
             logger.info("FAMPNN model loaded successfully")
 
-    def to_device(self, device: str) -> dict[str, Any]:
+    def to_device(self, device: str) -> None:
         """Move model to a different device."""
         from standalone_helpers import move_model_to_device
 
