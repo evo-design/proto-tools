@@ -160,7 +160,7 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 
 ## Naming Conventions
 
-- **Tool registry key**: `{tool}-{action}` kebab-case, e.g. `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`. Every key must have an action suffix.
+- **Tool registry key**: `{tool}-{suffix}` kebab-case, e.g. `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`, `"alphafold2-binder"`. The suffix names the tool's operation or operational domain and must uniquely distinguish it from sibling tools in the same `{tool}` family. Verb-like suffixes (`-search`, `-sample`) describe actions; noun-like suffixes (`-prediction`, `-binder`) describe output/mode when that's the cleaner fit. Pick the suffix that reads naturally; the rule is "disambiguate within a `{tool}` family," not "require a verb."
 - **Run function**: `run_{tool_name}`, e.g. `run_evo2_sample`, `run_blast_search`
 - **Classes**: PascalCase, e.g. `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
 - **Directories**: snake_case, e.g. `evo2/`, `blast/`
