@@ -104,6 +104,7 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `use_ste` | `bool` | `false` | When true, uses a Straight-Through Estimator: hard one-hot tokens in the forward pass with gradients flowing through soft probabilities. When false, uses soft blended embeddings |
+| `compute_gradient` | `bool` | `true` | When true, runs backward pass and returns the gradient. Set `false` for forward-only log-likelihood scoring (e.g. MCMC proposal ranking); `gradient` is `None` in the output |
 | `seed` | `int \| null` | `null` | Optional PyTorch random seed for reproducibility |
 | `device` | `str` | `"cuda"` | Device: `"cuda"`, `"cpu"`, `"mps"` |
 
@@ -142,7 +143,7 @@ For the sampling tool, chain sequences should contain `_` at positions to restor
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `gradient` | `list[list[float]]` | Gradient matrix with the same shape as the input logits |
+| `gradient` | `list[list[float]] \| null` | Gradient matrix with the same shape as the input logits. `null` when `compute_gradient=False` (forward-only scoring) |
 | `loss` | `float` | Shifted cross-entropy loss |
 | `metrics` | `dict[str, Any]` | Auxiliary metrics: `log_likelihood`, `sequence_length`, `model_choice`, and `objective` |
 | `vocab` | `list[str]` | Amino-acid column order for both the input logits and the returned gradient; always canonical protein order `ACDEFGHIKLMNPQRSTVWY` |

@@ -1,7 +1,9 @@
-"""AbLang relaxed-sequence gradient tool."""
+"""AbLang shifted cross-entropy tool (forward log-likelihood or gradient)."""
 
 import logging
 from typing import Any
+
+from pydantic import Field
 
 from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
@@ -40,7 +42,22 @@ class AbLangGradientInput(BaseToolInput):
     )
 
 
-AbLangGradientOutput = GradientOutput
+class AbLangGradientOutput(GradientOutput):
+    """AbLang shifted cross-entropy output; gradient is optional in forward-only mode.
+
+    Attributes:
+        gradient (list[list[float]] | None): Gradient w.r.t. input logits, or ``None``
+            when ``compute_gradient=False`` (forward-only log-likelihood scoring).
+        loss (float): Scalar objective value (mean cross-entropy over middle positions).
+        metrics (dict[str, Any]): ``log_likelihood``, ``sequence_length``, ``model_choice``, ``objective``.
+        vocab (list[str]): Amino-acid column ordering for the input logits.
+    """
+
+    # Widen to Optional for compute_gradient=False mode; same treatment as AlphaFold2BinderOutput.
+    gradient: list[list[float]] | None = Field(  # type: ignore[assignment]
+        default=None,
+        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
+    )
 
 
 class AbLangGradientConfig(BaseConfig):
@@ -50,6 +67,8 @@ class AbLangGradientConfig(BaseConfig):
         use_ste (bool): When ``True``, uses a Straight-Through Estimator: hard one-hot
             tokens in the forward pass with gradients flowing through soft probabilities.
             When ``False`` (default), uses soft blended embeddings directly.
+        compute_gradient (bool): Run backward pass and return gradient; ``False`` for
+            forward-only log-likelihood scoring (e.g. MCMC proposal ranking).
         device (str): Execution device for the model, for example 'cuda' or 'cpu'.
     """
 
@@ -57,6 +76,12 @@ class AbLangGradientConfig(BaseConfig):
         title="Straight-Through Estimator",
         default=False,
         description="Hard one-hot forward pass with soft-probability gradients.",
+    )
+    compute_gradient: bool = ConfigField(
+        title="Compute Gradient",
+        default=True,
+        description="Run backward pass and return gradient; set False for forward-only log-likelihood.",
+        advanced=True,
     )
     device: str = ConfigField(
         title="Device",
@@ -111,6 +136,7 @@ def run_ablang_gradient(
         "logits": logits,
         "temperature": inputs.temperature,
         "use_ste": config.use_ste,
+        "compute_gradient": config.compute_gradient,
         "model_choice": model_choice,
         "chain_break_position": chain_break_position,
         "seed": config.seed,

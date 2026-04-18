@@ -112,6 +112,7 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["model_choice"] == "ablang2-paired"
     assert captured["payload"]["temperature"] is None
     assert captured["payload"]["use_ste"] is False
+    assert captured["payload"]["compute_gradient"] is True  # default
 
     # Heavy only, with temperature
     run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
@@ -125,6 +126,36 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["logits"] == light
     assert captured["payload"]["chain_break_position"] is None
     assert captured["payload"]["model_choice"] == "ablang1-light"
+
+
+def test_ablang_forward_mode_dispatch_contract(monkeypatch):
+    """compute_gradient=False forwards the flag and returns gradient=None."""
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+        captured.update(payload=payload)
+        n = len(payload.get("logits", []))
+        return {
+            "gradient": None,
+            "loss": 0.5,
+            "metrics": {"log_likelihood": -0.5, "sequence_length": n},
+            "vocab": list(PROTEIN_AMINO_ACIDS),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.ablang.ablang_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_ablang_gradient(
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * 3)),
+        AbLangGradientConfig(compute_gradient=False),
+    )
+
+    assert captured["payload"]["compute_gradient"] is False
+    assert result.gradient is None
+    assert result.loss == 0.5
+    assert result.metrics["log_likelihood"] == -0.5
 
 
 # ── Gradient unit tests (CPU, fake model) ────────────────────────────────────
@@ -596,6 +627,31 @@ def test_ablang_gradient_paired_chains():
     assert result.metrics["sequence_length"] == heavy_len + light_len
     assert result.metrics["model_choice"] == "ablang2-paired"
     assert result.metrics["objective"] == "shifted_cross_entropy"
+
+
+@pytest.mark.uses_gpu
+def test_ablang_gradient_forward_mode_matches_backward_loss():
+    """compute_gradient=False returns gradient=None but matches backward-mode loss on the real model."""
+    seq_len = 10
+    logits = [[0.0] * 20] * seq_len
+    ab = AntibodyLogits(heavy_chain=logits)
+
+    backward = run_ablang_gradient(
+        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientConfig(seed=42),
+    )
+    forward = run_ablang_gradient(
+        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientConfig(seed=42, compute_gradient=False),
+    )
+    validate_output(backward)
+    validate_output(forward)
+
+    assert backward.gradient is not None
+    assert forward.gradient is None
+    assert forward.loss == pytest.approx(backward.loss, rel=1e-5)
+    assert forward.metrics["log_likelihood"] == pytest.approx(backward.metrics["log_likelihood"], rel=1e-5)
+    assert forward.metrics["sequence_length"] == backward.metrics["sequence_length"]
 
 
 @pytest.mark.uses_gpu

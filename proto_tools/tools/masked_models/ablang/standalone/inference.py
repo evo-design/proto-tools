@@ -372,10 +372,11 @@ class AbLangModel:
         use_ste: bool = False,
         chain_break_position: int | None = None,
         seed: int | None = None,
+        backprop: bool = True,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Compute shifted cross-entropy gradient with respect to a sequence distribution.
+        """Compute shifted cross-entropy loss (and optionally its gradient) against a sequence distribution.
 
         Args:
             logits_list (list[list[float]]): Distribution or logits, shape (L, 20).
@@ -383,6 +384,8 @@ class AbLangModel:
             use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
             chain_break_position (int | None): Where to insert the ``|`` chain separator.
             seed (int | None): Random seed for reproducibility.
+            backprop (bool): If True, run backward pass and return the gradient; if
+                False, skip backward and return ``gradient=None`` (forward-only scoring).
             device (str): Execution device.
             verbose (bool): Whether to log progress.
 
@@ -402,70 +405,79 @@ class AbLangModel:
         if seed is not None:
             torch.manual_seed(seed)
 
-        seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=True)  # (L, 20)
-        sequence_length = int(seq_dist.shape[0])
+        # Disables autograd graph building through model params in forward-only mode.
+        with torch.set_grad_enabled(backprop):
+            # input logits shape (L, 20)
+            seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
+            sequence_length = int(seq_dist.shape[0])
 
-        x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
 
-        mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
-        residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,) — labels only, no gradient
+            mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
+            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,) — labels only, no gradient
 
-        if use_ste:
-            hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
-            mapped = hard + (mapped - mapped.detach())  # STE: hard forward, soft backward
+            if use_ste:
+                hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
+                mapped = hard + (mapped - mapped.detach())  # STE: hard forward, soft backward
 
-        if self._is_ablang1:
-            embed_layer = self.model.AbRep.AbEmbeddings.AAEmbeddings
-            residue_embeddings = mapped[:, :-2] @ embed_layer.weight  # (L, V-2) @ (V-2, D) -> (L, D)
+            if self._is_ablang1:
+                embed_layer = self.model.AbRep.AbEmbeddings.AAEmbeddings
+                residue_embeddings = mapped[:, :-2] @ embed_layer.weight  # (L, V-2) @ (V-2, D) -> (L, D)
+            else:
+                embed_layer = self.model.AbLang.get_aa_embeddings()
+                residue_embeddings = mapped @ embed_layer.weight  # (L, V) @ (V, D) -> (L, D)
+
+            # For paired sequences, splice the "|" chain separator between the two chains
+            # so AbLang sees the same token layout it was trained on (e.g. "VH|VL").
+            if chain_break_position is not None:
+                assert self._ablang_vocab is not None
+                sep_id = self._ablang_vocab["|"]
+                sep_embed = embed_layer.weight[sep_id].unsqueeze(0)  # (1, D)
+                residue_embeddings = torch.cat(
+                    (residue_embeddings[:chain_break_position], sep_embed, residue_embeddings[chain_break_position:]),
+                    dim=0,
+                )  # (L+1, D)
+                residue_token_ids = torch.cat(
+                    (
+                        residue_token_ids[:chain_break_position],
+                        torch.tensor([sep_id], device=self.device, dtype=torch.long),
+                        residue_token_ids[chain_break_position:],
+                    ),
+                    dim=0,
+                )  # (L+1,)
+
+            token_ids = residue_token_ids.unsqueeze(0).to(self.device)  # (1, L + 1)
+            input_embeddings = residue_embeddings.unsqueeze(0)  # (1, L + 1, D)
+
+            def _embedding_hook(_module: Any, _input: Any, _output: Any) -> Any:
+                return input_embeddings
+
+            hook_handle = embed_layer.register_forward_hook(_embedding_hook)
+            try:
+                logits_out = self.model.AbLang(token_ids)  # (1, L + 1, Vm)
+            finally:
+                hook_handle.remove()
+
+            shift_logits = logits_out[:, :-1, :]
+            shift_labels = token_ids[:, 1:]
+            position_losses = F.cross_entropy(
+                shift_logits.reshape(-1, shift_logits.size(-1)),
+                shift_labels.reshape(-1),
+                reduction="none",
+            ).reshape(shift_labels.shape)
+            position_losses = position_losses[:, 1:-1]  # strip boundary tokens
+            loss = position_losses.mean()
+
+        gradient_value: list[list[float]] | None
+        if backprop:
+            (gradient,) = torch.autograd.grad(loss, seq_dist)  # (L, 20)
+            gradient_value = gradient.detach().cpu().tolist()
         else:
-            embed_layer = self.model.AbLang.get_aa_embeddings()
-            residue_embeddings = mapped @ embed_layer.weight  # (L, V) @ (V, D) -> (L, D)
-
-        # For paired sequences, splice the "|" chain separator between the two chains
-        # so AbLang sees the same token layout it was trained on (e.g. "VH|VL").
-        if chain_break_position is not None:
-            assert self._ablang_vocab is not None
-            sep_id = self._ablang_vocab["|"]
-            sep_embed = embed_layer.weight[sep_id].unsqueeze(0)  # (1, D)
-            residue_embeddings = torch.cat(
-                (residue_embeddings[:chain_break_position], sep_embed, residue_embeddings[chain_break_position:]),
-                dim=0,
-            )  # (L+1, D)
-            residue_token_ids = torch.cat(
-                (
-                    residue_token_ids[:chain_break_position],
-                    torch.tensor([sep_id], device=self.device, dtype=torch.long),
-                    residue_token_ids[chain_break_position:],
-                ),
-                dim=0,
-            )  # (L+1,)
-
-        token_ids = residue_token_ids.unsqueeze(0).to(self.device)  # (1, L + 1)
-        input_embeddings = residue_embeddings.unsqueeze(0)  # (1, L + 1, D)
-
-        def _embedding_hook(_module: Any, _input: Any, _output: Any) -> Any:
-            return input_embeddings
-
-        hook_handle = embed_layer.register_forward_hook(_embedding_hook)
-        try:
-            logits_out = self.model.AbLang(token_ids)  # (1, L + 1, Vm)
-        finally:
-            hook_handle.remove()
-
-        shift_logits = logits_out[:, :-1, :]
-        shift_labels = token_ids[:, 1:]
-        position_losses = F.cross_entropy(
-            shift_logits.reshape(-1, shift_logits.size(-1)),
-            shift_labels.reshape(-1),
-            reduction="none",
-        ).reshape(shift_labels.shape)
-        position_losses = position_losses[:, 1:-1]  # strip boundary tokens
-        loss = position_losses.mean()
-        (gradient,) = torch.autograd.grad(loss, seq_dist)  # (L, 20)
+            gradient_value = None
 
         loss_value = loss.item()
         return {
-            "gradient": gradient.detach().cpu().tolist(),
+            "gradient": gradient_value,
             "loss": loss_value,
             "metrics": {
                 "log_likelihood": -loss_value,
@@ -527,6 +539,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             use_ste=input_dict["use_ste"],
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
+            backprop=input_dict.get("compute_gradient", True),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )
