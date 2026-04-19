@@ -151,7 +151,7 @@ class RandomNucleotideSampleConfig(BaseConfig):
 # ============================================================================
 
 
-def _detect_sequence_type(sequences: list[str]) -> str:
+def _detect_sequence_type(sequences: list[str]) -> Literal["dna", "rna"]:
     """Detect whether sequences are DNA or RNA.
 
     Args:
@@ -219,7 +219,7 @@ def run_random_nucleotide_sample(
     # Resolve sequence type
     seq_type = config.sequence_type
     if seq_type == "auto":
-        seq_type = _detect_sequence_type(inputs.sequences)  # type: ignore[assignment]  # returns str, not Literal
+        seq_type = _detect_sequence_type(inputs.sequences)
 
     is_rna = seq_type == "rna"
 

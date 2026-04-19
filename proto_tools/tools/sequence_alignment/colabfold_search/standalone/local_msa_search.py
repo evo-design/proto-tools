@@ -23,8 +23,8 @@ class ColabFoldSearchWrapper:
     def __init__(self) -> None:
         """Initialize ColabFold search wrapper."""
         self._loaded = False
-        self.colabfold_search_executable = None
-        self.mmseqs_executable = None
+        self.colabfold_search_executable: str | None = None
+        self.mmseqs_executable: str | None = None
 
     def _detect_database_name(
         self,
@@ -249,9 +249,9 @@ class ColabFoldSearchWrapper:
         venv_executable = venv_bin_dir / "colabfold_search"
 
         if venv_executable.exists():
-            self.colabfold_search_executable = str(venv_executable)  # type: ignore[assignment]
+            self.colabfold_search_executable = str(venv_executable)
         elif shutil.which("colabfold_search") is not None:
-            self.colabfold_search_executable = shutil.which("colabfold_search")  # type: ignore[assignment]
+            self.colabfold_search_executable = shutil.which("colabfold_search")
         else:
             raise ImportError(
                 "Could not find the 'colabfold_search' executable. "
@@ -261,9 +261,9 @@ class ColabFoldSearchWrapper:
         # Find mmseqs binary (required by colabfold_search)
         venv_mmseqs = venv_bin_dir / "mmseqs"
         if venv_mmseqs.exists():
-            self.mmseqs_executable = str(venv_mmseqs)  # type: ignore[assignment]
+            self.mmseqs_executable = str(venv_mmseqs)
         elif shutil.which("mmseqs") is not None:
-            self.mmseqs_executable = shutil.which("mmseqs")  # type: ignore[assignment]
+            self.mmseqs_executable = shutil.which("mmseqs")
         else:
             raise ImportError(
                 "Could not find the 'mmseqs' executable. "

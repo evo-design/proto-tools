@@ -88,10 +88,10 @@ class AlphaFold3Model:
     def __init__(self) -> None:
         """Initialize model with unset paths."""
         self._loaded = False
-        self.repo_path = None
-        self.sif_path = None
-        self.model_dir = None
-        self.db_dir = None
+        self.repo_path: str | None = None
+        self.sif_path: str | None = None
+        self.model_dir: str | None = None
+        self.db_dir: str | None = None
 
     def load(self) -> None:
         """Validate that all required Singularity paths are set and exist."""
@@ -102,12 +102,12 @@ class AlphaFold3Model:
             "db_dir": self.db_dir,
         }
 
-        missing = [name for name, path in required_paths.items() if not path]  # type: ignore[redundant-expr]
+        missing = [name for name, path in required_paths.items() if path is None]
         if missing:
             raise ValueError(f"Missing required paths: {', '.join(missing)}")
 
         for name, path in required_paths.items():
-            if not os.path.exists(path):  # type: ignore[arg-type]
+            if path is not None and not os.path.exists(path):
                 raise FileNotFoundError(f"{name} does not exist: {path}")
 
         self._loaded = True
