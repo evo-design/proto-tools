@@ -29,7 +29,7 @@ class LigandMPNNModel:
     ):
         """Initialize LigandMPNNModel."""
         self._loaded = False
-        self._engine = None
+        self._engine: Any = None
         self.device: str | None = None
         self.checkpoint_path = checkpoint_path
 
@@ -101,7 +101,7 @@ class LigandMPNNModel:
             input_dict["designed_chains"] = chain_ids
 
         # Run inference
-        results = self._engine.run(input_dicts=[input_dict])  # type: ignore[attr-defined]
+        results = self._engine.run(input_dicts=[input_dict])
 
         # Extract sequences and metrics
         sequences: list[str] = []

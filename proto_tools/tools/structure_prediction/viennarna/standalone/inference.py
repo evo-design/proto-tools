@@ -22,7 +22,7 @@ class ViennaRNAModel:
 
     def __init__(self) -> None:
         """Initialize ViennaRNA model (lazy loading)."""
-        self._RNA = None
+        self._RNA: Any = None
         logger.debug("ViennaRNAModel initialized (lazy loading)")
 
     def load(self) -> None:
@@ -88,16 +88,16 @@ class ViennaRNAModel:
                 )
 
         # Configure model details
-        md = RNA.md()  # type: ignore[attr-defined]
+        md = RNA.md()
         md.temperature = temperature
         md.noLP = 1 if no_lonely_pairs else 0
 
         # Load appropriate energy parameters
         if use_dna_params:
-            RNA.params_load_DNA_Mathews2004()  # type: ignore[attr-defined]
+            RNA.params_load_DNA_Mathews2004()
             logger.debug("Using DNA energy parameters (Mathews 2004)")
         else:
-            RNA.params_load_RNA_Turner2004()  # type: ignore[attr-defined]
+            RNA.params_load_RNA_Turner2004()
             logger.debug("Using RNA energy parameters (Turner 2004)")
 
         # Fold each sequence
@@ -122,7 +122,7 @@ class ViennaRNAModel:
             logger.debug(f"Folding sequence {seq_idx + 1}/{len(sequences)} ({len(normalized_seq)} nt)")
 
             # Create fold compound and compute MFE structure
-            fc = RNA.fold_compound(normalized_seq, md)  # type: ignore[attr-defined]
+            fc = RNA.fold_compound(normalized_seq, md)
             structure, mfe = fc.mfe()
 
             results.append(

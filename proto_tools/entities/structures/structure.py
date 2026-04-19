@@ -288,7 +288,7 @@ class Structure(BaseModel):
                 doc = gemmi.cif.read_string(self.structure)
                 for block in doc:
                     struct = gemmi.make_structure_from_block(block)
-                    if struct is not None and len(struct) > 0:  # type: ignore[redundant-expr]
+                    if len(struct) > 0:
                         self._gemmi_struct = struct
                         break
                 if self._gemmi_struct is None:
@@ -457,7 +457,7 @@ class Structure(BaseModel):
             for block in doc:
                 try:
                     candidate = gemmi.make_structure_from_block(block)
-                    if candidate is not None and len(candidate) > 0:  # type: ignore[redundant-expr]
+                    if len(candidate) > 0:
                         gemmi_struct = candidate
                         break
                 except Exception:  # noqa: S112

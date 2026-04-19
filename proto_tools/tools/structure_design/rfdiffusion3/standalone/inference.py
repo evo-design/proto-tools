@@ -207,12 +207,8 @@ class RFdiffusion3Model:
 
         See: https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/intro_inference_calculations.md
         """
-        output_dir = Path(output_dir)  # type: ignore[assignment]
-        structure_files = sorted(
-            f
-            for f in output_dir.iterdir()  # type: ignore[attr-defined]
-            if f.name.endswith(self._STRUCTURE_EXTENSIONS)
-        )
+        output_path = Path(output_dir)
+        structure_files = sorted(f for f in output_path.iterdir() if f.name.endswith(self._STRUCTURE_EXTENSIONS))
 
         designs = []
         for struct_file in structure_files:

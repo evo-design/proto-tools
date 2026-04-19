@@ -22,7 +22,7 @@ class ColabFoldRemoteSearchWrapper:
     def __init__(self) -> None:
         """Initialize ColabFold remote search wrapper."""
         self._loaded = False
-        self.run_mmseqs2 = None
+        self.run_mmseqs2: Any = None
 
     def __call__(
         self,
@@ -67,7 +67,7 @@ class ColabFoldRemoteSearchWrapper:
                 temp_output_prefix = str(output_dir / seq_id)
 
                 # Run remote MSA search
-                self.run_mmseqs2(  # type: ignore[misc]
+                self.run_mmseqs2(
                     sequence,
                     temp_output_prefix,
                     use_env=use_metagenomic_db,

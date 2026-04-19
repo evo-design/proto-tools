@@ -95,15 +95,15 @@ class ProdigalInput(BaseToolInput):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_sequences(cls, data: Any) -> None:
+    def normalize_sequences(cls, data: Any) -> Any:
         """Normalize input_sequences from string to list."""
         if isinstance(data.get("input_sequences"), str):
             data["input_sequences"] = [data["input_sequences"]]
-        return data  # type: ignore[no-any-return]
+        return data
 
     @field_validator("input_sequences")
     @classmethod
-    def validate_sequences(cls, sequences: Any) -> None:
+    def validate_sequences(cls, sequences: Any) -> list[str]:
         """Validate DNA sequences."""
         if not sequences:
             raise ValueError("At least one sequence is required")
@@ -118,7 +118,7 @@ class ProdigalInput(BaseToolInput):
                 raise ValueError(f"Invalid DNA characters in sequence: {', '.join(sorted(invalid_chars))}")
             validated.append(seq_upper)
 
-        return validated  # type: ignore[return-value]
+        return validated
 
 
 class ProdigalConfig(BaseConfig):
