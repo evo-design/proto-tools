@@ -111,7 +111,7 @@ class AlphaGenomeModel:
         self._loaded = False
         self.model_version = model_version
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
 
     def _ensure_loaded(self, device: str) -> None:
         if not self._loaded:
@@ -131,7 +131,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_intervals(  # type: ignore[attr-defined]
+        predictions = self.model.predict_intervals(
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
@@ -164,7 +164,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_variants(  # type: ignore[attr-defined]
+        predictions = self.model.predict_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -187,7 +187,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
-        predictions = self.model.predict_sequences(  # type: ignore[attr-defined]
+        predictions = self.model.predict_sequences(
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
             ontology_terms=ontology_terms,
@@ -221,7 +221,7 @@ class AlphaGenomeModel:
             )
         self._ensure_loaded(device)
 
-        scores_per_variant = self.model.score_variants(  # type: ignore[attr-defined]
+        scores_per_variant = self.model.score_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
             variant_scorers=_resolve_variant_scorers(variant_scorers, organism),
@@ -245,7 +245,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
-        scores_per_interval = self.model.score_intervals(  # type: ignore[attr-defined]
+        scores_per_interval = self.model.score_intervals(
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),
             organism=_ORGANISM_ENUMS[organism],
@@ -285,7 +285,7 @@ class AlphaGenomeModel:
                     alternate_bases=req["alternate_bases"],
                 )
 
-            scores = self.model.score_ism_variants(  # type: ignore[attr-defined]
+            scores = self.model.score_ism_variants(
                 interval=interval,
                 ism_interval=ism_interval,
                 variant_scorers=scorers,
