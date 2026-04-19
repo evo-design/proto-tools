@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from proto_tools.entities.ligands import Fragment, Ligands
 from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -174,3 +175,40 @@ def test_af3_ligand_smile_to_ccd_conversion(mock_af3_inference):
 
     assert sequences[1]["ligand"]["id"] == "B"
     assert sequences[1]["ligand"]["ccdCodes"] == ["ATP"]
+
+
+def test_af3_accepts_fragment_directly(mock_af3_inference):
+    """Fragment objects in chains list flow through AF3 with their CCD code."""
+    complexes = [
+        StructurePredictionComplex(
+            chains=["MVLSPADKTN", Fragment(ccd_code="ATP")],
+        )
+    ]
+    inputs = AlphaFold3Input(complexes=complexes)
+    config = AlphaFold3Config(name="test_fragment", use_msa=False)
+
+    result = run_alphafold3(inputs, config)
+    assert result.success
+
+    sequences = mock_af3_inference["input_json"]["sequences"]
+    assert len(sequences) == 2
+    assert sequences[1]["ligand"]["ccdCodes"] == ["ATP"]
+
+
+def test_af3_accepts_ligands_collection_expanded(mock_af3_inference):
+    """A Ligands collection in chains list expands to one AF3 ligand entry per fragment."""
+    complexes = [
+        StructurePredictionComplex(
+            chains=["MVLSPADKTN", Ligands(ccd_codes=["ATP", "MG"])],
+        )
+    ]
+    inputs = AlphaFold3Input(complexes=complexes)
+    config = AlphaFold3Config(name="test_ligands_collection", use_msa=False)
+
+    result = run_alphafold3(inputs, config)
+    assert result.success
+
+    sequences = mock_af3_inference["input_json"]["sequences"]
+    assert len(sequences) == 3
+    assert sequences[1]["ligand"]["ccdCodes"] == ["ATP"]
+    assert sequences[2]["ligand"]["ccdCodes"] == ["MG"]

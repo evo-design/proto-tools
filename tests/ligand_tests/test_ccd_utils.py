@@ -7,6 +7,7 @@ import pytest
 
 from proto_tools.entities.ligands.ccd_utils import (
     COMMON_MODIFICATIONS,
+    get_all_ccd_codes,
     get_canonical_component,
     get_ccd_description,
     get_modifications_for_component,
@@ -288,4 +289,68 @@ def test_case_sensitivity_smiles():
 
 
 def test_map_smiles_no_name_fallback():
-    assert map_smiles_to_ccd_code("C1=CC2=CC=CC=C2C=C1", use_name_fallback=False) is None
+    assert map_smiles_to_ccd_code("c1ccc(C(=O)NCCNCCN)cc1", use_name_fallback=False) is None
+
+
+# ── Parameterized canonical round-trip tests ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    "ccd_code",
+    ["ATP", "SEP", "TPO", "HEM", "FAD", "ADP", "NAD", "GTP"],
+    ids=["ATP", "SEP", "TPO", "HEM", "FAD", "ADP", "NAD", "GTP"],
+)
+def test_valid_ligand_roundtrip(ccd_code):
+    """CCD → RDKit SMILES → CCD round-trip works via canonical comparison."""
+    smiles = map_ccd_code_to_smiles(ccd_code)
+    assert smiles is not None, f"No SMILES for {ccd_code}"
+    result = map_smiles_to_ccd_code(smiles, use_name_fallback=False)
+    assert result == ccd_code, f"Round-trip failed: {ccd_code} → {smiles} → {result}"
+
+
+@pytest.mark.parametrize(
+    "smiles",
+    [
+        "INVALID_NOT_SMILES",
+        "",
+        "X" * 100,
+        "C1CC1CC1CC1CC1CC1CC1CC1CC1CC1CC1CC1CC1CC1CC1",
+    ],
+    ids=["garbage", "empty", "long_garbage", "novel_molecule"],
+)
+def test_invalid_ligand_no_ccd(smiles):
+    """Invalid or novel SMILES return None from CCD lookup."""
+    result = map_smiles_to_ccd_code(smiles, use_name_fallback=False)
+    assert result is None
+
+
+def test_rdkit_canonical_smiles_matches_ccd():
+    """RDKit-canonical SMILES for a known molecule matches its CCD entry."""
+    from rdkit import Chem
+
+    # Phosphoserine: OE form differs from RDKit form
+    oe_smiles = "C([C@@H](C(=O)O)N)OP(=O)(O)O"
+    rdkit_canonical = Chem.MolToSmiles(Chem.MolFromSmiles(oe_smiles), canonical=True)
+    assert oe_smiles != rdkit_canonical, "OE and RDKit forms should differ"
+    assert map_smiles_to_ccd_code(rdkit_canonical, use_name_fallback=False) == "SEP"
+    assert map_smiles_to_ccd_code(oe_smiles, use_name_fallback=False) == "SEP"
+
+
+# ── Validity is independent of RDKit parseability ──────────────────────
+
+
+def test_is_valid_ccd_code_accepts_rdkit_unparseable_entry():
+    """A CCD code present in the file but with an RDKit-unparseable SMILES is still valid.
+
+    08T contains a beryllium atom with valence 4 that RDKit rejects, but it is
+    a real wwPDB CCD entry. ``is_valid_ccd_code`` should return True regardless.
+    """
+    assert is_valid_ccd_code("08T") is True
+    # The canonical mapping is rightfully None — we can't compute one without RDKit.
+    assert map_ccd_code_to_smiles("08T") is None
+
+
+def test_get_all_ccd_codes_includes_rdkit_unparseable_entries():
+    """get_all_ccd_codes returns the full raw set, not just the canonicalizable subset."""
+    all_codes = get_all_ccd_codes()
+    assert "08T" in all_codes  # RDKit-unparseable but file-present

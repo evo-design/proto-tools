@@ -371,9 +371,7 @@ def run_boltz2_on_complex(
                         stacklevel=2,
                     )
 
-        # Generate YAML directly with MSA paths baked in
-        chain_dicts = [{"entity_type": chain.entity_type, "sequence": chain.sequence} for chain in sp_complex.chains]
-        yaml_content = complex_to_yaml(chain_dicts, chain_msa_paths=chain_msa_paths)
+        yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
 
         input_yaml_path = os.path.join(temp_dir, "boltz2_input.yaml")
         with open(input_yaml_path, "w") as f:

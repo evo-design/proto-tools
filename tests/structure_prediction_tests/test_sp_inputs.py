@@ -8,6 +8,7 @@ from typing import ClassVar
 
 import pytest
 
+from proto_tools.entities.ligands import Fragment, Ligands
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
@@ -72,7 +73,7 @@ def test_complex_rejects_empty_chain_string():
 
 
 def test_complex_rejects_nonstring_chain():
-    with pytest.raises(ValueError, match="must be a string, dictionary, or Chain object"):
+    with pytest.raises(ValueError, match="must be a string, dict, Chain, Fragment, or Ligands"):
         StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, 123])
 
 
@@ -421,7 +422,7 @@ def test_complex_accepts_mixed_string_dict_and_chain_formats():
 
 
 def test_complex_rejects_invalid_dictionary_chain():
-    with pytest.raises(ValueError, match="dictionary is invalid"):
+    with pytest.raises(ValueError, match="Chain 0 is invalid"):
         StructurePredictionComplex(chains=[{"invalid_field": _PROTEIN_SEQ}])
 
 
@@ -889,3 +890,125 @@ def test_output_export_invalid_format(tmp_path):
     output = StructurePredictionOutput.model_construct(structures=[struct], success=True)
     with pytest.raises(ValueError, match="Invalid file format"):
         output._export_output(tmp_path / "out", "xyz")
+
+
+# ── Fragment-as-chain integration ──────────────────────────────────────────────
+
+
+def test_complex_accepts_fragment_directly():
+    """A Fragment passed in chains list is used as-is (no Chain wrapping)."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP")])
+    assert len(complex_obj.chains) == 2
+    assert isinstance(complex_obj.chains[0], Chain)
+    assert isinstance(complex_obj.chains[1], Fragment)
+    assert complex_obj.chains[1].ccd_code == "ATP"
+    assert complex_obj.chains[1].entity_type == "ligand"
+
+
+def test_complex_expands_ligands_collection():
+    """A Ligands collection in chains list expands to one Fragment per fragment."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Ligands(ccd_codes=["ATP", "MG", "MG"])])
+    assert len(complex_obj.chains) == 4
+    assert all(isinstance(c, Fragment) for c in complex_obj.chains[1:])
+    assert [f.ccd_code for f in complex_obj.chains[1:]] == ["ATP", "MG", "MG"]
+
+
+def test_complex_auto_splits_multi_fragment_smiles_string():
+    """A dot-separated SMILES string in chains list expands to N Fragments."""
+    complex_obj = StructurePredictionComplex(chains=["CCO.CO"])
+    assert len(complex_obj.chains) == 2
+    assert all(isinstance(c, Fragment) for c in complex_obj.chains)
+    assert {f.smiles for f in complex_obj.chains} == {"CCO", "CO"}
+
+
+def test_complex_converts_ligand_chain_to_fragment():
+    """Chain(entity_type='ligand') is auto-converted to Fragment in normalize_chains."""
+    chain = Chain(sequence="CCO", entity_type="ligand")
+    complex_obj = StructurePredictionComplex(chains=[chain])
+    assert isinstance(complex_obj.chains[0], Fragment)
+    assert complex_obj.chains[0].smiles == "CCO"
+    assert complex_obj.chains[0].entity_type == "ligand"
+
+
+def test_complex_dict_with_ccd_code_builds_fragment():
+    """A dict with ccd_code (no sequence) builds a Fragment."""
+    complex_obj = StructurePredictionComplex(chains=[{"ccd_code": "ATP"}])
+    assert isinstance(complex_obj.chains[0], Fragment)
+    assert complex_obj.chains[0].ccd_code == "ATP"
+
+
+def test_complex_dict_with_entity_type_ligand_builds_fragment():
+    """A dict with entity_type='ligand' builds a Fragment, not a Chain."""
+    complex_obj = StructurePredictionComplex(chains=[{"sequence": "CCO", "entity_type": "ligand"}])
+    assert isinstance(complex_obj.chains[0], Fragment)
+    assert complex_obj.chains[0].smiles == "CCO"
+
+
+def test_complex_dict_with_implicit_ligand_smiles_builds_fragment():
+    """A dict with only a SMILES-shaped 'sequence' (no entity_type) auto-converts to Fragment.
+
+    Mirrors the behavior of bare-string and Chain-object inputs: SMILES auto-detects
+    to entity_type='ligand', and ligand-typed entries are normalized to Fragment.
+    """
+    complex_obj = StructurePredictionComplex(chains=[{"sequence": "CCO"}])
+    assert isinstance(complex_obj.chains[0], Fragment)
+    assert complex_obj.chains[0].smiles == "CCO"
+    assert complex_obj.chains[0].entity_type == "ligand"
+
+
+def test_complex_chain_cap_enforced_after_expansion():
+    """The 26-chain cap is checked after Ligands/multi-fragment expansion."""
+    big_ligands = Ligands(ccd_codes=["MG"] * 26)
+    with pytest.raises(ValueError, match="Cannot provide more than"):
+        StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, big_ligands])
+
+
+def test_complex_entity_types_uniform_for_chain_and_fragment():
+    """entity_types property returns 'ligand' for both Fragment and ligand-converted chains."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP"), "CC(C)C"])
+    assert complex_obj.entity_types == ["protein", "ligand", "ligand"]
+
+
+def test_complex_sum_of_chain_lengths_counts_fragments_as_one():
+    """Each ligand Fragment contributes 1 to sum_of_chain_lengths."""
+    complex_obj = StructurePredictionComplex(
+        chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP"), Fragment(ccd_code="MG")]
+    )
+    assert complex_obj.sum_of_chain_lengths() == len(_PROTEIN_SEQ_SHORT) + 2
+
+
+def test_complex_sum_of_chain_lengths_with_ligands_collection():
+    """A Ligands collection expands to N Fragments and each contributes 1."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Ligands(ccd_codes=["ATP", "MG"])])
+    assert complex_obj.num_chains() == 3
+    assert complex_obj.sum_of_chain_lengths() == len(_PROTEIN_SEQ_SHORT) + 2
+
+
+def test_complex_chain_sequences_returns_smiles_for_fragments():
+    """chain_sequences exposes SMILES for Fragments and sequence for Chains."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(smiles="CCO")])
+    assert complex_obj.chain_sequences == [_PROTEIN_SEQ_SHORT, "CCO"]
+
+
+def test_complex_extract_protein_chains_skips_fragments():
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP"), "GSSGSSG"])
+    seqs, chain_ids = complex_obj.extract_protein_chains()
+    assert seqs == [_PROTEIN_SEQ_SHORT, "GSSGSSG"]
+    assert chain_ids == ["A", "C"]
+
+
+def test_complex_add_modification_to_fragment_chain_raises():
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP")])
+    with pytest.raises(ValueError, match="ligand Fragment and cannot have modifications"):
+        complex_obj.add_modification_to_chain(1, 1, "SEP")
+
+
+def test_complex_round_trip_with_fragment():
+    """Heterogeneous chains list survives model_dump → model_validate."""
+    complex_obj = StructurePredictionComplex(chains=[_PROTEIN_SEQ_SHORT, Fragment(ccd_code="ATP")])
+    dumped = complex_obj.model_dump()
+    reconstructed = StructurePredictionComplex.model_validate(dumped)
+    assert len(reconstructed.chains) == 2
+    assert isinstance(reconstructed.chains[0], Chain)
+    assert isinstance(reconstructed.chains[1], Fragment)
+    assert reconstructed.chains[1].ccd_code == "ATP"

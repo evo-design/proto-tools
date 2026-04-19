@@ -15,6 +15,7 @@ import tempfile
 from logging import getLogger
 from typing import Any, ClassVar, Literal
 
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
@@ -84,6 +85,12 @@ class ProtenixInput(StructurePredictionInput):
         sequences = []
 
         for chain in comp.chains:
+            entry: dict[str, Any]
+            if isinstance(chain, Fragment):
+                entry = {"ligand": {"ligand": chain.smiles, "count": 1}}
+                sequences.append(entry)
+                continue
+
             e_type = chain.entity_type
             seq = chain.sequence
 
@@ -119,9 +126,6 @@ class ProtenixInput(StructurePredictionInput):
                         }
                         for mod in chain.modifications
                     ]
-
-            elif e_type == "ligand":
-                entry = {"ligand": {"ligand": seq, "count": 1}}
 
             sequences.append(entry)
 

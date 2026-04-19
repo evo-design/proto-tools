@@ -104,8 +104,8 @@ class ESMFoldInput(StructurePredictionInput):
         """Prepares complexes for ESMFold inference."""
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
-            seq_lengths = [len(chain.sequence) for chain in comp.chains]
-            chain_sequences = [chain.sequence for chain in comp.chains]
+            chain_sequences = comp.chain_sequences  # SUPPORTED_ENTITY_TYPES rejects ligands upstream
+            seq_lengths = [len(s) for s in chain_sequences]
             linked_seq = chain_linker.join(chain_sequences)
             prepared_complexes.append(
                 {
