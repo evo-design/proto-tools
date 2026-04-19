@@ -617,7 +617,10 @@ class AlphaFold2Model:
             af_model.opt["con"].update(
                 {"num": intra_contact_num, "cutoff": intra_contact_cutoff, "binary": False, "seqsep": 9}
             )
-            # Framework contact penalty (Germinal vhh.yaml defaults).
+            # Framework contact penalty — pinned to Germinal's VHH defaults
+            # (``configs/run/vhh.yaml:29-30``). Not exposed as config fields; flip this
+            # block if you need a non-VHH target or an ablation. framework_contact_loss
+            # enables the penalty, framework_contact_offset tunes its start index.
             af_model.opt["i_con"].update(
                 {
                     "num": inter_contact_num,
