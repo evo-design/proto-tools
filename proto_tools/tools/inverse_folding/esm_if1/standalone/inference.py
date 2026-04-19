@@ -25,9 +25,9 @@ class ESMIF1Model:
         """Initialize ESMIF1Model."""
         self._loaded = False
         self.device: str | None = None
-        self.model = None
-        self.alphabet = None
-        self._weights_variant = None
+        self.model: Any = None
+        self.alphabet: Any = None
+        self._weights_variant: str | None = None
 
     def _load_structure(
         self,
@@ -97,7 +97,7 @@ class ESMIF1Model:
         # Build coords tensor matching multichain_util._concatenate_coords
         all_coords_concat = esm.inverse_folding.multichain_util._concatenate_coords(all_coords, target_chain)
 
-        sampled_seq = self.model.sample(  # type: ignore[attr-defined]
+        sampled_seq = self.model.sample(
             all_coords_concat,
             partial_seq=partial_seq,
             temperature=temperature,
@@ -137,7 +137,7 @@ class ESMIF1Model:
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import esm.inverse_folding.multichain_util
@@ -211,7 +211,7 @@ class ESMIF1Model:
         """
         if not self._loaded or self._weights_variant != weights_variant:
             self.load(device, weights_variant, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import esm.inverse_folding.multichain_util
@@ -270,7 +270,7 @@ class ESMIF1Model:
             dpo_weights_path = os.path.join(weights_dir, "paired_weights.pt")
             if os.path.exists(dpo_weights_path):
                 state_dict = torch.load(dpo_weights_path, map_location="cpu", weights_only=False)
-                self.model.load_state_dict(state_dict, strict=True)  # type: ignore[attr-defined]
+                self.model.load_state_dict(state_dict, strict=True)
                 if verbose:
                     logger.info(f"Loaded ProteinDPO weights from {dpo_weights_path}")
             else:
@@ -279,10 +279,10 @@ class ESMIF1Model:
                     f"Run setup.sh or set PROTO_ESM_IF1_WEIGHTS_DIR."
                 )
 
-        self.model = self.model.to(device)  # type: ignore[attr-defined]
-        self.model.eval()  # type: ignore[attr-defined]
+        self.model = self.model.to(device)
+        self.model.eval()
         self.device = device
-        self._weights_variant = weights_variant  # type: ignore[assignment]
+        self._weights_variant = weights_variant
         self._loaded = True
 
         if verbose:
@@ -299,7 +299,7 @@ class ESMIF1Model:
     def unload(self) -> None:
         """Move model to CPU to free GPU memory."""
         if self._loaded and self.device != "cpu":
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
             self.device = "cpu"
             gc.collect()
             if torch.cuda.is_available():
