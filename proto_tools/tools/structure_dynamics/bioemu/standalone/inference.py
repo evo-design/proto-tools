@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import move_model_to_device, set_torch_seed
+from standalone_helpers import set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +36,8 @@ class BioEmuModel:
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Sample a conformational ensemble with BioEmu."""
-        if not self._loaded or self._model_name != model_name:
+        if not self._loaded or self._model_name != model_name or self.device != device:
             self.load(model_name=model_name, device=device, verbose=verbose)
-        elif self.device != device:
-            self.to_device(device)
 
         # Seed after load so each dispatch enters sampling with the same RNG state.
         set_torch_seed(seed)
@@ -131,14 +129,6 @@ class BioEmuModel:
         self._loaded = True
         if verbose:
             logger.info("BioEmu model initialized successfully")
-
-    def to_device(self, device: str) -> None:
-        """Move model to another device."""
-        if not self._loaded:
-            raise RuntimeError("Cannot move unloaded model. Call load() first.")
-        if self.device != device:
-            self.model = move_model_to_device(self.model, self.device, device)  # type: ignore[has-type]
-            self.device = device
 
     def unload(self, verbose: bool = False) -> None:
         """Unload model and clear CUDA cache."""

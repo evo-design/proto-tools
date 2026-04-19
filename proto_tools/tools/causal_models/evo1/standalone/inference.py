@@ -82,9 +82,6 @@ class Evo1Model:
         if not self._loaded:
             self.load(self.device, verbose=verbose)
 
-        if isinstance(prompts, str):  # type: ignore[unreachable]
-            prompts = [prompts]  # type: ignore[unreachable]
-
         from evo.generation import generate as evo_generate
 
         all_sequences: list[str] = []

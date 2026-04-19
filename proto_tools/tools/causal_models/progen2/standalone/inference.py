@@ -206,8 +206,8 @@ class ProGen2Model:
             raise ValueError("Cannot sample from empty prompt list")
 
         # Batch processing logic
-        all_sequences = []
-        all_logits = []
+        all_sequences: list[str] = []
+        all_logits: list[torch.Tensor | None] = []
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
         with torch.no_grad():
@@ -317,8 +317,8 @@ class ProGen2Model:
         ]
 
         # Batch processing logic
-        all_logits = []
-        all_metrics = []
+        all_logits: list[torch.Tensor] = []
+        all_metrics: list[dict[str, float]] = []
         batches = [normalized_seqs[i : i + batch_size] for i in range(0, len(normalized_seqs), batch_size)]
 
         # Run inference

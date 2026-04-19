@@ -137,9 +137,6 @@ class Evo2Model:
         # Seed after load so each dispatch enters sampling with the same RNG state.
         set_torch_seed(seed)
 
-        if isinstance(prompts, str):  # type: ignore[unreachable]
-            prompts = [prompts]  # type: ignore[unreachable]
-
         # Create vortex inference generator
         gen = VortexGenerator(
             self.model.model,
