@@ -42,6 +42,8 @@ class BorzoiModel:
         self.replicate = replicate
         self.use_flash_attn = use_flash_attn
         self._loaded = False
+        self.model: Any = None
+        self.device: str | None = None
 
         # Determine model name
         prefix = "flashzoi" if use_flash_attn else "borzoi"
@@ -65,7 +67,7 @@ class BorzoiModel:
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU and clear CUDA cache."""
-        if hasattr(self, "model") and hasattr(self, "device"):
+        if self._loaded:
             if verbose:
                 logger.info(f"Moving model from {self.device} to CPU")
             self.to_device("cpu")

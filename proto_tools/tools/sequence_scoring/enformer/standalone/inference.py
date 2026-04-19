@@ -23,6 +23,8 @@ class EnformerModel:
     def __init__(self) -> None:
         """Initialize Enformer model wrapper."""
         self._loaded = False
+        self.model: Any = None
+        self.device: str | None = None
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load Enformer model to device."""
@@ -40,7 +42,7 @@ class EnformerModel:
 
     def unload(self, verbose: bool = False) -> None:
         """Move model to CPU and clear CUDA cache."""
-        if hasattr(self, "model") and hasattr(self, "device"):
+        if self._loaded:
             if verbose:
                 logger.info(f"Moving model from {self.device} to CPU")
             self.to_device("cpu")
