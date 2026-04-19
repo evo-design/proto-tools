@@ -72,9 +72,9 @@ class Evo2Model:
         self._loaded = False
         self.model_checkpoint = model_checkpoint
         self.local_path = local_path
-        self.tokenizer = None
+        self.tokenizer: Any = None
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
 
     def sample(
         self,
@@ -142,7 +142,7 @@ class Evo2Model:
 
         # Create vortex inference generator
         gen = VortexGenerator(
-            self.model.model,  # type: ignore[attr-defined]
+            self.model.model,
             self.tokenizer,
             top_k=top_k,
             top_p=top_p,
@@ -197,7 +197,7 @@ class Evo2Model:
                     logger.info(f"logits.shape: {logits.shape}")
 
                 # Detokenize batch
-                batch_sequences = list(self.tokenizer.detokenize_batch(output_ids))  # type: ignore[attr-defined]
+                batch_sequences = list(self.tokenizer.detokenize_batch(output_ids))
                 assert len(batch_sequences) == current_batch_size
 
                 # Collect sequences, logits, and inference params dicts
@@ -225,7 +225,7 @@ class Evo2Model:
             raise ValueError("Cannot prepare empty batch")
 
         # Tokenize sequences and convert to tensors
-        tokens = [self.tokenizer.tokenize(seq) for seq in sequences]  # type: ignore[attr-defined]
+        tokens = [self.tokenizer.tokenize(seq) for seq in sequences]
         if isinstance(tokens[0], list):
             tokens = [torch.tensor(t, dtype=torch.long) for t in tokens]
 
@@ -294,7 +294,7 @@ class Evo2Model:
 
                 input_ids, lengths = self._prepare_batch(batch_sequences, pad_left=False)
 
-                output = self.model.model(input_ids)  # type: ignore[attr-defined]
+                output = self.model.model(input_ids)
                 # Model returns tuple (logits,)
                 logits = output[0] if isinstance(output, tuple) else output
 
@@ -351,8 +351,8 @@ class Evo2Model:
 
         _cleanup_vortex_debug_log()
         self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
-        self.tokenizer = self.model.tokenizer  # type: ignore[attr-defined]
-        self.model.model = self.model.model.eval()  # type: ignore[attr-defined]
+        self.tokenizer = self.model.tokenizer
+        self.model.model = self.model.model.eval()
 
         self.device = device
         self._loaded = True
@@ -369,7 +369,7 @@ class Evo2Model:
         before constructing the model.
         """
         self.load(new_device)
-        return self.model.model  # type: ignore[attr-defined]
+        return self.model.model
 
     def to_device(self, device: str) -> None:
         """Move model to a different device.
@@ -386,16 +386,16 @@ class Evo2Model:
 
         if device == "cpu":
             # Standard offload, no reload needed
-            self.model.model = move_model_to_device(  # type: ignore[attr-defined]
-                self.model.model,  # type: ignore[attr-defined]
+            self.model.model = move_model_to_device(
+                self.model.model,
                 self.device,
                 device,
             )
             self.device = device
         else:
             # Moving to GPU requires full reload (vortex auto-sharding)
-            self.model.model = move_model_to_device(  # type: ignore[attr-defined]
-                self.model.model,  # type: ignore[attr-defined]
+            self.model.model = move_model_to_device(
+                self.model.model,
                 self.device,
                 device,
                 custom_move_fn=self._reload_to_device,
@@ -406,7 +406,7 @@ class Evo2Model:
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
-            self.model.model = self.model.model.to("cpu")  # type: ignore[attr-defined]
+            self.model.model = self.model.model.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

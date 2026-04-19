@@ -64,10 +64,10 @@ class ProGen2Model:
         self._loaded = False
         self.model_checkpoint = model_checkpoint
         self.local_path = local_path
-        self.tokenizer = None
+        self.tokenizer: Any = None
         self.device: str | None = None
-        self.model = None
-        self.pad_token_id = None
+        self.model: Any = None
+        self.pad_token_id: int | None = None
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ProGen2 model and tokenizer to device."""
@@ -91,7 +91,7 @@ class ProGen2Model:
 
         self.tokenizer = Tokenizer.from_pretrained(model_path)
         self.device = device
-        self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # type: ignore[attr-defined]  # ID 0
+        self.pad_token_id = self.tokenizer.token_to_id(PROGEN2_PAD_TOKEN)  # ID 0
         self._loaded = True
 
         if verbose:
@@ -110,7 +110,7 @@ class ProGen2Model:
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -123,7 +123,8 @@ class ProGen2Model:
         """Tokenize and pad sequences into a batch with attention mask."""
         if not sequences:
             raise ValueError("Cannot prepare empty batch")
-        encodings = self.tokenizer.encode_batch(sequences)  # type: ignore[attr-defined]
+        assert self.pad_token_id is not None, "Model not loaded; call load() first"
+        encodings = self.tokenizer.encode_batch(sequences)
         token_lists = [e.ids for e in encodings]
         lengths = [len(t) for t in token_lists]
         max_len = max(lengths)
@@ -214,7 +215,7 @@ class ProGen2Model:
                 # Left-pad for generation
                 input_ids, attention_mask, _ = self._prepare_batch(batch_prompts, pad_left=True)
 
-                output = self.model.generate(  # type: ignore[attr-defined]
+                output = self.model.generate(
                     input_ids,
                     attention_mask=attention_mask,
                     do_sample=True,
@@ -241,7 +242,7 @@ class ProGen2Model:
 
                         # Strip padding tokens
                         token_ids = [t for t in token_ids if t != self.pad_token_id]
-                        seq = self.tokenizer.decode(token_ids)  # type: ignore[attr-defined]
+                        seq = self.tokenizer.decode(token_ids)
 
                         if truncate_at_stop:
                             seq = self._truncate_at_terminals(seq)
@@ -330,7 +331,7 @@ class ProGen2Model:
 
                 input_ids, _, lengths = self._prepare_batch(batch_sequences, pad_left=False)
 
-                outputs = self.model(input_ids)  # type: ignore[misc]
+                outputs = self.model(input_ids)
                 logits = outputs.logits  # [batch, seq_len, vocab_size]
 
                 # Shift for autoregressive scoring: predict position i from positions 0..i-1

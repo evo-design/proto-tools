@@ -44,8 +44,8 @@ class Evo1Model:
         self.model_name = model_name
         self.device = device
         self._loaded = False
-        self.model = None
-        self.tokenizer = None
+        self.model: Any = None
+        self.tokenizer: Any = None
 
     def sample(
         self,
@@ -183,7 +183,7 @@ class Evo1Model:
                 )
 
                 # Forward pass: (batch, length, vocab_size)
-                logits, _ = self.model(input_ids)  # type: ignore[misc]
+                logits, _ = self.model(input_ids)
 
                 if verbose:
                     logger.info(f"Scored batch of {input_ids.shape[0]}, logits shape: {logits.shape}")
@@ -244,7 +244,7 @@ class Evo1Model:
         self.model = evo_obj.model
         self.tokenizer = evo_obj.tokenizer
 
-        self.model = self.model.to(device).eval()  # type: ignore[attr-defined]
+        self.model = self.model.to(device).eval()
         self.device = device
         self._loaded = True
 
@@ -264,7 +264,7 @@ class Evo1Model:
         if self._loaded and self.device != "cpu":
             if verbose:
                 logger.info("Unloading Evo1 from GPU")
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
