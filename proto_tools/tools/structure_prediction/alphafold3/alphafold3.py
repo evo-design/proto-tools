@@ -16,7 +16,7 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
-from proto_tools.entities.ligands import map_smiles_to_ccd_code
+from proto_tools.entities.ligands import Fragment, map_smiles_to_ccd_code
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
@@ -376,24 +376,28 @@ def _create_input_json_from_complex(
 
     for idx, chain in enumerate(sp_complex.chains):
         mol_type = chain.entity_type  # Currently, we use the same conventions as AlphaFold3.
-        sequence = chain.sequence
 
-        if mol_type == "ligand":
-            # AlphaFold3 does not allow MSA fields for ligands.
-            ccd_code = map_smiles_to_ccd_code(sequence)
+        if isinstance(chain, Fragment):
+            assert chain.smiles is not None  # noqa: S101 -- Fragment validator guarantees non-None
+            ccd_code = chain.ccd_code or map_smiles_to_ccd_code(chain.smiles, use_name_fallback=True)
             if ccd_code is None:
                 raise ValueError(
-                    f"Unable to map SMILES to CCD code: {sequence}. Please ensure the SMILES is valid and in the CCD database."
+                    f"Unable to map SMILES to CCD code: {chain.smiles}. "
+                    "AlphaFold3 requires CCD codes for ligands. "
+                    "Provide a known CCD code or a SMILES string that matches the CCD database."
                 )
-            # AlphaFold3 prefers CCD codes.
             sequence_entry = {
-                mol_type: {
+                "ligand": {
                     "id": CHAIN_IDS[idx],
                     "ccdCodes": [ccd_code],
                 }
             }
+            input_json_data["sequences"].append(sequence_entry)  # type: ignore[attr-defined]
+            continue
 
-        elif mol_type == "dna" or mol_type == "rna":
+        sequence = chain.sequence
+
+        if mol_type == "dna" or mol_type == "rna":
             # Ignore MSA fields for DNA and RNA.
             sequence_entry = {
                 mol_type: {
@@ -412,25 +416,18 @@ def _create_input_json_from_complex(
                 }
             }
 
-        # Add modifications from Chain object if present
-        if chain.modifications and mol_type != "ligand":
-            # Convert ChainModification objects to AlphaFold3 JSON format
-            # AlphaFold3 uses different field names for different entity types
+        if chain.modifications:
             alphafold3_modifications = []
             for mod in chain.modifications:
                 if mol_type == "protein":
-                    # Protein uses ptmType and ptmPosition
                     alphafold3_modifications.append({"ptmType": mod.modification_code, "ptmPosition": mod.position})
                 elif mol_type in ("dna", "rna"):
-                    # DNA and RNA use modificationType and basePosition
                     alphafold3_modifications.append(
                         {
                             "modificationType": mod.modification_code,
                             "basePosition": mod.position,
                         }
                     )
-
-            # Add modifications to the sequence entry
             sequence_entry[mol_type]["modifications"] = alphafold3_modifications  # type: ignore[assignment, index]
 
         input_json_data["sequences"].append(sequence_entry)  # type: ignore[attr-defined]

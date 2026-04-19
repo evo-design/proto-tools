@@ -315,3 +315,33 @@ def test_to_pdb_two_fragments():
 def test_to_pdb_empty_raises():
     with pytest.raises(ValueError, match="no fragments"):
         Ligands(fragments=[]).to_pdb()
+
+
+# ── Constructor shorthands ──────────────────────────────────────────────
+
+
+def test_ligands_constructor_from_smiles_kwarg():
+    """Dot-separated SMILES kwarg expands to N fragments."""
+    ligands = Ligands(smiles="CCO.CO")
+    assert len(ligands) == 2
+    assert {f.smiles for f in ligands} == {"CCO", "CO"}
+
+
+def test_ligands_constructor_from_ccd_codes_kwarg():
+    """List of CCD codes kwarg expands to one fragment per code."""
+    ligands = Ligands(ccd_codes=["ATP", "MG", "MG"])
+    assert len(ligands) == 3
+    assert [f.ccd_code for f in ligands] == ["ATP", "MG", "MG"]
+
+
+def test_ligands_constructor_combines_kwargs():
+    """smiles=, ccd_codes=, and explicit fragments= all combine into one collection."""
+    ligands = Ligands(
+        fragments=[Fragment(smiles="CO")],
+        smiles="CCO",
+        ccd_codes=["MG"],
+    )
+    assert len(ligands) == 3
+    smis = {f.smiles for f in ligands}
+    assert "CCO" in smis
+    assert "CO" in smis

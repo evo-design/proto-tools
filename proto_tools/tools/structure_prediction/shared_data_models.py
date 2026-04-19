@@ -11,11 +11,12 @@ from typing import Any, ClassVar, Final
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.entities.ligands import is_valid_ccd_code
+from proto_tools.entities.ligands import Fragment, Ligands, is_valid_ccd_code
 from proto_tools.entities.ligands.ccd_utils import (
     get_canonical_component,
     get_modifications_for_component,
 )
+from proto_tools.entities.ligands.ligands import parse_smiles_string
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.sequence_alignment.colabfold_search.colabfold_search import (
     ColabfoldSearchConfig,
@@ -325,76 +326,57 @@ class StructurePredictionComplex(BaseModel):
     a complex are expected to interact, and their relative orientations and interfaces
     are modeled together.
 
+    Biopolymer chains (protein, DNA, RNA) are represented as ``Chain`` objects.
+    Ligand chains are represented as ``Fragment`` objects. Both expose
+    ``entity_type`` so iteration code can branch uniformly:
+
+    >>> for chain in complex.chains:
+    ...     if chain.entity_type == "ligand":
+    ...         smi, ccd = chain.smiles, chain.ccd_code
+    ...     else:
+    ...         seq, mods = chain.sequence, chain.modifications
+
     Attributes:
-        chains (list[Chain]): Chains in the complex. Each chain can be:
+        chains (list[Chain | Fragment]): Chains in the complex. Each input element
+            is normalized to a single ``Chain`` (biopolymer) or ``Fragment``
+            (ligand). Accepted input forms:
 
-            - A string sequence (automatically converted to Chain object)
-            - A Chain object (with optional modifications)
-            - A dictionary with Chain fields (``sequence``, ``entity_type``, ``modifications``)
-
-            After validation, all chains are stored as Chain objects internally.
-
-            Supported sequence types:
-            - Protein sequences (amino acids in single-letter code)
-            - DNA sequences (nucleotide bases: A, T, C, G)
-            - RNA sequences (nucleotide bases: A, U, C, G)
-            - Ligand representations (SMILES strings)
-
-            All chains in the same complex are predicted together to model their
-            interactions and relative 3D arrangement.
+            - String sequence: protein/DNA/RNA → ``Chain``; SMILES → ``Fragment``
+              (multi-fragment SMILES like ``"ATP.MG"`` auto-split into N Fragments).
+            - Dict with ``sequence``/``entity_type``/... → ``Chain``;
+              dict with ``smiles``/``ccd_code`` → ``Fragment``.
+            - ``Chain`` object → used as-is (a ligand-typed Chain is converted to
+              a Fragment).
+            - ``Fragment`` object → used as-is.
+            - ``Ligands`` collection → expanded into one Fragment per fragment.
 
     Examples:
-        >>> # Simple usage with strings (backward compatible)
-        >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "ACDEFGHIKL"])
+        >>> # Strings — biopolymers and ligands all auto-detected
+        >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "CC(C)C"])
         >>>
-        >>> # Explicit entity types via Chain objects
-        >>> complex = StructurePredictionComplex(
-        ...     chains=[Chain(sequence="MVLSPADKTN", entity_type="protein"), Chain(sequence="ATCG", entity_type="dna")]
-        ... )
-        >>>
-        >>> # Mix strings and Chain objects
-        >>> complex = StructurePredictionComplex(
-        ...     chains=["MVLSPADKTN", Chain(sequence="ACDEFGHIKL", modifications=[(3, "SEP")])]
-        ... )
-        >>>
-        >>> # Chain objects with modifications using tuples (convenient)
+        >>> # Mix Chain, Fragment, and Ligands
         >>> complex = StructurePredictionComplex(
         ...     chains=[
-        ...         Chain(sequence="MVLSPADKTN", entity_type="protein", modifications=[(5, "HY3"), (10, "TPO")]),
-        ...         Chain(sequence="AUGCAUGC", entity_type="rna", modifications=[(1, "2MG")]),
+        ...         Chain(sequence="MVLSPADKTN", entity_type="protein"),
+        ...         Fragment(ccd_code="ATP"),
+        ...         Ligands(ccd_codes=["MG", "MG"]),  # expands to 2 chains
         ...     ]
         ... )
         >>>
-        >>> # Using dictionaries (most flexible)
-        >>> complex = StructurePredictionComplex(
-        ...     chains=[
-        ...         {"sequence": "MVLSPADKTN", "entity_type": "protein", "modifications": [(5, "HY3"), (10, "TPO")]},
-        ...         {"sequence": "AUGCAUGC", "entity_type": "rna", "modifications": [(1, "2MG")]},
-        ...     ]
-        ... )
-        >>>
-        >>> # Mix all formats (strings, dicts, Chain objects)
-        >>> complex = StructurePredictionComplex(
-        ...     chains=[
-        ...         "MVLSPADKTN",  # String
-        ...         {"sequence": "ATCG", "entity_type": "dna"},  # Dictionary
-        ...         Chain(sequence="AUGC", entity_type="rna"),  # Chain object
-        ...     ]
-        ... )
+        >>> # Multi-fragment SMILES auto-splits at the chains level
+        >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "ATP.MG.MG"])
         >>>
         >>> # Access entity types
-        >>> complex.entity_types  # Returns ["protein", "dna", "rna"]
-        >>> complex.get_entity_type_set()  # Returns {"protein", "dna", "rna"}
+        >>> complex.entity_types  # Returns ["protein", "ligand", "ligand", "ligand"]
 
     Note:
-        Each ``StructurePredictionComplex`` instance represents exactly one structure
-        prediction input. Chains are always normalized to Chain objects during
-        validation for consistent downstream processing. Entity types are stored
-        at the Chain level and accessed via the entity_types property.
+        Each ``StructurePredictionComplex`` instance represents exactly one
+        structure-prediction input. The 26-chain cap (``len(CHAIN_IDS)``) is
+        checked after expansion of ``Ligands`` and multi-fragment SMILES.
     """
 
-    chains: list[Chain] = Field(
-        description="Chains in the complex. Can be strings, Chain objects, or dictionaries with chain fields."
+    chains: list[Chain | Fragment] = Field(
+        description="Chains in the complex. Strings, dicts, Chain, Fragment, or Ligands."
     )
 
     @model_validator(mode="before")
@@ -412,40 +394,32 @@ class StructurePredictionComplex(BaseModel):
 
     @field_validator("chains", mode="before")
     @classmethod
-    def normalize_chains(cls, chains: Any) -> list[Chain]:
-        """Normalize chains to Chain objects, converting strings and dicts as needed."""
+    def normalize_chains(cls, chains: Any) -> list[Chain | Fragment]:
+        """Normalize chains to a flat list of ``Chain`` (biopolymer) or ``Fragment`` (ligand) objects."""
         if not isinstance(chains, list):
             raise ValueError(f"chains must be a list, got {type(chains)}")
-        if len(chains) > len(CHAIN_IDS):
-            raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
 
-        normalized_chains = []
+        normalized: list[Chain | Fragment] = []
         for chain_idx, chain in enumerate(chains):
-            if isinstance(chain, str):
-                # Convert string to Chain object
-                normalized_chains.append(Chain(sequence=chain))
-            elif isinstance(chain, dict):
-                # Convert dictionary to Chain object
-                try:
-                    normalized_chains.append(Chain(**chain))
-                except Exception as e:
-                    raise ValueError(f"Chain {chain_idx} dictionary is invalid: {e}") from e
-            elif isinstance(chain, Chain):
-                # Already a Chain object
-                normalized_chains.append(chain)
-            else:
-                raise ValueError(f"Chain {chain_idx} must be a string, dictionary, or Chain object. Got {type(chain)}")
+            try:
+                normalized.extend(_normalize_chain_entry(chain))
+            except Exception as e:  # noqa: PERF203 -- preserve per-entry index in error
+                raise ValueError(f"Chain {chain_idx} is invalid: {e}") from e
 
-        return normalized_chains
+        if len(normalized) > len(CHAIN_IDS):
+            raise ValueError(
+                f"Cannot provide more than {len(CHAIN_IDS)} chains (got {len(normalized)} after expansion)"
+            )
+        return normalized
 
     @property
     def chain_sequences(self) -> list[str]:
-        """Get the sequences of all chains in the complex."""
-        return [chain.sequence for chain in self.chains]
+        """Sequences for all chains. SMILES for Fragments, sequence for Chains."""
+        return [chain.smiles if isinstance(chain, Fragment) else chain.sequence for chain in self.chains]  # type: ignore[misc]
 
     @property
     def entity_types(self) -> list[str]:
-        """Get the entity types for all chains in the complex.
+        """Entity types for all chains in the complex.
 
         Returns:
             list[str]: List of entity types, one for each chain.
@@ -464,16 +438,14 @@ class StructurePredictionComplex(BaseModel):
         protein_seqs: list[str] = []
         protein_chain_ids: list[str] = []
         for i, chain in enumerate(self.chains):
-            if i >= len(CHAIN_IDS):
-                raise ValueError(f"Cannot provide more than {len(CHAIN_IDS)} chains")
-            if chain.entity_type == "protein":
+            if isinstance(chain, Chain) and chain.entity_type == "protein":
                 protein_seqs.append(chain.sequence)
                 protein_chain_ids.append(CHAIN_IDS[i])
         return protein_seqs, protein_chain_ids
 
     def sum_of_chain_lengths(self) -> int:
-        """Get the sum of the lengths of all chains in the complex."""
-        return sum(len(chain.sequence) for chain in self.chains)
+        """Total residue/atom count across chains. Ligand Fragments contribute 1 each."""
+        return sum(1 if isinstance(chain, Fragment) else len(chain.sequence) for chain in self.chains)
 
     def num_chains(self) -> int:
         """Get the number of chains in the complex."""
@@ -486,52 +458,50 @@ class StructurePredictionComplex(BaseModel):
     def add_modification_to_chain(
         self, chain_index: int, position: int, modification_code: str
     ) -> "StructurePredictionComplex":
-        """Add a modification to a specific chain in the complex.
+        """Add a modification to a specific (biopolymer) chain in the complex.
 
         Args:
-            chain_index (int): 0-based index of the chain to modify
-            position (int): 1-based position in the chain sequence
-            modification_code (str): CCD code for the modification
+            chain_index (int): 0-based index of the chain to modify.
+            position (int): 1-based position in the chain sequence.
+            modification_code (str): CCD code for the modification.
 
         Returns:
-            StructurePredictionComplex: Self for method chaining
+            StructurePredictionComplex: Self for method chaining.
 
         Raises:
-            IndexError: If chain_index is out of bounds
-            ValueError: If position exceeds chain sequence length
+            IndexError: If chain_index is out of bounds.
+            ValueError: If position exceeds chain sequence length, or if the
+                target chain is a ligand Fragment (which cannot have modifications).
 
         Examples:
             >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "ATCGATCG"])
             >>> complex.add_modification_to_chain(0, 5, "SEP")
-            >>> complex.add_modification_to_chain(0, 10, "TPO")
         """
         if chain_index < 0 or chain_index >= len(self.chains):
             raise IndexError(
                 f"Chain index {chain_index} out of bounds. "
                 f"Complex has {len(self.chains)} chains (indices 0-{len(self.chains) - 1})"
             )
-
-        self.chains[chain_index].add_modification(position, modification_code)
+        target = self.chains[chain_index]
+        if isinstance(target, Fragment):
+            raise ValueError(f"Chain {chain_index} is a ligand Fragment and cannot have modifications")
+        target.add_modification(position, modification_code)
         return self
 
     def clear_all_modifications(self) -> "StructurePredictionComplex":
-        """Remove all modifications from all chains in the complex.
+        """Remove all modifications from all biopolymer chains in the complex.
 
         Returns:
-            StructurePredictionComplex: Self for method chaining
-
-        Examples:
-            >>> complex = StructurePredictionComplex(chains=["MVLSPADKTN", "ATCGATCG"])
-            >>> complex.add_modification_to_chain(0, 5, "SEP")
-            >>> complex.clear_all_modifications()
+            StructurePredictionComplex: Self for method chaining.
         """
         for chain in self.chains:
-            chain.clear_modifications()
+            if isinstance(chain, Chain):
+                chain.clear_modifications()
         return self
 
     def has_modifications(self) -> bool:
-        """Check if any chain in this complex has any modifications."""
-        return any(chain.has_modifications() for chain in self.chains)
+        """Check if any (biopolymer) chain in this complex has any modifications."""
+        return any(isinstance(chain, Chain) and chain.has_modifications() for chain in self.chains)
 
     def __repr__(self) -> str:
         """Get a string representation of the complex."""
@@ -541,13 +511,56 @@ class StructurePredictionComplex(BaseModel):
         """Get a string representation of the complex."""
         return f"StructurePredictionComplex(with {self.num_chains()} chains)"
 
-    def __iter__(self) -> Iterator[Chain]:  # type: ignore[override]
+    def __iter__(self) -> Iterator[Chain | Fragment]:  # type: ignore[override]
         """Iterate over the chains in the complex."""
         return iter(self.chains)
 
-    def __getitem__(self, index: int) -> Chain:
+    def __getitem__(self, index: int) -> Chain | Fragment:
         """Get a chain by index."""
         return self.chains[index]
+
+
+def _normalize_chain_entry(chain: Any) -> list[Chain | Fragment]:
+    """Normalize a single user-provided chain entry to a list of Chain/Fragment objects.
+
+    Multi-fragment SMILES strings and ``Ligands`` collections expand into multiple
+    ``Fragment`` objects; everything else produces a single-entry list.
+
+    Args:
+        chain (Any): String, dict, Chain, Fragment, or Ligands.
+
+    Returns:
+        list[Chain | Fragment]: Normalized chain entries (length >= 1).
+
+    Raises:
+        ValueError: If the input type is not supported.
+    """
+    if isinstance(chain, Fragment):
+        return [chain]
+    if isinstance(chain, Ligands):
+        return list(chain.fragments)
+    if isinstance(chain, Chain):
+        if chain.entity_type == "ligand":
+            return [Fragment(smiles=chain.sequence)]
+        return [chain]
+    if isinstance(chain, dict):
+        if chain.get("entity_type") == "ligand" or "ccd_code" in chain or "smiles" in chain:
+            data = {k: v for k, v in chain.items() if k != "entity_type"}
+            # Translate biopolymer-style 'sequence' key to Fragment's 'smiles'
+            if "sequence" in data and "smiles" not in data:
+                data["smiles"] = data.pop("sequence")
+            return [Fragment(**data)]
+        # Build the Chain first so infer_entity_type runs; if it auto-classifies as
+        # ligand from a SMILES string, convert to Fragment (mirrors the Chain-object branch).
+        chain_obj = Chain(**chain)
+        if chain_obj.entity_type == "ligand":
+            return [Fragment(smiles=chain_obj.sequence)]
+        return [chain_obj]
+    if isinstance(chain, str):
+        if detect_sequence_type(chain) == "ligand":
+            return list(parse_smiles_string(chain))
+        return [Chain(sequence=chain)]
+    raise ValueError(f"Chain entry must be a string, dict, Chain, Fragment, or Ligands. Got {type(chain).__name__}")
 
 
 class StructurePredictionInput(BaseToolInput):
@@ -903,7 +916,7 @@ def _preprocess_structure_prediction_msas(
     unique_seqs: dict[str, str] = {}  # sequence -> query name
     for comp in inputs.complexes:
         for chain in comp.chains:
-            if chain.entity_type == "protein" and chain.sequence not in unique_seqs:
+            if isinstance(chain, Chain) and chain.entity_type == "protein" and chain.sequence not in unique_seqs:
                 unique_seqs[chain.sequence] = f"seq_{len(unique_seqs)}"
 
     if not unique_seqs:

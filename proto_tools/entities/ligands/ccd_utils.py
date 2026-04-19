@@ -1,13 +1,17 @@
-"""proto_tools/entities/ligands/ccd_utils.py.
-
-Utilities for working with the wwPDB Chemical Component Dictionary (CCD).
+"""Utilities for working with the wwPDB Chemical Component Dictionary (CCD).
 
 The CCD database contains information about all chemical components (ligands,
 modified residues, etc.) found in PDB structures. This module provides functions
 to map between SMILES strings and CCD codes, and to validate modification codes.
 
+The database file uses OpenEye-canonical SMILES, which differ from RDKit-canonical
+SMILES for the same molecule. All public functions in this module canonicalize via
+RDKit internally so that lookups work regardless of the input SMILES representation.
+
 Data source: https://files.wwpdb.org/pub/pdb/data/monomers/Components-smiles-stereo-oe.smi
 """
+
+from __future__ import annotations
 
 import logging
 from pathlib import Path
@@ -20,55 +24,130 @@ CCD_DATABASE_PATH = Path(__file__).parent / "ccd_maps" / "Components-smiles-ster
 
 
 def _ensure_ccd_database() -> None:
-    """Ensure the CCD database exists, downloading if necessary."""
+    """Ensure the CCD database exists."""
     if not CCD_DATABASE_PATH.exists():
         logger.error(f"CCD database not found at {CCD_DATABASE_PATH}")
         raise FileNotFoundError(f"CCD database not found at {CCD_DATABASE_PATH}")
 
 
-def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str | None:
-    """Map a SMILES string to its corresponding CCD code.
+# ============================================================================
+# CCD code caches
+#
+# Two independent caches are built from a single pass over the database file:
+#
+# - ``_ALL_CCD_CODES``: the raw set of every CCD code in the file. Used by
+#   ``is_valid_ccd_code`` and ``get_all_ccd_codes`` so validity checks remain
+#   broad — codes whose SMILES RDKit cannot parse are still considered valid
+#   (they exist in the wwPDB CCD file).
+#
+# - ``_RDKIT_CANONICAL_TO_CCD`` / ``_CCD_TO_RDKIT_CANONICAL``: bidirectional
+#   maps keyed by RDKit-canonical SMILES, used by ``map_smiles_to_ccd_code`` /
+#   ``map_ccd_code_to_smiles``. Codes whose SMILES RDKit cannot parse are
+#   excluded from these (no canonical form means no lookup is possible).
+# ============================================================================
+_ALL_CCD_CODES: set[str] | None = None
+_RDKIT_CANONICAL_TO_CCD: dict[str, str] | None = None
+_CCD_TO_RDKIT_CANONICAL: dict[str, str] | None = None
 
-    This function searches the CCD database for an exact SMILES match and returns
-    the corresponding three-letter CCD code. If no exact match is found and
-    use_name_fallback is True, it attempts to find a match by looking up the
-    molecule name via PubChem and matching it against CCD descriptions.
 
-    Args:
-        smiles (str): SMILES string representation of the molecule
-        use_name_fallback (bool): If True, attempt name-based lookup when exact match fails
+def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
+    """Build the raw-code set and bidirectional canonical caches in one pass.
 
     Returns:
-        str | None: CCD code if found, None otherwise
-
-    Examples:
-        >>> map_smiles_to_ccd_code("CNC[C@@H](c1ccc(c(c1)O)O)O")
-        'ALE'  # epinephrine
-
-        >>> map_smiles_to_ccd_code("CC(C)C")
-        'IBU'  # isobutane
-
-    Note:
-        The database file is formatted as a tab-delimited file with 3 columns:
-        SMILES, CCD code, and description. If the database doesn't exist locally,
-        it will be automatically downloaded.
-
-        The name-based fallback uses PubChem to get the molecule name and searches
-        CCD descriptions. It only returns a match if exactly one description contains
-        the name as a substring.
+        tuple[set[str], dict[str, str], dict[str, str]]:
+            (all_codes, smiles_to_ccd, ccd_to_smiles).
     """
+    from rdkit import Chem
+
     _ensure_ccd_database()
 
-    # Try exact SMILES match first
+    all_codes: set[str] = set()
+    smiles_to_ccd: dict[str, str] = {}
+    ccd_to_smiles: dict[str, str] = {}
+    skipped = 0
+
     with open(CCD_DATABASE_PATH) as f:
         for line in f:
             fields = line.rstrip().split("\t")
             if len(fields) < 2:
                 continue
-            if fields[0] == smiles:
-                return fields[1]
+            ccd_code = fields[1]
+            all_codes.add(ccd_code.upper())
+            mol = Chem.MolFromSmiles(fields[0])
+            if mol is None:
+                skipped += 1  # type: ignore[unreachable]
+                continue
+            canonical = Chem.MolToSmiles(mol, canonical=True)
+            if canonical not in smiles_to_ccd:
+                smiles_to_ccd[canonical] = ccd_code
+            ccd_to_smiles[ccd_code.upper()] = canonical
 
-    # If exact match failed and fallback is enabled, try name-based lookup
+    if skipped:
+        logger.debug("CCD canonical cache: skipped %d RDKit-unparseable entries", skipped)
+
+    return all_codes, smiles_to_ccd, ccd_to_smiles
+
+
+def _ensure_caches() -> None:
+    """Lazy-initialize all three caches on first use."""
+    global _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL
+    if _ALL_CCD_CODES is None:
+        _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL = _build_caches()
+
+
+def _get_canonical_caches() -> tuple[dict[str, str], dict[str, str]]:
+    """Return the bidirectional canonical caches (lazy-initialized).
+
+    Returns:
+        tuple[dict[str, str], dict[str, str]]: (smiles_to_ccd, ccd_to_smiles) caches.
+    """
+    _ensure_caches()
+    assert _RDKIT_CANONICAL_TO_CCD is not None and _CCD_TO_RDKIT_CANONICAL is not None  # noqa: S101
+    return _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL
+
+
+def _get_all_ccd_codes_cache() -> set[str]:
+    """Return the raw-file set of every CCD code (lazy-initialized).
+
+    Returns:
+        set[str]: All CCD codes in the database, regardless of RDKit parseability.
+    """
+    _ensure_caches()
+    assert _ALL_CCD_CODES is not None  # noqa: S101
+    return _ALL_CCD_CODES
+
+
+# ============================================================================
+# Public mapping functions
+# ============================================================================
+def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str | None:
+    """Map a SMILES string to its corresponding CCD code.
+
+    Canonicalizes the input SMILES via RDKit and looks up the canonical form
+    in a cached mapping built from the CCD database. This handles differences
+    between OpenEye and RDKit canonicalization transparently.
+
+    Args:
+        smiles (str): SMILES string representation of the molecule.
+        use_name_fallback (bool): If True, attempt PubChem name-based lookup
+            when canonical matching fails.
+
+    Returns:
+        str | None: CCD code if found, None otherwise.
+    """
+    from rdkit import Chem
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None  # type: ignore[unreachable]
+
+    canonical = Chem.MolToSmiles(mol, canonical=True)
+    smiles_to_ccd, _ = _get_canonical_caches()
+
+    result = smiles_to_ccd.get(canonical)
+    if result is not None:
+        return result
+
     if use_name_fallback:
         return _map_smiles_to_ccd_via_name(smiles)
 
@@ -137,41 +216,17 @@ def _map_smiles_to_ccd_via_name(smiles: str) -> str | None:
 
 
 def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
-    """Map a CCD code to its corresponding SMILES string.
-
-    This function searches the CCD database for a CCD code and returns the
-    corresponding SMILES representation.
+    """Map a CCD code to its RDKit-canonical SMILES string.
 
     Args:
-        ccd_code (str): Three-letter CCD code (e.g., "SEP", "TPO", "ALE")
+        ccd_code (str): CCD code (e.g., ``"SEP"``, ``"TPO"``, ``"ATP"``).
+            Case-insensitive.
 
     Returns:
-        str | None: SMILES string if found, None otherwise
-
-    Examples:
-        >>> map_ccd_code_to_smiles("SEP")
-        'C([C@@H](C(=O)O)N)OP(=O)(O)O'  # phosphoserine
-
-        >>> map_ccd_code_to_smiles("TPO")
-        'CC([C@@H](C(=O)O)N)OP(=O)(O)O'  # phosphothreonine
-
-    Note:
-        CCD codes are case-insensitive. If the database doesn't exist locally,
-        it will be automatically downloaded.
+        str | None: RDKit-canonical SMILES string if found, None otherwise.
     """
-    _ensure_ccd_database()
-
-    ccd_code_upper = ccd_code.upper()
-
-    with open(CCD_DATABASE_PATH) as f:
-        for line in f:
-            fields = line.rstrip().split("\t")
-            if len(fields) < 2:
-                continue
-            if fields[1].upper() == ccd_code_upper:
-                return fields[0]
-
-    return None
+    _, ccd_to_smiles = _get_canonical_caches()
+    return ccd_to_smiles.get(ccd_code.upper())
 
 
 def get_ccd_description(ccd_code: str) -> str | None:
@@ -208,70 +263,30 @@ def get_ccd_description(ccd_code: str) -> str | None:
 def is_valid_ccd_code(ccd_code: str) -> bool:
     """Check if a CCD code exists in the database (O(1) with caching).
 
-    This function uses an in-memory cache to avoid repeated file scans.
-    The cache is populated on first access to a non-common modification code.
+    Validity is checked against the raw set of all CCD codes in the wwPDB file,
+    independent of whether RDKit can parse the entry's SMILES. This avoids
+    rejecting codes whose SMILES happens to be unparseable.
 
     Args:
-        ccd_code (str): Three-letter CCD code to validate
+        ccd_code (str): CCD code to validate.
 
     Returns:
-        bool: True if the code exists in the CCD database, False otherwise
-
-    Examples:
-        >>> is_valid_ccd_code("SEP")
-        True
-
-        >>> is_valid_ccd_code("XYZ")
-        False
+        bool: True if the code exists in the CCD database, False otherwise.
     """
     code_upper = ccd_code.upper()
-
-    # Fast path: check common modifications first (O(1))
     if code_upper in COMMON_MODIFICATIONS:
         return True
-
-    # Slow path (first call only): load full database into memory cache
-    return code_upper in _get_ccd_code_cache()
+    return code_upper in _get_all_ccd_codes_cache()
 
 
 def get_all_ccd_codes() -> set[str]:
     """Get all CCD codes from the database.
 
-    Warning: This loads all codes into memory. Use sparingly.
-
     Returns:
-        set[str]: Set of all CCD codes in the database
+        set[str]: Set of all CCD codes in the database (raw, regardless of
+            RDKit parseability).
     """
-    _ensure_ccd_database()
-
-    codes = set()
-    with open(CCD_DATABASE_PATH) as f:
-        for line in f:
-            fields = line.rstrip().split("\t")
-            if len(fields) >= 2:
-                codes.add(fields[1])
-
-    return codes
-
-
-# Cache for CCD codes - populated on first access
-_CCD_CODE_CACHE: set[str] | None = None
-
-
-def _get_ccd_code_cache() -> set[str]:
-    """Lazy-load all CCD codes into memory on first use.
-
-    This function caches the entire set of CCD codes from the database
-    to avoid repeated file scans. The cache is populated on the first
-    call and reused for all subsequent calls.
-
-    Returns:
-        set[str]: Set of all CCD codes in the database
-    """
-    global _CCD_CODE_CACHE  # noqa: PLW0603 -- module-level cache
-    if _CCD_CODE_CACHE is None:
-        _CCD_CODE_CACHE = get_all_ccd_codes()
-    return _CCD_CODE_CACHE
+    return set(_get_all_ccd_codes_cache())
 
 
 COMMON_MODIFICATIONS = {

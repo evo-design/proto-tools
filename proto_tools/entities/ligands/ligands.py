@@ -19,21 +19,33 @@ from proto_tools.entities.ligands.utils import (
 
 
 class Fragment(BaseModel):
-    """A single small molecule, stored as a canonical SMILES string.
+    """A single small molecule with optional CCD code.
+
+    At least one of ``smiles`` or ``ccd_code`` must be provided. When only one
+    is given, the other is resolved automatically from the CCD database. When
+    both are given, they are validated to refer to the same molecule.
+
+    A Fragment must contain exactly one molecule. For multi-component inputs
+    (dot-separated SMILES, multiple CCD codes), use ``Ligands`` instead.
 
     The RDKit ``Mol`` object is lazy-loaded from the SMILES on first access
     via the ``mol`` property. Use ``Fragment.from_mol()`` to construct from an
     existing Mol.
 
     Attributes:
-        smiles (str): Canonical SMILES string (source of truth for serialization).
+        smiles (str | None): SMILES string (canonicalized to RDKit form on construction).
+        ccd_code (str | None): CCD code from the Chemical Component Dictionary.
+        entity_type (Literal["ligand"]): Always ``"ligand"``. Lets Fragments be used
+            interchangeably with ``Chain`` in structure-prediction inputs.
         name (str | None): Human-readable molecule name.
         metrics (dict[str, float]): Computed metrics for this fragment.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    smiles: str = Field(description="Canonical SMILES string")
+    smiles: str | None = Field(default=None, description="SMILES string")
+    ccd_code: str | None = Field(default=None, description="CCD code")
+    entity_type: Literal["ligand"] = Field(default="ligand", description="Always 'ligand'")
     name: str | None = Field(default=None, description="Molecule name")
     metrics: dict[str, float] = Field(default_factory=dict, description="Computed metrics")
 
@@ -41,14 +53,57 @@ class Fragment(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _canonicalize_smiles(cls, data: Any) -> Any:
-        """Validate and canonicalize the SMILES string before field assignment."""
-        if isinstance(data, dict) and "smiles" in data:
-            parsed = Chem.MolFromSmiles(data["smiles"])
+    def _resolve_smiles_and_ccd(cls, data: Any) -> Any:
+        """Resolve and cross-validate SMILES and CCD code."""
+        if not isinstance(data, dict):
+            return data
+
+        from proto_tools.entities.ligands.ccd_utils import (
+            is_valid_ccd_code,
+            map_ccd_code_to_smiles,
+            map_smiles_to_ccd_code,
+        )
+
+        raw_smiles = data.get("smiles")
+        raw_ccd = data.get("ccd_code")
+
+        if raw_smiles is None and raw_ccd is None:
+            raise ValueError("At least one of 'smiles' or 'ccd_code' must be provided")
+
+        # Resolve SMILES → canonical form + attempt CCD lookup
+        canonical_smiles: str | None = None
+        if raw_smiles is not None:
+            parsed = Chem.MolFromSmiles(raw_smiles)
             if parsed is None:
-                msg = f"Invalid SMILES string: {data['smiles']}"  # type: ignore[unreachable]
-                raise ValueError(msg)
-            data["smiles"] = Chem.MolToSmiles(parsed, canonical=True)
+                raise ValueError(f"Invalid SMILES string: {raw_smiles}")
+            num_frags = len(Chem.rdmolops.GetMolFrags(parsed, asMols=False))
+            if num_frags > 1:
+                raise ValueError(
+                    f"Fragment must contain exactly one molecule; got {num_frags} "
+                    f"in SMILES '{raw_smiles}'. Use `Ligands(smiles=...)` to "
+                    "construct a multi-fragment collection."
+                )
+            canonical_smiles = Chem.MolToSmiles(parsed, canonical=True)
+            data["smiles"] = canonical_smiles
+
+        # Resolve CCD code → SMILES
+        if raw_ccd is not None:
+            if not is_valid_ccd_code(raw_ccd):
+                raise ValueError(f"Invalid CCD code: {raw_ccd}")
+            ccd_smiles = map_ccd_code_to_smiles(raw_ccd)
+            if ccd_smiles is None:
+                raise ValueError(f"CCD code '{raw_ccd}' has no parseable SMILES in the database")
+            data["ccd_code"] = raw_ccd.upper()
+            if canonical_smiles is None:
+                data["smiles"] = ccd_smiles
+            elif canonical_smiles != ccd_smiles:
+                raise ValueError(
+                    f"SMILES and CCD code refer to different molecules: "
+                    f"smiles='{canonical_smiles}' but CCD {raw_ccd.upper()} resolves to '{ccd_smiles}'"
+                )
+        elif canonical_smiles is not None:
+            data["ccd_code"] = map_smiles_to_ccd_code(canonical_smiles, use_name_fallback=False)
+
         return data
 
     # ============================================================================
@@ -75,7 +130,6 @@ class Fragment(BaseModel):
             raise ValueError(msg)
         smiles = Chem.MolToSmiles(Chem.RemoveHs(mol), canonical=True)
         frag = cls(smiles=smiles, name=name or get_name_from_smiles(smiles))
-        # Cache the Mol with hydrogens added
         frag._mol = Chem.AddHs(mol)
         return frag
 
@@ -175,6 +229,14 @@ class Fragment(BaseModel):
 class Ligands(BaseModel):
     """Collection of small-molecule fragments.
 
+    Construct from explicit fragments, a dot-separated SMILES string, or a list
+    of CCD codes. All three styles can be mixed in a single call:
+
+    >>> Ligands(fragments=[Fragment(ccd_code="ATP")])
+    >>> Ligands(smiles="ATP.MG")
+    >>> Ligands(ccd_codes=["ATP", "MG", "MG"])
+    >>> Ligands(smiles="CCO", ccd_codes=["MG"])  # combined → 2 fragments
+
     Attributes:
         fragments (list[Fragment]): The fragment molecules in this collection.
     """
@@ -182,6 +244,22 @@ class Ligands(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     fragments: list[Fragment] = Field(default_factory=list, description="Fragment molecules")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_inputs(cls, data: Any) -> Any:
+        """Translate ``smiles=`` and ``ccd_codes=`` shorthand kwargs into ``fragments``."""
+        if not isinstance(data, dict):
+            return data
+        smiles = data.pop("smiles", None)
+        ccd_codes = data.pop("ccd_codes", None)
+        fragments = list(data.get("fragments") or [])
+        if smiles is not None:
+            fragments.extend(parse_smiles_string(smiles))
+        if ccd_codes is not None:
+            fragments.extend(Fragment(ccd_code=code) for code in ccd_codes)
+        data["fragments"] = fragments
+        return data
 
     # ============================================================================
     # Factories
@@ -230,6 +308,18 @@ class Ligands(BaseModel):
         frags = parse_fragments_from_mols(mols)
         return cls(fragments=frags)
 
+    @classmethod
+    def from_ccd_codes(cls, ccd_codes: list[str]) -> Ligands:
+        """Create Ligands from a list of CCD codes.
+
+        Args:
+            ccd_codes (list[str]): CCD codes (e.g., ``["ATP", "ZN"]``).
+
+        Returns:
+            Ligands: Collection of fragments with resolved SMILES.
+        """
+        return cls(fragments=[Fragment(ccd_code=code) for code in ccd_codes])
+
     # ============================================================================
     # Collection operations
     # ============================================================================
@@ -257,7 +347,7 @@ class Ligands(BaseModel):
                 num_conformers=num_conformers, random_seed=random_seed, prune_rms_threshold=prune_rms_threshold
             )
 
-    def get_smiles_list(self) -> list[str]:
+    def get_smiles_list(self) -> list[str | None]:
         """Return SMILES strings for all fragments."""
         return [fragment.smiles for fragment in self.fragments]
 
@@ -268,7 +358,12 @@ class Ligands(BaseModel):
     @property
     def smiles(self) -> str:
         """Dot-separated SMILES for all fragments."""
-        return ".".join(self.get_smiles_list())
+        return ".".join(s for s in self.get_smiles_list() if s is not None)
+
+    @property
+    def ccd_codes(self) -> list[str | None]:
+        """CCD codes for all fragments (None for molecules not in CCD)."""
+        return [fragment.ccd_code for fragment in self.fragments]
 
     def __len__(self) -> int:
         return len(self.fragments)

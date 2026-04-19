@@ -65,7 +65,7 @@ class BioEmuInput(StructurePredictionInput):
                     "BioEmu only supports single-chain proteins (monomers)."
                 )
 
-            chain_seq = comp.chains[0].sequence
+            chain_seq = comp.chain_sequences[0]  # SUPPORTED_ENTITY_TYPES rejects ligands upstream
             invalid_chars = return_invalid_protein_chars(chain_seq)
             if invalid_chars:
                 raise ValueError(
@@ -252,7 +252,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     msa_a3m_contents = {}
     if inputs.msas:
         for complex_ in inputs.complexes:
-            seq = complex_.chains[0].sequence
+            seq = complex_.chain_sequences[0]
             msa = inputs.msas.get(seq)
             if msa is not None:
                 msa_a3m_contents[seq] = msa.to_a3m_string()
@@ -263,7 +263,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
         "bioemu",
         {
             "operation": "sample",
-            "sequences": [complex_.chains[0].sequence for complex_ in inputs.complexes],
+            "sequences": [complex_.chain_sequences[0] for complex_ in inputs.complexes],
             "msa_a3m_contents": msa_a3m_contents,
             "num_samples": config.num_samples,
             "model_name": config.model_name,
@@ -282,7 +282,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     ensembles: list[StructureEnsemble] = []
     total_structures = 0
     for comp_idx, comp in enumerate(inputs.complexes):
-        sequence = comp.chains[0].sequence
+        sequence = comp.chain_sequences[0]
         result = raw_results[comp_idx]
 
         structures = _pdb_frames_to_structures(pdb_frames=result["pdb_frames"], comp_idx=comp_idx)

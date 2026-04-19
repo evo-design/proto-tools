@@ -23,6 +23,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
     hash_sequence as _hash_sequence,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Chain,
     MSAStructurePredictionConfig,
     StructurePredictionComplex,
     StructurePredictionInput,
@@ -312,8 +313,7 @@ def _msa_to_pqt_file(msa: Any, pqt_path: str, query_index: int = 0, source_datab
 
 def _generate_fasta_content(comp: StructurePredictionComplex) -> str:
     """Generate FASTA content from a typed StructurePredictionComplex."""
-    chain_dicts = [{"entity_type": chain.entity_type, "sequence": chain.sequence} for chain in comp.chains]
-    return complex_to_fasta(chain_dicts)
+    return complex_to_fasta(comp.chains)
 
 
 def run_chai1_on_complex(
@@ -348,7 +348,9 @@ def run_chai1_on_complex(
             pqt_dir = os.path.join(temp_dir, "msa_pqt")
             os.makedirs(pqt_dir, exist_ok=True)
             for chain in comp.chains:
-                if chain.entity_type == "protein" and chain.sequence in msas:
+                if not isinstance(chain, Chain) or chain.entity_type != "protein":
+                    continue
+                if chain.sequence in msas:
                     seq_hash = _hash_sequence(chain.sequence.upper())
                     pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
                     _msa_to_pqt_file(

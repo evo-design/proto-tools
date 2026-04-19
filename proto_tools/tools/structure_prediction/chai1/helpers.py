@@ -7,6 +7,9 @@ sequence hashing, MSA Parquet file writing, and FASTA generation.
 import hashlib
 from typing import Any
 
+from proto_tools.entities.ligands import Fragment
+from proto_tools.tools.structure_prediction.shared_data_models import Chain
+
 
 def hash_sequence(seq: str) -> str:
     """Compute SHA-256 hash of a sequence.
@@ -62,19 +65,20 @@ def write_msa_pqt(
     df.to_parquet(pqt_path, engine="pyarrow", index=False)
 
 
-def complex_to_fasta(chains: list[dict[str, Any]]) -> str:
-    """Convert a list of chain dicts to FASTA format for Chai1.
+def complex_to_fasta(chains: list[Chain | Fragment]) -> str:
+    """Convert a list of chains to FASTA format for Chai1.
 
     Args:
-        chains (list[dict[str, Any]]): List of chain dicts, each with 'entity_type' and 'sequence' keys.
+        chains (list[Chain | Fragment]): Biopolymer chains (``Chain``) and/or
+            ligands (``Fragment``).
 
     Returns:
-        str: FASTA-formatted string
+        str: FASTA-formatted string.
     """
     fasta_content = ""
     for i, chain in enumerate(chains):
-        e_type = chain.get("entity_type", "protein")
-        seq = chain.get("sequence", "")
-        fasta_content += f">{e_type}|name={e_type}_{i + 1}\n"
-        fasta_content += f"{seq.upper()}\n"
+        # SMILES is case-sensitive (lowercase letters denote aromatic atoms); only biopolymers get uppercased.
+        body = chain.smiles if isinstance(chain, Fragment) else chain.sequence.upper()
+        fasta_content += f">{chain.entity_type}|name={chain.entity_type}_{i + 1}\n"
+        fasta_content += f"{body}\n"
     return fasta_content
