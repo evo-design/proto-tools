@@ -201,6 +201,40 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
     assert captured["payload"]["compute_gradient"] is True
 
 
+def test_gradient_dispatch_omits_embedded_ablm_metadata(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+        captured.update(payload=payload)
+        return {
+            "gradient": [[0.0] * 20] * 3,
+            "loss": 0.0,
+            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0},
+            "vocab": _CANONICAL_VOCAB,
+            "pdb": _EXAMPLE_PDB,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    run_alphafold2_binder(
+        AlphaFold2BinderInput(
+            logits=[[0.0] * 20] * 3,
+            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            binder_chain="B",
+        ),
+        AlphaFold2BinderConfig(backend="germinal", device="cpu"),
+    )
+
+    assert "ablm_model" not in captured["payload"]
+    assert "cdr_lengths" not in captured["payload"]
+    assert "framework_lengths" not in captured["payload"]
+    assert "ablm_temp" not in captured["payload"]
+    assert "iglm_species" not in captured["payload"]
+
+
 def test_forward_mode_dispatch_contract(monkeypatch):
     """compute_gradient=False forwards the flag and returns gradient=None."""
     captured: dict[str, object] = {}
@@ -226,10 +260,11 @@ def test_forward_mode_dispatch_contract(monkeypatch):
             target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
             binder_chain="B",
         ),
-        AlphaFold2BinderConfig(compute_gradient=False, device="cpu"),
+        AlphaFold2BinderConfig(compute_gradient=False, hard=1.0, device="cpu"),
     )
 
     assert captured["payload"]["compute_gradient"] is False
+    assert captured["payload"]["hard"] == 1.0
     assert result.gradient is None
     assert result.loss == 0.75
     assert result.structure.source == "alphafold2-binder"

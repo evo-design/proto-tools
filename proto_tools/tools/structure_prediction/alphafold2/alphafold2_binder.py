@@ -113,6 +113,7 @@ class AlphaFold2BinderConfig(BaseConfig):
         sample_models (bool): Randomly sample model sets each forward pass.
         soft (float): ColabDesign softmax blending (0=raw logits, 1=full softmax).
             Passed per-step by the gradient optimizer.
+        hard (float): ColabDesign hard-sequence blending (0=relaxed, 1=straight-through argmax).
         backend (Literal["base", "germinal"]): ``"base"`` (upstream ColabDesign) or ``"germinal"``
             (Germinal fork with alpha, bias, framework contacts, extension losses).
         starting_binder_seq (str | None): Optional one-letter AA string used to seed
@@ -183,10 +184,18 @@ class AlphaFold2BinderConfig(BaseConfig):
         description="ColabDesign soft mixing coefficient (0=hard logits, 1=full softmax blend).",
         advanced=True,
     )
+    hard: float = ConfigField(
+        title="Hard Mixing",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="ColabDesign hard mixing coefficient (0=relaxed, 1=straight-through argmax).",
+        advanced=True,
+    )
     backend: Literal["base", "germinal"] = ConfigField(
         title="Backend",
         default="base",
-        description="ColabDesign backend: 'base' (upstream) or 'germinal' (with alpha, bias, IgLM).",
+        description="ColabDesign backend: 'base' (upstream) or 'germinal' (with alpha, bias, framework contacts).",
         advanced=True,
     )
     compute_gradient: bool = ConfigField(
@@ -334,6 +343,7 @@ def run_alphafold2_binder(
             "logits": inputs.logits,
             "temperature": inputs.temperature,
             "soft": config.soft,
+            "hard": config.hard,
             "target_pdb": inputs.target_pdb,
             "target_chain": inputs.target_chain,
             "target_hotspot": inputs.target_hotspot,

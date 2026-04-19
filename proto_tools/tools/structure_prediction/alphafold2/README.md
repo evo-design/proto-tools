@@ -41,7 +41,7 @@ The model was trained on experimentally determined structures from the [Protein 
 3. **Output processing:** Raw predictions are converted to Structure objects with PDB coordinates, confidence metrics (pLDDT, pTM, ipTM, PAE), and metadata.
 
 **Gradient computation (`alphafold2-binder`):**
-The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, IgLM support, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
+The gradient tool enables differentiable binder design by computing gradients of an AlphaFold2/ColabDesign binder objective with respect to relaxed binder logits. A frozen target structure is loaded from `target_pdb`, binder redesign is anchored to `binder_chain`, and structural callbacks (e.g. `i_plddt`, `i_ptm`, `rg`, `helix`, `beta_strand`, `NC`) can be weighted through `loss_weights`. Two ColabDesign backends are supported via the `backend` field: `"base"` (upstream ColabDesign) and `"germinal"` (Germinal fork with alpha=2.0 logit scaling, persistent bias, and framework contact penalties). The `soft` parameter controls ColabDesign's internal softmax blending — JAX autograd chain-rules through the full `soft_seq()` expression, so the returned gradient is exact `∂loss/∂logits`.
 
 **Key assumptions:**
 - Input sequences are valid protein sequences (standard amino acids plus 'X' for unknown)
@@ -109,7 +109,8 @@ The gradient tool enables differentiable binder design by computing gradients of
 | `model_num` | `int` | `1` | Which AF2 parameter set to use (1-5). |
 | `sample_models` | `bool` | `False` | Randomly sample from the five AF2 model parameter sets each forward pass. |
 | `soft` | `float` | `1.0` | ColabDesign softmax blending (0=logits, 1=full softmax). Controls `soft_seq()`. |
-| `backend` | `str` | `"base"` | ColabDesign backend: `"base"` (upstream) or `"germinal"` (with alpha=2.0, bias, IgLM, framework contacts). |
+| `hard` | `float` | `0.0` | ColabDesign hard-sequence blending (0=relaxed, 1=straight-through argmax). Useful for forward-only discrete scoring. |
+| `backend` | `str` | `"base"` | ColabDesign backend: `"base"` (upstream) or `"germinal"` (with alpha=2.0, bias, framework contacts). |
 | `loss_weights` | `dict[str, float]` | `{}` | Binder-objective weights. Stock: `plddt`, `i_plddt`, `pae`, `i_pae`, `con`, `i_con`, `exp_res`, `rmsd`, `dgram_cce`, `fape`. Extension callbacks (Germinal backend): `rg`, `i_ptm`, `NC`, `helix`, `beta_strand`. |
 | `intra_contact_num` | `int` | `2` | Intra-molecular contacts per residue. Only active when `backend="germinal"`. |
 | `intra_contact_cutoff` | `float` | `14.0` | Intra-molecular distance cutoff (Å). Only active when `backend="germinal"`. |

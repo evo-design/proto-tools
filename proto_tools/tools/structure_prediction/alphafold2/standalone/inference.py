@@ -8,6 +8,7 @@ Runs in an isolated venv with JAX and ColabDesign. Supports two backends:
   data/colabdesign_germinal, loaded via sys.path swap). Adds alpha=2.0 logit
   scaling, persistent bias_redesign, framework contact penalties in
   ``_loss_binder``, and ``soft_seq()`` with full JAX autograd chain rule.
+  Antibody-language-model gradients remain external to this tool.
 
 Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are ported from
 ``germinal/design/design.py`` and registered when their weight is > 0 in the
@@ -261,7 +262,7 @@ class AlphaFold2Model:
             device: JAX device string ("cuda", "cpu", "cuda:0", etc.).
             backend: Which ColabDesign package to use:
                 ``"base"`` — upstream sokrypton/ColabDesign (default for prediction).
-                ``"germinal"`` — Germinal fork with alpha=2.0, bias, IgLM, gradient merging.
+                ``"germinal"`` — Germinal fork with alpha=2.0, bias, and framework contacts.
             verbose: Log loading details.
         """
         if self._loaded and self._backend == backend:
@@ -465,6 +466,7 @@ class AlphaFold2Model:
         logits: list[list[float]],
         temperature: float,
         soft: float,
+        hard: float,
         num_recycles: int,
         model_num: int,
         sample_models: bool,
@@ -489,6 +491,7 @@ class AlphaFold2Model:
         opt["num_recycles"] = num_recycles
         opt["temp"] = temperature
         opt["soft"] = soft
+        opt["hard"] = hard
         if seed is not None:
             af_model.set_seed(seed)
         if loss_weights:
@@ -533,6 +536,7 @@ class AlphaFold2Model:
         logits: list[list[float]],
         temperature: float = 1.0,
         soft: float = 1.0,
+        hard: float = 0.0,
         target_pdb: str,
         target_chain: str = "A",
         target_hotspot: str | None = None,
@@ -601,10 +605,14 @@ class AlphaFold2Model:
         # Germinal-specific prep_inputs kwargs (bias_redesign, pos,
         # starting_binder_seq) are only supported by the Germinal ColabDesign fork.
         if backend == "germinal":
-            if design_positions is not None:
-                prep_kwargs["pos"] = design_positions
+            prep_kwargs["pos"] = design_positions if design_positions is not None else list(range(len(logits)))
             if bias_redesign is not None:
                 prep_kwargs["bias_redesign"] = bias_redesign
+            # Germinal's prep_inputs bootstraps an antibody LM before _prep_model();
+            # pass hidden defaults so the fork initializes cleanly (we only use run()).
+            prep_kwargs["ablm_model"] = "ablang"
+            prep_kwargs["ablm_temp"] = 0.6
+            prep_kwargs["lens"] = {"fw": [0, 0, 0, 0], "cdrs": [0, 0, 0]}
             if starting_binder_seq is not None:
                 if len(starting_binder_seq) != len(logits):
                     raise ValueError(f"starting_binder_seq len {len(starting_binder_seq)} != logits len {len(logits)}")
@@ -638,6 +646,7 @@ class AlphaFold2Model:
             logits=logits,
             temperature=temperature,
             soft=soft,
+            hard=hard,
             num_recycles=num_recycles,
             model_num=model_num,
             sample_models=sample_models,
@@ -688,6 +697,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             logits=input_dict["logits"],
             temperature=input_dict["temperature"],
             soft=input_dict.get("soft", 1.0),
+            hard=input_dict.get("hard", 0.0),
             target_pdb=input_dict["target_pdb"],
             target_chain=input_dict["target_chain"],
             target_hotspot=input_dict.get("target_hotspot"),
