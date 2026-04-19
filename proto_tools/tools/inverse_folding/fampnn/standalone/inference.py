@@ -26,9 +26,9 @@ class FAMPNNModel:
     def __init__(self) -> None:
         """Initialize FAMPNNModel."""
         self._loaded = False
-        self._model_variant = None
+        self._model_variant: str | None = None
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
 
     def sample(
         self,
@@ -52,7 +52,7 @@ class FAMPNNModel:
         """Sample sequences with optional sidechain co-generation."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import torch
@@ -167,7 +167,7 @@ class FAMPNNModel:
         )
 
         with torch.no_grad():
-            x_denoised, aatype_denoised, aux = self.model.sample(  # type: ignore[attr-defined]
+            x_denoised, aatype_denoised, aux = self.model.sample(
                 batch["x"],
                 aatype=batch["aatype"],
                 seq_mask=batch["seq_mask"],
@@ -238,7 +238,7 @@ class FAMPNNModel:
         """Pack sidechains onto a backbone given known sequence."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import pandas as pd
@@ -336,7 +336,7 @@ class FAMPNNModel:
         )
 
         with torch.no_grad():
-            x_denoised, aatype_denoised, aux = self.model.sidechain_pack(  # type: ignore[attr-defined]
+            x_denoised, aatype_denoised, aux = self.model.sidechain_pack(
                 batch["x"],
                 batch["aatype"],
                 seq_mask=batch["seq_mask"],
@@ -387,7 +387,7 @@ class FAMPNNModel:
         """Score every possible single mutation at every position."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import torch
@@ -432,7 +432,7 @@ class FAMPNNModel:
             )
 
             with torch.no_grad():
-                logprobs = self.model.score(  # type: ignore[attr-defined]
+                logprobs = self.model.score(
                     x=x_masked,
                     aatype=aatype_masked,
                     missing_atom_mask=missing_atom_mask_masked,
@@ -496,7 +496,7 @@ class FAMPNNModel:
         """Score specific mutations (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)."""
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
-        elif self.device != device:  # type: ignore[unreachable]
+        elif self.device != device:
             self.to_device(device)
 
         import numpy as np
@@ -635,10 +635,10 @@ class FAMPNNModel:
         torch_device = torch.device(device)
         ckpt = torch.load(checkpoint_path, map_location=torch_device, weights_only=False)
         self.model = SeqDenoiser(ckpt["model_cfg"]).to(torch_device).eval()
-        self.model.load_state_dict(ckpt["state_dict"])  # type: ignore[attr-defined]
+        self.model.load_state_dict(ckpt["state_dict"])
         self.device = device
         self._loaded = True
-        self._model_variant = model_variant  # type: ignore[assignment]
+        self._model_variant = model_variant
 
         if verbose:
             logger.info("FAMPNN model loaded successfully")
@@ -649,7 +649,7 @@ class FAMPNNModel:
 
         if self.model is None:
             raise RuntimeError("Cannot move unloaded model. Call load() first.")
-        if self.device == device:  # type: ignore[unreachable]
+        if self.device == device:
             return
 
         self.model = move_model_to_device(self.model, self.device, device)
