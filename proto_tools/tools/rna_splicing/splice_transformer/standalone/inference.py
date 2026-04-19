@@ -38,7 +38,7 @@ class SpliceTransformerModel:
         """Initialize SpliceTransformerModel."""
         self.context_length = context_length
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
         self._loaded = False
 
     def __call__(
@@ -106,7 +106,7 @@ class SpliceTransformerModel:
         """
         assert len(inputs.size()) == 3
         with torch.no_grad():
-            out = self.model(inputs).cpu().detach()  # type: ignore[misc]
+            out = self.model(inputs).cpu().detach()
             return self._post_decorate(out)
 
     def _calc_single_sequence(self, seq: np.ndarray) -> np.ndarray:
@@ -182,7 +182,7 @@ class SpliceTransformerModel:
         # Load and fix state dict
         save_dict = torch.load(model_path, map_location=device)
         state_dict = self._fix_state_dict_keys(save_dict["state_dict"])
-        self.model.load_state_dict(state_dict)  # type: ignore[attr-defined]
+        self.model.load_state_dict(state_dict)
 
         self.device = device
         self._loaded = True
@@ -203,7 +203,7 @@ class SpliceTransformerModel:
         if self._loaded and self.device != "cpu":
             logger.debug("Unloading SpliceTransformer from GPU")
 
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()

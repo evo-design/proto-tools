@@ -16,7 +16,7 @@ class Chai1Model:
     def __init__(self) -> None:
         """Initialize Chai1 model wrapper."""
         self._loaded = False
-        self._chai1_run_inference = None
+        self._chai1_run_inference: Any = None
         self.device: str | None = None
 
     def __call__(
@@ -66,7 +66,7 @@ class Chai1Model:
         sys.stdout.flush()
 
         # Run the model
-        candidates = self._chai1_run_inference(  # type: ignore[misc]
+        candidates = self._chai1_run_inference(
             fasta_file=Path(fasta_file),
             output_dir=Path(output_dir),
             use_esm_embeddings=use_esm_embeddings,

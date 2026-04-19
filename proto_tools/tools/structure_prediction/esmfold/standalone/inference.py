@@ -27,9 +27,9 @@ class ESMFoldModel:
     def __init__(self) -> None:
         """Initialize ESMFold model wrapper."""
         self._loaded = False
-        self.tokenizer = None
+        self.tokenizer: Any = None
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
 
     def __call__(
         self,
@@ -68,12 +68,12 @@ class ESMFoldModel:
         if max_seq_len > 1200:
             if verbose:
                 logger.info(f"Long sequence detected ({max_seq_len} residues), enabling trunk chunking (chunk_size=64)")
-            self.model.trunk.set_chunk_size(64)  # type: ignore[attr-defined]
+            self.model.trunk.set_chunk_size(64)
 
         # Use progress bar for batch processing
         with torch.inference_mode(), _allow_tf32():
             # Tokenize all sequences
-            tokenized_inputs = self.tokenizer(  # type: ignore[misc]
+            tokenized_inputs = self.tokenizer(
                 linked_sequences, return_tensors="pt", padding=True, add_special_tokens=False
             )
             tokenized_inputs = {k: v.to(self.device) for k, v in tokenized_inputs.items()}
@@ -83,7 +83,7 @@ class ESMFoldModel:
             tokenized_inputs["position_ids"] = position_ids
 
             # Forward pass
-            outputs = self.model(**tokenized_inputs)  # type: ignore[misc]
+            outputs = self.model(**tokenized_inputs)
 
             # Apply linker masking
             outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
@@ -190,7 +190,7 @@ class ESMFoldModel:
                 complex_output[key] = value
 
         # Convert to PDB
-        pdb_output = self.model.output_to_pdb(complex_output)[0]  # type: ignore[attr-defined]
+        pdb_output = self.model.output_to_pdb(complex_output)[0]
 
         # Calculate average pLDDT
         atom_exists = complex_output["atom37_atom_exists"]
@@ -237,8 +237,8 @@ class ESMFoldModel:
 
         self.model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1", trust_remote_code=True)
 
-        self.model = self.model.to(device)  # type: ignore[attr-defined]
-        self.model.esm = self.model.esm.half()  # type: ignore[attr-defined]
+        self.model = self.model.to(device)
+        self.model.esm = self.model.esm.half()
         self.tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
         self.device = device
         self._loaded = True
@@ -261,7 +261,7 @@ class ESMFoldModel:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
