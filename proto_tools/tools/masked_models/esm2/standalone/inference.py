@@ -36,10 +36,10 @@ class ESM2Model:
         """
         self._loaded = False
         self.model_checkpoint = model_checkpoint
-        self.tokenizer = None
-        self.amino_acid_token_ids = None
+        self.tokenizer: Any = None
+        self.amino_acid_token_ids: Any = None
         self.device: str | None = None
-        self.model = None
+        self.model: Any = None
 
     def __call__(
         self,
@@ -87,7 +87,7 @@ class ESM2Model:
         # For each batch
         for batch_sequences in tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)):
             # Tokenize the batch
-            batch_inputs = self.tokenizer(  # type: ignore[misc]
+            batch_inputs = self.tokenizer(
                 batch_sequences,
                 add_special_tokens=True,
                 padding=True,
@@ -100,7 +100,7 @@ class ESM2Model:
 
             # Forward pass
             with torch.inference_mode():
-                batch_outputs = self.model(  # type: ignore[misc]
+                batch_outputs = self.model(
                     input_ids=batch_inputs["input_ids"],
                     attention_mask=batch_inputs["attention_mask"],
                     output_hidden_states=True,
@@ -186,7 +186,7 @@ class ESM2Model:
             self.to_device(device)
 
         # Record mask positions, replace '_' with the model's mask token
-        mask_token = self.tokenizer.mask_token  # type: ignore[attr-defined]
+        mask_token = self.tokenizer.mask_token
         mask_positions: list[list[int]] = []
         tokenizer_sequences: list[str] = []
         for seq in sequences:
@@ -211,7 +211,7 @@ class ESM2Model:
             batch_originals = sequences[start:end]
 
             # Tokenize (mask tokens are handled natively by the tokenizer)
-            batch_inputs = self.tokenizer(  # type: ignore[misc]
+            batch_inputs = self.tokenizer(
                 batch_tok_seqs,
                 add_special_tokens=True,
                 padding=True,
@@ -223,7 +223,7 @@ class ESM2Model:
 
             # Forward pass
             with torch.inference_mode():
-                outputs = self.model(  # type: ignore[misc]
+                outputs = self.model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                 )
@@ -354,13 +354,13 @@ class ESM2Model:
                 - valid_count: Number of standard AA positions (excludes ambiguous)
         """
         # Tokenize once
-        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")  # type: ignore[misc]
+        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")
         original_ids = encoded["input_ids"].to(self.device)
 
         # Create all masked variants (L variants for sequence of length L)
         masked_ids = original_ids.repeat(len(seq), 1)
         for pos in range(len(seq)):
-            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # type: ignore[attr-defined]  # +1 for BOS token
+            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS token
 
         # Get true token IDs directly from tokenized input
         true_token_ids = original_ids[0, 1 : 1 + len(seq)]  # Token positions: [BOS] + seq + [EOS]
@@ -379,7 +379,7 @@ class ESM2Model:
             batch_ids = masked_ids[batch_start:batch_end]
 
             with torch.inference_mode():
-                outputs = self.model(input_ids=batch_ids)  # type: ignore[misc]
+                outputs = self.model(input_ids=batch_ids)
 
             # Extract logits at masked positions
             batch_indices = torch.arange(batch_end - batch_start, device=self.device)
@@ -423,7 +423,7 @@ class ESM2Model:
 
         # Create amino acid token IDs and keep them on the same device as model
         self.amino_acid_token_ids = torch.tensor(
-            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],  # type: ignore[attr-defined]
+            [self.tokenizer.get_vocab()[aa] for aa in AMINO_ACIDS_LIST],
             device=device,
         )
         self.device = device
@@ -439,7 +439,7 @@ class ESM2Model:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)  # type: ignore[attr-defined]
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:
@@ -448,8 +448,8 @@ class ESM2Model:
             if verbose:
                 logger.info(f"Unloading {self.__class__.__name__} from GPU")
 
-            self.model = self.model.to("cpu")  # type: ignore[attr-defined]
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")  # type: ignore[attr-defined]
+            self.model = self.model.to("cpu")
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to("cpu")
             self.device = "cpu"
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
