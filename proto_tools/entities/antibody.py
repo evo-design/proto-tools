@@ -40,7 +40,8 @@ class Antibody(BaseModel):
             return f"{self.heavy_chain}|{self.light_chain}"
         if self.heavy_chain is not None:
             return self.heavy_chain
-        return self.light_chain  # type: ignore[return-value]
+        assert self.light_chain is not None, "model_validator guarantees at least one chain is set"
+        return self.light_chain
 
 
 class AntibodyLogits(BaseModel):

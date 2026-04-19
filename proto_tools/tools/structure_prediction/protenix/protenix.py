@@ -440,8 +440,8 @@ def run_protenix(
 
     # Parse results for each complex
     results = []
-    for _i, job_result in enumerate(output_data):
-        raw_metrics = job_result.get("metrics", {})  # type: ignore[attr-defined]
+    for _i, job_result in enumerate(output_data["results"]):
+        raw_metrics = job_result.get("metrics", {})
 
         def _maybe_float(key: str, scale: float = 1.0, raw: dict[str, Any] = raw_metrics) -> float | None:
             """Return ``float(raw[key]) * scale`` if the key is present, else ``None``.
@@ -466,7 +466,7 @@ def run_protenix(
 
         results.append(
             Structure(
-                structure=job_result["structure_cif_output"],  # type: ignore[index]
+                structure=job_result["structure_cif_output"],
                 b_factor_type=BFactorType.PLDDT,
                 metrics=metrics,
                 source="protenix-prediction",

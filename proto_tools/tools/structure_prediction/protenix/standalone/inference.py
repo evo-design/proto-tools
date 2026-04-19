@@ -354,7 +354,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     operation = input_dict["operation"]
     if operation == "predict":
-        return _model(  # type: ignore[return-value]
+        results = _model(
             input_json_path=input_dict["input_json_path"],
             output_dir=input_dict["output_dir"],
             device=input_dict["device"],
@@ -366,6 +366,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             use_msa=input_dict["use_msa"],
             verbose=input_dict["verbose"],
         )
+        return {"results": results}
     raise ValueError(f"Unknown operation: {operation}")
 
 

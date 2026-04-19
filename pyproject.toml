@@ -289,6 +289,7 @@ ignore = [
 "proto_tools/utils/tool_pool.py" = ["S101"]
 # S101: type-narrowing asserts for mypy
 "proto_tools/entities/ligands/ligands.py" = ["S101"]
+"proto_tools/entities/antibody.py" = ["S101"]
 "proto_tools/tools/causal_models/evo2/evo2_sample.py" = ["S101"]
 "proto_tools/tools/masked_models/masking/base.py" = ["S101"]
 "proto_tools/tools/mutagenesis/codons.py" = ["S101"]
