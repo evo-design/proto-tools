@@ -1,5 +1,13 @@
 """Structure scoring tool wrappers."""
 
+from proto_tools.tools.structure_scoring.pdockq2 import (
+    InterfacePDockQ2,
+    PDockQ2Config,
+    PDockQ2Input,
+    PDockQ2Metrics,
+    PDockQ2Output,
+    run_pdockq2,
+)
 from proto_tools.tools.structure_scoring.pyrosetta import (
     PyRosettaEnergyConfig,
     PyRosettaEnergyInput,
@@ -29,6 +37,11 @@ from proto_tools.tools.structure_scoring.structure_metrics import (
 )
 
 __all__ = [
+    "InterfacePDockQ2",
+    "PDockQ2Config",
+    "PDockQ2Input",
+    "PDockQ2Metrics",
+    "PDockQ2Output",
     "PyRosettaEnergyConfig",
     "PyRosettaEnergyInput",
     "PyRosettaEnergyMetrics",
@@ -48,6 +61,7 @@ __all__ = [
     "StructureMetricsInput",
     "StructureMetricsOutput",
     "StructureQualityMetrics",
+    "run_pdockq2",
     "run_pyrosetta_energy",
     "run_pyrosetta_sap",
     "run_pyrosetta_sasa",

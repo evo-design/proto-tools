@@ -430,6 +430,11 @@ from proto_tools.tools.structure_prediction import (
     run_viennarna,
 )
 from proto_tools.tools.structure_scoring import (
+    InterfacePDockQ2,
+    PDockQ2Config,
+    PDockQ2Input,
+    PDockQ2Metrics,
+    PDockQ2Output,
     PyRosettaEnergyConfig,
     PyRosettaEnergyInput,
     PyRosettaEnergyMetrics,
@@ -449,6 +454,7 @@ from proto_tools.tools.structure_scoring import (
     StructureMetricsInput,
     StructureMetricsOutput,
     StructureQualityMetrics,
+    run_pdockq2,
     run_pyrosetta_energy,
     run_pyrosetta_sap,
     run_pyrosetta_sasa,
@@ -934,4 +940,11 @@ __all__ = [
     "StructureMetricsConfig",
     "StructureMetricsOutput",
     "StructureQualityMetrics",
+    # Structure scoring - pDockQ2
+    "run_pdockq2",
+    "PDockQ2Input",
+    "PDockQ2Config",
+    "PDockQ2Output",
+    "PDockQ2Metrics",
+    "InterfacePDockQ2",
 ]
