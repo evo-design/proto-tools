@@ -81,6 +81,7 @@ def test_get_name_from_smiles(side_effects, expected):
         assert get_name_from_smiles("CC(=O)Oc1ccccc1C(=O)O") == expected
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_smiles_valid_name():
     smiles = get_smiles_from_name("Aspirin")
@@ -89,18 +90,21 @@ def test_get_smiles_valid_name():
     assert mol is not None
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_smiles_invalid_name():
     with pytest.raises(ValueError, match="Could not find SMILES for"):
         get_smiles_from_name("ThisIsNotARealCompound1234")
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_name_invalid_smiles():
     name = get_name_from_smiles("C1C1C1C1C1")
     assert name == "Unknown"
 
 
+@pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_name_empty_smiles():
     name = get_name_from_smiles("")

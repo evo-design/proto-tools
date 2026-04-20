@@ -39,12 +39,12 @@ MAX_RETRIES = 10
 TIMEOUT = 10
 
 
-TIMEOUT = 10
-MAX_RETRIES = 10
-
-
 def fetch_pubchem_txt(url: str) -> str | None:
     """Fetch a PubChem TXT response from the given URL, with retries and timeout.
+
+    Retries with exponential backoff on rate limiting (429), server errors (5xx),
+    and network exceptions. Client errors (4xx other than 429) are treated as
+    terminal since they indicate the resource is genuinely unavailable.
 
     Args:
         url (str): The PubChem REST URL
@@ -58,11 +58,12 @@ def fetch_pubchem_txt(url: str) -> str | None:
             if resp.status_code == 200 and resp.text.strip():
                 result: str = resp.text.strip()
                 return result
-            if resp.status_code == 429:  # rate limited
+            if resp.status_code == 429 or resp.status_code >= 500:
                 time.sleep(2**attempt)
                 continue
+            return None
         except requests.RequestException:
-            time.sleep(TIMEOUT)
+            time.sleep(2**attempt)
     return None
 
 
