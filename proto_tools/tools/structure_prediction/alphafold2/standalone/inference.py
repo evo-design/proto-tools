@@ -183,13 +183,12 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
     import jax.numpy as jnp
     from colabdesign.af.loss import get_dgram_bins
 
+    total_len = af_model._target_len + af_model._binder_len
+    all_pos = jnp.asarray(af_model.opt.get("pos", []))
+    valid_pos = all_pos[(all_pos > 0) & (all_pos < total_len - 1)]
+
     def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
-        pos = jnp.asarray(af_model.opt.get("pos", []))
-        total_len = af_model._target_len + af_model._binder_len
-        if pos.size == 0:
-            return {"beta_strand": jnp.array(0.0)}
-        pos = pos[(pos > 0) & (pos < total_len - 1)]
-        if pos.size == 0:
+        if valid_pos.size == 0:
             return {"beta_strand": jnp.array(0.0)}
 
         dgram = outputs["distogram"]["logits"]
@@ -197,10 +196,10 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
         bins = jnp.logical_or(dgram_bins > 11.5, dgram_bins < 9.75)
         x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
 
-        mask_1d = jnp.zeros(total_len).at[pos - 1].set(1).at[pos + 1].set(1)
+        mask_1d = jnp.zeros(total_len).at[valid_pos - 1].set(1).at[valid_pos + 1].set(1)
         mask_2d = jnp.outer(mask_1d, mask_1d)
         loss_array = jnp.sort(jnp.diagonal(mask_2d * x, 3), descending=True)
-        top_k_mask = jnp.arange(loss_array.size) < (pos.size // 3)
+        top_k_mask = jnp.arange(loss_array.size) < (valid_pos.size // 3)
         return {"beta_strand": jnp.where(top_k_mask, loss_array, 0).sum(-1) / (top_k_mask.sum() + 1e-8)}
 
     af_model._callbacks["model"]["loss"].append(loss_fn)
