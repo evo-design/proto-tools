@@ -13,23 +13,36 @@ import pytest
 
 from proto_tools.utils.tool_instance import ToolInstance
 
-_TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent / "proto_tools"
+_TOOLS_DIR = _PACKAGE_ROOT / "tools"
+_SHARED_ENVS_DIR = _PACKAGE_ROOT / "shared_envs"
 
 
 def _discover_python_version_files() -> list[Path]:
-    """Find all standalone/python_version.txt files under proto_tools/tools."""
-    return sorted(_TOOLS_DIR.rglob("standalone/python_version.txt"))
+    """Find all python_version.txt files: per-tool standalones + shared envs."""
+    files = list(_TOOLS_DIR.rglob("standalone/python_version.txt"))
+    files += list(_SHARED_ENVS_DIR.glob("*/python_version.txt"))
+    return sorted(files)
 
 
 def _discover_standalone_dirs() -> list[Path]:
-    """Find every standalone/ directory under proto_tools/tools."""
-    return sorted(p for p in _TOOLS_DIR.rglob("standalone") if p.is_dir())
+    """Find every standalone/ directory under proto_tools/tools that owns its env.
+
+    Tools that opt into a shared env (via ``standalone/shared_env.txt``) get their
+    ``python_version.txt`` from the shared env def, not from their own standalone
+    dir. Skip those so the per-tool existence check only fires on real owners.
+    """
+    return sorted(p for p in _TOOLS_DIR.rglob("standalone") if p.is_dir() and not (p / "shared_env.txt").exists())
 
 
 def _tool_id(path: Path) -> str:
-    """Return 'category/tool' identifier for a python_version.txt path."""
-    rel = path.relative_to(_TOOLS_DIR)
-    return f"{rel.parts[0]}/{rel.parts[1]}"
+    """Return a 'category/tool' (or 'shared_envs/<name>') identifier for a python_version.txt path."""
+    try:
+        rel = path.relative_to(_TOOLS_DIR)
+        return f"{rel.parts[0]}/{rel.parts[1]}"
+    except ValueError:
+        rel = path.relative_to(_PACKAGE_ROOT)
+        return f"{rel.parts[0]}/{rel.parts[1]}"
 
 
 def _standalone_dir_id(path: Path) -> str:

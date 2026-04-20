@@ -61,6 +61,7 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 | `standalone/env_vars.txt` (any tool) | `notes/tool-environments.md` |
 | `standalone/setup.sh` patterns | `notes/tool-environments.md`, `fix-env` SKILL.md |
 | `standalone/python_version.txt` | `notes/tool-environments.md`, `implement-tool` SKILL.md |
+| `standalone/shared_env.txt` or `shared_envs/` | `notes/tool-environments.md` (Shared Environments section) |
 | New tool added/removed | CLAUDE.md (Package Hierarchy if structure changes), Key File Paths |
 | New skills or commands added | CLAUDE.md Skills & Commands section |
 | pytest markers, test patterns | `notes/testing.md`, CLAUDE.md Configuration |

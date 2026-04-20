@@ -182,17 +182,22 @@ class EnvReportCollector:
 
         venvs_dir = ToolInstance._get_tool_envs_root()
 
-        # Map registry key → tool directory name via ToolRegistry
+        # Map registry key → env name via ToolInstance, so shared-env tools
+        # report the actual env path instead of a non-existent per-tool path.
         spec = ToolRegistry.get(tool_name)
-        if spec:
-            dir_name = spec.source_file.parent.name
-            venv_dir = venvs_dir / f"{dir_name}_env"
-            if venv_dir.is_dir():
-                python_path = venv_dir / "bin" / "python"
-                if python_path.exists():
-                    return str(venv_dir), "success"
-                return str(venv_dir), "build_failed"
+        if not spec:
+            return None, "not_found"
+        try:
+            _, env_name = ToolInstance._resolve_env_def(spec.source_file.parent.name)
+        except ValueError:
+            return None, "not_found"
 
+        venv_dir = venvs_dir / f"{env_name}_env"
+        if venv_dir.is_dir():
+            python_path = venv_dir / "bin" / "python"
+            if python_path.exists():
+                return str(venv_dir), "success"
+            return str(venv_dir), "build_failed"
         return None, "not_found"
 
     def _get_output_path(self) -> Path:
@@ -962,14 +967,20 @@ def _env_report_clean_envs(request, setup_test_logging):
 
     if _env_report_collector.is_filtered:
         # Selective cleanup: only delete envs for the tools being re-tested.
-        # Map registry key → tool directory name via ToolRegistry.
-        env_dirs_to_clean: set[str] = set()
+        # Resolve via ToolInstance so shared-env tools target the right physical
+        # env (and naturally dedupe — two siblings of one shared env clean once).
+        env_names_to_clean: set[str] = set()
         for key in _env_report_collector.selected_tools:
             spec = ToolRegistry.get(key)
-            if spec:
-                env_dirs_to_clean.add(spec.source_file.parent.name)
-        for dir_name in env_dirs_to_clean:
-            env_dir = venvs_dir / f"{dir_name}_env"
+            if not spec:
+                continue
+            try:
+                _, env_name = ToolInstance._resolve_env_def(spec.source_file.parent.name)
+            except ValueError:
+                continue
+            env_names_to_clean.add(env_name)
+        for env_name in env_names_to_clean:
+            env_dir = venvs_dir / f"{env_name}_env"
             if env_dir.exists():
                 logger.warning(f"Cleaning {env_dir} for rebuild...")
                 subprocess.run(

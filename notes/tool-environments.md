@@ -210,6 +210,52 @@ The lookup key is built as `f"{platform.system().lower()}-{platform.machine()}"`
 
 **Consistency tests:** every shipped `python_version.txt` is validated by `tests/style_consistency_tests/test_python_version_consistency.py` (one parametrized result per tool). Parser unit tests live in `tests/tool_infra_tests/test_python_version_files.py`.
 
+## Shared Environments
+
+Multiple tools may rely on the same dependencies. For example, ESM3 and ESM C, which both come from `evolutionaryscale/esm` can share a single micromamba environment on disk. This avoids duplicating environments when adding a sibling model.
+
+**Layout:**
+
+```
+proto_tools/
+├── shared_envs/
+│   └── evolutionaryscale_esm/      # one env definition
+│       ├── setup.sh
+│       ├── requirements.txt
+│       └── python_version.txt
+└── tools/
+    └── masked_models/
+        ├── esm3/
+        │   └── standalone/
+        │       ├── shared_env.txt   # contents: "evolutionaryscale_esm"
+        │       └── inference.py     # ESM3-specific dispatch
+        └── esmc/
+            └── standalone/
+                ├── shared_env.txt   # contents: "evolutionaryscale_esm"
+                └── inference.py     # ESM C-specific dispatch
+```
+
+**How it resolves:** When a tool's `standalone/` contains a `shared_env.txt` marker, `ToolInstance._resolve_env_def()` reads the marker, looks up `proto_tools/shared_envs/<name>/`, and uses that directory's `setup.sh` / `requirements.txt` / `python_version.txt` / `env_vars.txt` for env construction. The on-disk env path becomes `PROTO_HOME/proto_tool_envs/<name>_env/` so all tools opting into the same shared env collide on the same physical directory and skip redundant setup.
+
+**`inference.py` always lives per-tool** — only env-construction inputs are shared. Each tool ships its own dispatch logic.
+
+**Validation:**
+
+- A tool with both `shared_env.txt` and `setup.sh` raises (ambiguous).
+- A `shared_env.txt` pointing to a non-existent shared env raises with a clear error at dispatch time.
+- An empty `shared_env.txt` raises.
+
+**Concurrency:** Existing setup-lock at `<env_path>/.setup.lock` serializes concurrent setup attempts from different tools.
+
+**When to use a shared env:**
+
+- Two or more tools install the same heavy Python package and the same Python version.
+- A new tool ships in an upstream package that already has a wrapper using the shared-env pattern.
+
+**When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
+
+**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `evolutionaryscale_esm`), its on-disk env directory changes from `<tool_name>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
+
 ## Binary Installation
 
 Tools needing external binaries must use `utils/install_binary.py`; never raw `curl`/`wget` in `setup.sh`.

@@ -46,6 +46,12 @@ from proto_tools.tools.masked_models.esm3 import (
     run_esm3_sample,
     run_esm3_score,
 )
+from proto_tools.tools.masked_models.esmc import (
+    ESMCEmbeddingsConfig,
+    ESMCEmbeddingsInput,
+    ESMCEmbeddingsOutput,
+    run_esmc_embeddings,
+)
 from proto_tools.tools.masked_models.masking import MaskingMethod, MaskingStrategy
 from proto_tools.tools.masked_models.shared_data_models import MaskedModelScoringMetrics, SequenceEmbedding
 
@@ -106,4 +112,9 @@ __all__ = [
     "ESM3ScoringInput",
     "ESM3ScoringConfig",
     "ESM3ScoringOutput",
+    # ESM C - Embeddings
+    "run_esmc_embeddings",
+    "ESMCEmbeddingsInput",
+    "ESMCEmbeddingsConfig",
+    "ESMCEmbeddingsOutput",
 ]

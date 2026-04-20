@@ -59,6 +59,8 @@ analyses/*
 **/standalone/standalone_helpers/
 **/standalone/standalone_helpers.py
 **/standalone/standalone_helpers.sh
+# Same helpers, copied next to setup.sh for shared envs
+**/shared_envs/*/standalone_helpers.sh
 
 .claude/worktrees/
 uv.lock

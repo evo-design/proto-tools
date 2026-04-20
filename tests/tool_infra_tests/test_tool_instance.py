@@ -188,13 +188,6 @@ def test_invalid_tool_name():
 # ── Script discovery tests ──────────────────────────────────────────────────
 
 
-def test_find_setup_script():
-    """Should find setup.sh for known tools."""
-    path = ToolInstance._find_setup_script("esm2")
-    assert path.name == "setup.sh"
-    assert path.exists()
-
-
 def test_find_script_inference():
     """Tools with inference.py should find it."""
     path = ToolInstance._find_script("esm2")

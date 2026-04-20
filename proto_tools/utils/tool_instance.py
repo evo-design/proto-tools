@@ -497,10 +497,12 @@ class ToolInstance:
         env_root = self._get_tool_envs_root()
         env_root.mkdir(parents=True, exist_ok=True)
 
-        self.env_path = env_root / f"{tool_name}_env"
-        self.setup_script = self._find_setup_script(tool_name)
+        env_def_dir, env_name = self._resolve_env_def(tool_name)
+        self.env_name = env_name
+        self.env_path = env_root / f"{env_name}_env"
+        self.setup_script = env_def_dir / "setup.sh"
         self.script_path = self._find_script(tool_name)
-        self._tool_env_vars = _parse_env_vars_file(self.setup_script.parent / "env_vars.txt")
+        self._tool_env_vars = _parse_env_vars_file(env_def_dir / "env_vars.txt")
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
@@ -1440,14 +1442,80 @@ class ToolInstance:
         raise ValueError(f"Invalid tool name: {tool_name!r}. Available tools with standalone dirs: {sorted(tool_dirs)}")
 
     @classmethod
-    def _find_setup_script(cls, tool_name: str) -> Path:
-        """Return the path to standalone/setup.sh for *tool_name*."""
+    def _shared_envs_root(cls) -> Path:
+        """Return the root directory for shared environment definitions.
+
+        Shared envs let multiple tools (e.g. different model families that ship
+        in the same Python package) reuse a single micromamba environment on
+        disk. A tool opts in by placing ``standalone/shared_env.txt`` containing
+        the shared env's directory name. See ``notes/tool-environments.md``.
+
+        Returns:
+            Path: Absolute path to ``proto_tools/shared_envs/``.
+        """
+        return Path(__file__).parent.parent / "shared_envs"
+
+    @classmethod
+    def _resolve_env_def(cls, tool_name: str) -> tuple[Path, str]:
+        """Resolve a tool's environment-definition directory and env name.
+
+        If the tool's standalone dir contains ``shared_env.txt``, the env def
+        comes from ``shared_envs/<name>/`` and the env name is ``<name>``;
+        multiple tools opting into the same shared env will share one physical
+        env on disk. Otherwise the env def is the tool's own ``standalone/``
+        directory and the env name is the tool's directory name.
+
+        Args:
+            tool_name (str): The tool's directory name (e.g. ``"esm3"``).
+
+        Returns:
+            tuple[Path, str]: ``(env_def_dir, env_name)``. ``env_def_dir``
+                contains ``setup.sh`` (and optionally ``requirements.txt``,
+                ``python_version.txt``, ``env_vars.txt``). ``env_name`` is used
+                to compute ``env_path = env_root / f"{env_name}_env"``.
+
+        Raises:
+            ValueError: If the tool dir is unknown, ``shared_env.txt`` points to
+                a non-existent shared env, the tool dir contains both
+                ``shared_env.txt`` and ``setup.sh`` (ambiguous), or no
+                ``setup.sh`` is found at the resolved location.
+        """
         tool_dir = cls._get_tool_dirs().get(tool_name)
-        if tool_dir is not None:
-            setup = tool_dir / "standalone" / "setup.sh"
-            if setup.is_file():
-                return setup
-        raise ValueError(f"No setup.sh found for tool {tool_name!r}")
+        if tool_dir is None:
+            raise ValueError(f"Unknown tool {tool_name!r}")
+
+        standalone_dir = tool_dir / "standalone"
+        marker = standalone_dir / "shared_env.txt"
+        local_setup = standalone_dir / "setup.sh"
+
+        if marker.is_file():
+            # Catch any stray env-def file alongside the marker — silently
+            # falling back to the shared dir would mask migration mistakes.
+            stray_env_def_files = [
+                name
+                for name in ("setup.sh", "requirements.txt", "python_version.txt", "env_vars.txt")
+                if (standalone_dir / name).is_file()
+            ]
+            if stray_env_def_files:
+                raise ValueError(
+                    f"Tool {tool_name!r} has shared_env.txt alongside stray env-def file(s) "
+                    f"{stray_env_def_files} in {standalone_dir}; delete the local file(s) "
+                    "to use the shared env, or delete shared_env.txt to use a private env."
+                )
+            shared_name = marker.read_text().strip()
+            if not shared_name:
+                raise ValueError(f"shared_env.txt for tool {tool_name!r} is empty")
+            env_def_dir = cls._shared_envs_root() / shared_name
+            shared_setup = env_def_dir / "setup.sh"
+            if not shared_setup.is_file():
+                raise ValueError(
+                    f"Tool {tool_name!r} references shared env {shared_name!r}, but {shared_setup} does not exist."
+                )
+            return env_def_dir, shared_name
+
+        if not local_setup.is_file():
+            raise ValueError(f"No setup.sh found for tool {tool_name!r} (looked in {standalone_dir})")
+        return standalone_dir, tool_name
 
     @classmethod
     def _find_script(cls, tool_name: str) -> Path:
