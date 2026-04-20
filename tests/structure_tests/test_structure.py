@@ -27,6 +27,7 @@ from proto_tools.entities.structures.utils import (
     pdb_file_to_atomarray,
 )
 from proto_tools.utils.tool_io import Metrics
+from tests._structure_fixtures import synthetic_cif
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -322,50 +323,6 @@ def test_convert_empty_strings():
 # ── to_pdb_with_chain_mapping ─────────────────────────────────────────────────
 
 
-def _synthetic_cif(chain_names: list[str]) -> str:
-    """Build a minimal valid mmCIF with one glycine residue per named chain.
-
-    Each chain gets four atoms (N, CA, C, O) so gemmi accepts it as a real residue.
-    Chains are spaced 100 A apart on the x-axis to avoid any overlap artifacts.
-    """
-    header = (
-        "data_synthetic\n"
-        "loop_\n"
-        "_atom_site.group_PDB\n"
-        "_atom_site.id\n"
-        "_atom_site.type_symbol\n"
-        "_atom_site.label_atom_id\n"
-        "_atom_site.label_alt_id\n"
-        "_atom_site.label_comp_id\n"
-        "_atom_site.label_asym_id\n"
-        "_atom_site.label_entity_id\n"
-        "_atom_site.label_seq_id\n"
-        "_atom_site.pdbx_PDB_ins_code\n"
-        "_atom_site.Cartn_x\n"
-        "_atom_site.Cartn_y\n"
-        "_atom_site.Cartn_z\n"
-        "_atom_site.occupancy\n"
-        "_atom_site.B_iso_or_equiv\n"
-        "_atom_site.auth_seq_id\n"
-        "_atom_site.auth_comp_id\n"
-        "_atom_site.auth_asym_id\n"
-        "_atom_site.auth_atom_id\n"
-        "_atom_site.pdbx_PDB_model_num\n"
-    )
-    atom_records = []
-    atom_id = 1
-    for chain_idx, name in enumerate(chain_names):
-        base_x = chain_idx * 100.0
-        label_asym = chr(ord("A") + chain_idx % 26)
-        for atom_name, dx, dy in [("N", 0.0, 0.0), ("CA", 1.5, 0.0), ("C", 2.0, 1.5), ("O", 1.3, 2.5)]:
-            atom_records.append(
-                f"ATOM {atom_id} {atom_name[0]} {atom_name} . GLY {label_asym} 1 1 ? "
-                f"{base_x + dx:.3f} {dy:.3f} 0.000 1.00 20.00 1 GLY {name} {atom_name} 1"
-            )
-            atom_id += 1
-    return header + "\n".join(atom_records) + "\n"
-
-
 def test_to_pdb_with_chain_mapping_pdb_input_is_identity(protein_from_pdb_file):
     """PDB-backed Structure returns identity mapping and unchanged content."""
     pdb_content, mapping = protein_from_pdb_file.to_pdb_with_chain_mapping()
@@ -376,7 +333,7 @@ def test_to_pdb_with_chain_mapping_pdb_input_is_identity(protein_from_pdb_file):
 
 def test_to_pdb_with_chain_mapping_multichar_cif_shortens_and_maps():
     """CIF with multi-char chains yields a valid PDB and a populated mapping."""
-    s = Structure(structure=_synthetic_cif(["Heavy", "Light"]))
+    s = Structure(structure=synthetic_cif(["Heavy", "Light"]))
     assert s.get_chain_ids() == ["Heavy", "Light"]
 
     pdb_content, mapping = s.to_pdb_with_chain_mapping()
@@ -394,7 +351,7 @@ def test_to_pdb_with_chain_mapping_multichar_cif_shortens_and_maps():
 
 def test_to_pdb_with_chain_mapping_does_not_mutate_cached_gemmi_struct():
     """Calling the helper must not touch the lazy-loaded gemmi cache."""
-    s = Structure(structure=_synthetic_cif(["Heavy", "Light"]))
+    s = Structure(structure=synthetic_cif(["Heavy", "Light"]))
     # Warm the cache first.
     _ = s.gemmi_struct
     chains_before = [chain.name for model in s.gemmi_struct for chain in model]
@@ -891,7 +848,312 @@ def test_concat_rejects_empty_input():
         Structure.concat([])
 
 
-def test_concat_rejects_multi_char_chain_id(multi_char_chain_structure):
-    """Concat emits PDB, which can't represent multi-char chain IDs — fail fast."""
-    with pytest.raises(ValueError, match="single character"):
-        Structure.concat([multi_char_chain_structure])
+def test_concat_accepts_multi_char_chain_id_when_all_inputs_are_cif():
+    """All-CIF concat preserves CIF format and supports multi-char chain IDs.
+
+    When every input is CIF, the concatenation emits a CIF result that can hold
+    multi-character chain labels like "Heavy" / "Light" without any PDB-shortening.
+    """
+    pdb_a = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 20.00           C\nEND\n"
+    pdb_b = "ATOM      1  CA  ALA B   1     100.000   0.000   0.000  1.00 20.00           C\nEND\n"
+    # Build CIF inputs with multi-char chain names: PDB → CIF → rename to multi-char.
+    s_a_cif = Structure(structure=Structure(structure=pdb_a).structure_cif, structure_format="cif")
+    s_b_cif = Structure(structure=Structure(structure=pdb_b).structure_cif, structure_format="cif")
+    heavy = s_a_cif.with_renamed_chains({"A": "Heavy"})
+    light = s_b_cif.with_renamed_chains({"B": "Light"})
+
+    out = Structure.concat([heavy, light])
+    assert out.structure_format == "cif"
+    assert sorted(out.get_chain_ids()) == ["Heavy", "Light"]
+
+
+def test_concat_rejects_mixed_formats():
+    """Mixed PDB+CIF inputs raise — caller must coerce explicitly to one format.
+
+    Avoids the ambiguity of "should we promote to CIF or demote to PDB?" by
+    forcing the choice into the call site, where the caller has the context.
+    """
+    pdb_struct = Structure(
+        structure="ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C\nEND\n",
+        structure_format="pdb",
+    )
+    cif_struct = Structure(structure=pdb_struct.structure_cif, structure_format="cif")
+    with pytest.raises(ValueError, match="share structure_format"):
+        Structure.concat([pdb_struct, cif_struct])
+
+
+def test_concat_preserves_pdb_format():
+    """All-PDB concat produces a PDB output (no surprise format change)."""
+    a = Structure(
+        structure="ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C\nEND\n",
+        structure_format="pdb",
+    )
+    b = Structure(
+        structure="ATOM      1  CA  ALA B   1       0.000   0.000   0.000  1.00 50.00           C\nEND\n",
+        structure_format="pdb",
+    )
+    out = Structure.concat([a, b])
+    assert out.structure_format == "pdb"
+    assert sorted(out.get_chain_ids()) == ["A", "B"]
+
+
+# ── with_renamed_chains ───────────────────────────────────────────────────────
+
+
+_SINGLE_CHAIN_PDB = (
+    "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00 20.00           N\n"
+    "ATOM      2  CA  GLY A   1       1.500   0.000   0.000  1.00 20.00           C\n"
+    "ATOM      3  C   GLY A   1       2.000   1.500   0.000  1.00 20.00           C\n"
+    "ATOM      4  O   GLY A   1       1.300   2.500   0.000  1.00 20.00           O\n"
+    "END\n"
+)
+
+_TWO_CHAIN_PDB = (
+    "ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00 20.00           N\n"
+    "ATOM      2  CA  GLY A   1       1.500   0.000   0.000  1.00 20.00           C\n"
+    "ATOM      3  C   GLY A   1       2.000   1.500   0.000  1.00 20.00           C\n"
+    "ATOM      4  O   GLY A   1       1.300   2.500   0.000  1.00 20.00           O\n"
+    "TER\n"
+    "ATOM      5  N   GLY B   1     100.000   0.000   0.000  1.00 20.00           N\n"
+    "ATOM      6  CA  GLY B   1     101.500   0.000   0.000  1.00 20.00           C\n"
+    "ATOM      7  C   GLY B   1     102.000   1.500   0.000  1.00 20.00           C\n"
+    "ATOM      8  O   GLY B   1     101.300   2.500   0.000  1.00 20.00           O\n"
+    "END\n"
+)
+
+
+def test_with_renamed_chains_identity_returns_unchanged():
+    """Identity mapping (and empty mapping) short-circuit and return self."""
+    s = Structure(structure=_SINGLE_CHAIN_PDB)
+    assert s.with_renamed_chains({"A": "A"}) is s
+    assert s.with_renamed_chains({}) is s
+
+
+def test_with_renamed_chains_single_char_preserves_pdb_format():
+    """Single-char rename on a PDB Structure stays PDB."""
+    s = Structure(structure=_SINGLE_CHAIN_PDB)
+    renamed = s.with_renamed_chains({"A": "B"})
+    assert renamed.get_chain_ids() == ["B"]
+    assert renamed.structure_format == "pdb"
+
+
+def test_with_renamed_chains_pdb_source_multi_char_target_raises():
+    """PDB col 22 is single-char only; multi-char target on a PDB Structure must raise.
+
+    The error message points the caller at the explicit fix (convert to CIF first)
+    rather than silently switching format.
+    """
+    s = Structure(structure=_SINGLE_CHAIN_PDB)
+    with pytest.raises(ValueError, match="multi-character chain ID"):
+        s.with_renamed_chains({"A": "Heavy"})
+
+
+def test_with_renamed_chains_multi_char_works_when_source_is_cif():
+    """Multi-char rename succeeds when the source is CIF (CIF can hold any chain ID)."""
+    s = Structure(structure=_SINGLE_CHAIN_PDB)
+    s_cif = Structure(structure=s.structure_cif, structure_format="cif")
+    renamed = s_cif.with_renamed_chains({"A": "Heavy"})
+    assert renamed.get_chain_ids() == ["Heavy"]
+    assert renamed.structure_format == "cif"
+
+
+def test_with_renamed_chains_partial_mapping_leaves_other_chains():
+    """Chain IDs not in the mapping pass through unchanged."""
+    s = Structure(structure=_TWO_CHAIN_PDB)
+    renamed = s.with_renamed_chains({"A": "C"})
+    # A → C, B unchanged. Both single-char so PDB stays PDB.
+    assert sorted(renamed.get_chain_ids()) == ["B", "C"]
+    assert renamed.structure_format == "pdb"
+
+
+def test_with_renamed_chains_rejects_duplicate_targets():
+    """Mapping that collapses two chains to the same target raises."""
+    s = Structure(structure=_TWO_CHAIN_PDB)
+    with pytest.raises(ValueError, match="duplicate chain ID"):
+        s.with_renamed_chains({"A": "X", "B": "X"})
+
+
+def test_with_renamed_chains_preserves_metadata():
+    """b_factor_type, source, and metrics carry through unchanged on a fresh Structure."""
+
+    class _M(Metrics):
+        plddt: float | None = None
+
+    s = Structure(
+        structure=_SINGLE_CHAIN_PDB,
+        b_factor_type=BFactorType.PLDDT,
+        source="esmfold",
+        metrics=_M(plddt=0.85),
+    )
+    renamed = s.with_renamed_chains({"A": "B"})
+    assert renamed is not s
+    assert renamed.b_factor_type == BFactorType.PLDDT
+    assert renamed.source == "esmfold"
+    assert renamed.metrics.plddt == 0.85
+    # Deep copy: mutating the renamed metrics doesn't touch the original.
+    renamed.metrics.plddt = 0.0
+    assert s.metrics.plddt == 0.85
+
+
+def test_with_renamed_chains_preserves_atomic_content():
+    """Renaming chains must not change residues, atoms, or coordinates.
+
+    Covers the gemmi clone-mutate-reserialize round trip:
+    - same-format rename (PDB → PDB via single-char target)
+    - same-format rename (CIF → CIF via multi-char target — exercises gemmi's
+      CIF writer code path, distinct from the PDB writer)
+    - full round-trip back to the original chain labels via ``approx_equal``
+    """
+    from proto_tools.entities.structures.structure import _extract_atom_positions
+
+    s = Structure(structure=_TWO_CHAIN_PDB)
+    original_atoms = _extract_atom_positions(s)
+
+    # Same-format PDB rename: A→C, B→D. Output stays PDB.
+    pdb_renamed = s.with_renamed_chains({"A": "C", "B": "D"})
+    assert pdb_renamed.structure_format == "pdb"
+    assert _extract_atom_positions(pdb_renamed) == original_atoms
+
+    # CIF source + multi-char rename: exercises the CIF writer path.
+    s_cif = Structure(structure=s.structure_cif, structure_format="cif")
+    cif_renamed = s_cif.with_renamed_chains({"A": "Heavy", "B": "Light"})
+    assert cif_renamed.structure_format == "cif"
+    assert _extract_atom_positions(cif_renamed) == original_atoms
+
+    # Full round-trip: rename and rename back, content matches via approx_equal.
+    round_tripped = cif_renamed.with_renamed_chains({"Heavy": "A", "Light": "B"})
+    s_cif.approx_equal(round_tripped)
+
+
+# ── _serialize_gemmi consolidation ────────────────────────────────────────────
+
+
+def _make_lossy_cif() -> str:
+    """Build a minimal CIF whose atoms have multi-char names.
+
+    Triggers the 'long atom name' warning when converted to PDB.
+    """
+    return (
+        "data_lossy\n"
+        "loop_\n"
+        "_atom_site.group_PDB\n"
+        "_atom_site.id\n"
+        "_atom_site.type_symbol\n"
+        "_atom_site.label_atom_id\n"
+        "_atom_site.label_alt_id\n"
+        "_atom_site.label_comp_id\n"
+        "_atom_site.label_asym_id\n"
+        "_atom_site.label_entity_id\n"
+        "_atom_site.label_seq_id\n"
+        "_atom_site.pdbx_PDB_ins_code\n"
+        "_atom_site.Cartn_x\n"
+        "_atom_site.Cartn_y\n"
+        "_atom_site.Cartn_z\n"
+        "_atom_site.occupancy\n"
+        "_atom_site.B_iso_or_equiv\n"
+        "_atom_site.auth_seq_id\n"
+        "_atom_site.auth_comp_id\n"
+        "_atom_site.auth_asym_id\n"
+        "_atom_site.auth_atom_id\n"
+        "_atom_site.pdbx_PDB_model_num\n"
+        # 5-char atom name "OVRLG" exceeds PDB's 4-char field.
+        "ATOM 1 N OVRLG . GLY A 1 1 ? 0.000 0.000 0.000 1.00 20.00 1 GLY A OVRLG 1\n"
+    )
+
+
+def _read_gemmi_pdb(content: str):
+    return gemmi.read_pdb_string(content)
+
+
+def test_serialize_gemmi_pdb_to_pdb_no_warning():
+    """Re-emission in source format never warns."""
+    from proto_tools.entities.structures.utils import _serialize_gemmi
+
+    struct = _read_gemmi_pdb(_SINGLE_CHAIN_PDB)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = _serialize_gemmi(struct, "pdb", source_format="pdb")
+    assert "ATOM" in out
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+def test_serialize_gemmi_cif_to_cif_no_warning():
+    """CIF re-emission also never warns (no conversion happens)."""
+    from proto_tools.entities.structures.utils import _serialize_gemmi
+
+    struct = _read_gemmi_pdb(_SINGLE_CHAIN_PDB)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = _serialize_gemmi(struct, "cif", source_format="cif")
+    assert out.startswith("data_")
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+def test_serialize_gemmi_pdb_to_cif_no_warning():
+    """PDB→CIF is lossless and never warns."""
+    from proto_tools.entities.structures.utils import _serialize_gemmi
+
+    struct = _read_gemmi_pdb(_SINGLE_CHAIN_PDB)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = _serialize_gemmi(struct, "cif", source_format="pdb")
+    assert out.startswith("data_")
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+def test_serialize_gemmi_cif_to_pdb_lossy_warns():
+    """CIF→PDB on a structure with long atom names emits the lossy warning."""
+    from proto_tools.entities.structures.utils import _serialize_gemmi
+
+    cif = _make_lossy_cif()
+    doc = gemmi.cif.read_string(cif)
+    struct = gemmi.make_structure_from_block(doc[0])
+    with pytest.warns(UserWarning, match="atom name"):
+        _serialize_gemmi(struct, "pdb", source_format="cif", cif_content_for_warnings=cif)
+
+
+def test_concat_does_not_warn_on_all_cif_input():
+    """Format-preserving concat (all-CIF → CIF output) skips CIF→PDB entirely, so no lossy warnings fire.
+
+    The consolidation work originally added a warning here because concat used to
+    always emit PDB. After the format-preserving redesign, concat no longer does
+    a CIF→PDB conversion when inputs are all CIF — the path that triggered
+    `_warn_cif_to_pdb_lossy` is gone, replaced by lossless CIF re-emission.
+    """
+    cif_struct = Structure(structure=_make_lossy_cif())
+    assert cif_struct.structure_format == "cif"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = Structure.concat([cif_struct])
+    assert out.structure_format == "cif"  # Format preserved — no conversion
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+def test_to_pdb_with_chain_mapping_warns_on_lossy_cif():
+    """to_pdb_with_chain_mapping on a CIF with long atom names warns.
+
+    When the source CIF carries data that PDB cannot represent (e.g. atom names
+    longer than 4 characters), emitting PDB must surface a lossy-conversion
+    warning rather than silently truncate.
+    """
+    cif_struct = Structure(structure=_make_lossy_cif())
+    with pytest.warns(UserWarning, match="atom name"):
+        cif_struct.to_pdb_with_chain_mapping()
+
+
+def test_select_chain_does_not_warn_on_cif_re_emission():
+    """select_chain is pure re-emission in source format — no warnings, ever."""
+    cif_struct = Structure(structure=_make_lossy_cif())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cif_struct.select_chain("A")
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+def test_with_renamed_chains_does_not_warn_on_cif_re_emission():
+    """with_renamed_chains is pure re-emission in source format — no warnings, ever."""
+    cif_struct = Structure(structure=_make_lossy_cif())
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cif_struct.with_renamed_chains({"A": "Heavy"})
+    assert [w for w in caught if "CIF→PDB" in str(w.message)] == []

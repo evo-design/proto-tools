@@ -1,13 +1,18 @@
 """Shared data models and input-prep helpers for PyRosetta scoring tools."""
 
+from __future__ import annotations
+
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.entities.structures import Structure
+
+if TYPE_CHECKING:
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +166,54 @@ def remap_per_residue_chain_ids(
     for result, reverse_map in zip(results, pdb_to_mmcif_maps, strict=True):
         for res in result.get("per_residue", []):
             res["chain_id"] = reverse_map.get(res["chain_id"], res["chain_id"])
+
+
+def relax_inputs_via_pyrosetta(
+    inputs: list[ScoringStructureInput],
+    relax_config: PyRosettaRelaxConfig,
+) -> list[ScoringStructureInput]:
+    """Run pyrosetta-relax on each input structure; return new ScoringStructureInputs.
+
+    Used by the ``preprocess`` hook on scoring tool configs (energy, SAP, SASA)
+    to opt into FastRelax preprocessing without re-implementing FastRelax. One
+    dispatch handles the whole batch; ``chain_ids`` on each input are preserved
+    unchanged because ``run_pyrosetta_relax`` restores original chain labels on
+    the returned ``Structure`` (via :meth:`Structure.with_renamed_chains`).
+
+    Args:
+        inputs (list[ScoringStructureInput]): Structures + chain selections.
+        relax_config (PyRosettaRelaxConfig): How to relax.
+
+    Returns:
+        list[ScoringStructureInput]: New inputs with the same ``chain_ids``,
+            pointing at the relaxed structures (chain labels match input).
+
+    Raises:
+        RuntimeError: If the relax dispatch fails.
+    """
+    # Lazy import to break the circular dependency: pyrosetta_relax imports
+    # from this module, and we'd otherwise import it back here.
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
+        PyRosettaRelaxInput,
+        run_pyrosetta_relax,
+    )
+
+    relax_out = run_pyrosetta_relax(
+        PyRosettaRelaxInput(
+            inputs=[ScoringStructureInput(structure=inp.structure) for inp in inputs],
+        ),
+        relax_config,
+    )
+    if not relax_out.success:
+        raise RuntimeError(f"FastRelax preprocess failed: {relax_out.errors}")
+
+    return [
+        ScoringStructureInput(
+            structure=relax_result.relax.relaxed_structure,
+            chain_ids=inp.chain_ids,
+        )
+        for inp, relax_result in zip(inputs, relax_out.results, strict=True)
+    ]
 
 
 def warn_about_dropped_residues(results: list[dict[str, Any]]) -> None:

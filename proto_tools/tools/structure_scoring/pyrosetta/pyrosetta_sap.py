@@ -1,5 +1,7 @@
 """PyRosetta Spatial Aggregation Propensity (SAP) scoring tool."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any, ClassVar
@@ -7,9 +9,11 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
     ScoringStructureInput,
     prepare_pdb_and_chain_maps,
+    relax_inputs_via_pyrosetta,
     remap_per_residue_chain_ids,
     warn_about_dropped_residues,
 )
@@ -18,6 +22,7 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    ConfigField,
     InputField,
     ToolInstance,
 )
@@ -101,8 +106,30 @@ class PyRosettaSAPInput(BaseToolInput):
 class PyRosettaSAPConfig(BaseConfig):
     """Configuration for PyRosetta SAP scoring.
 
-    No additional configuration parameters are needed.
+    Attributes:
+        pre_relax_structures (bool): If ``True``, run ``pyrosetta-relax`` on
+            each input structure before scoring. Default ``False``.
+        relax_config (PyRosettaRelaxConfig): Settings used when
+            ``pre_relax_structures=True``. Ignored otherwise.
     """
+
+    pre_relax_structures: bool = ConfigField(
+        title="Pre-relax Structures",
+        default=False,
+        description="If True, run pyrosetta-relax on each input structure before scoring.",
+    )
+    relax_config: PyRosettaRelaxConfig = ConfigField(
+        default_factory=PyRosettaRelaxConfig,
+        title="Relax Config",
+        description="Settings used when pre_relax_structures=True. Ignored otherwise.",
+        depends_on={"pre_relax_structures": [True]},
+    )
+
+    def preprocess(self, inputs: PyRosettaSAPInput) -> PyRosettaSAPInput:  # type: ignore[override]
+        """Apply optional FastRelax preprocess to input structures."""
+        if not self.pre_relax_structures:
+            return inputs
+        return inputs.model_copy(update={"inputs": relax_inputs_via_pyrosetta(inputs.inputs, self.relax_config)})
 
 
 class PyRosettaSAPOutput(BaseToolOutput):

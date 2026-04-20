@@ -2,60 +2,36 @@
 
 import pytest
 
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+    PyRosettaEnergyConfig,
+    PyRosettaEnergyInput,
+    run_pyrosetta_energy,
+)
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
+    PyRosettaRelaxConfig,
+)
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sap import (
+    PyRosettaSAPConfig,
+    PyRosettaSAPInput,
+    run_pyrosetta_sap,
+)
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sasa import (
+    PyRosettaSASAConfig,
+    PyRosettaSASAInput,
+    run_pyrosetta_sasa,
+)
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
     MAX_CHAINS_FOR_PDB,
     ScoringStructureInput,
     prepare_pdb_and_chain_maps,
     remap_per_residue_chain_ids,
 )
-
-
-def _synthetic_cif(chain_names: list[str]) -> str:
-    """Build a minimal valid mmCIF with one glycine per named chain.
-
-    Chains are placed 100 A apart on the x-axis to avoid any overlap.
-    """
-    header = (
-        "data_synthetic\n"
-        "loop_\n"
-        "_atom_site.group_PDB\n"
-        "_atom_site.id\n"
-        "_atom_site.type_symbol\n"
-        "_atom_site.label_atom_id\n"
-        "_atom_site.label_alt_id\n"
-        "_atom_site.label_comp_id\n"
-        "_atom_site.label_asym_id\n"
-        "_atom_site.label_entity_id\n"
-        "_atom_site.label_seq_id\n"
-        "_atom_site.pdbx_PDB_ins_code\n"
-        "_atom_site.Cartn_x\n"
-        "_atom_site.Cartn_y\n"
-        "_atom_site.Cartn_z\n"
-        "_atom_site.occupancy\n"
-        "_atom_site.B_iso_or_equiv\n"
-        "_atom_site.auth_seq_id\n"
-        "_atom_site.auth_comp_id\n"
-        "_atom_site.auth_asym_id\n"
-        "_atom_site.auth_atom_id\n"
-        "_atom_site.pdbx_PDB_model_num\n"
-    )
-    rows = []
-    atom_id = 1
-    for chain_idx, name in enumerate(chain_names):
-        base_x = chain_idx * 100.0
-        label_asym = chr(ord("A") + chain_idx % 26)
-        for atom_name, dx, dy in [("N", 0.0, 0.0), ("CA", 1.5, 0.0), ("C", 2.0, 1.5), ("O", 1.3, 2.5)]:
-            rows.append(
-                f"ATOM {atom_id} {atom_name[0]} {atom_name} . GLY {label_asym} 1 1 ? "
-                f"{base_x + dx:.3f} {dy:.3f} 0.000 1.00 20.00 1 GLY {name} {atom_name} 1"
-            )
-            atom_id += 1
-    return header + "\n".join(rows) + "\n"
+from tests._structure_fixtures import synthetic_cif
 
 
 def test_scoring_input_accepts_mmcif_multichar_chain_ids():
     """Users can pass mmCIF chains with multi-character labels (e.g. 'Heavy')."""
-    cif = _synthetic_cif(["Heavy", "Light"])
+    cif = synthetic_cif(["Heavy", "Light"])
 
     inp = ScoringStructureInput(structure=cif, chain_ids=["Heavy"])
 
@@ -71,7 +47,7 @@ def test_helpers_round_trip_mmcif_chain_ids_without_mutating_input():
     the output, and nothing on the ScoringStructureInput or its Structure is mutated
     along the way.
     """
-    cif = _synthetic_cif(["Heavy", "Light"])
+    cif = synthetic_cif(["Heavy", "Light"])
     inp = ScoringStructureInput(structure=cif, chain_ids=["Heavy"])
 
     # ── Forward: prepare translates mmCIF labels → single-char PDB labels ──
@@ -116,7 +92,38 @@ def test_helpers_round_trip_mmcif_chain_ids_without_mutating_input():
 def test_scoring_input_rejects_too_many_chains():
     """Structures with more chains than PDB can represent are rejected up front."""
     chain_names = [f"chain{i}" for i in range(MAX_CHAINS_FOR_PDB + 1)]
-    cif = _synthetic_cif(chain_names)
+    cif = synthetic_cif(chain_names)
 
     with pytest.raises(ValueError, match=f"at most {MAX_CHAINS_FOR_PDB}"):
         ScoringStructureInput(structure=cif)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("input_cls", "config_cls", "runner"),
+    [
+        pytest.param(PyRosettaEnergyInput, PyRosettaEnergyConfig, run_pyrosetta_energy, id="energy"),
+        pytest.param(PyRosettaSAPInput, PyRosettaSAPConfig, run_pyrosetta_sap, id="sap"),
+        pytest.param(PyRosettaSASAInput, PyRosettaSASAConfig, run_pyrosetta_sasa, id="sasa"),
+    ],
+)
+def test_preprocess_preserves_multichar_chain_ids(input_cls, config_cls, runner):
+    """pre_relax_structures preprocess preserves multi-char chain IDs across all scoring tools.
+
+    Every scoring tool routes pre_relax_structures=True through the same shared
+    helpers (relax_inputs_via_pyrosetta + remap_per_residue_chain_ids), so this
+    parametrization covers all three tools in one definition. With
+    chain_ids=["Heavy"] selected from a ["Heavy", "Light"] CIF, the relaxed
+    Structure retains its original mmCIF labels and per-residue output reports
+    the user's label, not PyRosetta's single-char substitute.
+    """
+    cif = synthetic_cif(["Heavy", "Light"])
+    result = runner(
+        input_cls(inputs=[{"structure": cif, "chain_ids": ["Heavy"]}]),
+        config_cls(
+            pre_relax_structures=True,
+            relax_config=PyRosettaRelaxConfig(relax_cycles=1, seed=42),
+        ),
+    )
+    assert result.success, f"multichar+preprocess failed: {result.errors}"
+    assert all(r.chain_id == "Heavy" for r in result.results[0].per_residue)

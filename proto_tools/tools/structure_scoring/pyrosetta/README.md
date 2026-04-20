@@ -10,7 +10,7 @@
 
 ## Overview
 
-PyRosetta provides physics-based scoring of protein structures using the Rosetta molecular modeling suite. Three operations are available: Spatial Aggregation Propensity (SAP) scoring, Solvent Accessible Surface Area (SASA) computation, and full Rosetta energy scoring with optional FastRelax.
+PyRosetta provides physics-based scoring of protein structures using the Rosetta molecular modeling suite. Four operations are available: Spatial Aggregation Propensity (SAP) scoring, Solvent Accessible Surface Area (SASA) computation, Rosetta energy scoring, and standalone FastRelax that returns the relaxed structure. The three scoring tools all expose an opt-in `pre_relax_structures` preprocess that calls `pyrosetta-relax` before scoring.
 
 ## Background
 
@@ -27,6 +27,7 @@ PyRosetta provides physics-based scoring of protein structures using the Rosetta
 | `pyrosetta-sap` | PyRosetta SAP Score | Compute Spatial Aggregation Propensity scores |
 | `pyrosetta-sasa` | PyRosetta SASA | Compute Solvent Accessible Surface Area (total and per-residue) |
 | `pyrosetta-energy` | PyRosetta Energy Score | Compute Rosetta energy scores with optional FastRelax |
+| `pyrosetta-relax` | PyRosetta FastRelax | Run FastRelax and return the relaxed `Structure` plus its total score, for chaining into downstream filters or scorers |
 
 ## Execution Modes
 
@@ -42,7 +43,11 @@ All three tools share a single standalone micromamba environment with PyRosetta 
 
 **SASA (`pyrosetta-sasa`)**: Loads the structure into a Rosetta Pose, then runs `SasaCalc` with a configurable probe radius. Returns both the total SASA and a per-residue breakdown with chain, residue index, residue name, and SASA value.
 
-**Energy (`pyrosetta-energy`)**: Loads the structure, optionally applies FastRelax (constrained to starting coordinates by default), then scores with the specified score function (default `ref2015`). Returns the total energy, a breakdown by score term (fa_atr, fa_rep, fa_sol, etc.), and per-residue total energies.
+**Energy (`pyrosetta-energy`)**: Loads the structure and scores it with the specified score function (default `ref2015`). Returns the total energy, a breakdown by score term (fa_atr, fa_rep, fa_sol, etc.), and per-residue total energies. By default no FastRelax is applied — the input structure is scored as-given. To resolve steric clashes and strain in raw predicted structures, set `config.pre_relax_structures=True` (see Relax preprocess below).
+
+**Relax (`pyrosetta-relax`)**: Runs FastRelax and returns the relaxed coordinates as a `Structure` plus the total Rosetta energy. The returned `Structure` is a drop-in replacement for the input (chain labels and format preserved), so it composes cleanly into `pyrosetta-energy`, `pyrosetta-sap`, `pyrosetta-sasa`, or geometric `Structure` methods.
+
+**Relax preprocess (on energy/sap/sasa)**: All three scoring tools accept `pre_relax_structures: bool` and `relax_config: PyRosettaRelaxConfig` on their config. When `pre_relax_structures=True`, the framework's `Config.preprocess` hook dispatches `pyrosetta-relax` on every input structure first and substitutes the relaxed structures before scoring. This composes the same `pyrosetta-relax` tool as a preprocess step — there is exactly one FastRelax implementation in the codebase. For batch workloads, run inside a persistent `ToolInstance` so the relax + scoring dispatches share one PyRosetta init.
 
 ## Input Parameters
 
@@ -54,9 +59,16 @@ All three tools accept the same input structure:
 
 ## Configuration
 
+### Shared `pre_relax_structures` preprocess (energy/sap/sasa)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pre_relax_structures` | `bool` | `False` | If `True`, run `pyrosetta-relax` on each input structure before scoring. |
+| `relax_config` | `PyRosettaRelaxConfig` | `PyRosettaRelaxConfig()` (factory) | Settings used when `pre_relax_structures=True`. Shown in the UI only when the toggle is on (`depends_on={"pre_relax_structures": [True]}`). |
+
 ### `pyrosetta-sap`
 
-No additional configuration parameters. Uses `PyRosettaSAPConfig` with defaults only.
+No tool-specific configuration parameters beyond the shared relax preprocess above.
 
 ### `pyrosetta-sasa`
 
@@ -69,9 +81,14 @@ No additional configuration parameters. Uses `PyRosettaSAPConfig` with defaults 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
 | `scorefxn` | `str` | `"ref2015"` | -- | Rosetta score function name (e.g., `ref2015`, `beta_nov16`, `ref2015_cart`) |
-| `relax` | `bool` | `True` | -- | Run FastRelax before scoring to resolve clashes and strain |
-| `relax_cycles` | `int` | `5` | 1-15 | Number of FastRelax cycles (more = better convergence, slower) |
-| `constrain_to_start` | `bool` | `True` | -- | Constrain relaxation to starting coordinates to prevent large deviations |
+
+### `pyrosetta-relax`
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `scorefxn` | `str` | `"ref2015"` | -- | Rosetta score function name |
+| `relax_cycles` | `int` | `1` | 1-15 | Number of FastRelax repeats. Default `1` matches Germinal's `-relax:default_repeats 1` |
+| `constrain_to_start` | `bool` | `True` | -- | Add a coordinate-constraint term to the relax scorefxn so atoms stay near input positions |
 
 ## Output Specification
 
@@ -122,7 +139,6 @@ Each `EnergyResult` contains:
 | `total_energy` | `float` | Total Rosetta energy in REU |
 | `energy_terms` | `dict[str, float]` | Breakdown by score term (fa_atr, fa_rep, fa_sol, etc.) |
 | `per_residue` | `list[ResidueEnergy]` | Per-residue energy breakdown |
-| `relaxed` | `bool` | Whether FastRelax was applied before scoring |
 
 Each `ResidueEnergy` contains:
 
@@ -133,7 +149,28 @@ Each `ResidueEnergy` contains:
 | `residue_name` | `str` | Three-letter residue code |
 | `total_energy` | `float` | Total residue energy in REU |
 
-Export formats: `csv`, `json` (all three tools).
+### `pyrosetta-relax`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `results` | `list[PyRosettaRelaxMetrics]` | One per input structure |
+
+Each `PyRosettaRelaxMetrics` contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_score` | `float` | Total Rosetta energy of the relaxed pose, in REU |
+| `relaxed` | `bool` | Always `True` for outputs of this tool |
+| `relax` | `RelaxResult` | Relaxed structure and run metadata |
+
+Each `RelaxResult` contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `relaxed_structure` | `Structure` | Relaxed coordinates. Drop-in replacement for the input: chain labels match and the source format (PDB/CIF) is preserved. |
+| `relax_cycles` | `int` | Number of FastRelax repeats applied |
+
+Export formats: `csv`, `json` (energy/sap/sasa); the relax tool returns a Structure that the caller persists separately.
 
 ## Interpreting Results
 
@@ -151,7 +188,7 @@ Export formats: `csv`, `json` (all three tools).
 - Rosetta energies are in REU (not kcal/mol). More negative = more favorable.
 - Absolute energies are not meaningful across different proteins. Compare variants of the same protein.
 - Key energy terms: `fa_atr` (attractive van der Waals), `fa_rep` (repulsive van der Waals, penalizes clashes), `fa_sol` (solvation), `hbond_*` (hydrogen bonds).
-- High `fa_rep` values indicate steric clashes -- run with `relax=True` to resolve these before interpreting other terms.
+- High `fa_rep` values indicate steric clashes -- run with `pre_relax_structures=True` to resolve these before interpreting other terms.
 - Per-residue energies identify problematic positions (e.g., residues with high positive energy are under strain).
 - **Chain selection filters display, not computation.** When you set `chain_ids` on an energy input, `total_energy` and `energy_terms` are still computed on the full pose — the selection only filters which residues appear in `per_residue`. Each per-residue energy reflects that residue's contribution *in the context of the full complex* (including pair interactions with the un-selected chains), not the chain's energy in isolation. To score a chain as if it were isolated, extract it into its own Structure first and score it separately.
 
@@ -186,7 +223,7 @@ for r in result.results:
         print(f"  {res.chain_id}:{res.residue_name}{res.residue_index} = {res.sasa:.1f} A^2")
 ```
 
-**Energy scoring with FastRelax:**
+**Energy scoring (no relax — the default):**
 ```python
 from proto_tools.tools.structure_scoring.pyrosetta import (
     run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
@@ -194,26 +231,64 @@ from proto_tools.tools.structure_scoring.pyrosetta import (
 
 result = run_pyrosetta_energy(
     PyRosettaEnergyInput(inputs=["/path/to/protein.pdb"]),
-    PyRosettaEnergyConfig(scorefxn="ref2015", relax=True, relax_cycles=5),
+    PyRosettaEnergyConfig(scorefxn="ref2015"),
 )
 
 for r in result.results:
-    print(f"Total energy: {r.total_energy:.1f} REU (relaxed={r.relaxed})")
+    print(f"Total energy: {r.total_energy:.1f} REU")
     print(f"  fa_atr: {r.energy_terms.get('fa_atr', 0):.1f}")
     print(f"  fa_rep: {r.energy_terms.get('fa_rep', 0):.1f}")
     print(f"  fa_sol: {r.energy_terms.get('fa_sol', 0):.1f}")
 ```
 
+**Energy scoring with the `pre_relax_structures` preprocess:**
+```python
+from proto_tools.tools.structure_scoring.pyrosetta import (
+    run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
+    PyRosettaRelaxConfig,
+)
+
+# Set pre_relax_structures=True; the framework calls pyrosetta-relax
+# on each input before energy scoring (one PyRosetta init in persistent mode).
+result = run_pyrosetta_energy(
+    PyRosettaEnergyInput(inputs=["/path/to/raw_prediction.pdb"]),
+    PyRosettaEnergyConfig(
+        pre_relax_structures=True,
+        relax_config=PyRosettaRelaxConfig(relax_cycles=1),
+    ),
+)
+print(f"Energy on relaxed pose: {result.results[0].total_energy:.1f} REU")
+```
+
+**Explicit relax → chain into another scorer:**
+```python
+from proto_tools.tools.structure_scoring.pyrosetta import (
+    run_pyrosetta_relax, PyRosettaRelaxInput, PyRosettaRelaxConfig,
+    run_pyrosetta_energy, PyRosettaEnergyInput, PyRosettaEnergyConfig,
+)
+
+# 1. Relax the predicted structure once (e.g. cofold from Chai-1 or AF3).
+relax_out = run_pyrosetta_relax(
+    PyRosettaRelaxInput(inputs=["/path/to/cofold.pdb"]),
+    PyRosettaRelaxConfig(relax_cycles=1),    # Germinal default
+)
+relaxed = relax_out.results[0].relax.relaxed_structure
+
+# 2. Score the relaxed structure (default config = no further relax).
+score_out = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[relaxed]))
+print(f"Relaxed total energy: {score_out.results[0].total_energy:.1f} REU")
+```
+
 ## Best Practices & Gotchas
 
 - **`linux-aarch64` runs a stale 2023.11 build.** The `conda.rosettacommons.org/linux-aarch64` channel has not been updated since March 2023 — the newest available pyrosetta on aarch64 is `2023.11` (Python 3.10), while `linux-64`, `osx-arm64`, and `osx-x86_64` ship the current `2026.06` builds. Scoring functions, FastRelax, and SAP have evolved over the past ~3 years, so values computed on `linux-aarch64` may differ slightly from values computed on other platforms. The setup script prints a warning banner on aarch64; reproduce final/published numbers on x86_64 or macOS.
-- **Always relax before energy scoring.** Raw PDB structures (from X-ray or prediction) typically have steric clashes that produce extremely high `fa_rep` values. The default `relax=True` resolves this. Only set `relax=False` if you have already relaxed the structure.
-- **PyRosetta initialization overhead.** The first call in a session takes a few seconds to initialize PyRosetta. Use `ToolInstance.persist()` for batch workloads to amortize this cost.
+- **Relax before energy scoring on raw predictions.** Raw PDB structures from X-ray or structure prediction typically have steric clashes that produce extremely high `fa_rep` values. Set `pre_relax_structures=True` (or call `pyrosetta-relax` first) when scoring such inputs. The default is `pre_relax_structures=False` so that callers passing already-relaxed structures don't double-relax silently.
+- **PyRosetta initialization overhead.** The first call in a session takes a few seconds to initialize PyRosetta. Use `ToolInstance.persist()` for batch workloads to amortize this cost — especially important when `pre_relax_structures=True`, since each scored structure triggers two dispatches (relax + score) that both hit the same persistent worker.
 - **Chain labels round-trip through the original format.** PDB stores chain IDs as a single character, while mmCIF permits arbitrary-length labels (e.g. `"Heavy"`, `"Light"`, or PDB bundle names like `"AA"`). You can pass either format directly, reference chains by their native labels in `chain_ids`, and read the same labels back in `per_residue[i].chain_id`. The tool internally shortens multi-character chain IDs to fit PDB format when dispatching to PyRosetta and restores the originals in the output, so the conversion is invisible. Structures with more than 62 unique chain labels cannot be represented in PDB and are rejected up front with a clear error.
 - **SAP is size-dependent.** Larger proteins naturally have higher SAP scores. Compare SAP across variants of the same protein, not across proteins of different sizes.
 - **Energy comparisons require the same score function.** Never compare REU values computed with different `scorefxn` settings (e.g., `ref2015` vs. `beta_nov16`).
-- **Relax cycles trade off accuracy vs. speed.** The default 5 cycles is a good balance. Increase to 10-15 for publication-quality results. Reduce to 1-2 for rapid screening.
-- **Constrain to start coordinates.** The default `constrain_to_start=True` prevents FastRelax from drastically altering the structure. Disable only if you want unconstrained relaxation (e.g., to find the nearest energy minimum).
+- **Relax cycles trade off accuracy vs. speed.** The `pyrosetta-relax` default is 1 cycle (matches Germinal). Increase via `PyRosettaRelaxConfig(relax_cycles=N)` to 5–15 for higher-quality convergence at the cost of runtime.
+- **Constrain to start coordinates.** The `PyRosettaRelaxConfig.constrain_to_start=True` default prevents FastRelax from drastically altering the structure. Disable only if you want unconstrained relaxation (e.g., to find the nearest energy minimum).
 - **Coordinates are 1-indexed.** Per-residue output uses 1-indexed residue positions consistent with PDB numbering.
 
 ## References

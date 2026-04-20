@@ -319,13 +319,14 @@ class PyRosettaScorer:
         self,
         pdb_contents: list[str],
         scorefxn_name: str = "ref2015",
-        relax: bool = True,
-        relax_cycles: int = 5,
-        constrain_to_start: bool = True,
         chain_ids_list: list[list[str] | None] | None = None,
-        seed: int | None = None,
     ) -> dict[str, Any]:
         """Compute energy scores for a list of PDB content strings.
+
+        Energy scoring is deterministic. No FastRelax happens here. To score a
+        relaxed pose, either run ``pyrosetta-relax`` explicitly first, or enable
+        the optional ``pre_relax_structures`` preprocessing step (which runs
+        ``pyrosetta-relax`` on each input before scoring).
 
         Chain selection (``chain_ids_list``) filters which residues appear in the
         per-residue breakdown, but does not change how energies are computed.
@@ -340,11 +341,7 @@ class PyRosettaScorer:
         Args:
             pdb_contents (list[str]): PDB format content strings.
             scorefxn_name (str): Rosetta score function name.
-            relax (bool): Whether to run FastRelax before scoring.
-            relax_cycles (int): Number of FastRelax cycles.
-            constrain_to_start (bool): Constrain relaxation to starting coords.
             chain_ids_list (list[list[str] | None] | None): Per-structure chain IDs.
-            seed (int | None): Random seed for FastRelax reproducibility.
 
         Returns:
             dict: {"results": [{"total_energy": float, "energy_terms": {...}, ...}, ...]}
@@ -354,10 +351,6 @@ class PyRosettaScorer:
         from pyrosetta.rosetta.core.scoring.methods import (
             EnergyMethodOptions,
         )
-
-        # Seed PyRosetta's internal C++ RNG for reproducible FastRelax.
-        if seed is not None:
-            pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
         sfxn = pyrosetta.create_score_function(scorefxn_name)
 
@@ -372,18 +365,6 @@ class PyRosettaScorer:
             pose = self._pdb_content_to_pose(pdb_content)
             dropped_residues = self._find_dropped_residues(pose)
             chain_ids = chain_ids_list[i] if chain_ids_list else None
-
-            if relax:
-                from pyrosetta.rosetta.core.scoring import ScoreType
-                from pyrosetta.rosetta.protocols.relax import FastRelax
-
-                relax_sfxn = sfxn.clone()
-                if constrain_to_start:
-                    relax_sfxn.set_weight(ScoreType.coordinate_constraint, 1.0)
-
-                fast_relax = FastRelax(relax_sfxn, relax_cycles)
-                fast_relax.constrain_relax_to_start_coords(constrain_to_start)
-                fast_relax.apply(pose)
 
             # Full-structure energy (physics requires all residues)
             total_energy = float(sfxn(pose))
@@ -416,11 +397,85 @@ class PyRosettaScorer:
                     "total_energy": total_energy,
                     "energy_terms": energy_terms,
                     "per_residue": per_residue,
-                    "relaxed": relax,
                     "dropped_residues": dropped_residues,
                 }
             )
 
+        return {"results": results}
+
+    def compute_relax(
+        self,
+        pdb_contents: list[str],
+        scorefxn_name: str = "ref2015",
+        relax_cycles: int = 1,
+        constrain_to_start: bool = True,
+        seed: int | None = None,
+    ) -> dict[str, Any]:
+        """Run FastRelax on each input pose and return the relaxed PDB + total score.
+
+        Args:
+            pdb_contents (list[str]): PDB-format content strings.
+            scorefxn_name (str): Rosetta score function name.
+            relax_cycles (int): Number of FastRelax repeats.
+            constrain_to_start (bool): If True, add a coordinate-constraint
+                term to the relax score function and call
+                ``constrain_relax_to_start_coords(True)`` on the FastRelax
+                mover so atoms stay near their input positions.
+            seed (int | None): Seed for PyRosetta's C++ RNG, applied via
+                ``rg().set_seed(seed)`` before FastRelax runs. When ``None``,
+                the RNG is not reseeded; because PyRosetta's RNG is
+                process-global state, output becomes dependent on prior
+                calls within the same persistent worker.
+
+        Returns:
+            dict: ``{"results": [{"relaxed_pdb": str, "total_score": float,
+                "relax_cycles": int, "dropped_residues": [...]}]}`` — one entry
+                per input, in input order.
+        """
+        self._ensure_init()
+        import os
+        import tempfile
+
+        import pyrosetta
+        from pyrosetta.rosetta.core.scoring import ScoreType
+        from pyrosetta.rosetta.protocols.relax import FastRelax
+
+        if seed is not None:
+            pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
+
+        sfxn = pyrosetta.create_score_function(scorefxn_name)
+        relax_sfxn = sfxn.clone()
+        if constrain_to_start:
+            relax_sfxn.set_weight(ScoreType.coordinate_constraint, 1.0)
+
+        results = []
+        for pdb_content in pdb_contents:
+            pose = self._pdb_content_to_pose(pdb_content)
+            dropped_residues = self._find_dropped_residues(pose)
+
+            fast_relax = FastRelax(relax_sfxn, relax_cycles)
+            fast_relax.constrain_relax_to_start_coords(constrain_to_start)
+            fast_relax.apply(pose)
+
+            # PyRosetta's dump_pdb is file-based; round-trip through tempfile
+            # so we can return the relaxed coordinates as a string.
+            with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
+                tmp_path = tmp.name
+            try:
+                pose.dump_pdb(tmp_path)
+                with open(tmp_path) as f:
+                    relaxed_pdb = f.read()
+            finally:
+                os.unlink(tmp_path)
+
+            results.append(
+                {
+                    "relaxed_pdb": relaxed_pdb,
+                    "total_score": float(sfxn(pose)),
+                    "relax_cycles": relax_cycles,
+                    "dropped_residues": dropped_residues,
+                }
+            )
         return {"results": results}
 
 
@@ -434,7 +489,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution.
 
     Args:
-        input_dict (dict): Input with "operation" key routing to sap/sasa/energy.
+        input_dict (dict): Input with "operation" key routing to sap/sasa/energy/relax.
 
     Returns:
         dict: Operation-specific results.
@@ -462,10 +517,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _scorer.compute_energy(
             pdb_contents,
             scorefxn_name=input_dict["scorefxn"],
-            relax=input_dict["relax"],
+            chain_ids_list=chain_ids_list,
+        )
+    if operation == "relax":
+        return _scorer.compute_relax(
+            pdb_contents,
+            scorefxn_name=input_dict["scorefxn"],
             relax_cycles=input_dict["relax_cycles"],
             constrain_to_start=input_dict["constrain_to_start"],
-            chain_ids_list=chain_ids_list,
             seed=input_dict["seed"],
         )
     raise ValueError(f"Unknown operation: {operation}")

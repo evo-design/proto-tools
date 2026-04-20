@@ -8,6 +8,14 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
     ResidueEnergy,
     run_pyrosetta_energy,
 )
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
+    PyRosettaRelaxConfig,
+    PyRosettaRelaxInput,
+    PyRosettaRelaxMetrics,
+    PyRosettaRelaxOutput,
+    RelaxResult,
+    run_pyrosetta_relax,
+)
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sap import (
     PyRosettaSAPConfig,
     PyRosettaSAPInput,
@@ -34,6 +42,13 @@ __all__ = [
     "PyRosettaEnergyOutput",
     "ResidueEnergy",
     "run_pyrosetta_energy",
+    # Relax
+    "PyRosettaRelaxConfig",
+    "PyRosettaRelaxInput",
+    "PyRosettaRelaxMetrics",
+    "PyRosettaRelaxOutput",
+    "RelaxResult",
+    "run_pyrosetta_relax",
     # SAP
     "PyRosettaSAPConfig",
     "PyRosettaSAPInput",

@@ -16,6 +16,7 @@ from IPython.display import HTML, display
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from proto_tools.entities.structures.utils import (
+    _serialize_gemmi,
     convert_cif_str_to_pdb_str,
     convert_pdb_str_to_cif_str,
     detect_structure_format,
@@ -370,12 +371,64 @@ class Structure(BaseModel):
             for i in range(len(model) - 1, -1, -1):
                 if model[i].name != chain_id:
                     del model[i]
-        if self.structure_format == "cif":
-            serialized = struct.make_mmcif_document().as_string()
-            new_format: Literal["pdb", "cif"] = "cif"
-        else:
-            serialized = struct.make_pdb_string()
-            new_format = "pdb"
+        new_format: Literal["pdb", "cif"] = self.structure_format or "pdb"
+        serialized = _serialize_gemmi(struct, new_format, source_format=new_format)
+        return Structure(
+            structure=serialized,
+            structure_format=new_format,
+            b_factor_type=self.b_factor_type,
+            source=self.source,
+            metrics=self.metrics.model_copy(deep=True),
+        )
+
+    def with_renamed_chains(self, mapping: dict[str, str]) -> Structure:
+        """Return a new Structure with chain IDs renamed via the given mapping.
+
+        Output preserves the source format (PDB stays PDB, CIF stays CIF).
+        Chain IDs not in the mapping pass through unchanged. Mirrors
+        :meth:`select_chain` — preserves ``b_factor_type``, ``source``, and a
+        deep copy of ``metrics``.
+
+        Args:
+            mapping (dict[str, str]): Old chain ID → new chain ID. Identity
+                and unmatched entries are no-ops.
+
+        Returns:
+            Structure: New Structure with renamed chains, in the same format as
+                ``self``. Returns ``self`` unchanged when the mapping is empty
+                or fully identity.
+
+        Raises:
+            ValueError: On duplicate target chain IDs, or on a multi-character
+                target on a PDB Structure (PDB col 22 is single-char only —
+                convert via ``Structure(structure=self.structure_cif,
+                structure_format="cif")`` first).
+        """
+        if not mapping or all(old == new for old, new in mapping.items()):
+            return self
+
+        struct = self.gemmi_struct.clone()
+        new_names_seen: set[str] = set()
+        for model in struct:
+            for chain in model:
+                new_name = mapping.get(chain.name, chain.name)
+                if new_name in new_names_seen:
+                    raise ValueError(f"Renaming would produce duplicate chain ID {new_name!r}")
+                new_names_seen.add(new_name)
+                chain.name = new_name
+
+        if self.structure_format == "pdb":
+            multi_char = sorted(name for name in new_names_seen if len(name) > 1)
+            if multi_char:
+                raise ValueError(
+                    f"Cannot rename to multi-character chain ID(s) {multi_char} on a PDB-format "
+                    "Structure (PDB column 22 is single-character only). Convert to CIF first via "
+                    "Structure(structure=self.structure_cif, structure_format='cif'), then rename."
+                )
+
+        new_format: Literal["pdb", "cif"] = self.structure_format or "pdb"
+        serialized = _serialize_gemmi(struct, new_format, source_format=new_format)
+
         return Structure(
             structure=serialized,
             structure_format=new_format,
@@ -393,22 +446,38 @@ class Structure(BaseModel):
         common source trivially do, as do chains predicted jointly by the same model.
         Uses model 0 from each input; additional models are ignored.
 
+        **Format-preserving:** the output format follows the inputs. All-PDB inputs
+        produce a PDB output; all-CIF inputs produce a CIF output (which can hold
+        multi-character chain IDs). Mixed-format inputs raise — the caller should
+        coerce explicitly via ``Structure(structure=s.structure_cif,
+        structure_format="cif")`` (or its PDB analog) to opt into the format change.
+
         Args:
             structures (list[Structure]): Non-empty list to merge, in order.
 
         Returns:
-            Structure: New Structure with all chains combined. ``b_factor_type`` is
-                inherited from the first input; ``source`` and ``metrics`` are not
-                carried over (merging them ambiguously would hide provenance).
+            Structure: New Structure with all chains combined, in the same format
+                as the inputs. ``b_factor_type`` is inherited from the first input;
+                ``source`` and ``metrics`` are not carried over (merging them
+                ambiguously would hide provenance).
 
         Raises:
             ValueError: If ``structures`` is empty, ``b_factor_type`` differs across
-                inputs, any chain ID appears in more than one input, or any chain
-                ID is multi-character (the merged output is PDB, which can't represent
-                multi-char chain IDs safely).
+                inputs, ``structure_format`` is mixed (some PDB, some CIF), any
+                chain ID appears in more than one input, or any chain ID is
+                multi-character when the output format is PDB (PDB column 22 is
+                single-character only — convert inputs to CIF first to allow it).
         """
         if not structures:
             raise ValueError("concat requires at least one Structure")
+        formats = {s.structure_format for s in structures if s.structure_format is not None}
+        if len(formats) > 1:
+            raise ValueError(
+                f"concat requires all inputs to share structure_format; got {sorted(formats)}. "
+                "Coerce explicitly via Structure(structure=s.structure_cif, structure_format='cif') "
+                "(or .structure_pdb / 'pdb') first."
+            )
+        target_format: Literal["pdb", "cif"] = next(iter(formats), "pdb")
         b_factor_type = structures[0].b_factor_type
         merged = gemmi.Structure()
         merged.add_model(gemmi.Model(1))
@@ -419,8 +488,12 @@ class Structure(BaseModel):
             if len(struct.gemmi_struct) == 0:
                 continue
             for chain in struct.gemmi_struct[0]:
-                if len(chain.name) != 1:
-                    raise ValueError(f"Chain {chain.name!r} must be a single character.")
+                if target_format == "pdb" and len(chain.name) != 1:
+                    raise ValueError(
+                        f"Chain {chain.name!r} must be a single character when concat output is PDB. "
+                        "Convert inputs to CIF (Structure(structure=s.structure_cif, structure_format='cif')) "
+                        "to allow multi-char chain IDs."
+                    )
                 if chain.name in seen:
                     raise ValueError(f"Duplicate chain ID {chain.name!r} across concat inputs")
                 seen.add(chain.name)
@@ -428,9 +501,11 @@ class Structure(BaseModel):
                 for residue in chain:
                     new_chain.add_residue(residue)
                 merged[0].add_chain(new_chain)
+        # source_format == target_format (mixed-format raised above); re-emission
+        # never warns — caller already chose the format by passing matching inputs.
         return cls(
-            structure=merged.make_pdb_string(),
-            structure_format="pdb",
+            structure=_serialize_gemmi(merged, target_format, source_format=target_format),
+            structure_format=target_format,
             b_factor_type=b_factor_type,
         )
 
@@ -495,7 +570,16 @@ class Structure(BaseModel):
             after = [chain.name for model in gemmi_struct for chain in model]
             chain_id_map = dict(zip(before, after, strict=True))
 
-            return gemmi_struct.make_pdb_string(), chain_id_map
+            # Chain shortening is intentional and silent (callers consume the
+            # map). Other lossy aspects of CIF→PDB (long atom names, atom-count
+            # caps, NCS metadata) still warn via _serialize_gemmi.
+            pdb_content = _serialize_gemmi(
+                gemmi_struct,
+                "pdb",
+                source_format="cif",
+                cif_content_for_warnings=self.structure,
+            )
+            return pdb_content, chain_id_map
         except Exception as e:
             raise ValueError(f"Failed to convert CIF to PDB with chain mapping: {e}") from e
 

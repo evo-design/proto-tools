@@ -6,6 +6,7 @@ Utility functions for working with protein structures.
 import warnings
 from io import StringIO
 from pathlib import Path
+from typing import Literal
 
 import gemmi
 import numpy as np
@@ -255,6 +256,41 @@ def get_backbone_atoms(atoms: AtomArray) -> AtomArray:
 # ===============================
 
 
+def _serialize_gemmi(
+    struct: gemmi.Structure,
+    target_format: Literal["pdb", "cif"],
+    *,
+    source_format: Literal["pdb", "cif"] | None = None,
+    cif_content_for_warnings: str | None = None,
+) -> str:
+    """Single emission path for ``gemmi.Structure → str``.
+
+    This function is the standardized conversion point from ``gemmi.Structure``
+    to content-string for structure objects; all serializers and re-emitters
+    route through here. CIF→PDB conversions defer to
+    :func:`_warn_cif_to_pdb_lossy` for warning behavior.
+
+    Args:
+        struct (gemmi.Structure): The (possibly mutated) gemmi.Structure to emit.
+        target_format (Literal["pdb", "cif"]): Output format.
+        source_format (Literal["pdb", "cif"] | None): Original format. ``"cif"``
+            with ``target_format="pdb"`` triggers the lossy-warning scan. Pass
+            ``None`` when there's no meaningful single source (e.g. ``concat``
+            building a struct from scratch).
+        cif_content_for_warnings (str | None): Raw CIF text scanned for CIF-only
+            metadata markers (NCS operators, etc.). When ``None``, only
+            structure-level warnings fire (long names, atom counts).
+
+    Returns:
+        str: Serialized structure content in the requested format.
+    """
+    if target_format == "cif":
+        return struct.make_mmcif_document().as_string()
+    if source_format == "cif":
+        _warn_cif_to_pdb_lossy(struct, cif_content_for_warnings or "")
+    return struct.make_pdb_string()
+
+
 def convert_pdb_str_to_cif_str(pdb_content: str) -> str:
     """Converts a structure from PDB format to mmCIF format using gemmi.
 
@@ -269,8 +305,7 @@ def convert_pdb_str_to_cif_str(pdb_content: str) -> str:
 
     try:
         structure = gemmi.read_pdb_string(pdb_content)
-        doc = structure.make_mmcif_document()
-        return doc.as_string()
+        return _serialize_gemmi(structure, "cif", source_format="pdb")
     except Exception as e:
         raise ValueError(f"Failed to convert PDB to CIF: {e}") from e
 
@@ -280,8 +315,15 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
 
     PDB has fixed-width fields and hard size caps that modern mmCIF files routinely
     exceed. When conversion would silently truncate, remap, or drop information, the
-    caller should know. We scan the parsed structure for the concrete truncation cases
-    and the raw CIF string for extension categories that have no PDB equivalent.
+    caller should know. Warns on:
+
+    * chain IDs longer than ``_PDB_MAX_CHAIN_ID_LEN`` (1 character)
+    * atom names longer than ``_PDB_MAX_ATOM_NAME_LEN`` (4 characters)
+    * residue names longer than ``_PDB_MAX_RESIDUE_NAME_LEN`` (3 characters)
+    * total atom count exceeding ``_PDB_MAX_ATOMS`` (99,999)
+    * per-chain residue count exceeding ``_PDB_MAX_RESIDUES_PER_CHAIN`` (9,999)
+    * CIF-only metadata categories (``_CIF_ONLY_METADATA_MARKERS``, e.g. NCS
+      operators) present in the source CIF text
 
     Args:
         structure (gemmi.Structure): Parsed structure used to scan for per-atom,
@@ -316,41 +358,41 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
             f"CIF→PDB conversion: {len(long_chain_ids)} chain ID(s) exceed PDB's "
             f"{_PDB_MAX_CHAIN_ID_LEN}-character limit and will be truncated or remapped "
             f"(e.g., {sorted(long_chain_ids)[:3]}).",
-            stacklevel=3,
+            stacklevel=4,
         )
     if long_atom_names:
         warnings.warn(
             f"CIF→PDB conversion: {len(long_atom_names)} atom name(s) exceed PDB's "
             f"{_PDB_MAX_ATOM_NAME_LEN}-character field width and may be mangled "
             f"(e.g., {sorted(long_atom_names)[:3]}).",
-            stacklevel=3,
+            stacklevel=4,
         )
     if total_atoms > _PDB_MAX_ATOMS:
         warnings.warn(
             f"CIF→PDB conversion: structure has {total_atoms} atoms, exceeding PDB's "
             f"{_PDB_MAX_ATOMS}-atom cap. Atoms beyond the cap will be dropped.",
-            stacklevel=3,
+            stacklevel=4,
         )
     if chains_over_residue_cap:
         warnings.warn(
             f"CIF→PDB conversion: {len(chains_over_residue_cap)} chain(s) exceed PDB's "
             f"{_PDB_MAX_RESIDUES_PER_CHAIN}-residue-per-chain cap and will be truncated "
             f"(chains: {sorted(chains_over_residue_cap)[:3]}).",
-            stacklevel=3,
+            stacklevel=4,
         )
     if long_residue_names:
         warnings.warn(
             f"CIF→PDB conversion: {len(long_residue_names)} residue name(s) exceed PDB's "
             f"{_PDB_MAX_RESIDUE_NAME_LEN}-character limit and will be truncated "
             f"(e.g., {sorted(long_residue_names)[:3]}).",
-            stacklevel=3,
+            stacklevel=4,
         )
     if any(marker in cif_content for marker in _CIF_ONLY_METADATA_MARKERS):
         warnings.warn(
             "CIF→PDB conversion: source CIF contains extension metadata (assemblies, "
             "NCS operations, or rich entity info) that PDB format cannot represent; "
             "this metadata will be lost.",
-            stacklevel=3,
+            stacklevel=4,
         )
 
 
@@ -390,10 +432,12 @@ def convert_cif_str_to_pdb_str(cif_content: str) -> str:
         if structure is None:
             raise ValueError("No valid structure found in CIF content")
 
-        _warn_cif_to_pdb_lossy(structure, cif_content)
-
-        # Convert to PDB string using gemmi's make_pdb_string
-        return structure.make_pdb_string()
+        return _serialize_gemmi(
+            structure,
+            "pdb",
+            source_format="cif",
+            cif_content_for_warnings=cif_content,
+        )
 
     except Exception as e:
         raise ValueError(f"Failed to convert CIF to PDB: {e}") from e

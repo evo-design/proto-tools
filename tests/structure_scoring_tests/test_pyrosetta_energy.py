@@ -36,15 +36,9 @@ def test_energy_input_rejects_invalid_chain():
 
 @pytest.mark.integration
 def test_run_pyrosetta_energy_on_pdb():
-    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
-        PyRosettaEnergyConfig,
-    )
-
+    """Default path: no relax preprocess; score the input structure as-given."""
     structure = Structure(structure=TEST_PDB)
-    result = run_pyrosetta_energy(
-        PyRosettaEnergyInput(inputs=[structure]),
-        PyRosettaEnergyConfig(relax_cycles=1),
-    )
+    result = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[structure]))
     assert_metrics_in_spec(result)
 
     assert result.success
@@ -52,8 +46,9 @@ def test_run_pyrosetta_energy_on_pdb():
     assert len(result.results) == 1
 
     energy = result.results[0]
-    assert energy.relaxed is True
-    assert -2000 <= energy.total_energy <= 0, f"Total energy {energy.total_energy} outside expected range"
+    # Raw (un-relaxed) AF3 prediction may have steric clashes inflating fa_rep,
+    # so the total range is wider than for a relaxed pose.
+    assert isinstance(energy.total_energy, float)
 
     assert isinstance(energy.energy_terms, dict)
     assert len(energy.energy_terms) > 5
@@ -66,7 +61,6 @@ def test_run_pyrosetta_energy_on_pdb():
     residue = energy.per_residue[0]
     assert isinstance(residue, ResidueEnergy)
     assert residue.residue_index >= 1
-    assert -50 <= residue.total_energy <= 50, f"Residue energy {residue.total_energy} outside expected range"
 
 
 @pytest.mark.integration
@@ -76,7 +70,7 @@ def test_run_pyrosetta_energy_chain_selection_filters_residues():
         PyRosettaEnergyConfig,
     )
 
-    no_relax = PyRosettaEnergyConfig(relax=False)
+    no_relax = PyRosettaEnergyConfig()
     whole = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[TEST_CIF_MULTICHAIN]), no_relax)
     chain_a = run_pyrosetta_energy(
         PyRosettaEnergyInput(inputs=[{"structure": TEST_CIF_MULTICHAIN, "chain_ids": ["A"]}]),
@@ -92,3 +86,35 @@ def test_run_pyrosetta_energy_chain_selection_filters_residues():
         "Chain A should have fewer residues than whole complex"
     )
     assert all(r.chain_id == "A" for r in chain_a_res.per_residue), "All residues should be from chain A"
+
+
+@pytest.mark.integration
+def test_run_pyrosetta_energy_with_pre_relax_preprocess():
+    """Setting pre_relax_structures=True should run pyrosetta-relax before scoring.
+
+    The relaxed pose's total energy should differ meaningfully from the raw
+    (un-relaxed) pose, since FastRelax resolves steric clashes that inflate fa_rep.
+    """
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+        PyRosettaEnergyConfig,
+    )
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
+        PyRosettaRelaxConfig,
+    )
+
+    structure = Structure(structure=TEST_PDB)
+
+    raw = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[structure]))
+    relaxed = run_pyrosetta_energy(
+        PyRosettaEnergyInput(inputs=[structure]),
+        PyRosettaEnergyConfig(
+            pre_relax_structures=True,
+            relax_config=PyRosettaRelaxConfig(relax_cycles=1, seed=42),
+        ),
+    )
+
+    assert raw.success and relaxed.success
+    # Relax should drop the energy meaningfully (>1 REU) by resolving clashes.
+    assert relaxed.results[0].total_energy < raw.results[0].total_energy - 1.0, (
+        f"Relaxed energy {relaxed.results[0].total_energy} should be lower than raw {raw.results[0].total_energy}"
+    )

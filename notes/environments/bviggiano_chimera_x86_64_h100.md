@@ -17,8 +17,8 @@
 
 ## Git
 
-- **Commit**: `f0400bd97cbe`
-- **Branch**: `feat/shared-envs-and-esmc`
+- **Commit**: `9050d858c86b`
+- **Branch**: `feat/pyrosetta-relax`
 - **Dirty**: Yes
 
 ## Environment Variables
@@ -91,16 +91,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/....
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.cursor-server/cli/ser...
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
@@ -114,7 +114,7 @@ TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
@@ -229,7 +229,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `pyrosetta-energy` | no | ✅ | 69.0s | `f0400bd` ✱ | ✅ Pass |
+| `pyrosetta-energy` | no | ✅ | 94.1s | `9050d85` ✱ | ✅ Pass |
 | `structure-metrics` | no | ✅ | 16.5s | `f0400bd` ✱ | ✅ Pass |
 
 ### Testing (3/3)
@@ -258,7 +258,7 @@ E    +  where False = AlphaFold2BinderOutput(tool_id, execution_time, timestamp,
 ```
 
 ---
-*Generated at 2026-04-19 14:47:06 by `pytest --env-report`*
+*Generated at 2026-04-19 18:42:44 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -683,12 +683,12 @@ E    +  where False = AlphaFold2BinderOutput(tool_id, execution_time, timestamp,
     "category": "structure_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[pyrosetta-energy]",
     "status": "passed",
-    "duration_seconds": 68.99,
+    "duration_seconds": 94.06,
     "uses_gpu": false,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyrosetta_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "f0400bd97cbe",
+    "git_commit": "9050d858c86b",
     "git_dirty": true
   },
   {

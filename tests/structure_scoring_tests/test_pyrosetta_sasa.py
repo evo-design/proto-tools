@@ -70,3 +70,35 @@ def test_run_pyrosetta_sasa_chain_selection_filters_residues():
     )
     assert all(r.chain_id == "A" for r in chain_a_res.per_residue), "All residues should be from chain A"
     assert chain_a_res.total_sasa < whole_res.total_sasa, "Chain A SASA should be less than whole complex SASA"
+
+
+@pytest.mark.integration
+def test_sasa_with_pre_relax_preprocess():
+    """Setting pre_relax_structures=True should run pyrosetta-relax before SASA computation."""
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
+        PyRosettaRelaxConfig,
+    )
+    from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sasa import (
+        PyRosettaSASAConfig,
+    )
+
+    structure = Structure(structure=TEST_PDB)
+
+    raw = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[structure]))
+    relaxed = run_pyrosetta_sasa(
+        PyRosettaSASAInput(inputs=[structure]),
+        PyRosettaSASAConfig(
+            pre_relax_structures=True,
+            relax_config=PyRosettaRelaxConfig(relax_cycles=1, seed=42),
+        ),
+    )
+
+    assert raw.success and relaxed.success
+    # SASA depends on sidechain positions; relax should perturb the total enough
+    # to be detectable but stay within ~5% of the raw value.
+    raw_sasa = raw.results[0].total_sasa
+    relaxed_sasa = relaxed.results[0].total_sasa
+    assert raw_sasa != relaxed_sasa, "Relax should change SASA"
+    assert abs(relaxed_sasa - raw_sasa) / raw_sasa < 0.05, (
+        f"Relaxed SASA {relaxed_sasa} differs by >5% from raw {raw_sasa}"
+    )

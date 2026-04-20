@@ -1,4 +1,6 @@
-"""PyRosetta energy scoring tool with optional FastRelax."""
+"""PyRosetta energy scoring tool, with opt-in FastRelax preprocess."""
+
+from __future__ import annotations
 
 import logging
 from pathlib import Path
@@ -7,9 +9,11 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
     ScoringStructureInput,
     prepare_pdb_and_chain_maps,
+    relax_inputs_via_pyrosetta,
     remap_per_residue_chain_ids,
     warn_about_dropped_residues,
 )
@@ -66,7 +70,6 @@ class PyRosettaEnergyMetrics(Metrics):
     Metrics documented in ``metric_spec``:
         total_energy (float): Total Rosetta energy in REU (Rosetta Energy Units).
             Always the whole-pose total, independent of chain selection.
-        relaxed (bool): Whether FastRelax was applied before scoring.
 
     Attributes:
         energy_terms (dict[str, float]): Breakdown by score term (fa_atr, fa_rep, etc.).
@@ -85,12 +88,6 @@ class PyRosettaEnergyMetrics(Metrics):
             "min": None,
             "max": None,
             "unit": "REU",
-        },
-        "relaxed": {
-            "availability": "always",
-            "type": "bool",
-            "min": None,
-            "max": None,
         },
     }
     primary_metric: str | None = "total_energy"
@@ -127,14 +124,16 @@ class PyRosettaEnergyConfig(BaseConfig):
     """Configuration for PyRosetta energy scoring.
 
     Attributes:
-        scorefxn (str): Rosetta score function name. 'ref2015' is the current
+        scorefxn (str): Rosetta score function name. ``ref2015`` is the current
             community standard.
-        relax (bool): Whether to run FastRelax before scoring. Recommended for
-            raw PDB structures to resolve clashes and strain.
-        relax_cycles (int): Number of FastRelax cycles. More cycles improve
-            convergence but increase runtime.
-        constrain_to_start (bool): Whether to constrain relaxation to starting
-            coordinates. Prevents large structural deviations.
+        pre_relax_structures (bool): If ``True``, run ``pyrosetta-relax`` on
+            each input structure before scoring (the actual settings come from
+            :attr:`relax_config`). Default ``False`` — energy is reported on
+            the input structure as-given. Set to ``True`` for raw predicted
+            structures with steric clashes that would otherwise inflate
+            ``fa_rep``.
+        relax_config (PyRosettaRelaxConfig): Settings used when
+            ``pre_relax_structures=True``. Ignored otherwise.
     """
 
     scorefxn: str = ConfigField(
@@ -143,25 +142,23 @@ class PyRosettaEnergyConfig(BaseConfig):
         description="Rosetta score function name",
         examples=["ref2015", "beta_nov16", "ref2015_cart"],
     )
-    relax: bool = ConfigField(
-        title="Relax Before Scoring",
-        default=True,
-        description="Run FastRelax before scoring to resolve clashes",
+    pre_relax_structures: bool = ConfigField(
+        title="Pre-relax Structures",
+        default=False,
+        description="If True, run pyrosetta-relax on each input structure before scoring.",
     )
-    relax_cycles: int = ConfigField(
-        title="Relax Cycles",
-        default=5,
-        ge=1,
-        le=15,
-        description="Number of FastRelax repeats (more = better convergence, slower)",
-        advanced=True,
+    relax_config: PyRosettaRelaxConfig = ConfigField(
+        default_factory=PyRosettaRelaxConfig,
+        title="Relax Config",
+        description="Settings used when pre_relax_structures=True. Ignored otherwise.",
+        depends_on={"pre_relax_structures": [True]},
     )
-    constrain_to_start: bool = ConfigField(
-        title="Constrain to Start",
-        default=True,
-        description="Constrain relaxation to starting coordinates",
-        advanced=True,
-    )
+
+    def preprocess(self, inputs: PyRosettaEnergyInput) -> PyRosettaEnergyInput:  # type: ignore[override]
+        """Apply optional FastRelax preprocess to input structures."""
+        if not self.pre_relax_structures:
+            return inputs
+        return inputs.model_copy(update={"inputs": relax_inputs_via_pyrosetta(inputs.inputs, self.relax_config)})
 
 
 class PyRosettaEnergyOutput(BaseToolOutput):
@@ -197,7 +194,6 @@ class PyRosettaEnergyOutput(BaseToolOutput):
             {
                 "structure_index": i,
                 "total_energy": result["total_energy"],
-                "relaxed": result["relaxed"],
                 "chain_id": res.chain_id,
                 "residue_index": res.residue_index,
                 "residue_name": res.residue_name,
@@ -236,7 +232,7 @@ def example_input() -> Any:
     input_class=PyRosettaEnergyInput,
     config_class=PyRosettaEnergyConfig,
     output_class=PyRosettaEnergyOutput,
-    description="Compute Rosetta energy scores for protein structures with optional FastRelax",
+    description="Compute Rosetta energy scores for protein structures (with optional FastRelax preprocess via config.pre_relax_structures)",
     uses_gpu=False,
     example_input=example_input,
     iterable_input_field="inputs",
@@ -250,19 +246,21 @@ def run_pyrosetta_energy(
 ) -> PyRosettaEnergyOutput:
     """Compute Rosetta energy scores using PyRosetta.
 
-    Scores protein structures using the specified Rosetta score function.
-    Optionally applies FastRelax before scoring to resolve steric clashes
-    and strain in raw PDB structures.
+    Scores each protein structure using the specified Rosetta score function.
+    To resolve steric clashes and strain before scoring, set
+    ``config.pre_relax_structures=True`` — the framework's ``Config.preprocess``
+    hook then dispatches ``pyrosetta-relax`` and substitutes the relaxed
+    structures before this function runs.
 
     Chain selection only filters the per-residue breakdown; the whole pose
     is always scored, so ``total_energy``/``energy_terms`` are always the
     full-complex values and selected-residue energies are in-complex
-    contributions, not isolated-chain energies. See :class:`EnergyResult`
+    contributions, not isolated-chain energies. See :class:`PyRosettaEnergyMetrics`
     for details.
 
     Args:
         inputs (PyRosettaEnergyInput): Structures to score with optional chain selection.
-        config (PyRosettaEnergyConfig | None): Configuration for score function and relaxation.
+        config (PyRosettaEnergyConfig | None): Score function + optional relax preprocess.
         instance (ToolInstance | None): Optional ToolInstance for persistent execution.
 
     Returns:
@@ -270,7 +268,6 @@ def run_pyrosetta_energy(
     """
     logger.debug("Using local venv for PyRosetta energy scoring")
 
-    seed = config.seed if config.seed is not None else config.get_random_int()  # type: ignore[union-attr]
     pdb_contents, chain_ids_list, pdb_to_mmcif_maps = prepare_pdb_and_chain_maps(inputs.inputs)
 
     input_data = {
@@ -278,10 +275,6 @@ def run_pyrosetta_energy(
         "pdb_contents": pdb_contents,
         "chain_ids_list": chain_ids_list,
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
-        "relax": config.relax,  # type: ignore[union-attr]
-        "relax_cycles": config.relax_cycles,  # type: ignore[union-attr]
-        "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
-        "seed": seed,
         "device": "cpu",
     }
 
@@ -300,7 +293,7 @@ def run_pyrosetta_energy(
         metadata={
             "num_structures": len(inputs.inputs),
             "scorefxn": config.scorefxn,  # type: ignore[union-attr]
-            "relax": config.relax,  # type: ignore[union-attr]
+            "pre_relax_structures": config.pre_relax_structures,  # type: ignore[union-attr]
         },
         results=results,
     )
