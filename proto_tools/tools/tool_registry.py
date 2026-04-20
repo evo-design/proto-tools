@@ -770,7 +770,7 @@ class ToolRegistry:
         """Get links.yaml metadata for a tool.
 
         Returns parsed contents of the tool's links.yaml file, which may contain
-        github, image, and organizations fields.
+        github, image, organizations, docs_url, and preprint fields.
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
@@ -790,6 +790,51 @@ class ToolRegistry:
             if not isinstance(data, dict):
                 return None
             return data
+
+    @classmethod
+    def get_docs_url(cls, key: str) -> str | None:
+        """Get the documentation URL for a tool.
+
+        Reads the optional ``docs_url:`` key from the tool's ``links.yaml``.
+        Returns ``None`` when either the tool has no ``links.yaml`` or the
+        file does not declare ``docs_url:``. No URL probing is performed —
+        tools without a docs page simply omit the key.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search').
+
+        Returns:
+            str | None: Documentation URL, or None if not declared.
+
+        Raises:
+            ValueError: If tool key is not found in registry.
+        """
+        links = cls.get_links(key)
+        if links is None:
+            return None
+        url = links.get("docs_url")
+        return url if isinstance(url, str) else None
+
+    @classmethod
+    def get_example_notebook_path(cls, key: str) -> Path | None:
+        """Get the path to a tool's example notebook, if present.
+
+        Returns the filesystem path to ``examples/example.ipynb`` inside the
+        tool's directory, or ``None`` if the tool has no example notebook.
+        Downstream consumers decide how to render (e.g., convert to a
+        GitHub viewer URL).
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search').
+
+        Returns:
+            Path | None: Path to ``example.ipynb``, or None if not present.
+
+        Raises:
+            ValueError: If tool key is not found in registry.
+        """
+        cls.get(key)
+        return _find_tool_metadata_file(key, "examples/example.ipynb")
 
     @classmethod
     def _check_duplicate(cls, key: str, attempted_name: str | None = None) -> None:

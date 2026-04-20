@@ -1361,3 +1361,60 @@ def test_get_doi():
     # Unknown tool
     with pytest.raises(ValueError, match="nonexistent-tool"):
         ToolRegistry.get_doi("nonexistent-tool")
+
+
+# ── get_docs_url / get_example_notebook_path ─────────────────────────────────
+
+
+def test_get_docs_url():
+    """get_docs_url reads docs_url: from links.yaml; returns None when absent."""
+    # Explicit docs_url: declared in evo2/links.yaml
+    url = ToolRegistry.get_docs_url("evo2-sample")
+    assert url is not None
+    assert url.startswith("https://")
+
+    # links.yaml present but no docs_url: key
+    assert ToolRegistry.get_docs_url("blast-search") is None
+
+    # No links.yaml at all
+    assert ToolRegistry.get_docs_url("sequence-fetch") is None
+
+    # Unknown tool
+    with pytest.raises(ValueError, match="nonexistent-tool"):
+        ToolRegistry.get_docs_url("nonexistent-tool")
+
+
+def test_get_example_notebook_path():
+    """get_example_notebook_path returns the path to examples/example.ipynb if present."""
+    # Tool with example notebook
+    path = ToolRegistry.get_example_notebook_path("evo2-sample")
+    assert path is not None
+    assert path.name == "example.ipynb"
+    assert path.parent.name == "examples"
+    assert path.exists()
+
+    # Unknown tool
+    with pytest.raises(ValueError, match="nonexistent-tool"):
+        ToolRegistry.get_example_notebook_path("nonexistent-tool")
+
+
+def test_get_example_notebook_path_returns_none_when_absent(clean_registry):
+    """Registered tool with no examples/example.ipynb on disk returns None.
+
+    Every shipped tool has an example notebook, so register a fake-keyed tool
+    to exercise the negative branch (the directory walk finds no match).
+    """
+
+    @clean_registry.register(
+        key="no-notebook-tool",
+        label="No Notebook Tool",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool with no example notebook on disk",
+    )
+    def no_notebook_tool(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    assert clean_registry.get_example_notebook_path("no-notebook-tool") is None
