@@ -791,6 +791,45 @@ def test_interface_contact_residues_rejects_invalid_chain_args(pdl1_complex, bin
         pdl1_complex.interface_contact_residues(binder_chain=binder, target_chain=target, cutoff=4.0)
 
 
+def test_hotspot_contacts_subset_of_interface_with_equivalent_inputs(pdl1_complex):
+    """Hits are a subset of interface contacts; str and list hotspot formats parse identically."""
+    interface = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=5.3)
+    hits_str = pdl1_complex.hotspot_contacts(binder_chain="B", target_hotspots="A56,A66", cutoff=5.3)
+    hits_list = pdl1_complex.hotspot_contacts(binder_chain="B", target_hotspots=["A56", "A66"], cutoff=5.3)
+    assert hits_str and hits_str == hits_list
+    assert set(hits_str) <= set(interface)
+
+
+def test_hotspot_contacts_filters_by_binder_positions():
+    """``binder_positions`` restricts the binder side; unmatched hotspots → graceful empty."""
+    # Both binder residues are in range; the filter keeps only residue 2.
+    struct = _synthetic_pdb(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      2  CA  ALA A   2       2.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      3  CA  ALA B  10       3.000   0.000   0.000  1.00 50.00           C",
+    )
+    assert set(struct.hotspot_contacts(binder_chain="A", target_hotspots="B10", cutoff=4.0)) == {1, 2}
+    assert set(struct.hotspot_contacts(binder_chain="A", target_hotspots="B10", cutoff=4.0, binder_positions=[2])) == {
+        2
+    }
+    assert struct.hotspot_contacts(binder_chain="A", target_hotspots="Z99", cutoff=4.0) == {}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({"binder_chain": "B", "target_hotspots": "45"}, "chain-prefixed", id="no-chain-prefix"),
+        pytest.param({"binder_chain": "B", "target_hotspots": "A45.5"}, "chain-prefixed", id="non-integer-residue"),
+        pytest.param({"binder_chain": "Heavy", "target_hotspots": "A45"}, "single character", id="multi-char-binder"),
+        pytest.param({"binder_chain": "A", "target_hotspots": "A45"}, "must not also appear", id="binder-in-hotspots"),
+    ],
+)
+def test_hotspot_contacts_rejects_invalid_inputs(pdl1_complex, kwargs, match):
+    """Malformed tokens, multi-char binder chains, and self-contact all fail fast."""
+    with pytest.raises(ValueError, match=match):
+        pdl1_complex.hotspot_contacts(cutoff=5.3, **kwargs)
+
+
 def test_ca_clash_score_rejects_multi_char_chain_id_on_structure(multi_char_chain_structure):
     """Guard protects the bonded-neighbor exclusion from silently mis-firing on collided chain IDs."""
     with pytest.raises(ValueError, match="single character"):

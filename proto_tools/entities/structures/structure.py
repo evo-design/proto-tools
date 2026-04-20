@@ -29,6 +29,20 @@ from proto_tools.utils.tool_io import Metrics, MetricValue
 VISUALIZE_STYLE_OPTIONS = ["cartoon", "line", "stick", "sphere", "licorice"]
 
 
+def _parse_hotspots(target_hotspots: str | list[str]) -> dict[str, set[int]]:
+    """Parse ``"A45,A47"`` or ``["A45", "A47"]`` into ``{chain: {residue_num, ...}}``."""
+    tokens = target_hotspots.split(",") if isinstance(target_hotspots, str) else target_hotspots
+    hotspots: dict[str, set[int]] = {}
+    for raw in (t.strip() for t in tokens):
+        if not raw:
+            continue
+        chain, residue_str = raw[0], raw[1:]
+        if not chain.isalpha() or not residue_str.lstrip("-").isdigit():
+            raise ValueError(f"Hotspot {raw!r} must be chain-prefixed like 'A45'.")
+        hotspots.setdefault(chain, set()).add(int(residue_str))
+    return hotspots
+
+
 # Color palette for chain coloring (supports up to 20 chains with distinct colors)
 CHAIN_COLORS = [
     "red",
@@ -750,9 +764,61 @@ class Structure(BaseModel):
             for idx in cells.get_atoms(coord, radius=cutoff):
                 touched.add(int(binder_atoms.res_id[idx]))
 
-        res_map = self.get_residue_position_map().get(binder_chain, [])
-        aa_by_pos = {pos: aa for aa, pos in res_map}
         # get_residue_position_map is polymer-only — HETATM/ligand residues in `touched` are dropped here.
+        residue_map = self.get_residue_position_map()[binder_chain]
+        aa_by_pos = {pos: aa for aa, pos in residue_map}
+        return {pos: aa_by_pos[pos] for pos in sorted(touched) if pos in aa_by_pos}
+
+    def hotspot_contacts(
+        self,
+        binder_chain: str,
+        target_hotspots: str | list[str],
+        cutoff: float = 5.3,
+        binder_positions: list[int] | None = None,
+    ) -> dict[int, str]:
+        """Binder residues whose heavy atoms are within ``cutoff`` Å of any target hotspot heavy atom.
+
+        Like :meth:`interface_contact_residues` with the target side restricted to chain-prefixed
+        ``target_hotspots`` (``"A45,A47"`` or ``["A45", "A47"]``) and the binder side optionally
+        filtered by ``binder_positions``.
+
+        Raises:
+            ValueError: ``binder_chain`` is not single-char, appears among hotspot chains,
+                or any hotspot token is malformed.
+        """
+        if len(binder_chain) != 1:
+            raise ValueError(f"Chain ID {binder_chain!r} must be a single character.")
+        hotspots = _parse_hotspots(target_hotspots)
+        if binder_chain in hotspots:
+            raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_hotspots.")
+        if not hotspots:
+            return {}
+
+        # Select heavy atoms: binder side (optionally filtered) and target-hotspot side.
+        atoms = pdb_file_to_atomarray(StringIO(self.structure_pdb))
+        heavy = atoms.element != "H"
+        binder_mask = heavy & (atoms.chain_id == binder_chain)
+        if binder_positions is not None:
+            binder_mask &= np.isin(atoms.res_id, binder_positions)
+        per_chain_hotspot_masks = [
+            (atoms.chain_id == chain) & np.isin(atoms.res_id, list(residues)) for chain, residues in hotspots.items()
+        ]
+        target_mask = heavy & np.logical_or.reduce(per_chain_hotspot_masks)
+
+        binder_atoms = atoms[binder_mask]
+        target_atoms = atoms[target_mask]
+        if len(binder_atoms) == 0 or len(target_atoms) == 0:
+            return {}
+
+        # Spatial-hash the binder; collect binder residues that any target atom touches.
+        cells = CellList(binder_atoms.coord, cell_size=cutoff)
+        touched: set[int] = set()
+        for coord in target_atoms.coord:
+            for idx in cells.get_atoms(coord, radius=cutoff):
+                touched.add(int(binder_atoms.res_id[idx]))
+
+        residue_map = self.get_residue_position_map()[binder_chain]
+        aa_by_pos = {pos: aa for aa, pos in residue_map}
         return {pos: aa_by_pos[pos] for pos in sorted(touched) if pos in aa_by_pos}
 
     # ============================================================================
