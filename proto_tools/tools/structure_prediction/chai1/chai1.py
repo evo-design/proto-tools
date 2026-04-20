@@ -85,6 +85,7 @@ class Chai1Metrics(Metrics):
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Always present.
         avg_pae (float): Average predicted aligned error. Always present.
+        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
         confidence_score (float): Chai-1 confidence score. Always present.
     """
 
@@ -93,6 +94,7 @@ class Chai1Metrics(Metrics):
         "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "iptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
+        "pae": {"availability": "when include_pae_matrix=True", "type": "list[list[float]]", "min": 0.0, "max": None},
         "confidence_score": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
     }
     primary_metric: str | None = "avg_plddt"
@@ -148,6 +150,8 @@ class Chai1Config(MSAStructurePredictionConfig):
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Only used when ``use_msa=True``. Inherited from
             ``MSAStructurePredictionConfig``. Default: ``None``.
+
+        include_pae_matrix (bool): Inherited. Default: ``False``.
 
         device: Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
@@ -375,6 +379,7 @@ def run_chai1_on_complex(
             "num_diffn_samples": config.num_diffn_samples,
             "num_trunk_samples": config.num_trunk_samples,
             "seed": config.seed,
+            "include_pae_matrix": config.include_pae_matrix,
         }
 
         # Call the inference script with the venv activated

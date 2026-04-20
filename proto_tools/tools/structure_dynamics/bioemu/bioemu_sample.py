@@ -158,6 +158,7 @@ class BioEmuConfig(StructurePredictionConfig):
         colabfold_search_config (ColabfoldSearchConfig | None): Configuration for
             ColabFold MSA search. Default: Uses ColabfoldSearchConfig defaults.
         device (str): Inference device (inherited).
+        include_pae_matrix (bool): Inherited; unused by BioEmu. Default: ``False``.
         verbose (bool): Verbose logging toggle (inherited).
     """
 

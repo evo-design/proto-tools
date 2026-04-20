@@ -88,7 +88,7 @@ def _metric_value(value: Any) -> float | None:
     return float(serialized)
 
 
-def _extract_metrics(aux: dict[str, Any] | None) -> dict[str, Any]:
+def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = False) -> dict[str, Any]:
     """Convert ColabDesign aux outputs into simple scalar metrics."""
     if not aux:
         return {}
@@ -100,6 +100,8 @@ def _extract_metrics(aux: dict[str, Any] | None) -> dict[str, Any]:
             scalar = _metric_value(value)
             if scalar is not None:
                 metrics[dst_key] = scalar
+
+    metrics["pae"] = serialize_output(aux["pae"]) if include_pae_matrix else None
 
     for key, value in aux.get("losses", {}).items():
         scalar = _metric_value(value)
@@ -423,6 +425,7 @@ class AlphaFold2Model:
         msa_a3m_content: str | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run AlphaFold2 prediction on one complex."""
         self._ensure_loaded(device, backend="base", verbose=verbose)
@@ -446,13 +449,14 @@ class AlphaFold2Model:
         af_model.predict(**predict_kwargs)
 
         aux = getattr(af_model, "aux", {})
-        metrics = _extract_metrics(aux)
+        metrics = _extract_metrics(aux, include_pae_matrix=include_pae_matrix)
         return {
             "pdb": af_model.save_pdb(),
             "avg_plddt": metrics["avg_plddt"],
             "ptm": metrics["ptm"],
             "iptm": metrics.get("iptm"),
             "avg_pae": metrics["avg_pae"],
+            "pae": metrics["pae"],
         }
 
     # -------------------------------------------------------------------------
@@ -473,6 +477,7 @@ class AlphaFold2Model:
         loss_weights: dict[str, float] | None,
         seed: int | None,
         backprop: bool = True,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run one binder-design AF2 pass and return loss, metrics, Structure, and optionally gradient.
 
@@ -525,7 +530,7 @@ class AlphaFold2Model:
         return {
             "gradient": gradient,
             "loss": float(serialize_output(aux["loss"])),
-            "metrics": _extract_metrics(aux),
+            "metrics": _extract_metrics(aux, include_pae_matrix=include_pae_matrix),
             "vocab": AMINO_ACIDS_LIST,
             "pdb": af_model.save_pdb(get_best=False),
         }
@@ -559,6 +564,7 @@ class AlphaFold2Model:
         compute_gradient: bool = True,
         device: str = "cuda",
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run AF2 binder design against a frozen target (forward, optionally backward).
 
@@ -653,6 +659,7 @@ class AlphaFold2Model:
             loss_weights=loss_weights,
             seed=seed,
             backprop=compute_gradient,
+            include_pae_matrix=include_pae_matrix,
         )
 
     def to_device(self, device: str, verbose: bool = False) -> None:
@@ -691,6 +698,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             msa_a3m_content=input_dict.get("msa_a3m_content"),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
     if operation == "compute_gradient":
         return _model.compute_binder_gradient(
@@ -720,6 +728,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             compute_gradient=input_dict.get("compute_gradient", True),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 

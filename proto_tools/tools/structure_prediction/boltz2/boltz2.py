@@ -146,6 +146,8 @@ class Boltz2Config(MSAStructurePredictionConfig):
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.
 
+        include_pae_matrix (bool): Inherited; unused by Boltz2. Default: ``False``.
+
         timeout (int): Maximum execution time in seconds. Default: 1200.
 
     """

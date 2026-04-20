@@ -127,12 +127,14 @@ class ESMFoldMetrics(Metrics):
         avg_plddt (float): Average predicted LDDT score (0-1). Always present.
         ptm (float): Predicted TM-score (0-1). Depends on model output.
         avg_pae (float): Average predicted aligned error. Depends on model output.
+        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True and model emits PAE.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "ptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
         "avg_pae": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": None},
+        "pae": {"availability": "when include_pae_matrix=True", "type": "list[list[float]]", "min": 0.0, "max": None},
     }
     primary_metric: str | None = "avg_plddt"
 
@@ -175,6 +177,8 @@ class ESMFoldConfig(StructurePredictionConfig):
 
         device (str): Device to run the model on (``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
+
+        include_pae_matrix (bool): Inherited. Default: ``False``.
 
         verbose: Whether to print status messages during execution. Inherited
             from ``StructurePredictionConfig``. Default: ``False``.
@@ -323,6 +327,7 @@ def run_esmfold(
             "batch_data": sub_batch,
             "residue_idx_offset": config.residue_idx_offset,
             "chain_linker": config.chain_linker,
+            "include_pae_matrix": config.include_pae_matrix,
         }
 
         # Call the inference script
@@ -356,6 +361,7 @@ def run_esmfold(
                     avg_plddt=result["avg_plddt"],
                     ptm=result["ptm"],
                     avg_pae=result["avg_pae"],
+                    pae=result["pae"],
                 ),
                 source="esmfold-prediction",
             )

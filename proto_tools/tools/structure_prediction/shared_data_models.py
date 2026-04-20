@@ -751,7 +751,9 @@ class StructurePredictionConfig(BaseConfig):
             ``"cpu"`` (CPU execution), or specific GPU devices like ``"cuda:0"``.
             Structure prediction is computationally intensive and strongly benefits
             from GPU acceleration. Default: ``"cuda"``.
-
+        include_pae_matrix (bool): If True, attach the full per-residue PAE
+            matrix. Off by default — the matrix is ``O(n_residues^2)`` floats
+            and adds noticeable serialization cost. Default: ``False``.
     """
 
     device: str = ConfigField(
@@ -760,6 +762,11 @@ class StructurePredictionConfig(BaseConfig):
         description="Device to run the model on (e.g., 'cuda', 'cpu')",
         hidden=True,
         include_in_key=False,
+    )
+    include_pae_matrix: bool = ConfigField(
+        title="Include PAE Matrix",
+        default=False,
+        description="Attach the full per-residue PAE matrix.",
     )
 
 

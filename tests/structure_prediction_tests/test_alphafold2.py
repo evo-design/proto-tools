@@ -102,7 +102,7 @@ def test_gradient_dispatch_contract(monkeypatch):
         return {
             "gradient": [[0.1] * 20] * 2,
             "loss": 1.25,
-            "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5},
+            "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5, "pae": None},
             "vocab": _CANONICAL_VOCAB,
             "pdb": _EXAMPLE_PDB,
         }
@@ -171,7 +171,7 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
         return {
             "gradient": [[0.0] * 20] * 3,
             "loss": 0.0,
-            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0},
+            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
             "vocab": _CANONICAL_VOCAB,
             "pdb": _EXAMPLE_PDB,
         }
@@ -209,7 +209,7 @@ def test_gradient_dispatch_omits_embedded_ablm_metadata(monkeypatch):
         return {
             "gradient": [[0.0] * 20] * 3,
             "loss": 0.0,
-            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0},
+            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
             "vocab": _CANONICAL_VOCAB,
             "pdb": _EXAMPLE_PDB,
         }
@@ -244,7 +244,7 @@ def test_forward_mode_dispatch_contract(monkeypatch):
         return {
             "gradient": None,
             "loss": 0.75,
-            "metrics": {"avg_plddt": 0.82, "ptm": 0.65, "iptm": 0.55, "avg_pae": 2.1},
+            "metrics": {"avg_plddt": 0.82, "ptm": 0.65, "iptm": 0.55, "avg_pae": 2.1, "pae": None},
             "vocab": _CANONICAL_VOCAB,
             "pdb": _EXAMPLE_PDB,
         }
@@ -276,7 +276,7 @@ def test_prediction_dispatch_contract(monkeypatch):
 
     def fake_dispatch(tool_name, payload, *, instance=None, config=None):
         captured.append(payload)
-        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": None, "avg_pae": 1.5}
+        return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": None, "avg_pae": 1.5, "pae": None}
 
     monkeypatch.setattr(
         "proto_tools.tools.structure_prediction.alphafold2.alphafold2.ToolInstance.dispatch",

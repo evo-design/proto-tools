@@ -101,6 +101,7 @@ class AlphaFold2BinderConfig(BaseConfig):
     loss callbacks, and CDR position-aware losses).
 
     Attributes:
+        include_pae_matrix (bool): Attach full per-residue PAE matrix. Default: ``False``.
         bias_redesign (float | None): Persistent softmax bias toward wildtype at
             non-design positions. Germinal backend only.
         omit_aas (str | None): Amino acids to ban (e.g. ``"C,W"``).
@@ -130,6 +131,11 @@ class AlphaFold2BinderConfig(BaseConfig):
             for forward-only scoring (returns ``gradient=None``).
     """
 
+    include_pae_matrix: bool = ConfigField(
+        title="Include PAE Matrix",
+        default=False,
+        description="Attach the full per-residue PAE matrix.",
+    )
     bias_redesign: float | None = ConfigField(
         title="Bias Redesign",
         default=None,
@@ -362,6 +368,7 @@ def run_alphafold2_binder(
             "inter_contact_num": config.inter_contact_num,
             "inter_contact_cutoff": config.inter_contact_cutoff,
             "seed": config.seed,
+            "include_pae_matrix": config.include_pae_matrix,
             "backend": config.backend,
             "compute_gradient": config.compute_gradient,
             "device": config.device,
@@ -385,6 +392,7 @@ def run_alphafold2_binder(
                 ptm=metrics["ptm"],
                 iptm=metrics.get("iptm"),
                 avg_pae=metrics["avg_pae"],
+                pae=metrics["pae"],
             ),
             source="alphafold2-binder",
         ),

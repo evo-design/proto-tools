@@ -249,6 +249,8 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         device: Device to run the model on (e.g., ``"cuda"``, ``"cpu"``). Inherited
             from ``StructurePredictionConfig``. Default: ``"cuda"``.
 
+        include_pae_matrix (bool): Inherited; unused by Protenix. Default: ``False``.
+
         verbose: Whether to print status messages during execution including
             MSA generation, model loading, and prediction progress. Inherited from
             ``StructurePredictionConfig``. Default: ``False``.

@@ -38,6 +38,7 @@ class ESMFoldModel:
         chain_linker: str,
         device: str = "cuda",
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> list[dict[str, Any]]:
         """Run ESMFold structure prediction on protein sequences.
 
@@ -47,6 +48,7 @@ class ESMFoldModel:
             chain_linker: Sequence used to link chains
             device: Device to run on
             verbose: Whether to print status messages
+            include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             List of dicts with keys: pdb, avg_plddt, ptm
@@ -89,7 +91,7 @@ class ESMFoldModel:
             outputs["atom37_atom_exists"] = outputs["atom37_atom_exists"] * linker_masks[:, :, None]
 
         # Extract per-complex results
-        return [self._extract_result(outputs, idx) for idx in range(len(batch_data))]
+        return [self._extract_result(outputs, idx, include_pae_matrix) for idx in range(len(batch_data))]
 
     def _build_batch_tensors(
         self, batch_data: list[dict[str, Any]], residue_idx_offset: int, chain_linker: str
@@ -158,7 +160,9 @@ class ESMFoldModel:
 
         return position_ids, linker_mask
 
-    def _extract_result(self, outputs: dict[str, torch.Tensor | None], batch_idx: int) -> dict[str, Any]:
+    def _extract_result(
+        self, outputs: dict[str, torch.Tensor | None], batch_idx: int, include_pae_matrix: bool = False
+    ) -> dict[str, Any]:
         """Extract results for a single complex from batched outputs.
 
         Returns:
@@ -208,14 +212,17 @@ class ESMFoldModel:
             # Create 2D mask for valid (i, j) residue pairs
             pae_mask = residue_mask.unsqueeze(-1) * residue_mask.unsqueeze(-2)  # (1, seq_len, seq_len)
             avg_pae = float((pae * pae_mask).sum() / pae_mask.sum().clamp(min=1))
+            pae_matrix = pae[0].tolist() if include_pae_matrix else None
         else:
             avg_pae = None
+            pae_matrix = None
 
         return {
             "pdb": pdb_output,
             "avg_plddt": float(avg_plddt),
             "ptm": float(ptm) if ptm is not None else None,
             "avg_pae": avg_pae,
+            "pae": pae_matrix,
         }
 
     # ============================================================================
@@ -297,6 +304,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chain_linker=input_dict["chain_linker"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
         return {"results": results}
     raise ValueError(f"Unknown operation: {operation}")

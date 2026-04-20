@@ -33,6 +33,7 @@ def _extract_structure_and_scores(
     output_dir: str,
     name: str,
     verbose: bool = False,  # noqa: ARG001 — required by tool interface
+    include_pae_matrix: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """Extract predicted structure and confidence scores from AlphaFold3 output.
 
@@ -40,6 +41,7 @@ def _extract_structure_and_scores(
         output_dir: Directory containing AlphaFold3 output.
         name: Name of the prediction job.
         verbose: Whether to print progress messages.
+        include_pae_matrix: Attach the full per-residue PAE matrix.
 
     Returns:
         Tuple of (pdb_path, scores_dict).
@@ -67,6 +69,7 @@ def _extract_structure_and_scores(
     alphafold3_scores: dict[str, Any] = {}
     alphafold3_scores["avg_plddt"] = float(np.mean(full_metrics["atom_plddts"]))
     alphafold3_scores["avg_pae"] = float(np.mean(np.array(full_metrics["pae"])))
+    alphafold3_scores["pae"] = full_metrics["pae"] if include_pae_matrix else None
     alphafold3_scores["ptm"] = summary_metrics.get("ptm")
     alphafold3_scores["iptm"] = summary_metrics.get("iptm")
     alphafold3_scores["ranking_score"] = summary_metrics.get("ranking_score")
@@ -118,6 +121,7 @@ class AlphaFold3Model:
         output_dir: str,
         device: str,
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run AlphaFold3 prediction via Singularity.
 
@@ -129,6 +133,7 @@ class AlphaFold3Model:
             output_dir: Directory for output files.
             device: Device for subprocess environment (e.g., "cuda:0").
             verbose: Whether to print progress messages.
+            include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             Dict with keys:
@@ -230,6 +235,7 @@ class AlphaFold3Model:
             output_dir,
             input_json["name"],
             verbose=verbose,
+            include_pae_matrix=include_pae_matrix,
         )
 
         # === Return as dict (instead of tuple) ===
@@ -276,6 +282,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         output_dir=input_dict["output_dir"],
         device=input_dict["device"],
         verbose=input_dict["verbose"],
+        include_pae_matrix=input_dict["include_pae_matrix"],
     )
 
 

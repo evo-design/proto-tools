@@ -32,6 +32,7 @@ class Chai1Model:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run Chai1 structure prediction.
 
@@ -47,6 +48,7 @@ class Chai1Model:
             seed: Random seed for reproducibility
             device: Device to run on ('cuda' or 'cpu')
             verbose: Whether to print status messages
+            include_pae_matrix: Attach the full per-residue PAE matrix.
 
         Returns:
             Dictionary containing cif_output and metrics
@@ -110,6 +112,7 @@ class Chai1Model:
                 "ptm": best_ptm,
                 "iptm": best_iptm,
                 "avg_pae": best_pae,
+                "pae": candidates.pae[0].tolist() if include_pae_matrix else None,
                 "confidence_score": best_score,
             },
         }
@@ -182,6 +185,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=sampling_seed,
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            include_pae_matrix=input_dict["include_pae_matrix"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 
