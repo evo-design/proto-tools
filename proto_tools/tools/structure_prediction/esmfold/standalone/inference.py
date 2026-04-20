@@ -158,7 +158,7 @@ class ESMFoldModel:
 
         return position_ids, linker_mask
 
-    def _extract_result(self, outputs: dict[str, torch.Tensor], batch_idx: int) -> dict[str, Any]:
+    def _extract_result(self, outputs: dict[str, torch.Tensor | None], batch_idx: int) -> dict[str, Any]:
         """Extract results for a single complex from batched outputs.
 
         Returns:
@@ -175,19 +175,18 @@ class ESMFoldModel:
             "states",
             "lddt_head",
         }
-        complex_output = {}
+        complex_output: dict[str, torch.Tensor] = {}
         for key, value in outputs.items():
-            if isinstance(value, torch.Tensor):
-                if value.ndim == 0:  # Scalar
-                    complex_output[key] = value
-                elif key in structure_module_tensors:
-                    complex_output[key] = value[
-                        :, batch_idx : batch_idx + 1, ...
-                    ]  # structure module tensors have batch as dim 1
-                else:
-                    complex_output[key] = value[batch_idx : batch_idx + 1]  # all other tensors have batch as dim 0
-            else:
+            if value is None:
+                continue
+            if value.ndim == 0:  # Scalar
                 complex_output[key] = value
+            elif key in structure_module_tensors:
+                # structure module tensors have batch as dim 1
+                complex_output[key] = value[:, batch_idx : batch_idx + 1, ...]
+            else:
+                # all other tensors have batch as dim 0
+                complex_output[key] = value[batch_idx : batch_idx + 1]
 
         # Convert to PDB
         pdb_output = self.model.output_to_pdb(complex_output)[0]
