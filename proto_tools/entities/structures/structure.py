@@ -29,18 +29,29 @@ from proto_tools.utils.tool_io import Metrics, MetricValue
 VISUALIZE_STYLE_OPTIONS = ["cartoon", "line", "stick", "sphere", "licorice"]
 
 
-def _parse_hotspots(target_hotspots: str | list[str]) -> dict[str, set[int]]:
-    """Parse ``"A45,A47"`` or ``["A45", "A47"]`` into ``{chain: {residue_num, ...}}``."""
-    tokens = target_hotspots.split(",") if isinstance(target_hotspots, str) else target_hotspots
-    hotspots: dict[str, set[int]] = {}
-    for raw in (t.strip() for t in tokens):
-        if not raw:
-            continue
-        chain, residue_str = raw[0], raw[1:]
-        if not chain.isalpha() or not residue_str.lstrip("-").isdigit():
-            raise ValueError(f"Hotspot {raw!r} must be chain-prefixed like 'A45'.")
-        hotspots.setdefault(chain, set()).add(int(residue_str))
-    return hotspots
+# Per-residue VDW "key atoms" used by ``hotspot_contacts`` with ``germinal_mode=True``.
+_KEY_SIDE_CHAIN_ATOMS: dict[str, list[str]] = {
+    "VAL": ["CG1", "CG2"],
+    "ILE": ["CG1", "CG2", "CD1"],
+    "LEU": ["CG", "CD1", "CD2"],
+    "MET": ["CG", "SD", "CE"],
+    "ALA": [],
+    "PRO": ["CG", "CD"],
+    "PHE": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+    "TYR": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ", "OH"],
+    "TRP": ["CG", "CD1", "CD2", "NE1", "CE2", "CE3", "CZ2", "CZ3", "CH2"],
+    "ASP": ["CG", "OD1", "OD2"],
+    "GLU": ["CG", "CD", "OE1", "OE2"],
+    "LYS": ["CG", "CD", "CE", "NZ"],
+    "ARG": ["CG", "CD", "NE", "CZ", "NH1", "NH2"],
+    "HIS": ["CG", "ND1", "CD2", "CE1", "NE2"],
+    "SER": ["OG"],
+    "THR": ["OG1", "CG2"],
+    "ASN": ["CG", "OD1", "ND2"],
+    "GLN": ["CG", "CD", "OE1", "NE2"],
+    "GLY": [],
+    "CYS": ["SG"],
+}
 
 
 # Color palette for chain coloring (supports up to 20 chains with distinct colors)
@@ -773,49 +784,94 @@ class Structure(BaseModel):
         self,
         binder_chain: str,
         target_hotspots: str | list[str],
-        cutoff: float = 5.3,
+        expansion_cutoff: float = 5.3,
+        contact_cutoff: float = 6.0,
         binder_positions: list[int] | None = None,
+        germinal_mode: bool = False,
     ) -> dict[int, str]:
-        """Binder residues whose heavy atoms are within ``cutoff`` Å of any target hotspot heavy atom.
+        """Binder residues near declared target hotspots via a two-step filter.
 
-        Like :meth:`interface_contact_residues` with the target side restricted to chain-prefixed
-        ``target_hotspots`` (``"A45,A47"`` or ``["A45", "A47"]``) and the binder side optionally
-        filtered by ``binder_positions``.
+        1. Expand: target residues within ``expansion_cutoff`` Å of any hotspot atom.
+        2. Contact: binder residues within ``contact_cutoff`` Å of any atom in that expanded region.
+
+        ``germinal_mode=True`` switches to CA expansion + key-atom contacts; default is all-heavy.
 
         Raises:
-            ValueError: ``binder_chain`` is not single-char, appears among hotspot chains,
-                or any hotspot token is malformed.
+            ValueError: ``binder_chain`` not single-char, in hotspot chains, or bad token format.
         """
         if len(binder_chain) != 1:
             raise ValueError(f"Chain ID {binder_chain!r} must be a single character.")
-        hotspots = _parse_hotspots(target_hotspots)
+
+        # Parse "A45,A47" or ["A45", "A47"] → {chain: {residue_num, ...}}.
+        tokens = target_hotspots.split(",") if isinstance(target_hotspots, str) else target_hotspots
+        hotspots: dict[str, set[int]] = {}
+        for raw in (t.strip() for t in tokens):
+            if not raw:
+                continue
+            chain, residue_str = raw[0], raw[1:]
+            if not chain.isalpha() or not residue_str.lstrip("-").isdigit():
+                raise ValueError(f"Hotspot {raw!r} must be chain-prefixed like 'A45'.")
+            hotspots.setdefault(chain, set()).add(int(residue_str))
         if binder_chain in hotspots:
             raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_hotspots.")
         if not hotspots:
             return {}
 
-        # Select heavy atoms: binder side (optionally filtered) and target-hotspot side.
         atoms = pdb_file_to_atomarray(StringIO(self.structure_pdb))
-        heavy = atoms.element != "H"
-        binder_mask = heavy & (atoms.chain_id == binder_chain)
-        if binder_positions is not None:
-            binder_mask &= np.isin(atoms.res_id, binder_positions)
-        per_chain_hotspot_masks = [
-            (atoms.chain_id == chain) & np.isin(atoms.res_id, list(residues)) for chain, residues in hotspots.items()
-        ]
-        target_mask = heavy & np.logical_or.reduce(per_chain_hotspot_masks)
+        if germinal_mode:
+            # Germinal's PyRosetta-era semantics: CA-CA distance for expansion, "key atoms"
+            # (CA + CB-if-not-GLY + per-residue sidechain atoms) for VDW contacts.
+            expansion_atom_mask = atoms.atom_name == "CA"
+            contact_atom_mask = atoms.atom_name == "CA"
+            contact_atom_mask |= (atoms.atom_name == "CB") & (atoms.res_name != "GLY")
+            for res_name, atom_names in _KEY_SIDE_CHAIN_ATOMS.items():
+                if atom_names:
+                    contact_atom_mask |= (atoms.res_name == res_name) & np.isin(atoms.atom_name, atom_names)
+        else:
+            expansion_atom_mask = atoms.element != "H"
+            contact_atom_mask = atoms.element != "H"
 
-        binder_atoms = atoms[binder_mask]
-        target_atoms = atoms[target_mask]
-        if len(binder_atoms) == 0 or len(target_atoms) == 0:
+        binder_chain_mask = atoms.chain_id == binder_chain
+        if binder_positions is not None:
+            binder_chain_mask &= np.isin(atoms.res_id, binder_positions)
+
+        # Step 1: per-chain expansion (neighbor search is restricted to each hotspot's own chain).
+        # expansion_cutoff=0 skips the widening (declared hotspots only).
+        expanded_by_chain: dict[str, set[int]] = {}
+        for chain, residues in hotspots.items():
+            if expansion_cutoff <= 0:
+                expanded_by_chain[chain] = set(residues)
+                continue
+            chain_mask = atoms.chain_id == chain
+            chain_hotspot_atoms = atoms[expansion_atom_mask & chain_mask & np.isin(atoms.res_id, list(residues))]
+            chain_target_atoms = atoms[expansion_atom_mask & chain_mask]
+            if len(chain_hotspot_atoms) == 0 or len(chain_target_atoms) == 0:
+                continue
+            cells = CellList(chain_target_atoms.coord, cell_size=expansion_cutoff)
+            expanded: set[int] = set()
+            for coord in chain_hotspot_atoms.coord:
+                for idx in cells.get_atoms(coord, radius=expansion_cutoff):
+                    expanded.add(int(chain_target_atoms.res_id[idx]))
+            if expanded:
+                expanded_by_chain[chain] = expanded
+
+        if not expanded_by_chain:
             return {}
 
-        # Spatial-hash the binder; collect binder residues that any target atom touches.
-        cells = CellList(binder_atoms.coord, cell_size=cutoff)
+        expanded_residue_mask = np.logical_or.reduce(
+            [(atoms.chain_id == c) & np.isin(atoms.res_id, list(r)) for c, r in expanded_by_chain.items()]
+        )
+        expanded_contact_atoms = atoms[contact_atom_mask & expanded_residue_mask]
+        binder_contact_atoms = atoms[contact_atom_mask & binder_chain_mask]
+        if len(expanded_contact_atoms) == 0 or len(binder_contact_atoms) == 0:
+            return {}
+
+        # Step 2: binder atoms within contact_cutoff of any expanded-region atom.
+        cells = CellList(binder_contact_atoms.coord, cell_size=contact_cutoff)
         touched: set[int] = set()
-        for coord in target_atoms.coord:
-            for idx in cells.get_atoms(coord, radius=cutoff):
-                touched.add(int(binder_atoms.res_id[idx]))
+        for coord in expanded_contact_atoms.coord:
+            for idx in cells.get_atoms(coord, radius=contact_cutoff):
+                touched.add(int(binder_contact_atoms.res_id[idx]))
 
         residue_map = self.get_residue_position_map()[binder_chain]
         aa_by_pos = {pos: aa for aa, pos in residue_map}
