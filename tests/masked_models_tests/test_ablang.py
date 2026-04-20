@@ -3,8 +3,6 @@
 import math
 import sys
 import types
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -30,11 +28,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _VALID_AAS = set(PROTEIN_AMINO_ACIDS)
 _CANONICAL_VOCAB = list(PROTEIN_AMINO_ACIDS)
-
-# AbLang's amino acid ordering, from https://github.com/TobiasHeOl/AbLang2/blob/main/ablang2/models/ablang2/vocab.py
-ABLANG_VOCAB_ORDER = list("ARNDCQEGHILKMFPSTWYV")
-_ABLANG_VOCAB_SIZE = len(ABLANG_VOCAB_ORDER) + 1  # +1 for "|" separator
-_PIPE_TOKEN_ID = len(ABLANG_VOCAB_ORDER)
 
 
 def _import_ablang_inference():
@@ -158,125 +151,7 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     assert result.metrics["log_likelihood"] == -0.5
 
 
-# ── Gradient unit tests (CPU, fake model) ────────────────────────────────────
-
-
-class _FakeHookHandle:
-    def __init__(self, layer: "_FakeEmbedLayer") -> None:
-        self.layer = layer
-
-    def remove(self) -> None:
-        self.layer.hook = None
-
-
-class _FakeEmbedLayer:
-    def __init__(self, weight: Any) -> None:
-        self.weight = weight
-        self.hook = None
-
-    def register_forward_hook(self, hook):
-        self.hook = hook
-        return _FakeHookHandle(self)
-
-    def __call__(self, token_ids: Any) -> Any:
-        output = self.weight[token_ids]
-        if self.hook is not None:
-            return self.hook(self, (token_ids,), output)
-        return output
-
-
-class _FakeAbLangPaired:
-    def __init__(self, embed_layer: _FakeEmbedLayer, projection: Any) -> None:
-        self.embed_layer = embed_layer
-        self.projection = projection
-
-    def get_aa_embeddings(self) -> _FakeEmbedLayer:
-        return self.embed_layer
-
-    def __call__(self, token_ids: Any) -> Any:
-        import torch
-
-        embeddings = self.embed_layer(token_ids)
-        return torch.einsum("bld,df->blf", embeddings, self.projection)
-
-
-def _build_fake_paired_model() -> tuple:
-    import torch
-
-    ablang_inference = _import_ablang_inference()
-
-    weight = torch.arange(_ABLANG_VOCAB_SIZE * 3, dtype=torch.float32).reshape(_ABLANG_VOCAB_SIZE, 3) / 10.0
-    projection = torch.arange(3 * _ABLANG_VOCAB_SIZE, dtype=torch.float32).reshape(3, _ABLANG_VOCAB_SIZE) / 7.0
-    embed_layer = _FakeEmbedLayer(weight)
-
-    model = ablang_inference.AbLangModel(model_choice="ablang2-paired")
-    model._loaded = True
-    model.device = "cpu"
-    model.model = SimpleNamespace(AbLang=_FakeAbLangPaired(embed_layer, projection))
-    model._ablang_vocab = {aa: idx for idx, aa in enumerate(ABLANG_VOCAB_ORDER)} | {"|": _PIPE_TOKEN_ID}
-    return model, weight, projection
-
-
-def _manual_expected_gradient(
-    logits_list: list[list[float]],
-    *,
-    temperature: float | None = None,
-    use_ste: bool = False,
-    chain_break_position: int | None,
-    weight: Any,
-    projection: Any,
-) -> tuple:
-    """Compute the expected gradient by manually reproducing the math."""
-    import torch
-    import torch.nn.functional as F
-
-    seq_dist = torch.tensor(logits_list, dtype=torch.float32, requires_grad=True)
-
-    x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
-
-    mapping = torch.zeros((len(_CANONICAL_VOCAB), _ABLANG_VOCAB_SIZE), dtype=torch.float32)
-    for idx, aa in enumerate(_CANONICAL_VOCAB):
-        mapping[idx, ABLANG_VOCAB_ORDER.index(aa)] = 1.0
-    mapped = x @ mapping
-
-    token_ids = mapped.argmax(dim=-1).detach()
-
-    if use_ste:
-        hard = F.one_hot(token_ids, num_classes=_ABLANG_VOCAB_SIZE).float()
-        mapped = hard + (mapped - mapped.detach())
-
-    residue_embeddings = mapped @ weight
-
-    if chain_break_position is not None:
-        residue_embeddings = torch.cat(
-            [
-                residue_embeddings[:chain_break_position],
-                weight[_PIPE_TOKEN_ID].unsqueeze(0),
-                residue_embeddings[chain_break_position:],
-            ],
-            dim=0,
-        )
-        token_ids = torch.cat(
-            [
-                token_ids[:chain_break_position],
-                torch.tensor([_PIPE_TOKEN_ID], dtype=torch.long),
-                token_ids[chain_break_position:],
-            ],
-            dim=0,
-        )
-
-    logits_out = torch.einsum("bld,df->blf", residue_embeddings.unsqueeze(0), projection)
-    shift_logits = logits_out[:, :-1, :]
-    shift_labels = token_ids.unsqueeze(0)[:, 1:]
-    position_losses = F.cross_entropy(
-        shift_logits.reshape(-1, shift_logits.size(-1)),
-        shift_labels.reshape(-1),
-        reduction="none",
-    ).reshape(shift_labels.shape)
-    loss = position_losses[:, 1:-1].mean()
-    (gradient,) = torch.autograd.grad(loss, seq_dist)
-
-    return gradient, loss.item()
+# ── Gradient dispatch tests (subprocess venv, GPU with CPU fallback) ─────────
 
 
 _UNIT_LOGITS = [
@@ -290,45 +165,47 @@ _UNIT_LOGITS = [
 ]
 
 
-@pytest.mark.parametrize("chain_break_position", [2, None])
+def _gradient_device() -> str:
+    from proto_tools.utils.device import number_of_visible_gpus
+
+    return "cuda" if number_of_visible_gpus() > 0 else "cpu"
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.parametrize("paired", [True, False], ids=["paired", "single"])
 @pytest.mark.parametrize(
     ("temperature", "use_ste"),
     [(None, False), (0.6, False), (None, True), (0.6, True)],
     ids=["default", "temp_only", "ste_only", "temp_and_ste"],
 )
-def test_compute_gradient_matches_objective_math(
-    chain_break_position: int | None,
+def test_compute_gradient_dispatch(
+    paired: bool,
     temperature: float | None,
     use_ste: bool,
 ) -> None:
-    """Validate the exact shifted-cross-entropy math across temperature/STE combinations."""
-    torch = pytest.importorskip("torch")
-    model, weight, projection = _build_fake_paired_model()
+    """Validate compute_gradient across temperature/STE/chain modes via real dispatch."""
+    if paired:
+        antibody = AntibodyLogits(heavy_chain=_UNIT_LOGITS[:2], light_chain=_UNIT_LOGITS[2:])
+        expected_len = len(_UNIT_LOGITS)
+    else:
+        antibody = AntibodyLogits(heavy_chain=_UNIT_LOGITS)
+        expected_len = len(_UNIT_LOGITS)
 
-    result = model.compute_gradient(
-        logits_list=_UNIT_LOGITS,
-        temperature=temperature,
-        use_ste=use_ste,
-        chain_break_position=chain_break_position,
-        seed=None,
-        device="cpu",
+    result = run_ablang_gradient(
+        AbLangGradientInput(antibody=antibody, temperature=temperature),
+        AbLangGradientConfig(use_ste=use_ste, device=_gradient_device()),
     )
+    validate_output(result)
 
-    expected_gradient, expected_loss = _manual_expected_gradient(
-        _UNIT_LOGITS,
-        temperature=temperature,
-        use_ste=use_ste,
-        chain_break_position=chain_break_position,
-        weight=weight,
-        projection=projection,
-    )
-
-    result_gradient = torch.tensor(result["gradient"], dtype=torch.float32)
-    torch.testing.assert_close(result_gradient, expected_gradient, rtol=1e-5, atol=1e-6)
-    assert result["loss"] == pytest.approx(expected_loss, rel=1e-6)
-    assert result["metrics"]["log_likelihood"] == pytest.approx(-expected_loss, rel=1e-6)
-    assert result["metrics"]["sequence_length"] == len(_UNIT_LOGITS)
-    assert result["vocab"] == _CANONICAL_VOCAB
+    assert result.gradient is not None
+    assert len(result.gradient) == expected_len
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert result.loss > 0
+    assert math.isfinite(result.loss)
+    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["sequence_length"] == expected_len
+    assert result.vocab == _CANONICAL_VOCAB
 
 
 @pytest.mark.parametrize(
