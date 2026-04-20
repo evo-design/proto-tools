@@ -9,11 +9,9 @@ echo "Installing uv package manager..."
 pip install uv
 
 proto_install_cuda_toolkit "${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
-proto_install_jax ALPHAFOLD2
 
-echo "Installing default ColabDesign and dependencies..."
-uv pip install "colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@gamma"
-uv pip install biopython ipython
+echo "Installing JAX, ColabDesign, and deps..."
+uv pip install -r requirements.txt
 
 echo "Installing Germinal ColabDesign fork (gradient backend with alpha/bias and framework contacts)..."
 GERMINAL_DIR="${TOOL_VENV_PATH:-$VIRTUAL_ENV}/data/colabdesign_germinal"

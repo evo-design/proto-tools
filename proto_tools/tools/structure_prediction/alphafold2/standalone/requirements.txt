@@ -1,0 +1,7 @@
+# AlphaFold2 (ColabDesign) dependencies
+# https://github.com/sokrypton/ColabDesign
+
+jax[cuda12]>=0.4.20,<0.5  # <0.5: colabdesign@gamma uses removed jnp.clip(a_min=...). See #507.
+colabdesign @ git+https://github.com/sokrypton/ColabDesign.git@gamma
+biopython
+ipython
