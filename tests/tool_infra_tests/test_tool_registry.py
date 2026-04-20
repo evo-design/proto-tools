@@ -1367,17 +1367,18 @@ def test_get_doi():
 
 
 def test_get_docs_url():
-    """get_docs_url reads docs_url: from links.yaml; returns None when absent."""
-    # Explicit docs_url: declared in evo2/links.yaml
-    url = ToolRegistry.get_docs_url("evo2-sample")
-    assert url is not None
-    assert url.startswith("https://")
+    """get_docs_url computes URL from tool directory path (one page per dir)."""
+    # Single-word tool dir: proto_tools/tools/causal_models/evo2/ → /tools/causal-models/evo2
+    assert ToolRegistry.get_docs_url("evo2-sample") == "https://bio-pro.mintlify.app/tools/causal-models/evo2"
 
-    # links.yaml present but no docs_url: key
-    assert ToolRegistry.get_docs_url("blast-search") is None
+    # Multi-key tool dir: blast-search and blast-create-db share the blast/ dir
+    assert ToolRegistry.get_docs_url("blast-search") == "https://bio-pro.mintlify.app/tools/gene-annotation/blast"
 
-    # No links.yaml at all
-    assert ToolRegistry.get_docs_url("sequence-fetch") is None
+    # Tool dir with no links.yaml still resolves — the URL is computed from path
+    assert (
+        ToolRegistry.get_docs_url("sequence-fetch")
+        == "https://bio-pro.mintlify.app/tools/database-retrieval/sequence-fetch"
+    )
 
     # Unknown tool
     with pytest.raises(ValueError, match="nonexistent-tool"):

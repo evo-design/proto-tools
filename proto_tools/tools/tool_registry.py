@@ -770,7 +770,9 @@ class ToolRegistry:
         """Get links.yaml metadata for a tool.
 
         Returns parsed contents of the tool's links.yaml file, which may contain
-        github, image, organizations, docs_url, and preprint fields.
+        github, image, organizations, and preprint fields. The documentation URL
+        is computed separately by ``get_docs_url`` (derived from the tool's
+        directory path, not stored in YAML).
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
@@ -795,25 +797,38 @@ class ToolRegistry:
     def get_docs_url(cls, key: str) -> str | None:
         """Get the documentation URL for a tool.
 
-        Reads the optional ``docs_url:`` key from the tool's ``links.yaml``.
-        Returns ``None`` when either the tool has no ``links.yaml`` or the
-        file does not declare ``docs_url:``. No URL probing is performed —
-        tools without a docs page simply omit the key.
+        Computes the URL from the tool's directory location: every tool under
+        ``proto_tools/tools/{category}/{tool_name}/`` maps deterministically
+        to ``https://bio-pro.mintlify.app/tools/{category-kebab}/{tool-kebab}``,
+        because proto-docs auto-generates one page per tool dir on each sync.
+
+        Returns ``None`` only when the tool's directory can't be located on
+        disk (e.g. a registry entry with no corresponding source tree — not a
+        case that should occur for shipped tools).
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search').
 
         Returns:
-            str | None: Documentation URL, or None if not declared.
+            str | None: Documentation URL, or None if the tool directory
+                cannot be resolved.
 
         Raises:
             ValueError: If tool key is not found in registry.
         """
-        links = cls.get_links(key)
-        if links is None:
+        spec = cls.get(key)
+        normalized = key.replace("-", "_")
+        category_dir = TOOLS_DIR / spec.category
+        if not category_dir.is_dir():
             return None
-        url = links.get("docs_url")
-        return url if isinstance(url, str) else None
+        for tool_dir in sorted(category_dir.iterdir()):
+            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
+                continue
+            if normalized == tool_dir.name or normalized.startswith(tool_dir.name + "_"):
+                category_kebab = spec.category.replace("_", "-")
+                tool_kebab = tool_dir.name.replace("_", "-")
+                return f"https://bio-pro.mintlify.app/tools/{category_kebab}/{tool_kebab}"
+        return None
 
     @classmethod
     def get_example_notebook_path(cls, key: str) -> Path | None:
@@ -1000,8 +1015,8 @@ def _find_tool_metadata_file(tool_key: str, filename: str) -> Path | None:
             if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
                 continue
 
-            # e.g., 'evo2_sample' starts with 'evo2', 'blast_search' starts with 'blast'
-            if normalized_key.startswith(tool_dir.name):
+            # e.g., 'evo2_sample' matches 'evo2', 'blast_search' matches 'blast'
+            if normalized_key == tool_dir.name or normalized_key.startswith(tool_dir.name + "_"):
                 file_path = tool_dir / filename
                 if file_path.exists():
                     return file_path

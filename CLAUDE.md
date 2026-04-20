@@ -101,8 +101,8 @@ ToolRegistry.list_all()                               # All registered tools
 ToolRegistry.get_schemas("tool-key")                  # Input, config, output JSON schemas
 ToolRegistry.get_citation("tool-key")                 # BibTeX string
 ToolRegistry.get_doi("tool-key")                      # DOI extracted from cite.bib
-ToolRegistry.get_links("tool-key")                    # Parsed links.yaml (github, image, docs_url, …)
-ToolRegistry.get_docs_url("tool-key")                 # Documentation URL from links.yaml
+ToolRegistry.get_links("tool-key")                    # Parsed links.yaml (github, image, huggingface, …)
+ToolRegistry.get_docs_url("tool-key")                 # Documentation URL computed from tool directory
 ToolRegistry.get_example_input("esmfold-prediction")  # Minimal valid Input
 ToolRegistry.get_example_notebook_path("tool-key")    # Path to examples/example.ipynb
 ```
