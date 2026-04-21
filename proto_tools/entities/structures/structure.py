@@ -364,12 +364,43 @@ class Structure(BaseModel):
         Raises:
             ValueError: If ``chain_id`` is not present in this Structure.
         """
-        if not any(chain.name == chain_id for model in self.gemmi_struct for chain in model):
-            raise ValueError(f"Chain {chain_id!r} not present in Structure")
+        return self.select_chains([chain_id])
+
+    def select_chains(self, chain_ids: str | list[str] | tuple[str, ...]) -> Structure:
+        """Return a new Structure with only the requested chains.
+
+        ``chain_ids`` may be a comma-separated string (for example ``"A,B"``)
+        or an explicit sequence of chain identifiers. Output preserves
+        ``b_factor_type``, ``source``, a deep copy of ``metrics``, and the
+        original ``structure_format``.
+
+        Args:
+            chain_ids (str | list[str] | tuple[str, ...]): Chain identifiers to retain.
+
+        Returns:
+            Structure: New Structure containing only the requested chains.
+
+        Raises:
+            ValueError: If no chain IDs are requested or any requested chain is
+                not present in this Structure.
+        """
+        if isinstance(chain_ids, str):
+            requested = [chain_id.strip() for chain_id in chain_ids.split(",") if chain_id.strip()]
+        else:
+            requested = [chain_id.strip() for chain_id in chain_ids if chain_id.strip()]
+        if not requested:
+            raise ValueError("At least one chain ID must be requested")
+
+        available = {chain.name for model in self.gemmi_struct for chain in model}
+        missing = [chain_id for chain_id in requested if chain_id not in available]
+        if missing:
+            raise ValueError(f"Chain(s) {missing!r} not present in Structure")
+
+        keep = set(requested)
         struct = self.gemmi_struct.clone()
         for model in struct:
             for i in range(len(model) - 1, -1, -1):
-                if model[i].name != chain_id:
+                if model[i].name not in keep:
                     del model[i]
         new_format: Literal["pdb", "cif"] = self.structure_format or "pdb"
         serialized = _serialize_gemmi(struct, new_format, source_format=new_format)

@@ -606,49 +606,78 @@ def test_per_residue_plddt_none_for_non_plddt():
     assert Structure(structure=pdb, b_factor_type=BFactorType.UNSPECIFIED).per_residue_plddt is None
 
 
-# ── select_chain ──────────────────────────────────────────────────────────────
+# ── chain selection ───────────────────────────────────────────────────────────
 
 
-def test_select_chain_keeps_only_requested_chain_and_preserves_metadata():
+@pytest.fixture
+def three_chain_structure() -> Structure:
     pdb = "\n".join(
         [
             _pdb_line(1, "A", 1, 95.0),
             _pdb_line(2, "A", 2, 80.0),
             _pdb_line(3, "B", 1, 60.0),
             _pdb_line(4, "B", 2, 55.0),
+            _pdb_line(5, "C", 1, 40.0),
             "END",
         ]
     )
-    s = Structure(structure=pdb, b_factor_type=BFactorType.PLDDT, source="test")
-    b = s.select_chain("B")
-    assert b.per_residue_plddt == pytest.approx([0.60, 0.55], abs=1e-2)
-    assert b.b_factor_type == BFactorType.PLDDT
-    assert b.source == "test"
-    assert b.structure_format == "pdb"  # PDB in → PDB out
-    # Cloned — original not mutated.
-    assert s.per_residue_plddt == pytest.approx([0.95, 0.80, 0.60, 0.55], abs=1e-2)
+    return Structure(structure=pdb, b_factor_type=BFactorType.PLDDT, source="test")
 
 
-def test_select_chain_raises_on_missing_chain():
+@pytest.mark.parametrize(
+    ("method_name", "chain_ids", "expected_chains", "expected_plddt"),
+    [
+        ("select_chain", "B", ["B"], [0.60, 0.55]),
+        ("select_chains", "A,C", ["A", "C"], [0.95, 0.80, 0.40]),
+        ("select_chains", ["B", "C"], ["B", "C"], [0.60, 0.55, 0.40]),
+    ],
+)
+def test_chain_selection_keeps_requested_chains_and_metadata(
+    method_name, chain_ids, expected_chains, expected_plddt, three_chain_structure
+):
+    selected = getattr(three_chain_structure, method_name)(chain_ids)
+
+    assert [chain.name for model in selected.gemmi_struct for chain in model] == expected_chains
+    assert selected.per_residue_plddt == pytest.approx(expected_plddt, abs=1e-2)
+    assert selected.b_factor_type == BFactorType.PLDDT
+    assert selected.source == "test"
+    assert selected.structure_format == "pdb"
+    assert three_chain_structure.per_residue_plddt == pytest.approx([0.95, 0.80, 0.60, 0.55, 0.40], abs=1e-2)
+
+
+@pytest.mark.parametrize(
+    ("method_name", "chain_ids"),
+    [("select_chain", "B"), ("select_chains", "A,C")],
+)
+def test_chain_selection_metrics_are_deep_copied(method_name, chain_ids, three_chain_structure):
+    three_chain_structure.add_metric("pae", [[0.0]])
+    selected = getattr(three_chain_structure, method_name)(chain_ids)
+    selected.add_metric("pae", [[1.0]])
+    assert three_chain_structure.metrics["pae"] == [[0.0]]
+    assert selected.metrics["pae"] == [[1.0]]
+
+
+@pytest.mark.parametrize(
+    ("method_name", "chain_ids", "match"),
+    [
+        ("select_chain", "Z", "not present"),
+        ("select_chains", "A,Z", "not present"),
+        ("select_chains", "", "At least one"),
+    ],
+)
+def test_chain_selection_rejects_missing_or_empty_request(method_name, chain_ids, match):
     pdb = "\n".join([_pdb_line(1, "A", 1, 95.0), "END"])
-    with pytest.raises(ValueError, match="not present"):
-        Structure(structure=pdb, b_factor_type=BFactorType.PLDDT).select_chain("Z")
-
-
-def test_select_chain_metrics_are_deep_copied():
-    pdb = "\n".join([_pdb_line(1, "A", 1, 90.0), _pdb_line(2, "B", 1, 80.0), "END"])
     s = Structure(structure=pdb, b_factor_type=BFactorType.PLDDT)
-    s.add_metric("plddt", 0.90)
-    b = s.select_chain("B")
-    b.add_metric("plddt", 0.50)
-    assert s.metrics["plddt"] == 0.90 and b.metrics["plddt"] == 0.50
+    with pytest.raises(ValueError, match=match):
+        getattr(s, method_name)(chain_ids)
 
 
-def test_select_chain_preserves_cif_format_for_multi_char_chains(test_cif_file_content):
-    """CIF-sourced Structures round-trip through select_chain without dropping multi-char chain names."""
+@pytest.mark.parametrize("method_name", ["select_chain", "select_chains"])
+def test_chain_selection_preserves_cif_format_for_multi_char_chains(method_name, test_cif_file_content):
+    """CIF-sourced Structures round-trip without dropping multi-char chain names."""
     s = Structure(structure=test_cif_file_content, structure_format="cif")
     chain_name = next(c.name for m in s.gemmi_struct for c in m)
-    out = s.select_chain(chain_name)
+    out = getattr(s, method_name)(chain_name if method_name == "select_chain" else [chain_name])
     assert out.structure_format == "cif"
     assert any(c.name == chain_name for m in out.gemmi_struct for c in m)
 
@@ -1141,12 +1170,13 @@ def test_to_pdb_with_chain_mapping_warns_on_lossy_cif():
         cif_struct.to_pdb_with_chain_mapping()
 
 
-def test_select_chain_does_not_warn_on_cif_re_emission():
-    """select_chain is pure re-emission in source format — no warnings, ever."""
+@pytest.mark.parametrize("method_name", ["select_chain", "select_chains"])
+def test_chain_selection_does_not_warn_on_cif_re_emission(method_name):
+    """Chain selection is pure re-emission in source format — no warnings, ever."""
     cif_struct = Structure(structure=_make_lossy_cif())
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        cif_struct.select_chain("A")
+        getattr(cif_struct, method_name)("A")
     assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
 
 
