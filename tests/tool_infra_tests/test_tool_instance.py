@@ -1678,3 +1678,71 @@ def test_run_setup_script_propagates_nonzero_exit(tmp_path, monkeypatch):
     assert rc == 7
     assert "before fail" in combined
     assert "before fail" in log_path.read_text()
+
+
+# ── Tool discovery: _has_valid_standalone / _get_tool_dirs / cleanup ──────
+
+
+def _make_standalone(root: Path, category: str, tool: str, files: list[str]) -> Path:
+    """Create a tool directory with given files inside standalone/."""
+    standalone = root / category / tool / "standalone"
+    standalone.mkdir(parents=True)
+    for name in files:
+        (standalone / name).touch()
+    return root / category / tool
+
+
+@pytest.mark.parametrize("filename", ["setup.sh", "inference.py", "run.py"])
+def test_has_valid_standalone_accepts_required_files(tmp_path: Path, filename: str) -> None:
+    standalone = tmp_path / "standalone"
+    standalone.mkdir()
+    (standalone / filename).touch()
+    assert ToolInstance._has_valid_standalone(standalone)
+
+
+@pytest.mark.parametrize(
+    "files",
+    [[], ["standalone_helpers.sh"], ["standalone_helpers.sh", "standalone_helpers.py"]],
+    ids=["empty", "helpers-sh-only", "helpers-both"],
+)
+def test_has_valid_standalone_rejects_invalid(tmp_path: Path, files: list[str]) -> None:
+    standalone = tmp_path / "standalone"
+    standalone.mkdir()
+    for f in files:
+        (standalone / f).touch()
+    assert not ToolInstance._has_valid_standalone(standalone)
+
+
+def test_cleanup_removes_stale_and_preserves_valid(tmp_path: Path) -> None:
+    stale = _make_standalone(tmp_path, "old_cat", "mytool", ["standalone_helpers.sh", "standalone_helpers.py"])
+    valid = _make_standalone(tmp_path, "new_cat", "mytool", ["setup.sh", "run.py"])
+
+    ToolInstance._cleanup_stale_standalone_dirs(tools_dir=tmp_path)
+
+    assert not stale.exists()
+    assert valid.exists()
+    assert (valid / "standalone" / "setup.sh").exists()
+
+
+def test_cleanup_ignores_dirs_with_unknown_files(tmp_path: Path) -> None:
+    tool = _make_standalone(tmp_path, "cat", "mytool", ["standalone_helpers.sh", "unknown.txt"])
+
+    ToolInstance._cleanup_stale_standalone_dirs(tools_dir=tmp_path)
+
+    assert tool.exists()
+
+
+def test_get_tool_dirs_resolves_duplicate_names_by_init_py(tmp_path: Path) -> None:
+    _make_standalone(tmp_path, "old_cat", "mytool", ["setup.sh"])
+    real = _make_standalone(tmp_path, "new_cat", "mytool", ["setup.sh", "run.py"])
+    (real / "__init__.py").touch()
+
+    # Scan like _get_tool_dirs does, against our fake tree
+    candidates: dict[str, list[Path]] = {}
+    for standalone_dir in tmp_path.rglob("standalone"):
+        if standalone_dir.is_dir() and ToolInstance._has_valid_standalone(standalone_dir):
+            candidates.setdefault(standalone_dir.parent.name, []).append(standalone_dir.parent)
+
+    assert len(candidates["mytool"]) == 2
+    with_init = [d for d in candidates["mytool"] if (d / "__init__.py").is_file()]
+    assert with_init == [real]

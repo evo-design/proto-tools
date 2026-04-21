@@ -1418,19 +1418,92 @@ class ToolInstance:
         platform_key = f"{platform.system().lower()}-{platform.machine()}"
         return self._parse_python_version(content, platform_key, str(version_file))
 
+    _HELPER_ARTIFACTS = frozenset({"standalone_helpers", "standalone_helpers.sh", "standalone_helpers.py"})
+
+    @staticmethod
+    def _has_valid_standalone(standalone_dir: Path) -> bool:
+        """Check that a standalone/ directory contains a setup.sh or runnable script."""
+        if (standalone_dir / "setup.sh").is_file():
+            return True
+        return any((standalone_dir / name).is_file() for name in ("inference.py", "run.py"))
+
+    @classmethod
+    def _cleanup_stale_standalone_dirs(cls, tools_dir: Path | None = None) -> None:
+        """Remove orphaned standalone helper artifacts left after tool category moves.
+
+        When a tool moves between categories, git removes tracked files but
+        gitignored runtime copies (standalone_helpers/, standalone_helpers.sh)
+        persist at the old path. This detects and removes those phantom dirs.
+        """
+        if tools_dir is None:
+            tools_dir = Path(__file__).parent.parent / "tools"
+
+        for standalone_dir in tools_dir.rglob("standalone"):
+            if not standalone_dir.is_dir():
+                continue
+            if cls._has_valid_standalone(standalone_dir):
+                continue
+            contents = {p.name for p in standalone_dir.iterdir()}
+            if contents - cls._HELPER_ARTIFACTS - {"__pycache__"}:
+                continue
+
+            tool_dir = standalone_dir.parent
+            logger.info(
+                "Removing stale standalone helpers at %s (tool was likely moved to a different category)",
+                standalone_dir,
+            )
+            shutil.rmtree(standalone_dir, ignore_errors=True)
+
+            if tool_dir.exists():
+                remaining = set(tool_dir.iterdir())
+                if not remaining or remaining == {tool_dir / "__pycache__"}:
+                    shutil.rmtree(tool_dir, ignore_errors=True)
+
     @classmethod
     def _get_tool_dirs(cls) -> dict[str, Path]:
         """Return a ``{tool_name: dir_path}`` mapping for all standalone tools.
 
         The mapping is computed once (single ``rglob``) and cached for the
-        lifetime of the process.
+        lifetime of the process. Phantom directories (stale helper copies
+        without setup.sh or scripts) are filtered out and cleaned up.
         """
         if cls._tool_dir_cache is not None:
             return cls._tool_dir_cache
+
         tools_dir = Path(__file__).parent.parent / "tools"
-        cls._tool_dir_cache = {
-            item.name: item for item in tools_dir.rglob("*") if item.is_dir() and (item / "standalone").exists()
-        }
+        candidates: dict[str, list[Path]] = {}
+        for standalone_dir in tools_dir.rglob("standalone"):
+            if not standalone_dir.is_dir():
+                continue
+            if cls._has_valid_standalone(standalone_dir):
+                candidates.setdefault(standalone_dir.parent.name, []).append(standalone_dir.parent)
+
+        result: dict[str, Path] = {}
+        for name, dirs in candidates.items():
+            if len(dirs) == 1:
+                result[name] = dirs[0]
+            else:
+                with_init = [d for d in dirs if (d / "__init__.py").is_file()]
+                if len(with_init) == 1:
+                    result[name] = with_init[0]
+                    logger.warning(
+                        "Tool %r found at multiple paths; using %s. Stale: %s",
+                        name,
+                        with_init[0],
+                        [d for d in dirs if d != with_init[0]],
+                    )
+                else:
+                    ordered = sorted(dirs)
+                    result[name] = ordered[0]
+                    logger.warning(
+                        "Tool %r has multiple valid paths: %s. Using %s.",
+                        name,
+                        dirs,
+                        ordered[0],
+                    )
+
+        cls._tool_dir_cache = result
+        cls._cleanup_stale_standalone_dirs(tools_dir)
         return cls._tool_dir_cache
 
     @classmethod
