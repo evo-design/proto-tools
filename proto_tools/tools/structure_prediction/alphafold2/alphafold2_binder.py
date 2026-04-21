@@ -127,6 +127,8 @@ class AlphaFold2BinderConfig(BaseConfig):
         intra_contact_cutoff (float): Intra-chain distance cutoff (Å). Germinal only.
         inter_contact_num (int): Interface contacts per residue. Germinal only.
         inter_contact_cutoff (float): Interface distance cutoff (Å). Germinal only.
+        framework_contact_offset (float): Framework contact penalty offset in the
+            Germinal inter-chain contact loss. Germinal backend only.
         compute_gradient (bool): Run backward pass and return gradient; ``False``
             for forward-only scoring (returns ``gradient=None``).
     """
@@ -250,6 +252,13 @@ class AlphaFold2BinderConfig(BaseConfig):
         description="Distance cutoff in angstroms for inter-molecular contacts.",
         advanced=True,
     )
+    framework_contact_offset: float = ConfigField(
+        title="Framework Contact Offset",
+        default=1.0,
+        gt=0.0,
+        description="Penalty offset for framework contacts in the Germinal inter-chain contact loss.",
+        advanced=True,
+    )
     device: str = ConfigField(
         title="Device",
         default="cuda",
@@ -367,6 +376,7 @@ def run_alphafold2_binder(
             "intra_contact_cutoff": config.intra_contact_cutoff,
             "inter_contact_num": config.inter_contact_num,
             "inter_contact_cutoff": config.inter_contact_cutoff,
+            "framework_contact_offset": config.framework_contact_offset,
             "seed": config.seed,
             "include_pae_matrix": config.include_pae_matrix,
             "backend": config.backend,

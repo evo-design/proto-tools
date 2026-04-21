@@ -558,6 +558,7 @@ class AlphaFold2Model:
         intra_contact_cutoff: float = 14.0,
         inter_contact_num: int = 10,
         inter_contact_cutoff: float = 20.0,
+        framework_contact_offset: float = 1.0,
         seed: int | None = None,
         backend: str = "base",
         compute_gradient: bool = True,
@@ -630,17 +631,13 @@ class AlphaFold2Model:
             af_model.opt["con"].update(
                 {"num": intra_contact_num, "cutoff": intra_contact_cutoff, "binary": False, "seqsep": 9}
             )
-            # Framework contact penalty — pinned to Germinal's VHH defaults
-            # (``configs/run/vhh.yaml:29-30``). Not exposed as config fields; flip this
-            # block if you need a non-VHH target or an ablation. framework_contact_loss
-            # enables the penalty, framework_contact_offset tunes its start index.
             af_model.opt["i_con"].update(
                 {
                     "num": inter_contact_num,
                     "cutoff": inter_contact_cutoff,
                     "binary": False,
                     "framework_contact_loss": True,
-                    "framework_contact_offset": 1,
+                    "framework_contact_offset": framework_contact_offset,
                 }
             )
             # Register Germinal extension loss callbacks.
@@ -722,6 +719,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
             inter_contact_num=input_dict.get("inter_contact_num", 10),
             inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 20.0),
+            framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
             seed=input_dict["seed"],
             backend=input_dict.get("backend", "base"),
             compute_gradient=input_dict.get("compute_gradient", True),
