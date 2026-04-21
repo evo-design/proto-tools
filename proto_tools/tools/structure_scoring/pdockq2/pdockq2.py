@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.entities.structures.structure import BFactorType
@@ -119,29 +119,36 @@ class PDockQ2Input(BaseToolInput):
             ``structure.metrics['pae']`` as a square ``list[list[float]]``
             whose dimension matches the structure's total residue count.
         binder_chain (str): Single-character chain ID of the binder (e.g. VHH).
-        target_chain (str): Target chain IDs (single character each). May be
-            comma-separated to cover multi-chain targets, matching
-            ``Structure.interface_contact_residues``'s convention.
+        target_chains (list[str]): Target chain IDs (single character each).
     """
 
     structure: Structure = InputField(description="Cofolded complex with pLDDT B-factors and PAE in metrics['pae']")
     binder_chain: str = InputField(description="Single-character chain ID of the binder")
-    target_chain: str = InputField(description="Target chain ID(s); comma-separated for multi-chain targets")
+    target_chains: list[str] = InputField(description="Target chain ID(s)")
+
+    @field_validator("target_chains", mode="before")
+    @classmethod
+    def _normalize_target_chains(cls, value: Any) -> list[str]:
+        """Accept comma-separated strings or explicit lists; store a clean chain list."""
+        raw_chain_ids = [value] if isinstance(value, str) else value
+        if not isinstance(raw_chain_ids, (list, tuple)) or not all(isinstance(c, str) for c in raw_chain_ids):
+            raise ValueError("target_chains must be a string or list of strings")
+        target_chains = [chain.strip() for raw in raw_chain_ids for chain in raw.split(",") if chain.strip()]
+        if not target_chains:
+            raise ValueError("target_chains must contain at least one chain ID")
+        return target_chains
 
     @model_validator(mode="after")
     def _validate(self) -> "PDockQ2Input":
         """Validate chain IDs exist and required confidence signals are attached."""
-        targets = [c.strip() for c in self.target_chain.split(",") if c.strip()]
-        if not targets:
-            raise ValueError("target_chain must contain at least one chain ID")
-        for cid in (self.binder_chain, *targets):
+        for cid in (self.binder_chain, *self.target_chains):
             if len(cid) != 1:
                 raise ValueError(f"chain IDs must be a single character, got {cid!r}")
-        if self.binder_chain in targets:
-            raise ValueError(f"binder_chain {self.binder_chain!r} must not appear in target_chain")
+        if self.binder_chain in self.target_chains:
+            raise ValueError(f"binder_chain {self.binder_chain!r} must not appear in target_chains")
 
         available = set(self.structure.get_chain_ids())
-        missing = {self.binder_chain, *targets} - available
+        missing = {self.binder_chain, *self.target_chains} - available
         if missing:
             raise ValueError(f"Chain ID(s) {sorted(missing)} not found in structure. Available: {sorted(available)}")
 
@@ -212,7 +219,7 @@ def example_input() -> Any:
     fixture = Path(__file__).parent / "example_input_fixture.pdb"
     pae = json.loads((Path(__file__).parent / "example_input_fixture_pae.json").read_text())
     structure = Structure.from_file(fixture, b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
-    return PDockQ2Input(structure=structure, binder_chain="A", target_chain="B")
+    return PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
 
 
 @tool(
@@ -234,7 +241,7 @@ def run_pdockq2(
 ) -> PDockQ2Output:
     """Compute pDockQ2 (Zhu 2023) for a cofolded protein complex.
 
-    Returns the mean per-chain ``pmidockq`` over chains in ``target_chain``
+    Returns the mean per-chain ``pmidockq`` over chains in ``target_chains``
     that contact ``binder_chain``, plus per-chain debug rows.
 
     Args:
@@ -247,7 +254,7 @@ def run_pdockq2(
     """
     structure = inputs.structure
     binder_chain = inputs.binder_chain
-    target_chains = {c.strip() for c in inputs.target_chain.split(",") if c.strip()}
+    target_chains = set(inputs.target_chains)
     cutoff = config.distance_cutoff
 
     per_residue_plddt = structure.per_residue_plddt
@@ -334,7 +341,7 @@ def run_pdockq2(
     return PDockQ2Output(
         metadata={
             "binder_chain": binder_chain,
-            "target_chain": inputs.target_chain,
+            "target_chains": inputs.target_chains,
             "distance_cutoff": cutoff,
         },
         metrics=metrics,

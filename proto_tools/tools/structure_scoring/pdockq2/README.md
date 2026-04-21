@@ -32,7 +32,7 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 2. Read the full PAE matrix from `structure.metrics["pae"]`. The tool asserts the matrix is square and matches the total residue count emitted by `Structure.per_residue_plddt`.
 3. For each chain, find CA-CA contact residue pairs against every other chain within `distance_cutoff` (default 10.0 Å). Collect the per-chain interface pLDDT and the normalized-PAE average over those pairs.
 4. Apply the Zhu-2023 sigmoid to `if_plddt * norm_pae` for each chain to get `pmidockq`.
-5. Aggregate: average `pmidockq` over chains in `inputs.target_chain` that contact `inputs.binder_chain`.
+5. Aggregate: average `pmidockq` over chains in `inputs.target_chains` that contact `inputs.binder_chain`.
 
 ## Execution Modes
 
@@ -46,7 +46,7 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 |-----------|------|---------|-------------|
 | `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
 | `binder_chain` | `str` | *Required* | Single-character chain ID of the binder. |
-| `target_chain` | `str` | *Required* | Target chain ID(s). Single-character entries, comma-separated for multi-chain targets. |
+| `target_chains` | `list[str]` | *Required* | Target chain ID(s). Single-character entries; comma-separated strings are accepted and normalized. |
 
 ## Configuration
 
@@ -77,7 +77,7 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 
 - `pdockq2 > 0.23`: conventional "acceptable" threshold from Zhu 2023's AlphaFold-Multimer benchmark; values above this gate are consistent with reliably predicted interfaces.
 - `pdockq2 < 0.1`: low-confidence interface; usually reflects either low interface pLDDT or high PAE between the binder and target.
-- `num_interface_contacts == 0`: binder and target chains are not in contact within `distance_cutoff` — score is set to 0.0 and a warning is logged. Verify `binder_chain` and `target_chain` correctness before interpreting.
+- `num_interface_contacts == 0`: binder and target chains are not in contact within `distance_cutoff` — score is set to 0.0 and a warning is logged. Verify `binder_chain` and `target_chains` correctness before interpreting.
 - `interfaces` rows expose the per-chain breakdown (useful when debugging multi-chain targets).
 
 ## Quick Start Examples
@@ -93,7 +93,7 @@ structure = Structure.from_file(
     metrics={"pae": my_pae_matrix},  # list[list[float]], N x N over all residues
 )
 
-inputs = PDockQ2Input(structure=structure, binder_chain="A", target_chain="B")
+inputs = PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])
 result = run_pdockq2(inputs, PDockQ2Config())
 print(result.metrics.pdockq2, result.metrics.num_interface_contacts)
 ```
@@ -116,7 +116,7 @@ for row in result.metrics.interfaces:
 - **Residue ordering invariant**: the PAE matrix must be indexed in the same residue order as `Structure.per_residue_plddt` (i.e. gemmi model → chain → residue iteration order). If your structure predictor emits PAE in a different order, remap it before attaching.
 - **pLDDT scale**: upstream predictors differ (AF2/AF3 emit 0-100, ESMFold emits 0-1). `Structure.b_factor_type` captures this; the tool uses `Structure.per_residue_plddt` which normalizes to 0-1 and rescales internally to the 0-100 scale the sigmoid was fit on.
 - **`binder_chain` must be single-character**: multi-character mmCIF chain labels need to be shortened via `Structure.to_pdb_with_chain_mapping()` before calling this tool.
-- **Empty contact set**: a zero score with zero contacts typically means the caller passed `binder_chain`/`target_chain` that do not interact. Check structure orientation and cutoff.
+- **Empty contact set**: a zero score with zero contacts typically means the caller passed `binder_chain`/`target_chains` that do not interact. Check structure orientation and cutoff.
 - **Contact detection uses CA atoms only**: every residue is treated by its CA position, without fallback to CB. This is appropriate for model-predicted structures where every modeled residue has CA; experimental structures with disordered backbones may skip residues with missing CA.
 - **Interface pLDDT is contact-pair weighted** (Zhu 2023). A residue that contacts `k` cross-chain partners contributes its pLDDT `k` times to the interface mean — not once per unique residue.
 - **Chains with no cross-chain contacts score exactly 0.0**. A caller comparing raw `pmidockq` values across predictions should be aware this short-circuits past the sigmoid.
