@@ -738,8 +738,8 @@ def test_ca_clash_score_clean_complex_is_zero(pdl1_complex):
 
 def test_interface_contact_residues_shape_and_monotonicity(pdl1_complex):
     """Return contract: 1-indexed sorted keys, single-letter AA values; tighter cutoff ⊆ looser."""
-    loose = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=4.0)
-    tight = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=3.0)
+    loose = pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["A"], cutoff=4.0)
+    tight = pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["A"], cutoff=3.0)
     assert loose, "PDL1 binder should contact target at 4.0 Å"
     assert list(loose) == sorted(loose) and all(pos >= 1 for pos in loose)
     assert all(len(aa) == 1 and aa.isalpha() for aa in loose.values())
@@ -748,17 +748,18 @@ def test_interface_contact_residues_shape_and_monotonicity(pdl1_complex):
 
 def test_interface_contact_residues_missing_target_is_empty(pdl1_complex):
     """A nonexistent target chain yields {} rather than raising."""
-    assert pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="Z", cutoff=4.0) == {}
+    assert pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["Z"], cutoff=4.0) == {}
 
 
-def test_interface_contact_residues_pools_multi_chain_target():
-    """``target_chain="B,C"`` splits and unions atoms across both chains."""
+@pytest.mark.parametrize("target_chains", [["B", "C"], ("B", "C"), "B,C"])
+def test_interface_contact_residues_pools_multi_chain_target(target_chains):
+    """``target_chains`` unions atoms across explicit and comma-separated chain inputs."""
     # A at origin; B at (10,10,10) is out of range; C at (2,0,0) is 2 Å from A.
     contacts = _synthetic_pdb(
         "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
         "ATOM      2  CA  ALA B   1      10.000  10.000  10.000  1.00 50.00           C",
         "ATOM      3  CA  ALA C   1       2.000   0.000   0.000  1.00 50.00           C",
-    ).interface_contact_residues(binder_chain="A", target_chain="B,C", cutoff=4.0)
+    ).interface_contact_residues(binder_chain="A", target_chains=target_chains, cutoff=4.0)
     assert contacts == {1: "A"}
 
 
@@ -774,12 +775,12 @@ def test_interface_contact_residues_pools_multi_chain_target():
 def test_interface_contact_residues_rejects_invalid_chain_args(pdl1_complex, binder, target, match):
     """Multi-char chain IDs and binder∈target are both silent-nonsense — fail fast."""
     with pytest.raises(ValueError, match=match):
-        pdl1_complex.interface_contact_residues(binder_chain=binder, target_chain=target, cutoff=4.0)
+        pdl1_complex.interface_contact_residues(binder_chain=binder, target_chains=target, cutoff=4.0)
 
 
 def test_hotspot_contacts_subset_relations(pdl1_complex):
     """Hits ⊆ interface contacts, germinal_mode ⊆ default, and str/list hotspot specs parse identically."""
-    interface = pdl1_complex.interface_contact_residues(binder_chain="B", target_chain="A", cutoff=6.0)
+    interface = pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["A"], cutoff=6.0)
     default = pdl1_complex.hotspot_contacts(binder_chain="B", target_hotspots="A56,A66")
     germinal = pdl1_complex.hotspot_contacts(binder_chain="B", target_hotspots="A56,A66", germinal_mode=True)
     assert default == pdl1_complex.hotspot_contacts(binder_chain="B", target_hotspots=["A56", "A66"])

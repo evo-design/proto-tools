@@ -57,13 +57,13 @@ def _pae_shape_mismatch_structure() -> Structure:
         ({"structure": lambda: _bundled_structure(with_pae=False)}, r"metrics\['pae'\]"),
         ({"structure": _pae_shape_mismatch_structure}, "does not match residue count"),
         ({"binder_chain": "Z"}, "not found in structure"),
-        ({"target_chain": "A,B"}, "must not appear in target_chain"),
+        ({"target_chains": ["A", "B"]}, "must not appear in target_chains"),
         ({"binder_chain": "AA"}, "single character"),
     ],
     ids=["no_plddt", "no_pae", "pae_shape_mismatch", "unknown_chain", "binder_in_target", "multichar_chain"],
 )
 def test_input_validator_rejects(overrides, message):
-    kwargs = {"structure": _bundled_structure(), "binder_chain": "A", "target_chain": "B"}
+    kwargs = {"structure": _bundled_structure(), "binder_chain": "A", "target_chains": ["B"]}
     for key, value in overrides.items():
         kwargs[key] = value() if callable(value) else value
     with pytest.raises(ValidationError, match=message):
@@ -121,7 +121,7 @@ def test_export_json_round_trip(tmp_path):
     assert payload["num_interface_contacts"] == out.metrics.num_interface_contacts
 
 
-# ── Integration: target_chain aggregation on a 3-chain fixture with a decoy ──
+# ── Integration: target_chains aggregation on a 3-chain fixture with a decoy ──
 
 
 def _three_chain_structure(tmp_path: Path) -> Structure:
@@ -146,14 +146,14 @@ def _three_chain_structure(tmp_path: Path) -> Structure:
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "target_chain,scoring_chains",
-    [("B", ["B"]), ("B,C", ["B", "C"])],
-    ids=["single_target_excludes_decoy", "multichain_target_includes_both"],
+    "target_chains,scoring_chains",
+    [(["B"], ["B"]), (["B", "C"], ["B", "C"]), ("B,C", ["B", "C"])],
+    ids=["single_target_excludes_decoy", "multichain_target_list_includes_both", "multichain_target_csv_includes_both"],
 )
-def test_target_chain_aggregation(tmp_path, target_chain, scoring_chains):
-    """Only chains listed in ``target_chain`` contribute to the final pdockq2 average."""
+def test_target_chains_aggregation(tmp_path, target_chains, scoring_chains):
+    """Only chains listed in ``target_chains`` contribute to the final pdockq2 average."""
     out = run_pdockq2(
-        PDockQ2Input(structure=_three_chain_structure(tmp_path), binder_chain="A", target_chain=target_chain),
+        PDockQ2Input(structure=_three_chain_structure(tmp_path), binder_chain="A", target_chains=target_chains),
         PDockQ2Config(),
     )
     by_chain = {row.chain_id: row for row in out.metrics.interfaces}
@@ -183,7 +183,7 @@ def test_interface_plddt_is_contact_pair_weighted(tmp_path):
     pae = [[6.0] * 4 for _ in range(4)]
     structure = Structure.from_file(tmp_path / "hetero.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
 
-    out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chain="B"), PDockQ2Config())
+    out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"]), PDockQ2Config())
     by_chain = {row.chain_id: row for row in out.metrics.interfaces}
     assert by_chain["B"].if_plddt == pytest.approx(70.0)
 
@@ -206,7 +206,7 @@ def test_disjoint_chains_score_zero_with_warning(tmp_path, caplog):
     )
 
     with caplog.at_level(logging.WARNING, logger="proto_tools.tools.structure_scoring.pdockq2.pdockq2"):
-        out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chain="B"), PDockQ2Config())
+        out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"]), PDockQ2Config())
 
     assert out.metrics.pdockq2 == 0.0
     assert out.metrics.num_interface_contacts == 0

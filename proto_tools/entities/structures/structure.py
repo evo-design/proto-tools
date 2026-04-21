@@ -845,17 +845,17 @@ class Structure(BaseModel):
     def interface_contact_residues(
         self,
         binder_chain: str,
-        target_chain: str,
+        target_chains: str | list[str] | tuple[str, ...],
         cutoff: float = 4.0,
     ) -> dict[int, str]:
         """Binder residues with any heavy atom within ``cutoff`` Å of a target heavy atom.
 
-        Hydrogens are excluded on both sides. ``target_chain`` may be comma-separated
-        for multi-chain targets.
+        Hydrogens are excluded on both sides. ``target_chains`` may be a
+        comma-separated string or an explicit sequence of chain IDs.
 
         Args:
             binder_chain (str): Chain ID of the binder.
-            target_chain (str): Chain ID(s) of the target. Comma-separated for multi-chain.
+            target_chains (str | list[str] | tuple[str, ...]): Chain ID(s) of the target.
             cutoff (float): Heavy-atom distance cutoff in Å. Defaults to 4.0 (Germinal
                 ``hotspot_residues`` default; the VHH pipeline uses 3.0 via
                 ``vhh.yaml:122 atom_distance_cutoff``).
@@ -866,19 +866,22 @@ class Structure(BaseModel):
 
         Raises:
             ValueError: If any chain ID is more than 1 character, or if ``binder_chain``
-                appears in ``target_chain`` (self-contact is not meaningful).
+                appears in ``target_chains`` (self-contact is not meaningful).
         """
-        target_chains = [c.strip() for c in target_chain.split(",")]
-        for cid in [binder_chain, *target_chains]:
+        raw_chain_ids = [target_chains] if isinstance(target_chains, str) else target_chains
+        targets = [chain.strip() for raw in raw_chain_ids for chain in raw.split(",") if chain.strip()]
+        if not targets:
+            raise ValueError("target_chains must contain at least one chain ID.")
+        for cid in [binder_chain, *targets]:
             if len(cid) != 1:
                 raise ValueError(f"Chain ID {cid!r} must be a single character.")
-        if binder_chain in target_chains:
-            raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_chain.")
+        if binder_chain in targets:
+            raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_chains.")
         atom_array = pdb_file_to_atomarray(StringIO(self.structure_pdb))
         heavy_mask = atom_array.element != "H"
 
         binder_mask = heavy_mask & (atom_array.chain_id == binder_chain)
-        target_mask = heavy_mask & np.isin(atom_array.chain_id, target_chains)
+        target_mask = heavy_mask & np.isin(atom_array.chain_id, targets)
         binder_atoms = atom_array[binder_mask]
         target_atoms = atom_array[target_mask]
         if len(binder_atoms) == 0 or len(target_atoms) == 0:
