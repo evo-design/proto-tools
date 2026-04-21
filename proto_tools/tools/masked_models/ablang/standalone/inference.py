@@ -382,7 +382,7 @@ class AbLangModel:
             logits_list (list[list[float]]): Distribution or logits, shape (L, 20).
             temperature (float | None): When set, applies ``softmax(input / temperature)``.
             use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
-            chain_break_position (int | None): Where to insert the ``|`` chain separator.
+            chain_break_position (int | None): VH/VL split for Germinal's ``<VH>|<VL>`` paired layout.
             seed (int | None): Random seed for reproducibility.
             backprop (bool): If True, run backward pass and return the gradient; if
                 False, skip backward and return ``gradient=None`` (forward-only scoring).
@@ -394,7 +394,7 @@ class AbLangModel:
 
         Shape notation:
             L  = input sequence length
-            V  = AbLang vocab size (21 for ablang2, 19 for ablang1 after :-2 trim)
+            V  = AbLang vocab size
             D  = embedding dimension
             Vm = model output vocab size
         """
@@ -427,34 +427,58 @@ class AbLangModel:
                 embed_layer = self.model.AbLang.get_aa_embeddings()
                 residue_embeddings = mapped @ embed_layer.weight  # (L, V) @ (V, D) -> (L, D)
 
-            # For paired sequences, splice the "|" chain separator between the two chains
-            # so AbLang sees the same token layout it was trained on (e.g. "VH|VL").
-            if chain_break_position is not None:
-                assert self._ablang_vocab is not None
-                sep_id = self._ablang_vocab["|"]
-                sep_embed = embed_layer.weight[sep_id].unsqueeze(0)  # (1, D)
-                residue_embeddings = torch.cat(
-                    (residue_embeddings[:chain_break_position], sep_embed, residue_embeddings[chain_break_position:]),
+            assert self._ablang_vocab is not None
+            ablang_vocab = self._ablang_vocab
+
+            def special_ids(tokens: list[str]) -> Any:
+                return torch.tensor([ablang_vocab[token] for token in tokens], device=self.device)
+
+            def special_embeddings(tokens: list[str]) -> Any:
+                return embed_layer.weight[special_ids(tokens)]
+
+            if self._is_ablang1:
+                if chain_break_position is not None:
+                    raise ValueError("AbLang1 gradient layout does not support paired chain_break_position.")
+                input_embeddings = torch.cat(
+                    (special_embeddings(["<"]), residue_embeddings, special_embeddings([">"])),
                     dim=0,
-                )  # (L+1, D)
-                residue_token_ids = torch.cat(
+                )  # (L + 2, D)
+                token_ids = torch.cat((special_ids(["<"]), residue_token_ids, special_ids([">"])), dim=0)  # (L + 2,)
+            else:
+                if chain_break_position is None:
+                    raise ValueError("AbLang2 paired gradient requires chain_break_position.")
+                if chain_break_position <= 0 or chain_break_position >= residue_token_ids.shape[0]:
+                    raise ValueError(f"Bad chain split={chain_break_position}; expected 1..{sequence_length - 1}.")
+                input_embeddings = torch.cat(
                     (
-                        residue_token_ids[:chain_break_position],
-                        torch.tensor([sep_id], device=self.device, dtype=torch.long),
-                        residue_token_ids[chain_break_position:],
+                        special_embeddings(["<"]),
+                        residue_embeddings[:chain_break_position],
+                        special_embeddings([">", "|", "<"]),
+                        residue_embeddings[chain_break_position:],
+                        special_embeddings([">"]),
                     ),
                     dim=0,
-                )  # (L+1,)
+                )  # (L + 5, D)
+                token_ids = torch.cat(
+                    (
+                        special_ids(["<"]),
+                        residue_token_ids[:chain_break_position],
+                        special_ids([">", "|", "<"]),
+                        residue_token_ids[chain_break_position:],
+                        special_ids([">"]),
+                    ),
+                    dim=0,
+                )  # (L + 5,)
 
-            token_ids = residue_token_ids.unsqueeze(0).to(self.device)  # (1, L + 1)
-            input_embeddings = residue_embeddings.unsqueeze(0)  # (1, L + 1, D)
+            input_embeddings = input_embeddings.unsqueeze(0)  # (1, S, D)
+            token_ids = token_ids.unsqueeze(0)  # (1, S)
 
             def _embedding_hook(_module: Any, _input: Any, _output: Any) -> Any:
                 return input_embeddings
 
             hook_handle = embed_layer.register_forward_hook(_embedding_hook)
             try:
-                logits_out = self.model.AbLang(token_ids)  # (1, L + 1, Vm)
+                logits_out = self.model.AbLang(token_ids)  # (1, S, Vm)
             finally:
                 hook_handle.remove()
 

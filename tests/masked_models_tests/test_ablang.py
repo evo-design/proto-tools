@@ -151,7 +151,7 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     assert result.metrics["log_likelihood"] == -0.5
 
 
-# ── Gradient dispatch tests (subprocess venv, GPU with CPU fallback) ─────────
+# ── Gradient dispatch tests (subprocess venv, GPU-only) ──────────────────────
 
 
 _UNIT_LOGITS = [
@@ -163,12 +163,6 @@ _UNIT_LOGITS = [
     [0.6 - i / 100.0 for i in range(20)],
     [0.7 + i / 110.0 for i in range(20)],
 ]
-
-
-def _gradient_device() -> str:
-    from proto_tools.utils.device import number_of_visible_gpus
-
-    return "cuda" if number_of_visible_gpus() > 0 else "cpu"
 
 
 @pytest.mark.uses_gpu
@@ -193,7 +187,7 @@ def test_compute_gradient_dispatch(
 
     result = run_ablang_gradient(
         AbLangGradientInput(antibody=antibody, temperature=temperature),
-        AbLangGradientConfig(use_ste=use_ste, device=_gradient_device()),
+        AbLangGradientConfig(use_ste=use_ste),
     )
     validate_output(result)
 
