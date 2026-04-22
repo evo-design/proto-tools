@@ -194,6 +194,7 @@ module = [
     "sinkhorn_transformer.*",
     "cuequivariance_ops_torch_cu12.*",
     "pyrosetta.*",
+    "scipy.*",
     # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
     "model.*",

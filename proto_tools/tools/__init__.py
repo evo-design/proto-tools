@@ -431,6 +431,7 @@ from proto_tools.tools.structure_prediction import (
 )
 from proto_tools.tools.structure_scoring import (
     InterfacePDockQ2,
+    InterfaceStructureInput,
     PDockQ2Config,
     PDockQ2Input,
     PDockQ2Metrics,
@@ -439,6 +440,10 @@ from proto_tools.tools.structure_scoring import (
     PyRosettaEnergyInput,
     PyRosettaEnergyMetrics,
     PyRosettaEnergyOutput,
+    PyRosettaInterfaceAnalyzerConfig,
+    PyRosettaInterfaceAnalyzerInput,
+    PyRosettaInterfaceAnalyzerMetrics,
+    PyRosettaInterfaceAnalyzerOutput,
     PyRosettaRelaxConfig,
     PyRosettaRelaxInput,
     PyRosettaRelaxMetrics,
@@ -461,6 +466,7 @@ from proto_tools.tools.structure_scoring import (
     StructureQualityMetrics,
     run_pdockq2,
     run_pyrosetta_energy,
+    run_pyrosetta_interface_analyzer,
     run_pyrosetta_relax,
     run_pyrosetta_sap,
     run_pyrosetta_sasa,
@@ -940,6 +946,13 @@ __all__ = [
     "PyRosettaEnergyOutput",
     "PyRosettaEnergyMetrics",
     "ResidueEnergy",
+    # Structure scoring - PyRosetta Interface Analyzer
+    "run_pyrosetta_interface_analyzer",
+    "InterfaceStructureInput",
+    "PyRosettaInterfaceAnalyzerInput",
+    "PyRosettaInterfaceAnalyzerConfig",
+    "PyRosettaInterfaceAnalyzerOutput",
+    "PyRosettaInterfaceAnalyzerMetrics",
     # Structure scoring - PyRosetta Relax (FastRelax)
     "run_pyrosetta_relax",
     "PyRosettaRelaxInput",

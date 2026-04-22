@@ -8,6 +8,14 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
     ResidueEnergy,
     run_pyrosetta_energy,
 )
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_interface_analyzer import (
+    InterfaceStructureInput,
+    PyRosettaInterfaceAnalyzerConfig,
+    PyRosettaInterfaceAnalyzerInput,
+    PyRosettaInterfaceAnalyzerMetrics,
+    PyRosettaInterfaceAnalyzerOutput,
+    run_pyrosetta_interface_analyzer,
+)
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
     PyRosettaRelaxConfig,
     PyRosettaRelaxInput,
@@ -42,6 +50,13 @@ __all__ = [
     "PyRosettaEnergyOutput",
     "ResidueEnergy",
     "run_pyrosetta_energy",
+    # Interface Analyzer
+    "InterfaceStructureInput",
+    "PyRosettaInterfaceAnalyzerConfig",
+    "PyRosettaInterfaceAnalyzerInput",
+    "PyRosettaInterfaceAnalyzerMetrics",
+    "PyRosettaInterfaceAnalyzerOutput",
+    "run_pyrosetta_interface_analyzer",
     # Relax
     "PyRosettaRelaxConfig",
     "PyRosettaRelaxInput",

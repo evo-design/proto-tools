@@ -504,6 +504,8 @@ Notebook metadata:
 - Show output inspection (printing key fields)
 
 Write the notebook as valid .ipynb JSON (the raw JSON format with cells array, metadata, etc.).
+
+Note: the notebook will be executed during Phase 4 via `scripts/run_example_notebooks.py`, which strips widget/Plotly/Bokeh mime types that don't render in static viewers.
 ```
 
 ---
@@ -658,9 +660,15 @@ CRITICAL RULES:
    python3 -c "from proto_tools.tools.tool_registry import ToolRegistry; specs = [s for s in ToolRegistry.list_all() if '{tool_name}' in s.key]; print([(s.key, s.label) for s in specs])"
    ```
 
-4. **Fix any failures** — If imports fail, check the export chain. If tests fail, fix the tool file or test file directly.
+4. **Execute the example notebook** — Always route notebook execution through the sanitizer script, never `jupyter nbconvert --execute` directly. The script strips widget / Plotly / Bokeh mime types that a kernel emits but static viewers (VS Code, JupyterLab, GitHub, nbviewer) can't render, leaving only the `text/plain` / `text/html` fallbacks that survive the round-trip:
+   ```bash
+   python3 scripts/run_example_notebooks.py --only {tool_name}
+   ```
+   Use `--sanitize-only` to clean a pre-executed notebook without re-running (fast; for notebooks that can't re-run on the current host).
 
-5. **Run the validation checklist:**
+5. **Fix any failures** — If imports fail, check the export chain. If tests fail, fix the tool file or test file directly.
+
+6. **Run the validation checklist:**
    - [ ] Uses `logging.getLogger(__name__)`, never `print()`
    - [ ] Input extends `BaseToolInput`, uses `Field()` (not ConfigField)
    - [ ] Config extends `BaseConfig`, uses `ConfigField()` (not bare Field)
