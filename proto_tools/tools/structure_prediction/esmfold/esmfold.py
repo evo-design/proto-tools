@@ -286,7 +286,7 @@ def run_esmfold(
         >>> inputs = ESMFoldInput(complexes=["MVLSPADKTNVKAAW"])
         >>> config = ESMFoldConfig(verbose=True)
         >>> result = run_esmfold(inputs, config)
-        >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
+        >>> print(f"Average pLDDT: {result.structures[0].metrics.avg_plddt:.2f}")
 
     Note:
         - Maximum 2,400 residues per complex (hard limit)

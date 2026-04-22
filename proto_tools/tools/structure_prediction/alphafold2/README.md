@@ -222,8 +222,8 @@ config = AlphaFold2Config(use_msa=True, num_recycles=3)
 result = run_alphafold2(inputs, config)
 
 structure = result.structures[0]
-print(f"avg_pLDDT: {structure.avg_plddt:.3f}")
-print(f"pTM: {structure.metrics['ptm']:.3f}")
+print(f"avg_pLDDT: {structure.metrics.avg_plddt:.3f}")
+print(f"pTM: {structure.metrics.ptm:.3f}")
 ```
 
 **Example 2: Fast single-sequence mode (no MSA)**
@@ -238,7 +238,7 @@ inputs = AlphaFold2Input(complexes=["MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI
 config = AlphaFold2Config(use_msa=False, num_recycles=3)
 
 result = run_alphafold2(inputs, config)
-print(f"avg_pLDDT: {result.structures[0].avg_plddt:.3f}")
+print(f"avg_pLDDT: {result.structures[0].metrics.avg_plddt:.3f}")
 ```
 
 **Example 3: High-quality ensemble prediction**
