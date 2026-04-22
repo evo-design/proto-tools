@@ -618,6 +618,7 @@ class PyRosettaScorer:
         binder_chains: list[str],
         target_chains: list[str],
         scorefxn_name: str = "ref2015",
+        seed: int | None = None,
     ) -> dict[str, Any]:
         """Compute interface-analysis metrics for a list of two-chain complexes.
 
@@ -634,6 +635,13 @@ class PyRosettaScorer:
             target_chains (list[str]): Per-input target chain labels
                 (PDB-shortened, single character).
             scorefxn_name (str): Rosetta score function name.
+            seed (int | None): Seed for PyRosetta's C++ RNG, applied via
+                ``rg().set_seed(seed)`` before ``InterfaceAnalyzerMover.apply``.
+                Required for reproducible ``interface_dG`` / ``interface_packstat``
+                because ``set_pack_separated(True)`` drives a stochastic
+                simulated-annealing repack off the global RNG. When ``None``,
+                the RNG is not reseeded; output becomes dependent on prior
+                calls within the same persistent worker.
 
         Returns:
             dict: ``{"results": [{"interface_sc": float, "interface_hbonds": int,
@@ -645,6 +653,9 @@ class PyRosettaScorer:
         self._ensure_init()
         import pyrosetta
         from pyrosetta.rosetta.protocols.analysis import InterfaceAnalyzerMover
+
+        if seed is not None:
+            pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
         results = []
         for i, pdb_content in enumerate(pdb_contents):
@@ -750,6 +761,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             binder_chains=input_dict["binder_chains"],
             target_chains=input_dict["target_chains"],
             scorefxn_name=input_dict["scorefxn"],
+            seed=input_dict.get("seed"),
         )
     raise ValueError(f"Unknown operation: {operation}")
 

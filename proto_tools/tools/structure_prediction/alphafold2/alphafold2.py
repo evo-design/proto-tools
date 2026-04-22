@@ -115,7 +115,7 @@ class AlphaFold2Metrics(Metrics):
         ptm (float): Predicted TM-score (0-1). Always present.
         iptm (float): Interface predicted TM-score (0-1). Multi-chain input only.
         avg_pae (float): Average predicted aligned error. Always present.
-        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
+        pae_matrix (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -123,7 +123,12 @@ class AlphaFold2Metrics(Metrics):
         "ptm": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "iptm": {"availability": "multi-chain input only", "type": "float", "min": 0.0, "max": 1.0},
         "avg_pae": {"availability": "always", "type": "float", "min": 0.0, "max": None},
-        "pae": {"availability": "when include_pae_matrix=True", "type": "list[list[float]]", "min": 0.0, "max": None},
+        "pae_matrix": {
+            "availability": "when include_pae_matrix=True",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": None,
+        },
     }
     primary_metric: str | None = "avg_plddt"
 
@@ -333,7 +338,7 @@ def run_alphafold2(
             ptm=output_data["ptm"],
             iptm=output_data.get("iptm"),
             avg_pae=output_data.get("avg_pae"),
-            pae=output_data["pae"],
+            pae_matrix=output_data.get("pae_matrix"),
         )
 
         structure_outputs.append(

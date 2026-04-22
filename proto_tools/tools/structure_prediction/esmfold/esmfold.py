@@ -127,14 +127,19 @@ class ESMFoldMetrics(Metrics):
         avg_plddt (float): Average predicted LDDT score (0-1). Always present.
         ptm (float): Predicted TM-score (0-1). Depends on model output.
         avg_pae (float): Average predicted aligned error. Depends on model output.
-        pae (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True and model emits PAE.
+        pae_matrix (list[list[float]]): Full per-residue PAE matrix in Å. Present when include_pae_matrix=True and model emits PAE.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "avg_plddt": {"availability": "always", "type": "float", "min": 0.0, "max": 1.0},
         "ptm": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": 1.0},
         "avg_pae": {"availability": "depends on model output", "type": "float", "min": 0.0, "max": None},
-        "pae": {"availability": "when include_pae_matrix=True", "type": "list[list[float]]", "min": 0.0, "max": None},
+        "pae_matrix": {
+            "availability": "when include_pae_matrix=True",
+            "type": "list[list[float]]",
+            "min": 0.0,
+            "max": None,
+        },
     }
     primary_metric: str | None = "avg_plddt"
 
@@ -361,7 +366,7 @@ def run_esmfold(
                     avg_plddt=result["avg_plddt"],
                     ptm=result["ptm"],
                     avg_pae=result["avg_pae"],
-                    pae=result["pae"],
+                    pae_matrix=result.get("pae_matrix"),
                 ),
                 source="esmfold-prediction",
             )

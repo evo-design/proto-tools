@@ -29,7 +29,7 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 ## How It Works
 
 1. Extract per-residue CA coordinates and per-residue pLDDT (0-1) from the cofolded `Structure`. The pLDDT is rescaled to 0-100 internally so the sigmoid parameters match the published fit.
-2. Read the full PAE matrix from `structure.metrics["pae"]`. The tool asserts the matrix is square and matches the total residue count emitted by `Structure.per_residue_plddt`.
+2. Read the full PAE matrix from `structure.metrics["pae_matrix"]`. The tool asserts the matrix is square and matches the total residue count emitted by `Structure.per_residue_plddt`.
 3. For each chain, find CA-CA contact residue pairs against every other chain within `distance_cutoff` (default 10.0 Å). Collect the per-chain interface pLDDT and the normalized-PAE average over those pairs.
 4. Apply the Zhu-2023 sigmoid to `if_plddt * norm_pae` for each chain to get `pmidockq`.
 5. Aggregate: average `pmidockq` over chains in `inputs.target_chains` that contact `inputs.binder_chain`.
@@ -44,7 +44,7 @@ These feed a sigmoid whose parameters were fit by Zhu et al. 2023 against ground
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
+| `structure` | `Structure` | *Required* | Cofolded complex. `b_factor_type` must be `PLDDT` or `NORMALIZED_PLDDT`. PAE matrix must be attached at `structure.metrics["pae_matrix"]` as a square `list[list[float]]` whose dimension matches the total residue count. |
 | `binder_chain` | `str` | *Required* | Single-character chain ID of the binder. |
 | `target_chains` | `list[str]` | *Required* | Target chain ID(s). Single-character entries; comma-separated strings are accepted and normalized. |
 
@@ -90,7 +90,7 @@ from proto_tools.tools import PDockQ2Config, PDockQ2Input, run_pdockq2
 structure = Structure.from_file(
     "complex.pdb",
     b_factor_type=BFactorType.PLDDT,
-    metrics={"pae": my_pae_matrix},  # list[list[float]], N x N over all residues
+    metrics={"pae_matrix": my_pae_matrix},  # list[list[float]], N x N over all residues
 )
 
 inputs = PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"])

@@ -380,6 +380,7 @@ def run_pyrosetta_interface_analyzer(
         "binder_chains": binder_chains,
         "target_chains": target_chains,
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
+        "seed": config.seed,  # type: ignore[union-attr]
         "device": "cpu",
     }
 

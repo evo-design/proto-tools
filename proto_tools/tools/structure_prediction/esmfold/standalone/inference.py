@@ -222,7 +222,7 @@ class ESMFoldModel:
             "avg_plddt": float(avg_plddt),
             "ptm": float(ptm) if ptm is not None else None,
             "avg_pae": avg_pae,
-            "pae": pae_matrix,
+            "pae_matrix": pae_matrix,
         }
 
     # ============================================================================
