@@ -291,7 +291,7 @@ def run_chai1(inputs: Chai1Input, config: Chai1Config, instance: Any = None) -> 
         >>> inputs = Chai1Input(complexes=[["MVLSPADKTNVKAAW", "GSSGSSGSS"]])
         >>> config = Chai1Config(use_esm_embeddings=True, num_trunk_recycles=3, verbose=True)
         >>> result = run_chai1(inputs, config)
-        >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
+        >>> print(f"Average pLDDT: {result.structures[0].metrics.avg_plddt:.2f}")
 
     Note:
         - Chai1 processes each complex independently and sequentially

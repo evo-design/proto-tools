@@ -281,7 +281,7 @@ def run_alphafold2(
         >>> inputs = AlphaFold2Input(complexes=["MVLSPADKTNVKAAW"])
         >>> config = AlphaFold2Config(use_msa=False, verbose=True)
         >>> result = run_alphafold2(inputs, config)
-        >>> print(f"Average pLDDT: {result.structures[0].avg_plddt:.2f}")
+        >>> print(f"Average pLDDT: {result.structures[0].metrics.avg_plddt:.2f}")
     """
     prepared_complexes = inputs.prepare_complexes()
 

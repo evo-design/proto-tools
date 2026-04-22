@@ -123,16 +123,16 @@ from proto_tools.tools.structure_alignment.tmalign import (
     TMalignInput, TMalignConfig, run_tmalign,
 )
 from proto_tools.tools.structure_prediction.esmfold import (
-    run_esmfold_prediction, ESMFoldPredictionInput, ESMFoldPredictionConfig,
+    run_esmfold, ESMFoldInput, ESMFoldConfig,
 )
 
 # Predict structure of designed sequence
 designed_seq = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDI"
-pred_result = run_esmfold_prediction(
-    ESMFoldPredictionInput(complexes=[designed_seq]),
-    ESMFoldPredictionConfig(),
+pred_result = run_esmfold(
+    ESMFoldInput(complexes=[designed_seq]),
+    ESMFoldConfig(),
 )
-predicted_pdb = pred_result.structures[0].to_pdb_string()
+predicted_pdb = pred_result.structures[0].structure_pdb
 
 # Compare to target structure
 with open("target_fold.pdb") as f:
