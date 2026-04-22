@@ -251,6 +251,9 @@ def test_ligands_hash():
 # ── I/O ──────────────────────────────────────────────────────────────────
 
 
+# Eager PubChem name lookup in SDF parse path makes this network-dependent;
+# blows up CI retry budget when PubChem is rate-limiting. Tracked in #550.
+@pytest.mark.skip_ci
 def test_to_sdf_round_trip(tmp_path):
     ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
     sdf_path = tmp_path / "out.sdf"

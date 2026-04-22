@@ -6,6 +6,7 @@ Provides a decorator-based API for registering tools with metadata and
 automatic schema generation for API/frontend integration.
 """
 
+import contextlib
 import inspect
 import logging
 import re
@@ -420,166 +421,178 @@ class ToolRegistry:
                             logger.debug("[Cache Hit] %s: using cached result", key)
                             return cached
 
-                # --- Preprocess inputs via config hook ---
-                inputs = config.preprocess(inputs)
-
-                # --- Dispatch (pool or local) ---
-
-                # Check for active ToolPool (transparent parallel dispatch)
-                from proto_tools.utils.tool_pool import (
-                    get_active_pool,
-                    is_pool_executing,
+                # Share one worker across preprocess + main dispatch. Skipped for
+                # in-process tools (no worker to share).
+                toolkit = source_file.parent.name
+                has_standalone_env = spec is not None and spec.has_standalone_env
+                has_custom_preprocess = type(config).preprocess is not BaseConfig.preprocess
+                needs_scope = has_standalone_env and (has_custom_preprocess or instance is not None)
+                auto_persist_ctx: contextlib.AbstractContextManager[None] = (
+                    ToolInstance._auto_persist_scope(toolkit, instance=instance)
+                    if needs_scope
+                    else contextlib.nullcontext()
                 )
 
-                pool = get_active_pool()
-                if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
-                    result = pool._parallel_dispatch(key, func, inputs, config)
-                    result.tool_id = key
-                    result.success = True
-                    result.execution_time = time.time() - start_time
-                    return _post_dispatch_cache_and_expand(
-                        key,
-                        spec,
-                        cacheable,
-                        result,
-                        strip,
-                        deduped,
-                        original_items,
-                        whole_cache_key,
+                with auto_persist_ctx:
+                    inputs = config.preprocess(inputs)
+
+                    # --- Dispatch (pool or local) ---
+
+                    # Check for active ToolPool (transparent parallel dispatch)
+                    from proto_tools.utils.tool_pool import (
+                        get_active_pool,
+                        is_pool_executing,
                     )
 
-                # Extension point: try external dispatch before local execution
-                try:
-                    dispatched = cls._try_dispatch(key, inputs, config)
-                except Exception as e:
-                    logger.error("Tool %s: _try_dispatch raised %s: %s", key, type(e).__name__, e)
-                    return _make_error_output(
-                        output_class,
-                        key,
-                        start_time,
-                        e,
-                        traceback.format_exc(),
-                    )
-                if dispatched is not None:
-                    dispatched.tool_id = key
-                    dispatched.success = True
-                    dispatched.execution_time = time.time() - start_time
-                    return _post_dispatch_cache_and_expand(
-                        key,
-                        spec,
-                        cacheable,
-                        dispatched,
-                        strip,
-                        deduped,
-                        original_items,
-                        whole_cache_key,
-                    )
+                    pool = get_active_pool()
+                    if pool is not None and not is_pool_executing() and spec and spec.iterable_input_field is not None:
+                        result = pool._parallel_dispatch(key, func, inputs, config)
+                        result.tool_id = key
+                        result.success = True
+                        result.execution_time = time.time() - start_time
+                        return _post_dispatch_cache_and_expand(
+                            key,
+                            spec,
+                            cacheable,
+                            result,
+                            strip,
+                            deduped,
+                            original_items,
+                            whole_cache_key,
+                        )
 
-                # Carry per-invocation flags (key, gpu_only) to ToolInstance so
-                # the eviction callback can restart the worker instead of
-                # attempting an in-process CPU offload when the tool is gpu_only.
-                from proto_tools.utils.tool_instance import _current_tool_invocation
-
-                for attempt in range(1 + MAX_RETRIES):
+                    # Extension point: try external dispatch before local execution
                     try:
-                        if attempt == 0:
-                            logger.debug(f"Tool {key}: starting execution")
-
-                        # Capture warnings during execution
-                        with warnings.catch_warnings(record=True) as warning_list:
-                            # Ensure all warnings are captured
-                            warnings.simplefilter("always")
-
-                            # Execute the tool function (ContextVar is read by
-                            # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                            _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": effective_gpu_only})
-                            try:
-                                result = func(inputs, config, instance)
-                            finally:
-                                _current_tool_invocation.reset(_inv_token)
-
-                            # Populate metadata fields
-                            result.tool_id = key
-                            result.execution_time = time.time() - start_time
-                            result.success = True
-
-                            # Add captured warnings to the result (filtered)
-                            if warning_list:
-                                # Filter out ignored warnings
-                                filtered_warnings = [
-                                    w
-                                    for w in warning_list
-                                    if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                                ]
-
-                                if filtered_warnings:
-                                    captured_warnings = [str(w.message) for w in filtered_warnings]
-                                    result.warnings = result.warnings + captured_warnings
-                                    for w in captured_warnings:
-                                        logger.warning(f"Tool {key}: {w}")
-
-                                    # Re-emit warnings so they still get logged/printed
-                                    _re_emit_warnings(filtered_warnings)
-
-                            # Post-dispatch: cache store, stitch, dedup expand
-                            result = _post_dispatch_cache_and_expand(
-                                key,
-                                spec,
-                                cacheable,
-                                result,
-                                strip,
-                                deduped,
-                                original_items,
-                                whole_cache_key,
-                            )
-
-                            logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
-                            return result
-
-                    except _RETRYABLE_EXCEPTIONS as e:  # noqa: PERF203 -- retry loop
-                        last_exception = e
-                        last_traceback = traceback.format_exc()
-                        if attempt < MAX_RETRIES:
-                            delay = RETRY_DELAY * (2**attempt)
-                            logger.warning(
-                                f"Tool {key}: transient {type(e).__name__} on attempt "
-                                f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
-                            )
-                            time.sleep(delay)
-
+                        dispatched = cls._try_dispatch(key, inputs, config)
                     except Exception as e:
-                        # Non-retryable error; return immediately
-                        filtered_warnings = [
-                            w
-                            for w in warning_list
-                            if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                        ]
-                        captured_warnings = [str(w.message) for w in filtered_warnings]
-                        _re_emit_warnings(filtered_warnings)
-
-                        logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
+                        logger.error("Tool %s: _try_dispatch raised %s: %s", key, type(e).__name__, e)
                         return _make_error_output(
                             output_class,
                             key,
                             start_time,
                             e,
                             traceback.format_exc(),
-                            captured_warnings,
+                        )
+                    if dispatched is not None:
+                        dispatched.tool_id = key
+                        dispatched.success = True
+                        dispatched.execution_time = time.time() - start_time
+                        return _post_dispatch_cache_and_expand(
+                            key,
+                            spec,
+                            cacheable,
+                            dispatched,
+                            strip,
+                            deduped,
+                            original_items,
+                            whole_cache_key,
                         )
 
-                # All retries exhausted for a retryable exception
-                assert last_exception is not None  # set on first retry iteration
-                logger.error(
-                    f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
-                    f"{type(last_exception).__name__}: {last_exception}"
-                )
-                return _make_error_output(
-                    output_class,
-                    key,
-                    start_time,
-                    last_exception,
-                    last_traceback,
-                )
+                    # Carry per-invocation flags (key, gpu_only) to ToolInstance so
+                    # the eviction callback can restart the worker instead of
+                    # attempting an in-process CPU offload when the tool is gpu_only.
+                    from proto_tools.utils.tool_instance import _current_tool_invocation
+
+                    for attempt in range(1 + MAX_RETRIES):
+                        try:
+                            if attempt == 0:
+                                logger.debug(f"Tool {key}: starting execution")
+
+                            # Capture warnings during execution
+                            with warnings.catch_warnings(record=True) as warning_list:
+                                # Ensure all warnings are captured
+                                warnings.simplefilter("always")
+
+                                # Execute the tool function (ContextVar is read by
+                                # ``ToolInstance.dispatch`` / ``_run_persistent``).
+                                _inv_token = _current_tool_invocation.set({"key": key, "gpu_only": effective_gpu_only})
+                                try:
+                                    result = func(inputs, config, instance)
+                                finally:
+                                    _current_tool_invocation.reset(_inv_token)
+
+                                # Populate metadata fields
+                                result.tool_id = key
+                                result.execution_time = time.time() - start_time
+                                result.success = True
+
+                                # Add captured warnings to the result (filtered)
+                                if warning_list:
+                                    # Filter out ignored warnings
+                                    filtered_warnings = [
+                                        w
+                                        for w in warning_list
+                                        if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                                    ]
+
+                                    if filtered_warnings:
+                                        captured_warnings = [str(w.message) for w in filtered_warnings]
+                                        result.warnings = result.warnings + captured_warnings
+                                        for w in captured_warnings:
+                                            logger.warning(f"Tool {key}: {w}")
+
+                                        # Re-emit warnings so they still get logged/printed
+                                        _re_emit_warnings(filtered_warnings)
+
+                                # Post-dispatch: cache store, stitch, dedup expand
+                                result = _post_dispatch_cache_and_expand(
+                                    key,
+                                    spec,
+                                    cacheable,
+                                    result,
+                                    strip,
+                                    deduped,
+                                    original_items,
+                                    whole_cache_key,
+                                )
+
+                                logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
+                                return result
+
+                        except _RETRYABLE_EXCEPTIONS as e:  # noqa: PERF203 -- retry loop
+                            last_exception = e
+                            last_traceback = traceback.format_exc()
+                            if attempt < MAX_RETRIES:
+                                delay = RETRY_DELAY * (2**attempt)
+                                logger.warning(
+                                    f"Tool {key}: transient {type(e).__name__} on attempt "
+                                    f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                )
+                                time.sleep(delay)
+
+                        except Exception as e:
+                            # Non-retryable error; return immediately
+                            filtered_warnings = [
+                                w
+                                for w in warning_list
+                                if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                            ]
+                            captured_warnings = [str(w.message) for w in filtered_warnings]
+                            _re_emit_warnings(filtered_warnings)
+
+                            logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
+                            return _make_error_output(
+                                output_class,
+                                key,
+                                start_time,
+                                e,
+                                traceback.format_exc(),
+                                captured_warnings,
+                            )
+
+                    # All retries exhausted for a retryable exception
+                    assert last_exception is not None  # set on first retry iteration
+                    logger.error(
+                        f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
+                        f"{type(last_exception).__name__}: {last_exception}"
+                    )
+                    return _make_error_output(
+                        output_class,
+                        key,
+                        start_time,
+                        last_exception,
+                        last_traceback,
+                    )
 
             # Register the tool spec with the captured source file
             cls._registry[key] = ToolSpec(

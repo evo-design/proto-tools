@@ -91,11 +91,32 @@ _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contex
     "_current_tool_invocation", default=None
 )
 
+# Overlay of toolkit -> ToolInstance used by _auto_persist_scope. Checked by
+# dispatch() Path 2 BEFORE the shared cache. ContextVar-backed so two
+# concurrent callers each with their own instance don't cross-contaminate.
+_auto_persist_overlay: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = contextvars.ContextVar(
+    "_auto_persist_overlay", default=None
+)
+
 
 def _active_cache() -> dict[str, "ToolInstance"]:
     """Return the scope-local cache if inside scope(), else the global cache."""
     override = _scope_override.get()
     return override if override is not None else _instances
+
+
+def _lookup_instance(key: str) -> "ToolInstance | None":
+    """Return the cached instance for *key*, checking the auto-persist overlay first.
+
+    Read-only — use :func:`_active_cache` for mutations. Overlays are
+    ContextVar-backed so they take precedence and stay per-task/thread,
+    preventing concurrent callers with distinct instances from colliding.
+    """
+    overlay = _auto_persist_overlay.get()
+    if overlay is not None and key in overlay:
+        return overlay[key]
+    with _lock:
+        return _active_cache().get(key)
 
 
 def _run_setup_script(
@@ -292,10 +313,11 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 2: look up by string cache key (or toolkit as default key)
+        # Path 2: look up by string cache key (or toolkit as default key).
+        # Path 1 already handled the ToolInstance case, so ``instance`` is
+        # ``str | None`` and ``key`` is always ``str``.
         key = instance if instance is not None else toolkit
-        with _lock:
-            cached = _active_cache().get(key)
+        cached = _lookup_instance(key)
         if cached is not None:
             logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, key)
             return cached.run(
@@ -494,6 +516,47 @@ class ToolInstance:
                 yield
         finally:
             _persist_mode.reset(token)
+
+    @classmethod
+    @contextmanager
+    def _auto_persist_scope(
+        cls,
+        toolkit: str,
+        *,
+        instance: "ToolInstance | None" = None,
+    ) -> Generator[None, None, None]:
+        """Internal: seed a thread-local overlay so preprocess + dispatch share one worker.
+
+        Called by the ``@tool`` wrapper when a tool has a custom ``preprocess``
+        or an explicit ``instance=`` is passed. Inner same-toolkit dispatches
+        find the seeded instance via ``dispatch`` Path 2 and reuse it.
+
+        No-op (nesting-safe) if *toolkit* is already visible via the overlay
+        or the shared cache. A caller-provided *instance* is seeded but not
+        shut down on exit (caller owns it); a fresh instance is created and
+        shut down on exit.
+
+        Raises:
+            ValueError: If ``instance.toolkit`` does not match *toolkit*.
+        """
+        toolkit = cls._normalize_toolkit(toolkit)
+        if instance is not None and instance.toolkit != toolkit:
+            raise ValueError(
+                f"ToolInstance toolkit mismatch: instance.toolkit={instance.toolkit!r} != outer toolkit={toolkit!r}"
+            )
+        if _lookup_instance(toolkit) is not None:
+            yield
+            return
+
+        scoped_inst = instance if instance is not None else cls(toolkit)
+        overlay = _auto_persist_overlay.get() or {}
+        token = _auto_persist_overlay.set({**overlay, toolkit: scoped_inst})
+        try:
+            yield
+        finally:
+            _auto_persist_overlay.reset(token)
+            if instance is None:
+                scoped_inst.shutdown()
 
     # ------------------------------------------------------------------
     # Init

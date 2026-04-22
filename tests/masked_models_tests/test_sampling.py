@@ -3,6 +3,10 @@
 Integration tests for sampling tools (masked models + random mutagenesis).
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import pytest
 
 from proto_tools.tools.masked_models.esm2 import (
@@ -274,3 +278,80 @@ def test_all_fixed_positions_is_identity(
     )
     result = run_fn(input_cls(sequences=[seq]), config)
     assert result.sequences == [seq]
+
+
+# ── Cross-toolkit overlay isolation ───────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_esm2_sample_with_esm3_masking_isolates_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ESM2 sampling with ESM3-backed masking must not leak 'esm3' into ESM2's auto-persist overlay."""
+    # ESM3 is gated on HuggingFace; the framework auto-resolves the token from
+    # env vars, ``~/.cache/huggingface/token``, or ``~/.git-credentials``.
+    from proto_tools.utils.auth import resolve_hf_token
+
+    if resolve_hf_token() is None:
+        pytest.skip("ESM3 requires a HuggingFace token; none resolvable via env or ~/.cache/huggingface/")
+
+    from proto_tools.tools.masked_models.esm2 import esm2_sample as esm2_sample_mod
+    from proto_tools.utils.tool_instance import _auto_persist_overlay
+
+    snapshots: list[tuple[str, set[str]]] = []
+
+    def _snap(where: str) -> None:
+        overlay = _auto_persist_overlay.get() or {}
+        snapshots.append((where, set(overlay.keys())))
+
+    original_preprocess = ESM2SampleConfig.preprocess
+
+    def _instrumented_preprocess(self: ESM2SampleConfig, inputs: Any) -> Any:
+        _snap("preprocess-enter")
+        result = original_preprocess(self, inputs)
+        _snap("preprocess-exit")
+        return result
+
+    monkeypatch.setattr(ESM2SampleConfig, "preprocess", _instrumented_preprocess)
+
+    # Patch the name as re-bound in esm2_sample's module namespace (it's imported
+    # via `from proto_tools.transforms.masking import build_position_score_fn`).
+    original_build = esm2_sample_mod.build_position_score_fn
+
+    def _instrumented_build(sampling_model: str, masking_strategy: MaskingStrategy, device: str) -> Any:
+        fn = original_build(sampling_model, masking_strategy, device)
+        if fn is None:
+            return None
+
+        def _wrapped(sequences: list[str]) -> Any:
+            _snap("build_position_score_fn-called")
+            return fn(sequences)
+
+        return _wrapped
+
+    monkeypatch.setattr(esm2_sample_mod, "build_position_score_fn", _instrumented_build)
+
+    sequences = [
+        "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ",
+        "GVKLIFYEASKILDHLKVAARKVPQRSSGFGIP",
+    ]
+    config = ESM2SampleConfig(
+        masking_strategy=MaskingStrategy(method="entropy", model_name="esm3", num_mutations=3),
+        temperature=1.0,
+        batch_size=1,
+        device="cuda",
+    )
+    result = run_esm2_sample(ESM2SampleInput(sequences=sequences), config)
+
+    assert result.success, f"run_esm2_sample failed: {result.errors}"
+    assert len(result.sequences) == 2
+    assert all(isinstance(s, str) and len(s) > 0 for s in result.sequences)
+
+    preprocess_snaps = [s for s in snapshots if s[0] in ("preprocess-enter", "preprocess-exit")]
+    assert preprocess_snaps, "preprocess was never entered"
+    for where, keys in preprocess_snaps:
+        assert "esm2" in keys, f"snapshot {where}: expected 'esm2' in overlay, got {keys}"
+        assert "esm3" not in keys, f"snapshot {where}: 'esm3' leaked into outer overlay; got {keys}"
+
+    score_snaps = [s for s in snapshots if s[0] == "build_position_score_fn-called"]
+    assert score_snaps, "ESM3 scoring path never fired — test would be vacuous"
+    for where, keys in score_snaps:
+        assert "esm3" not in keys, f"snapshot {where}: 'esm3' present in overlay during scoring; got {keys}"
