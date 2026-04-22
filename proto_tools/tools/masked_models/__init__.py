@@ -52,8 +52,8 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCEmbeddingsOutput,
     run_esmc_embeddings,
 )
-from proto_tools.tools.masked_models.masking import MaskingMethod, MaskingStrategy
 from proto_tools.tools.masked_models.shared_data_models import MaskedModelScoringMetrics, SequenceEmbedding
+from proto_tools.transforms.masking import MaskingMethod, MaskingStrategy
 
 __all__ = [
     # Masking strategies

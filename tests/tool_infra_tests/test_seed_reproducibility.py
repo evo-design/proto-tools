@@ -33,7 +33,7 @@ def test_cache_key_with_seed():
 
 def test_masking_strategy_seeded():
     """Same seed → same mask positions; different seeds → different positions."""
-    from proto_tools.tools.masked_models.masking import MaskingStrategy
+    from proto_tools.transforms.masking import MaskingStrategy
 
     strategy = MaskingStrategy(method="random", mask_fraction=0.5)
     seqs = ["ACGTACGTACGTACGT"]

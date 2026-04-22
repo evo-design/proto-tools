@@ -1,4 +1,4 @@
-"""proto_tools/tools/masked_models/masking/base.py.
+"""proto_tools/transforms/masking/base.py.
 
 Masking strategies for masked language model sampling.
 """
@@ -11,7 +11,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import BaseModel, ConfigDict, PrivateAttr, model_validator
 
-from proto_tools.tools.masked_models.masking.maskers import MASKERS, Masker, MaskingMethod
+from proto_tools.transforms.masking.maskers import MASKERS, Masker, MaskingMethod
 from proto_tools.utils import ConfigField
 
 logger = logging.getLogger(__name__)

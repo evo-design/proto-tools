@@ -11,16 +11,16 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from proto_tools.tools.masked_models.masking import (
-    MASK_TOKEN,
-    MaskingStrategy,
-    apply_masking_strategy,
-)
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from proto_tools.tools.mutagenesis.codons import sample_amino_acid
 from proto_tools.tools.tool_registry import tool
+from proto_tools.transforms.masking import (
+    MASK_TOKEN,
+    MaskingStrategy,
+    apply_masking_strategy,
+)
 from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
 
 logger = logging.getLogger(__name__)

@@ -15,7 +15,6 @@ from proto_tools.tools.masked_models.esm3 import (
     ESM3SampleInput,
     run_esm3_sample,
 )
-from proto_tools.tools.masked_models.masking import MaskingStrategy
 from proto_tools.tools.mutagenesis.random_nucleotide import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
@@ -26,6 +25,7 @@ from proto_tools.tools.mutagenesis.random_protein import (
     RandomProteinSampleInput,
     run_random_protein_sample,
 )
+from proto_tools.transforms.masking import MaskingStrategy
 from proto_tools.utils.sequence import (
     return_invalid_dna_chars,
     return_invalid_protein_chars,

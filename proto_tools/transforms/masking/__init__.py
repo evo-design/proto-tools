@@ -1,12 +1,12 @@
 """Pluggable masking strategies for masked language model sampling tools."""
 
-from proto_tools.tools.masked_models.masking.base import (
+from proto_tools.transforms.masking.base import (
     MASK_TOKEN,
     MaskingStrategy,
     apply_masking_strategy,
     build_position_score_fn,
 )
-from proto_tools.tools.masked_models.masking.maskers import MASKERS, MaskingMethod
+from proto_tools.transforms.masking.maskers import MASKERS, MaskingMethod
 
 __all__ = [
     "MASK_TOKEN",
