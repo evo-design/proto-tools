@@ -180,9 +180,9 @@ def test_get_memory_stats_via_worker(tool_spec):
 
     tool_key = tool_spec.key
 
-    tool_name = tool_spec.source_file.parent.name
+    toolkit = tool_spec.source_file.parent.name
 
-    with ToolInstance.persist_tool(tool_name) as instance:
+    with ToolInstance.persist_tool(toolkit) as instance:
         try:
             command = {"command": "get_memory_stats"}
             script_path = tool_spec.source_file.parent / "standalone" / "inference.py"
@@ -197,7 +197,7 @@ def test_get_memory_stats_via_worker(tool_spec):
             # the warmup timeout extension to be skipped.
             cfg = BaseConfig(verbose=False, timeout=600)
             result = ToolInstance.dispatch(
-                tool_name,
+                toolkit,
                 command,
                 instance=instance,
                 script_path=script_path,

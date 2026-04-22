@@ -304,6 +304,6 @@ def test_multi_gpu_device_status(device_manager, mock_callback):
 
     assert "instance1" in status["allocations"]
     alloc_info = status["allocations"]["instance1"]
-    assert alloc_info["tool_name"] == "tool1"
+    assert alloc_info["toolkit"] == "tool1"
 
     assert "," in alloc_info["device_id"] or len(alloc_info["device_id"].split(":")) == 2

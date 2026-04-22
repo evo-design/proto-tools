@@ -2,6 +2,14 @@
 
 Reference file for the `implement-tool` skill. Patterns are tagged with which subagent or phase consumes them.
 
+**Placeholder glossary** (see SKILL.md for full definitions):
+
+- `{toolkit}` — snake_case directory name (e.g., `evo2`, `pyrosetta`). **Strict** — drives the directory path and dispatch identifier.
+- `{tool_key}` — kebab-case registration key (e.g., `evo2-sample`). **Strict** — passed to `@tool(key=...)`.
+- `{tool_key_snake}` — snake_case form of `{tool_key}` (e.g., `evo2_sample`). **Strict** — the core tool file name, the `run_*` function, and the test file.
+- `{ToolName}` — PascalCase class-name prefix for this tool's `Input` / `Config` / `Output` (e.g., `Evo2Sample`, `ESMFoldPrediction`). **Developer's choice** — typically the PascalCase of `{tool_key}`, but pick whatever reads cleanly as long as it's specific to this tool.
+- `{tool_display_name}` — human-readable label (e.g., `"Evo 2"`).
+
 ---
 
 ## Standalone CPU Tool (ToolInstance) — [Subagent 1: Standalone + Phase 2: Contract]
@@ -10,8 +18,8 @@ Reference file for the `implement-tool` skill. Patterns are tagged with which su
 ```python
 from proto_tools.utils.tool_instance import ToolInstance
 
-def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    logger.debug("Using local venv for tool_name operation")
+def run_{tool_key_snake}(inputs: {ToolName}Input, config: {ToolName}Config) -> {ToolName}Output:
+    logger.debug("Using local venv for {toolkit} operation")
 
     input_data = {
         "operation": "{operation_name}",
@@ -21,7 +29,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
     }
 
     output_data = ToolInstance.dispatch(
-        "{tool_name}",
+        "{toolkit}",
         input_data,
         script_path=Path(__file__).parent / "standalone" / "run.py",
         config=config,
@@ -36,7 +44,7 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
 **standalone/run.py** (Subagent 1) — JSON I/O entry point:
 ```python
 """
-{ToolName} standalone runner for ToolInstance venv execution.
+{tool_display_name} standalone runner for ToolInstance venv execution.
 Usage (called by ToolInstance, not directly):
     python run.py <input.json> <output.json>  # CPU tools
     python inference.py <input.json> <output.json>  # AI model tools
@@ -111,7 +119,7 @@ pip install uv
 uv pip install -r requirements.txt
 
 # Resolve weight directory based on PROTO_MODEL_CACHE
-proto_resolve_weights_dir my_tool
+proto_resolve_weights_dir {toolkit}
 
 if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
     echo "Downloading model weights..."
@@ -135,11 +143,11 @@ numpy>=1.24.0
 ```python
 from proto_tools.utils.tool_instance import ToolInstance
 
-def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
-    logger.debug("Using local venv for tool_name operation")
+def run_{tool_key_snake}(inputs: {ToolName}Input, config: {ToolName}Config) -> {ToolName}Output:
+    logger.debug("Using local venv for {toolkit} operation")
 
     result = ToolInstance.dispatch(
-        "{tool_name}",
+        "{toolkit}",
         {
             "operation": "run",
             "sequences": inputs.sequences,
@@ -151,13 +159,13 @@ def run_tool_name(inputs: ToolInput, config: ToolConfig) -> ToolOutput:
         config=config,
     )
 
-    return ToolOutput(results=result["results"])
+    return {ToolName}Output(results=result["results"])
 ```
 
 **standalone/inference.py** (Subagent 1) — GPU model pattern:
 ```python
 """
-{ToolName} standalone inference for ToolInstance venv execution.
+{tool_display_name} standalone inference for ToolInstance venv execution.
 """
 
 import json
@@ -179,7 +187,7 @@ class {ToolName}Model:
         import torch  # Heavy imports ONLY inside methods
         # For non-HF tools, resolve weight path:
         # from standalone_helpers import resolve_weights_dir
-        # weights_dir = resolve_weights_dir("my_tool")
+        # weights_dir = resolve_weights_dir("{toolkit}")
         # model_path = os.path.join(weights_dir, "model.pt")
         # Load model...
         self._loaded = True
@@ -264,10 +272,10 @@ echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
 # Non-HF tools that download weights:
-# proto_resolve_weights_dir my_tool
+# proto_resolve_weights_dir {toolkit}
 # wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
 
-echo "{ToolName} setup complete!"
+echo "{tool_display_name} setup complete!"
 ```
 
 ### Downloading model weights in setup.sh
@@ -314,7 +322,7 @@ proto_install_jax MYTOOL
 echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
-echo "{ToolName} setup complete!"
+echo "{tool_display_name} setup complete!"
 ```
 
 ### Required Functions for AI Model Standalone Scripts
@@ -385,7 +393,7 @@ def get_memory_stats() -> dict:
 **standalone/run.py** — CLI subprocess pattern:
 ```python
 """
-{ToolName} standalone runner for ToolInstance venv execution.
+{tool_display_name} standalone runner for ToolInstance venv execution.
 
 CRITICAL: This script runs in an isolated environment and CANNOT import from proto_tools.
 Only import from: stdlib, requirements.txt dependencies, and standalone_helpers (auto-copied).
@@ -467,7 +475,7 @@ For tools distributed as C/C++ source (no prebuilt binaries or pip packages), co
 #!/bin/bash
 set -euo pipefail
 
-echo "Setting up {ToolName}..."
+echo "Setting up {tool_display_name}..."
 
 # Check for compiler
 if ! command -v g++ &>/dev/null; then
@@ -485,7 +493,7 @@ BIN_DIR="$(dirname "$(which python)")"
 g++ -O3 -ffast-math -lm -o "$BIN_DIR/{ToolBinary}" "$BUILD_DIR/src/{source}.cpp"
 
 rm -rf "$BUILD_DIR"
-echo "{ToolName} setup complete!"
+echo "{tool_display_name} setup complete!"
 ```
 
 **Key differences from CPU/GPU patterns:**
@@ -506,12 +514,12 @@ Add `cacheable=True` to the `@tool()` decorator. The wrapper auto-selects strate
 
 ```python
 # Per-item caching (tools processing lists/batches):
-@tool(key="tool-key", ..., iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
-def run_tool_name(inputs, config) -> Output:
+@tool(key="{tool_key}", ..., iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
+def run_{tool_key_snake}(inputs, config) -> Output:
 
 # Whole-output caching (tools with single output):
-@tool(key="tool-key", ..., cacheable=True)
-def run_tool_name(inputs, config) -> Output:
+@tool(key="{tool_key}", ..., cacheable=True)
+def run_{tool_key_snake}(inputs, config) -> Output:
 ```
 
 No separate imports needed — caching is built into the `@tool()` decorator.
@@ -524,20 +532,20 @@ Generative tools (e.g., samplers) should NOT set `cacheable=True`.
 **You MUST update ALL 4 levels.** Missing any level breaks imports.
 
 ### Level 1: Tool `__init__.py`
-`tools/{category}/{tool_name}/__init__.py`:
+`tools/{category}/{toolkit}/__init__.py`:
 ```python
-from .{tool_name} import (
+from .{tool_key_snake} import (
     {ToolName}Config,
     {ToolName}Input,
     {ToolName}Output,
-    run_{tool_name},
+    run_{tool_key_snake},
 )
 
 __all__ = [
     "{ToolName}Config",
     "{ToolName}Input",
     "{ToolName}Output",
-    "run_{tool_name}",
+    "run_{tool_key_snake}",
 ]
 ```
 
@@ -547,11 +555,11 @@ __all__ = [
 `tools/{category}/__init__.py` — add imports:
 ```python
 # {ToolName}
-from .{tool_name} import (
+from .{toolkit} import (
     {ToolName}Config,
     {ToolName}Input,
     {ToolName}Output,
-    run_{tool_name},
+    run_{tool_key_snake},
 )
 
 # ... existing imports ...
@@ -562,7 +570,7 @@ __all__ = [
     "{ToolName}Config",
     "{ToolName}Input",
     "{ToolName}Output",
-    "run_{tool_name}",
+    "run_{tool_key_snake}",
 ]
 ```
 
@@ -574,7 +582,7 @@ from .{category} import (
     {ToolName}Config,
     {ToolName}Input,
     {ToolName}Output,
-    run_{tool_name},
+    run_{tool_key_snake},
 )
 
 # In __all__:
@@ -584,7 +592,7 @@ __all__ = [
     "{ToolName}Config",
     "{ToolName}Input",
     "{ToolName}Output",
-    "run_{tool_name}",
+    "run_{tool_key_snake}",
 ]
 ```
 

@@ -43,7 +43,7 @@ allowed-tools:
 **Files you MUST NOT modify:**
 - `standalone/run.py`
 - `standalone/inference.py`
-- `{tool_name}.py` (core implementation)
+- `{toolkit}.py` (core implementation)
 
 ## Common Failure Patterns
 
@@ -110,7 +110,7 @@ Use defensive patterns (`|| true`, conditional checks, graceful fallbacks) that 
 ### 6. Validate Fix on Current Machine
 ```bash
 rm -rf tool_envs/{tool}_env
-pytest -k "tool_name" --all -sv
+pytest -k "tool_key" --all -sv
 pytest --cpu --skip-ci
 pytest --gpu --all  # if GPU available
 ```

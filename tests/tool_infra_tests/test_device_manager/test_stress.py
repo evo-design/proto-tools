@@ -27,7 +27,7 @@ _GPU_MEMORY_TOLERANCE_MB = 3072
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
-# Each entry: (tool_name, InputClass, ConfigClass, run_fn)
+# Each entry: (toolkit, InputClass, ConfigClass, run_fn)
 # Populated lazily so imports don't fail on environments without JAX/torch.
 
 
@@ -115,7 +115,7 @@ def _run_tool(tool_factory, instance_name, **config_kwargs):
     buffer for reliable memory assertions. CLI mock has no GPU buffer, so
     memory_mb is skipped for configs that don't declare the field.
     """
-    _tool_name, InputCls, ConfigCls, run_fn = tool_factory()
+    _toolkit, InputCls, ConfigCls, run_fn = tool_factory()
     if "memory_mb" not in config_kwargs and "memory_mb" in ConfigCls.model_fields:
         config_kwargs["memory_mb"] = _TOOL_MEMORY_MB
     return run_fn(InputCls(), ConfigCls(**config_kwargs), instance=instance_name)
@@ -427,12 +427,12 @@ def test_three_tool_eviction_chain():
 def test_config_moves_between_gpus(tool_factory):
     """Changing config device between calls should move the tool."""
     dm = _setup_dm(["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
-    tool_name = tool_factory()[0]
+    toolkit = tool_factory()[0]
 
     try:
         baseline = _snapshot_gpu_memory(dm)
 
-        with ToolInstance.persist_tool(tool_name, instance_name="mover"):
+        with ToolInstance.persist_tool(toolkit, instance_name="mover"):
             result = _run_tool(tool_factory, "mover", device="cuda:0")
             assert result.success
 
@@ -454,12 +454,12 @@ def test_config_moves_between_gpus(tool_factory):
 def test_config_gpu_cpu_gpu_multi_gpu(tool_factory):
     """Round-trip: GPU,GPU -> CPU -> GPU,GPU via config changes."""
     dm = _setup_dm(["cuda:0", "cuda:1"])
-    tool_name = tool_factory()[0]
+    toolkit = tool_factory()[0]
 
     try:
         baseline = _snapshot_gpu_memory(dm)
 
-        with ToolInstance.persist_tool(tool_name, instance_name="bouncer"):
+        with ToolInstance.persist_tool(toolkit, instance_name="bouncer"):
             result = _run_tool(tool_factory, "bouncer")
             assert result.success
 
@@ -494,12 +494,12 @@ def test_config_gpu_cpu_gpu_multi_gpu(tool_factory):
 def test_shutdown_and_auto_restart(tool_factory):
     """Manually shutting down a worker should allow auto-restart on next call."""
     dm = _setup_dm(["cuda:0"])
-    tool_name = tool_factory()[0]
+    toolkit = tool_factory()[0]
 
     try:
         baseline = _snapshot_gpu_memory(dm)
 
-        inst = ToolInstance.get(tool_name, instance_name="restarter")
+        inst = ToolInstance.get(toolkit, instance_name="restarter")
         result = _run_tool(tool_factory, "restarter")
         assert result.success
         assert inst._worker is not None
@@ -678,13 +678,13 @@ def test_rapid_eviction_cycle():
         ]
 
         # Track which instances are CLI tools
-        for tool_name, _, inst_name in tools:
-            if "cli" in tool_name:
+        for toolkit, _, inst_name in tools:
+            if "cli" in toolkit:
                 cli_instances.add(inst_name)
 
         # Persist all tools (only 2 GPUs, so one will always be evicted)
-        for tool_name, _, inst_name in tools:
-            ToolInstance.get(tool_name, instance_name=inst_name)
+        for toolkit, _, inst_name in tools:
+            ToolInstance.get(toolkit, instance_name=inst_name)
 
         # Run each tool twice to force eviction/restore cycles
         for cycle in range(2):

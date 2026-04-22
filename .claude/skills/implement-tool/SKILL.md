@@ -118,19 +118,27 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 **Steps:**
 
+**Placeholder glossary** (used throughout this skill — all distinct concepts, not interchangeable):
+
+- `{toolkit}` — snake_case directory name shared by all tools in the family (e.g., `evo2`, `pyrosetta`). **Strict** — drives the directory path and the dispatch/worker identifier.
+- `{tool_key}` — kebab-case registration key, `{toolkit}-{suffix}` (e.g., `evo2-sample`, `pyrosetta-energy`). **Strict** — the value passed to `@tool(key=...)`.
+- `{tool_key_snake}` — snake_case form of `{tool_key}` (e.g., `evo2_sample`). **Strict** — the core tool file name, the `run_*` function, and the test file.
+- `{ToolName}` — PascalCase class-name prefix for this tool's `Input` / `Config` / `Output` (e.g., `Evo2Sample`, `ESMFoldPrediction`). **Developer's choice** — typically the PascalCase of `{tool_key}`, but pick whatever reads cleanly (e.g., `ESMFold` over `Esmfold`) as long as it's specific to this tool.
+- `{tool_display_name}` — human-readable label (e.g., `"Evo 2"`). Used in docstrings, commit messages, and PR titles.
+
 1. Create the tool directory structure:
    ```bash
-   mkdir -p proto_tools/tools/{category}/{tool_name}/standalone
-   mkdir -p proto_tools/tools/{category}/{tool_name}/examples
+   mkdir -p proto_tools/tools/{category}/{toolkit}/standalone
+   mkdir -p proto_tools/tools/{category}/{toolkit}/examples
    ```
 
    Target file tree:
    ```
    tools/{category}/
    +-- shared_data_models.py   # Shared Input/Config/Output base classes (if category has 2+ tools)
-   +-- {tool_name}/
+   +-- {toolkit}/
    |   +-- __init__.py
-   |   +-- {tool_name}.py      # Core tool file (Input/Config/Output + @tool + run_*)
+   |   +-- {tool_key_snake}.py # Core tool file (Input/Config/Output + @tool + run_*); one per registered tool
    |   +-- cite.bib            # BibTeX citation (required)
    |   +-- README.md
    |   +-- examples/
@@ -144,7 +152,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    +-- __init__.py
    ```
 
-2. Write the core tool file `proto_tools/tools/{category}/{tool_name}/{operation}.py` with:
+2. Write the core tool file `proto_tools/tools/{category}/{toolkit}/{tool_key_snake}.py` with:
    - Proper imports
    - Input class extending `BaseToolInput` (or shared base) with `Field()` — `extra="forbid"`
    - Config class extending `BaseConfig` (or shared base) with `ConfigField()` — `extra="forbid"`. Use `reload_on_change=True` on fields that require worker restart (model checkpoint, etc.). Use `include_in_key=False` on fields that don't affect computation results (device, verbose, timeout are already excluded on `BaseConfig`; tool-level overrides of `device` must also set `include_in_key=False`). `include_in_key` defaults to `True`
@@ -155,15 +163,15 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    - **Metrics**: if the tool emits scalar metric-like values (plDDT, perplexity, scores, etc.), route them through a `Metrics` subclass (from `proto_tools/utils/tool_io.py`). Prefer a shared per-category class (`MaskedModelScoringMetrics`, `InverseFoldingScoringMetrics`, `CausalModelScoringMetrics`, etc.) when the metric set matches siblings. Otherwise declare a per-tool `<Tool>Metrics(Metrics)` subclass in the tool file with a `metric_spec: ClassVar[dict[str, MetricSpec]]` documenting type/range for each metric. Verification lives in each tool's e2e test via `assert_metrics_in_spec(result)` (helper at `tests/tool_infra_tests/_metric_helpers.py`).
 
 **Critical conventions:**
-- Tool registry key: `{tool}-{action}` kebab-case (e.g., `"esmif-sample"`)
-- Run function: `run_{tool_name}_{action}` (e.g., `run_esmif_sample`)
-- Classes: PascalCase (e.g., `ESMIFSampleInput`)
+- Tool registry key (`{tool_key}`): `{toolkit}-{suffix}` kebab-case (e.g., `"esmif-sample"`)
+- Run function: `run_{tool_key_snake}` (e.g., `run_esmif_sample`)
+- Classes: `{ToolName}Input/Config/Output`, PascalCase (e.g., `ESMIFSampleInput`)
 - `batch_size` defaults to `1` for GPU tools
 - No try/except — `@tool` decorator handles errors
 - Use `logging.getLogger(__name__)`, never `print()`
 - Output must implement `output_format_options`, `output_format_default`, `_export_output()`
 
-**Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
+**Inherited field audit:** When reusing a shared base config (e.g., `InverseFoldingConfig`) or base input, enumerate every inherited field and verify the target model can implement it. For each unsupported field, either implement support (e.g., logit masking for `excluded_amino_acids`) or override the field with a validator that raises `ValueError("'{field_name}' is not supported by {tool_display_name}")` when a non-default value is provided. Do not silently inherit fields that the model ignores.
 
 ## Code Style Conventions
 
@@ -184,7 +192,7 @@ These ensure consistent formatting across all generated tools:
    ```
 5. **logger.debug() before main loop** — Add a status message before the processing loop:
    ```python
-   logger.debug("Using local venv for {tool_name} {operation}")
+   logger.debug("Using local venv for {toolkit} {operation}")
    ```
 6. **Don't redefine inherited fields** — Fields like `verbose`, `timeout`, and `device` are inherited from `BaseConfig`. Don't redeclare them in tool-specific Config classes unless overriding the default value.
 7. **`__init__.py` files** — Sort `__all__` alphabetically.
@@ -217,8 +225,8 @@ Then launch all 5 subagents simultaneously:
 You are implementing the standalone execution environment for a bioinformatics tool.
 
 ## Your Task
-Create the standalone files for the {tool_name} tool in:
-  proto_tools/tools/{category}/{tool_name}/standalone/
+Create the standalone files for the {tool_display_name} tool in:
+  proto_tools/tools/{category}/{toolkit}/standalone/
 
 ## Contract (the tool file this standalone serves)
 <paste full tool file content here>
@@ -348,7 +356,7 @@ proto_install_pytorch
 uv pip install -r requirements.txt
 
 # Non-HF tools that download weights:
-proto_resolve_weights_dir my_tool
+proto_resolve_weights_dir {toolkit}
 if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
     wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
 fi
@@ -361,13 +369,13 @@ fi
 - `proto_install_pytorch [spec] [extras...]` — install PyTorch via RECOMMENDED_TORCH_SPEC, with optional version-matched extras (e.g., `torchvision`)
 - `proto_install_jax [TOOL_PREFIX]` — install JAX with tool-specific overrides
 - `proto_install_cuda_toolkit [constraint] [extras...]` — micromamba CUDA toolkit
-- `proto_resolve_weights_dir <tool_name>` — set `$WEIGHTS_DIR` via PROTO_MODEL_CACHE
+- `proto_resolve_weights_dir <toolkit>` — set `$WEIGHTS_DIR` via PROTO_MODEL_CACHE
 - `proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]` — validate HF access
 
 **For the standalone inference.py**, non-HF tools must call `resolve_weights_dir()` to find weights at runtime:
 ```python
 from standalone_helpers import resolve_weights_dir
-weights_dir = resolve_weights_dir("my_tool")
+weights_dir = resolve_weights_dir("{toolkit}")
 model_path = os.path.join(weights_dir, "model.pt")
 ```
 
@@ -406,7 +414,7 @@ HF_TOKEN
 Run all tests (functional + infra) filtered to the new tool:
 
 ```bash
-pytest --all --ext -k "{tool_name}" -v
+pytest --all --ext -k "{tool_key}" -v
 ```
 
 This runs the tool's functional tests AND the parametrized infra tests (`example_input`, device consistency, registry integration). A detailed log file is generated in `logs/` (project root).
@@ -423,8 +431,8 @@ This runs the tool's functional tests AND the parametrized infra tests (`example
 You are writing the documentation for a bioinformatics tool.
 
 ## Your Task
-Create README.md and cite.bib for the {tool_name} tool in:
-  proto_tools/tools/{category}/{tool_name}/
+Create README.md and cite.bib for the {tool_display_name} tool in:
+  proto_tools/tools/{category}/{toolkit}/
 
 ## Contract (the tool's API)
 <paste full tool file content here>
@@ -454,7 +462,7 @@ Follow this exact structure:
 14. ## References — paper citation, GitHub links
 15. ## Related Tools — tools often used together, alternatives
 
-CRITICAL: Use exact import paths from proto_tools.tools.{category}.{tool_name}. Class names and function names must match the contract exactly.
+CRITICAL: Use exact import paths from proto_tools.tools.{category}.{toolkit}. Class names and function names must match the contract exactly.
 
 ## cite.bib
 Look up the paper's BibTeX citation using the DOI. Format:
@@ -479,8 +487,8 @@ Look up the paper's BibTeX citation using the DOI. Format:
 You are creating an example Jupyter notebook for a bioinformatics tool.
 
 ## Your Task
-Create examples/example.ipynb for the {tool_name} tool in:
-  proto_tools/tools/{category}/{tool_name}/examples/
+Create examples/example.ipynb for the {tool_display_name} tool in:
+  proto_tools/tools/{category}/{toolkit}/examples/
 
 ## Contract (the tool's API)
 <paste full tool file content here>
@@ -489,7 +497,7 @@ Create examples/example.ipynb for the {tool_name} tool in:
 Create a Jupyter notebook (.ipynb JSON) with these cells:
 
 1. **Markdown title cell** — Tool name, brief description, paper link
-2. **Code: Imports** — Exact imports from proto_tools.tools.{category}.{tool_name}
+2. **Code: Imports** — Exact imports from proto_tools.tools.{category}.{toolkit}
 3. **Markdown: Input API Reference** — Table with Field, Type, Default, Description
 4. **Markdown: Config API Reference** — Same table format
 5. **Markdown: Output API Reference** — Same table format
@@ -512,7 +520,7 @@ Note: the notebook will be executed during Phase 4 via `scripts/run_example_note
 
 ### Subagent 4: Tests
 
-**What it produces:** `tests/{category}_tests/test_{tool_name}.py`
+**What it produces:** `tests/{category}_tests/test_{tool_key_snake}.py`
 
 **Prompt template:**
 
@@ -520,7 +528,7 @@ Note: the notebook will be executed during Phase 4 via `scripts/run_example_note
 You are writing tests for a bioinformatics tool.
 
 ## Your Task
-Create tests/{category}_tests/test_{tool_name}.py
+Create tests/{category}_tests/test_{tool_key_snake}.py
 
 ## Contract (the tool's API)
 <paste full tool file content here>
@@ -532,34 +540,34 @@ Here are the tests from {reference_tool} as a structural template:
 ## Test Structure
 
 ```python
-"""Tests for {ToolName} tool."""
+"""Tests for {tool_display_name} tool."""
 from pathlib import Path
 
 import pytest
 
 from proto_tools.entities.structures.structure import Structure  # if needed
-from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools import run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"  # if needed
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
-def test_{tool_name}_input_normalizes_single_item():
+def test_{tool_key_snake}_input_normalizes_single_item():
     """Test that single inputs are normalized to lists (custom validator)."""
 
 # ── Integration ───────────────────────────────────────────────────────────────
 
 @pytest.mark.uses_gpu  # or @pytest.mark.integration for CPU tools
-def test_{tool_name}_basic_execution():
+def test_{tool_key_snake}_basic_execution():
     """Test basic tool execution with default config."""
     # Create input with realistic data
     # Run tool
     # Assert result.success
-    # Assert result.tool_id == "{tool-key}"
+    # Assert result.tool_id == "{tool_key}"
     # Assert specific output fields are populated
 
 @pytest.mark.uses_gpu
-def test_{tool_name}_export(tmp_path):
+def test_{tool_key_snake}_export(tmp_path):
     """Test output export to supported formats."""
 ```
 
@@ -601,21 +609,21 @@ Update __init__.py files at 3 levels to export the new tool's classes and functi
 ## Changes Required
 
 ### Level 1: Create tool __init__.py
-File: proto_tools/tools/{category}/{tool_name}/__init__.py
+File: proto_tools/tools/{category}/{toolkit}/__init__.py
 
 ```python
-from proto_tools.tools.{category}.{tool_name}.{operation} import (
+from proto_tools.tools.{category}.{toolkit}.{tool_key_snake} import (
     {ToolName}Config,
     {ToolName}Input,
     {ToolName}Output,
-    run_{tool_name},
+    run_{tool_key_snake},
 )
 
 __all__ = [
     "{ToolName}Config",
     "{ToolName}Input",
     "{ToolName}Output",
-    "run_{tool_name}",
+    "run_{tool_key_snake}",
 ]
 ```
 
@@ -646,23 +654,23 @@ CRITICAL RULES:
 
 1. **Check import chain** — Verify the tool imports correctly:
    ```bash
-   python3 -c "from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config; print('Import OK')"
+   python3 -c "from proto_tools.tools import run_{tool_key_snake}, {ToolName}Input, {ToolName}Config; print('Import OK')"
    ```
 
 2. **Run tests** — Execute the test file:
    ```bash
-   python3 -m pytest tests/{category}_tests/test_{tool_name}.py -v --cpu
+   python3 -m pytest tests/{category}_tests/test_{tool_key_snake}.py -v --cpu
    ```
    (Use `--cpu` if no GPU available; tests requiring GPU will be skipped)
 
 3. **Validate tool registration** — Check the tool appears in the registry:
    ```bash
-   python3 -c "from proto_tools.tools.tool_registry import ToolRegistry; specs = [s for s in ToolRegistry.list_all() if '{tool_name}' in s.key]; print([(s.key, s.label) for s in specs])"
+   python3 -c "from proto_tools.tools.tool_registry import ToolRegistry; specs = [s for s in ToolRegistry.list_all() if '{tool_key}' in s.key]; print([(s.key, s.label) for s in specs])"
    ```
 
 4. **Execute the example notebook** — Always route notebook execution through the sanitizer script, never `jupyter nbconvert --execute` directly. The script strips widget / Plotly / Bokeh mime types that a kernel emits but static viewers (VS Code, JupyterLab, GitHub, nbviewer) can't render, leaving only the `text/plain` / `text/html` fallbacks that survive the round-trip:
    ```bash
-   python3 scripts/run_example_notebooks.py --only {tool_name}
+   python3 scripts/run_example_notebooks.py --only {toolkit}
    ```
    Use `--sanitize-only` to clean a pre-executed notebook without re-running (fast; for notebooks that can't re-run on the current host).
 
@@ -707,17 +715,17 @@ Launch a single audit agent via `Task()`:
 You are auditing a newly implemented bioinformatics tool for quality issues.
 
 ## Your Task
-Read all generated files for the {tool_name} tool and check for issues.
+Read all generated files for the {tool_display_name} tool and check for issues.
 
 ## Files to Read
-- proto_tools/tools/{category}/{tool_name}/{operation}.py (core tool file)
-- proto_tools/tools/{category}/{tool_name}/standalone/inference.py (or run.py)
-- proto_tools/tools/{category}/{tool_name}/standalone/setup.sh
-- proto_tools/tools/{category}/{tool_name}/standalone/requirements.txt
-- proto_tools/tools/{category}/{tool_name}/standalone/python_version.txt
-- proto_tools/tools/{category}/{tool_name}/README.md
-- proto_tools/tools/{category}/{tool_name}/examples/example.ipynb
-- tests/{category}_tests/test_{tool_name}.py
+- proto_tools/tools/{category}/{toolkit}/{tool_key_snake}.py (core tool file)
+- proto_tools/tools/{category}/{toolkit}/standalone/inference.py (or run.py)
+- proto_tools/tools/{category}/{toolkit}/standalone/setup.sh
+- proto_tools/tools/{category}/{toolkit}/standalone/requirements.txt
+- proto_tools/tools/{category}/{toolkit}/standalone/python_version.txt
+- proto_tools/tools/{category}/{toolkit}/README.md
+- proto_tools/tools/{category}/{toolkit}/examples/example.ipynb
+- tests/{category}_tests/test_{tool_key_snake}.py
 
 ## Reference Tool (for comparison)
 Also read the same files from {reference_tool} to compare patterns.
@@ -749,7 +757,7 @@ If no issues found, print: []
 4. Re-run Phase 4 import/test checks if any fixes touched the tool file or standalone code
 5. **Log findings to auto-memory** — If any `"fix"` issues were found, save them to persistent memory so we can track how the pipeline fails over time. Write (or append) to the auto-memory directory at `implement-tool-audits.md`:
    ```
-   ## {tool_name} audit — {date}
+   ## {toolkit} audit — {date}
    - {N} fix issues, {M} cosmetic
    - Fixes: {brief list of fix issues}
    - These indicate systemic gaps in the pipeline.
@@ -766,8 +774,8 @@ If no issues found, print: []
 
 1. **Stage all new files:**
    ```bash
-   git add proto_tools/tools/{category}/{tool_name}/
-   git add tests/{category}_tests/test_{tool_name}.py
+   git add proto_tools/tools/{category}/{toolkit}/
+   git add tests/{category}_tests/test_{tool_key_snake}.py
    # Also stage modified __init__.py files
    git add proto_tools/tools/{category}/__init__.py
    git add proto_tools/tools/__init__.py
@@ -775,7 +783,7 @@ If no issues found, print: []
 
 2. **Commit:**
    ```bash
-   git commit -m "feat: implement {tool_name} tool wrapper
+   git commit -m "feat: implement {tool_display_name} tool wrapper
 
    Implements {tool_display_name} ({operations}) in the {category} category.
    Closes #{issue_number}"
@@ -784,7 +792,7 @@ If no issues found, print: []
 3. **Push and create PR:**
    ```bash
    git push -u origin HEAD
-   gh pr create --title "feat: implement {tool_name} tool" --body "$(cat <<'EOF'
+   gh pr create --title "feat: implement {tool_display_name} tool" --body "$(cat <<'EOF'
    ## Summary
    - Implements {tool_display_name} tool wrapper ({operations})
    - Category: {category}
@@ -802,8 +810,8 @@ If no issues found, print: []
    - Full export chain (__init__.py at all levels)
 
    ## Test Plan
-   - [ ] `python3 -c "from proto_tools.tools import run_{tool_name}"` imports successfully
-   - [ ] `pytest tests/{category}_tests/test_{tool_name}.py` passes
+   - [ ] `python3 -c "from proto_tools.tools import run_{tool_key_snake}"` imports successfully
+   - [ ] `pytest tests/{category}_tests/test_{tool_key_snake}.py` passes
    - [ ] Tool appears in ToolRegistry.list_all()
    - [ ] GPU execution verified (if applicable)
    EOF

@@ -109,14 +109,14 @@ def test_move_to_generic_cuda_excludes_self_from_eviction(device_manager, mock_c
 # ── Device mismatch detection in _run_persistent ──────────────────────────
 
 
-def _make_instance(device_manager, tool_name="mock_pytorch_tool", instance_name="inst"):
+def _make_instance(device_manager, toolkit="mock_pytorch_tool", instance_name="inst"):
     """Create a ToolInstance with a mock worker (no real subprocess).
 
     Also stubs _ensure_env to skip the real micromamba/PyTorch install;
     these tests only exercise device-movement logic.
     """
     ToolInstance.clear_all()
-    inst = ToolInstance.get(tool_name, instance_name=instance_name)
+    inst = ToolInstance.get(toolkit, instance_name=instance_name)
     # Mock the worker so _run_persistent takes the `else` branch
     mock_worker = MagicMock()
     mock_worker.script_path = inst.script_path

@@ -236,7 +236,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 <!-- env-report-data
 [
   {
-    "tool_name": "alphafold2-prediction",
+    "tool_key": "alphafold2-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold2-prediction]",
     "status": "skipped",
@@ -249,7 +249,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "alphafold3-prediction",
+    "tool_key": "alphafold3-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold3-prediction]",
     "status": "skipped",
@@ -262,7 +262,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "alphagenome-predict-intervals",
+    "tool_key": "alphagenome-predict-intervals",
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphagenome-predict-intervals]",
     "status": "skipped",
@@ -275,7 +275,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "bioemu-sample",
+    "tool_key": "bioemu-sample",
     "category": "structure_dynamics",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[bioemu-sample]",
     "status": "skipped",
@@ -288,7 +288,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "blast-create-db",
+    "tool_key": "blast-create-db",
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[blast-create-db]",
     "status": "passed",
@@ -301,7 +301,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "boltz2-prediction",
+    "tool_key": "boltz2-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[boltz2-prediction]",
     "status": "skipped",
@@ -314,7 +314,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "borzoi-ensemble",
+    "tool_key": "borzoi-ensemble",
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[borzoi-ensemble]",
     "status": "skipped",
@@ -327,7 +327,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "chai1-prediction",
+    "tool_key": "chai1-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[chai1-prediction]",
     "status": "skipped",
@@ -340,7 +340,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "colabfold-search",
+    "tool_key": "colabfold-search",
     "category": "sequence_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[colabfold-search]",
     "status": "passed",
@@ -353,7 +353,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "crispr-tracr",
+    "tool_key": "crispr-tracr",
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[crispr-tracr]",
     "status": "passed",
@@ -366,7 +366,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "enformer-prediction",
+    "tool_key": "enformer-prediction",
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[enformer-prediction]",
     "status": "skipped",
@@ -379,7 +379,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "esm-if1-sample",
+    "tool_key": "esm-if1-sample",
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm-if1-sample]",
     "status": "skipped",
@@ -392,7 +392,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "esm2-embedding",
+    "tool_key": "esm2-embedding",
     "category": "masked_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm2-embedding]",
     "status": "skipped",
@@ -405,7 +405,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "esm3-embedding",
+    "tool_key": "esm3-embedding",
     "category": "masked_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esm3-embedding]",
     "status": "skipped",
@@ -418,7 +418,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "esmfold-prediction",
+    "tool_key": "esmfold-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[esmfold-prediction]",
     "status": "skipped",
@@ -431,7 +431,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "evo1-sample",
+    "tool_key": "evo1-sample",
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[evo1-sample]",
     "status": "skipped",
@@ -444,7 +444,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "evo2-sample",
+    "tool_key": "evo2-sample",
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[evo2-sample]",
     "status": "skipped",
@@ -457,7 +457,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "fampnn-pack",
+    "tool_key": "fampnn-pack",
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[fampnn-pack]",
     "status": "skipped",
@@ -470,7 +470,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "ligandmpnn-sample",
+    "tool_key": "ligandmpnn-sample",
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[ligandmpnn-sample]",
     "status": "skipped",
@@ -483,7 +483,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mafft-align",
+    "tool_key": "mafft-align",
     "category": "sequence_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mafft-align]",
     "status": "passed",
@@ -496,7 +496,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "minced-crispr",
+    "tool_key": "minced-crispr",
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[minced-crispr]",
     "status": "passed",
@@ -509,7 +509,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mmseqs-clustering",
+    "tool_key": "mmseqs-clustering",
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mmseqs-clustering]",
     "status": "passed",
@@ -522,7 +522,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-cli-multi-gpu-tool-run",
+    "tool_key": "mock-cli-multi-gpu-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-cli-multi-gpu-tool-run]",
     "status": "skipped",
@@ -535,7 +535,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-cli-tool-run",
+    "tool_key": "mock-cli-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-cli-tool-run]",
     "status": "skipped",
@@ -548,7 +548,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-jax-multi-gpu-tool-run",
+    "tool_key": "mock-jax-multi-gpu-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-jax-multi-gpu-tool-run]",
     "status": "skipped",
@@ -561,7 +561,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-jax-tool-run",
+    "tool_key": "mock-jax-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-jax-tool-run]",
     "status": "skipped",
@@ -574,7 +574,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-pytorch-multi-gpu-tool-run",
+    "tool_key": "mock-pytorch-multi-gpu-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-pytorch-multi-gpu-tool-run]",
     "status": "skipped",
@@ -587,7 +587,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "mock-pytorch-tool-run",
+    "tool_key": "mock-pytorch-tool-run",
     "category": "testing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[mock-pytorch-tool-run]",
     "status": "skipped",
@@ -600,7 +600,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "orfipy-prediction",
+    "tool_key": "orfipy-prediction",
     "category": "orf_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[orfipy-prediction]",
     "status": "passed",
@@ -613,7 +613,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "prodigal-prediction",
+    "tool_key": "prodigal-prediction",
     "category": "orf_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[prodigal-prediction]",
     "status": "passed",
@@ -626,7 +626,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "progen2-sample",
+    "tool_key": "progen2-sample",
     "category": "causal_models",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[progen2-sample]",
     "status": "skipped",
@@ -639,7 +639,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "proteinmpnn-sample",
+    "tool_key": "proteinmpnn-sample",
     "category": "inverse_folding",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[proteinmpnn-sample]",
     "status": "skipped",
@@ -652,7 +652,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "protenix-prediction",
+    "tool_key": "protenix-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[protenix-prediction]",
     "status": "skipped",
@@ -665,7 +665,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "pyhmmer-hmmscan",
+    "tool_key": "pyhmmer-hmmscan",
     "category": "gene_annotation",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[pyhmmer-hmmscan]",
     "status": "passed",
@@ -678,7 +678,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "random-nucleotide-sample",
+    "tool_key": "random-nucleotide-sample",
     "category": "mutagenesis",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[random-nucleotide-sample]",
     "status": "passed",
@@ -691,7 +691,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "random-protein-sample",
+    "tool_key": "random-protein-sample",
     "category": "mutagenesis",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[random-protein-sample]",
     "status": "passed",
@@ -704,7 +704,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "rfdiffusion3-design",
+    "tool_key": "rfdiffusion3-design",
     "category": "structure_design",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[rfdiffusion3-design]",
     "status": "skipped",
@@ -717,7 +717,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "segmasker-score",
+    "tool_key": "segmasker-score",
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[segmasker-score]",
     "status": "passed",
@@ -730,7 +730,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "splice-transformer-prediction",
+    "tool_key": "splice-transformer-prediction",
     "category": "rna_splicing",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[splice-transformer-prediction]",
     "status": "skipped",
@@ -743,7 +743,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "structure-metrics",
+    "tool_key": "structure-metrics",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[structure-metrics]",
     "status": "passed",
@@ -756,7 +756,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "tmalign-alignment",
+    "tool_key": "tmalign-alignment",
     "category": "structure_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[tmalign-alignment]",
     "status": "passed",
@@ -769,7 +769,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "usalign-alignment",
+    "tool_key": "usalign-alignment",
     "category": "structure_alignment",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[usalign-alignment]",
     "status": "passed",
@@ -782,7 +782,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "git_dirty": true
   },
   {
-    "tool_name": "viennarna-prediction",
+    "tool_key": "viennarna-prediction",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[viennarna-prediction]",
     "status": "passed",

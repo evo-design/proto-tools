@@ -46,7 +46,7 @@ def test_get_device_status_with_tools():
             assert "mock_status_1" in status["allocations"]
 
             alloc1 = status["allocations"]["mock_status_1"]
-            assert alloc1["tool_name"] == "mock_pytorch_tool"
+            assert alloc1["toolkit"] == "mock_pytorch_tool"
             assert alloc1["device_id"].startswith("cuda:")
             assert "allocated_at" in alloc1
             assert "last_used" in alloc1

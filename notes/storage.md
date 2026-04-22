@@ -42,8 +42,8 @@ The cache and tool envs share a filesystem by default, which lets `uv` hard-link
 
 | Mode | HF_HOME | Non-HF weights | TORCH_HOME |
 |------|---------|----------------|------------|
-| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/huggingface/` | `{PROTO_HOME}/proto_model_cache/{tool_name}/` | `{PROTO_HOME}/proto_model_cache/torch/` |
-| `/absolute/path` | `/absolute/path/huggingface/` | `/absolute/path/{tool_name}/` | `/absolute/path/torch/` |
+| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/huggingface/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/` | `{PROTO_HOME}/proto_model_cache/torch/` |
+| `/absolute/path` | `/absolute/path/huggingface/` | `/absolute/path/{toolkit}/` | `/absolute/path/torch/` |
 | `IN_ENV` | `{venv}/cache/huggingface/` | `{venv}/model_weight_cache/` | `{venv}/cache/torch/` |
 | `NONE` | Parent `HF_HOME` passthrough | `{venv}/weights/` | Parent `TORCH_HOME` passthrough |
 
@@ -76,7 +76,7 @@ export PROTO_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
 
 ## For tool authors
 
-Non-HF tools call `resolve_weights_dir(tool_name)` from `standalone_helpers.py`:
+Non-HF tools call `resolve_weights_dir(toolkit)` from `standalone_helpers.py`:
 
 ```python
 from standalone_helpers import resolve_weights_dir

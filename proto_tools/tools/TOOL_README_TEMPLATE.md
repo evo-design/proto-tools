@@ -334,7 +334,7 @@
 **Example 1: {Simplest use case description}**
 ```python
 from proto_tools.tools.{category} import (
-    run_{tool_name}, {ToolName}Input, {ToolName}Config
+    run_{tool_snake}, {ToolName}Input, {ToolName}Config
 )
 
 inputs = {ToolName}Input(
@@ -342,14 +342,14 @@ inputs = {ToolName}Input(
 )
 config = {ToolName}Config()  # Defaults
 
-result = run_{tool_name}(inputs, config)
+result = run_{tool_snake}(inputs, config)
 print(f"Result: ...")  # Show how to access key output fields
 ```
 
 **Example 2: {Common scenario with non-default parameters}**
 ```python
 from proto_tools.tools.{category} import (
-    run_{tool_name}, {ToolName}Input, {ToolName}Config
+    run_{tool_snake}, {ToolName}Input, {ToolName}Config
 )
 
 inputs = {ToolName}Input(...)
@@ -358,7 +358,7 @@ config = {ToolName}Config(
     param2=value,  # Why this value for this scenario
 )
 
-result = run_{tool_name}(inputs, config)
+result = run_{tool_snake}(inputs, config)
 # Show how to access and use results meaningfully
 ```
 

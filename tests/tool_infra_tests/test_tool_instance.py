@@ -30,7 +30,7 @@ from proto_tools.utils.tool_instance import (
 
 
 def _make_fake_instance(
-    tool_name: str = "esm2",
+    toolkit: str = "esm2",
     device: str = "cpu",
     needs_warmup: bool = False,
     _tmp_dir: Path | None = None,
@@ -39,7 +39,7 @@ def _make_fake_instance(
 
     Parameters
     ----------
-    tool_name : str
+    toolkit : str
         Name of the tool
     device : str
         Device to use
@@ -51,7 +51,7 @@ def _make_fake_instance(
         Otherwise creates a temp directory.
     """
     inst = ToolInstance.__new__(ToolInstance)
-    inst.tool_name = tool_name
+    inst.toolkit = toolkit
     inst.device = device
     if _tmp_dir is not None:
         inst.env_path = _tmp_dir
@@ -105,8 +105,8 @@ def test_get_returns_same_instance(mock_init: MagicMock):
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_default_key_is_tool_name(mock_init: MagicMock):
-    """Without instance_name, cache key should be tool_name."""
+def test_default_key_is_toolkit(mock_init: MagicMock):
+    """Without instance_name, cache key should be toolkit."""
     ToolInstance.get("esm2")
     assert "esm2" in _instances
     assert len(_instances) == 1
@@ -173,16 +173,37 @@ def test_clear_all():
 # ── Tool name validation tests ──────────────────────────────────────────────
 
 
-def test_valid_tool_name():
-    """Known tool names should validate."""
-    assert ToolInstance._validate_tool_name("esm2") == "esm2"
-    assert ToolInstance._validate_tool_name("blast") == "blast"
+def test_valid_toolkit():
+    """Known worker groups should validate."""
+    assert ToolInstance._validate_toolkit("esm2") == "esm2"
+    assert ToolInstance._validate_toolkit("blast") == "blast"
 
 
-def test_invalid_tool_name():
-    """Unknown tool names should raise ValueError."""
-    with pytest.raises(ValueError, match="Invalid tool name"):
-        ToolInstance._validate_tool_name("nonexistent_tool_xyz")
+def test_invalid_toolkit():
+    """Unknown worker groups should raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid toolkit"):
+        ToolInstance._validate_toolkit("nonexistent_tool_xyz")
+
+
+def test_toolkit_normalization_accepts_tool_key():
+    """A registered tool_key is accepted and resolves to its toolkit.
+
+    The normalization helper looks up the tool_key in the registry and
+    returns the parent directory name (the toolkit). Unknown strings
+    pass through unchanged so downstream validation can surface errors.
+    """
+    # Unknown identifier passes through unchanged (validation surfaces downstream).
+    assert ToolInstance._normalize_toolkit("esm2") == "esm2"
+    assert ToolInstance._normalize_toolkit("unknown_xyz") == "unknown_xyz"
+
+    # A registered tool_key resolves to its toolkit (folder name).
+    # "pyrosetta-energy" lives under the pyrosetta/ toolkit directory.
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    if "pyrosetta-energy" in ToolRegistry._registry:
+        assert ToolInstance._normalize_toolkit("pyrosetta-energy") == "pyrosetta"
+    if "esm2-sample" in ToolRegistry._registry:
+        assert ToolInstance._normalize_toolkit("esm2-sample") == "esm2"
 
 
 # ── Script discovery tests ──────────────────────────────────────────────────
@@ -414,7 +435,7 @@ def test_persistent_with_instance_name(mock_init: MagicMock):
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persistent_anonymous_caches_when_slot_open(mock_init: MagicMock):
-    """Single anonymous persistent should cache under tool_name."""
+    """Single anonymous persistent should cache under toolkit."""
     with ToolInstance.persist_tool("esm2") as inst:
         assert "esm2" in _instances
         assert _instances["esm2"] is inst
@@ -703,7 +724,7 @@ def test_persist_multiple_tools(mock_init: MagicMock):
 
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_persist_with_nested_persist_tool(mock_init: MagicMock):
-    """persist_tool(tool_name) inside persist() should coexist correctly.
+    """persist_tool(toolkit) inside persist() should coexist correctly.
 
     The persist_tool instance lives in the persist scope's cache. When
     persist_tool() exits, its instance is cleaned up, but the auto-cached
@@ -1027,7 +1048,7 @@ def test_send_timeout_kills_worker():
     from proto_tools.utils.persistent_worker import PersistentWorker
 
     worker = PersistentWorker.__new__(PersistentWorker)
-    worker.tool_name = "esm2"
+    worker.toolkit = "esm2"
     worker._lock = __import__("threading").Lock()
 
     mock_process = MagicMock()
@@ -1231,7 +1252,7 @@ def test_concurrent_dispatch_with_cached_instance(mock_init: MagicMock):
 def test_failure_writes_status_and_raises(tmp_path: Path):
     """_create_env() should write FAILED status and raise on setup.sh failure."""
     inst = ToolInstance.__new__(ToolInstance)
-    inst.tool_name = "fake_tool"
+    inst.toolkit = "fake_tool"
     inst.device = "cpu"
     inst.env_path = tmp_path / "fake_env"
     inst.setup_script = tmp_path / "setup.sh"
@@ -1540,7 +1561,7 @@ def test_run_oneshot_reads_output(tmp_path: Path):
     )
 
     inst = ToolInstance.__new__(ToolInstance)
-    inst.tool_name = "test"
+    inst.toolkit = "test"
     inst.device = "cpu"
     # Use current Python as the "venv" python
     python_dir = Path(sys.executable).parent
@@ -1594,7 +1615,7 @@ def test_run_setup_script_writes_log_and_returns_output(tmp_path, monkeypatch):
         cwd=tmp_path,
         env={"PATH": "/usr/bin:/bin"},
         log_path=log_path,
-        tool_name="fake",
+        toolkit="fake",
     )
 
     assert rc == 0
@@ -1615,7 +1636,7 @@ def test_run_setup_script_verbose_mirrors_to_stderr(tmp_path, monkeypatch, capfd
         cwd=tmp_path,
         env={"PATH": "/usr/bin:/bin"},
         log_path=log_path,
-        tool_name="fake",
+        toolkit="fake",
     )
 
     assert rc == 0
@@ -1634,7 +1655,7 @@ def test_run_setup_script_quiet_by_default(tmp_path, monkeypatch, capfd):
         cwd=tmp_path,
         env={"PATH": "/usr/bin:/bin"},
         log_path=log_path,
-        tool_name="fake",
+        toolkit="fake",
     )
 
     captured = capfd.readouterr()
@@ -1653,7 +1674,7 @@ def test_run_setup_script_mirrors_log_to_dir(tmp_path, monkeypatch):
         cwd=tmp_path,
         env={"PATH": "/usr/bin:/bin"},
         log_path=log_path,
-        tool_name="fake",
+        toolkit="fake",
     )
 
     mirrored = mirror / "fake_setup.log"
@@ -1672,7 +1693,7 @@ def test_run_setup_script_propagates_nonzero_exit(tmp_path, monkeypatch):
         cwd=tmp_path,
         env={"PATH": "/usr/bin:/bin"},
         log_path=log_path,
-        tool_name="fake",
+        toolkit="fake",
     )
 
     assert rc == 7

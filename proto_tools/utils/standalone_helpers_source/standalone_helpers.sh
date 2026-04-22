@@ -15,7 +15,7 @@
 #   proto_install_pytorch [torch_spec]
 #   proto_install_jax [TOOL_PREFIX]
 #   proto_install_cuda_toolkit [constraint] [extra_packages...]
-#   proto_resolve_weights_dir <tool_name>     -> sets $WEIGHTS_DIR
+#   proto_resolve_weights_dir <toolkit>     -> sets $WEIGHTS_DIR
 #   proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
 # ============================================================================
 
@@ -122,7 +122,7 @@ proto_install_cuda_toolkit() {
 
 
 # ---------------------------------------------------------------------------
-# proto_resolve_weights_dir <tool_name>
+# proto_resolve_weights_dir <toolkit>
 #
 # Set the shell variable WEIGHTS_DIR based on PROTO_MODEL_CACHE.
 # Mirrors the Python resolve_weights_dir() logic in standalone_helpers.py.
@@ -130,8 +130,8 @@ proto_install_cuda_toolkit() {
 # Priority:
 #   1. PROTO_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)
 #   2. PROTO_MODEL_CACHE:
-#      - (default/unset): {PROTO_HOME}/proto_model_cache/{tool_name}
-#      - /absolute/path:  /absolute/path/{tool_name} (shared directory)
+#      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}
+#      - /absolute/path:  /absolute/path/{toolkit} (shared directory)
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
@@ -142,9 +142,9 @@ proto_install_cuda_toolkit() {
 # Reference: tools/inverse_folding/fampnn/standalone/setup.sh
 # ---------------------------------------------------------------------------
 proto_resolve_weights_dir() {
-    local tool_name="$1"
+    local toolkit="$1"
     local tool_upper
-    tool_upper=$(echo "$tool_name" | tr '[:lower:]' '[:upper:]')
+    tool_upper=$(echo "$toolkit" | tr '[:lower:]' '[:upper:]')
     local override_var="PROTO_${tool_upper}_WEIGHTS_DIR"
     local override="${!override_var:-}"
 
@@ -155,11 +155,11 @@ proto_resolve_weights_dir() {
     elif [ "${PROTO_MODEL_CACHE:-}" = "NONE" ]; then
         WEIGHTS_DIR="${VENV_PATH}/weights"
     elif [ -n "${PROTO_MODEL_CACHE:-}" ]; then
-        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${tool_name}"
+        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${toolkit}"
     else
         # Default: PROTO_HOME/proto_model_cache/ directory
         local _proto_home="${PROTO_HOME:-$HOME/.proto}"
-        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${tool_name}"
+        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}"
     fi
     mkdir -p "$WEIGHTS_DIR"
 }

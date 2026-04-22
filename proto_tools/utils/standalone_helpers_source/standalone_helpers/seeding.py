@@ -111,7 +111,7 @@ def set_jax_seed(seed: int | None) -> Any:
     return jax.random.PRNGKey(seed)
 
 
-def enable_jax_compilation_cache(tool_name: str) -> str | None:
+def enable_jax_compilation_cache(toolkit: str) -> str | None:
     """Enable JAX disk compilation cache for faster cold starts.
 
     Persists compiled XLA kernels (and, transitively via
@@ -131,7 +131,7 @@ def enable_jax_compilation_cache(tool_name: str) -> str | None:
     ``JAX_COMPILATION_CACHE_DIR`` env var overrides this default.
 
     Args:
-        tool_name (str): Tool name for logging (e.g., ``"alphagenome"``).
+        toolkit (str): Tool name for logging (e.g., ``"alphagenome"``).
 
     Returns:
         str | None: Resolved cache directory path, or ``None`` if ``jax``
@@ -152,12 +152,12 @@ def enable_jax_compilation_cache(tool_name: str) -> str | None:
         if not venv_path:
             logger.warning(
                 "Cannot enable JAX compilation cache for %s: CONDA_PREFIX not set (tool env path unknown).",
-                tool_name,
+                toolkit,
             )
             return None
         cache_dir = Path(venv_path) / "jax_cache"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     jax.config.update("jax_compilation_cache_dir", str(cache_dir))
-    logger.info("JAX compilation cache for %s enabled at %s", tool_name, cache_dir)
+    logger.info("JAX compilation cache for %s enabled at %s", toolkit, cache_dir)
     return str(cache_dir)

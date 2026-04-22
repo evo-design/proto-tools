@@ -140,7 +140,7 @@ def _make_worker(script_path: Path) -> PersistentWorker:
     python_dir = Path(sys.executable).parent
     fake_venv = python_dir.parent  # e.g. /usr → /usr/bin/python
     return PersistentWorker(
-        tool_name="test",
+        toolkit="test",
         env_path=fake_venv,
         script_path=script_path,
         device="cpu",
@@ -265,7 +265,7 @@ def test_alive_property(echo_script: Path):
 def test_stop_signals_process_group():
     """stop() should send SIGTERM to the process group, not just the process."""
     worker = PersistentWorker.__new__(PersistentWorker)
-    worker.tool_name = "test"
+    worker.toolkit = "test"
 
     mock_process = MagicMock()
     mock_process.poll.return_value = None
@@ -285,7 +285,7 @@ def test_stop_signals_process_group():
 def test_stop_escalates_to_sigkill():
     """stop() should SIGKILL the group if SIGTERM + wait fails."""
     worker = PersistentWorker.__new__(PersistentWorker)
-    worker.tool_name = "test"
+    worker.toolkit = "test"
 
     mock_process = MagicMock()
     mock_process.poll.return_value = None
@@ -910,7 +910,7 @@ def test_helpers_copied_on_worker_startup(tmp_path: Path, echo_script):
 
     # Start the worker
     worker = PersistentWorker(
-        tool_name="test-tool",
+        toolkit="test-tool",
         env_path=fake_env,
         script_path=script_path,
     )
@@ -962,7 +962,7 @@ def test_helpers_not_copied_outside_standalone(tmp_path: Path):
 
     # Start worker with script NOT in standalone/ directory
     worker = PersistentWorker(
-        tool_name="test-tool",
+        toolkit="test-tool",
         env_path=fake_env,
         script_path=script,
     )

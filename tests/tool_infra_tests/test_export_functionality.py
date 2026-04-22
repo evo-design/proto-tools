@@ -102,7 +102,7 @@ def validate_output(output: BaseToolOutput, check_export: bool = True):
         with tempfile.TemporaryDirectory() as tmp_dir:
             output.export(name="test_output", export_path=tmp_dir)
             export_path = Path(tmp_dir) / "test_output"
-            tool_name = output.tool_id or "unknown tool"
+            tool_key = output.tool_id or "unknown tool"
 
             # Pattern 1: Directory export (path is a directory with files inside)
             if validate_export_output(export_path):
@@ -119,7 +119,7 @@ def validate_output(output: BaseToolOutput, check_export: bool = True):
             if sibling_files:
                 return
 
-            raise AssertionError(f"Export validation failed for {tool_name}")
+            raise AssertionError(f"Export validation failed for {tool_key}")
 
 
 # ── Mock tool outputs ────────────────────────────────────────────────────────

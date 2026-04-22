@@ -91,7 +91,7 @@ See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverag
 When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two env vars opt into richer visibility:
 
 - `PROTO_ENV_VERBOSE=1` — streams each line of `setup.sh`'s output live to the caller's stderr as the subprocess runs. Useful for watching long installs (PyTorch, flash-attn, transformer-engine, etc.) in real time and for diagnosing hangs.
-- `PROTO_ENV_LOG_DIR=<path>` — after `setup.sh` exits (success or failure), copies the complete log to `<PROTO_ENV_LOG_DIR>/<tool_name>_setup.log`. Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
+- `PROTO_ENV_LOG_DIR=<path>` — after `setup.sh` exits (success or failure), copies the complete log to `<PROTO_ENV_LOG_DIR>/<toolkit>_setup.log`. Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
 
 Regardless of either flag, the combined output is always written to `<env_path>/setup.log` during setup, so you can inspect it after the fact from any env that still has its files on disk.
 
@@ -254,7 +254,7 @@ proto_tools/
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
-**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `evolutionaryscale_esm`), its on-disk env directory changes from `<tool_name>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
+**Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `evolutionaryscale_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless; users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation
 
@@ -263,7 +263,7 @@ Tools needing external binaries must use `utils/install_binary.py`; never raw `c
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
    - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into bin/
-2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <tool_name>`
+2. In `setup.sh`, call: `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
 
 See blast or mmseqs for the standard pattern. For platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 

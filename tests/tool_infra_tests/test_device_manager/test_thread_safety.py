@@ -15,8 +15,8 @@ def test_concurrent_requests(device_manager, mock_callback):
     device_manager.configure(offload_strategy=OffloadStrategy.CPU)
     results = {}
 
-    def request_device(tool_name, instance_name):
-        device = device_manager.request_device(tool_name, instance_name, device="cuda", eviction_callback=mock_callback)
+    def request_device(toolkit, instance_name):
+        device = device_manager.request_device(toolkit, instance_name, device="cuda", eviction_callback=mock_callback)
         results[instance_name] = device
 
     threads = [threading.Thread(target=request_device, args=(f"tool{i}", f"instance{i}")) for i in range(5)]

@@ -30,7 +30,7 @@ def _fake_hf_token(monkeypatch):
 def test_single_sequence_dispatch(monkeypatch):
     calls: list[dict[str, Any]] = []
 
-    def mock_dispatch(_tool_name, payload, **kwargs):
+    def mock_dispatch(_toolkit, payload, **kwargs):
         calls.append({"payload": payload, "kwargs": kwargs})
         return {"predictions": [{"signal": 1.23}]}
 
@@ -52,7 +52,7 @@ def test_single_sequence_dispatch(monkeypatch):
 def test_multi_sequence_dispatch(monkeypatch):
     calls: list[dict[str, Any]] = []
 
-    def mock_dispatch(_tool_name, payload, **kwargs):
+    def mock_dispatch(_toolkit, payload, **kwargs):
         calls.append({"payload": payload, "kwargs": kwargs})
         return {"predictions": [{"signal": "a"}, {"signal": "b"}]}
 
@@ -75,7 +75,7 @@ def test_single_string_auto_wraps(monkeypatch):
     """A single sequence string should auto-wrap into a list."""
     calls: list[dict[str, Any]] = []
 
-    def mock_dispatch(_tool_name, payload, **kwargs):
+    def mock_dispatch(_toolkit, payload, **kwargs):
         calls.append({"payload": payload, "kwargs": kwargs})
         return {"predictions": [{"signal": 0.5}]}
 

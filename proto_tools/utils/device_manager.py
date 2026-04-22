@@ -105,7 +105,7 @@ class AllocationType(Enum):
 class DeviceAllocation:
     """Tracks device allocation for a tool instance (single or multi-GPU)."""
 
-    tool_name: str
+    toolkit: str
     instance_name: str
     device_ids: list[str]  # Changed from device_id: str for multi-GPU support
     allocated_at: float
@@ -284,7 +284,7 @@ class DeviceManager:
                 for alloc in orphaned:
                     logger.debug(
                         "DeviceManager: Shutting down %s on %s (device removed from pool)",
-                        alloc.tool_name,
+                        alloc.toolkit,
                         self._device_str(alloc.device_ids),
                     )
                     try:
@@ -458,7 +458,7 @@ class DeviceManager:
 
     def _create_allocation(
         self,
-        tool_name: str,
+        toolkit: str,
         instance_name: str,
         device_ids: list[str],
         eviction_callback: Callable[[str], None],
@@ -467,7 +467,7 @@ class DeviceManager:
         """Create a DeviceAllocation record and log it.
 
         Args:
-            tool_name (str): Name of the tool being allocated.
+            toolkit (str): Name of the tool being allocated.
             instance_name (str): Unique instance identifier.
             device_ids (list[str]): List of device IDs to allocate (e.g., ``["cuda:0"]``).
             eviction_callback (Callable[[str], None]): Callback invoked when evicting this allocation.
@@ -477,7 +477,7 @@ class DeviceManager:
         """
         now = time.time()
         self._allocations[instance_name] = DeviceAllocation(
-            tool_name=tool_name,
+            toolkit=toolkit,
             instance_name=instance_name,
             device_ids=device_ids,
             allocated_at=now,
@@ -491,7 +491,7 @@ class DeviceManager:
             "DeviceManager: Allocated %s [%s] for %s (instance: %s, type: %s)",
             "device" if len(device_ids) == 1 else f"{len(device_ids)} device(s)",
             device_str,
-            tool_name,
+            toolkit,
             instance_name,
             allocation_type.value,
         )
@@ -635,7 +635,7 @@ class DeviceManager:
         if self._offload_strategy == OffloadStrategy.CPU:
             logger.info(
                 "DeviceManager: Moving %s from %s to CPU (LRU eviction)",
-                allocation.tool_name,
+                allocation.toolkit,
                 device_str,
             )
             # Call eviction callback to move model to CPU
@@ -648,7 +648,7 @@ class DeviceManager:
         else:  # RESTART
             logger.info(
                 "DeviceManager: Restarting %s on %s (LRU eviction, strategy: RESTART)",
-                allocation.tool_name,
+                allocation.toolkit,
                 device_str,
             )
             # Call eviction callback to shutdown worker
@@ -731,7 +731,7 @@ class DeviceManager:
 
     def _allocate_n_devices(
         self,
-        tool_name: str,
+        toolkit: str,
         instance_name: str,
         n: int,
         eviction_callback: Callable[[str], None],
@@ -740,7 +740,7 @@ class DeviceManager:
         """Allocate N GPU devices with LRU eviction if needed.
 
         Args:
-            tool_name (str): Tool requesting devices.
+            toolkit (str): Tool requesting devices.
             instance_name (str): Unique instance identifier.
             n (int): Number of devices to allocate.
             eviction_callback (Callable[[str], None]): Callback for eviction
@@ -758,7 +758,7 @@ class DeviceManager:
             available = self._ensure_n_free_devices(n)
 
         return self._create_allocation(
-            tool_name,
+            toolkit,
             instance_name,
             available,
             eviction_callback,
@@ -767,7 +767,7 @@ class DeviceManager:
 
     def _allocate_specific_devices(
         self,
-        tool_name: str,
+        toolkit: str,
         instance_name: str,
         requested_devices: list[str],
         eviction_callback: Callable[[str], None],
@@ -776,7 +776,7 @@ class DeviceManager:
         """Allocate specific requested devices.
 
         Args:
-            tool_name (str): Tool requesting devices.
+            toolkit (str): Tool requesting devices.
             instance_name (str): Unique instance identifier.
             requested_devices (list[str]): List of device IDs (e.g., ``["cuda:0", "cuda:1"]``).
             eviction_callback (Callable[[str], None]): Callback for eviction
@@ -798,7 +798,7 @@ class DeviceManager:
         self._resolve_device_conflicts(requested_devices)
 
         return self._create_allocation(
-            tool_name,
+            toolkit,
             instance_name,
             requested_devices,
             eviction_callback,
@@ -811,7 +811,7 @@ class DeviceManager:
 
     def request_device(
         self,
-        tool_name: str,
+        toolkit: str,
         instance_name: str,
         device: str,
         eviction_callback: Callable[[str], None] | None = None,
@@ -824,7 +824,7 @@ class DeviceManager:
         configured offload strategy.
 
         Args:
-            tool_name (str): Tool name (e.g., ``"esmfold"``, ``"boltz2"``).
+            toolkit (str): Tool name (e.g., ``"esmfold"``, ``"boltz2"``).
             instance_name (str): Unique instance identifier (cache key).
             device (str): Device string (e.g., ``"cpu"``, ``"cuda"``, ``"cudax2"``, ``"cuda:0,1"``).
             eviction_callback (Callable[[str], None] | None): Callback invoked when this
@@ -856,13 +856,13 @@ class DeviceManager:
             if eviction_callback is None:
                 raise ValueError(
                     f"eviction_callback is required for device allocation "
-                    f"(tool: {tool_name}, instance: {instance_name}, device: {device})"
+                    f"(tool: {toolkit}, instance: {instance_name}, device: {device})"
                 )
 
             # Handle CPU allocation
             if spec.devices and spec.devices[0] == "cpu":
                 return self._create_allocation(
-                    tool_name,
+                    toolkit,
                     instance_name,
                     ["cpu"],
                     eviction_callback,
@@ -873,16 +873,16 @@ class DeviceManager:
             gpu_devices = [d for d in all_devices if self._is_gpu(d)]
             if not gpu_devices:
                 raise RuntimeError(
-                    f"No GPUs available for {tool_name} (requested device: {device}). "
+                    f"No GPUs available for {toolkit} (requested device: {device}). "
                     f"Set device='cpu' in the tool config to run on CPU."
                 )
 
             # Explicit device(s) requested
             if spec.devices:
-                return self._allocate_specific_devices(tool_name, instance_name, spec.devices, eviction_callback)
+                return self._allocate_specific_devices(toolkit, instance_name, spec.devices, eviction_callback)
 
             # Auto-allocate N GPUs
-            return self._allocate_n_devices(tool_name, instance_name, spec.count, eviction_callback)
+            return self._allocate_n_devices(toolkit, instance_name, spec.count, eviction_callback)
 
     def release_device(self, instance_name: str) -> None:
         """Release device(s) allocated to a tool instance.
@@ -896,7 +896,7 @@ class DeviceManager:
                 logger.debug(
                     "DeviceManager: Released %s from %s (instance: %s)",
                     self._device_str(allocation.device_ids),
-                    allocation.tool_name,
+                    allocation.toolkit,
                     instance_name,
                 )
                 self._device_available.notify_all()
@@ -908,7 +908,7 @@ class DeviceManager:
     @contextmanager
     def lease(
         self,
-        tool_name: str,
+        toolkit: str,
         device: str,
         timeout: float = 300.0,
     ) -> Generator[str, None, None]:
@@ -925,7 +925,7 @@ class DeviceManager:
         Non-GPU devices (cpu, etc.) yield immediately with no tracking.
 
         Args:
-            tool_name (str): Tool name (for logging and allocation tracking).
+            toolkit (str): Tool name (for logging and allocation tracking).
             device (str): Device string (e.g., ``"cpu"``, ``"cuda"``, ``"cuda:0"``).
             timeout (float): Maximum seconds to wait for a GPU to become available.
 
@@ -948,8 +948,8 @@ class DeviceManager:
             yield device
             return
 
-        lease_id = f"_lease_{tool_name}_{uuid4().hex[:8]}"
-        allocated_device = self._acquire_lease(tool_name, lease_id, device, timeout)
+        lease_id = f"_lease_{toolkit}_{uuid4().hex[:8]}"
+        allocated_device = self._acquire_lease(toolkit, lease_id, device, timeout)
         try:
             yield allocated_device
         finally:
@@ -957,7 +957,7 @@ class DeviceManager:
 
     def _acquire_lease(
         self,
-        tool_name: str,
+        toolkit: str,
         lease_id: str,
         device: str,
         timeout: float,
@@ -970,7 +970,7 @@ class DeviceManager:
         are TRANSIENT (non-evictable).
 
         Args:
-            tool_name (str): Tool name for allocation record.
+            toolkit (str): Tool name for allocation record.
             lease_id (str): Unique lease identifier.
             device (str): Device string (e.g., ``"cuda"``, ``"cuda:0"``).
             timeout (float): Maximum seconds to wait.
@@ -987,7 +987,7 @@ class DeviceManager:
         gpu_devices = [d for d in all_devices if self._is_gpu(d)]
         if not gpu_devices:
             raise RuntimeError(
-                f"No GPUs available for {tool_name} (requested device: {device}). "
+                f"No GPUs available for {toolkit} (requested device: {device}). "
                 f"Set device='cpu' in the tool config to run on CPU."
             )
 
@@ -1001,7 +1001,7 @@ class DeviceManager:
                 try:
                     if spec.devices:
                         result = self._allocate_specific_devices(
-                            tool_name,
+                            toolkit,
                             lease_id,
                             spec.devices,
                             noop_callback,
@@ -1009,7 +1009,7 @@ class DeviceManager:
                         )
                     else:
                         result = self._allocate_n_devices(
-                            tool_name,
+                            toolkit,
                             lease_id,
                             spec.count,
                             noop_callback,
@@ -1022,7 +1022,7 @@ class DeviceManager:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise TimeoutError(
-                            f"Timed out waiting for GPU for {tool_name} (waited {timeout:.1f}s, device={device})"
+                            f"Timed out waiting for GPU for {toolkit} (waited {timeout:.1f}s, device={device})"
                         ) from None
 
                     logger.debug(
@@ -1056,7 +1056,7 @@ class DeviceManager:
             allocations_info = {}
             for name, alloc in self._allocations.items():
                 allocations_info[name] = {
-                    "tool_name": alloc.tool_name,
+                    "toolkit": alloc.toolkit,
                     "device_id": self._device_str(alloc.device_ids),  # String for backward compat
                     "device_ids": alloc.device_ids,  # List for multi-GPU
                     "allocated_at": alloc.allocated_at,
@@ -1207,11 +1207,11 @@ class DeviceManager:
                     "available": False,
                     "error": f"Instance '{instance_name}' not found in allocations",
                 }
-            tool_name = allocation.tool_name
+            toolkit = allocation.toolkit
 
         # Query memory stats outside the lock (may be slow)
         try:
-            tool_instance = ToolInstance.get(tool_name, instance_name=instance_name)
+            tool_instance = ToolInstance.get(toolkit, instance_name=instance_name)
             return tool_instance.get_memory_stats()
         except Exception as e:
             logger.error("Failed to get memory stats for %s: %s", instance_name, e)

@@ -15,7 +15,7 @@ _SETUP_SH_CONTENT = "#!/bin/bash\necho test"
 def _make_test_instance(setup_dir: Path) -> ToolInstance:
     """Create a ToolInstance with a fake setup script for testing."""
     inst = ToolInstance.__new__(ToolInstance)
-    inst.tool_name = "test_tool"
+    inst.toolkit = "test_tool"
     inst.setup_script = setup_dir / "setup.sh"
     return inst
 

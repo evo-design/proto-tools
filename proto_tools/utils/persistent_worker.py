@@ -356,7 +356,7 @@ class PersistentWorker:
 
     Parameters
     ----------
-    tool_name : str
+    toolkit : str
         Name of the tool (e.g. ``"esm2"``, ``"blast"``).
     env_path : Path
         Path to the tool's environment (e.g. ``tool_envs/esm2_env``).
@@ -370,14 +370,14 @@ class PersistentWorker:
 
     def __init__(
         self,
-        tool_name: str,
+        toolkit: str,
         env_path: Path,
         script_path: Path,
         device: str = "cpu",
         tool_env_vars: dict[str, list[str]] | None = None,
     ) -> None:
         """Initialize PersistentWorker."""
-        self.tool_name = tool_name
+        self.toolkit = toolkit
         self.env_path = env_path
         self.script_path = script_path
         self.device = device
@@ -413,7 +413,7 @@ class PersistentWorker:
                 normalized = _normalize_progress_line(text)
                 if normalized == prev_normalized:
                     continue
-                logger.debug("[%s worker stderr] %s", self.tool_name, text)
+                logger.debug("[%s worker stderr] %s", self.toolkit, text)
                 prev_line = text
                 prev_normalized = normalized
 
@@ -433,7 +433,7 @@ class PersistentWorker:
 
         logger.debug(
             "Starting persistent worker for %s (script=%s, device=%s)",
-            self.tool_name,
+            self.toolkit,
             self.script_path,
             self.device,
         )
@@ -480,7 +480,7 @@ class PersistentWorker:
                 self.start()
 
             if self._process is None or self._process.stdin is None or self._process.stdout is None:
-                raise RuntimeError(f"Worker for {self.tool_name} failed to start: process or pipes are None")
+                raise RuntimeError(f"Worker for {self.toolkit} failed to start: process or pipes are None")
 
             request_id = uuid.uuid4().hex[:8]
             request = {"id": request_id, "input": input_dict}
@@ -492,7 +492,7 @@ class PersistentWorker:
             except (BrokenPipeError, OSError) as exc:
                 stderr_tail = "\n".join(self._stderr_lines[-20:])
                 raise RuntimeError(
-                    f"Worker for {self.tool_name} crashed while sending request.\nstderr:\n{stderr_tail}"
+                    f"Worker for {self.toolkit} crashed while sending request.\nstderr:\n{stderr_tail}"
                 ) from exc
 
             # Read response line (with optional timeout).
@@ -501,7 +501,7 @@ class PersistentWorker:
                 ready, _, _ = select.select([self._process.stdout.fileno()], [], [], timeout)
                 if not ready:
                     self.stop()
-                    raise TimeoutError(f"Worker for {self.tool_name} timed out after {timeout}s")
+                    raise TimeoutError(f"Worker for {self.toolkit} timed out after {timeout}s")
 
             # Read header, skipping non-protocol lines (warnings/logs).
             # Header is either PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path>
@@ -512,9 +512,7 @@ class PersistentWorker:
                 header_line = self._process.stdout.readline()
                 if not header_line:
                     stderr_tail = "\n".join(self._stderr_lines[-20:])
-                    raise RuntimeError(
-                        f"Worker for {self.tool_name} closed stdout unexpectedly.\nstderr:\n{stderr_tail}"
-                    )
+                    raise RuntimeError(f"Worker for {self.toolkit} closed stdout unexpectedly.\nstderr:\n{stderr_tail}")
 
                 header_line = header_line.strip()
                 if header_line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
@@ -525,7 +523,7 @@ class PersistentWorker:
                 normalized = _normalize_progress_line(header_line)
                 if normalized == prev_stdout_normalized:
                     continue
-                logger.debug("[%s worker stdout] %s", self.tool_name, header_line)
+                logger.debug("[%s worker stdout] %s", self.toolkit, header_line)
                 prev_stdout_line = header_line
                 prev_stdout_normalized = normalized
 
@@ -536,7 +534,7 @@ class PersistentWorker:
                 if not file_path.startswith(tempfile.gettempdir()):
                     logger.warning(
                         "Worker for %s sent file path outside temp directory: %s",
-                        self.tool_name,
+                        self.toolkit,
                         file_path,
                     )
                 try:
@@ -551,31 +549,29 @@ class PersistentWorker:
                     json_length = int(header_line.split(":", 1)[1])
                 except (ValueError, IndexError) as exc:
                     raise RuntimeError(
-                        f"Worker for {self.tool_name} sent invalid LENGTH header: {header_line!r}"
+                        f"Worker for {self.toolkit} sent invalid LENGTH header: {header_line!r}"
                     ) from exc
 
                 response_bytes = self._process.stdout.read(json_length)
                 if len(response_bytes) != json_length:
                     raise RuntimeError(
-                        f"Worker for {self.tool_name} sent incomplete JSON: "
+                        f"Worker for {self.toolkit} sent incomplete JSON: "
                         f"expected {json_length} bytes, got {len(response_bytes)}"
                     )
 
                 try:
                     response = json.loads(response_bytes)
                 except json.JSONDecodeError as exc:
-                    raise RuntimeError(
-                        f"Worker for {self.tool_name} returned invalid JSON: {response_bytes!r}"
-                    ) from exc
+                    raise RuntimeError(f"Worker for {self.toolkit} returned invalid JSON: {response_bytes!r}") from exc
 
             if response.get("id") != request_id:
                 raise RuntimeError(
-                    f"Worker for {self.tool_name} returned mismatched request id: "
+                    f"Worker for {self.toolkit} returned mismatched request id: "
                     f"expected {request_id}, got {response.get('id')}"
                 )
 
             if "error" in response:
-                raise RuntimeError(f"Worker for {self.tool_name} returned an error:\n{response['error']}")
+                raise RuntimeError(f"Worker for {self.toolkit} returned an error:\n{response['error']}")
 
             return response["result"]  # type: ignore[no-any-return]
 
@@ -602,4 +598,4 @@ class PersistentWorker:
                         with contextlib.suppress(Exception):
                             pipe.close()
                 self._process = None
-                logger.debug("Stopped persistent worker for %s", self.tool_name)
+                logger.debug("Stopped persistent worker for %s", self.toolkit)

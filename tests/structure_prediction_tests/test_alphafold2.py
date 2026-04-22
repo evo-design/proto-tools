@@ -97,8 +97,8 @@ def test_gradient_input_requires_target_pdb():
 def test_gradient_dispatch_contract(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
-        captured.update(tool_name=tool_name, payload=payload)
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured.update(toolkit=toolkit, payload=payload)
         return {
             "gradient": [[0.1] * 20] * 2,
             "loss": 1.25,
@@ -127,7 +127,7 @@ def test_gradient_dispatch_contract(monkeypatch):
     result = run_alphafold2_binder(inputs=inputs, config=config)
 
     validate_output(result)
-    assert captured["tool_name"] == "alphafold2"
+    assert captured["toolkit"] == "alphafold2"
     payload = captured["payload"]
     assert payload["operation"] == "compute_gradient"
     assert payload["temperature"] == 0.8
@@ -166,7 +166,7 @@ def test_gradient_export_writes_pdb_sidecar(tmp_path, name):
 def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
             "gradient": [[0.0] * 20] * 3,
@@ -204,7 +204,7 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
 def test_gradient_dispatch_omits_embedded_ablm_metadata(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
             "gradient": [[0.0] * 20] * 3,
@@ -239,7 +239,7 @@ def test_forward_mode_dispatch_contract(monkeypatch):
     """compute_gradient=False forwards the flag and returns gradient=None."""
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
             "gradient": None,
@@ -274,7 +274,7 @@ def test_forward_mode_dispatch_contract(monkeypatch):
 def test_prediction_dispatch_contract(monkeypatch):
     captured: list[dict] = []
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.append(payload)
         return {"pdb": _EXAMPLE_PDB, "avg_plddt": 0.85, "ptm": 0.72, "iptm": None, "avg_pae": 1.5, "pae": None}
 

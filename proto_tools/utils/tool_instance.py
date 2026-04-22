@@ -104,7 +104,7 @@ def _run_setup_script(
     cwd: Path,
     env: dict[str, str],
     log_path: Path,
-    tool_name: str,
+    toolkit: str,
 ) -> tuple[int, str]:
     """Run ``setup.sh``, capturing stdout+stderr to ``log_path``.
 
@@ -114,7 +114,7 @@ def _run_setup_script(
       this process's stderr as it arrives, so users see install progress
       live instead of waiting for the subprocess to finish.
     - ``PROTO_ENV_LOG_DIR=<path>`` copies the completed log to
-      ``<PROTO_ENV_LOG_DIR>/<tool_name>_setup.log`` after the subprocess
+      ``<PROTO_ENV_LOG_DIR>/<toolkit>_setup.log`` after the subprocess
       exits. Useful for inspecting setup output when the env directory
       itself is ephemeral — e.g. pointing ``PROTO_ENV_LOG_DIR`` at a
       persistent scratch path so a failed build's log is retrievable
@@ -126,7 +126,7 @@ def _run_setup_script(
         env (dict[str, str]): Environment variables for the subprocess.
         log_path (Path): Where to write the setup log. The parent
             directory must already exist.
-        tool_name (str): Used to name the mirrored log file when
+        toolkit (str): Used to name the mirrored log file when
             ``PROTO_ENV_LOG_DIR`` is set.
 
     Returns:
@@ -158,7 +158,7 @@ def _run_setup_script(
         mirror_path = Path(mirror_dir)
         mirror_path.mkdir(parents=True, exist_ok=True)
         with suppress(OSError):
-            shutil.copy2(log_path, mirror_path / f"{tool_name}_setup.log")
+            shutil.copy2(log_path, mirror_path / f"{toolkit}_setup.log")
 
     combined_output = log_path.read_text(errors="replace") if log_path.exists() else ""
     return proc.returncode, combined_output
@@ -180,33 +180,36 @@ class ToolInstance:
     @classmethod
     def get(
         cls,
-        tool_name: str,
+        toolkit: str,
         *,
         instance_name: str | None = None,
     ) -> "ToolInstance":
-        """Return (or create) a ToolInstance for *tool_name*.
+        """Return (or create) a ToolInstance for *toolkit*.
 
         Args:
-            tool_name (str): Model-level folder name (e.g. ``"esm2"``, ``"progen2"``).
+            toolkit (str): Worker-group folder name (e.g. ``"esm2"``, ``"progen2"``).
+                Accepts either a toolkit or a registered tool_key; tool_keys are
+                normalized to their toolkit.
             instance_name (str | None): Explicit cache key. When None, the instance is
-                cached under *tool_name* so that different operations on the same
+                cached under *toolkit* so that different operations on the same
                 model share one worker.
         """
-        key = instance_name if instance_name is not None else tool_name
+        toolkit = cls._normalize_toolkit(toolkit)
+        key = instance_name if instance_name is not None else toolkit
         with _lock:
             cache = _active_cache()
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
         # Create outside lock — __init__ is lightweight now (no venv build)
-        new_inst = cls(tool_name)
+        new_inst = cls(toolkit)
         with _lock:
             cache = _active_cache()
             # Double-check — another thread may have created it
             if key in cache:
                 logger.debug("Returning cached ToolInstance for key=%r", key)
                 return cache[key]
-            logger.debug("Creating new ToolInstance for %r (key=%r)", tool_name, key)
+            logger.debug("Creating new ToolInstance for %r (key=%r)", toolkit, key)
             cache[key] = new_inst
             if not hasattr(new_inst, "_cache_keys"):
                 new_inst._cache_keys = set()
@@ -244,7 +247,7 @@ class ToolInstance:
     @classmethod
     def dispatch(
         cls,
-        tool_name: str,
+        toolkit: str,
         input_dict: dict[str, Any],
         *,
         instance: "str | ToolInstance | None" = None,
@@ -259,7 +262,9 @@ class ToolInstance:
         :meth:`persistent` or :meth:`get`), reuses it.
 
         Args:
-            tool_name (str): Model-level folder name (e.g. ``"esm2"``).
+            toolkit (str): Worker-group folder name (e.g. ``"esm2"``).
+                Accepts either a toolkit or a registered tool_key; tool_keys
+                are normalized to their toolkit.
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             instance (str | ToolInstance | None): A ToolInstance object to use directly,
                 a string cache key for persistent instance lookup, or None.
@@ -267,6 +272,7 @@ class ToolInstance:
             config (BaseConfig | None): Tool configuration object. When provided,
                 verbose, timeout, and reload_on are derived automatically.
         """
+        toolkit = cls._normalize_toolkit(toolkit)
         # Derive execution parameters from config
         if config is not None:
             verbose = config.verbose
@@ -278,7 +284,7 @@ class ToolInstance:
             reload_on = None
         # Path 1: caller passed a ToolInstance object directly
         if isinstance(instance, ToolInstance):
-            logger.debug("dispatch(%s): using provided ToolInstance", tool_name)
+            logger.debug("dispatch(%s): using provided ToolInstance", toolkit)
             return instance.run(
                 input_dict,
                 script_path=script_path,
@@ -286,12 +292,12 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 2: look up by string cache key (or tool_name as default key)
-        key = instance if instance is not None else tool_name
+        # Path 2: look up by string cache key (or toolkit as default key)
+        key = instance if instance is not None else toolkit
         with _lock:
             cached = _active_cache().get(key)
         if cached is not None:
-            logger.debug("dispatch(%s): reusing cached instance (key=%r)", tool_name, key)
+            logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, key)
             return cached.run(
                 input_dict,
                 script_path=script_path,
@@ -303,10 +309,10 @@ class ToolInstance:
         if _persist_mode.get():
             logger.debug(
                 "dispatch(%s): persist mode, auto-caching instance (key=%r)",
-                tool_name,
+                toolkit,
                 key,
             )
-            inst = cls.get(tool_name, instance_name=key)
+            inst = cls.get(toolkit, instance_name=key)
             return inst.run(
                 input_dict,
                 script_path=script_path,
@@ -315,9 +321,9 @@ class ToolInstance:
                 reload_on=reload_on,
             )
         # Path 4: no cached instance — ephemeral one-shot subprocess
-        logger.debug("dispatch(%s): no cached instance, running one-shot", tool_name)
+        logger.debug("dispatch(%s): no cached instance, running one-shot", toolkit)
         return cls._oneshot(
-            tool_name,
+            toolkit,
             input_dict,
             script_path=script_path,
             verbose=verbose,
@@ -327,7 +333,7 @@ class ToolInstance:
     @classmethod
     def _oneshot(
         cls,
-        tool_name: str,
+        toolkit: str,
         input_dict: dict[str, Any],
         *,
         script_path: Path | str | None = None,
@@ -340,20 +346,20 @@ class ToolInstance:
         to prevent concurrent one-shot calls from stomping the same GPU.
 
         Args:
-            tool_name (str): Model-level folder name (e.g. ``"esm2"``).
+            toolkit (str): Model-level folder name (e.g. ``"esm2"``).
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
             script_path (Path | str | None): Override the default standalone script.
             verbose (bool): Whether to print status messages.
             timeout (int | None): Maximum execution time in seconds.
         """
-        inst = cls(tool_name)
+        inst = cls(toolkit)
         effective_script = Path(script_path) if script_path else inst.script_path
         device = input_dict.get("device")
 
         if device and device.startswith("cuda"):
             dm = DeviceManager.get_instance()
             lease_timeout = float((timeout or DEFAULT_TIMEOUT) + 60)
-            with dm.lease(tool_name, device=device, timeout=lease_timeout) as allocated:
+            with dm.lease(toolkit, device=device, timeout=lease_timeout) as allocated:
                 leased_input = {**input_dict, "device": allocated}
                 return inst._run_oneshot(
                     leased_input,
@@ -373,7 +379,7 @@ class ToolInstance:
     @contextmanager
     def persist_tool(
         cls,
-        tool_name: str,
+        toolkit: str,
         *,
         instance_name: str | None = None,
     ) -> Generator["ToolInstance", None, None]:
@@ -389,26 +395,29 @@ class ToolInstance:
         The worker is shut down and removed from the cache on exit.
 
         Args:
-            tool_name (str): Model-level folder name (e.g. ``"esmfold"``).
-            instance_name (str | None): Explicit cache key. When None, uses tool_name.
+            toolkit (str): Worker-group folder name (e.g. ``"esmfold"``).
+                Accepts either a toolkit or a registered tool_key; tool_keys are
+                normalized to their toolkit.
+            instance_name (str | None): Explicit cache key. When None, uses toolkit.
         """
+        toolkit = cls._normalize_toolkit(toolkit)
         if instance_name is not None:
             # Named: always cache under the given name
-            inst = cls.get(tool_name, instance_name=instance_name)
+            inst = cls.get(toolkit, instance_name=instance_name)
             try:
                 yield inst
             finally:
                 cls.shutdown_instance(instance_name)
         else:
-            # Anonymous: atomically check-and-claim the tool_name slot
+            # Anonymous: atomically check-and-claim the toolkit slot
             with _lock:
                 cache = _active_cache()
-                if tool_name not in cache:
-                    inst = cls(tool_name)
-                    cache[tool_name] = inst
+                if toolkit not in cache:
+                    inst = cls(toolkit)
+                    cache[toolkit] = inst
                     if not hasattr(inst, "_cache_keys"):
                         inst._cache_keys = set()
-                    inst._cache_keys.add(tool_name)
+                    inst._cache_keys.add(toolkit)
                     owns_slot = True
                 else:
                     owns_slot = False
@@ -416,7 +425,7 @@ class ToolInstance:
                 try:
                     yield inst
                 finally:
-                    cls.shutdown_instance(tool_name)
+                    cls.shutdown_instance(toolkit)
             else:
                 # Slot taken: don't cache (user must pass instance=)
                 logger.warning(
@@ -426,9 +435,9 @@ class ToolInstance:
                     "must be explicitly specified — pass instance=<this "
                     "instance> to run_*() calls, or use instance_name= "
                     "to give it a unique cache key.",
-                    tool_name,
+                    toolkit,
                 )
-                inst = cls(tool_name)
+                inst = cls(toolkit)
                 try:
                     yield inst
                 finally:
@@ -489,19 +498,27 @@ class ToolInstance:
     # ------------------------------------------------------------------
     # Init
     # ------------------------------------------------------------------
-    def __init__(self, tool_name: str) -> None:
-        """Initialize ToolInstance."""
-        self.tool_name = self._validate_tool_name(tool_name)
+    def __init__(self, toolkit: str) -> None:
+        """Initialize ToolInstance.
+
+        Args:
+            toolkit (str): Either a toolkit (folder name like ``"pyrosetta"``)
+                or a registered tool_key (``"pyrosetta-energy"``). Tool keys are
+                auto-normalized to their toolkit via the registry.
+        """
+        # Accept either a toolkit or a tool_key for ergonomic flexibility.
+        toolkit = self._normalize_toolkit(toolkit)
+        self.toolkit = self._validate_toolkit(toolkit)
         self.device = "cpu"
 
         env_root = self._get_tool_envs_root()
         env_root.mkdir(parents=True, exist_ok=True)
 
-        env_def_dir, env_name = self._resolve_env_def(tool_name)
+        env_def_dir, env_name = self._resolve_env_def(toolkit)
         self.env_name = env_name
         self.env_path = env_root / f"{env_name}_env"
         self.setup_script = env_def_dir / "setup.sh"
-        self.script_path = self._find_script(tool_name)
+        self.script_path = self._find_script(toolkit)
         self._tool_env_vars = _parse_env_vars_file(env_def_dir / "env_vars.txt")
 
         self._env_ready = False
@@ -527,11 +544,11 @@ class ToolInstance:
         """
         if getattr(self, "_env_ready", False):
             return
-        if self.tool_name in self._build_failures:
-            tail = self._build_failures[self.tool_name]
+        if self.toolkit in self._build_failures:
+            tail = self._build_failures[self.toolkit]
             hint = f"\n{tail}" if tail else ""
             raise RuntimeError(
-                f"'{self.tool_name}' may not be compatible with your system. Check logs for details.{hint}"
+                f"'{self.toolkit}' may not be compatible with your system. Check logs for details.{hint}"
             )
         # Show one-time notice if using default storage locations
         from proto_tools.utils.proto_home import show_first_run_notice
@@ -543,7 +560,7 @@ class ToolInstance:
                 logger.info(
                     "First-time setup for %s. Installing dependencies. "
                     "This is a one-time process; subsequent runs will start much faster.",
-                    self.tool_name,
+                    self.toolkit,
                 )
             # Check for a stale status from a previous session
             status_file = self.env_path / "STATUS.txt"
@@ -552,7 +569,7 @@ class ToolInstance:
                 if status.startswith("SUCCESS"):
                     logger.info(
                         "Setup files changed for %s, rebuilding environment",
-                        self.tool_name,
+                        self.toolkit,
                     )
                 elif status.startswith("FAILED"):
                     current_hash = self._setup_hash()
@@ -566,21 +583,21 @@ class ToolInstance:
                             "compatible with your system, or you may "
                             "need to accept a license agreement (e.g. "
                             "Hugging Face). Check logs for details.",
-                            self.tool_name,
+                            self.toolkit,
                             current_hash,
                             hint,
                         )
                     else:
                         logger.info(
                             "Setup files changed for %s — retrying venv build",
-                            self.tool_name,
+                            self.toolkit,
                         )
             try:
                 self._create_env()
             except Exception as exc:
                 # Store exception message as fallback if _create_env didn't populate _build_failures
-                if self.tool_name not in self._build_failures:
-                    self._build_failures[self.tool_name] = str(exc)
+                if self.toolkit not in self._build_failures:
+                    self._build_failures[self.toolkit] = str(exc)
                 raise
         self._env_ready = True
 
@@ -643,7 +660,7 @@ class ToolInstance:
         else:
             worker = getattr(self, "_worker", None)
         if worker is not None:
-            name = getattr(self, "tool_name", "?")
+            name = getattr(self, "toolkit", "?")
             logger.debug("Shutting down persistent worker for %s", name)
             worker.stop()
 
@@ -681,7 +698,7 @@ class ToolInstance:
         """
         with self._instance_lock:
             # Get instance name for DeviceManager
-            instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
+            instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
 
             # If no worker exists yet, just update internal device tracking
             if self._worker is None:
@@ -819,7 +836,7 @@ class ToolInstance:
                 logger.info(
                     "First run of %s with %s. Model weights may need to download; "
                     "subsequent runs with this configuration will be faster.",
-                    self.tool_name,
+                    self.toolkit,
                     config_desc,
                 )
             logger.debug(
@@ -877,7 +894,7 @@ class ToolInstance:
                         ", ".join(
                             f"{k}: {self._reload_params.get(k)!r} → {reload_params[k]!r}" for k in sorted(changed)
                         ),
-                        self.tool_name,
+                        self.toolkit,
                     )
                 set_substatus("Restarting worker")
                 self._worker.stop()
@@ -886,7 +903,7 @@ class ToolInstance:
         self._reload_params = reload_params
 
         # Get instance name for DeviceManager (use first cache key if available)
-        instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.tool_name
+        instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
 
         if self._worker is None:
             # Request device from DeviceManager
@@ -906,7 +923,7 @@ class ToolInstance:
                                 "Evicting gpu_only tool %s: killing worker "
                                 "(CPU offload not supported; fresh worker will "
                                 "spawn on next GPU dispatch).",
-                                self.tool_name,
+                                self.toolkit,
                             )
                             try:
                                 worker.stop()
@@ -939,7 +956,7 @@ class ToolInstance:
                             logger.error("Failed to stop worker during RESTART eviction: %s", e)
 
             allocated_device = device_manager.request_device(
-                tool_name=self.tool_name,
+                toolkit=self.toolkit,
                 instance_name=instance_name,
                 device=device,
                 eviction_callback=eviction_callback,
@@ -951,7 +968,7 @@ class ToolInstance:
 
             set_substatus("Starting worker")
             self._worker = PersistentWorker(
-                tool_name=self.tool_name,
+                toolkit=self.toolkit,
                 env_path=self.env_path,
                 script_path=sp,
                 device=self.device,
@@ -982,7 +999,7 @@ class ToolInstance:
         # Apply warm-up timeout for first use of this config combination
         effective_timeout = self._apply_warmup_timeout(timeout, reload_params)
 
-        set_substatus(f"Running {self.tool_name}")
+        set_substatus(f"Running {self.toolkit}")
         try:
             result = self._worker.send(input_dict, timeout=effective_timeout)
             self._mark_warmup_complete(reload_params)
@@ -1048,7 +1065,7 @@ class ToolInstance:
             # Show a spinner only when no tool-level progress bar is active
             # (tools like ESMFold create their own bar for batch iteration)
             show_spinner = not has_active_progress_bar()
-            display_name = get_current_tool_function() or self.tool_name
+            display_name = get_current_tool_function() or self.toolkit
             pbar = progress_bar(
                 total=1,
                 desc=f"Running {display_name}",
@@ -1071,13 +1088,13 @@ class ToolInstance:
                 tail = self._stderr_tail(e.stderr or e.stdout or "")
                 logger.error(
                     "Tool %s failed (exit %d):\n%s",
-                    self.tool_name,
+                    self.toolkit,
                     e.returncode,
                     tail,
                 )
                 raise
             except subprocess.TimeoutExpired:
-                raise TimeoutError(f"Tool {self.tool_name} timed out after {effective_timeout}s") from None
+                raise TimeoutError(f"Tool {self.toolkit} timed out after {effective_timeout}s") from None
             finally:
                 pbar.close()
 
@@ -1406,7 +1423,7 @@ class ToolInstance:
         version_file = self.setup_script.parent / "python_version.txt"
         if not version_file.exists():
             raise FileNotFoundError(
-                f"Tool {self.tool_name!r} is missing required standalone/python_version.txt "
+                f"Tool {self.toolkit!r} is missing required standalone/python_version.txt "
                 f"at {version_file}. Every tool must pin its Python version explicitly. "
                 f"Create the file with a single line like 'default: 3.12'. "
                 f"See notes/tool-environments.md for the format."
@@ -1414,7 +1431,7 @@ class ToolInstance:
         try:
             content = version_file.read_text()
         except Exception as e:
-            raise RuntimeError(f"Failed to read {version_file} for tool '{self.tool_name}': {e}") from e
+            raise RuntimeError(f"Failed to read {version_file} for tool '{self.toolkit}': {e}") from e
         platform_key = f"{platform.system().lower()}-{platform.machine()}"
         return self._parse_python_version(content, platform_key, str(version_file))
 
@@ -1461,7 +1478,7 @@ class ToolInstance:
 
     @classmethod
     def _get_tool_dirs(cls) -> dict[str, Path]:
-        """Return a ``{tool_name: dir_path}`` mapping for all standalone tools.
+        """Return a ``{toolkit: dir_path}`` mapping for all standalone tools.
 
         The mapping is computed once (single ``rglob``) and cached for the
         lifetime of the process. Phantom directories (stale helper copies
@@ -1507,12 +1524,46 @@ class ToolInstance:
         return cls._tool_dir_cache
 
     @classmethod
-    def _validate_tool_name(cls, tool_name: str) -> str:
-        """Raise ValueError if *tool_name* has no standalone/ directory."""
+    def _validate_toolkit(cls, toolkit: str) -> str:
+        """Raise ValueError if *toolkit* has no standalone/ directory."""
         tool_dirs = cls._get_tool_dirs()
-        if tool_name in tool_dirs:
-            return tool_name
-        raise ValueError(f"Invalid tool name: {tool_name!r}. Available tools with standalone dirs: {sorted(tool_dirs)}")
+        if toolkit in tool_dirs:
+            return toolkit
+        raise ValueError(
+            f"Invalid toolkit: {toolkit!r}. Available worker groups with standalone dirs: {sorted(tool_dirs)}"
+        )
+
+    @classmethod
+    def _normalize_toolkit(cls, identifier: str) -> str:
+        """Accept either a toolkit or a tool_key; return a toolkit.
+
+        Because one toolkit = one persistent subprocess serving all tools
+        in that folder, any tool_key inside a folder is operationally
+        equivalent to the toolkit itself for worker-management purposes.
+        Callers can pass either form; tool_keys are resolved to their
+        toolkit via the registry.
+
+        Invariant: this assumes one-worker-per-toolkit. If that ever
+        changes (e.g. per-tool_key workers), remove this normalization.
+
+        Args:
+            identifier (str): Either a toolkit (folder name) or a tool
+                registration key (``@tool(key=...)``).
+
+        Returns:
+            str: The toolkit identifier.
+        """
+        # Lazy import to avoid circular dep: tool_registry imports tool_instance
+        from proto_tools.tools.tool_registry import ToolRegistry
+
+        spec = ToolRegistry._registry.get(identifier)
+        if spec is not None:
+            resolved = spec.source_file.parent.name
+            logger.debug("normalized tool_key %r to toolkit %r", identifier, resolved)
+            return resolved
+        # Already a toolkit — or invalid, in which case _validate_toolkit or
+        # _resolve_env_def will surface a clear error downstream.
+        return identifier
 
     @classmethod
     def _shared_envs_root(cls) -> Path:
@@ -1529,7 +1580,7 @@ class ToolInstance:
         return Path(__file__).parent.parent / "shared_envs"
 
     @classmethod
-    def _resolve_env_def(cls, tool_name: str) -> tuple[Path, str]:
+    def _resolve_env_def(cls, toolkit: str) -> tuple[Path, str]:
         """Resolve a tool's environment-definition directory and env name.
 
         If the tool's standalone dir contains ``shared_env.txt``, the env def
@@ -1539,7 +1590,7 @@ class ToolInstance:
         directory and the env name is the tool's directory name.
 
         Args:
-            tool_name (str): The tool's directory name (e.g. ``"esm3"``).
+            toolkit (str): The tool's directory name (e.g. ``"esm3"``).
 
         Returns:
             tuple[Path, str]: ``(env_def_dir, env_name)``. ``env_def_dir``
@@ -1553,9 +1604,9 @@ class ToolInstance:
                 ``shared_env.txt`` and ``setup.sh`` (ambiguous), or no
                 ``setup.sh`` is found at the resolved location.
         """
-        tool_dir = cls._get_tool_dirs().get(tool_name)
+        tool_dir = cls._get_tool_dirs().get(toolkit)
         if tool_dir is None:
-            raise ValueError(f"Unknown tool {tool_name!r}")
+            raise ValueError(f"Unknown tool {toolkit!r}")
 
         standalone_dir = tool_dir / "standalone"
         marker = standalone_dir / "shared_env.txt"
@@ -1571,29 +1622,29 @@ class ToolInstance:
             ]
             if stray_env_def_files:
                 raise ValueError(
-                    f"Tool {tool_name!r} has shared_env.txt alongside stray env-def file(s) "
+                    f"Tool {toolkit!r} has shared_env.txt alongside stray env-def file(s) "
                     f"{stray_env_def_files} in {standalone_dir}; delete the local file(s) "
                     "to use the shared env, or delete shared_env.txt to use a private env."
                 )
             shared_name = marker.read_text().strip()
             if not shared_name:
-                raise ValueError(f"shared_env.txt for tool {tool_name!r} is empty")
+                raise ValueError(f"shared_env.txt for tool {toolkit!r} is empty")
             env_def_dir = cls._shared_envs_root() / shared_name
             shared_setup = env_def_dir / "setup.sh"
             if not shared_setup.is_file():
                 raise ValueError(
-                    f"Tool {tool_name!r} references shared env {shared_name!r}, but {shared_setup} does not exist."
+                    f"Tool {toolkit!r} references shared env {shared_name!r}, but {shared_setup} does not exist."
                 )
             return env_def_dir, shared_name
 
         if not local_setup.is_file():
-            raise ValueError(f"No setup.sh found for tool {tool_name!r} (looked in {standalone_dir})")
-        return standalone_dir, tool_name
+            raise ValueError(f"No setup.sh found for tool {toolkit!r} (looked in {standalone_dir})")
+        return standalone_dir, toolkit
 
     @classmethod
-    def _find_script(cls, tool_name: str) -> Path:
+    def _find_script(cls, toolkit: str) -> Path:
         """Find the main standalone script (inference.py or run.py)."""
-        tool_dir = cls._get_tool_dirs().get(tool_name)
+        tool_dir = cls._get_tool_dirs().get(toolkit)
         if tool_dir is not None:
             standalone_dir = tool_dir / "standalone"
             # Prefer inference.py, then run.py
@@ -1605,7 +1656,7 @@ class ToolInstance:
             for py_file in sorted(standalone_dir.glob("*.py")):
                 if py_file.name not in ("__init__.py", "binary_config.py"):
                     return py_file
-        raise ValueError(f"No standalone script found for tool {tool_name!r}")
+        raise ValueError(f"No standalone script found for tool {toolkit!r}")
 
     def _setup_hash(self) -> str:
         """Short SHA-256 of setup.sh + requirements.txt + env_vars.txt + python_version.txt for change detection."""
@@ -1700,7 +1751,7 @@ class ToolInstance:
         python_version = self._get_python_version()
 
         # Create fresh micromamba environment
-        set_substatus(f"Setting up environment for {self.tool_name}")
+        set_substatus(f"Setting up environment for {self.toolkit}")
         # Set MAMBA_ROOT_PREFIX to the .micromamba dir (same filesystem as
         # tool_envs/) so the package cache lives alongside the envs and
         # micromamba can hardlink instead of copying.
@@ -1768,22 +1819,22 @@ class ToolInstance:
             cwd=self.setup_script.parent,
             env=env,
             log_path=self.env_path / "setup.log",
-            tool_name=self.tool_name,
+            toolkit=self.toolkit,
         )
 
         if returncode == 0:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
-            logger.debug("Environment setup completed for %s", self.tool_name)
+            logger.debug("Environment setup completed for %s", self.toolkit)
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(
                 "Environment setup failed for %s (exit %d):\n%s",
-                self.tool_name,
+                self.toolkit,
                 returncode,
                 tail,
             )
             if combined_output:
-                logger.debug("Full setup output for %s:\n%s", self.tool_name, combined_output)
+                logger.debug("Full setup output for %s:\n%s", self.toolkit, combined_output)
             status_file.write_text(
                 f"FAILED\n\n"
                 f"Return code: {returncode}\n"
@@ -1792,10 +1843,10 @@ class ToolInstance:
                 f"Timestamp: {datetime.datetime.now()}\n\n"
                 f"OUTPUT:\n{combined_output or ''}\n"
             )
-            self._build_failures[self.tool_name] = tail
+            self._build_failures[self.toolkit] = tail
             hint = f"\n{tail}" if tail else ""
             raise RuntimeError(
-                f"'{self.tool_name}' may not be compatible with your system. setup.sh failed (exit {returncode}).{hint}"
+                f"'{self.toolkit}' may not be compatible with your system. setup.sh failed (exit {returncode}).{hint}"
             )
 
 

@@ -81,7 +81,7 @@ def test_ablang_gradient_input_validation():
 def test_ablang_gradient_dispatch_contract(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["payload"] = payload
         n = len(payload.get("logits", []))
         return {
@@ -125,7 +125,7 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     """compute_gradient=False forwards the flag and returns gradient=None."""
     captured: dict[str, object] = {}
 
-    def fake_dispatch(tool_name, payload, *, instance=None, config=None):
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         n = len(payload.get("logits", []))
         return {

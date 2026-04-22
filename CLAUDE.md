@@ -75,9 +75,9 @@ When a code change alters behavior documented in this file, any `SKILL.md`, or `
 proto_tools/
 ├── tools/                          # All tool wrappers
 │   ├── {category}/                 # e.g., gene_annotation, structure_prediction
-│   │   ├── {tool_name}/            # e.g., blast, esmfold
+│   │   ├── {toolkit}/            # e.g., blast, esmfold
 │   │   │   ├── __init__.py         # Exports: Input, Config, Output, run_*
-│   │   │   ├── tool_name.py        # Implementation
+│   │   │   ├── {tool_key_snake}.py # Implementation (one per registered tool)
 │   │   │   ├── cite.bib            # BibTeX citation (optional if no published paper)
 │   │   │   ├── examples/           # Example notebook
 │   │   │   │   └── example.ipynb   # Working example with imports and output
@@ -92,7 +92,7 @@ proto_tools/
 
 ### Tool Registry: Quick Navigation
 
-Every tool is registered via `@tool()` and discoverable through `ToolRegistry`. Tools are at `tools/{category}/{tool_name}/`.
+Every tool is registered via `@tool()` and discoverable through `ToolRegistry`. Tools are at `tools/{category}/{toolkit}/`.
 
 ```python
 from proto_tools.tools import ToolRegistry
@@ -116,8 +116,8 @@ def example_input():
     """Minimal valid input for testing and examples."""
     return ToolInput(sequences=["MKTL"])
 
-@tool(key="tool-key", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input, iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
-def run_tool_name(inputs: ToolInput, config: ToolConfig, instance: Any = None) -> ToolOutput:
+@tool(key="{tool_key}", label="Tool Label", category="category_name", input_class=ToolInput, config_class=ToolConfig, output_class=ToolOutput, description="...", example_input=example_input, iterable_input_field="sequences", iterable_output_field="results", cacheable=True)
+def run_{tool_key_snake}(inputs: ToolInput, config: ToolConfig, instance: Any = None) -> ToolOutput:
 ```
 
 - **Input** (`BaseToolInput`): primary data (sequences, structures, files). Uses `extra="forbid"`.
@@ -163,14 +163,31 @@ Tools with heavy dependencies run in isolated micromamba environments with centr
 | `utils/msa.py` | `extract_msa_sequences()`: MSA extraction utilities |
 | `tools/__init__.py` | Master export, all tools re-exported here |
 
+## Key Concepts: `tool`, `toolkit`, `tool_key`, `env_name`
+
+Three identifiers show up across the codebase, plus the informal term "tool" itself. Do not conflate them — each names a different level of the hierarchy.
+
+**A toolkit is a group of specific tools that share the same underlying model or codebase.** For example, `pyrosetta` is a toolkit that bundles 5 distinct tools (`pyrosetta-energy`, `pyrosetta-relax`, `pyrosetta-sap`, `pyrosetta-sasa`, `pyrosetta-interface-analyzer`) — all running against the same PyRosetta installation and sharing one persistent subprocess when a worker is warm. The word **tool** always refers to a single registered operation (what `@tool(key=...)` registers); the **toolkit** is the family they belong to.
+
+| Identifier | Example | What it identifies | Where it's used |
+|---|---|---|---|
+| **tool** (concept) | `pyrosetta-energy`, `esm2-sample` | A single registered operation. One `@tool(key=...)` invocation = one tool. | Everywhere — the primary unit of functionality |
+| **`tool_key`** | `"pyrosetta-energy"`, `"esm2-sample"` | The string identifier for a tool (the value passed to `@tool(key=...)`) | `ToolRegistry`, `ToolCache` (per-operation output cache), error messages |
+| **`toolkit`** | `"pyrosetta"`, `"esm2"` | The family of tools sharing a codebase / model / standalone script / persistent subprocess. All `pyrosetta-*` tools belong to the `"pyrosetta"` toolkit. | `ToolInstance`, `DeviceManager`, `PersistentWorker`, `persist_tool()`, worker cache key |
+| **`env_name`** | `"pyrosetta_env"`, `"evolutionaryscale_esm_env"` | The physical micromamba env directory on disk. Resolved from the toolkit via `standalone/shared_env.txt`. Multiple toolkits may share one env (e.g. `esm3` and `esmc` both resolve to `evolutionaryscale_esm`). | Internal to `ToolInstance.__init__`; not part of the public dispatch / caching API |
+
+The system invariant is **one persistent worker per toolkit** (not per tool, not per env). APIs that take a `toolkit` (e.g. `ToolInstance.persist_tool`, `DeviceManager.lease`) also accept a `tool_key` as a convenience — the registry maps the tool_key back to its toolkit via `ToolInstance._normalize_toolkit`.
+
 ## Naming Conventions
 
-- **Tool registry key**: `{tool}-{suffix}` kebab-case, e.g. `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`, `"alphafold2-binder"`. The suffix names the tool's operation or operational domain and must uniquely distinguish it from sibling tools in the same `{tool}` family. Verb-like suffixes (`-search`, `-sample`) describe actions; noun-like suffixes (`-prediction`, `-binder`) describe output/mode when that's the cleaner fit. Pick the suffix that reads naturally; the rule is "disambiguate within a `{tool}` family," not "require a verb."
-- **Run function**: `run_{tool_name}`, e.g. `run_evo2_sample`, `run_blast_search`
-- **Classes**: PascalCase, e.g. `Evo2SampleInput`, `Evo2SampleConfig`, `Evo2SampleOutput`
-- **Directories**: snake_case, e.g. `evo2/`, `blast/`
-- **Files**: snake_case, e.g. `evo2_sample.py`, `blast_search.py`
+- **Tool registry key** (`tool_key`): `{toolkit}-{suffix}` kebab-case, e.g. `"evo2-sample"`, `"blast-search"`, `"alphafold3-prediction"`, `"alphafold2-binder"`. The suffix names the tool's operation or operational domain and must uniquely distinguish it from sibling tools in the same `{toolkit}` family. Verb-like suffixes (`-search`, `-sample`) describe actions; noun-like suffixes (`-prediction`, `-binder`) describe output/mode when that's the cleaner fit. Pick the suffix that reads naturally; the rule is "disambiguate within a `{toolkit}` family," not "require a verb."
+- **Run function**: `run_{tool_key_snake}`, e.g. `run_evo2_sample`, `run_blast_search` (snake_case form of the `@tool(key=...)` registration key)
+- **Classes**: PascalCase, tool-specific. Typically the PascalCase of the `tool_key` + `Input`/`Config`/`Output` (e.g. `Evo2SampleInput`, `BlastSearchConfig`), but the PascalCase prefix is the developer's choice — pick whatever reads cleanly (e.g. `ESMFold` over `Esmfold`) as long as it's specific to the tool.
+- **Directories**: snake_case, one per `{toolkit}` — e.g. `evo2/`, `blast/`, `pyrosetta/`.
+- **Files**: snake_case `{tool_key_snake}.py`, one per registered tool — e.g. `evo2_sample.py` inside `evo2/`, `pyrosetta_energy.py` + `pyrosetta_relax.py` inside `pyrosetta/`. Test files follow the same rule: `tests/{category}_tests/test_{tool_key_snake}.py`.
 - **Code section headers**: `# ============================================================================`
+
+**Filesystem mapping recap:** directory = `{toolkit}`; one `.py` per `{tool_key}` named `{tool_key_snake}.py`; test file `test_{tool_key_snake}.py`. The `implement-tool` skill's SKILL.md / TEMPLATES.md / PATTERNS.md use these placeholders verbatim — `{toolkit}`, `{tool_key}`, `{tool_key_snake}` are strict; `{ToolName}` (PascalCase class prefix) and `{tool_display_name}` (human label) are developer's choice.
 
 ## Docstring Conventions
 

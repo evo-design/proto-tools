@@ -8,7 +8,7 @@ Each tool provides its own `binary_config.py` in its standalone/ directory with:
 This script discovers and loads the tool's config automatically.
 
 Usage:
-    python install_binary.py <tool_name>
+    python install_binary.py <toolkit>
 """
 
 import importlib.util
@@ -35,24 +35,24 @@ _ARCH_ALIASES: dict[str, str] = {
 }
 
 
-def _find_tool_config(tool_name: str) -> Path:
+def _find_tool_config(toolkit: str) -> Path:
     """Find a tool's binary_config.py by scanning for standalone/ directories.
 
     Uses the same discovery pattern as ToolInstance._determine_valid_model_name().
 
     Args:
-        tool_name (str): Name of the tool directory to search for.
+        toolkit (str): Name of the tool directory to search for.
     """
     tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> proto_tools/ -> tools/
 
     for item in tools_dir.rglob("*"):
-        if item.is_dir() and item.name == tool_name and (item / "standalone").exists():
+        if item.is_dir() and item.name == toolkit and (item / "standalone").exists():
             config_path = item / "standalone" / "binary_config.py"
             if config_path.exists():
                 return config_path
 
     raise ValueError(
-        f"No binary_config.py found for tool: {tool_name}. Expected at: <tool_dir>/standalone/binary_config.py"
+        f"No binary_config.py found for tool: {toolkit}. Expected at: <tool_dir>/standalone/binary_config.py"
     )
 
 
@@ -121,7 +121,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
         raise OSError(f"Download incomplete: got {downloaded} bytes, expected {total} bytes from {url}")
 
 
-def install_binary(tool_name: str) -> None:
+def install_binary(toolkit: str) -> None:
     """Download and install a platform-specific binary into the active venv.
 
     Discovers the tool's binary_config.py, reads its URLS and extract function,
@@ -129,9 +129,9 @@ def install_binary(tool_name: str) -> None:
     binaries into the venv's bin/ directory.
 
     Args:
-        tool_name (str): Name of the tool to install binaries for.
+        toolkit (str): Name of the tool to install binaries for.
     """
-    config_path = _find_tool_config(tool_name)
+    config_path = _find_tool_config(toolkit)
     config = _load_tool_config(config_path)
 
     system = platform.system()
@@ -147,22 +147,20 @@ def install_binary(tool_name: str) -> None:
         os_matches = {k: v for k, v in config.URLS.items() if k[0] == system}
         if os_matches:
             fallback_key = next(iter(os_matches))
-            warnings.warn(
-                f"No native {machine} binary for {tool_name}, falling back to {fallback_key[1]}.", stacklevel=2
-            )
+            warnings.warn(f"No native {machine} binary for {toolkit}, falling back to {fallback_key[1]}.", stacklevel=2)
             key = fallback_key
             url = os_matches[fallback_key]
         else:
             supported = ", ".join(f"{s}/{m}" for s, m in config.URLS)
             raise RuntimeError(
-                f"No {tool_name} binary available for {system}/{machine} "
+                f"No {toolkit} binary available for {system}/{machine} "
                 f"(raw arch: {raw_machine}). "
                 f"Supported platforms: {supported}"
             )
 
     bin_dir = Path(sys.executable).parent
 
-    print(f"Installing {tool_name} for {key[0]}/{key[1]}...")
+    print(f"Installing {toolkit} for {key[0]}/{key[1]}...")
 
     last_error = None
     for attempt in range(1, _MAX_DOWNLOAD_RETRIES + 1):
@@ -178,7 +176,7 @@ def install_binary(tool_name: str) -> None:
 
                 config.extract(archive_path, bin_dir)
 
-            print(f"{tool_name} installation complete!")
+            print(f"{toolkit} installation complete!")
             return
         except (OSError, EOFError, urllib.error.URLError) as exc:  # noqa: PERF203 -- retry loop
             last_error = exc
@@ -191,14 +189,12 @@ def install_binary(tool_name: str) -> None:
             else:
                 print(f"  Download attempt {attempt}/{_MAX_DOWNLOAD_RETRIES} failed: {exc}")
 
-    raise RuntimeError(
-        f"Failed to download {tool_name} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}"
-    )
+    raise RuntimeError(f"Failed to download {toolkit} after {_MAX_DOWNLOAD_RETRIES} attempts. Last error: {last_error}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} <tool_name>", file=sys.stderr)
+        print(f"Usage: python {sys.argv[0]} <toolkit>", file=sys.stderr)
         sys.exit(1)
 
     install_binary(sys.argv[1])

@@ -42,7 +42,7 @@ def mock_af3_inference(tmp_path):
 
     captured_data = {}
 
-    def mock_dispatch(tool_name, input_data, **kwargs):
+    def mock_dispatch(toolkit, input_data, **kwargs):
         with open(input_data["input_json_path"]) as f:
             captured_data["input_json"] = json.load(f)
         return {

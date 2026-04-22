@@ -46,7 +46,7 @@ def resolve_hf_token() -> str | None:
     return None
 
 
-def require_hf_token(tool_name: str, repo_url: str = "") -> None:
+def require_hf_token(tool_display_name: str, repo_url: str = "") -> None:
     """Check that a HuggingFace token is available, raising a clear error if not.
 
     Call this at the top of tool functions that use gated HuggingFace models.
@@ -54,7 +54,7 @@ def require_hf_token(tool_name: str, repo_url: str = "") -> None:
     standalone subprocess.
 
     Args:
-        tool_name (str): Human-readable tool name for the error message (e.g., "ESM3").
+        tool_display_name (str): Human-readable tool name for the error message (e.g., "ESM3").
         repo_url (str): HuggingFace repo URL where the user can accept the license.
 
     Raises:
@@ -64,7 +64,7 @@ def require_hf_token(tool_name: str, repo_url: str = "") -> None:
         return
 
     msg = (
-        f"{tool_name} requires a HuggingFace token to download gated model weights.\n"
+        f"{tool_display_name} requires a HuggingFace token to download gated model weights.\n"
         "\n"
         "To fix this:\n"
         "  1. Create a HuggingFace account at https://huggingface.co\n"

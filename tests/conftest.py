@@ -86,7 +86,7 @@ def _gpu_available() -> bool:
 class ToolTestResult:
     """Result of a single tool smoke test."""
 
-    tool_name: str
+    tool_key: str
     category: str
     test_name: str
     status: str  # "passed", "failed", "skipped"
@@ -123,7 +123,7 @@ class EnvReportCollector:
         *,
         has_gpu_marker: bool = False,
         error_message: str | None = None,
-        tool_name: str | None = None,
+        tool_key: str | None = None,
         category: str | None = None,
     ) -> None:
         """Record a test result.
@@ -133,12 +133,12 @@ class EnvReportCollector:
             outcome (str): Test outcome (``"passed"``, ``"failed"``, ``"skipped"``).
             has_gpu_marker (bool): Whether the test is marked with ``uses_gpu``.
             error_message (str | None): Error message if the test failed.
-            tool_name (str | None): Tool key from the ``include_in_env_report`` marker.
+            tool_key (str | None): Tool key from the ``include_in_env_report`` marker.
             category (str | None): Tool category from the marker.
         """
         import time
 
-        if not tool_name:
+        if not tool_key:
             return  # Marker must provide tool name
 
         # Calculate duration
@@ -149,7 +149,7 @@ class EnvReportCollector:
             category = "unknown"
 
         # Determine venv path and status
-        env_path, env_status = self._get_venv_info(tool_name)
+        env_path, env_status = self._get_venv_info(tool_key)
 
         # Capture git state at test time
         from proto_tools.utils.system_info import get_git_info
@@ -158,7 +158,7 @@ class EnvReportCollector:
 
         self.results.append(
             ToolTestResult(
-                tool_name=tool_name,
+                tool_key=tool_key,
                 category=category,
                 test_name=nodeid,
                 status=outcome,
@@ -172,11 +172,11 @@ class EnvReportCollector:
             )
         )
 
-    def _get_venv_info(self, tool_name: str) -> tuple[str | None, str]:
+    def _get_venv_info(self, tool_key: str) -> tuple[str | None, str]:
         """Get venv path and status for a tool.
 
         Args:
-            tool_name (str): Registry key (e.g., ``"fampnn-sample"``).
+            tool_key (str): Registry key (e.g., ``"fampnn-sample"``).
         """
         from proto_tools.utils.tool_instance import ToolInstance
 
@@ -184,7 +184,7 @@ class EnvReportCollector:
 
         # Map registry key → env name via ToolInstance, so shared-env tools
         # report the actual env path instead of a non-existent per-tool path.
-        spec = ToolRegistry.get(tool_name)
+        spec = ToolRegistry.get(tool_key)
         if not spec:
             return None, "not_found"
         try:
@@ -257,10 +257,10 @@ class EnvReportCollector:
         # Merge results
         if self.is_filtered:
             existing = self._load_embedded_data(output_path)
-            # Build lookup: new results override by tool_name
-            merged = {r.tool_name: r for r in existing}
+            # Build lookup: new results override by tool_key
+            merged = {r.tool_key: r for r in existing}
             for r in self.results:
-                merged[r.tool_name] = r
+                merged[r.tool_key] = r
             all_results = list(merged.values())
         else:
             all_results = self.results
@@ -399,7 +399,7 @@ class EnvReportCollector:
             lines.append("| Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |")
             lines.append("|------|--------------|----------------------|----------|-----------|--------|")
 
-            for r in sorted(results, key=lambda x: x.tool_name):
+            for r in sorted(results, key=lambda x: x.tool_key):
                 # Status emoji
                 if r.status == "passed":
                     status = "✅ Pass"
@@ -430,7 +430,7 @@ class EnvReportCollector:
                 else:
                     commit_tag = "—"
 
-                lines.append(f"| `{r.tool_name}` | {gpu_req} | {venv} | {duration} | {commit_tag} | {status} |")
+                lines.append(f"| `{r.tool_key}` | {gpu_req} | {venv} | {duration} | {commit_tag} | {status} |")
 
             lines.append("")
 
@@ -441,7 +441,7 @@ class EnvReportCollector:
             lines.append("")
 
             for r in failures:
-                lines.append(f"### ❌ `{r.tool_name}`")
+                lines.append(f"### ❌ `{r.tool_key}`")
                 lines.append("")
                 lines.append(f"**Test**: `{r.test_name}`")
                 lines.append("")
@@ -614,11 +614,11 @@ def pytest_runtest_makereport(item, call):
             return
 
         # Extract tool name and category from marker if provided
-        tool_name = None
+        tool_key = None
         category = None
         marker = item.get_closest_marker("include_in_env_report")
         if marker:
-            tool_name = marker.kwargs.get("tool")
+            tool_key = marker.kwargs.get("tool")
             category = marker.kwargs.get("category")
 
         # Determine outcome
@@ -643,7 +643,7 @@ def pytest_runtest_makereport(item, call):
                 status,
                 has_gpu_marker=has_gpu,
                 error_message=error_msg,
-                tool_name=tool_name,
+                tool_key=tool_key,
                 category=category,
             )
         elif report.when == "setup" and report.failed:
@@ -653,7 +653,7 @@ def pytest_runtest_makereport(item, call):
                 "failed",
                 has_gpu_marker="uses_gpu" in item.keywords,
                 error_message=f"Setup failed: {report.longrepr}",
-                tool_name=tool_name,
+                tool_key=tool_key,
                 category=category,
             )
         elif report.when == "setup" and report.skipped:
@@ -663,7 +663,7 @@ def pytest_runtest_makereport(item, call):
                 "skipped",
                 has_gpu_marker="uses_gpu" in item.keywords,
                 error_message=str(report.longrepr) if report.longrepr else None,
-                tool_name=tool_name,
+                tool_key=tool_key,
                 category=category,
             )
 
@@ -1053,13 +1053,15 @@ def _cleanup_tool_instances():
 # ============================================================================
 # Persistent tool fixture factory
 # ============================================================================
-def make_persistent_fixture(tool_name: str, *, gpu: bool = True):
+def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
     """Create a module-scoped autouse fixture that wraps tests in persistence.
 
     Parameters
     ----------
-    tool_name : str
-        Tool name passed to ``ToolInstance.persist_tool()``.
+    toolkit : str
+        Worker group passed to ``ToolInstance.persist_tool()`` (e.g.
+        ``"pyrosetta"``, ``"esm2"``). Accepts a registered tool_key too
+        (it will be normalized).
     gpu : bool
         When *True* (default), the fixture skips persistence when no
         GPU is available: ``--cpu`` flag, ``CUDA_VISIBLE_DEVICES=""``,
@@ -1072,7 +1074,7 @@ def make_persistent_fixture(tool_name: str, *, gpu: bool = True):
         if gpu and (request.config.getoption("--cpu") or not _gpu_available()):
             yield
             return
-        with ToolInstance.persist_tool(tool_name):
+        with ToolInstance.persist_tool(toolkit):
             yield
 
     return _persistent_tool

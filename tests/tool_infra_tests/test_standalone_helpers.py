@@ -295,7 +295,7 @@ def test_resolve_weights_dir_in_env_explicit(monkeypatch, tmp_path):
 
 
 def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
-    """Absolute path mode returns /path/{tool_name}/."""
+    """Absolute path mode returns /path/{toolkit}/."""
     shared = tmp_path / "shared_weights"
     shared.mkdir()
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))

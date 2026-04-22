@@ -700,11 +700,11 @@ class ToolRegistry:
         """
         tool_categories: dict[str, str] = {}
         for spec in cls._registry.values():
-            # Extract tool name from key: 'blast-search' -> 'blast'
+            # Extract toolkit from key: 'blast-search' -> 'blast'
             # Handle multi-part names: 'colabfold-search' -> 'colabfold_search'
             key_parts = spec.key.split("-")
-            tool_name = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
-            tool_categories[tool_name] = spec.category
+            toolkit = "_".join(key_parts[:-1]) if len(key_parts) >= 2 else spec.key
+            tool_categories[toolkit] = spec.category
         return tool_categories
 
     @classmethod
@@ -798,7 +798,7 @@ class ToolRegistry:
         """Get the documentation URL for a tool.
 
         Computes the URL from the tool's directory location: every tool under
-        ``proto_tools/tools/{category}/{tool_name}/`` maps deterministically
+        ``proto_tools/tools/{category}/{toolkit}/`` maps deterministically
         to ``https://bio-pro.mintlify.app/tools/{category-kebab}/{tool-kebab}``,
         because proto-docs auto-generates one page per tool dir on each sync.
 

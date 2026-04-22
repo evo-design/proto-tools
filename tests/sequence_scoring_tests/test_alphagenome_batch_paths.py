@@ -52,7 +52,7 @@ def mock_dispatch_factory(monkeypatch):
     def _install(return_value: dict[str, Any]) -> list[dict[str, Any]]:
         calls: list[dict[str, Any]] = []
 
-        def _mock(_tool_name, payload, **kwargs):
+        def _mock(_toolkit, payload, **kwargs):
             calls.append({"payload": payload, "kwargs": kwargs})
             return return_value
 

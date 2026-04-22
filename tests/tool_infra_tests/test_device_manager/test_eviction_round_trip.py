@@ -66,7 +66,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
             # Extract the tool's registry key to derive a safe instance name
             tool_key = tool_spec.key
             instance_name = f"test_{tool_key.replace('-', '_')}"
-            # Derive the tool_name for ToolInstance (directory name, snake_case)
+            # Derive the toolkit for ToolInstance (directory name, snake_case)
             # The source_file path tells us: .../tools/{category}/{tool_dir}/{file}.py
             tool_dir = tool_spec.source_file.parent.name
 

@@ -66,8 +66,8 @@ def _discover_tool_readmes() -> list[Path]:
         parts = rel.parts
         if len(parts) != 3:
             continue
-        category, tool_name, _ = parts
-        if category in _EXCLUDED_DIRS or tool_name in _EXCLUDED_DIRS:
+        category, toolkit, _ = parts
+        if category in _EXCLUDED_DIRS or toolkit in _EXCLUDED_DIRS:
             continue
         readmes.append(readme)
     return readmes
@@ -189,8 +189,8 @@ def test_starts_with_h1(readme: Path) -> None:
 def test_has_doc_badge(readme: Path) -> None:
     """README must have a right-aligned Proto Docs badge linking to the correct page."""
     rel = readme.relative_to(_TOOLS_DIR)
-    category, tool_name, _ = rel.parts
-    expected_path = f"/tools/{_slugify(category)}/{_slugify(tool_name)}"
+    category, toolkit, _ = rel.parts
+    expected_path = f"/tools/{_slugify(category)}/{_slugify(toolkit)}"
 
     text = readme.read_text()
     assert "img.shields.io/badge/View_in_Proto_Docs" in text, (

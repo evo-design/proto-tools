@@ -125,7 +125,7 @@ Every tool follows the universal `Input` / `Config` / `run_{tool}()` / `Output` 
 
 Key requirements for new tools:
 
-- Tool directory at `tools/{category}/{tool_name}/`
+- Tool directory at `tools/{category}/{toolkit}/`
 - `@tool()` decorator registration with all required metadata
 - `example_input()` factory function
 - `cite.bib` citation file

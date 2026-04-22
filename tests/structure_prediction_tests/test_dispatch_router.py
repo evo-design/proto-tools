@@ -20,14 +20,14 @@ def _dispatch(tool_config=None, *, config_cls=_FakeConfig):
     fake_map = {"fake": {"config": config_cls, "input": mock_input, "run_func": mock_run}}
     cpx = StructurePredictionComplex(chains=["MVLSPADKTN"])
     with patch.dict(SP_TOOL_MAP, fake_map, clear=True):
-        predict_structures(cpx, tool_name="fake", tool_config=tool_config)
+        predict_structures(cpx, toolkit="fake", tool_config=tool_config)
     return mock_run, mock_input
 
 
 def test_unknown_tool_raises():
     cpx = StructurePredictionComplex(chains=["MVLSPADKTN"])
     with pytest.raises(ValueError, match="Unknown structure prediction tool"):
-        predict_structures(cpx, tool_name="nonexistent_tool")
+        predict_structures(cpx, toolkit="nonexistent_tool")
 
 
 def test_single_complex_normalized_to_list():

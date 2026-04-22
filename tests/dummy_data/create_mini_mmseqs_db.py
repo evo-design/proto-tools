@@ -56,11 +56,11 @@ def download_file(url: str, output_path: Path) -> None:
         (["wget", "-O", str(output_path), url], "wget"),
     ]
 
-    for cmd, tool_name in download_tools:
+    for cmd, cli_tool in download_tools:
         if shutil.which(cmd[0]):
             try:
                 subprocess.run(cmd, check=True)
-                logger.info("Downloaded using %s", tool_name)
+                logger.info("Downloaded using %s", cli_tool)
                 return
             except subprocess.CalledProcessError:
                 continue

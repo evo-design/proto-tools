@@ -2,12 +2,20 @@
 
 Reference file for the `implement-tool` skill. Templates are tagged with which phase or subagent consumes them.
 
+**Placeholder glossary** (see SKILL.md for full definitions):
+
+- `{toolkit}` — snake_case directory name (e.g., `evo2`, `pyrosetta`). **Strict** — drives the directory path.
+- `{tool_key}` — kebab-case registration key (e.g., `evo2-sample`). **Strict** — passed to `@tool(key=...)`.
+- `{tool_key_snake}` — snake_case form of `{tool_key}` (e.g., `evo2_sample`). **Strict** — core tool file name, `run_*` function, test file name.
+- `{ToolName}` — PascalCase class-name prefix for this tool's `Input` / `Config` / `Output` (e.g., `Evo2Sample`, `ESMFoldPrediction`). **Developer's choice** — typically the PascalCase of `{tool_key}`, but pick whatever reads cleanly (e.g., `ESMFold` over `Esmfold`) as long as it's specific to this tool.
+- `{tool_display_name}` — human-readable label (e.g., `"Evo 2"`).
+
 ---
 
 ## Complete Tool File Template — [Phase 2: Contract]
 
 ```python
-"""{ToolName} {operation} tool."""
+"""{tool_display_name} {operation} tool."""
 
 import logging
 from typing import Literal
@@ -33,7 +41,7 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 class {ToolName}Input(BaseToolInput):
-    """Input object for {ToolName}.
+    """Input object for {tool_display_name}.
 
     Attributes:
         sequences (list[str]): Description of primary input data.
@@ -204,7 +212,7 @@ def example_input():
     device_count="1",  # Optional: Device count requirement ("1", "1-2", ">=1", "<=2"). Defaults to "1"
     example_input=example_input,  # Factory returning minimal valid input for parametrized tests
 )
-def run_{tool_name}(
+def run_{tool_key_snake}(
     inputs: {ToolName}Input, config: {ToolName}Config
 ) -> {ToolName}Output:
     """Brief description of tool function.
@@ -222,7 +230,7 @@ def run_{tool_name}(
     Examples:
         >>> inputs = {ToolName}Input(sequences=["ATGCGT"])
         >>> config = {ToolName}Config(param1=4)
-        >>> result = run_{tool_name}(inputs, config)
+        >>> result = run_{tool_key_snake}(inputs, config)
         >>> print(f"Found {result.num_results} results")
 
     See Also:
@@ -244,22 +252,22 @@ def run_{tool_name}(
 
 ## Test Template — [Subagent 4: Tests]
 
-Create `tests/{category}_tests/test_{tool_name}.py`:
+Create `tests/{category}_tests/test_{tool_key_snake}.py`:
 
 ```python
-"""Tests for {ToolName} tool."""
+"""Tests for {tool_display_name} tool."""
 import pytest
-from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools import run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
 
 
 class Test{ToolName}:
-    """Tests for {ToolName}."""
+    """Tests for {tool_display_name}."""
 
     def test_basic_execution(self):
         """Test basic tool execution with default config."""
         inputs = {ToolName}Input(sequences=["ATGCGT"])
         config = {ToolName}Config()
-        result = run_{tool_name}(inputs, config)
+        result = run_{tool_key_snake}(inputs, config)
 
         assert result.success
         assert result.num_results > 0
@@ -280,7 +288,7 @@ class Test{ToolName}:
         """Test CSV export."""
         inputs = {ToolName}Input(sequences=["ATGCGT"])
         config = {ToolName}Config()
-        result = run_{tool_name}(inputs, config)
+        result = run_{tool_key_snake}(inputs, config)
         result.export(name="test_output", export_path=tmp_path, file_format="csv")
         assert (tmp_path / "test_output.csv").exists()
 ```
@@ -296,7 +304,7 @@ class Test{ToolName}GPU:
 
 ## README.md Template — [Subagent 2: README + cite.bib]
 
-Create `tools/{category}/{tool_name}/README.md`:
+Create `tools/{category}/{toolkit}/README.md`:
 
 ```markdown
 # {Tool Display Name}
@@ -367,13 +375,13 @@ How to interpret the output values biologically.
 
 **Example 1: Basic usage**
 \```python
-from proto_tools.tools.{category}.{tool_name} import (
-    run_{tool_name}, {ToolName}Input, {ToolName}Config
+from proto_tools.tools.{category}.{toolkit} import (
+    run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
 )
 
 inputs = {ToolName}Input(...)
 config = {ToolName}Config(...)
-result = run_{tool_name}(inputs, config)
+result = run_{tool_key_snake}(inputs, config)
 \```
 
 ## Best Practices & Gotchas
@@ -394,7 +402,7 @@ Tools often used together, alternatives.
 
 ## cite.bib Template — [Subagent 2: README + cite.bib]
 
-Create `tools/{category}/{tool_name}/cite.bib`:
+Create `tools/{category}/{toolkit}/cite.bib`:
 
 ```bibtex
 @article{author2024toolname,
@@ -419,10 +427,10 @@ Create `tools/{category}/{tool_name}/cite.bib`:
 
 ## Example Notebook Guidance — [Subagent 3: Example Notebook]
 
-Create `tools/{category}/{tool_name}/examples/example.ipynb` with:
+Create `tools/{category}/{toolkit}/examples/example.ipynb` with:
 
 1. **Markdown title cell** with tool name, brief description, and link to paper
-2. **Import cell** with exact imports from `proto_tools.tools.{category}.{tool_name}`
+2. **Import cell** with exact imports from `proto_tools.tools.{category}.{toolkit}`
 3. **API reference cells** with markdown tables documenting Input/Config/Output fields
 4. **Execution cells** showing realistic usage with example data
 5. **Export cell** demonstrating `result.export()`
@@ -440,15 +448,15 @@ Follow the pattern in existing notebooks (e.g., `tools/causal_models/evo2/exampl
 Write and execute a short verification script:
 
 ```python
-"""Verify {tool_name} implementation."""
-from proto_tools.tools import run_{tool_name}, {ToolName}Input, {ToolName}Config
+"""Verify {tool_display_name} implementation."""
+from proto_tools.tools import run_{tool_key_snake}, {ToolName}Input, {ToolName}Config
 
 # Create input with realistic test data
 inputs = {ToolName}Input(sequences=["ATGCGT..."])  # Use real biological data
 config = {ToolName}Config()  # Default config
 
 # Run the tool
-result = run_{tool_name}(inputs, config)
+result = run_{tool_key_snake}(inputs, config)
 
 # Verify
 print(f"Success: {result.success}")

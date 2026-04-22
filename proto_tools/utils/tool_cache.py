@@ -81,25 +81,25 @@ class ToolCache:
         """Return the currently tracked size in bytes."""
         return self._current_size_bytes
 
-    def get(self, tool_name: str, cache_key: str) -> Any | None:
+    def get(self, tool_key: str, cache_key: str) -> Any | None:
         """Get cached result for a tool and cache key.
 
         Args:
-            tool_name (str): Name of the tool
+            tool_key (str): Name of the tool
             cache_key (str): Cache key for the specific invocation
 
         Returns:
             Any | None: Cached result if available, None otherwise
         """
-        tool_cache = self._cache.get(tool_name)
+        tool_cache = self._cache.get(tool_key)
         if tool_cache is None:
             return None
 
         if cache_key in tool_cache:
             # Mark as most-recently used.
             # Move tool to the end of the main cache.
-            val = self._cache.pop(tool_name)
-            self._cache[tool_name] = val
+            val = self._cache.pop(tool_key)
+            self._cache[tool_key] = val
             # Move the specific entry the end of the tool's cache dict.
             result = tool_cache.pop(cache_key)
             tool_cache[cache_key] = result
@@ -107,21 +107,21 @@ class ToolCache:
 
         return None
 
-    def set(self, tool_name: str, cache_key: str, result: Any) -> None:
+    def set(self, tool_key: str, cache_key: str, result: Any) -> None:
         """Store result in cache for a tool and cache key.
 
         Args:
-            tool_name (str): Name of the tool
+            tool_key (str): Name of the tool
             cache_key (str): Cache key for the specific invocation
             result (Any): Result to cache
         """
         # If the tool exists, move it to the end of the cache (mark as recently used).
-        if tool_name in self._cache:
-            self._cache[tool_name] = self._cache.pop(tool_name)
+        if tool_key in self._cache:
+            self._cache[tool_key] = self._cache.pop(tool_key)
         else:
-            self._cache[tool_name] = {}
+            self._cache[tool_key] = {}
 
-        tool_entries = self._cache[tool_name]
+        tool_entries = self._cache[tool_key]
 
         # If key exists, remove it first so the new insertion goes to the end.
         if cache_key in tool_entries:
@@ -130,21 +130,21 @@ class ToolCache:
 
         tool_entries[cache_key] = result
         self._current_size_bytes += _get_obj_size(result)
-        logger.debug(f"ToolCache.set: {tool_name}, size={self._current_size_bytes} bytes")
+        logger.debug(f"ToolCache.set: {tool_key}, size={self._current_size_bytes} bytes")
 
-    def clear(self, tool_name: str | None = None) -> int:
+    def clear(self, tool_key: str | None = None) -> int:
         """Clear cache entries.
 
         Args:
-            tool_name (str | None): If provided, clear only this tool's cache.
+            tool_key (str | None): If provided, clear only this tool's cache.
                        If None, clear all cache entries.
 
         Returns:
             int: Number of entries cleared
         """
-        if tool_name:
-            count = len(self._cache.get(tool_name, {}))
-            popped = self._cache.pop(tool_name, None)
+        if tool_key:
+            count = len(self._cache.get(tool_key, {}))
+            popped = self._cache.pop(tool_key, None)
             if popped is not None:
                 for cache_key in popped:
                     self._current_size_bytes -= _get_obj_size(popped[cache_key])
@@ -224,11 +224,11 @@ def _serialize_for_cache_key(obj: Any) -> str:
     return str(obj)
 
 
-def _generate_cache_key(tool_name: str, *args: Any, **kwargs: Any) -> str:
+def _generate_cache_key(tool_key: str, *args: Any, **kwargs: Any) -> str:
     """Generate a deterministic cache key for tool operations.
 
     Args:
-        tool_name (str): Name of the tool.
+        tool_key (str): Name of the tool.
         args: Positional arguments to the tool (via ``*args``).
         kwargs: Keyword arguments to the tool (via ``**kwargs``).
 
@@ -236,7 +236,7 @@ def _generate_cache_key(tool_name: str, *args: Any, **kwargs: Any) -> str:
         str: A deterministic hash key for the cache
     """
     # Create a list of all parameters in a deterministic order
-    key_parts = [tool_name]
+    key_parts = [tool_key]
 
     # Add positional arguments
     key_parts.extend(_serialize_for_cache_key(arg) for arg in args)
@@ -331,14 +331,14 @@ class CacheStripResult:
 
 
 def cache_strip_items(
-    tool_name: str,
+    tool_key: str,
     items: list[Any],
     config: Any,
 ) -> CacheStripResult | None:
     """Look up each item in the active cache, returning cached vs uncached split.
 
     Args:
-        tool_name (str): Registry key of the tool.
+        tool_key (str): Registry key of the tool.
         items (list[Any]): List of input items (already deduped).
         config (Any): Tool config (included in per-item cache key).
 
@@ -352,8 +352,8 @@ def cache_strip_items(
     result = CacheStripResult()
 
     for idx, item in enumerate(items):
-        cache_key = _generate_cache_key(tool_name, input_item=item, config=config)
-        cached = cache.get(tool_name, cache_key)
+        cache_key = _generate_cache_key(tool_key, input_item=item, config=config)
+        cached = cache.get(tool_key, cache_key)
         if cached is not None:
             result.cached_results[idx] = cached
         else:
@@ -365,7 +365,7 @@ def cache_strip_items(
     total = len(items)
     logger.debug(
         "[Iterable Cache Stats] %s: %d cache hits, %d misses out of %d items",
-        tool_name,
+        tool_key,
         num_hits,
         total - num_hits,
         total,
@@ -375,14 +375,14 @@ def cache_strip_items(
 
 
 def cache_store_items(
-    tool_name: str,
+    tool_key: str,
     cache_keys: list[str],
     result_items: list[Any],
 ) -> None:
     """Write newly computed items into the active cache.
 
     Args:
-        tool_name (str): Registry key of the tool.
+        tool_key (str): Registry key of the tool.
         cache_keys (list[str]): Cache keys (1:1 with result_items).
         result_items (list[Any]): Computed result items to store.
     """
@@ -391,7 +391,7 @@ def cache_store_items(
         return
 
     for key, item in zip(cache_keys, result_items, strict=False):
-        cache.set(tool_name, key, item)
+        cache.set(tool_key, key, item)
 
 
 def cache_stitch_items(
@@ -431,18 +431,18 @@ def clear_cache() -> None:
         cache.clear()
 
 
-def clear_tool_cache(tool_name: str) -> int:
+def clear_tool_cache(tool_key: str) -> int:
     """Clear cache entries for a specific tool.
 
     Args:
-        tool_name (str): Name of the tool to clear cache for
+        tool_key (str): Name of the tool to clear cache for
 
     Returns:
         int: Number of entries cleared
     """
     cache = _program_tool_cache.get()
     if cache:
-        return cache.clear(tool_name)
+        return cache.clear(tool_key)
     return 0
 
 
@@ -458,11 +458,11 @@ def get_cache_info() -> dict[str, Any]:
     return {"total_entries": 0, "cache_size_bytes": 0}
 
 
-def has_cached_entries(tool_name: str) -> bool:
+def has_cached_entries(tool_key: str) -> bool:
     """Check if a specific tool has any cached entries.
 
     Args:
-        tool_name (str): Name of the tool to check
+        tool_key (str): Name of the tool to check
 
     Returns:
         bool: True if the tool has cached entries, False otherwise
@@ -471,5 +471,5 @@ def has_cached_entries(tool_name: str) -> bool:
     if cache is None:
         return False
 
-    tool_cache = cache._cache.get(tool_name)
+    tool_cache = cache._cache.get(tool_key)
     return tool_cache is not None and len(tool_cache) > 0
