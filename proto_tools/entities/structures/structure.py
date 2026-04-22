@@ -172,6 +172,12 @@ class Structure(BaseModel):
     The ``structure`` field accepts either the raw content string or a path to a
     ``.pdb``/``.cif``/``.mmcif`` file — paths are loaded transparently at construction
     time. ``Structure.from_file()`` is also available as an explicit factory.
+
+    ``Structure.model_validate`` also accepts a bare ``str`` or ``Path`` as shorthand
+    for ``{"structure": <value>}``, so any nested field typed ``Structure`` (e.g.
+    ``SequenceStructurePair.structure``, ``MutationInput.structure``) takes a raw
+    PDB/CIF string or file path directly — no ``{"structure": ...}`` envelope required.
+
     Heavy objects (gemmi parsed structure) are lazy-loaded via ``PrivateAttr``.
 
     Attributes:
@@ -198,11 +204,17 @@ class Structure(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _handle_construction(cls, data: Any) -> Any:
-        """Load ``structure`` from disk if it looks like a path, then auto-detect format.
+        """Coerce bare input, load paths, then auto-detect format.
 
-        This lets callers write ``Structure(structure="foo.pdb")`` in addition to
-        ``Structure.from_file("foo.pdb")`` — the old plain-class shortcut survives.
+        Accepts ``str`` / ``Path`` input as shorthand for ``{"structure": <value>}`` so any
+        field typed ``Structure`` on a nested Pydantic model (e.g. ``SequenceStructurePair``,
+        ``MutationInput``) takes a raw PDB/CIF string or a file path without the caller
+        having to spell out the envelope. This matches ``Structure(structure=<content-or-path>)``
+        — the plain-class shortcut — and ``Structure.from_file(<path>)``.
         """
+        if isinstance(data, (str, Path)):
+            data = {"structure": data}
+
         if not isinstance(data, dict):
             return data
 

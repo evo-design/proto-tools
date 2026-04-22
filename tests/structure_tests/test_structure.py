@@ -109,6 +109,44 @@ def test_init_content_string_not_treated_as_path(test_pdb_file_content):
     assert s.structure == test_pdb_file_content
 
 
+def test_model_validate_accepts_bare_content_string(test_pdb_file_content):
+    """Bare PDB/CIF string is accepted as shorthand for {"structure": value}.
+
+    Used by nested Pydantic fields typed ``Structure`` (SequenceStructurePair,
+    MutationInput) so HTTP callers don't have to hand-roll the envelope.
+    """
+    s = Structure.model_validate(test_pdb_file_content)
+    assert s.structure_format == "pdb"
+    assert s.structure == test_pdb_file_content
+    assert s.source is None
+
+
+@pytest.mark.parametrize("path_type", [str, Path])
+def test_model_validate_accepts_bare_path(path_type):
+    """Bare path is also accepted and loaded from disk, matching from_file."""
+    s = Structure.model_validate(path_type(_TEST_PDB_FILE))
+    assert s.structure_format == "pdb"
+    assert s.source == str(_TEST_PDB_FILE)
+    assert "ATOM" in s.structure
+
+
+def test_nested_field_typed_structure_accepts_bare_string(test_pdb_file_content):
+    """A nested Pydantic field typed ``Structure`` accepts a bare content string.
+
+    Regression for the SequenceStructurePair / MutationInput contract — callers
+    had to wrap payloads as {"structure": {"structure": <pdb>}} before the
+    ``Structure`` before-validator learned to coerce bare strings.
+    """
+
+    class _Pair(BaseModel):
+        sequence: str
+        structure: Structure
+
+    p = _Pair.model_validate({"sequence": "MKTL", "structure": test_pdb_file_content})
+    assert p.structure.structure_format == "pdb"
+    assert p.structure.structure == test_pdb_file_content
+
+
 # ── Format conversion ────────────────────────────────────────────────────────
 
 
