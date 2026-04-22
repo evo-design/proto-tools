@@ -478,6 +478,222 @@ class PyRosettaScorer:
             )
         return {"results": results}
 
+    def _hotspot_residues_from_pose(
+        self,
+        pose: Any,
+        binder_chain: str,
+        target_chain: str,
+        cutoff: float = 4.0,
+    ) -> dict[int, str]:
+        """Identify binder interface residues by all-atom proximity to the target.
+
+        Returns ``{pdb_resnum: one_letter_aa}`` for every binder-chain residue
+        that has at least one atom within ``cutoff`` angstroms of any
+        target-chain atom. Uses ``scipy.spatial.cKDTree`` for the neighbor
+        search and skips residues whose three-letter name is outside the
+        standard 20 amino acids.
+
+        Args:
+            pose (Any): PyRosetta pose object.
+            binder_chain (str): Binder chain label (single character).
+            target_chain (str): Target chain label (single character).
+            cutoff (float): Atom-atom distance cutoff in angstroms.
+
+        Returns:
+            dict[int, str]: Mapping from binder PDB residue number to the
+                residue's one-letter amino-acid code.
+        """
+        import numpy as np
+        from scipy.spatial import cKDTree
+
+        # PDBInfo translates Rosetta's 1-indexed residues back to original
+        # PDB chain letters and residue numbers.
+        pdb_info = pose.pdb_info()
+
+        # Binder atoms carry residue metadata for later AA counting; target
+        # atoms only need coordinates (they are pure KDTree lookup targets).
+        binder_atoms: list[tuple[int, str, float, float, float]] = []
+        target_coords: list[list[float]] = []
+
+        # Single pass over the pose, partitioning atoms by chain.
+        for res_idx in range(1, pose.total_residue() + 1):
+            chain = pdb_info.chain(res_idx)
+            if chain == binder_chain:
+                resnum = pdb_info.number(res_idx)
+                resname = pose.residue(res_idx).name3().strip()
+                for atom_idx in range(1, pose.residue(res_idx).natoms() + 1):
+                    xyz = pose.residue(res_idx).atom(atom_idx).xyz()
+                    binder_atoms.append((resnum, resname, xyz.x, xyz.y, xyz.z))
+            elif chain == target_chain:
+                for atom_idx in range(1, pose.residue(res_idx).natoms() + 1):
+                    xyz = pose.residue(res_idx).atom(atom_idx).xyz()
+                    target_coords.append([xyz.x, xyz.y, xyz.z])
+
+        # Nothing to score if either side is absent.
+        if not binder_atoms or not target_coords:
+            return {}
+
+        # Build KDTrees for both chains; `query_ball_tree` returns, for each
+        # binder atom, the list of target-atom indices within `cutoff` angstroms.
+        binder_coords = np.array([(a[2], a[3], a[4]) for a in binder_atoms])
+        target_arr = np.array(target_coords)
+        tgt_tree = cKDTree(target_arr)
+        bnd_tree = cKDTree(binder_coords)
+        pairs = bnd_tree.query_ball_tree(tgt_tree, cutoff)
+
+        three_to_one = {
+            "ALA": "A",
+            "CYS": "C",
+            "ASP": "D",
+            "GLU": "E",
+            "PHE": "F",
+            "GLY": "G",
+            "HIS": "H",
+            "ILE": "I",
+            "LYS": "K",
+            "LEU": "L",
+            "MET": "M",
+            "ASN": "N",
+            "PRO": "P",
+            "GLN": "Q",
+            "ARG": "R",
+            "SER": "S",
+            "THR": "T",
+            "VAL": "V",
+            "TRP": "W",
+            "TYR": "Y",
+        }
+        result: dict[int, str] = {}
+        for bnd_idx, close_indices in enumerate(pairs):
+            if close_indices:
+                resnum, resname, *_ = binder_atoms[bnd_idx]
+                if resname in three_to_one:
+                    result[resnum] = three_to_one[resname]
+        return result
+
+    def _surface_hydrophobicity(self, pose: Any, binder_chain: str) -> float:
+        """Fraction of binder-chain surface residues that are apolar or aromatic.
+
+        Splits the binder chain into its own sub-pose, marks surface residues
+        with ``LayerSelector(pick_surface=True)``, and counts each surface
+        residue that is either ``residue.is_apolar()`` or named ``PHE`` /
+        ``TRP`` / ``TYR``. The fraction is ``apolar_count / total_surface``.
+
+        Args:
+            pose (Any): PyRosetta pose object.
+            binder_chain (str): Binder chain label (single character).
+
+        Returns:
+            float: Surface hydrophobicity fraction in [0, 1], or 0.0 if the
+                binder chain has no surface residues.
+        """
+        from pyrosetta.rosetta.core.select.residue_selector import LayerSelector
+
+        pdb_info = pose.pdb_info()
+        binder_chain_num = None
+        for res_idx in range(1, pose.total_residue() + 1):
+            if pdb_info.chain(res_idx) == binder_chain:
+                binder_chain_num = pose.chain(res_idx)
+                break
+        if binder_chain_num is None:
+            return 0.0
+        sub_poses = pose.split_by_chain()
+        binder_pose = sub_poses[binder_chain_num]
+        layer_sel = LayerSelector()
+        layer_sel.set_layers(pick_core=False, pick_boundary=False, pick_surface=True)
+        surface_vec = layer_sel.apply(binder_pose)
+        exp_apol_count = 0
+        total_count = 0
+        for i in range(1, len(surface_vec) + 1):
+            if surface_vec[i]:
+                res = binder_pose.residue(i)
+                if res.is_apolar() or res.name3().strip() in ("PHE", "TRP", "TYR"):
+                    exp_apol_count += 1
+                total_count += 1
+        return (exp_apol_count / total_count) if total_count else 0.0
+
+    def compute_interface_analyzer(
+        self,
+        pdb_contents: list[str],
+        binder_chains: list[str],
+        target_chains: list[str],
+        scorefxn_name: str = "ref2015",
+    ) -> dict[str, Any]:
+        """Compute interface-analysis metrics for a list of two-chain complexes.
+
+        Runs InterfaceAnalyzerMover for shape complementarity, H-bonds, ΔG,
+        dSASA, and packstat; computes interface_hydrophobicity from
+        hotspot-residue AA composition (4.0 Å atom-atom cutoff, apolar set
+        'ACFILMPVWY'); computes surface_hydrophobicity from
+        LayerSelector(pick_surface=True) on the binder sub-pose.
+
+        Args:
+            pdb_contents (list[str]): PDB-format content strings.
+            binder_chains (list[str]): Per-input binder chain labels
+                (PDB-shortened, single character).
+            target_chains (list[str]): Per-input target chain labels
+                (PDB-shortened, single character).
+            scorefxn_name (str): Rosetta score function name.
+
+        Returns:
+            dict: ``{"results": [{"interface_sc": float, "interface_hbonds": int,
+                "interface_dG": float, "interface_dSASA": float,
+                "interface_packstat": float, "interface_hydrophobicity": float,
+                "surface_hydrophobicity": float,
+                "dropped_residues": [...]}, ...]}``
+        """
+        self._ensure_init()
+        import pyrosetta
+        from pyrosetta.rosetta.protocols.analysis import InterfaceAnalyzerMover
+
+        results = []
+        for i, pdb_content in enumerate(pdb_contents):
+            pose = self._pdb_content_to_pose(pdb_content)
+            dropped_residues = self._find_dropped_residues(pose)
+            binder_chain = binder_chains[i]
+            target_chain = target_chains[i]
+
+            iam = InterfaceAnalyzerMover()
+            iam.set_interface(f"{target_chain}_{binder_chain}")
+            sfxn = pyrosetta.create_score_function(scorefxn_name)
+            iam.set_scorefunction(sfxn)
+            iam.set_compute_packstat(True)
+            iam.set_compute_interface_energy(True)
+            iam.set_calc_dSASA(True)
+            iam.set_calc_hbond_sasaE(True)
+            iam.set_compute_interface_sc(True)
+            iam.set_pack_separated(True)
+            iam.apply(pose)
+            data = iam.get_all_data()
+            interface_sc = float(data.sc_value)
+            interface_hbonds = int(data.interface_hbonds)
+            interface_dG = float(iam.get_interface_dG())
+            interface_dSASA = float(iam.get_interface_delta_sasa())
+            interface_packstat = float(iam.get_interface_packstat())
+
+            interface_residues = self._hotspot_residues_from_pose(pose, binder_chain, target_chain)
+            interface_nres = len(interface_residues)
+            apolar_aa = set("ACFILMPVWY")
+            hydrophobic_count = sum(1 for aa in interface_residues.values() if aa in apolar_aa)
+            interface_hydrophobicity = (hydrophobic_count / interface_nres) * 100 if interface_nres else 0.0
+
+            surface_hydrophobicity = self._surface_hydrophobicity(pose, binder_chain)
+
+            results.append(
+                {
+                    "interface_sc": interface_sc,
+                    "interface_hbonds": interface_hbonds,
+                    "interface_dG": interface_dG,
+                    "interface_dSASA": interface_dSASA,
+                    "interface_packstat": interface_packstat,
+                    "interface_hydrophobicity": interface_hydrophobicity,
+                    "surface_hydrophobicity": surface_hydrophobicity,
+                    "dropped_residues": dropped_residues,
+                }
+            )
+
+        return {"results": results}
+
 
 # ============================================================================
 # Dispatch Entry Point
@@ -489,7 +705,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution.
 
     Args:
-        input_dict (dict): Input with "operation" key routing to sap/sasa/energy/relax.
+        input_dict (dict): Input with "operation" key routing to
+            sap/sasa/energy/relax/interface_analyzer.
 
     Returns:
         dict: Operation-specific results.
@@ -526,6 +743,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             relax_cycles=input_dict["relax_cycles"],
             constrain_to_start=input_dict["constrain_to_start"],
             seed=input_dict["seed"],
+        )
+    if operation == "interface_analyzer":
+        return _scorer.compute_interface_analyzer(
+            pdb_contents,
+            binder_chains=input_dict["binder_chains"],
+            target_chains=input_dict["target_chains"],
+            scorefxn_name=input_dict["scorefxn"],
         )
     raise ValueError(f"Unknown operation: {operation}")
 
