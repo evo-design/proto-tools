@@ -1,4 +1,4 @@
-"""proto_tools/tools/masked_models/masking/maskers.py.
+"""proto_tools/transforms/masking/maskers.py.
 
 Each masker has:
 - ``supported_models``: which models it works with (None = no model needed)

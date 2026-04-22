@@ -108,7 +108,7 @@ from proto_tools.tools.mutagenesis import (
     RandomNucleotideSampleInput, RandomNucleotideSampleConfig,
     run_random_nucleotide_sample,
 )
-from proto_tools.tools.masked_models.masking import MaskingStrategy
+from proto_tools.transforms.masking import MaskingStrategy
 
 config = RandomNucleotideSampleConfig(
     masking_strategy=MaskingStrategy(num_mutations=3),

@@ -10,15 +10,15 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from proto_tools.tools.masked_models.masking import (
-    MaskingStrategy,
-    apply_masking_strategy,
-    build_position_score_fn,
-)
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelInput,
 )
 from proto_tools.tools.tool_registry import tool
+from proto_tools.transforms.masking import (
+    MaskingStrategy,
+    apply_masking_strategy,
+    build_position_score_fn,
+)
 from proto_tools.utils import (
     BaseConfig,
     BaseToolOutput,

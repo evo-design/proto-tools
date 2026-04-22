@@ -1,5 +1,3 @@
-<a href="https://bio-pro.mintlify.app/tools/masked-models/masking"><img align="right" src="https://img.shields.io/badge/View_in_Proto_Docs_→-046e7a?style=for-the-badge&logo=readthedocs&logoColor=white" alt="View in Proto Docs →"></a>
-
 # Masking
 
 ## Overview
@@ -34,7 +32,7 @@ All randomness flows through an explicit `np.random.RandomState`, so a given `(m
 ## Quick Start Examples
 
 ```python
-from proto_tools.tools.masked_models.masking import MaskingStrategy
+from proto_tools.transforms.masking import MaskingStrategy
 
 # Default: uniform random, 30% of designable positions.
 MaskingStrategy().mask(["MKTLLIFLA"])
@@ -53,7 +51,7 @@ MaskingStrategy(mask_fraction=1.0, fixed_positions=[1]).mask(["MKTLLIFLA"])
 # → ["_K_______"]
 ```
 
-The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [ESM2](../esm2/README.md) and [ESM3](../esm3/README.md) example notebooks for end-to-end usage.
+The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [ESM2](../../tools/masked_models/esm2/README.md) and [ESM3](../../tools/masked_models/esm3/README.md) example notebooks for end-to-end usage.
 
 ## Best Practices & Gotchas
 
@@ -71,5 +69,5 @@ The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [E
 
 ## Related Tools
 
-- [ESM2](../esm2/README.md) — Meta AI's protein language model; uses this masking utility for sampling.
-- [ESM3](../esm3/README.md) — ESM3 (multimodal protein language model); also uses this masking utility.
+- [ESM2](../../tools/masked_models/esm2/README.md) — Meta AI's protein language model; uses this masking utility for sampling.
+- [ESM3](../../tools/masked_models/esm3/README.md) — ESM3 (multimodal protein language model); also uses this masking utility.

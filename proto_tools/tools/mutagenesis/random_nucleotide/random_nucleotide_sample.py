@@ -11,13 +11,13 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
-from proto_tools.tools.masked_models.masking import (
+from proto_tools.tools.mutagenesis.codons import sample_nucleotide
+from proto_tools.tools.tool_registry import tool
+from proto_tools.transforms.masking import (
     MASK_TOKEN,
     MaskingStrategy,
     apply_masking_strategy,
 )
-from proto_tools.tools.mutagenesis.codons import sample_nucleotide
-from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
