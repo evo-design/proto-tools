@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SerializeAsAny, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.utils import (
@@ -305,11 +305,12 @@ class InverseFoldingOutput(BaseToolOutput):
     Contains a list of DesignedSequences objects, one for each input structure.
 
     Attributes:
-        designed_sequences (list[DesignedSequences]): List of DesignedSequences objects, one for each input structure.
-            The order matches the input structures order.
+        designed_sequences (list[SerializeAsAny[DesignedSequences]]): List of DesignedSequences objects, one for each
+            input structure. The order matches the input structures order.
     """
 
-    designed_sequences: list[DesignedSequences] = Field(
+    # SerializeAsAny so subclass-only fields (e.g. ProteinMPNNSequences.perplexity) survive model_dump().
+    designed_sequences: list[SerializeAsAny[DesignedSequences]] = Field(
         description="List of sequences predicted for the input structures"
     )
 

@@ -135,6 +135,23 @@ def test_output_iter():
     assert list(output) == [DesignedSequences(sequences=["MVLSP", "GGGS"])]
 
 
+def test_output_preserves_subclass_fields_on_dump():
+    """Subclass-only fields must survive model_dump() on a polymorphic list.
+
+    Without `SerializeAsAny`, Pydantic serializes list items against the
+    declared base type (`DesignedSequences`), silently dropping fields
+    like `perplexity` / `sequence_identity` on the HTTP/the cloud runtime boundary.
+    """
+    subclass_item = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
+    output = InverseFoldingOutput(designed_sequences=[subclass_item])
+    dumped = output.model_dump()
+    assert dumped["designed_sequences"][0]["sequences"] == ["MVLSP", "GGGS"]
+    assert dumped["designed_sequences"][0]["custom_metric"] == [0.1, 0.2]
+    # mode="json" is the path taken by the HTTP/the cloud runtime serializer.
+    dumped_json = output.model_dump(mode="json")
+    assert dumped_json["designed_sequences"][0]["custom_metric"] == [0.1, 0.2]
+
+
 # ── Validation: invalid chain_ids and fixed_positions ───────────────────────
 
 
