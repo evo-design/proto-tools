@@ -25,7 +25,7 @@ def _bundled_structure(*, with_pae: bool = True, b_factor_type: BFactorType = BF
     pdb_path = FIXTURE_DIR / "example_input_fixture.pdb"
     metrics: dict[str, object] = {}
     if with_pae:
-        metrics["pae"] = json.loads((FIXTURE_DIR / "example_input_fixture_pae.json").read_text())
+        metrics["pae_matrix"] = json.loads((FIXTURE_DIR / "example_input_fixture_pae.json").read_text())
     return Structure.from_file(pdb_path, b_factor_type=b_factor_type, metrics=metrics)
 
 
@@ -46,7 +46,7 @@ def _pae_shape_mismatch_structure() -> Structure:
     return Structure.from_file(
         FIXTURE_DIR / "example_input_fixture.pdb",
         b_factor_type=BFactorType.PLDDT,
-        metrics={"pae": [[0.0] * 4 for _ in range(4)]},
+        metrics={"pae_matrix": [[0.0] * 4 for _ in range(4)]},
     )
 
 
@@ -54,7 +54,7 @@ def _pae_shape_mismatch_structure() -> Structure:
     "overrides,message",
     [
         ({"structure": lambda: _bundled_structure(b_factor_type=BFactorType.UNSPECIFIED)}, "per_residue_plddt"),
-        ({"structure": lambda: _bundled_structure(with_pae=False)}, r"metrics\['pae'\]"),
+        ({"structure": lambda: _bundled_structure(with_pae=False)}, r"metrics\['pae_matrix'\]"),
         ({"structure": _pae_shape_mismatch_structure}, "does not match residue count"),
         ({"binder_chain": "Z"}, "not found in structure"),
         ({"target_chains": ["A", "B"]}, "must not appear in target_chains"),
@@ -141,7 +141,9 @@ def _three_chain_structure(tmp_path: Path) -> Structure:
             pae[i][j] = pae[j][i] = 3.0
         for j in (4, 5):
             pae[i][j] = pae[j][i] = 8.0
-    return Structure.from_file(tmp_path / "three_chain.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
+    return Structure.from_file(
+        tmp_path / "three_chain.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae_matrix": pae}
+    )
 
 
 @pytest.mark.integration
@@ -181,7 +183,9 @@ def test_interface_plddt_is_contact_pair_weighted(tmp_path):
         ],
     )
     pae = [[6.0] * 4 for _ in range(4)]
-    structure = Structure.from_file(tmp_path / "hetero.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
+    structure = Structure.from_file(
+        tmp_path / "hetero.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae_matrix": pae}
+    )
 
     out = run_pdockq2(PDockQ2Input(structure=structure, binder_chain="A", target_chains=["B"]), PDockQ2Config())
     by_chain = {row.chain_id: row for row in out.metrics.interfaces}
@@ -202,7 +206,7 @@ def test_disjoint_chains_score_zero_with_warning(tmp_path, caplog):
         ],
     )
     structure = Structure.from_file(
-        pdb_path, b_factor_type=BFactorType.PLDDT, metrics={"pae": [[15.0] * 4 for _ in range(4)]}
+        pdb_path, b_factor_type=BFactorType.PLDDT, metrics={"pae_matrix": [[15.0] * 4 for _ in range(4)]}
     )
 
     with caplog.at_level(logging.WARNING, logger="proto_tools.tools.structure_scoring.pdockq2.pdockq2"):

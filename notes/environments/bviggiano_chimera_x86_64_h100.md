@@ -1,6 +1,6 @@
 # Linux x86_64 Environment Report
 
-![Pass Rate](https://img.shields.io/badge/pass_rate-95%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-43-brightgreen) ![Failed](https://img.shields.io/badge/failed-2-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
+![Pass Rate](https://img.shields.io/badge/pass_rate-100%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-45-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
 
 ## Platform
 
@@ -17,8 +17,8 @@
 
 ## Git
 
-- **Commit**: `c0b536273d62`
-- **Branch**: `feat/auto-persist-preprocess-scope`
+- **Commit**: `5b7cb41b7e9a`
+- **Branch**: `fix/nightly-test-failures`
 - **Dirty**: No
 
 ## Environment Variables
@@ -29,21 +29,25 @@
 BLASTDB=/common_datasets/external/databases/blast
 BROWSER=/home/bviggiano/.cursor-server/cli/servers/Stable-d8673fb56ba50fda33ad78382000b519bb8acb70/server/bin/helpers/browser.sh
 BUNDLED_DEBUGPY_PATH=/home/bviggiano/.cursor-server/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/libs/debugpy
-CLAUDE_CODE_SSE_PORT=62782
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
+CLAUDE_CODE_EXECPATH=/home/bviggiano/.local/share/claude/versions/2.1.117
+CLAUDE_CODE_SSE_PORT=59768
 COLORTERM=truecolor
 CONDA_DEFAULT_ENV=proto-tools
 CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
 CONDA_PREFIX=/home/bviggiano/miniforge3/envs/proto-tools
 CONDA_PREFIX_1=/home/bviggiano/miniforge3
-CONDA_PREFIX_2=/home/bviggiano/miniforge3/envs/proto-tools
-CONDA_PREFIX_3=/home/bviggiano/miniforge3
 CONDA_PROMPT_MODIFIER=(proto-tools) 
 CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
-CONDA_SHLVL=4
+CONDA_SHLVL=2
+COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
+GIT_EDITOR=true
+GK_GL_ADDR=http://127.0.0.1:44763
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64
+LD_LIBRARY_PATH=/usr/local/cuda/lib64
 LESSCLOSE=/usr/bin/lesspipe %s %s
 LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=bviggiano
@@ -51,8 +55,10 @@ LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd
 MAMBA_EXE=/home/bviggiano/miniforge3/bin/mamba
 MAMBA_ROOT_PREFIX=/home/bviggiano/.local/share/mamba
 MOTD_SHOWN=pam
+NoDefaultCurrentDirectoryInExePath=1
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
 OVSX_REGISTRY_URL=https://open-vsx.org
-PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.cursor-server/cli/servers/Stable...
+PATH=/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.cursor-server/cli/servers/Stable-d8673fb56ba50fda33ad78382000b519bb8acb70/server/bin/remote-cli:/ho...
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 PWD=/home/bviggiano/main/codebases/evo-design/proto-tools
 PYDEVD_DISABLE_FILE_VALIDATION=1
@@ -61,22 +67,20 @@ PYTEST_VERSION=9.0.3
 RCLONE_CONFIG=/large_storage/rclone/etc/rclone.conf
 RDBASE=/home/bviggiano/miniforge3/envs/proto-tools/lib/python3.14/site-packages/rdkit
 SHELL=/bin/bash
-SHLVL=3
-SLURM_JOB_ID=2206052
+SHLVL=2
+SLURM_JOB_ID=2207932
 TERM=xterm-256color
-TERM_PROGRAM=tmux
-TERM_PROGRAM_VERSION=3.2a
-TMUX=/tmp/tmux-10249/default,2511031,0
-TMUX_PANE=%0
+TERM_PROGRAM=vscode
+TERM_PROGRAM_VERSION=3.1.14
 USER=bviggiano
 VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=/home/bviggiano/.cursor-server/extensions/ms-python.debugpy-2025.18.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-8103c33f2ddb9245.txt
 VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-0f6dc9dc9f.sock
-VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-43505172-0d1a-43c2-bfdb-929c2fd6384b.sock
+VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-bc3abc15-6636-4e77-bb22-1123588a3f74.sock
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
-XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog
-_=/home/bviggiano/miniforge3/envs/proto-tools/bin/pytest
+XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog
+_=/home/bviggiano/miniforge3/envs/proto-tools/bin/python3
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -86,16 +90,16 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyhmmer_env
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
 LANG=C.UTF-8
-LD_LIBRARY_PATH=/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyhmmer_env/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bvi...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/....
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
@@ -109,7 +113,8 @@ TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/pyhmmer_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env
+XLA_FLAGS=--xla_gpu_cuda_data_dir=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env/cuda_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
@@ -180,11 +185,11 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `colabfold-search` | no | ✅ | 40.5s | `c0b5362` | ✅ Pass |
 | `mafft-align` | no | ✅ | 20.0s | `c0b5362` | ✅ Pass |
 
-### Sequence Scoring (3/4)
+### Sequence Scoring (4/4)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `alphagenome-predict-intervals` | yes | ✅ | 125.3s | `c0b5362` | ❌ Fail |
+| `alphagenome-predict-intervals` | yes | ✅ | 214.1s | `ccdcf09` ✱ | ✅ Pass |
 | `borzoi-ensemble` | yes | ✅ | 95.2s | `c0b5362` | ✅ Pass |
 | `enformer-prediction` | yes | ✅ | 38.4s | `c0b5362` | ✅ Pass |
 | `segmasker-score` | no | ✅ | 32.2s | `c0b5362` | ✅ Pass |
@@ -208,11 +213,11 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 |------|--------------|----------------------|----------|-----------|--------|
 | `bioemu-sample` | yes | ✅ | 116.8s | `c0b5362` | ✅ Pass |
 
-### Structure Prediction (6/7)
+### Structure Prediction (7/7)
 
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
-| `alphafold2-binder` | yes | ✅ | 207.0s | `c0b5362` | ❌ Fail |
+| `alphafold2-binder` | yes | ✅ | 245.0s | `5b7cb41` | ✅ Pass |
 | `alphafold3-prediction` | yes | ✅ | 70.8s | `c0b5362` | ✅ Pass |
 | `boltz2-prediction` | yes | ✅ | 106.2s | `c0b5362` | ✅ Pass |
 | `chai1-prediction` | yes | ✅ | 200.5s | `c0b5362` | ✅ Pass |
@@ -239,38 +244,8 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `mock-pytorch-multi-gpu-tool-run` | yes | - | - | `c0b5362` | ⏭️ Skip |
 | `mock-pytorch-tool-run` | yes | ✅ | 69.4s | `c0b5362` | ✅ Pass |
 
-## Failure Details
-
-### ❌ `alphafold2-binder`
-
-**Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold2-binder]`
-
-```
-tests/tool_infra_tests/test_env_report.py:80: in test_tool_env_report
-    assert_metrics_in_spec(result)
-tests/tool_infra_tests/_metric_helpers.py:62: in assert_metrics_in_spec
-    metrics.validate_against_spec()
-proto_tools/utils/tool_io.py:310: in validate_against_spec
-    _check_list_in_spec(name, value, value_spec)
-proto_tools/utils/tool_io.py:357: in _check_list_in_spec
-    raise AssertionError(
-E   AssertionError: Metric 'pae' has type float but spec declares 'list[list[float]]'
-```
-
-### ❌ `alphagenome-predict-intervals`
-
-**Test**: `tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphagenome-predict-intervals]`
-
-```
-tests/tool_infra_tests/test_env_report.py:79: in test_tool_env_report
-    assert result.success, f"Tool {spec.key} failed: {result.errors}"
-E   AssertionError: Tool alphagenome-predict-intervals failed: ["Command '['/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env/bin/python', '/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/standalone/inference.py', '/tmp/tmpfkbkffye/input.json', '/tmp/tmpfkbkffye/output.json']' returned non-zero exit status 1.", 'Traceback (most recent call last):\n  File "/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/tool_registry.py", line 497, in _wrapper_body\n    result = func(inputs, config, instance)\n  File "/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py", line 148, in run_alphagenome_predict_intervals\n    dispatch_result = ToolInstance.dispatch(\n        "alphagenome",\n    ...<17 lines>...\n        config=config,\n    )\n  File "/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py", line 325, in dispatch\n    return cls._oneshot(\n           ~~~~~~~~~~~~^\n        toolkit,\n        ^^^^^^^^\n    ...<3 lines>...\n        timeout=timeout,\n        ^^^^^^^^^^^^^^^^\n    )\n    ^\n  File "/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py", line 364, in _oneshot\n    return inst._run_oneshot(\n           ~~~~~~~~~~~~~~~~~^\n        leased_input,\n        ^^^^^^^^^^^^^\n    ...<2 lines>...\n        timeout=timeout,\n        ^^^^^^^^^^^^^^^^\n    )\n    ^\n  File "/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py", line 1077, in _run_oneshot\n    subprocess.run(\n    ~~~~~~~~~~~~~~^\n        [python_exe, str(sp), str(input_path), str(output_path)],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<5 lines>...\n        stderr=None if verbose else subprocess.PIPE,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File "/home/bviggiano/miniforge3/envs/proto-tools/lib/python3.14/subprocess.py", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command \'[\'/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env/bin/python\', \'/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/standalone/inference.py\', \'/tmp/tmpfkbkffye/input.json\', \'/tmp/tmpfkbkffye/output.json\']\' returned non-zero exit status 1.\n']
-E   assert False
-E    +  where False = AlphaGenomePredictIntervalsOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata).success
-```
-
 ---
-*Generated at 2026-04-22 00:51:04 by `pytest --env-report`*
+*Generated at 2026-04-22 14:01:55 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -577,13 +552,13 @@ E    +  where False = AlphaGenomePredictIntervalsOutput(tool_id, execution_time,
     "tool_key": "alphafold2-binder",
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold2-binder]",
-    "status": "failed",
-    "duration_seconds": 207.0,
+    "status": "passed",
+    "duration_seconds": 245.04,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold2_env",
     "env_status": "success",
-    "error_message": "tests/tool_infra_tests/test_env_report.py:80: in test_tool_env_report\n    assert_metrics_in_spec(result)\ntests/tool_infra_tests/_metric_helpers.py:62: in assert_metrics_in_spec\n    metrics.validate_against_spec()\nproto_tools/utils/tool_io.py:310: in validate_against_spec\n    _check_list_in_spec(name, value, value_spec)\nproto_tools/utils/tool_io.py:357: in _check_list_in_spec\n    raise AssertionError(\nE   AssertionError: Metric 'pae' has type float but spec declares 'list[list[float]]'",
-    "git_commit": "c0b536273d62",
+    "error_message": null,
+    "git_commit": "5b7cb41b7e9a",
     "git_dirty": false
   },
   {
@@ -668,14 +643,14 @@ E    +  where False = AlphaGenomePredictIntervalsOutput(tool_id, execution_time,
     "tool_key": "alphagenome-predict-intervals",
     "category": "sequence_scoring",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphagenome-predict-intervals]",
-    "status": "failed",
-    "duration_seconds": 125.26,
+    "status": "passed",
+    "duration_seconds": 214.09,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env",
     "env_status": "success",
-    "error_message": "tests/tool_infra_tests/test_env_report.py:79: in test_tool_env_report\n    assert result.success, f\"Tool {spec.key} failed: {result.errors}\"\nE   AssertionError: Tool alphagenome-predict-intervals failed: [\"Command '['/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env/bin/python', '/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/standalone/inference.py', '/tmp/tmpfkbkffye/input.json', '/tmp/tmpfkbkffye/output.json']' returned non-zero exit status 1.\", 'Traceback (most recent call last):\\n  File \"/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/tool_registry.py\", line 497, in _wrapper_body\\n    result = func(inputs, config, instance)\\n  File \"/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py\", line 148, in run_alphagenome_predict_intervals\\n    dispatch_result = ToolInstance.dispatch(\\n        \"alphagenome\",\\n    ...<17 lines>...\\n        config=config,\\n    )\\n  File \"/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py\", line 325, in dispatch\\n    return cls._oneshot(\\n           ~~~~~~~~~~~~^\\n        toolkit,\\n        ^^^^^^^^\\n    ...<3 lines>...\\n        timeout=timeout,\\n        ^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \"/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py\", line 364, in _oneshot\\n    return inst._run_oneshot(\\n           ~~~~~~~~~~~~~~~~~^\\n        leased_input,\\n        ^^^^^^^^^^^^^\\n    ...<2 lines>...\\n        timeout=timeout,\\n        ^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \"/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/utils/tool_instance.py\", line 1077, in _run_oneshot\\n    subprocess.run(\\n    ~~~~~~~~~~~~~~^\\n        [python_exe, str(sp), str(input_path), str(output_path)],\\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n    ...<5 lines>...\\n        stderr=None if verbose else subprocess.PIPE,\\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \"/home/bviggiano/miniforge3/envs/proto-tools/lib/python3.14/subprocess.py\", line 578, in run\\n    raise CalledProcessError(retcode, process.args,\\n                             output=stdout, stderr=stderr)\\nsubprocess.CalledProcessError: Command \\'[\\'/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphagenome_env/bin/python\\', \\'/large_storage/hielab/bviggiano/codebases/evo-design/proto-tools/proto_tools/tools/sequence_scoring/alphagenome/standalone/inference.py\\', \\'/tmp/tmpfkbkffye/input.json\\', \\'/tmp/tmpfkbkffye/output.json\\']\\' returned non-zero exit status 1.\\n']\nE   assert False\nE    +  where False = AlphaGenomePredictIntervalsOutput(tool_id, execution_time, timestamp, success, warnings, errors, metadata).success",
-    "git_commit": "c0b536273d62",
-    "git_dirty": false
+    "error_message": null,
+    "git_commit": "ccdcf0937ef4",
+    "git_dirty": true
   },
   {
     "tool_key": "progen2-sample",

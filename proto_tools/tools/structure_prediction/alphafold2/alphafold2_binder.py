@@ -402,7 +402,7 @@ def run_alphafold2_binder(
                 ptm=metrics["ptm"],
                 iptm=metrics.get("iptm"),
                 avg_pae=metrics["avg_pae"],
-                pae=metrics["pae"],
+                pae_matrix=metrics.get("pae_matrix"),
             ),
             source="alphafold2-binder",
         ),
