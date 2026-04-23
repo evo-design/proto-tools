@@ -119,6 +119,53 @@ def _lookup_instance(key: str) -> "ToolInstance | None":
         return _active_cache().get(key)
 
 
+def _resolve_instance_or_raise(
+    instance: "str | ToolInstance | None",
+    toolkit: str,
+) -> "ToolInstance | None":
+    """Normalize the ``instance`` kwarg shared by ``dispatch`` and the @tool wrapper.
+
+    Semantics:
+      * ``None`` -> returns ``None`` (caller's default-dispatch path).
+      * ``ToolInstance`` -> returns it unchanged (caller owns the handle).
+      * ``str`` -> looked up via :func:`_lookup_instance`. If found, returns it.
+        If not found AND ``_persist_mode`` is active, returns ``None`` so
+        dispatch can create-and-register under the string key. If not found
+        AND ``_persist_mode`` is inactive, raises :class:`ValueError` — a
+        string is a reference, not a creation request.
+
+    Args:
+        instance (str | ToolInstance | None): The caller-supplied ``instance``
+            value. Strings are treated as cache keys that must already exist
+            outside of a ``persist()`` / ``persist_tool()`` context.
+        toolkit (str): Toolkit name, used in the error message to suggest
+            a remediation (``ToolInstance.get`` / ``persist_tool``).
+
+    Returns:
+        ToolInstance | None: The resolved instance, or ``None`` when the
+            caller passed ``None`` or an unresolved string inside persist mode.
+
+    Raises:
+        ValueError: When ``instance`` is a string not present in
+            ``_instances`` and ``_persist_mode`` is inactive.
+    """
+    if instance is None or isinstance(instance, ToolInstance):
+        return instance
+    cached = _lookup_instance(instance)
+    if cached is not None:
+        return cached
+    if _persist_mode.get():
+        # Explicit opt-in: persist() / persist_tool() authorize auto-creation
+        # under the supplied key. Let dispatch handle the actual `.get()`.
+        return None
+    raise ValueError(
+        f"No cached ToolInstance for instance_name={instance!r}. "
+        f"Create one with ToolInstance.get({toolkit!r}, instance_name={instance!r}) "
+        f"or wrap the call in ToolInstance.persist_tool({toolkit!r}, "
+        f"instance_name={instance!r}) before dispatching."
+    )
+
+
 def _run_setup_script(
     setup_script: Path,
     *,
@@ -207,12 +254,17 @@ class ToolInstance:
     ) -> "ToolInstance":
         """Return (or create) a ToolInstance for *toolkit*.
 
+        Passing ``instance_name="K"`` registers the instance in the shared
+        cache under ``"K"`` so later ``dispatch(..., instance="K")`` calls
+        can reference it. Strings are references: outside of a :meth:`persist`
+        / :meth:`persist_tool` context, an unknown name raises ``ValueError``.
+
         Args:
             toolkit (str): Worker-group folder name (e.g. ``"esm2"``, ``"progen2"``).
                 Accepts either a toolkit or a registered tool_key; tool_keys are
                 normalized to their toolkit.
-            instance_name (str | None): Explicit cache key. When None, the instance is
-                cached under *toolkit* so that different operations on the same
+            instance_name (str | None): Explicit cache key. When None, the instance
+                is cached under *toolkit* so that different operations on the same
                 model share one worker.
         """
         toolkit = cls._normalize_toolkit(toolkit)
@@ -287,11 +339,21 @@ class ToolInstance:
                 Accepts either a toolkit or a registered tool_key; tool_keys
                 are normalized to their toolkit.
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
-            instance (str | ToolInstance | None): A ToolInstance object to use directly,
-                a string cache key for persistent instance lookup, or None.
+            instance (str | ToolInstance | None): How to route the call.
+                A ``ToolInstance`` is used directly. A string is a **reference**
+                to an already-registered cache entry — it must exist in
+                ``_instances`` (via :meth:`get` or :meth:`persist_tool`), else
+                ``ValueError`` is raised. Inside a :meth:`persist` /
+                :meth:`persist_tool` context strings may auto-create under the
+                named key. ``None`` falls back to the toolkit-keyed default
+                (cached instance, persist-mode auto-create, or one-shot).
             script_path (Path | str | None): Override the default standalone script.
             config (BaseConfig | None): Tool configuration object. When provided,
                 verbose, timeout, and reload_on are derived automatically.
+
+        Raises:
+            ValueError: If ``instance`` is a string not present in
+                ``_instances`` and no persist context is active.
         """
         toolkit = cls._normalize_toolkit(toolkit)
         # Derive execution parameters from config
@@ -303,7 +365,7 @@ class ToolInstance:
             verbose = False
             timeout = DEFAULT_TIMEOUT
             reload_on = None
-        # Path 1: caller passed a ToolInstance object directly
+        # Path 1: caller passed a ToolInstance object directly — use as-is.
         if isinstance(instance, ToolInstance):
             logger.debug("dispatch(%s): using provided ToolInstance", toolkit)
             return instance.run(
@@ -313,13 +375,32 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 2: look up by string cache key (or toolkit as default key).
-        # Path 1 already handled the ToolInstance case, so ``instance`` is
-        # ``str | None`` and ``key`` is always ``str``.
-        key = instance if instance is not None else toolkit
-        cached = _lookup_instance(key)
+        # Path 2: string reference — must resolve, or be inside persist mode.
+        # Raises ValueError otherwise (strings are references, not creation requests).
+        if isinstance(instance, str):
+            resolved = _resolve_instance_or_raise(instance, toolkit)
+            if resolved is not None:
+                logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, instance)
+                return resolved.run(
+                    input_dict,
+                    script_path=script_path,
+                    verbose=verbose,
+                    timeout=timeout,
+                    reload_on=reload_on,
+                )
+            # Inside persist mode with an unresolved string: create + register under it.
+            logger.debug("dispatch(%s): persist mode, auto-caching instance (key=%r)", toolkit, instance)
+            return cls.get(toolkit, instance_name=instance).run(
+                input_dict,
+                script_path=script_path,
+                verbose=verbose,
+                timeout=timeout,
+                reload_on=reload_on,
+            )
+        # Path 3: instance is None — toolkit-keyed default.
+        cached = _lookup_instance(toolkit)
         if cached is not None:
-            logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, key)
+            logger.debug("dispatch(%s): reusing cached instance (key=%r)", toolkit, toolkit)
             return cached.run(
                 input_dict,
                 script_path=script_path,
@@ -327,22 +408,16 @@ class ToolInstance:
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 3: persist mode — auto-create and cache instead of one-shot
         if _persist_mode.get():
-            logger.debug(
-                "dispatch(%s): persist mode, auto-caching instance (key=%r)",
-                toolkit,
-                key,
-            )
-            inst = cls.get(toolkit, instance_name=key)
-            return inst.run(
+            logger.debug("dispatch(%s): persist mode, auto-caching instance (key=%r)", toolkit, toolkit)
+            return cls.get(toolkit).run(
                 input_dict,
                 script_path=script_path,
                 verbose=verbose,
                 timeout=timeout,
                 reload_on=reload_on,
             )
-        # Path 4: no cached instance — ephemeral one-shot subprocess
+        # Path 4: no cached instance — ephemeral one-shot subprocess.
         logger.debug("dispatch(%s): no cached instance, running one-shot", toolkit)
         return cls._oneshot(
             toolkit,

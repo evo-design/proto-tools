@@ -364,15 +364,14 @@ def test_atool_wrapper_skips_scope_without_preprocess_or_instance(
 
 
 # Regression tests: `instance=` kwarg accepts `str | ToolInstance | None` per
-# `ToolInstance.dispatch()`. The auto-persist wrapper must not crash when given
-# a string cache key.
+# `ToolInstance.dispatch()`. Strings are references and must resolve to a
+# cached ToolInstance; unresolved strings raise ValueError.
 
 
-def test_atool_wrapper_accepts_string_instance_when_uncached(
+def test_atool_wrapper_errors_on_unknown_string_instance(
     _clean_registry: type[ToolRegistry],
 ) -> None:
-    """String instance that doesn't resolve to a cached ToolInstance: no scope opened, no crash."""
-    observed: dict[str, Any] = {}
+    """String instance that doesn't resolve raises ValueError before preprocess runs."""
 
     @_clean_registry.register(
         key="auto-persist-str-uncached-test",
@@ -381,11 +380,11 @@ def test_atool_wrapper_accepts_string_instance_when_uncached(
         input_class=_AutoPersistInput,
         config_class=_PlainConfig,
         output_class=_AutoPersistOutput,
-        description="String instance, no custom preprocess, not cached — should skip scope",
+        description="String instance, no custom preprocess, not cached — must error fast",
     )
     def run_tool(inputs: _AutoPersistInput, config: _PlainConfig, instance: Any = None) -> _AutoPersistOutput:
-        observed["overlay"] = _auto_persist_overlay.get()
-        return _AutoPersistOutput(result=inputs.input_data)
+        # Should NEVER be reached — the wrapper must raise before preprocess / body.
+        raise AssertionError("tool body must not execute for unknown string instance")
 
     pyrosetta_source = (
         Path(__file__).resolve().parents[2]
@@ -399,11 +398,8 @@ def test_atool_wrapper_accepts_string_instance_when_uncached(
     spec.source_file = pyrosetta_source
     _override_wrapper_source_file(run_tool, pyrosetta_source)
 
-    result = run_tool(_AutoPersistInput(input_data="ping"), _PlainConfig(), instance="not_cached_key")
-
-    assert result.result == "ping"
-    # String didn't resolve to any cached instance, so no scope should have opened.
-    assert observed["overlay"] is None
+    with pytest.raises(ValueError, match="No cached ToolInstance for instance_name='not_cached_key'"):
+        run_tool(_AutoPersistInput(input_data="ping"), _PlainConfig(), instance="not_cached_key")
 
 
 def test_atool_wrapper_accepts_string_instance_when_cached(

@@ -283,20 +283,30 @@ def test_dispatch_uses_cached_instance(mock_init: MagicMock):
     )
 
 
-@patch.object(ToolInstance, "_oneshot")
 @patch.object(ToolInstance, "__init__", return_value=None)
-def test_dispatch_respects_instance_string_key(mock_init: MagicMock, mock_oneshot: MagicMock):
-    """dispatch() should look up by string instance key when provided."""
-    mock_oneshot.return_value = {"result": "oneshot"}
-
-    # Cache under "esm2" (default key), but dispatch with custom key
+def test_dispatch_errors_on_unknown_instance_string(mock_init: MagicMock):
+    """dispatch() raises ValueError when instance='K' is not cached and persist_mode is off."""
+    # Cache under "esm2" (default key), but dispatch with a DIFFERENT key.
     inst = ToolInstance.get("esm2")
     inst.run = MagicMock()
 
-    result = ToolInstance.dispatch("esm2", {"op": "score"}, instance="other-key")
-    # Should NOT use cached "esm2" — key mismatch
-    assert result == {"result": "oneshot"}
+    with pytest.raises(ValueError, match="No cached ToolInstance for instance_name='other-key'"):
+        ToolInstance.dispatch("esm2", {"op": "score"}, instance="other-key")
+    # The cached "esm2" entry must NOT have been consulted.
     inst.run.assert_not_called()
+
+
+@patch.object(ToolInstance, "__init__", return_value=None)
+def test_dispatch_with_string_instance_in_persist_mode_auto_creates(mock_init: MagicMock):
+    """Inside ToolInstance.persist(), an unknown string auto-creates + registers under that key."""
+    with patch.object(ToolInstance, "_ensure_env"):
+        with ToolInstance.persist():
+            with patch.object(ToolInstance, "run", return_value={"result": "created"}) as mock_run:
+                result = ToolInstance.dispatch("esm2", {"op": "score"}, instance="fresh-key")
+            assert result == {"result": "created"}
+            # Must have been registered under the supplied string key in the active scope.
+            assert "fresh-key" in _active_cache()
+            mock_run.assert_called_once()
 
 
 def test_dispatch_with_tool_instance_object():
