@@ -312,7 +312,16 @@ class ToolRegistry:
                 config: BaseConfig | None = None,
                 instance: "str | ToolInstance | None" = None,
             ) -> BaseToolOutput:
-                """Wrapper that tracks execution and populates metadata."""
+                """Wrapper that tracks execution and populates metadata.
+
+                ``instance`` is forwarded to ``ToolInstance.dispatch``. A string
+                is a **reference** to a cached instance registered via
+                ``ToolInstance.get(instance_name=...)`` or
+                ``ToolInstance.persist_tool(instance_name=...)``; unknown strings
+                raise ``ValueError`` unless the call is inside a
+                ``ToolInstance.persist()`` context (which authorizes auto-creation
+                under the given name).
+                """
                 _func_token = set_current_tool_function(func.__name__)
                 try:
                     return _wrapper_body(inputs, config, instance)
@@ -428,15 +437,14 @@ class ToolRegistry:
                 toolkit = source_file.parent.name
                 has_standalone_env = spec is not None and spec.has_standalone_env
                 has_custom_preprocess = type(config).preprocess is not BaseConfig.preprocess
-                # ``instance`` may be a ToolInstance or a string cache key (dispatch
-                # Path 2). Resolve strings to their cached ToolInstance before handing
-                # to the scope; a string that doesn't resolve (ephemeral/persist-mode
-                # first-run) has no object to seed, so skip scoping for that case.
-                from proto_tools.utils.tool_instance import _lookup_instance
+                # ``instance`` may be a ToolInstance or a string cache key.
+                # Fail fast here (before preprocess runs) if a string references
+                # an unregistered instance outside of persist mode — dispatch would
+                # raise the same error later, but catching it here avoids running
+                # preprocess before the inevitable failure.
+                from proto_tools.utils.tool_instance import _resolve_instance_or_raise
 
-                resolved_instance: ToolInstance | None = (
-                    _lookup_instance(instance) if isinstance(instance, str) else instance
-                )
+                resolved_instance: ToolInstance | None = _resolve_instance_or_raise(instance, toolkit)
                 needs_scope = has_standalone_env and (has_custom_preprocess or resolved_instance is not None)
                 auto_persist_ctx: contextlib.AbstractContextManager[None] = (
                     ToolInstance._auto_persist_scope(toolkit, instance=resolved_instance)

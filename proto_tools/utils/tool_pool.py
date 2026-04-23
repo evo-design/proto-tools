@@ -21,7 +21,7 @@ from proto_tools.utils.device import (
     determine_visible_devices,
     number_of_available_gpus,
 )
-from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance, _persist_mode
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +364,13 @@ class ToolPool:
 
             def _run_local_partition(assignment: WorkerAssignment) -> tuple[list[tuple[int, Any]], Any]:
                 """Run a single partition on a local device."""
-                token = _pool_executing.set(True)
+                pool_token = _pool_executing.set(True)
+                # A ToolPool is inherently a persist context: partition workers are
+                # named per-device and must be reusable across dispatch calls.
+                # Force _persist_mode on for this partition's execution so the
+                # named-instance kwarg passed to ``func`` auto-creates under its
+                # key (idempotent if the caller already entered ``with pool:``).
+                persist_token = _persist_mode.set(True)
                 try:
                     device_id = assignment.device.device_id
                     partition_items = [wi.item for wi in assignment.items]
@@ -385,7 +391,8 @@ class ToolPool:
                     ]
                     return indexed, result
                 finally:
-                    _pool_executing.reset(token)
+                    _persist_mode.reset(persist_token)
+                    _pool_executing.reset(pool_token)
 
             failed: list[dict[str, Any]] = []
 
