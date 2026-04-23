@@ -308,7 +308,9 @@ class ToolRegistry:
 
             @wraps(func)
             def wrapper(
-                inputs: BaseToolInput, config: BaseConfig | None = None, instance: ToolInstance | None = None
+                inputs: BaseToolInput,
+                config: BaseConfig | None = None,
+                instance: "str | ToolInstance | None" = None,
             ) -> BaseToolOutput:
                 """Wrapper that tracks execution and populates metadata."""
                 _func_token = set_current_tool_function(func.__name__)
@@ -318,7 +320,7 @@ class ToolRegistry:
                     reset_current_tool_function(_func_token)
 
             def _wrapper_body(
-                inputs: BaseToolInput, config: BaseConfig | None, instance: ToolInstance | None
+                inputs: BaseToolInput, config: BaseConfig | None, instance: "str | ToolInstance | None"
             ) -> BaseToolOutput:
                 # Auto-configure logging if no handlers exist (one-time, O(1) after first call)
                 from proto_tools.utils.logging_config import _auto_configure_logging
@@ -426,9 +428,18 @@ class ToolRegistry:
                 toolkit = source_file.parent.name
                 has_standalone_env = spec is not None and spec.has_standalone_env
                 has_custom_preprocess = type(config).preprocess is not BaseConfig.preprocess
-                needs_scope = has_standalone_env and (has_custom_preprocess or instance is not None)
+                # ``instance`` may be a ToolInstance or a string cache key (dispatch
+                # Path 2). Resolve strings to their cached ToolInstance before handing
+                # to the scope; a string that doesn't resolve (ephemeral/persist-mode
+                # first-run) has no object to seed, so skip scoping for that case.
+                from proto_tools.utils.tool_instance import _lookup_instance
+
+                resolved_instance: ToolInstance | None = (
+                    _lookup_instance(instance) if isinstance(instance, str) else instance
+                )
+                needs_scope = has_standalone_env and (has_custom_preprocess or resolved_instance is not None)
                 auto_persist_ctx: contextlib.AbstractContextManager[None] = (
-                    ToolInstance._auto_persist_scope(toolkit, instance=instance)
+                    ToolInstance._auto_persist_scope(toolkit, instance=resolved_instance)
                     if needs_scope
                     else contextlib.nullcontext()
                 )
