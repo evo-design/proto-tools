@@ -10,10 +10,9 @@ Runs in an isolated venv with JAX and ColabDesign. Supports two backends:
   ``_loss_binder``, and ``soft_seq()`` with full JAX autograd chain rule.
   Antibody-language-model gradients remain external to this tool.
 
-Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are ported from
-``germinal/design/design.py`` and registered when their weight is > 0 in the
-``loss_weights`` dict. These are JAX functions that run inside
-``jax.value_and_grad`` and only activate with ``backend="germinal"``.
+Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are registered
+when their weight is non-zero in ``loss_weights`` and work on any backend.
+Helix and beta_strand bin selection is gated by backend.
 
 Usage:
     python inference.py <input_json_path> <output_json_path>
@@ -114,16 +113,13 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
     return metrics
 
 
-# ---------------------------------------------------------------------------
-# Germinal loss callbacks (ported from germinal/germinal/design/design.py)
-#
-# These are JAX functions appended to af_model._callbacks["model"]["loss"].
-# They run inside jax.value_and_grad and must stay in the standalone venv.
-# ---------------------------------------------------------------------------
+# ============================================================================
+# Extension loss callbacks
+# ============================================================================
 
 
 def _add_rg_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Radius-of-gyration loss (germinal/design.py:467)."""
+    """Radius-of-gyration loss — penalizes extended binders."""
     import jax
     import jax.numpy as jnp
     from colabdesign.af.alphafold.common import residue_constants
@@ -140,7 +136,7 @@ def _add_rg_loss(af_model: Any, weight: float = 0.1) -> None:
 
 
 def _add_i_ptm_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Interface pTM loss (germinal/design.py:497)."""
+    """Interface pTM loss — maximizes interface predicted TM-score."""
     from colabdesign.af.loss import get_ptm
 
     def loss_fn(inputs: Any, outputs: Any) -> dict[str, Any]:
@@ -150,11 +146,13 @@ def _add_i_ptm_loss(af_model: Any, weight: float = 0.1) -> None:
     af_model.opt["weights"]["i_ptm"] = weight
 
 
-def _add_helix_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Alpha-helix loss — i,i+3 contacts in 2.0-6.2 A (germinal/design.py:522)."""
+def _add_helix_loss(af_model: Any, weight: float = 0.1, *, standard_convention: bool = True) -> None:
+    """Alpha-helix loss — i,i+3 contacts in 2.0-6.2 A range."""
     import jax
     import jax.numpy as jnp
     from colabdesign.af.loss import get_dgram_bins
+
+    select_inside = standard_convention
 
     def loss_fn(inputs: Any, outputs: Any) -> dict[str, Any]:
         offset = (
@@ -164,7 +162,10 @@ def _add_helix_loss(af_model: Any, weight: float = 0.1) -> None:
         )
         dgram = outputs["distogram"]["logits"]
         dgram_bins = get_dgram_bins(outputs)
-        bins = jnp.logical_or(dgram_bins > 6.2, dgram_bins < 2.0)
+        if select_inside:
+            bins = jnp.logical_and(dgram_bins >= 2.0, dgram_bins <= 6.2)
+        else:
+            bins = jnp.logical_or(dgram_bins > 6.2, dgram_bins < 2.0)
         x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
 
         if "pos" in af_model.opt:
@@ -180,8 +181,8 @@ def _add_helix_loss(af_model: Any, weight: float = 0.1) -> None:
     af_model.opt["weights"]["helix"] = weight
 
 
-def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Beta-strand loss — 9.75-11.5 A pairs, top-k (germinal/design.py:602)."""
+def _add_beta_strand_loss(af_model: Any, weight: float = 0.1, *, standard_convention: bool = True) -> None:
+    """Beta-strand loss — 9.75-11.5 A pairwise distances, top-k."""
     import jax
     import jax.numpy as jnp
     from colabdesign.af.loss import get_dgram_bins
@@ -189,6 +190,7 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
     total_len = af_model._target_len + af_model._binder_len
     all_pos = jnp.asarray(af_model.opt.get("pos", []))
     valid_pos = all_pos[(all_pos > 0) & (all_pos < total_len - 1)]
+    select_inside = standard_convention
 
     def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
         if valid_pos.size == 0:
@@ -196,7 +198,10 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
 
         dgram = outputs["distogram"]["logits"]
         dgram_bins = get_dgram_bins(outputs)
-        bins = jnp.logical_or(dgram_bins > 11.5, dgram_bins < 9.75)
+        if select_inside:
+            bins = jnp.logical_and(dgram_bins >= 9.75, dgram_bins <= 11.5)
+        else:
+            bins = jnp.logical_or(dgram_bins > 11.5, dgram_bins < 9.75)
         x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
 
         mask_1d = jnp.zeros(total_len).at[valid_pos - 1].set(1).at[valid_pos + 1].set(1)
@@ -210,7 +215,7 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
 
 
 def _add_termini_distance_loss(af_model: Any, weight: float = 0.1, threshold: float = 7.0) -> None:
-    """N-C termini distance loss (germinal/design.py:781)."""
+    """N-C termini distance loss — penalizes distant chain ends."""
     import jax
     import jax.numpy as jnp
     from colabdesign.af.alphafold.common import residue_constants
@@ -225,22 +230,23 @@ def _add_termini_distance_loss(af_model: Any, weight: float = 0.1, threshold: fl
     af_model.opt["weights"]["NC"] = weight
 
 
-def _configure_germinal_losses(af_model: Any, loss_weights: dict[str, float]) -> None:
-    """Register Germinal loss callbacks based on the provided weight dict.
+def _configure_extension_losses(af_model: Any, loss_weights: dict[str, float], *, backend: str = "base") -> None:
+    """Register extension loss callbacks that work on any backend.
 
-    Stock ColabDesign losses (plddt, i_plddt, pae, i_pae, con, i_con, etc.)
-    are configured via ``af_model.set_weights()``. This function handles the
-    Germinal-specific extension losses that require explicit callbacks.
+    Helix/beta_strand bin selection is gated by backend: ``"germinal"``
+    selects bins outside the contact range (positive weight = penalize),
+    others select bins inside (positive weight = encourage).
     """
-    if loss_weights.get("rg", 0.0) > 0:
+    standard = backend != "germinal"
+    if "rg" in loss_weights:
         _add_rg_loss(af_model, loss_weights["rg"])
-    if loss_weights.get("i_ptm", 0.0) > 0:
+    if "i_ptm" in loss_weights:
         _add_i_ptm_loss(af_model, loss_weights["i_ptm"])
-    if loss_weights.get("helix", 0.0) > 0:
-        _add_helix_loss(af_model, loss_weights["helix"])
-    if loss_weights.get("beta_strand", 0.0) > 0:
-        _add_beta_strand_loss(af_model, loss_weights["beta_strand"])
-    if loss_weights.get("NC", 0.0) > 0:
+    if "helix" in loss_weights:
+        _add_helix_loss(af_model, loss_weights["helix"], standard_convention=standard)
+    if "beta_strand" in loss_weights:
+        _add_beta_strand_loss(af_model, loss_weights["beta_strand"], standard_convention=standard)
+    if "NC" in loss_weights:
         _add_termini_distance_loss(af_model, loss_weights["NC"])
 
 
@@ -643,8 +649,8 @@ class AlphaFold2Model:
                     "framework_contact_offset": framework_contact_offset,
                 }
             )
-            # Register Germinal extension loss callbacks.
-            _configure_germinal_losses(af_model, loss_weights or {})
+
+        _configure_extension_losses(af_model, loss_weights or {}, backend=backend)
 
         return self._run_gradient(
             af_model,
