@@ -361,3 +361,87 @@ def test_atool_wrapper_skips_scope_without_preprocess_or_instance(
 
     assert result.result == "ping"
     assert observed["overlay"] is None
+
+
+# Regression tests: `instance=` kwarg accepts `str | ToolInstance | None` per
+# `ToolInstance.dispatch()`. The auto-persist wrapper must not crash when given
+# a string cache key.
+
+
+def test_atool_wrapper_accepts_string_instance_when_uncached(
+    _clean_registry: type[ToolRegistry],
+) -> None:
+    """String instance that doesn't resolve to a cached ToolInstance: no scope opened, no crash."""
+    observed: dict[str, Any] = {}
+
+    @_clean_registry.register(
+        key="auto-persist-str-uncached-test",
+        label="Auto Persist String Uncached Test",
+        category="test",
+        input_class=_AutoPersistInput,
+        config_class=_PlainConfig,
+        output_class=_AutoPersistOutput,
+        description="String instance, no custom preprocess, not cached — should skip scope",
+    )
+    def run_tool(inputs: _AutoPersistInput, config: _PlainConfig, instance: Any = None) -> _AutoPersistOutput:
+        observed["overlay"] = _auto_persist_overlay.get()
+        return _AutoPersistOutput(result=inputs.input_data)
+
+    pyrosetta_source = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools"
+        / "tools"
+        / "structure_scoring"
+        / "pyrosetta"
+        / "fake_tool_for_test.py"
+    )
+    spec = _clean_registry.get("auto-persist-str-uncached-test")
+    spec.source_file = pyrosetta_source
+    _override_wrapper_source_file(run_tool, pyrosetta_source)
+
+    result = run_tool(_AutoPersistInput(input_data="ping"), _PlainConfig(), instance="not_cached_key")
+
+    assert result.result == "ping"
+    # String didn't resolve to any cached instance, so no scope should have opened.
+    assert observed["overlay"] is None
+
+
+def test_atool_wrapper_accepts_string_instance_when_cached(
+    _clean_registry: type[ToolRegistry],
+) -> None:
+    """String instance resolving to a cached ToolInstance: scope opens and seeds overlay."""
+    observed: dict[str, Any] = {}
+    cached = _make_fake_instance(toolkit="pyrosetta")
+    _instances["cache_key_abc"] = cached
+
+    @_clean_registry.register(
+        key="auto-persist-str-cached-test",
+        label="Auto Persist String Cached Test",
+        category="test",
+        input_class=_AutoPersistInput,
+        config_class=_PlainConfig,
+        output_class=_AutoPersistOutput,
+        description="String instance resolving to cache — should seed overlay with the resolved instance",
+    )
+    def run_tool(inputs: _AutoPersistInput, config: _PlainConfig, instance: Any = None) -> _AutoPersistOutput:
+        overlay = _auto_persist_overlay.get() or {}
+        observed["overlay_instance"] = overlay.get("pyrosetta")
+        return _AutoPersistOutput(result=inputs.input_data)
+
+    pyrosetta_source = (
+        Path(__file__).resolve().parents[2]
+        / "proto_tools"
+        / "tools"
+        / "structure_scoring"
+        / "pyrosetta"
+        / "fake_tool_for_test.py"
+    )
+    spec = _clean_registry.get("auto-persist-str-cached-test")
+    spec.source_file = pyrosetta_source
+    _override_wrapper_source_file(run_tool, pyrosetta_source)
+
+    result = run_tool(_AutoPersistInput(input_data="ping"), _PlainConfig(), instance="cache_key_abc")
+
+    assert result.result == "ping"
+    # The resolved cached instance should have been seeded into the overlay under the toolkit key.
+    assert observed["overlay_instance"] is cached
