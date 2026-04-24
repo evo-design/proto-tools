@@ -137,7 +137,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         num_diffn_samples (int): Number of independent structure samples to generate
             per complex via the diffusion process. Only the best sample (by confidence)
             is returned. Higher values explore more conformational space but increase
-            computation time. Must be at least 1. Default: 1.
+            computation time. Must be at least 1. Default: 5.
 
         num_trunk_samples (int): Number of independent trunk forward passes per
             diffusion sample. Increases diversity in structure generation. Must be
@@ -190,9 +190,9 @@ class Chai1Config(MSAStructurePredictionConfig):
     )
     num_diffn_samples: int = ConfigField(
         title="Number of Diffusion Samples",
-        default=1,
+        default=5,
         ge=1,
-        description="Number of independent structure samples to generate (Only best is returned for each complex)",
+        description="Number of independent structure samples to generate (only best is returned)",
         advanced=True,
     )
     num_trunk_samples: int = ConfigField(

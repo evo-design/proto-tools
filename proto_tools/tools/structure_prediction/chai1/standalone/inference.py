@@ -27,7 +27,7 @@ class Chai1Model:
         msa_directory: Path | None = None,
         num_trunk_recycles: int = 3,
         num_diffn_timesteps: int = 200,
-        num_diffn_samples: int = 1,
+        num_diffn_samples: int = 5,
         num_trunk_samples: int = 1,
         seed: int | None = None,
         device: str = "cuda",
