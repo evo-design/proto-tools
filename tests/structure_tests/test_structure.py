@@ -789,6 +789,24 @@ def test_interface_contact_residues_missing_target_is_empty(pdl1_complex):
     assert pdl1_complex.interface_contact_residues(binder_chain="B", target_chains=["Z"], cutoff=4.0) == {}
 
 
+def test_interface_contact_residues_include_hydrogens_toggle():
+    """Heavy atoms 5 Å apart (no heavy-only contact) but a binder H is within 4 Å of the target CA.
+
+    ``include_hydrogens=False`` (default) → heavy-only check, no contact.
+    ``include_hydrogens=True`` → H-inclusive, matches Germinal's ``hotspot_residues`` which
+    uses ``Selection.unfold_entities("A")`` on PyRosetta-relaxed PDBs that carry hydrogens.
+    """
+    struct = _synthetic_pdb(
+        "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C",
+        "ATOM      2  H   ALA A   1       1.500   0.000   0.000  1.00 50.00           H",
+        "ATOM      3  CA  ALA B   1       5.000   0.000   0.000  1.00 50.00           C",
+    )
+    assert struct.interface_contact_residues(binder_chain="A", target_chains=["B"], cutoff=4.0) == {}
+    assert struct.interface_contact_residues(
+        binder_chain="A", target_chains=["B"], cutoff=4.0, include_hydrogens=True
+    ) == {1: "A"}
+
+
 @pytest.mark.parametrize("target_chains", [["B", "C"], ("B", "C"), "B,C"])
 def test_interface_contact_residues_pools_multi_chain_target(target_chains):
     """``target_chains`` unions atoms across explicit and comma-separated chain inputs."""

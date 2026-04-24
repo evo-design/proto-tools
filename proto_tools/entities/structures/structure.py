@@ -859,22 +859,26 @@ class Structure(BaseModel):
         binder_chain: str,
         target_chains: str | list[str] | tuple[str, ...],
         cutoff: float = 4.0,
+        include_hydrogens: bool = False,
     ) -> dict[int, str]:
-        """Binder residues with any heavy atom within ``cutoff`` Å of a target heavy atom.
+        """Binder residues with any atom within ``cutoff`` Å of a target atom.
 
-        Hydrogens are excluded on both sides. ``target_chains`` may be a
-        comma-separated string or an explicit sequence of chain IDs.
+        ``target_chains`` may be a comma-separated string or an explicit sequence of
+        chain IDs.
 
         Args:
             binder_chain (str): Chain ID of the binder.
             target_chains (str | list[str] | tuple[str, ...]): Chain ID(s) of the target.
-            cutoff (float): Heavy-atom distance cutoff in Å. Defaults to 4.0 (Germinal
+            cutoff (float): Atom distance cutoff in Å. Defaults to 4.0 (Germinal
                 ``hotspot_residues`` default; the VHH pipeline uses 3.0 via
                 ``vhh.yaml:122 atom_distance_cutoff``).
+            include_hydrogens (bool): Include hydrogens in the distance check. Defaults to
+                ``False`` (heavy-only). Set ``True`` for Germinal parity on PyRosetta-relaxed
+                inputs, which carry hydrogens that upstream ``hotspot_residues`` counts.
 
         Returns:
             dict[int, str]: Map from 1-indexed binder residue number to single-letter AA
-                code for every residue with at least one heavy atom within ``cutoff``.
+                code for every residue with at least one atom within ``cutoff``.
 
         Raises:
             ValueError: If any chain ID is more than 1 character, or if ``binder_chain``
@@ -890,12 +894,9 @@ class Structure(BaseModel):
         if binder_chain in targets:
             raise ValueError(f"binder_chain {binder_chain!r} must not also appear in target_chains.")
         atom_array = pdb_file_to_atomarray(StringIO(self.structure_pdb))
-        heavy_mask = atom_array.element != "H"
-
-        binder_mask = heavy_mask & (atom_array.chain_id == binder_chain)
-        target_mask = heavy_mask & np.isin(atom_array.chain_id, targets)
-        binder_atoms = atom_array[binder_mask]
-        target_atoms = atom_array[target_mask]
+        atoms = atom_array if include_hydrogens else atom_array[atom_array.element != "H"]
+        binder_atoms = atoms[atoms.chain_id == binder_chain]
+        target_atoms = atoms[np.isin(atoms.chain_id, targets)]
         if len(binder_atoms) == 0 or len(target_atoms) == 0:
             return {}
 
