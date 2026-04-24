@@ -286,11 +286,11 @@ class AbLangModel:
                 score_val = float(s)
                 m: dict[str, float] = {scoring_mode: score_val}
                 if scoring_mode == "pseudo_log_likelihood":
-                    seq_len = len(batch[j])
-                    avg_ll = score_val / seq_len if seq_len > 0 else 0.0
-                    m["log_likelihood"] = score_val
-                    m["avg_log_likelihood"] = avg_ll
-                    m["perplexity"] = math.exp(-avg_ll)
+                    # Library returns mean log-prob (reduction="mean" in ablang2's scores.py).
+                    seq_len = len(batch[j].replace("|", ""))
+                    m["log_likelihood"] = score_val * seq_len  # sum
+                    m["avg_log_likelihood"] = score_val  # mean (as returned)
+                    m["perplexity"] = math.exp(-score_val)
                 all_metrics.append(m)
 
         return {"metrics": all_metrics}
