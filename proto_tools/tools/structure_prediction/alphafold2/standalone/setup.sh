@@ -16,7 +16,7 @@ uv pip install -r requirements.txt
 echo "Installing Germinal ColabDesign fork (gradient backend with alpha/bias and framework contacts)..."
 GERMINAL_DIR="${TOOL_VENV_PATH:-$VIRTUAL_ENV}/data/colabdesign_germinal"
 mkdir -p "$GERMINAL_DIR"
-uv pip install --no-deps --target "$GERMINAL_DIR" "colabdesign @ git+https://github.com/SantiagoMille/germinal.git#subdirectory=colabdesign"
+uv pip install --no-deps --target "$GERMINAL_DIR" "colabdesign @ git+https://github.com/SantiagoMille/germinal.git@1e1c1a5#subdirectory=colabdesign"
 uv pip install cvxopt
 
 # JAX 0.5+ compat patches for the Germinal fork:
@@ -31,7 +31,7 @@ cat > "$GERMINAL_DIR/colabdesign/iglm/model.py" << 'IGLM_STUB'
 class CustomIgLM:
     def __init__(self, **kw):
         self.is_scfv = kw.get("is_scfv", False)
-    def get_ablm_grad(self, seq):
+    def get_ablm_grad(self, seq, method=None):
         import numpy as np
         return np.zeros_like(seq), 0.0
 IGLM_STUB
@@ -45,7 +45,7 @@ class CustomAbLang:
         self.vh_len = kwargs.get("vh_len")
         self.vl_len = kwargs.get("vl_len")
         self.vh_first = kwargs.get("vh_first", True)
-    def get_ablm_grad(self, seq):
+    def get_ablm_grad(self, seq, method=None, pll_chunk_size=None):
         return np.zeros_like(seq), 0.0
 ABLANG_STUB
 
