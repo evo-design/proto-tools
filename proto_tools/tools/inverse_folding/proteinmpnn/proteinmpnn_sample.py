@@ -44,16 +44,16 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[str] | None): List of amino acids not allowed in the sequence.
         seed (int): Random seed to use for sampling.
-        model_choice (Literal['proteinmpnn', 'abmpnn']): Model weights to use. ``"proteinmpnn"`` for the general-purpose
-            ProteinMPNN model, ``"abmpnn"`` for antibody-optimized weights.
+        model_choice (Literal['proteinmpnn', 'abmpnn', 'soluble']): Model weights to use. ``"proteinmpnn"`` for the
+            general-purpose model, ``"abmpnn"`` for antibody-optimized, ``"soluble"`` for soluble-protein-trained weights.
     """
 
-    model_choice: Literal["proteinmpnn", "abmpnn"] = ConfigField(
+    model_choice: Literal["proteinmpnn", "abmpnn", "soluble"] = ConfigField(
         title="Model Choice",
         default="proteinmpnn",
-        description="Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)",
+        description="Model weights: 'proteinmpnn' (general), 'abmpnn' (antibody), or 'soluble' (soluble proteins)",
         reload_on_change=True,
-        examples=["proteinmpnn", "abmpnn"],
+        examples=["proteinmpnn", "abmpnn", "soluble"],
     )
 
 
