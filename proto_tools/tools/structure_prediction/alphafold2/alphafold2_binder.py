@@ -123,10 +123,10 @@ class AlphaFold2BinderConfig(BaseConfig):
         loss_weights (dict[str, float]): Binder-objective weights. Base keys:
             plddt, i_plddt, pae, i_pae, con, i_con, exp_res, rmsd, dgram_cce,
             fape. Germinal extension keys: rg, i_ptm, NC, helix, beta_strand.
-        intra_contact_num (int): Intra-chain contacts per residue. Germinal only.
-        intra_contact_cutoff (float): Intra-chain distance cutoff (Å). Germinal only.
-        inter_contact_num (int): Interface contacts per residue. Germinal only.
-        inter_contact_cutoff (float): Interface distance cutoff (Å). Germinal only.
+        intra_contact_num (int): Intra-chain contacts per residue.
+        intra_contact_cutoff (float): Intra-chain distance cutoff (Å).
+        inter_contact_num (int): Interface contacts per residue.
+        inter_contact_cutoff (float): Interface distance cutoff (Å).
         framework_contact_offset (float): Framework contact penalty offset in the
             Germinal inter-chain contact loss. Germinal backend only.
         compute_gradient (bool): Run backward pass and return gradient; ``False``
@@ -224,30 +224,31 @@ class AlphaFold2BinderConfig(BaseConfig):
         description="Binder-objective weights passed to ColabDesign's set_weights().",
         advanced=True,
     )
+    # Contact loss defaults match ColabDesign (mk_af_model.__init__). Override per-pipeline.
     intra_contact_num: int = ConfigField(
         title="Intra Contact Number",
-        default=2,
+        default=2,  # ColabDesign default
         ge=1,
         description="Number of intra-molecular contacts per residue for the contact loss.",
         advanced=True,
     )
     intra_contact_cutoff: float = ConfigField(
         title="Intra Contact Cutoff",
-        default=14.0,
+        default=14.0,  # ColabDesign default
         gt=0.0,
         description="Distance cutoff in angstroms for intra-molecular contacts.",
         advanced=True,
     )
     inter_contact_num: int = ConfigField(
         title="Inter Contact Number",
-        default=10,
+        default=1,  # ColabDesign default (Germinal uses 10, BindCraft uses 2)
         ge=1,
         description="Number of inter-molecular (interface) contacts per residue.",
         advanced=True,
     )
     inter_contact_cutoff: float = ConfigField(
         title="Inter Contact Cutoff",
-        default=20.0,
+        default=21.6875,  # ColabDesign default (Germinal/BindCraft use 20.0)
         gt=0.0,
         description="Distance cutoff in angstroms for inter-molecular contacts.",
         advanced=True,
