@@ -22,10 +22,11 @@ ALPHAFOLD_VOCAB: list[str] = list(
     "ARNDCQEGHILKMFPSTWYVX"
 )  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
 
-# Maps model_choice to ColabDesign's model_name parameter
-_MODEL_NAME_MAP = {
-    "proteinmpnn": "v_48_020",
-    "abmpnn": "abmpnn",
+# Maps model_choice to ColabDesign's (model_name, weights) parameters
+_MODEL_CONFIG: dict[str, tuple[str, str]] = {
+    "proteinmpnn": ("v_48_020", "original"),
+    "abmpnn": ("abmpnn", "original"),
+    "soluble": ("v_48_020", "soluble"),
 }
 
 
@@ -65,7 +66,7 @@ class ProteinMPNNModel:
             excluded_amino_acids: List of amino acids to exclude
             seed: Random seed
             device: Device to run on ('cuda' or 'cpu')
-            model_choice: Model weights ('proteinmpnn' or 'abmpnn')
+            model_choice: Model weights ('proteinmpnn', 'abmpnn', or 'soluble')
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
 
@@ -134,7 +135,7 @@ class ProteinMPNNModel:
             fixed_positions: Dict mapping chain IDs to fixed positions
             seed: Random seed (required — jax.random.PRNGKey rejects None)
             device: Device to run on
-            model_choice: Model weights ('proteinmpnn' or 'abmpnn')
+            model_choice: Model weights ('proteinmpnn', 'abmpnn', or 'soluble')
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
 
@@ -192,20 +193,20 @@ class ProteinMPNNModel:
 
         Args:
             device: Device to load the model on.
-            model_choice: Model weights ('proteinmpnn' or 'abmpnn').
+            model_choice: Model weights ('proteinmpnn', 'abmpnn', or 'soluble').
             verbose: Whether to print status messages.
         """
         self.verbose = verbose
-        model_name = _MODEL_NAME_MAP.get(model_choice, "v_48_020")
+        model_name, weights = _MODEL_CONFIG.get(model_choice, ("v_48_020", "original"))
 
         if self.verbose:
-            logger.info(f"Loading {model_choice} (model_name={model_name}) on {device}")
+            logger.info(f"Loading {model_choice} (model_name={model_name}, weights={weights}) on {device}")
 
         # Lazy import ProteinMPNN from ColabDesign
         from colabdesign.mpnn import mk_mpnn_model
 
         # Load the Flax module (params land on CPU by default)
-        self.model = mk_mpnn_model(model_name=model_name)
+        self.model = mk_mpnn_model(model_name=model_name, weights=weights)
         self.params = self.model._model.params
         self.device = "cpu"
         self._model_choice = model_choice

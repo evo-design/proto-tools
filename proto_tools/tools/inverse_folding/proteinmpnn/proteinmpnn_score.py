@@ -66,9 +66,9 @@ class ProteinMPNNScoringConfig(BaseConfig):
             When ``True``, returns logits for each sequence. When ``False``, only
             returns metrics (saves memory and serialization time). Default: ``False``.
 
-        model_choice (Literal['proteinmpnn', 'abmpnn']): Model weights to use.
-            ``"proteinmpnn"`` for the general-purpose model, ``"abmpnn"`` for
-            antibody-optimized weights. Default: ``"proteinmpnn"``.
+        model_choice (Literal['proteinmpnn', 'abmpnn', 'soluble']): Model weights to use.
+            ``"proteinmpnn"`` for general-purpose, ``"abmpnn"`` for antibody-optimized,
+            ``"soluble"`` for soluble-protein-trained weights. Default: ``"proteinmpnn"``.
 
     Note:
         - ProteinMPNN uses AlphaFold alphabet ordering (21 tokens including X)
@@ -99,12 +99,12 @@ class ProteinMPNNScoringConfig(BaseConfig):
         advanced=True,
     )
 
-    model_choice: Literal["proteinmpnn", "abmpnn"] = ConfigField(
+    model_choice: Literal["proteinmpnn", "abmpnn", "soluble"] = ConfigField(
         title="Model Choice",
         default="proteinmpnn",
-        description="Model weights: 'proteinmpnn' (general) or 'abmpnn' (antibody-optimized)",
+        description="Model weights: 'proteinmpnn' (general), 'abmpnn' (antibody), or 'soluble' (soluble proteins)",
         reload_on_change=True,
-        examples=["proteinmpnn", "abmpnn"],
+        examples=["proteinmpnn", "abmpnn", "soluble"],
     )
 
 
