@@ -106,7 +106,7 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["temperature"] is None
     assert captured["payload"]["use_ste"] is False
     assert captured["payload"]["compute_gradient"] is True  # default
-    assert captured["payload"]["chunk_size"] is None  # default auto
+    assert captured["payload"]["batch_size"] is None  # default auto
 
     # Heavy only, with temperature
     run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
@@ -574,19 +574,19 @@ def test_ablang_gradient_descent_reduces_loss():
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("chunk_size", [1, 3, None], ids=["chunk1", "chunk3", "auto"])
-def test_ablang_gradient_chunk_size_equivalence(chunk_size: int | None) -> None:
+@pytest.mark.parametrize("batch_size", [1, 3, None], ids=["chunk1", "chunk3", "auto"])
+def test_ablang_gradient_batch_size_equivalence(batch_size: int | None) -> None:
     """Different chunk sizes must produce identical loss and gradient."""
     logits = [[0.1 * (i + j) for j in range(20)] for i in range(5)]
     ab = AntibodyLogits(heavy_chain=logits)
 
     ref = run_ablang_gradient(
         AbLangGradientInput(antibody=ab, temperature=0.6),
-        AbLangGradientConfig(seed=42, chunk_size=None),
+        AbLangGradientConfig(seed=42, batch_size=None),
     )
     result = run_ablang_gradient(
         AbLangGradientInput(antibody=ab, temperature=0.6),
-        AbLangGradientConfig(seed=42, chunk_size=chunk_size),
+        AbLangGradientConfig(seed=42, batch_size=batch_size),
     )
 
     assert result.loss == pytest.approx(ref.loss, rel=1e-5)
