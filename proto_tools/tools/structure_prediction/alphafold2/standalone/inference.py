@@ -565,8 +565,8 @@ class AlphaFold2Model:
         loss_weights: dict[str, float] | None = None,
         intra_contact_num: int = 2,
         intra_contact_cutoff: float = 14.0,
-        inter_contact_num: int = 10,
-        inter_contact_cutoff: float = 20.0,
+        inter_contact_num: int = 1,
+        inter_contact_cutoff: float = 21.6875,
         framework_contact_offset: float = 1.0,
         seed: int | None = None,
         backend: str = "base",
@@ -635,19 +635,13 @@ class AlphaFold2Model:
 
         af_model.prep_inputs(**prep_kwargs)
 
+        # Contact num/cutoff: respect user config on all backends
+        af_model.opt["con"].update({"num": intra_contact_num, "cutoff": intra_contact_cutoff})
+        af_model.opt["i_con"].update({"num": inter_contact_num, "cutoff": inter_contact_cutoff})
+
         if backend == "germinal":
-            # Contact parameter configuration (germinal/design.py:191-208).
-            af_model.opt["con"].update(
-                {"num": intra_contact_num, "cutoff": intra_contact_cutoff, "binary": False, "seqsep": 9}
-            )
             af_model.opt["i_con"].update(
-                {
-                    "num": inter_contact_num,
-                    "cutoff": inter_contact_cutoff,
-                    "binary": False,
-                    "framework_contact_loss": True,
-                    "framework_contact_offset": framework_contact_offset,
-                }
+                {"framework_contact_loss": True, "framework_contact_offset": framework_contact_offset}
             )
 
         _configure_extension_losses(af_model, loss_weights or {}, backend=backend)
@@ -726,8 +720,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             loss_weights=input_dict.get("loss_weights"),
             intra_contact_num=input_dict.get("intra_contact_num", 2),
             intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
-            inter_contact_num=input_dict.get("inter_contact_num", 10),
-            inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 20.0),
+            inter_contact_num=input_dict.get("inter_contact_num", 1),
+            inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
             framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
             seed=input_dict["seed"],
             backend=input_dict.get("backend", "base"),
