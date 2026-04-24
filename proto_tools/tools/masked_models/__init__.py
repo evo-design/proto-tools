@@ -52,7 +52,11 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCEmbeddingsOutput,
     run_esmc_embeddings,
 )
-from proto_tools.tools.masked_models.shared_data_models import MaskedModelScoringMetrics, SequenceEmbedding
+from proto_tools.tools.masked_models.shared_data_models import (
+    MaskedModelScoringMetrics,
+    Projection2D,
+    SequenceEmbedding,
+)
 from proto_tools.transforms.masking import MaskingMethod, MaskingStrategy
 
 __all__ = [
@@ -61,6 +65,7 @@ __all__ = [
     "MaskingMethod",
     # Shared data models
     "MaskedModelScoringMetrics",
+    "Projection2D",
     "SequenceEmbedding",
     # AbLang - Embeddings
     "AbLangEmbeddingsConfig",

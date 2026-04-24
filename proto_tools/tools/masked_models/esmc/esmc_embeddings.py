@@ -6,6 +6,7 @@ ESM C (Cambrian) embeddings tool.
 import logging
 from typing import Any, Literal
 
+from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelConfig,
     MaskedModelInput,
@@ -126,6 +127,7 @@ def example_input() -> Any:
     iterable_input_field="sequences",
     iterable_output_field="results",
     cacheable=True,
+    post_process_iterable=attach_projections,
 )
 def run_esmc_embeddings(
     inputs: ESMCEmbeddingsInput, config: ESMCEmbeddingsConfig, instance: Any = None

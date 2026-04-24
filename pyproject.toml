@@ -23,6 +23,7 @@ dependencies = [
     "numpy>=1.20",
     "pandas>=1.5",
     "pyarrow",  # Required for pandas parquet support (chai1 MSA conversion)
+    "umap-learn>=0.5.3",  # 2D projection of embedding outputs (CPU-side, lazy-imported)
 
     # Bioinformatics
     "biopython",
@@ -195,6 +196,7 @@ module = [
     "cuequivariance_ops_torch_cu12.*",
     "pyrosetta.*",
     "scipy.*",
+    "umap.*",
     # Local sibling imports in standalone dirs (resolved at runtime via sys.path)
     "inference.*",
     "model.*",

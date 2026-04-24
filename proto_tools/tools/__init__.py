@@ -236,6 +236,7 @@ from proto_tools.tools.masked_models import (
     ESMCEmbeddingsOutput,
     MaskedModelScoringMetrics,
     MaskingStrategy,
+    Projection2D,
     SequenceEmbedding,
     run_ablang_embeddings,
     run_ablang_gradient,
@@ -849,6 +850,7 @@ __all__ = [
     # Masked models - shared
     "MaskedModelScoringMetrics",
     "MaskingStrategy",
+    "Projection2D",
     "SequenceEmbedding",
     # Masked models - AbLang Embeddings
     "AbLangEmbeddingsConfig",

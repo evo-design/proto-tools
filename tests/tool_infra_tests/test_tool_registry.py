@@ -6,7 +6,7 @@ Tests for ToolRegistry.
 import time
 
 import pytest
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import (
     MAX_RETRIES,
@@ -1419,3 +1419,75 @@ def test_get_example_notebook_path_returns_none_when_absent(clean_registry):
         return MockToolOutput(result="ok")
 
     assert clean_registry.get_example_notebook_path("no-notebook-tool") is None
+
+
+# ── post_process_iterable hook ──────────────────────────────────────────────
+
+
+class MockIterableItem(BaseModel):
+    name: str = Field(description="Cache key payload")
+    stamp: int | None = Field(default=None, description="Batch size seen by the post-process hook")
+
+
+class MockBatchAwareOutput(MockToolOutputBase):
+    results: list[MockIterableItem] = Field(description="Stamped items")
+
+
+class MockBatchAwareInput(BaseToolInput):
+    items: list[MockIterableItem] = Field(description="Items to process")
+
+
+def _register_batch_aware_tool(registry, key, run_fn, hook):
+    registry.register(
+        key=key,
+        label=key,
+        category="test",
+        input_class=MockBatchAwareInput,
+        config_class=MockToolConfig,
+        output_class=MockBatchAwareOutput,
+        description=key,
+        iterable_input_field="items",
+        iterable_output_field="results",
+        cacheable=True,
+        post_process_iterable=hook,
+    )(run_fn)
+    return registry.get(key)
+
+
+def _stamp_with_batch_size(items: list) -> None:
+    n = len(items)
+    for item in items:
+        item.stamp = n
+
+
+def test_post_process_iterable_runs_on_full_stitched_batch(clean_registry, _setup_cache):
+    # Hook must see the full batch on every dispatch path: cache-stitch (inner
+    # func sees only uncached items) AND full-cache-hit (inner func skipped).
+    # Otherwise cached items keep stale stamps from a prior call's batch size.
+    dispatched_sizes = []
+
+    def run_tool(inputs, config=None, instance=None):
+        dispatched_sizes.append(len(inputs.items))
+        return MockBatchAwareOutput(results=[MockIterableItem(name=item.name) for item in inputs.items])
+
+    def call(spec, names):
+        return spec.function(MockBatchAwareInput(items=[MockIterableItem(name=n) for n in names]), config)
+
+    spec = _register_batch_aware_tool(clean_registry, "post-process", run_tool, _stamp_with_batch_size)
+    config = MockToolConfig(param1="v")
+
+    assert all(r.stamp == 5 for r in call(spec, "abcde").results)
+    stitched = call(spec, "abcdefgh")
+    assert len(stitched.results) == 8 and all(r.stamp == 8 for r in stitched.results)
+    assert all(r.stamp == 5 for r in call(spec, "abcde").results)  # full cache hit
+
+    assert dispatched_sizes == [5, 3]
+
+
+def test_post_process_iterable_optional(clean_registry, _setup_cache):
+    def run_tool(inputs, config=None, instance=None):
+        return MockIterableOutput(results=[f"out_{x}" for x in inputs.items])
+
+    spec = _register_cacheable_iterable(clean_registry, "no-post-process", run_tool)
+    result = spec.function(MockIterableInput(items=["a", "b", "c"]), MockToolConfig(param1="v"))
+    assert result.results == ["out_a", "out_b", "out_c"]

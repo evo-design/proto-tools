@@ -91,6 +91,11 @@ class ToolSpec(BaseModel):
             of results (for ToolPool fan-out).
         cacheable (bool): Whether this tool's results should be cached in the
             program-scoped cache.
+        post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
+            hook invoked on the stitched ``iterable_output_field`` list after cache
+            reconciliation and dedup expansion. Use for batch-level post-processing
+            (e.g. UMAP projection of an embedding batch) that must see the full
+            request, not the per-item cached subset visible inside the tool function.
     """
 
     # Public fields - exposed in API
@@ -140,6 +145,16 @@ class ToolSpec(BaseModel):
         default=False,
         exclude=True,
         description="Whether this tool's results should be cached in the program-scoped cache",
+    )
+    post_process_iterable: Callable[[list[Any]], None] | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Optional in-place hook invoked on the stitched ``iterable_output_field`` after "
+            "cache reconciliation and dedup expansion. Use for batch-level post-processing "
+            "(e.g. UMAP projection of an embedding batch) that must see the full request — "
+            "not the per-item cached subset visible inside the tool function."
+        ),
     )
 
     model_config = {
@@ -243,6 +258,7 @@ class ToolRegistry:
         iterable_input_field: str | None = None,
         iterable_output_field: str | None = None,
         cacheable: bool = False,
+        post_process_iterable: Callable[[list[Any]], None] | None = None,
     ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
 
@@ -275,6 +291,13 @@ class ToolRegistry:
                 results for ToolPool fan-out and per-item caching.
             cacheable (bool): Whether this tool's results should be cached in the
                 program-scoped cache.
+            post_process_iterable (Callable[[list[Any]], None] | None): Optional
+                in-place hook invoked on the stitched ``iterable_output_field``
+                list after cache reconciliation. Required when a derived field
+                (e.g. UMAP projection) is meaningful only across the full request
+                — running it inside the tool function would only see the uncached
+                subset and produce incoherent results once stitched against
+                cached items.
 
         Returns:
             Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]: Decorator
@@ -406,6 +429,8 @@ class ToolRegistry:
                         # Expand dedup if needed
                         if deduped and len(deduped.unique_items) < len(original_items):
                             cached_list = [cached_list[uid] for _, uid in deduped.index_map]
+                        if spec.post_process_iterable is not None:
+                            spec.post_process_iterable(cached_list)
                         cache_kwargs: dict[str, Any] = {
                             "tool_id": key,
                             "execution_time": 0.0,
@@ -631,6 +656,7 @@ class ToolRegistry:
                 iterable_input_field=iterable_input_field,
                 iterable_output_field=iterable_output_field,
                 cacheable=cacheable,
+                post_process_iterable=post_process_iterable,
             )
             return wrapper
 
@@ -1000,6 +1026,11 @@ def _post_dispatch_cache_and_expand(
             unique_results = getattr(result, output_field)
             expanded = [unique_results[uid] for _, uid in deduped.index_map]
             setattr(result, output_field, expanded)
+
+        # Run after store + stitch + dedup so the hook always sees the full
+        # request batch, never the per-item cached subset.
+        if spec.post_process_iterable is not None:
+            spec.post_process_iterable(getattr(result, output_field))
 
     elif is_cacheable and whole_cache_key is not None:
         # Whole-output cache store
