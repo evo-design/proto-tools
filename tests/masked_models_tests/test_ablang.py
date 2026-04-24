@@ -325,6 +325,31 @@ def test_ablang_embeddings_auto_routing():
     assert len(paired_result.results[0].mean_embedding) == 480
 
 
+# ── Cross-tool consistency ──────────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_ablang_score_and_gradient_agree_on_pll():
+    """ablang-score (string input) and ablang-gradient (one-hot logits, backprop=False) return the same mean NLL."""
+    sequence = "EVQLVESGGGLVQPGGSLRL"
+    aa_order = list("ACDEFGHIKLMNPQRSTVWY")
+
+    score_result = run_ablang_score(
+        AbLangScoringInput(antibodies=[Antibody(heavy_chain=sequence)]),
+        AbLangScoringConfig(scoring_mode="pseudo_log_likelihood"),
+    )
+    score_pll = score_result.scores[0]["avg_log_likelihood"]
+
+    one_hot = [[10.0 if aa_order[j] == aa else 0.0 for j in range(20)] for aa in sequence]
+    grad_result = run_ablang_gradient(
+        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
+        AbLangGradientConfig(use_ste=True, compute_gradient=False),
+    )
+    grad_pll = grad_result.metrics["log_likelihood"]
+
+    assert score_pll == pytest.approx(grad_pll, rel=1e-3)
+
+
 # ── Scoring tests ────────────────────────────────────────────────────────────
 
 
