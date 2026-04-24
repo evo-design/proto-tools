@@ -106,6 +106,7 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["temperature"] is None
     assert captured["payload"]["use_ste"] is False
     assert captured["payload"]["compute_gradient"] is True  # default
+    assert captured["payload"]["chunk_size"] is None  # default auto
 
     # Heavy only, with temperature
     run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
@@ -471,7 +472,7 @@ def test_ablang_gradient_single_chain():
     assert result.vocab == _CANONICAL_VOCAB
     assert result.metrics["sequence_length"] == seq_len
     assert result.metrics["model_choice"] == "ablang1-heavy"
-    assert result.metrics["objective"] == "shifted_cross_entropy"
+    assert result.metrics["objective"] == "masked_pll"
     assert result.metrics["log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
 
 
@@ -497,12 +498,12 @@ def test_ablang_gradient_paired_chains():
     assert result.vocab == _CANONICAL_VOCAB
     assert result.metrics["sequence_length"] == heavy_len + light_len
     assert result.metrics["model_choice"] == "ablang2-paired"
-    assert result.metrics["objective"] == "shifted_cross_entropy"
+    assert result.metrics["objective"] == "masked_pll"
 
 
 @pytest.mark.uses_gpu
 def test_ablang_gradient_forward_mode_matches_backward_loss():
-    """compute_gradient=False returns gradient=None but matches backward-mode loss on the real model."""
+    """Forward and backward use the same masked PLL objective — losses must match."""
     seq_len = 10
     logits = [[0.0] * 20] * seq_len
     ab = AntibodyLogits(heavy_chain=logits)
@@ -545,6 +546,28 @@ def test_ablang_gradient_descent_reduces_loss():
     )
 
     assert result_1.loss < result_0.loss
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.parametrize("chunk_size", [1, 3, None], ids=["chunk1", "chunk3", "auto"])
+def test_ablang_gradient_chunk_size_equivalence(chunk_size: int | None) -> None:
+    """Different chunk sizes must produce identical loss and gradient."""
+    logits = [[0.1 * (i + j) for j in range(20)] for i in range(5)]
+    ab = AntibodyLogits(heavy_chain=logits)
+
+    ref = run_ablang_gradient(
+        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientConfig(seed=42, chunk_size=None),
+    )
+    result = run_ablang_gradient(
+        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientConfig(seed=42, chunk_size=chunk_size),
+    )
+
+    assert result.loss == pytest.approx(ref.loss, rel=1e-5)
+    for row_r, row_ref in zip(result.gradient, ref.gradient, strict=True):
+        for v_r, v_ref in zip(row_r, row_ref, strict=True):
+            assert v_r == pytest.approx(v_ref, rel=1e-5)
 
 
 # ── Batched tests ────────────────────────────────────────────────────────────

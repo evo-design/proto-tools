@@ -1,13 +1,4 @@
-"""Local AbLang inference implementation.
-
-The ablang2 library (v0.2.1) loads ablang1 models correctly via fetch_ablang1(),
-but the ablang1 tokenizer is missing attributes and kwargs expected by the
-unified API (encodings.py, scores.py, restoration.py all pass w_extra_tkns
-and use mask_token/all_special_tokens). We monkey-patch the tokenizer after
-loading so the library's own methods work for all model variants.
-"""
-
-from __future__ import annotations
+"""Local AbLang inference: embeddings, scoring, sampling, and masked PLL gradient."""
 
 import json
 import logging
@@ -373,30 +364,25 @@ class AbLangModel:
         chain_break_position: int | None = None,
         seed: int | None = None,
         backprop: bool = True,
+        chunk_size: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Compute shifted cross-entropy loss (and optionally its gradient) against a sequence distribution.
+        """Chunked masked PLL gradient. Masks each AA position, predicts from bidirectional context.
 
         Args:
-            logits_list (list[list[float]]): Distribution or logits, shape (L, 20).
-            temperature (float | None): When set, applies ``softmax(input / temperature)``.
+            logits_list (list[list[float]]): Input logits, shape (L, 20).
+            temperature (float | None): Softmax temperature; ``None`` uses logits as-is.
             use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
-            chain_break_position (int | None): VH/VL split for Germinal's ``<VH>|<VL>`` paired layout.
-            seed (int | None): Random seed for reproducibility.
-            backprop (bool): If True, run backward pass and return the gradient; if
-                False, skip backward and return ``gradient=None`` (forward-only scoring).
+            chain_break_position (int | None): VH/VL split for ``<VH>|<VL>`` paired layout.
+            seed (int | None): Random seed.
+            backprop (bool): If False, skip backward and return ``gradient=None``.
+            chunk_size (int | None): AA positions per forward pass (default: 8 paired, 32 single).
             device (str): Execution device.
-            verbose (bool): Whether to log progress.
+            verbose (bool): Log progress.
 
         Returns:
             dict[str, Any]: Keys: ``gradient``, ``loss``, ``metrics``, ``vocab``.
-
-        Shape notation:
-            L  = input sequence length
-            V  = AbLang vocab size
-            D  = embedding dimension
-            Vm = model output vocab size
         """
         import torch
         import torch.nn.functional as F
@@ -407,25 +393,24 @@ class AbLangModel:
 
         # Disables autograd graph building through model params in forward-only mode.
         with torch.set_grad_enabled(backprop):
-            # input logits shape (L, 20)
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
-
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist  # (L, 20)
             mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
-            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,) — labels only, no gradient
+            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,)
 
             if use_ste:
                 hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
-                mapped = hard + (mapped - mapped.detach())  # STE: hard forward, soft backward
+                mapped = hard + (mapped - mapped.detach())  # hard forward, soft backward
 
+            # Soft embeddings: (L, V) @ (V, D) → (L, D)
             if self._is_ablang1:
                 embed_layer = self.model.AbRep.AbEmbeddings.AAEmbeddings
-                residue_embeddings = mapped[:, :-2] @ embed_layer.weight  # (L, V-2) @ (V-2, D) -> (L, D)
+                residue_embeddings = mapped[:, :-2] @ embed_layer.weight  # ablang1 vocab has 2 extra tokens
             else:
                 embed_layer = self.model.AbLang.get_aa_embeddings()
-                residue_embeddings = mapped @ embed_layer.weight  # (L, V) @ (V, D) -> (L, D)
+                residue_embeddings = mapped @ embed_layer.weight
 
             assert self._ablang_vocab is not None
             ablang_vocab = self._ablang_vocab
@@ -436,14 +421,15 @@ class AbLangModel:
             def special_embeddings(tokens: list[str]) -> Any:
                 return embed_layer.weight[special_ids(tokens)]
 
+            # Wrap with special tokens: ablang1 → <residues>, ablang2 → <VH>|<VL>
             if self._is_ablang1:
                 if chain_break_position is not None:
                     raise ValueError("AbLang1 gradient layout does not support paired chain_break_position.")
                 input_embeddings = torch.cat(
                     (special_embeddings(["<"]), residue_embeddings, special_embeddings([">"])),
                     dim=0,
-                )  # (L + 2, D)
-                token_ids = torch.cat((special_ids(["<"]), residue_token_ids, special_ids([">"])), dim=0)  # (L + 2,)
+                )  # (L+2, D)
+                token_ids = torch.cat((special_ids(["<"]), residue_token_ids, special_ids([">"])), dim=0)  # (L+2,)
             else:
                 if chain_break_position is None:
                     raise ValueError("AbLang2 paired gradient requires chain_break_position.")
@@ -458,7 +444,7 @@ class AbLangModel:
                         special_embeddings([">"]),
                     ),
                     dim=0,
-                )  # (L + 5, D)
+                )  # (L+5, D)
                 token_ids = torch.cat(
                     (
                         special_ids(["<"]),
@@ -468,46 +454,70 @@ class AbLangModel:
                         special_ids([">"]),
                     ),
                     dim=0,
-                )  # (L + 5,)
+                )  # (L+5,)
 
             input_embeddings = input_embeddings.unsqueeze(0)  # (1, S, D)
             token_ids = token_ids.unsqueeze(0)  # (1, S)
 
-            def _embedding_hook(_module: Any, _input: Any, _output: Any) -> Any:
-                return input_embeddings
+            # AA positions: indices into token_ids[0] that are amino acids (not BOS/EOS/SEP)
+            aa_vocab_ids = torch.tensor([ablang_vocab[aa] for aa in STANDARD_AMINO_ACIDS], device=self.device)
+            aa_positions = torch.isin(token_ids[0], aa_vocab_ids).nonzero().squeeze(1)  # (n_aa,)
 
-            hook_handle = embed_layer.register_forward_hook(_embedding_hook)
-            try:
-                logits_out = self.model.AbLang(token_ids)  # (1, S, Vm)
-            finally:
-                hook_handle.remove()
+            n_aa = aa_positions.shape[0]
+            if chunk_size is None:
+                chunk_size = 8 if not self._is_ablang1 else 32
 
-            shift_logits = logits_out[:, :-1, :]
-            shift_labels = token_ids[:, 1:]
-            position_losses = F.cross_entropy(
-                shift_logits.reshape(-1, shift_logits.size(-1)),
-                shift_labels.reshape(-1),
-                reduction="none",
-            ).reshape(shift_labels.shape)
-            position_losses = position_losses[:, 1:-1]  # strip boundary tokens
-            loss = position_losses.mean()
+            seq_len = input_embeddings.shape[1]
+            mask_emb = embed_layer.weight[ablang_vocab["*"]].detach()  # (D,)
+            pos_idx = torch.arange(seq_len, device=self.device)  # (S,)
 
-        gradient_value: list[list[float]] | None
+            # Chunked PLL: mask each AA position, predict from bidirectional context.
+            # Per-chunk backward frees transformer activations immediately → O(chunk) memory.
+            ie_grad = torch.zeros_like(input_embeddings) if backprop else None
+            total_loss_val = 0.0
+            for start in range(0, n_aa, chunk_size):
+                end = min(start + chunk_size, n_aa)
+                chunk_aa_pos = aa_positions[start:end]  # (C,)
+                chunk_len = end - start
+
+                chunk_masked = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)  # (C, S)
+                ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
+                chunk_input = torch.where(
+                    chunk_masked.unsqueeze(-1),
+                    mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1),
+                    ie_chunk.expand(chunk_len, -1, -1),
+                )  # (C, S, D)
+
+                handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
+                try:
+                    chunk_logits = self.model.AbLang(token_ids.expand(chunk_len, -1))  # (C, S, V)
+                finally:
+                    handle.remove()
+
+                chunk_idx = torch.arange(chunk_len, device=self.device)
+                pred = chunk_logits[chunk_idx, chunk_aa_pos, :]  # (C, V)
+                labels = token_ids[0, aa_positions[start:end]]  # (C,)
+                loss = F.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss.item()
+
+                if backprop:
+                    loss.backward()
+                    ie_grad += ie_chunk.grad
+
+        mean_nll = total_loss_val / n_aa
+        gradient_value: list[list[float]] | None = None
         if backprop:
-            (gradient,) = torch.autograd.grad(loss, seq_dist)  # (L, 20)
-            gradient_value = gradient.detach().cpu().tolist()
-        else:
-            gradient_value = None
+            (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad)
+            gradient_value = x_grad.detach().cpu().tolist()  # (L, 20)
 
-        loss_value = loss.item()
         return {
             "gradient": gradient_value,
-            "loss": loss_value,
+            "loss": mean_nll,
             "metrics": {
-                "log_likelihood": -loss_value,
+                "log_likelihood": -mean_nll,
                 "sequence_length": sequence_length,
                 "model_choice": self.model_choice,
-                "objective": "shifted_cross_entropy",
+                "objective": "masked_pll",
             },
             "vocab": list(STANDARD_AMINO_ACIDS),
         }
@@ -564,6 +574,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),
+            chunk_size=input_dict.get("chunk_size"),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )

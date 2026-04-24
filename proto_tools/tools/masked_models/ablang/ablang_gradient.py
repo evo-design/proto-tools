@@ -1,4 +1,4 @@
-"""AbLang shifted cross-entropy tool (forward log-likelihood or gradient)."""
+"""AbLang masked pseudo-log-likelihood gradient tool."""
 
 import logging
 from typing import Any
@@ -43,12 +43,12 @@ class AbLangGradientInput(BaseToolInput):
 
 
 class AbLangGradientOutput(GradientOutput):
-    """AbLang shifted cross-entropy output; gradient is optional in forward-only mode.
+    """AbLang masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
         gradient (list[list[float]] | None): Gradient w.r.t. input logits, or ``None``
-            when ``compute_gradient=False`` (forward-only log-likelihood scoring).
-        loss (float): Scalar objective value (mean cross-entropy over middle positions).
+            when ``compute_gradient=False`` (forward-only scoring).
+        loss (float): Mean negative log-likelihood over AA positions.
         metrics (dict[str, Any]): ``log_likelihood``, ``sequence_length``, ``model_choice``, ``objective``.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
@@ -61,7 +61,7 @@ class AbLangGradientOutput(GradientOutput):
 
 
 class AbLangGradientConfig(BaseConfig):
-    """Configuration for the AbLang shifted cross-entropy gradient tool.
+    """Configuration for the AbLang masked PLL gradient tool.
 
     Attributes:
         use_ste (bool): When ``True``, uses a Straight-Through Estimator: hard one-hot
@@ -69,6 +69,8 @@ class AbLangGradientConfig(BaseConfig):
             When ``False`` (default), uses soft blended embeddings directly.
         compute_gradient (bool): Run backward pass and return gradient; ``False`` for
             forward-only log-likelihood scoring (e.g. MCMC proposal ranking).
+        chunk_size (int | None): AA positions per forward pass for chunked PLL.
+            ``None`` (default) auto-selects: 8 for paired/scFv, 32 for single-chain.
         device (str): Execution device for the model, for example 'cuda' or 'cpu'.
     """
 
@@ -82,6 +84,14 @@ class AbLangGradientConfig(BaseConfig):
         default=True,
         description="Run backward pass and return gradient; set False for forward-only log-likelihood.",
         advanced=True,
+    )
+    chunk_size: int | None = ConfigField(
+        title="PLL Chunk Size",
+        default=None,
+        gt=0,
+        description="AA positions per forward pass. None for auto (8 paired, 32 single-chain).",
+        advanced=True,
+        include_in_key=False,
     )
     device: str = ConfigField(
         title="Device",
@@ -104,7 +114,7 @@ def example_input() -> AbLangGradientInput:
     input_class=AbLangGradientInput,
     config_class=AbLangGradientConfig,
     output_class=AbLangGradientOutput,
-    description="Compute AbLang shifted cross-entropy gradient for relaxed antibody sequences",
+    description="Compute AbLang masked pseudo-log-likelihood gradient for relaxed antibody sequences",
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
@@ -114,7 +124,7 @@ def run_ablang_gradient(
     config: AbLangGradientConfig,
     instance: Any = None,
 ) -> AbLangGradientOutput:
-    """Compute AbLang gradient with respect to relaxed antibody logits."""
+    """Compute AbLang masked PLL gradient with respect to relaxed antibody logits."""
     ab = inputs.antibody
     model_choice = _resolve_model_choice([ab])
 
@@ -137,6 +147,7 @@ def run_ablang_gradient(
         "temperature": inputs.temperature,
         "use_ste": config.use_ste,
         "compute_gradient": config.compute_gradient,
+        "chunk_size": config.chunk_size,
         "model_choice": model_choice,
         "chain_break_position": chain_break_position,
         "seed": config.seed,
