@@ -69,7 +69,7 @@ class AbLangGradientConfig(BaseConfig):
             When ``False`` (default), uses soft blended embeddings directly.
         compute_gradient (bool): Run backward pass and return gradient; ``False`` for
             forward-only log-likelihood scoring (e.g. MCMC proposal ranking).
-        chunk_size (int | None): AA positions per forward pass for chunked PLL.
+        batch_size (int | None): AA positions per forward pass for batched PLL.
             ``None`` (default) auto-selects: 8 for paired/scFv, 32 for single-chain.
         device (str): Execution device for the model, for example 'cuda' or 'cpu'.
     """
@@ -85,8 +85,8 @@ class AbLangGradientConfig(BaseConfig):
         description="Run backward pass and return gradient; set False for forward-only log-likelihood.",
         advanced=True,
     )
-    chunk_size: int | None = ConfigField(
-        title="PLL Chunk Size",
+    batch_size: int | None = ConfigField(
+        title="PLL Batch Size",
         default=None,
         gt=0,
         description="AA positions per forward pass. None for auto (8 paired, 32 single-chain).",
@@ -147,7 +147,7 @@ def run_ablang_gradient(
         "temperature": inputs.temperature,
         "use_ste": config.use_ste,
         "compute_gradient": config.compute_gradient,
-        "chunk_size": config.chunk_size,
+        "batch_size": config.batch_size,
         "model_choice": model_choice,
         "chain_break_position": chain_break_position,
         "seed": config.seed,

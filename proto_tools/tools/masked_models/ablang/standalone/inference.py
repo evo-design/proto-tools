@@ -364,7 +364,7 @@ class AbLangModel:
         chain_break_position: int | None = None,
         seed: int | None = None,
         backprop: bool = True,
-        chunk_size: int | None = None,
+        batch_size: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
@@ -377,7 +377,7 @@ class AbLangModel:
             chain_break_position (int | None): VH/VL split for ``<VH>|<VL>`` paired layout.
             seed (int | None): Random seed.
             backprop (bool): If False, skip backward and return ``gradient=None``.
-            chunk_size (int | None): AA positions per forward pass (default: 8 paired, 32 single).
+            batch_size (int | None): AA positions per forward pass (default: 8 paired, 32 single).
             device (str): Execution device.
             verbose (bool): Log progress.
 
@@ -464,8 +464,8 @@ class AbLangModel:
             aa_positions = torch.isin(token_ids[0], aa_vocab_ids).nonzero().squeeze(1)  # (n_aa,)
 
             n_aa = aa_positions.shape[0]
-            if chunk_size is None:
-                chunk_size = 8 if not self._is_ablang1 else 32
+            if batch_size is None:
+                batch_size = 8 if not self._is_ablang1 else 32
 
             seq_len = input_embeddings.shape[1]
             mask_emb = embed_layer.weight[ablang_vocab["*"]].detach()  # (D,)
@@ -475,8 +475,8 @@ class AbLangModel:
             # Per-chunk backward frees transformer activations immediately → O(chunk) memory.
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
-            for start in range(0, n_aa, chunk_size):
-                end = min(start + chunk_size, n_aa)
+            for start in range(0, n_aa, batch_size):
+                end = min(start + batch_size, n_aa)
                 chunk_aa_pos = aa_positions[start:end]  # (C,)
                 chunk_len = end - start
 
@@ -574,7 +574,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),
-            chunk_size=input_dict.get("chunk_size"),
+            batch_size=input_dict.get("batch_size"),
             device=input_dict["device"],
             verbose=input_dict["verbose"],
         )
