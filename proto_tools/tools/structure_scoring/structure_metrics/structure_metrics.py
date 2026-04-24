@@ -1,4 +1,4 @@
-"""Structural quality metrics (longest alpha helix length, gyration radius) from PDB files.
+"""Structural quality metrics (helix/sheet/loop %, longest helix, gyration radius) from PDB files.
 
 Used to filter out disordered or artifactual predicted protein structures.
 """
@@ -8,13 +8,13 @@ from typing import Any, ClassVar
 
 from pydantic import Field, field_validator
 
+from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
     InputField,
-    ToolInstance,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -27,14 +27,13 @@ class StructureQualityMetrics(Metrics):
 
     Metrics documented in ``metric_spec``:
         longest_alpha_helix (int): Length of the longest alpha helix (residues).
-            Always present.
         gyration_radius (float): Radius of gyration of the structure (Å).
-            Always present.
+        helix_pct (float): Percentage of residues in alpha helices (0-100).
+        sheet_pct (float): Percentage of residues in beta sheets (0-100).
+        loop_pct (float): Percentage of residues in loops/coil (0-100).
 
     Attributes:
         pdb_path (str): Path to the PDB file that produced these metrics.
-            Declared as a real field (not a metric) so it stays out of
-            metric iteration.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -51,6 +50,27 @@ class StructureQualityMetrics(Metrics):
             "min": 0.0,
             "max": None,
             "unit": "Å",
+        },
+        "helix_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
+        },
+        "sheet_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
+        },
+        "loop_pct": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": 100.0,
+            "unit": "%",
         },
     }
 
@@ -137,7 +157,7 @@ def example_input() -> Any:
     input_class=StructureMetricsInput,
     config_class=StructureMetricsConfig,
     output_class=StructureMetricsOutput,
-    description="Compute structural quality metrics (longest alpha helix, gyration radius) from PDB files",
+    description="Compute structural quality metrics (SS percentages, longest helix, gyration radius) from PDB files",
     example_input=example_input,
     iterable_input_field="pdb_paths",
     iterable_output_field="metrics",
@@ -145,44 +165,37 @@ def example_input() -> Any:
 )
 def run_structure_metrics(
     inputs: StructureMetricsInput,
-    config: StructureMetricsConfig,
-    instance: Any = None,
+    config: StructureMetricsConfig,  # noqa: ARG001
+    instance: Any = None,  # noqa: ARG001
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB files.
 
-    Uses biotite to annotate secondary structure elements (SSE) and compute
-    the radius of gyration for each input PDB structure. These metrics are
-    used to filter out structures with unusually long alpha helices (artifact)
-    or high gyration radius (disordered).
+    Computes secondary structure percentages, longest alpha helix, and radius of
+    gyration for each input structure. Used to filter out disordered or artifactual
+    predicted structures.
 
     Args:
-        inputs (StructureMetricsInput): Validated input containing PDB file paths.
-        config (StructureMetricsConfig): Configuration (no parameters needed).
-        instance (Any): Optional ToolInstance for subprocess execution.
+        inputs (StructureMetricsInput): PDB file paths to analyze.
+        config (StructureMetricsConfig): No parameters needed.
+        instance (Any): Unused (no standalone dispatch).
 
     Returns:
-        StructureMetricsOutput: Per-structure metrics.
-
-    Examples:
-        >>> inputs = StructureMetricsInput(pdb_paths=["/path/to/structure.pdb"])
-        >>> config = StructureMetricsConfig()
-        >>> result = run_structure_metrics(inputs, config)
-        >>> print(result.metrics[0].longest_alpha_helix)
-        >>> print(result.metrics[0].gyration_radius)
+        StructureMetricsOutput: Per-structure quality metrics.
     """
-    input_data = {
-        "pdb_paths": inputs.pdb_paths,
-    }
-
-    input_data["device"] = "cpu"  # type: ignore[assignment]
-    output_data = ToolInstance.dispatch(
-        "structure_metrics",
-        input_data,
-        instance=instance,
-        config=config,
-    )
-
-    metrics = [StructureQualityMetrics(**m) for m in output_data["metrics"]]
+    metrics = []
+    for pdb_path in inputs.pdb_paths:
+        struct = Structure.from_file(pdb_path)
+        ss = struct.secondary_structure_percentages()
+        metrics.append(
+            StructureQualityMetrics(
+                pdb_path=str(pdb_path),
+                longest_alpha_helix=struct.longest_alpha_helix(),
+                gyration_radius=struct.gyration_radius(),
+                helix_pct=ss["helix"],
+                sheet_pct=ss["sheet"],
+                loop_pct=ss["loop"],
+            )
+        )
 
     return StructureMetricsOutput(
         metadata={"num_structures": len(inputs.pdb_paths)},

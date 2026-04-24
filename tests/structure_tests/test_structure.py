@@ -1244,3 +1244,45 @@ def test_with_renamed_chains_does_not_warn_on_cif_re_emission():
         warnings.simplefilter("always")
         cif_struct.with_renamed_chains({"A": "Heavy"})
     assert [w for w in caught if "CIF→PDB" in str(w.message)] == []
+
+
+# ============================================================================
+# Structural Analysis (biotite)
+# ============================================================================
+
+
+def test_secondary_structure_percentages_sum_to_100(pdl1_complex):
+    """SS percentages always sum to 100 regardless of structure."""
+    ss = pdl1_complex.secondary_structure_percentages()
+    assert pytest.approx(ss["helix"] + ss["sheet"] + ss["loop"], abs=0.1) == 100.0
+
+
+def test_secondary_structure_percentages_per_chain(pdl1_complex):
+    """Per-chain SS differs from whole-complex SS."""
+    whole = pdl1_complex.secondary_structure_percentages()
+    chain_a = pdl1_complex.secondary_structure_percentages(chain_id="A")
+    assert chain_a != whole
+
+
+def test_gyration_radius_positive(pdl1_complex):
+    """Gyration radius is positive and per-chain is smaller than whole complex."""
+    whole = pdl1_complex.gyration_radius()
+    chain_a = pdl1_complex.gyration_radius(chain_id="A")
+    assert whole > 0
+    assert chain_a > 0
+    assert chain_a < whole
+
+
+def test_longest_alpha_helix_nonnegative(pdl1_complex):
+    """Longest helix is a non-negative integer."""
+    assert pdl1_complex.longest_alpha_helix() >= 0
+
+
+def test_backbone_rmsd_self_is_zero(pdl1_complex):
+    """RMSD of a structure against itself is zero."""
+    assert pdl1_complex.backbone_rmsd(pdl1_complex) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_backbone_rmsd_per_chain(pdl1_complex):
+    """Per-chain RMSD against self is also zero."""
+    assert pdl1_complex.backbone_rmsd(pdl1_complex, chain_id="A") == pytest.approx(0.0, abs=1e-3)

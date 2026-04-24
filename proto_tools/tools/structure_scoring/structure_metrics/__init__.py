@@ -1,4 +1,4 @@
-"""Structural quality metrics (longest alpha helix length, gyration radius)."""
+"""Structural quality metrics (SS percentages, longest helix, gyration radius)."""
 
 from proto_tools.tools.structure_scoring.structure_metrics.structure_metrics import (
     StructureMetricsConfig,

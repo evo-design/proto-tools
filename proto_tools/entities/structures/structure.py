@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from enum import Enum
 from io import StringIO
@@ -11,7 +12,9 @@ from typing import Any, Literal
 import gemmi
 import numpy as np
 import py3Dmol
-from biotite.structure import CellList
+from biotite.structure import AtomArray, CellList, annotate_sse, superimpose
+from biotite.structure import gyration_radius as _biotite_gyration_radius
+from biotite.structure import rmsd as _biotite_rmsd
 from IPython.display import HTML, display
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -1054,6 +1057,98 @@ class Structure(BaseModel):
             raise AssertionError(f"Metric keys differ: {set(self.metrics.keys()) ^ set(other.metrics.keys())}")
         for key in self.metrics:
             _approx_equal_metric(key, self.metrics[key], other.metrics[key], rtol, atol)
+
+    # ============================================================================
+    # Structural Analysis (biotite)
+    # ============================================================================
+
+    def _get_atom_array(self, chain_id: str | None = None) -> AtomArray:
+        """Load biotite AtomArray, optionally filtered to a single chain."""
+        array = pdb_file_to_atomarray(StringIO(self.structure_pdb))
+        if chain_id is not None:
+            array = array[array.chain_id == chain_id]
+        return array
+
+    def secondary_structure_percentages(self, chain_id: str | None = None) -> dict[str, float]:
+        """Helix/sheet/loop percentages via biotite P-SEA algorithm.
+
+        Args:
+            chain_id (str | None): Chain to analyze. None uses the full structure.
+
+        Returns:
+            dict[str, float]: Keys ``"helix"``, ``"sheet"``, ``"loop"`` with values 0-100.
+        """
+        sse = annotate_sse(self._get_atom_array(chain_id))
+        sse = sse[sse != ""]  # exclude non-amino-acid residues
+        total = max(len(sse), 1)
+        helix = int(np.sum(sse == "a"))
+        sheet = int(np.sum(sse == "b"))
+        loop = total - helix - sheet
+        return {"helix": 100.0 * helix / total, "sheet": 100.0 * sheet / total, "loop": 100.0 * loop / total}
+
+    def gyration_radius(self, chain_id: str | None = None) -> float:
+        """Radius of gyration in Angstroms.
+
+        Args:
+            chain_id (str | None): Chain to analyze. None uses the full structure.
+
+        Returns:
+            float: Radius of gyration.
+        """
+        return float(_biotite_gyration_radius(self._get_atom_array(chain_id)))
+
+    def longest_alpha_helix(self, chain_id: str | None = None) -> int:
+        """Length of longest contiguous alpha helix segment.
+
+        Args:
+            chain_id (str | None): Chain to analyze. None uses the full structure.
+
+        Returns:
+            int: Residue count of the longest helix.
+        """
+        sse = annotate_sse(self._get_atom_array(chain_id))
+        max_len = 0
+        cur = 0
+        for s in sse:
+            if s == "a":
+                cur += 1
+                max_len = max(max_len, cur)
+            else:
+                cur = 0
+        return max_len
+
+    def backbone_rmsd(self, other: Structure, chain_id: str | None = None) -> float:
+        """CA-atom RMSD after optimal superposition against another structure.
+
+        CA atoms are paired by array index, not residue ID. Structures must share
+        the same residue ordering for meaningful results. If lengths differ, only
+        the first ``min(len_self, len_other)`` CA atoms are compared.
+
+        Args:
+            other (Structure): Reference structure to align against.
+            chain_id (str | None): Chain to compare. None uses all chains.
+
+        Returns:
+            float: RMSD in Angstroms after superposition.
+        """
+        self_array = self._get_atom_array(chain_id)
+        other_array = other._get_atom_array(chain_id)
+        ca_self = self_array[self_array.atom_name == "CA"]
+        ca_other = other_array[other_array.atom_name == "CA"]
+        min_len = min(len(ca_self), len(ca_other))
+        if min_len == 0:
+            return float("inf")
+        if len(ca_self) != len(ca_other):
+            logging.getLogger(__name__).warning(
+                "CA atom count mismatch (%d vs %d); RMSD computed on first %d atoms",
+                len(ca_self),
+                len(ca_other),
+                min_len,
+            )
+        ca_self = ca_self[:min_len]
+        ca_other = ca_other[:min_len]
+        ca_self_sup, _ = superimpose(ca_other, ca_self)
+        return float(_biotite_rmsd(ca_other, ca_self_sup))
 
     # ============================================================================
     # Visualization
