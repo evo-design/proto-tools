@@ -150,6 +150,7 @@ To use these models:
 ├── <a href="proto_tools/tools/structure_prediction/protenix/">protenix/</a>
 └── <a href="proto_tools/tools/structure_prediction/viennarna/">viennarna/</a>
 <a href="proto_tools/tools/structure_scoring/">structure_scoring/</a>              # Structure quality scoring
+├── <a href="proto_tools/tools/structure_scoring/dssp/">dssp/</a>
 ├── <a href="proto_tools/tools/structure_scoring/pdockq2/">pdockq2/</a>
 ├── <a href="proto_tools/tools/structure_scoring/pyrosetta/">pyrosetta/</a>
 └── <a href="proto_tools/tools/structure_scoring/structure_metrics/">structure_metrics/</a>

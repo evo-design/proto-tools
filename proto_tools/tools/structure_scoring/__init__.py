@@ -1,5 +1,13 @@
 """Structure scoring tool wrappers."""
 
+from proto_tools.tools.structure_scoring.dssp import (
+    DSSPSecondaryStructureConfig,
+    DSSPSecondaryStructureInput,
+    DSSPSecondaryStructureMetrics,
+    DSSPSecondaryStructureOutput,
+    DSSPStructureInput,
+    run_dssp_secondary_structure,
+)
 from proto_tools.tools.structure_scoring.pdockq2 import (
     InterfacePDockQ2,
     PDockQ2Config,
@@ -51,6 +59,11 @@ from proto_tools.tools.structure_scoring.structure_metrics import (
 __all__ = [
     "InterfacePDockQ2",
     "InterfaceStructureInput",
+    "DSSPSecondaryStructureConfig",
+    "DSSPSecondaryStructureInput",
+    "DSSPSecondaryStructureMetrics",
+    "DSSPSecondaryStructureOutput",
+    "DSSPStructureInput",
     "PDockQ2Config",
     "PDockQ2Input",
     "PDockQ2Metrics",
@@ -83,6 +96,7 @@ __all__ = [
     "StructureMetricsInput",
     "StructureMetricsOutput",
     "StructureQualityMetrics",
+    "run_dssp_secondary_structure",
     "run_pdockq2",
     "run_pyrosetta_energy",
     "run_pyrosetta_interface_analyzer",

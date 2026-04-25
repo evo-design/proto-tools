@@ -431,6 +431,11 @@ from proto_tools.tools.structure_prediction import (
     run_viennarna,
 )
 from proto_tools.tools.structure_scoring import (
+    DSSPSecondaryStructureConfig,
+    DSSPSecondaryStructureInput,
+    DSSPSecondaryStructureMetrics,
+    DSSPSecondaryStructureOutput,
+    DSSPStructureInput,
     InterfacePDockQ2,
     InterfaceStructureInput,
     PDockQ2Config,
@@ -465,6 +470,7 @@ from proto_tools.tools.structure_scoring import (
     StructureMetricsInput,
     StructureMetricsOutput,
     StructureQualityMetrics,
+    run_dssp_secondary_structure,
     run_pdockq2,
     run_pyrosetta_energy,
     run_pyrosetta_interface_analyzer,
@@ -962,6 +968,13 @@ __all__ = [
     "PyRosettaRelaxOutput",
     "PyRosettaRelaxMetrics",
     "RelaxResult",
+    # Structure scoring - DSSP Secondary Structure
+    "run_dssp_secondary_structure",
+    "DSSPSecondaryStructureInput",
+    "DSSPSecondaryStructureConfig",
+    "DSSPSecondaryStructureOutput",
+    "DSSPSecondaryStructureMetrics",
+    "DSSPStructureInput",
     # Structure scoring - Structure Metrics
     "run_structure_metrics",
     "StructureMetricsInput",
