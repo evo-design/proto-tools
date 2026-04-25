@@ -43,8 +43,10 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
     assert len(designed.sequences) == 2
     assert all(isinstance(sequence, str) for sequence in designed.sequences)
     assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.ligandmpnn_metrics) == 2
-    assert all(isinstance(score, dict) for score in designed.ligandmpnn_metrics)
+    assert len(designed.sequence_recovery) == 2
+    assert len(designed.ligand_interface_sequence_recovery) == 2
+    assert all(0.0 <= r <= 1.0 for r in designed.sequence_recovery)
+    assert all(0.0 <= r <= 1.0 for r in designed.ligand_interface_sequence_recovery)
 
 
 @pytest.mark.uses_gpu
@@ -64,8 +66,8 @@ def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     assert len(designed.sequences) == 6
     assert all(isinstance(seq, str) for seq in designed.sequences)
     assert all(len(seq) > 0 for seq in designed.sequences)
-    assert len(designed.ligandmpnn_metrics) == 6
-    assert all(isinstance(m, dict) for m in designed.ligandmpnn_metrics)
+    assert len(designed.sequence_recovery) == 6
+    assert len(designed.ligand_interface_sequence_recovery) == 6
 
 
 @pytest.mark.uses_gpu

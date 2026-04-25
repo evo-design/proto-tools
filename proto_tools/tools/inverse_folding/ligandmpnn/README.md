@@ -116,7 +116,8 @@ Each `LigandMPNNSequences` contains:
 | Field | Type | Description |
 |-------|------|-------------|
 | `sequences` | `List[str]` | Designed amino acid sequences (length = `num_sequences_per_structure`) |
-| `ligandmpnn_metrics` | `List[Dict[str, Any]]` | Per-sequence metrics from LigandMPNN |
+| `sequence_recovery` | `List[float]` | Per-sequence fraction of designed residues matching the reference sequence (0.0-1.0) |
+| `ligand_interface_sequence_recovery` | `List[float]` | Per-sequence recovery restricted to ligand-interface residues (0.0-1.0) |
 
 Export formats: `fasta`, `json`
 
@@ -125,7 +126,7 @@ Export formats: `fasta`, `json`
 - **Sequence recovery**: Compare designed sequences to the native sequence at each position. Recovery rates of 40-55% are typical for well-designed backbones.
 - **Ligand contact positions**: Positions near the ligand often show higher conservation across samples, reflecting the model's learned binding-site preferences.
 - **Diversity across samples**: At low temperature (0.1), most samples will be very similar. Increased diversity at higher temperatures is expected and useful for library generation.
-- **Metrics dict**: The `ligandmpnn_metrics` field contains model-internal metrics that vary by LigandMPNN version. Inspect the keys for available metrics.
+- **Recovery metrics**: `sequence_recovery` and `ligand_interface_sequence_recovery` are aligned with `sequences` (parallel lists). Both are floats in `[0.0, 1.0]` — fraction of designed residues matching the input structure's reference sequence (overall vs. restricted to ligand-interface residues).
 
 ## Quick Start Examples
 
@@ -189,9 +190,9 @@ for i, designs in enumerate(result.designed_sequences):
 **Accessing per-sequence metrics:**
 ```python
 result = run_ligandmpnn_sample(inputs, config)
-for i, seq in enumerate(result.designed_sequences[0].sequences):
-    metrics = result.designed_sequences[0].ligandmpnn_metrics[i]
-    print(f"Seq {i}: {seq[:30]}... | Metrics: {metrics}")
+designs = result.designed_sequences[0]
+for i, seq in enumerate(designs.sequences):
+    print(f"Seq {i}: {seq[:30]}... | recovery={designs.sequence_recovery[i]:.3f} | interface={designs.ligand_interface_sequence_recovery[i]:.3f}")
 ```
 
 **Export results:**
