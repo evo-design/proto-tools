@@ -32,6 +32,7 @@ def test_dssp_tool_is_registered() -> None:
     assert spec.example_input is not None
     example = spec.example_input()
     assert isinstance(example, DSSPSecondaryStructureInput)
+    assert ToolRegistry.get_links("dssp-secondary-structure") == {"github": "https://github.com/PDB-REDO/dssp"}
 
 
 def test_dssp_input_accepts_single_path_and_defaults_chain() -> None:

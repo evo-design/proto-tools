@@ -18,7 +18,12 @@ def _find_dssp_binary() -> str:
 
 
 def _secondary_structure_percentages(pdb_content: str, chain_id: str, dssp_binary: str) -> dict[str, float]:
-    """Compute BindCraft-style helix/sheet/loop percentages for one chain."""
+    """Compute helix, sheet, and loop percentages from DSSP assignments.
+
+    DSSP states ``H``, ``G``, and ``I`` count as helix; ``E`` counts as sheet;
+    all other assigned states, including isolated beta bridges (``B``), count
+    as loop for this coarse three-class summary.
+    """
     from Bio.PDB.DSSP import DSSP
     from Bio.PDB.PDBParser import PDBParser
 

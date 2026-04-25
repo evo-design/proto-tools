@@ -57,13 +57,13 @@ from proto_tools.tools.structure_scoring.structure_metrics import (
 )
 
 __all__ = [
-    "InterfacePDockQ2",
-    "InterfaceStructureInput",
     "DSSPSecondaryStructureConfig",
     "DSSPSecondaryStructureInput",
     "DSSPSecondaryStructureMetrics",
     "DSSPSecondaryStructureOutput",
     "DSSPStructureInput",
+    "InterfacePDockQ2",
+    "InterfaceStructureInput",
     "PDockQ2Config",
     "PDockQ2Input",
     "PDockQ2Metrics",

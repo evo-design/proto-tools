@@ -933,6 +933,13 @@ __all__ = [
     "RandomNucleotideSampleInput",
     "RandomNucleotideSampleConfig",
     "RandomNucleotideSampleOutput",
+    # Structure scoring - DSSP Secondary Structure
+    "run_dssp_secondary_structure",
+    "DSSPSecondaryStructureInput",
+    "DSSPSecondaryStructureConfig",
+    "DSSPSecondaryStructureOutput",
+    "DSSPSecondaryStructureMetrics",
+    "DSSPStructureInput",
     # Structure scoring - PyRosetta SAP
     "run_pyrosetta_sap",
     "PyRosettaSAPInput",
@@ -968,13 +975,6 @@ __all__ = [
     "PyRosettaRelaxOutput",
     "PyRosettaRelaxMetrics",
     "RelaxResult",
-    # Structure scoring - DSSP Secondary Structure
-    "run_dssp_secondary_structure",
-    "DSSPSecondaryStructureInput",
-    "DSSPSecondaryStructureConfig",
-    "DSSPSecondaryStructureOutput",
-    "DSSPSecondaryStructureMetrics",
-    "DSSPStructureInput",
     # Structure scoring - Structure Metrics
     "run_structure_metrics",
     "StructureMetricsInput",
