@@ -108,7 +108,7 @@ Contains a list of `ProteinMPNNSequences` objects, one per input structure:
 |-------|------|-------------|
 | `sequences` | `List[str]` | Designed amino acid sequences. Multi-chain sequences are "/"-delimited (e.g., `"MASCQT/EVQLVE"`) |
 | `perplexity` | `List[float]` | Perplexity for each sequence. **Lower is better.** Typical range: 1.5-8.0 |
-| `sequence_identity` | `List[float]` | Identity to the original PDB sequence (0.0-1.0) |
+| `sequence_recovery` | `List[float]` | Fraction of designed residues matching the original PDB sequence (0.0-1.0) |
 
 ### Scoring Output (`ProteinMPNNScoringOutput`)
 

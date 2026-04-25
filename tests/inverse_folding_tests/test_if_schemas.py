@@ -140,7 +140,7 @@ def test_output_preserves_subclass_fields_on_dump():
 
     Without `SerializeAsAny`, Pydantic serializes list items against the
     declared base type (`DesignedSequences`), silently dropping fields
-    like `perplexity` / `sequence_identity` on the HTTP/the cloud runtime boundary.
+    like `perplexity` / `sequence_recovery` on the HTTP/the cloud runtime boundary.
     """
     subclass_item = _MockDesignedSequences(sequences=["MVLSP", "GGGS"], custom_metric=[0.1, 0.2])
     output = InverseFoldingOutput(designed_sequences=[subclass_item])
