@@ -65,7 +65,7 @@ def test_proteinmpnn_sample_simple(pdb_structure: Structure):
         assert len(designed_sequences) == 10
         assert all(isinstance(sequence, str) for sequence in designed_sequences.sequences)
         assert all(isinstance(perplexity, float) for perplexity in designed_sequences.perplexity)
-        assert all(isinstance(identity, float) for identity in designed_sequences.sequence_identity)
+        assert all(isinstance(recovery, float) for recovery in designed_sequences.sequence_recovery)
 
 
 @pytest.mark.uses_gpu
@@ -87,8 +87,8 @@ def test_proteinmpnn_sample_chunked_batching(pdb_structure: Structure):
     assert all(len(seq) > 0 for seq in designed.sequences)
     assert len(designed.perplexity) == 6
     assert all(isinstance(p, float) for p in designed.perplexity)
-    assert len(designed.sequence_identity) == 6
-    assert all(isinstance(s, float) for s in designed.sequence_identity)
+    assert len(designed.sequence_recovery) == 6
+    assert all(isinstance(s, float) for s in designed.sequence_recovery)
 
 
 @pytest.mark.uses_gpu

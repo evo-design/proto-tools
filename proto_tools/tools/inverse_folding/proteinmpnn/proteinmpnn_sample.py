@@ -63,11 +63,14 @@ class ProteinMPNNSequences(DesignedSequences):
     Attributes:
         sequences (list[str]): Designed protein sequences.
         perplexity (list[float]): Per-sequence perplexity values.
-        sequence_identity (list[float]): Sequence identity to the PDB prompt sequence.
+        sequence_recovery (list[float]): Per-sequence fraction of designed
+            residues matching the PDB prompt reference (0.0-1.0).
     """
 
     perplexity: list[float] = Field(description="Perplexity of the sequence from the ProteinMPNN model")
-    sequence_identity: list[float] = Field(description="Sequence identity to the sequence in the PDB prompt")
+    sequence_recovery: list[float] = Field(
+        description="Per-sequence fraction of designed residues matching the PDB prompt reference (0.0-1.0)",
+    )
 
 
 # ============================================================================
@@ -130,7 +133,7 @@ def run_proteinmpnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        all_seqs, all_perp, all_seqid = [], [], []
+        all_seqs, all_perp, all_seq_recovery = [], [], []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
@@ -157,14 +160,14 @@ def run_proteinmpnn_sample(
             )
             all_seqs.extend(result["seq"])
             all_perp.extend(np.exp(result["score"]).tolist())
-            all_seqid.extend(result["seqid"])
+            all_seq_recovery.extend(result["seqid"])
             chunk_idx += 1
             remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             ProteinMPNNSequences(
                 sequences=all_seqs,
                 perplexity=all_perp,
-                sequence_identity=all_seqid,
+                sequence_recovery=all_seq_recovery,
             )
         )
     return ProteinMPNNSampleOutput(designed_sequences=designed_sequences)  # type: ignore[arg-type]
