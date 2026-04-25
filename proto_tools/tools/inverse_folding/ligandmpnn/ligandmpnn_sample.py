@@ -37,14 +37,18 @@ class LigandMPNNSequences(DesignedSequences):
     """Represents designed sequences from LigandMPNN.
 
     Attributes:
-        ligandmpnn_metrics (list[dict[str, Any]]): Per-sequence metrics returned by
-            LigandMPNN, such as sequence recovery and log-likelihood scores.
+        sequences (list[str]): Designed amino acid sequences.
+        sequence_recovery (list[float]): Per-sequence fraction of designed
+            residues matching the input structure's reference sequence (0.0-1.0).
+        ligand_interface_sequence_recovery (list[float]): Per-sequence recovery
+            restricted to residues at the ligand interface (0.0-1.0).
     """
 
-    ligandmpnn_metrics: list[dict[str, Any]] = Field(
-        description="Metrics returned by LigandMPNN",
-        title="LigandMPNN Metrics",
-        json_schema_extra={"advanced": True},
+    sequence_recovery: list[float] = Field(
+        description="Per-sequence fraction of designed residues matching the reference (0.0-1.0)",
+    )
+    ligand_interface_sequence_recovery: list[float] = Field(
+        description="Per-sequence recovery restricted to ligand-interface residues (0.0-1.0)",
     )
 
 
@@ -104,7 +108,9 @@ def run_ligandmpnn_sample(
         unit="structure",
         total=len(inputs.inputs),
     ):
-        all_seqs, all_metrics = [], []
+        all_seqs: list[str] = []
+        all_recovery: list[float] = []
+        all_interface_recovery: list[float] = []
         remaining = config.num_sequences_per_structure
         chunk_idx = 0
         while remaining > 0:
@@ -128,13 +134,15 @@ def run_ligandmpnn_sample(
                 config=config,
             )
             all_seqs.extend(result["sequences"])
-            all_metrics.extend(result["metrics"])
+            all_recovery.extend(m["sequence_recovery"] for m in result["metrics"])
+            all_interface_recovery.extend(m["ligand_interface_sequence_recovery"] for m in result["metrics"])
             chunk_idx += 1
             remaining -= chunk  # type: ignore[operator]
         designed_sequences.append(
             LigandMPNNSequences(
                 sequences=all_seqs,
-                ligandmpnn_metrics=all_metrics,
+                sequence_recovery=all_recovery,
+                ligand_interface_sequence_recovery=all_interface_recovery,
             )
         )
 
