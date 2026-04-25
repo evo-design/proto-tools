@@ -112,6 +112,10 @@ class AlphaFold2BinderConfig(BaseConfig):
             ``"first"`` uses only recycle 0.
         model_num (int): AF2 parameter set (1-5).
         sample_models (bool): Randomly sample model sets each forward pass.
+        use_multimer (bool): Use AlphaFold multimer parameters for binder protocol.
+        rm_target_seq (bool): Mask target template sequence in ``prep_inputs``.
+        rm_target_sc (bool): Mask target template side chains in ``prep_inputs``.
+        rm_template_ic (bool): Mask inter-chain template contacts in ``prep_inputs``.
         soft (float): ColabDesign softmax blending (0=raw logits, 1=full softmax).
             Passed per-step by the gradient optimizer.
         hard (float): ColabDesign hard-sequence blending (0=relaxed, 1=straight-through argmax).
@@ -183,6 +187,31 @@ class AlphaFold2BinderConfig(BaseConfig):
         description="Randomly sample from available AF2 model parameter sets each forward pass.",
         advanced=True,
         include_in_key=False,
+    )
+    use_multimer: bool = ConfigField(
+        title="Use Multimer",
+        default=True,
+        description="Use AlphaFold multimer parameters for binder protocol.",
+        advanced=True,
+        reload_on_change=True,
+    )
+    rm_target_seq: bool = ConfigField(
+        title="Mask Target Sequence",
+        default=True,
+        description="Mask target template sequence in ColabDesign prep_inputs.",
+        advanced=True,
+    )
+    rm_target_sc: bool = ConfigField(
+        title="Mask Target Side Chains",
+        default=False,
+        description="Mask target template side chains in ColabDesign prep_inputs.",
+        advanced=True,
+    )
+    rm_template_ic: bool = ConfigField(
+        title="Mask Inter-chain Contacts",
+        default=True,
+        description="Mask inter-chain template contacts in ColabDesign prep_inputs.",
+        advanced=True,
     )
     soft: float = ConfigField(
         title="Soft Mixing",
@@ -371,6 +400,10 @@ def run_alphafold2_binder(
             "recycle_mode": config.recycle_mode,
             "model_num": config.model_num,
             "sample_models": config.sample_models,
+            "use_multimer": config.use_multimer,
+            "rm_target_seq": config.rm_target_seq,
+            "rm_target_sc": config.rm_target_sc,
+            "rm_template_ic": config.rm_template_ic,
             "starting_binder_seq": config.starting_binder_seq,
             "loss_weights": config.loss_weights,
             "intra_contact_num": config.intra_contact_num,

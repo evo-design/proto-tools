@@ -561,6 +561,10 @@ class AlphaFold2Model:
         recycle_mode: str = "last",
         model_num: int = 1,
         sample_models: bool = False,
+        use_multimer: bool = True,
+        rm_target_seq: bool = True,
+        rm_target_sc: bool = False,
+        rm_template_ic: bool = True,
         starting_binder_seq: str | None = None,
         loss_weights: dict[str, float] | None = None,
         intra_contact_num: int = 2,
@@ -588,10 +592,10 @@ class AlphaFold2Model:
             raise ValueError("target_pdb is required for binder gradient computation.")
 
         self._ensure_loaded(device, backend=backend, verbose=verbose)
-        key = ("binder", True, False, recycle_mode, self._backend)
+        key = ("binder", use_multimer, False, recycle_mode, self._backend)
         af_model = self._get_model(
             protocol="binder",
-            use_multimer=True,
+            use_multimer=use_multimer,
             use_msa=False,
             recycle_mode=recycle_mode,
             verbose=verbose,
@@ -605,12 +609,12 @@ class AlphaFold2Model:
             "target_chain": target_chain,
             "binder_len": len(logits),
             "binder_chain": binder_chain,
-            "rm_target_seq": True,
-            "rm_target_sc": False,
+            "rm_target_seq": rm_target_seq,
+            "rm_target_sc": rm_target_sc,
             "rm_binder": False,
             "rm_binder_seq": True,
             "rm_binder_sc": True,
-            "rm_template_ic": True,
+            "rm_template_ic": rm_template_ic,
         }
         if target_hotspot:
             prep_kwargs["hotspot"] = target_hotspot
@@ -716,6 +720,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             recycle_mode=input_dict.get("recycle_mode", "last"),
             model_num=input_dict["model_num"],
             sample_models=input_dict.get("sample_models", False),
+            use_multimer=input_dict.get("use_multimer", True),
+            rm_target_seq=input_dict.get("rm_target_seq", True),
+            rm_target_sc=input_dict.get("rm_target_sc", False),
+            rm_template_ic=input_dict.get("rm_template_ic", True),
             starting_binder_seq=input_dict.get("starting_binder_seq"),
             loss_weights=input_dict.get("loss_weights"),
             intra_contact_num=input_dict.get("intra_contact_num", 2),
