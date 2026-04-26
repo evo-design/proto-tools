@@ -16,7 +16,7 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
-from proto_tools.entities.ligands import Fragment, map_smiles_to_ccd_code
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     CHAIN_IDS,
@@ -379,7 +379,7 @@ def _create_input_json_from_complex(
 
         if isinstance(chain, Fragment):
             assert chain.smiles is not None  # noqa: S101 -- Fragment validator guarantees non-None
-            ccd_code = chain.ccd_code or map_smiles_to_ccd_code(chain.smiles, use_name_fallback=True)
+            ccd_code = chain.best_ccd_code()
             if ccd_code is None:
                 raise ValueError(
                     f"Unable to map SMILES to CCD code: {chain.smiles}. "

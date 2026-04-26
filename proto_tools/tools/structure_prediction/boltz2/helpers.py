@@ -57,7 +57,13 @@ def complex_to_yaml(
         entry: dict[str, Any] = {"id": CHAIN_IDS[i]}
 
         if isinstance(chain, Fragment):
-            entry["smiles"] = chain.smiles
+            # Prefer CCD code: Boltz2 uses internal CCD parameterization,
+            # avoiding RDKit↔Boltz SMILES canonicalization mismatches.
+            ccd_code = chain.best_ccd_code()
+            if ccd_code:
+                entry["ccd"] = ccd_code
+            else:
+                entry["smiles"] = chain.smiles
         else:
             entry["sequence"] = chain.sequence
             if e_type == "protein":

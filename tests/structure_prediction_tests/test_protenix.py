@@ -98,6 +98,40 @@ def test_protenix_input_accepts_chain_objects():
     assert inputs.complexes[0].chains[0].entity_type == "protein"
 
 
+# ── Ligand JSON shape: CCD-prefer dispatch (#502) ───────────────────────────
+
+
+def _protenix_ligand_entries(chains):
+    """Build a Protenix JSON payload from ``chains`` and return its ligand entries."""
+    inputs = ProtenixInput(complexes=[StructurePredictionComplex(chains=chains)])
+    payload = inputs.to_json(complex_idx=0, name="test")
+    return [entry["ligand"] for entry in payload[0]["sequences"] if "ligand" in entry]
+
+
+def test_protenix_ligand_uses_ccd_code_when_available():
+    """Fragment with a resolved ccd_code serializes to ``CCD_<code>``, not raw SMILES."""
+    from proto_tools.entities.ligands import Fragment
+
+    atp = Fragment(ccd_code="ATP")
+    assert atp.ccd_code == "ATP"  # invariant guard
+
+    [ligand_entry] = _protenix_ligand_entries([Chain(sequence="MKTLPGCDA", entity_type="protein"), atp])
+    assert ligand_entry == {"ligand": "CCD_ATP", "count": 1}
+
+
+def test_protenix_ligand_falls_back_to_smiles_when_no_ccd_match():
+    """Novel ligand (SMILES with no wwPDB CCD entry) serializes as raw SMILES."""
+    from proto_tools.entities.ligands import Fragment
+
+    # Synthetic perfluorinated terphenyl chain — not in the wwPDB CCD database.
+    novel_smiles = "FC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)c1ccc(-c2ccc(-c3ccccc3)cc2)cc1"
+    novel = Fragment(smiles=novel_smiles)
+    assert novel.ccd_code is None  # invariant guard
+
+    [ligand_entry] = _protenix_ligand_entries([Chain(sequence="MKTLPGCDA", entity_type="protein"), novel])
+    assert ligand_entry == {"ligand": novel.smiles, "count": 1}
+
+
 # ---------------------------------------------------------------------------
 # GPU tests
 # ---------------------------------------------------------------------------
