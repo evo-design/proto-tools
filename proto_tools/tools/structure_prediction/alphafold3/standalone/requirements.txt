@@ -1,6 +1,4 @@
-# Minimal dependencies for AlphaFold3 worker subprocess
-# - numpy: for confidence score processing
-# - biopython: for mmCIF to PDB conversion
-# MSA generation (ColabFold) runs in main process, not here
+# AlphaFold3 itself is installed from source in setup.sh (not on PyPI as of v3.0.2).
+# These are deps needed by the standalone/inference.py wrapper for pre- and post-processing.
 numpy
 biopython

@@ -1,7 +1,15 @@
 """AlphaFold3 Structure Prediction Pipeline.
 
-This script provides utilities for running AlphaFold3 structure predictions
-via Singularity containers, with support for MSA generation via ColabFold search.
+Two execution paths, selected at runtime based on what setup.sh provisioned:
+
+1. Sif path (preferred): invokes ``apptainer exec <sif> python run_alphafold.py``
+   inside a pre-built AlphaFold3 container image. Robust across systems.
+2. Env path (fallback): invokes ``python run_alphafold.py`` directly from a
+   source clone of AlphaFold3 installed into the tool's micromamba venv.
+
+MSAs are supplied by the caller via the input JSON (proto_tools delegates MSA
+generation to the colabfold-search tool), so we pass --norun_data_pipeline and
+skip the sequence databases entirely on both paths.
 
 Worker protocol implementation for ToolInstance integration.
 """
@@ -19,7 +27,7 @@ from Bio import PDB
 logger = logging.getLogger(__name__)
 
 # Import from auto-copied standalone_helpers
-from standalone_helpers import get_subprocess_device_env
+from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
 
 
 class AlphaFold3ExecutionError(Exception):
@@ -27,6 +35,55 @@ class AlphaFold3ExecutionError(Exception):
 
 
 AlphaFold3JSON = dict[str, Any]
+
+
+def _venv_path() -> str:
+    """Return the tool's venv directory, resolved from standard env vars."""
+    venv_path = os.environ.get("VIRTUAL_ENV") or os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+    if not venv_path:
+        raise FileNotFoundError("Cannot locate tool venv: VIRTUAL_ENV / TOOL_VENV_PATH / VENV_PATH not set.")
+    return venv_path
+
+
+def _resolve_sif_path(override: str | None = None) -> str | None:
+    """Resolve the AlphaFold3 sif image path, or None if the env path is in use.
+
+    Precedence:
+        1. Caller-supplied override (from tool config's sif_path).
+        2. ``$VENV_PATH/alphafold3.sif`` — written by setup.sh when the sif path is taken.
+
+    Args:
+        override (str | None): Optional explicit sif path from config.
+
+    Returns:
+        str | None: Absolute path to an existing sif file, or None if neither source yields one.
+    """
+    if override:
+        if not os.path.exists(override):
+            raise FileNotFoundError(f"Config sif_path does not exist: {override}")
+        return override
+    default = os.path.join(_venv_path(), "alphafold3.sif")
+    return default if os.path.exists(default) else None
+
+
+def _resolve_repo_path() -> str:
+    """Locate the AlphaFold3 source clone written by setup.sh (env path only).
+
+    Returns:
+        str: Absolute path to the local AlphaFold3 repository containing run_alphafold.py.
+
+    Raises:
+        FileNotFoundError: If setup.sh has not been run or the marker file is missing.
+    """
+    venv_path = _venv_path()
+    marker = os.path.join(venv_path, "alphafold3_repo_path.txt")
+    if not os.path.exists(marker):
+        raise FileNotFoundError(f"AlphaFold3 repo marker not found at {marker}. Re-run setup.sh.")
+    with open(marker) as f:
+        repo_path = f.read().strip()
+    if not os.path.exists(os.path.join(repo_path, "run_alphafold.py")):
+        raise FileNotFoundError(f"run_alphafold.py not found in {repo_path}. Re-run setup.sh.")
+    return repo_path
 
 
 def _extract_structure_and_scores(
@@ -38,13 +95,13 @@ def _extract_structure_and_scores(
     """Extract predicted structure and confidence scores from AlphaFold3 output.
 
     Args:
-        output_dir: Directory containing AlphaFold3 output.
-        name: Name of the prediction job.
-        verbose: Whether to print progress messages.
-        include_pae_matrix: Attach the full per-residue PAE matrix.
+        output_dir (str): Directory containing AlphaFold3 output.
+        name (str): Name of the prediction job.
+        verbose (bool): Whether to print progress messages.
+        include_pae_matrix (bool): Attach the full per-residue PAE matrix.
 
     Returns:
-        Tuple of (pdb_path, scores_dict).
+        tuple[str, dict[str, Any]]: Tuple of (pdb_path, scores_dict).
     """
     alphafold3_results_folder = os.path.join(output_dir, name)
     alphafold3_structure = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
@@ -87,74 +144,148 @@ def _extract_structure_and_scores(
 
 
 class AlphaFold3Model:
-    """Wrapper for AlphaFold3 Singularity execution."""
+    """Wrapper for AlphaFold3 CLI execution (sif or env path)."""
 
     def __init__(self) -> None:
-        """Initialize model with unset paths."""
+        """Initialize model with unresolved paths."""
         self._loaded = False
-        self.repo_path: str | None = None
-        self.sif_path: str | None = None
+        self.sif_path: str | None = None  # set when running via apptainer
+        self.repo_path: str | None = None  # set when running via env
         self.model_dir: str | None = None
-        self.db_dir: str | None = None
 
-    def load(self) -> None:
-        """Validate that all required Singularity paths are set and exist."""
-        required_paths = {
-            "repo_path": self.repo_path,
-            "sif_path": self.sif_path,
-            "model_dir": self.model_dir,
-            "db_dir": self.db_dir,
-        }
+    def load(self, model_dir: str | None = None, sif_path: str | None = None) -> None:
+        """Resolve execution-path + weights paths and verify they exist.
 
-        missing = [name for name, path in required_paths.items() if path is None]
-        if missing:
-            raise ValueError(f"Missing required paths: {', '.join(missing)}")
+        Prefers the sif path if either a config override is supplied or setup.sh
+        provisioned ``$VENV_PATH/alphafold3.sif``. Falls back to the env path otherwise.
 
-        for name, path in required_paths.items():
-            if path is not None and not os.path.exists(path):
-                raise FileNotFoundError(f"{name} does not exist: {path}")
+        Args:
+            model_dir (str | None): Caller-provided weights directory override
+                (from the tool config). Falls through to PROTO_ALPHAFOLD3_WEIGHTS_DIR /
+                PROTO_MODEL_CACHE / PROTO_HOME when unset.
+            sif_path (str | None): Caller-provided sif path override. Falls through
+                to ``$VENV_PATH/alphafold3.sif`` when unset.
+        """
+        # 1. Resolve execution path (sif preferred, env fallback).
+        resolved_sif = _resolve_sif_path(sif_path)
+        if resolved_sif:
+            self.sif_path = resolved_sif
+            logger.debug("AlphaFold3: using sif path %s", self.sif_path)
+        else:
+            self.repo_path = _resolve_repo_path()
+            logger.debug("AlphaFold3: using env path, repo at %s", self.repo_path)
+
+        # 2. Resolve weights (same logic on both paths).
+        if model_dir:
+            self.model_dir = model_dir
+        else:
+            weights_dir = resolve_weights_dir("alphafold3")
+            if not weights_dir:
+                raise FileNotFoundError(
+                    "Unable to resolve AlphaFold3 weights directory. "
+                    "Set PROTO_ALPHAFOLD3_WEIGHTS_DIR or configure PROTO_MODEL_CACHE, "
+                    "or pass model_dir via the tool config."
+                )
+            self.model_dir = weights_dir
+
+        has_weights = any(
+            f.endswith((".bin", ".bin.zst"))
+            for f in os.listdir(self.model_dir)
+            if os.path.isfile(os.path.join(self.model_dir, f))
+        )
+        if not has_weights:
+            raise FileNotFoundError(
+                f"No AlphaFold3 weights (.bin / .bin.zst) found in {self.model_dir}. "
+                "Request access via https://github.com/google-deepmind/alphafold3#obtaining-model-parameters "
+                "and place the downloaded weights file in that directory (or override "
+                "with PROTO_ALPHAFOLD3_WEIGHTS_DIR)."
+            )
 
         self._loaded = True
+
+    def _build_cmd(self, input_json_path: str, output_dir: str) -> list[str]:
+        """Build the AlphaFold3 subprocess argv for whichever path is active."""
+        assert self.model_dir is not None  # set by load()
+
+        common_args = [
+            f"--json_path={input_json_path}",
+            f"--output_dir={output_dir}",
+            f"--model_dir={self.model_dir}",
+            "--norun_data_pipeline",
+        ]
+
+        if self.sif_path is not None:
+            # Sif path: `apptainer run` invokes the sif's %runscript with the
+            # appended args. This avoids hardcoding the in-sif path to
+            # run_alphafold.py — the sif itself encapsulates where AF3 lives
+            # in its rootfs (our Singularity.def puts it at /opt/alphafold3).
+            # BYO sifs must have a %runscript that accepts AF3 CLI args.
+            input_dir = os.path.dirname(input_json_path)
+            apptainer_bin = os.path.join(_venv_path(), "bin", "apptainer")
+            return [
+                apptainer_bin,
+                "run",
+                "--nv",
+                "--bind",
+                f"{input_dir}:{input_dir}",
+                "--bind",
+                f"{output_dir}:{output_dir}",
+                "--bind",
+                f"{self.model_dir}:{self.model_dir}",
+                self.sif_path,
+                *common_args,
+            ]
+
+        # Env path: direct python subprocess against the cloned repo.
+        assert self.repo_path is not None
+        return [
+            sys.executable,
+            os.path.join(self.repo_path, "run_alphafold.py"),
+            *common_args,
+        ]
 
     def __call__(
         self,
         input_json_path: str,
         output_dir: str,
         device: str,
+        model_dir: str | None = None,
+        sif_path: str | None = None,
         verbose: bool = False,
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
-        """Run AlphaFold3 prediction via Singularity.
+        """Run AlphaFold3 prediction.
 
         MSA generation is handled in the main process before calling this method.
-        This method only runs the AlphaFold3 Singularity container and extracts results.
+        This method runs AlphaFold3 with --norun_data_pipeline via whichever
+        execution path setup.sh provisioned (sif preferred, env fallback).
 
         Args:
-            input_json_path: Path to AlphaFold3 input JSON file (with MSA paths already populated).
-            output_dir: Directory for output files.
-            device: Device for subprocess environment (e.g., "cuda:0").
-            verbose: Whether to print progress messages.
-            include_pae_matrix: Attach the full per-residue PAE matrix.
+            input_json_path (str): Path to AlphaFold3 input JSON file (MSAs already populated).
+            output_dir (str): Directory for output files.
+            device (str): Device for subprocess environment (e.g., "cuda:0").
+            model_dir (str | None): Optional explicit override for the weights directory.
+            sif_path (str | None): Optional explicit override for the sif image path.
+            verbose (bool): Whether to print progress messages.
+            include_pae_matrix (bool): Attach the full per-residue PAE matrix.
 
         Returns:
-            Dict with keys:
-                - structure_pdb: Path to generated PDB file
-                - metrics: Dict of confidence scores
+            dict[str, Any]: Dict with ``structure_pdb`` (path to generated PDB) and
+                ``metrics`` (confidence scores).
 
         Raises:
             AlphaFold3ExecutionError: If AlphaFold3 execution fails.
         """
         if not self._loaded:
-            self.load()
+            self.load(model_dir=model_dir, sif_path=sif_path)
 
-        # Load input JSON from file (MSAs already generated by main process)
+        # Load input JSON (MSAs already generated by main process)
         with open(input_json_path) as f:
             input_json = json.load(f)
 
-        # === Output directory handling ===
+        # Output directory handling: if the dir already exists, append .1, .2, etc.
         original_output_dir = output_dir
         counter = 1
-        # Check if dir exists, if so, append .1, .2, etc.
         while os.path.exists(output_dir):
             output_dir = f"{original_output_dir}.{counter}"
             counter += 1
@@ -162,56 +293,18 @@ class AlphaFold3Model:
         if counter > 1:
             logger.debug(f"Output dir existed, created new directory: {output_dir}")
 
-        # Input directory was created by main process, get parent dir
-        input_dir = os.path.dirname(input_json_path)
+        run_cmds = self._build_cmd(input_json_path, output_dir)
 
-        # === UNCHANGED LOGIC: Path validation ===
-        for name, path in [
-            ("repo_path", self.repo_path),
-            ("model_dir", self.model_dir),
-            ("db_dir", self.db_dir),
-            ("sif_path", self.sif_path),
-        ]:
-            if not os.path.exists(path):  # type: ignore[arg-type]
-                raise AlphaFold3ExecutionError(f"Path does not exist for {name}: {path}")
-
-        # === UNCHANGED LOGIC: Build Singularity command ===
-        run_cmds = [
-            "singularity",
-            "exec",
-            "--nv",
-            "--env",
-            "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu",
-            # Mount required directories into the container.
-            "--bind",
-            f"{output_dir}:/root/af_output",
-            "--bind",
-            f"{input_dir}:/root/af_input",
-            "--bind",
-            f"{self.model_dir}:/root/models",
-            "--bind",
-            f"{self.db_dir}:/root/public_databases",
-            "--bind",
-            f"{self.repo_path}:/root/alphafold3",
-            self.sif_path,
-            "python",
-            "/root/alphafold3/run_alphafold.py",
-            "--model_dir=/root/models",
-            "--db_dir=/root/public_databases",
-            "--output_dir=/root/af_output",
-            f"--json_path=/root/af_input/{os.path.basename(input_json_path)}",
-        ]
-
-        logger.debug("Executing AlphaFold3 via Singularity...")
+        logger.debug("Executing AlphaFold3 (%s path)...", "sif" if self.sif_path else "env")
         logger.debug(f"  Input: {input_json_path}")
         logger.debug(f"  Output: {output_dir}")
+        logger.debug(f"  Model dir: {self.model_dir}")
 
-        # === Get subprocess environment (now receives specific device from DeviceManager) ===
+        # Pin the subprocess to the caller-specified GPU via CUDA_VISIBLE_DEVICES
         env = get_subprocess_device_env(device)
 
-        # === UNCHANGED LOGIC: Run Singularity subprocess ===
         process = subprocess.Popen(
-            run_cmds,  # type: ignore[arg-type]
+            run_cmds,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -220,18 +313,16 @@ class AlphaFold3Model:
 
         _stdout, stderr = process.communicate()
 
-        # === UNCHANGED LOGIC: Error handling ===
         if process.returncode != 0:
             error_msg = (
                 f"AlphaFold3 failed with return code {process.returncode}\n"
-                f"Command: {' '.join(run_cmds)}\n"  # type: ignore[arg-type]
+                f"Command: {' '.join(run_cmds)}\n"
                 f"Stderr:\n{stderr}"
             )
             raise AlphaFold3ExecutionError(error_msg)
 
         logger.debug("AlphaFold3 execution completed successfully.")
 
-        # === UNCHANGED LOGIC: Extract structure and scores ===
         pdb_path, alphafold3_scores = _extract_structure_and_scores(
             output_dir,
             input_json["name"],
@@ -239,7 +330,6 @@ class AlphaFold3Model:
             include_pae_matrix=include_pae_matrix,
         )
 
-        # === Return as dict (instead of tuple) ===
         return {
             "structure_pdb": pdb_path,
             "metrics": alphafold3_scores,
@@ -259,42 +349,39 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     MSA generation is handled in the main process, so this only runs AlphaFold3.
 
     Args:
-        input_dict: Input parameters from ToolInstance.dispatch()
+        input_dict (dict[str, Any]): Input parameters from ToolInstance.dispatch().
 
     Returns:
-        Dict with structure_pdb and metrics
+        dict[str, Any]: Dict with structure_pdb and metrics.
     """
     global _model
 
-    # Create model on first call and set paths
     if _model is None:
         _model = AlphaFold3Model()
-        _model.repo_path = input_dict["repo_path"]
-        _model.sif_path = input_dict["sif_path"]
-        _model.model_dir = input_dict["model_dir"]
-        _model.db_dir = input_dict["db_dir"]
 
-    # Delegate to model (MSAs already generated in main process)
     return _model(
         input_json_path=input_dict["input_json_path"],
         output_dir=input_dict["output_dir"],
         device=input_dict["device"],
+        model_dir=input_dict.get("model_dir"),
+        sif_path=input_dict.get("sif_path"),
         verbose=input_dict["verbose"],
         include_pae_matrix=input_dict["include_pae_matrix"],
     )
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback for moving model to different device.
+    """DeviceManager callback for moving the model to a different device.
 
-    For AlphaFold3 (CLI tool), this is a passthrough - Singularity subprocess
-    handles device allocation via CUDA_VISIBLE_DEVICES environment variable.
+    AlphaFold3 runs as a fresh Python subprocess per call (no persistent in-process
+    state), so device assignment is a passthrough — CUDA_VISIBLE_DEVICES on the
+    subprocess handles allocation.
 
     Args:
-        device: Target device (e.g., "cpu", "cuda:0")
+        device (str): Target device (e.g., "cpu", "cuda:0").
 
     Returns:
-        Success status dict
+        dict[str, Any]: Success status dict.
     """
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 

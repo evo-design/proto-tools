@@ -63,16 +63,17 @@ export PROTO_HOME=/path/to/your/proto_home
 
 To override just model weights separately: `export PROTO_MODEL_CACHE=/path/to/shared/weights`. See [notes/storage.md](notes/storage.md) for all options.
 
-### Step 3: HuggingFace authentication (optional) 🔑
+### Step 3: Gated model access (optional) 🔑
 
-Some tools use gated models that require a HuggingFace account and accepting the model's license/terms:
+Some tools use gated models that require accepting a license / terms-of-use. Two access flows depending on how the upstream author publishes weights:
 
-| Model | HuggingFace Repo | Notes |
-|-------|-----------------|-------|
-| ESM3 | [EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1) | Requires accepting EvolutionaryScale license |
-| AlphaGenome | [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Requires accepting Google DeepMind terms |
+| Model | Source | Access |
+|-------|--------|--------|
+| ESM3 | HuggingFace: [EvolutionaryScale/esm3-sm-open-v1](https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1) | Accept EvolutionaryScale license, then authenticate with HF (see below) |
+| AlphaGenome | HuggingFace: [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Accept Google DeepMind terms, then authenticate with HF (see below) |
+| AlphaFold3 | DeepMind request form: [google-deepmind/alphafold3#obtaining-model-parameters](https://github.com/google-deepmind/alphafold3#obtaining-model-parameters) | Submit DeepMind's form; after approval (2–3 business days) download the weights archive and place at `$PROTO_HOME/proto_model_cache/alphafold3/` (or set `PROTO_ALPHAFOLD3_WEIGHTS_DIR`). Not hosted on HuggingFace. |
 
-To use these models:
+**For HuggingFace-gated models:**
 
 1. Create a [HuggingFace](https://huggingface.co) account
 2. Visit each model page above and **accept the license/terms**
@@ -85,6 +86,8 @@ To use these models:
    ```bash
    export HF_TOKEN=hf_...
    ```
+
+**For AlphaFold3:** follow DeepMind's linked form (no HF token involved). See [`proto_tools/tools/structure_prediction/alphafold3/README.md`](proto_tools/tools/structure_prediction/alphafold3/README.md) for the full weights-setup flow.
 
 > [!TIP]
 > **You're all set up!** To learn what features are available in the library, check out the [tutorial series](tutorials/) — four short notebooks covering the universal tool pattern, persistent execution, device management, and parallel multi-GPU runs.
