@@ -87,7 +87,11 @@ class ProtenixInput(StructurePredictionInput):
         for chain in comp.chains:
             entry: dict[str, Any]
             if isinstance(chain, Fragment):
-                entry = {"ligand": {"ligand": chain.smiles, "count": 1}}
+                # Prefer CCD code: Protenix uses internal CCD parameterization,
+                # avoiding RDKit↔Protenix SMILES canonicalization mismatches.
+                ccd_code = chain.best_ccd_code()
+                ligand_str = f"CCD_{ccd_code}" if ccd_code else chain.smiles
+                entry = {"ligand": {"ligand": ligand_str, "count": 1}}
                 sequences.append(entry)
                 continue
 
