@@ -658,6 +658,20 @@ def pytest_addoption(parser):
         "(layout: <dir>/{toolkit}/{tool_key}.md). Implies --benchmark.",
     )
     parser.addoption(
+        "--benchmark-tool",
+        default=None,
+        metavar="TOOL_KEY",
+        help="Narrow --benchmark selection to a single tool by its marker arg "
+        "(e.g. --benchmark-tool=esm2-embedding). Implies --benchmark.",
+    )
+    parser.addoption(
+        "--benchmark-toolkit",
+        default=None,
+        metavar="TOOLKIT",
+        help="Narrow --benchmark selection to one toolkit (e.g. --benchmark-toolkit=esm2 "
+        "selects every benchmark whose tool_key resolves to the esm2 toolkit). Implies --benchmark.",
+    )
+    parser.addoption(
         "--no-log-console",
         action="store_true",
         default=False,
@@ -1039,11 +1053,25 @@ def pytest_collection_modifyitems(config, items):
 
     # --benchmark: keep only @pytest.mark.benchmark tests. Without the flag,
     # benchmark-marked tests still run normally — the marker is purely a selection signal.
-    # --benchmark-report implies --benchmark.
-    if config.getoption("--benchmark") or config.getoption("--benchmark-report"):
+    # --benchmark-report / --benchmark-tool / --benchmark-toolkit all imply --benchmark.
+    tool_filter = config.getoption("--benchmark-tool")
+    toolkit_filter = config.getoption("--benchmark-toolkit")
+    if config.getoption("--benchmark") or config.getoption("--benchmark-report") or tool_filter or toolkit_filter:
         selected, deselected = [], []
         for item in items:
-            (selected if "benchmark" in item.keywords else deselected).append(item)
+            if "benchmark" not in item.keywords:
+                deselected.append(item)
+                continue
+            if tool_filter or toolkit_filter:
+                marker = item.get_closest_marker("benchmark")
+                tool_key = marker.args[0] if marker and marker.args else None
+                if tool_filter and tool_key != tool_filter:
+                    deselected.append(item)
+                    continue
+                if toolkit_filter and (tool_key is None or _resolve_toolkit(tool_key) != toolkit_filter):
+                    deselected.append(item)
+                    continue
+            selected.append(item)
         if deselected:
             items[:] = selected
             config.hook.pytest_deselected(items=deselected)
