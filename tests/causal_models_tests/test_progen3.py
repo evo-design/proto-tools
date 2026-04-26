@@ -276,7 +276,7 @@ def test_progen3_score_per_position_consistency():
     """
     seq = "MKTLVIVTGASGAGK"
     inputs = ProGen3ScoringInput(sequences=[seq])
-    config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL)
+    config = ProGen3ScoringConfig(model_checkpoint=_SMALL_MODEL, seed=42)
     result = run_progen3_score(inputs, config)
 
     score = result.scores[0]
