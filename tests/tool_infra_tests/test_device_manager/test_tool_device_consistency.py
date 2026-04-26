@@ -8,7 +8,6 @@ import re
 import pytest
 
 from proto_tools.tools import ToolRegistry
-from tests.conftest import is_on_chimera
 
 _all_gpu_specs = [spec for spec in ToolRegistry.list_all() if spec.uses_gpu]
 
@@ -21,12 +20,6 @@ def _find_standalone_script(tool_spec):
     for name in ("inference.py", "run.py"):
         if (standalone_dir / name).exists():
             return standalone_dir / name
-
-    # AlphaFold3 exception: script in tool root
-    if tool_spec.key == "alphafold3-prediction":
-        for name in ("inference.py", "run.py"):
-            if (tool_dir / name).exists():
-                return tool_dir / name
 
     return None
 
@@ -47,9 +40,6 @@ def test_standalone_protocol_compliance(tool_spec):
     - If the tool imports JAX, it uses centralized resolve_jax_device() helper
     """
     tool_key = tool_spec.key
-
-    if tool_key == "alphafold3-prediction" and not is_on_chimera():
-        pytest.skip("AlphaFold3 requires Chimera cluster")
 
     standalone_script = _find_standalone_script(tool_spec)
     assert standalone_script is not None, (

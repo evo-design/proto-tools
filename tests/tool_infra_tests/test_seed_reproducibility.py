@@ -6,7 +6,6 @@ from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from proto_tools.utils.base_config import BaseConfig
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.pytest_helpers import (
-    CHIMERA_ONLY_KEYS,
     EXCLUDED_CATEGORIES,
     build_inputs_and_config,
     parse_min_gpu_count,
@@ -68,11 +67,19 @@ def test_masking_strategy_seeded():
 #   alphafold2-prediction (see _SEED_NON_PERSISTENT_EXCLUDED_KEYS), but
 #   gradient backprop amplifies the drift beyond tolerances even within a
 #   single persistent worker (~12% relative error on gradient values).
+# - alphafold3-prediction: AF3 honours the seed via ``modelSeeds`` →
+#   ``jax.random.PRNGKey(seed)`` in run_alphafold.py, but the diffusion +
+#   pairformer stack hits the same JAX/CUDA autotune + bfloat16 reduction-order
+#   non-determinism as AF2. ~7 mÅ atomic-coordinate drift between runs (same
+#   seed) — across both persistent and non-persistent variants. Mitigations
+#   like ``XLA_FLAGS=--xla_gpu_deterministic_ops=true`` would slow inference
+#   2-5x without a guarantee of bit-exact reproducibility.
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "protenix-prediction",
         "alphafold2-binder",
+        "alphafold3-prediction",
     }
 )
 
@@ -156,9 +163,6 @@ def _build_seed_test_params() -> list:
         if spec.uses_gpu:
             gpu_count = parse_min_gpu_count(spec.device_count)
             marks.append(pytest.mark.uses_gpu(gpu_count))
-
-        if spec.key in CHIMERA_ONLY_KEYS:
-            marks.append(pytest.mark.only_chimera)
 
         params.append(pytest.param(spec, id=spec.key, marks=marks))
 

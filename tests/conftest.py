@@ -41,35 +41,6 @@ from proto_tools.utils.system_info import (
 from proto_tools.utils.tool_instance import ToolInstance
 
 
-def is_on_chimera() -> bool:
-    """Check if running on the Chimera (arc-slurm) cluster."""
-    # First check environment variable (set by some SLURM configs)
-    cluster_name = os.environ.get("SLURM_CLUSTER_NAME")
-    if cluster_name == "arc-slurm":
-        return True
-
-    # If SLURM_JOB_ID is set, we're on SLURM - query scontrol for cluster name
-    if os.environ.get("SLURM_JOB_ID"):
-        try:
-            result = subprocess.run(  # noqa: PLW1510 -- checking returncode manually
-                ["scontrol", "show", "config"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                # Parse "ClusterName = arc-slurm" from output
-                import re
-
-                match = re.search(r"ClusterName\s*=\s*(\S+)", result.stdout)
-                if match:
-                    return match.group(1) == "arc-slurm"
-        except Exception:
-            pass
-
-    return False
-
-
 @functools.cache
 def _gpu_available() -> bool:
     """Check if a GPU is likely available (without importing torch)."""
@@ -730,19 +701,14 @@ def pytest_collection_modifyitems(config, items):
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
-        skip_not_chimera = pytest.mark.skip(reason="--env-report: requires Chimera cluster")
         gpu_available = _gpu_available()
         visible_gpus = number_of_visible_gpus() if gpu_available else 0
-        on_chimera = is_on_chimera()
 
         selected = []
         deselected = []
         for item in items:
             if "include_in_env_report" not in item.keywords:
                 deselected.append(item)
-            elif "only_chimera" in item.keywords and not on_chimera:
-                item.add_marker(skip_not_chimera)
-                selected.append(item)
             elif "uses_gpu" in item.keywords and not gpu_available:
                 # Skip GPU tests on platforms without GPU, but still include in report
                 item.add_marker(skip_no_gpu)
@@ -850,13 +816,6 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "extensive" in item.keywords:
                 item.add_marker(skip_extensive)
-
-    # Skip only_chimera tests when not on Chimera cluster
-    if not is_on_chimera():
-        skip_not_chimera = pytest.mark.skip(reason="Test requires Chimera cluster (SLURM_CLUSTER_NAME != 'arc-slurm')")
-        for item in items:
-            if "only_chimera" in item.keywords:
-                item.add_marker(skip_not_chimera)
 
     # Skip test_on_platforms tests when current architecture doesn't match
     import platform as _platform

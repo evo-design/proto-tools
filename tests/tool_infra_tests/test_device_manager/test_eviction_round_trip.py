@@ -11,18 +11,14 @@ import pytest
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 from proto_tools.utils.tool_instance import ToolInstance
-from tests.tool_infra_tests.pytest_helpers import CHIMERA_ONLY_KEYS, parse_min_gpu_count
+from tests.tool_infra_tests.pytest_helpers import parse_min_gpu_count
 
 # Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
-# Tools requiring specific clusters get per-item markers via pytest.param.
-_GPU_TOOLS = []
-for _spec in ToolRegistry.list_all():
-    if not _spec.uses_gpu or _spec.category == "testing":
-        continue
-    if _spec.key in CHIMERA_ONLY_KEYS:
-        _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key, marks=pytest.mark.only_chimera))
-    else:
-        _GPU_TOOLS.append(pytest.param(_spec, id=_spec.key))
+_GPU_TOOLS = [
+    pytest.param(_spec, id=_spec.key)
+    for _spec in ToolRegistry.list_all()
+    if _spec.uses_gpu and _spec.category != "testing"
+]
 
 
 @pytest.mark.extensive

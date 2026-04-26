@@ -2,8 +2,9 @@
 
 Two execution paths, selected at runtime based on what setup.sh provisioned:
 
-1. Sif path (preferred): invokes ``apptainer exec <sif> python run_alphafold.py``
-   inside a pre-built AlphaFold3 container image. Robust across systems.
+1. Sif path (preferred): invokes ``apptainer run <sif>`` against a pre-built
+   AlphaFold3 container image (the sif's ``%runscript`` execs ``run_alphafold.py``).
+   Robust across systems.
 2. Env path (fallback): invokes ``python run_alphafold.py`` directly from a
    source clone of AlphaFold3 installed into the tool's micromamba venv.
 

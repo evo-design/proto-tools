@@ -248,7 +248,7 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - Python >=3.10, Pydantic >=2.0
 - Ruff for linting and formatting (line length 120, 22 rule groups with Google-convention pydocstyle — see `pyproject.toml [tool.ruff.lint]` for full config). Formatting is enforced in CI via `ruff format --check`.
 - Mypy strict mode with Pydantic plugin — all code must pass `mypy proto_tools/` with zero errors. Every `# type: ignore` must include the error code (e.g. `# type: ignore[arg-type]`). Use only for genuinely unfixable external-lib issues. Prefer `assert` guards for type narrowing over `# type: ignore`. Do NOT use `cast()`, arbitrary `Protocol` definitions, or `TYPE_CHECKING` blocks to work around type issues. Third-party deps without stubs are listed in `[[tool.mypy.overrides]]`.
-- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `only_chimera`, `extensive`
+- Pytest markers: `uses_gpu`, `uses_cpu`, `slow`, `integration`, `skip_ci`, `asyncio`, `extensive`
 - `pytest-randomly` randomizes test order; reproduce with `--randomly-seed=N`
 - Branch coverage configured via `[tool.coverage]` in `pyproject.toml`; CI runs `--cov`
 - Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`

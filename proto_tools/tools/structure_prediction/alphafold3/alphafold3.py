@@ -127,10 +127,11 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             Default: ``None``.
 
         sif_path (str | None): Optional path to a pre-built AlphaFold3 Apptainer
-            image (``.sif``). When set, the tool runs ``apptainer exec`` against
-            this image instead of the in-env Python install. When ``None`` (default),
-            inference.py looks for ``$VENV_PATH/alphafold3.sif`` (provisioned by
-            setup.sh) and falls back to the env-based install if absent.
+            image (``.sif``). When set, the tool runs ``apptainer run`` against
+            this image (which dispatches via the sif's ``%runscript``) instead of
+            the in-env Python install. When ``None`` (default), inference.py looks
+            for ``$VENV_PATH/alphafold3.sif`` (provisioned by setup.sh) and falls
+            back to the env-based install if absent.
             Default: ``None``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
