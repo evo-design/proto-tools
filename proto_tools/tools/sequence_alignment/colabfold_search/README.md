@@ -32,7 +32,7 @@ ColabFold uses MMSeqs2 (Many-against-Many sequence searching) for fast homology 
 
 **Search modes:**
 - **Remote** (default): Queries the ColabFold API server. No local database required, but subject to rate limits. Best for small batches.
-- **Local**: Searches a locally installed MMSeqs2 database. Requires downloading the [UniRef30](https://www.uniprot.org/help/uniref) database (~70 GB). Best for large-scale or repeated searches.
+- **Local**: Searches a locally installed MMSeqs2 database. **Requires manually provisioning the [UniRef30](https://www.uniprot.org/help/uniref) database** before first use — see [Local Database Setup](#local-database-setup) under Configuration. Best for large-scale or repeated searches.
 
 ## Input Parameters
 
@@ -71,7 +71,7 @@ Sequence IDs are auto-generated from a hash of the sequence if not provided.
 | `database_name` | `str` | `"uniref30_2302_db"` | Database name for local search. |
 | `num_threads` | `Optional[int]` | `None` (auto) | CPU threads for local search. Auto-detects available cores. |
 | `output_dir` | `Optional[str]` | `None` | Output directory for MSA files. Defaults to `~/.cache/proto-language/colabfold_search`. |
-| `msa_db_dir` | `str` | (system default) | Path to local MMSeqs2 database directory. Local mode only. |
+| `msa_db_dir` | `Optional[str]` | `None` (resolves to `$PROTO_MODEL_CACHE/databases/uniref30_2302/`) | Path to local MMSeqs2 database directory. Local mode only. |
 | `verbose` | `bool` | `False` | Print progress messages during execution. |
 
 ### Parameter Guides
@@ -91,6 +91,36 @@ Sequence IDs are auto-generated from a hash of the sequence if not provided.
 |---------|-----------|-------|-------------|
 | `False` | Lower | Faster | Most use cases; sufficient for well-studied protein families |
 | `True` | Higher | Slower | Orphan proteins, de novo designs, or when MSA depth is critical for structure prediction |
+
+### Local Database Setup
+
+Local search (`search_mode="local"`) requires the UniRef30 MMSeqs2 database to be downloaded and indexed on the host. **The tool does not download databases automatically** — running `colabfold-search` against a missing local database raises a `ValueError` with a hint pointing at this script. Provision once:
+
+```bash
+# Default location: $PROTO_MODEL_CACHE/databases/uniref30_2302/
+# (resolves to $PROTO_HOME/proto_model_cache/databases/uniref30_2302/ when PROTO_MODEL_CACHE is unset)
+bash proto_tools/tools/sequence_alignment/colabfold_search/setup_databases.sh \
+  "$PROTO_MODEL_CACHE/databases/uniref30_2302" \
+  uniref30_2302 \
+  colabfold_envdb_202108 \
+  1   # SKIP_METAGENOMIC=1; drop this arg to also fetch the ~110 GB envdb
+```
+
+What the script does:
+
+1. Downloads `uniref30_2302.tar.gz` (~99 GB) and the companion taxonomy tarball
+2. Extracts the prebuilt MMSeqs2 database files
+3. Runs `mmseqs createindex` to build the CPU-side `.idx` (~290 GB)
+4. Runs `mmseqs makepaddedseqdb` to build the GPU-padded `.idx_pad` (~8 GB; requires the GPU-capable MMseqs2 binary, included in the tool's standalone env)
+5. Touches a `UNIREF30_READY` marker
+
+**Disk requirement**: ~650 GB free at peak (downloads + intermediate tar + indexed DB). Final indexed size is ~630 GB.
+
+**Time**: ~2 hours on a fast network (download dominates; indexing is ~30 minutes).
+
+**Custom location**: pass any path as the first argument and set `msa_db_dir` to the same path on `ColabfoldSearchConfig`. Multiple proto-tools (now and planned) read from `$PROTO_MODEL_CACHE/databases/{name}/`, so following the default keeps databases shareable.
+
+**GPU search**: requires the `.idx_pad` file produced in step 4 above. The tool validates this at config time when `use_gpu=True`.
 
 ## Output Specification
 
@@ -213,7 +243,7 @@ if msa is not None:
 - **Results are cached per sequence.** The `cacheable=True` flag on `@tool()` enables per-item caching, so re-running with the same sequences skips the search. This works even if you add new sequences to the batch.
 - **MSA is `None` when no homologs are found.** Always check `result.msa is not None` before accessing MSA properties. The `num_homologs_found` property safely returns 0 in this case.
 - **Sequence IDs must be unique.** If you provide duplicate `sequence_id` values, validation will fail. Auto-generated IDs are derived from sequence hashes and are guaranteed unique for distinct sequences.
-- **Local databases require setup.** For local mode, download databases using the provided `setup_databases.sh` script. The UniRef30 database is ~70 GB on disk.
+- **Local databases require manual setup.** Local mode does not auto-download. See [Local Database Setup](#local-database-setup) for the one-time provisioning script; UniRef30 is ~99 GB to download and ~630 GB after indexing.
 - **A3M vs FASTA format.** A3M files use lowercase letters for insertions relative to the query, making them more compact. FASTA files pad with gaps for a rectangular alignment. Most structure predictors accept A3M directly.
 - **MSA depth matters for structure prediction.** If your MSA is shallow (<30 sequences), consider enabling `use_metagenomic_db=True` or increasing `sensitivity` to find more distant homologs.
 
