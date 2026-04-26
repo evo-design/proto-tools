@@ -100,6 +100,8 @@ class ColabfoldSearchInput(BaseToolInput):
     - List of ColabfoldSearchQuery instances or single ColabfoldSearchQuery instance  (explicit format)
     - List of sequence strings or single sequence string (each auto-assigned seq_0, seq_1, ...)
     - List of tuples or single tuple of the form (sequence, sequence_id)
+    - List of dicts or single dict of the form ``{"sequence": str, "sequence_id": str | None}``
+      (the shape produced by ``model_dump`` when the input is round-tripped through JSON)
 
     Attributes:
         queries (list[ColabfoldSearchQuery]): List of search queries. Each query
@@ -135,11 +137,15 @@ class ColabfoldSearchInput(BaseToolInput):
                 query = ColabfoldSearchQuery(sequence=raw_query)
             elif isinstance(raw_query, tuple):
                 query = ColabfoldSearchQuery(sequence=raw_query[0], sequence_id=raw_query[1])
+            elif isinstance(raw_query, dict):
+                # JSON round-trip case: model_dump serializes ColabfoldSearchQuery
+                # as {"sequence": str, "sequence_id": str | None}.
+                query = ColabfoldSearchQuery(**raw_query)
             elif isinstance(raw_query, ColabfoldSearchQuery):
                 query = raw_query
             else:
                 raise ValueError(
-                    f"Invalid query input: {raw_query}. Must be a string, tuple, or ColabfoldSearchQuery instance."
+                    f"Invalid query input: {raw_query}. Must be a string, tuple, dict, or ColabfoldSearchQuery instance."
                 )
             validated_queries.append(query)
 

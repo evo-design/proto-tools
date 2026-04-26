@@ -75,6 +75,9 @@ class ScoringStructureInput(BaseModel):
             resolved_structure = Structure(structure=str(structure))
         elif isinstance(structure, Structure):
             resolved_structure = structure
+        elif isinstance(structure, dict):
+            # JSON round-trip case: model_dump serializes a Structure as a dict.
+            resolved_structure = Structure(**structure)
         else:
             raise ValueError(f"Unsupported structure type: {type(structure)}")
 

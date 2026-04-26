@@ -152,14 +152,20 @@ class Mmseqs2HomologySearchInput(BaseToolInput):
 
 
 def _coerce_query(raw: Any) -> Mmseqs2HomologySearchQuery:
-    """Convert string / tuple / Query → Mmseqs2HomologySearchQuery."""
+    """Convert string / tuple / dict / Query → Mmseqs2HomologySearchQuery."""
     if isinstance(raw, Mmseqs2HomologySearchQuery):
         return raw
     if isinstance(raw, str):
         return Mmseqs2HomologySearchQuery(sequence=raw)
     if isinstance(raw, tuple) and len(raw) == 2:
         return Mmseqs2HomologySearchQuery(sequence=raw[0], sequence_id=raw[1])
-    raise ValueError(f"Invalid query item: {raw!r}. Expected str, (sequence, id) tuple, or Mmseqs2HomologySearchQuery.")
+    if isinstance(raw, dict):
+        # JSON round-trip case: model_dump serializes Mmseqs2HomologySearchQuery
+        # as {"sequence": str, "sequence_id": str | None}.
+        return Mmseqs2HomologySearchQuery(**raw)
+    raise ValueError(
+        f"Invalid query item: {raw!r}. Expected str, (sequence, id) tuple, dict, or Mmseqs2HomologySearchQuery."
+    )
 
 
 # ============================================================================
