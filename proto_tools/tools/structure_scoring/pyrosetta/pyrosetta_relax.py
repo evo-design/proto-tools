@@ -122,6 +122,9 @@ class PyRosettaRelaxConfig(BaseConfig):
             ``constrain_relax_to_start_coords(True)`` on the FastRelax mover so
             atoms stay near their input positions. Recommended for filter use
             cases where large geometric deviations would defeat the purpose.
+        max_iter (int | None): Maximum minimizer iterations per relax cycle.
+            ``None`` uses PyRosetta's default (2500). Upstream BindCraft uses
+            200 for faster turnaround in binder-design pipelines.
     """
 
     scorefxn: str = ConfigField(
@@ -141,6 +144,13 @@ class PyRosettaRelaxConfig(BaseConfig):
         title="Constrain to Start",
         default=True,
         description="Constrain relaxation to starting coordinates",
+        advanced=True,
+    )
+    max_iter: int | None = ConfigField(
+        default=None,
+        ge=1,
+        title="Max Iterations",
+        description="Maximum minimizer iterations per relax cycle. None uses PyRosetta default (2500).",
         advanced=True,
     )
 
@@ -250,6 +260,7 @@ def run_pyrosetta_relax(
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
         "relax_cycles": config.relax_cycles,  # type: ignore[union-attr]
         "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
+        "max_iter": config.max_iter,  # type: ignore[union-attr]
         "seed": seed,
         "device": "cpu",
     }

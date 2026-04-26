@@ -410,6 +410,7 @@ class PyRosettaScorer:
         relax_cycles: int = 1,
         constrain_to_start: bool = True,
         seed: int | None = None,
+        max_iter: int | None = None,
     ) -> dict[str, Any]:
         """Run FastRelax on each input pose and return the relaxed PDB + total score.
 
@@ -426,6 +427,8 @@ class PyRosettaScorer:
                 the RNG is not reseeded; because PyRosetta's RNG is
                 process-global state, output becomes dependent on prior
                 calls within the same persistent worker.
+            max_iter (int | None): Maximum minimizer iterations per relax
+                cycle. When ``None``, PyRosetta's default (2500) is used.
 
         Returns:
             dict: ``{"results": [{"relaxed_pdb": str, "total_score": float,
@@ -454,6 +457,8 @@ class PyRosettaScorer:
             dropped_residues = self._find_dropped_residues(pose)
 
             fast_relax = FastRelax(relax_sfxn, relax_cycles)
+            if max_iter is not None:
+                fast_relax.max_iter(max_iter)
             fast_relax.constrain_relax_to_start_coords(constrain_to_start)
             fast_relax.apply(pose)
 
@@ -754,6 +759,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             relax_cycles=input_dict["relax_cycles"],
             constrain_to_start=input_dict["constrain_to_start"],
             seed=input_dict["seed"],
+            max_iter=input_dict.get("max_iter"),
         )
     if operation == "interface_analyzer":
         return _scorer.compute_interface_analyzer(
