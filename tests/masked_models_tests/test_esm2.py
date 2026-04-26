@@ -43,6 +43,7 @@ def test_esm2_embeddings_input_normalizes_single_string():
 # ── Embedding tests ───────────────────────────────────────────────────────────
 
 
+@pytest.mark.benchmark("esm2-embedding")
 @pytest.mark.uses_gpu
 def test_esm2_forward_pass():
     sequences = ["TARGET"] * 10 + ["TEST"] * 30

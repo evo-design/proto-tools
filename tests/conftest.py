@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -451,6 +451,142 @@ _env_report_collector: EnvReportCollector | None = None
 
 
 # ============================================================================
+# Benchmark Report Collector
+# ============================================================================
+@dataclass
+class BenchmarkResult:
+    """Outcome of a single @pytest.mark.benchmark test."""
+
+    tool_key: str
+    toolkit: str
+    test_nodeid: str
+    status: str  # "passed", "failed", "skipped"
+    duration_seconds: float
+    error_message: str | None
+    backend_url: str | None
+    parametrize_summary: dict[str, str] | None  # callspec.params for parametrized tests
+    timestamp: str  # ISO-8601 UTC
+
+
+def _resolve_toolkit(tool_key: str) -> str:
+    """Map a registered tool_key to its toolkit (parent directory) name.
+
+    Falls back to the part before the first '-' if the registry doesn't know
+    the key (e.g. test-only registration).
+    """
+    spec = ToolRegistry.get(tool_key)
+    if spec is not None:
+        return spec.source_file.parent.name
+    return tool_key.split("-", 1)[0]
+
+
+def _summarize_callspec(item: pytest.Item) -> dict[str, str] | None:
+    """Compact one-line summary of pytest parametrize values, if any.
+
+    Returns ``{"test_name": "trp_heterodimer", "predictor_name": "esmfold", ...}``
+    so the report can identify which row inside a parametrized test was run.
+    """
+    callspec = getattr(item, "callspec", None)
+    if callspec is None or not getattr(callspec, "params", None):
+        return None
+    return {k: repr(v) if not isinstance(v, str) else v for k, v in callspec.params.items()}
+
+
+@dataclass
+class BenchmarkReportCollector:
+    """Collects benchmark test results and writes per-tool markdown reports.
+
+    Layout: ``<output_dir>/{toolkit}/{tool_key}.md``. Each run overwrites the
+    canonical file for that tool — no merging, no embedded JSON.
+
+    The ``results`` mapping is keyed by ``tool_key`` and uses last-write-wins
+    semantics. Today only one parametrize row per tool carries the benchmark
+    marker, so this is unambiguous; if a future change marks two rows with the
+    same tool_key, only the last to finish will appear in the report.
+    """
+
+    output_dir: Path
+    backend_url: str | None = None
+    results: dict[str, BenchmarkResult] = field(default_factory=dict)
+
+    def record_result(
+        self,
+        item: pytest.Item,
+        tool_key: str,
+        outcome: str,
+        duration_seconds: float,
+        *,
+        error_message: str | None = None,
+    ) -> None:
+        self.results[tool_key] = BenchmarkResult(
+            tool_key=tool_key,
+            toolkit=_resolve_toolkit(tool_key),
+            test_nodeid=item.nodeid,
+            status=outcome,
+            duration_seconds=round(duration_seconds, 2),
+            error_message=error_message,
+            backend_url=self.backend_url,
+            parametrize_summary=_summarize_callspec(item),
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+
+    def write_reports(self) -> list[Path]:
+        """Render one markdown file per recorded tool. Returns the paths written."""
+        written: list[Path] = []
+        for result in self.results.values():
+            target = self.output_dir / result.toolkit / f"{result.tool_key}.md"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(_render_benchmark_markdown(result))
+            written.append(target)
+        return written
+
+
+def _render_benchmark_markdown(result: BenchmarkResult) -> str:
+    """Render a BenchmarkResult as a markdown report (one file per tool)."""
+    if result.status == "passed":
+        status_emoji, color = "✅", "brightgreen"
+    elif result.status == "failed":
+        status_emoji, color = "❌", "red"
+    else:
+        status_emoji, color = "⏭️", "lightgrey"
+
+    backend_display = result.backend_url or "local (default device)"
+
+    lines: list[str] = [
+        f"# `{result.tool_key}`",
+        "",
+        f"![status](https://img.shields.io/badge/status-{result.status}-{color})",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| **Toolkit** | `{result.toolkit}` |",
+        f"| **Backend** | `{backend_display}` |",
+        f"| **Test** | `{result.test_nodeid}` |",
+        f"| **Duration** | {result.duration_seconds:.2f}s |",
+        f"| **Status** | {status_emoji} {result.status} |",
+        f"| **Run at** | {result.timestamp} |",
+        "",
+        "## Parametrize values",
+        "",
+    ]
+    if result.parametrize_summary:
+        lines += ["| Parameter | Value |", "|---|---|"]
+        lines += [f"| `{k}` | `{v}` |" for k, v in result.parametrize_summary.items()]
+    else:
+        lines.append("_(test is not parametrized)_")
+
+    if result.error_message:
+        lines += ["", "## Error", "", "```", result.error_message, "```"]
+
+    lines += ["", "---", f"*Generated by `pytest --benchmark-report` at {result.timestamp}.*", ""]
+    return "\n".join(lines)
+
+
+# Global collector (set in pytest_configure if --benchmark-report is used)
+_benchmark_report_collector: BenchmarkReportCollector | None = None
+
+
+# ============================================================================
 # Pytest Hooks
 # ============================================================================
 def pytest_addoption(parser):
@@ -503,9 +639,10 @@ def pytest_addoption(parser):
         "--benchmark",
         action="store_true",
         default=False,
-        help="Run only @pytest.mark.benchmark tests. Combine with --all (local GPU) or "
-        "--use-cloud (route to Proto's remote execution service); on its own, the GPU/slow "
-        "gates still apply and benchmarks may be skipped. Marked tests also run normally under --all.",
+        help="Run only @pytest.mark.benchmark tests. In this mode the 'slow' gate is bypassed (no need "
+        "to also pass --slow); hardware gates (uses_gpu, GPU count) are bypassed only when --use-cloud "
+        "is also set. Outside this mode, marked tests are gated normally — they run under --all but "
+        "are skipped under plain pytest if also marked slow / uses_gpu.",
     )
     parser.addoption(
         "--use-cloud",
@@ -513,6 +650,12 @@ def pytest_addoption(parser):
         default=False,
         help="Route every tool run through device='cloud' (proto_tools.cloud.use_api_backend). "
         "Requires PROTO_API_KEY in the environment.",
+    )
+    parser.addoption(
+        "--benchmark-report",
+        default=None,
+        help="Write per-tool benchmark markdown reports under the given directory "
+        "(layout: <dir>/{toolkit}/{tool_key}.md). Implies --benchmark.",
     )
     parser.addoption(
         "--no-log-console",
@@ -538,6 +681,7 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     """Configure pytest with custom markers and options."""
     global _env_report_collector  # noqa: PLW0603 -- test infrastructure
+    global _benchmark_report_collector  # noqa: PLW0603 -- test infrastructure
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line("markers", "uses_cpu: mark test as CPU-only")
@@ -569,6 +713,19 @@ def pytest_configure(config):
 
         # Capture parent process environment before any tools run
         capture_parent_env()
+
+    # Handle --benchmark-report (implies --benchmark via pytest_collection_modifyitems below)
+    benchmark_report_opt = config.getoption("--benchmark-report")
+    if benchmark_report_opt:
+        backend_url = (
+            os.environ.get("PROTO_TOOLS_BASE_URL", "<proto-client default>")
+            if config.getoption("--use-cloud")
+            else None
+        )
+        _benchmark_report_collector = BenchmarkReportCollector(
+            output_dir=Path(benchmark_report_opt),
+            backend_url=backend_url,
+        )
 
 
 def pytest_runtest_logstart(nodeid, location):
@@ -662,6 +819,28 @@ def pytest_runtest_makereport(item, call):
                 category=category,
             )
 
+    # Benchmark report: capture per-tool outcome.
+    # On the call phase: record pass/fail/skip with the call duration.
+    # On setup-phase failures or skips (e.g. missing weights, insufficient GPUs):
+    # record so the report shows "this tool was selected but didn't run", instead of
+    # silently leaving the file out.
+    if _benchmark_report_collector is not None and "benchmark" in item.keywords:
+        marker = item.get_closest_marker("benchmark")
+        if marker and marker.args:
+            tool_key = marker.args[0]
+            longrepr = str(report.longrepr) if report.longrepr else None
+            if report.when == "call":
+                if report.passed:
+                    status, err = "passed", None
+                elif report.skipped:
+                    status, err = "skipped", longrepr
+                else:
+                    status, err = "failed", longrepr
+                _benchmark_report_collector.record_result(item, tool_key, status, call.duration, error_message=err)
+            elif report.when == "setup" and (report.failed or report.skipped):
+                status = "skipped" if report.skipped else "failed"
+                _benchmark_report_collector.record_result(item, tool_key, status, call.duration, error_message=longrepr)
+
 
 def pytest_sessionfinish(session, exitstatus):
     """Log test session summary at the end and write env report if requested."""
@@ -718,6 +897,12 @@ def pytest_sessionfinish(session, exitstatus):
         if report_path:
             logger.info(f"\n--env-report: Compatibility report written to {report_path}")
             print(f"\n[env-report] Report written to: {report_path}")
+
+    # Write benchmark reports if collector is active
+    if _benchmark_report_collector is not None:
+        for path in _benchmark_report_collector.write_reports():
+            logger.info(f"--benchmark-report: wrote {path}")
+            print(f"[benchmark-report] {path}")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -787,19 +972,20 @@ def pytest_collection_modifyitems(config, items):
             if "skip_ci" in item.keywords:
                 item.add_marker(skip_ci)
 
-    # Benchmark + --use-cloud: the workload runs on the server, so the local
-    # uses_gpu / slow gates don't apply. Returns True for items that should be
-    # exempt from those skip blocks.
+    # Two independent carve-outs:
+    # - --use-cloud bypasses every hardware-availability gate, since the GPUs
+    #   live on the server. Applies to any selected test, not just benchmarks.
+    # - @pytest.mark.benchmark bypasses the default 'slow' gate so benchmark
+    #   tests still run when invoked under --benchmark, even if they happen
+    #   to also be marked slow. Hardware gates (gpu count) are NOT bypassed
+    #   by the benchmark marker alone — those still need --use-cloud.
     use_cloud = config.getoption("--use-cloud")
-
-    def _runs_in_cloud(item) -> bool:
-        return use_cloud and "benchmark" in item.keywords
 
     # Skip GPU tests when --cpu is specified
     if config.getoption("--cpu"):
         skip_gpu = pytest.mark.skip(reason="--cpu specified")
         for item in items:
-            if "uses_gpu" in item.keywords and not _runs_in_cloud(item):
+            if "uses_gpu" in item.keywords and not use_cloud:
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu is specified
@@ -813,12 +999,13 @@ def pytest_collection_modifyitems(config, items):
     elif not (config.getoption("--all") or (config.getoption("--integration") and _gpu_available())):
         skip_gpu = pytest.mark.skip(reason="GPU test (use --gpu, --integration with GPU, or --all to run)")
         for item in items:
-            if "uses_gpu" in item.keywords and not _runs_in_cloud(item):
+            if "uses_gpu" in item.keywords and not use_cloud:
                 item.add_marker(skip_gpu)
 
     # Handle slow test filtering
     run_all = config.getoption("--all")
     run_slow_only = config.getoption("--slow")
+    benchmark_mode = config.getoption("--benchmark") or config.getoption("--benchmark-report")
 
     if run_slow_only:
         # When --slow is specified, skip tests NOT marked as slow
@@ -826,11 +1013,12 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" not in item.keywords:
                 item.add_marker(skip_non_slow)
-    elif not run_all and not config.getoption("extensive"):
-        # By default, skip slow tests (--all or --ext bypass this)
+    elif not run_all and not config.getoption("extensive") and not benchmark_mode:
+        # By default, skip slow tests. --all and --ext bypass this; --benchmark
+        # also bypasses (benchmark mode is opt-in to running slow workloads).
         skip_slow = pytest.mark.skip(reason="slow test (use --all to run, or --slow to run only slow tests)")
         for item in items:
-            if "slow" in item.keywords and not _runs_in_cloud(item):
+            if "slow" in item.keywords:
                 item.add_marker(skip_slow)
 
     # Skip integration tests unless --integration or --all is specified
@@ -851,7 +1039,8 @@ def pytest_collection_modifyitems(config, items):
 
     # --benchmark: keep only @pytest.mark.benchmark tests. Without the flag,
     # benchmark-marked tests still run normally — the marker is purely a selection signal.
-    if config.getoption("--benchmark"):
+    # --benchmark-report implies --benchmark.
+    if config.getoption("--benchmark") or config.getoption("--benchmark-report"):
         selected, deselected = [], []
         for item in items:
             (selected if "benchmark" in item.keywords else deselected).append(item)
@@ -869,9 +1058,12 @@ def pytest_collection_modifyitems(config, items):
             if current_arch not in allowed:
                 item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
 
-    # Skip uses_gpu(n) tests when fewer than n GPUs are visible
+    # Skip uses_gpu(n) tests when fewer than n GPUs are visible — bypassed
+    # under --use-cloud (the GPUs live on the server).
     visible_gpus = number_of_visible_gpus()
     for item in items:
+        if use_cloud:
+            continue
         for marker in item.iter_markers("uses_gpu"):
             required = marker.args[0] if marker.args else 1
             if visible_gpus < required:
