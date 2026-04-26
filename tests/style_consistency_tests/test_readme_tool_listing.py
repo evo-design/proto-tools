@@ -7,7 +7,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _TOOLS_DIR = _REPO_ROOT / "proto_tools" / "tools"
 _README = _REPO_ROOT / "README.md"
 
-_EXCLUDED_DIRS = frozenset({"__pycache__", "infra", "utils", "testing"})
+_EXCLUDED_DIRS = frozenset({"__pycache__", "infra", "utils", "testing", "databases"})
 
 
 def _discover_tools_on_disk() -> set[str]:

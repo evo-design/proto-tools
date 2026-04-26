@@ -43,11 +43,16 @@ def _default_output_dir() -> Path:
     return get_proto_home() / "colabfold_search"
 
 
-# Default database directory (in the same directory as this file)
-DEFAULT_DB_DIR = Path(__file__).parent / "databases"
+# Default database directory: registry-driven, resolves to
+# `$PROTO_MODEL_CACHE/databases/uniref30_2302/`. Kept under PROTO_MODEL_CACHE
+# (not $PROTO_HOME/colabfold_search/) so it survives `_default_output_dir`
+# cleanup, and uses a dataset-scoped subdir (not tool-scoped) so the future
+# `mmseqs2-homology-search` tool reads the same files without redownloading.
+# See proto_tools/tools/sequence_alignment/databases/.
+def _default_msa_db_dir() -> Path:
+    from proto_tools.tools.sequence_alignment.databases import get_dataset_dir
 
-# NOTE: Hardcoded path to shared ColabFold database on Chimera to avoid redundant downloads.
-CHIMERA_COLABFOLD_DB_LOCATION = "/large_storage/hielab/brk/databases/colabfold"
+    return get_dataset_dir("uniref30-2302")
 
 
 # Input:
@@ -282,10 +287,13 @@ class ColabfoldSearchConfig(BaseConfig):
             but significantly slow down the search. Lower values are faster but
             may miss distant homologs. If None, uses the default sensitivity (~8). Default: None.
 
-        msa_db_dir (str): Only used if search_mode is "local". Path to the local ColabFold/MMSeqs2 database directory.
-            This directory should contain the database files downloaded using the
-            setup_databases.sh script. To download databases, run: ./setup_databases.sh
-            Default: None (uses built-in databases directory).
+        msa_db_dir (str | None): Only used if search_mode is "local". Path to the local ColabFold/MMSeqs2
+            database directory. This directory should contain the database files downloaded using
+            the `setup_databases.sh` script. If None, defaults to `$PROTO_MODEL_CACHE/databases/uniref30_2302/`
+            (which resolves to `$PROTO_HOME/proto_model_cache/databases/uniref30_2302/` when
+            `PROTO_MODEL_CACHE` is unset). This location is deliberately *outside* `output_dir`
+            so the run-time cleanup in `_cleanup_default_output_dir_if_cache_empty` cannot delete
+            downloaded databases. Default: None.
 
         database_name (str): Only used if search_mode is "local". Name of the database to use.
             If not provided, the tool will automatically detect the available databases and use one.
@@ -324,10 +332,10 @@ class ColabfoldSearchConfig(BaseConfig):
         description="Directory for output MSA files (default: $PROTO_HOME/colabfold_search)",
         hidden=True,
     )
-    msa_db_dir: str = ConfigField(
+    msa_db_dir: str | None = ConfigField(
         title="MSA Database Directory",
-        default=CHIMERA_COLABFOLD_DB_LOCATION,
-        description="Path to local ColabFold/MMSeqs2 database directory (default: ./databases in tool directory)",
+        default=None,
+        description="Local MMSeqs2 database directory (default: $PROTO_MODEL_CACHE/databases/uniref30_2302/)",
     )
     database_name: str = ConfigField(
         title="Database Name",
@@ -372,8 +380,19 @@ class ColabfoldSearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def set_default_msa_db_dir(self) -> Any:
-        """Set default database directory if not provided and track user specification."""
-        self._user_specified_db_dir = self.msa_db_dir != str(DEFAULT_DB_DIR)
+        """Resolve `msa_db_dir` default to $PROTO_MODEL_CACHE/databases/uniref30_2302/ when not user-specified.
+
+        `_user_specified_db_dir` reflects whether the resolved value differs
+        from the registry default; it can't reliably distinguish None (unset)
+        from an explicit pass of the same default path, but that doesn't matter
+        for the error-message hint logic below.
+        """
+        default_resolved = str(_default_msa_db_dir())
+        if self.msa_db_dir is None:
+            self.msa_db_dir = default_resolved
+            self._user_specified_db_dir = False
+        else:
+            self._user_specified_db_dir = self.msa_db_dir != default_resolved
         return self
 
     @model_validator(mode="after")
@@ -383,9 +402,20 @@ class ColabfoldSearchConfig(BaseConfig):
         if self.search_mode != "local":
             return self
 
+        # `set_default_msa_db_dir` (declared above) always resolves None → default path.
+        assert self.msa_db_dir is not None
+
         # Ensure the specified directory exists
         if not Path(self.msa_db_dir).exists():
-            raise ValueError(f"msa_db_dir does not exist: {self.msa_db_dir}")
+            hint = (
+                " Provision by running "
+                "`proto_tools/tools/sequence_alignment/colabfold_search/setup_databases.sh "
+                f"{self.msa_db_dir}` "
+                "or set `msa_db_dir` to a pre-built database location."
+                if not self._user_specified_db_dir
+                else ""
+            )
+            raise ValueError(f"msa_db_dir does not exist: {self.msa_db_dir}.{hint}")
         if not Path(self.msa_db_dir).is_dir():
             raise ValueError(f"msa_db_dir exists but is not a directory: {self.msa_db_dir}")
 
@@ -432,6 +462,7 @@ class ColabfoldSearchConfig(BaseConfig):
         """Validate that the database has been formatted for GPU search."""
         if not self.use_gpu or self.search_mode != "local":
             return self
+        assert self.msa_db_dir is not None  # resolved by `set_default_msa_db_dir`
         idx_pad = Path(self.msa_db_dir) / f"{self.database_name}.idx_pad"
         if not idx_pad.exists():
             raise ValueError(
@@ -440,6 +471,16 @@ class ColabfoldSearchConfig(BaseConfig):
                 f"Create it with: mmseqs makepaddedseqdb {self.database_name}.idx {self.database_name}.idx_pad"
             )
         return self
+
+    @property
+    def devices_per_instance(self) -> int:
+        """Number of GPUs the configured search uses.
+
+        Returns 1 when ``use_gpu=True`` (MMseqs2-GPU is invoked with ``--gpu 1``),
+        else 0 (CPU search). Overrides the ``BaseConfig`` default of 1 so the
+        framework's GPU accounting matches actual usage.
+        """
+        return 1 if self.use_gpu else 0
 
 
 # ============================================================================

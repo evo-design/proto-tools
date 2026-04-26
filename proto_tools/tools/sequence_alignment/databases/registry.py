@@ -1,0 +1,238 @@
+"""Dataset registry for MMseqs2-based homology search tools.
+
+One source of truth for downloadable sequence databases consumed by
+``colabfold-search`` (today) and ``mmseqs2-homology-search`` (planned). Holds
+per-dataset metadata — molecule type, download URLs, index recipe, MMseqs2
+flags, GPU/pairing capability — and resolves the on-disk cache location under
+``$PROTO_MODEL_CACHE/databases/{name}/``.
+
+This module defines the schemas and a simple lookup registry only. The actual
+download / index / paired-index machinery (``DatasetManager.ensure``,
+``provision_datasets``, CLI entrypoint) ships with ``mmseqs2-homology-search``
+— see ``notes/homology-search-design.md``.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import ClassVar, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# ============================================================================
+# Schemas
+# ============================================================================
+
+
+class DownloadSpec(BaseModel):
+    """One file to fetch as part of a dataset.
+
+    Attributes:
+        url (str): HTTPS URL to fetch from.
+        filename (str): Local filename under the dataset's cache directory.
+            Used for resume and post-download verification.
+        sha256 (str | None): Optional SHA-256 of the downloaded file for
+            integrity check.
+        required (bool): When False, download failure is non-fatal
+            (e.g. taxonomy files needed only for paired-MSA workflows).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(description="HTTPS URL to fetch from")
+    filename: str = Field(description="Local filename under the dataset cache dir")
+    sha256: str | None = Field(default=None, description="Optional SHA-256 checksum")
+    required: bool = Field(default=True, description="Whether failure is fatal")
+
+
+class IndexStep(BaseModel):
+    """One command to run after download, in order.
+
+    Each step is an MMseqs2 invocation (or similar) that transforms the raw
+    download into usable index files. Steps are resolved in the tool's
+    standalone env at ``ensure()`` time.
+
+    Attributes:
+        command (list[str]): Argv for the step. Template placeholder
+            ``{name}`` is substituted with the dataset name at runtime.
+        description (str): One-line explanation for logs / error messages.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: list[str] = Field(description="Argv (supports {name} placeholder)")
+    description: str = Field(description="Human-readable step description")
+
+
+class IndexRecipe(BaseModel):
+    """How to turn downloads into an indexed MMseqs2 database.
+
+    Attributes:
+        steps (list[IndexStep]): Commands to run in order (extract, createdb,
+            makepaddedseqdb, createtaxdb, etc.).
+        output_files (list[str]): Files whose presence marks the dataset as
+            indexed. Supports ``{name}`` substitution.
+        paired_output_files (list[str]): Additional files required for the
+            paired-MSA workflow (typically taxonomy files). Supports ``{name}``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    steps: list[IndexStep] = Field(default_factory=list)
+    output_files: list[str] = Field(default_factory=list)
+    paired_output_files: list[str] = Field(default_factory=list)
+
+
+class MmseqsFlags(BaseModel):
+    """Search-time MMseqs2 parameters, baked into the dataset entry.
+
+    Registry-driven defaults keep the tool layer thin: the generalized
+    ``mmseqs2-homology-search`` tool does not branch on molecule type or
+    dataset, it just dereferences these flags.
+
+    Attributes:
+        sensitivity (float): MMseqs2 ``-s`` parameter (1.0 fast, 7.5 very sensitive).
+        prefilter_mode (int): MMseqs2 prefilter mode (0 kmer, 1 ungapped, 2 exhaustive).
+        max_seqs (int): Maximum results per query allowed through the prefilter.
+        extra_args (list[str]): Escape hatch for dataset-specific quirks.
+            Prefer dedicated fields when a pattern recurs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sensitivity: float = Field(default=8.0, description="MMseqs2 -s sensitivity")
+    prefilter_mode: int = Field(default=0, description="0=kmer, 1=ungapped, 2=exhaustive")
+    max_seqs: int = Field(default=300, description="Max prefilter results per query")
+    extra_args: list[str] = Field(default_factory=list, description="Escape-hatch extra flags")
+
+
+class DatasetEntry(BaseModel):
+    """One searchable homology database.
+
+    Attributes:
+        name (str): Registry key, kebab-case (e.g. ``"uniref30-2302"``).
+        molecule_type (Literal["protein", "rna", "dna"]): Sequence type.
+        display_name (str): Human-readable name for UI.
+        description (str): One-line description for UI.
+        citation_doi (str | None): Paper DOI if applicable.
+        urls (list[DownloadSpec]): Files to fetch.
+        total_download_bytes (int): Sum of all ``urls`` sizes for precheck.
+        total_disk_bytes (int): Post-extract, post-index size estimate.
+        index_recipe (IndexRecipe): Steps to produce the indexed DB.
+        mmseqs_flags (MmseqsFlags): Search-time MMseqs2 parameters.
+        db_prefix (str): Filename prefix of the final DB files on disk
+            (e.g. ``"uniref30_2302_db"`` → ``{cache_dir}/uniref30_2302_db*``).
+        supports_gpu (bool): Whether a GPU-padded index is produced
+            (``.idx_pad`` file present after indexing).
+        supports_pairing (bool): Whether a taxonomy-tagged index is produced
+            (required for cross-chain paired MSAs).
+        min_gpu_memory_gb (float | None): Minimum GPU memory for GPU search.
+            None when the dataset is CPU-only or negligible.
+        a3m_adapter (Literal["colabfold", "plain", "rna"]): Which A3M-writer
+            convention the ``mmseqs2-homology-search`` tool uses to stitch
+            m8 hits into an A3M for this dataset.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    molecule_type: Literal["protein", "rna", "dna"]
+    display_name: str
+    description: str
+    citation_doi: str | None = None
+
+    urls: list[DownloadSpec]
+    total_download_bytes: int
+    total_disk_bytes: int
+
+    index_recipe: IndexRecipe
+    mmseqs_flags: MmseqsFlags = Field(default_factory=MmseqsFlags)
+
+    db_prefix: str
+    supports_gpu: bool
+    supports_pairing: bool
+    min_gpu_memory_gb: float | None = None
+    a3m_adapter: Literal["colabfold", "plain", "rna"] = "colabfold"
+
+
+# ============================================================================
+# Registry
+# ============================================================================
+
+
+class DatasetRegistry:
+    """Lookup API over the set of registered dataset entries.
+
+    Entries self-register at import time by calling :meth:`register` from
+    ``proto_tools.tools.sequence_alignment.databases.entries.*`` modules.
+    """
+
+    _entries: ClassVar[dict[str, DatasetEntry]] = {}
+
+    @classmethod
+    def register(cls, entry: DatasetEntry) -> None:
+        """Register a dataset entry. Raises on duplicate ``name``."""
+        if entry.name in cls._entries:
+            raise ValueError(f"Dataset {entry.name!r} already registered")
+        cls._entries[entry.name] = entry
+
+    @classmethod
+    def get(cls, name: str) -> DatasetEntry:
+        """Return the entry for ``name``. Raises ``KeyError`` if missing."""
+        if name not in cls._entries:
+            available = ", ".join(sorted(cls._entries)) or "<none>"
+            raise KeyError(f"Unknown dataset {name!r}. Registered: {available}")
+        return cls._entries[name]
+
+    @classmethod
+    def list_all(cls) -> list[str]:
+        """All registered dataset names, sorted."""
+        return sorted(cls._entries)
+
+    @classmethod
+    def by_molecule_type(cls, molecule_type: Literal["protein", "rna", "dna"]) -> list[DatasetEntry]:
+        """All entries of the given molecule type."""
+        return [e for e in cls._entries.values() if e.molecule_type == molecule_type]
+
+
+# ============================================================================
+# Path resolution
+# ============================================================================
+
+
+def get_databases_root() -> Path:
+    """Return ``$PROTO_MODEL_CACHE/databases/``.
+
+    Falls back to ``$PROTO_HOME/proto_model_cache/databases/`` when
+    ``PROTO_MODEL_CACHE`` is unset. Matches the HuggingFace / torch cache
+    pattern so NFS-mounting ``PROTO_MODEL_CACHE`` shares datasets across users.
+    """
+    from proto_tools.utils.proto_home import get_proto_home
+
+    model_cache = os.environ.get("PROTO_MODEL_CACHE") or str(get_proto_home() / "proto_model_cache")
+    return Path(model_cache) / "databases"
+
+
+def get_dataset_dir(name: str) -> Path:
+    """Return the on-disk cache directory for a registered dataset.
+
+    Resolves to ``$PROTO_MODEL_CACHE/databases/{name_slug}/`` where
+    ``name_slug`` is the dataset's ``name`` with ``-`` replaced by ``_`` (to
+    match MMseqs2 filename conventions, e.g. ``uniref30_2302``).
+
+    The directory may not exist yet — this is a pure path helper, not an
+    ``ensure``. Materialization belongs to ``DatasetManager.ensure`` (TBD,
+    shipping with ``mmseqs2-homology-search``).
+
+    Args:
+        name (str): Registered dataset key (kebab-case, e.g. ``"uniref30-2302"``).
+
+    Returns:
+        Path: Absolute path to the dataset's cache directory.
+
+    Raises:
+        KeyError: If ``name`` is not a registered dataset.
+    """
+    entry = DatasetRegistry.get(name)
+    return get_databases_root() / entry.name.replace("-", "_")
