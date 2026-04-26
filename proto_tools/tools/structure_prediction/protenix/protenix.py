@@ -89,8 +89,7 @@ class ProtenixInput(StructurePredictionInput):
             if isinstance(chain, Fragment):
                 # Prefer CCD code: Protenix uses internal CCD parameterization,
                 # avoiding RDKit↔Protenix SMILES canonicalization mismatches.
-                ccd_code = chain.best_ccd_code()
-                ligand_str = f"CCD_{ccd_code}" if ccd_code else chain.smiles
+                ligand_str = f"CCD_{chain.ccd_code}" if chain.ccd_code else chain.smiles
                 entry = {"ligand": {"ligand": ligand_str, "count": 1}}
                 sequences.append(entry)
                 continue

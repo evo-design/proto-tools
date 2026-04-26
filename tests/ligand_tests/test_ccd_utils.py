@@ -288,8 +288,85 @@ def test_case_sensitivity_smiles():
     assert result3 is None or result3 == "SEP"
 
 
-def test_map_smiles_no_name_fallback():
-    assert map_smiles_to_ccd_code("c1ccc(C(=O)NCCNCCN)cc1", use_name_fallback=False) is None
+def test_map_smiles_novel_returns_none():
+    """A SMILES with no canonical or InChIKey match in the CCD returns None."""
+    assert map_smiles_to_ccd_code("c1ccc(C(=O)NCCNCCN)cc1") is None
+
+
+def test_inchikey_cache_contains_known_ccd_entries():
+    """InChIKey cache is populated for common biology-relevant ligands.
+
+    Validates the cache build correctly emits InChIKey entries (regression guard
+    for the InChIKey 2nd-tier lookup added in PR for #550). Asserts a minimum
+    number of probed CCDs were actually found — without this counter, the test
+    would silently pass if all probes happened to be ambiguity-filtered out.
+    """
+    from rdkit import Chem
+
+    from proto_tools.entities.ligands.ccd_utils import _get_inchikey_cache
+
+    cache = _get_inchikey_cache()
+    # All three probes are common biology ligands with known-unambiguous InChIKeys
+    # in the wwPDB CCD (verified at PR time). TYR and HEM are NOT used as probes:
+    # TYR shares its InChIKey with at least one other CCD entry; HEM produces an
+    # empty InChIKey (RDKit/InChI can't process metal-coordinated macrocycles).
+    probes = ["ATP", "FAD", "GTP"]
+    found = 0
+    for ccd_code in probes:
+        smiles = map_ccd_code_to_smiles(ccd_code)
+        assert smiles is not None
+        inchikey = Chem.MolToInchiKey(Chem.MolFromSmiles(smiles))  # type: ignore[no-untyped-call]
+        # If this InChIKey is in the cache, it must point to the right CCD.
+        if inchikey in cache:
+            assert cache[inchikey] == ccd_code, f"InChIKey {inchikey} maps to {cache[inchikey]}, expected {ccd_code}"
+            found += 1
+
+    # Guard against a future RDKit/InChI update silently filtering all probes —
+    # without this counter the per-iteration assert above would silently pass.
+    assert found == len(probes), (
+        f"Expected all {len(probes)} probes ({probes}) in InChIKey cache, only found {found}. "
+        "If this fails after an RDKit/InChI update, verify whether the probe ligands' "
+        "InChIKeys changed and pick replacements known to be unambiguous."
+    )
+
+
+def test_inchikey_cache_drops_ambiguous_keys():
+    """When multiple CCDs share an InChIKey, none of them are in the cache.
+
+    Validates the safe-by-default collision handling (skip ambiguous matches
+    rather than picking arbitrarily).
+    """
+    from collections import defaultdict
+    from pathlib import Path
+
+    from rdkit import Chem, RDLogger
+
+    from proto_tools.entities.ligands.ccd_utils import CCD_DATABASE_PATH, _get_inchikey_cache
+
+    cache = _get_inchikey_cache()
+
+    # Find an InChIKey collision in the bundled CCD file
+    RDLogger.DisableLog("rdApp.*")
+    inchikey_groups: dict[str, list[str]] = defaultdict(list)
+    with open(Path(CCD_DATABASE_PATH)) as f:
+        for line in f:
+            fields = line.rstrip().split("\t")
+            if len(fields) < 2:
+                continue
+            mol = Chem.MolFromSmiles(fields[0])
+            if mol is None:
+                continue
+            inchikey = Chem.MolToInchiKey(mol)
+            if inchikey:
+                inchikey_groups[inchikey].append(fields[1])
+    RDLogger.EnableLog("rdApp.*")
+
+    ambiguous_keys = [k for k, codes in inchikey_groups.items() if len(codes) > 1]
+    assert ambiguous_keys, "Expected at least one InChIKey collision in the CCD"
+
+    # None of the ambiguous keys should appear in the lookup cache.
+    leaked = [k for k in ambiguous_keys if k in cache]
+    assert not leaked, f"Ambiguous InChIKeys leaked into cache: {leaked[:3]}..."
 
 
 # ── Parameterized canonical round-trip tests ───────────────────────────
@@ -304,7 +381,7 @@ def test_valid_ligand_roundtrip(ccd_code):
     """CCD → RDKit SMILES → CCD round-trip works via canonical comparison."""
     smiles = map_ccd_code_to_smiles(ccd_code)
     assert smiles is not None, f"No SMILES for {ccd_code}"
-    result = map_smiles_to_ccd_code(smiles, use_name_fallback=False)
+    result = map_smiles_to_ccd_code(smiles)
     assert result == ccd_code, f"Round-trip failed: {ccd_code} → {smiles} → {result}"
 
 
@@ -320,7 +397,7 @@ def test_valid_ligand_roundtrip(ccd_code):
 )
 def test_invalid_ligand_no_ccd(smiles):
     """Invalid or novel SMILES return None from CCD lookup."""
-    result = map_smiles_to_ccd_code(smiles, use_name_fallback=False)
+    result = map_smiles_to_ccd_code(smiles)
     assert result is None
 
 
@@ -332,8 +409,8 @@ def test_rdkit_canonical_smiles_matches_ccd():
     oe_smiles = "C([C@@H](C(=O)O)N)OP(=O)(O)O"
     rdkit_canonical = Chem.MolToSmiles(Chem.MolFromSmiles(oe_smiles), canonical=True)
     assert oe_smiles != rdkit_canonical, "OE and RDKit forms should differ"
-    assert map_smiles_to_ccd_code(rdkit_canonical, use_name_fallback=False) == "SEP"
-    assert map_smiles_to_ccd_code(oe_smiles, use_name_fallback=False) == "SEP"
+    assert map_smiles_to_ccd_code(rdkit_canonical) == "SEP"
+    assert map_smiles_to_ccd_code(oe_smiles) == "SEP"
 
 
 # ── Validity is independent of RDKit parseability ──────────────────────

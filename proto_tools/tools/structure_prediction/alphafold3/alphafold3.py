@@ -379,7 +379,7 @@ def _create_input_json_from_complex(
 
         if isinstance(chain, Fragment):
             assert chain.smiles is not None  # noqa: S101 -- Fragment validator guarantees non-None
-            ccd_code = chain.best_ccd_code()
+            ccd_code = chain.ccd_code
             if ccd_code is None:
                 raise ValueError(
                     f"Unable to map SMILES to CCD code: {chain.smiles}. "

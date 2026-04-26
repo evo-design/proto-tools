@@ -91,34 +91,6 @@ def test_fragment_from_novel_smiles_has_none_ccd():
     assert frag.ccd_code is None
 
 
-def test_fragment_best_ccd_code_returns_validator_resolved_code():
-    """When the validator already resolved ccd_code via canonical match, return it directly."""
-    frag = Fragment(ccd_code="ATP")
-    assert frag.ccd_code == "ATP"  # invariant guard
-    assert frag.best_ccd_code() == "ATP"
-
-
-def test_fragment_best_ccd_code_returns_none_when_both_layers_miss():
-    """A novel SMILES that misses canonical match AND name fallback returns None.
-
-    Note: a positive test for the name-fallback layer specifically (canonical
-    fails but name-fallback succeeds) would require a stable SMILES whose RDKit
-    canonical form differs from any CCD entry but whose PubChem-resolved name
-    matches a CCD description — not reproducibly stable across PubChem updates.
-    The name-fallback layer is exercised indirectly via AF3's existing E2E tests.
-    """
-    novel = Fragment(smiles="FC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)c1ccc(-c2ccc(-c3ccccc3)cc2)cc1")
-    assert novel.ccd_code is None
-    assert novel.best_ccd_code() is None
-
-
-def test_fragment_best_ccd_code_disable_name_fallback():
-    """use_name_fallback=False makes best_ccd_code equivalent to reading ccd_code."""
-    frag = Fragment(smiles="c1ccc(C(=O)NCCNCCN)cc1")  # novel
-    assert frag.best_ccd_code(use_name_fallback=False) is None
-    assert frag.best_ccd_code(use_name_fallback=False) == frag.ccd_code
-
-
 def test_fragment_neither_smiles_nor_ccd_raises():
     with pytest.raises(ValueError, match="At least one of"):
         Fragment()

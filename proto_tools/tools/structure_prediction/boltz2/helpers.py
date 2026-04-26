@@ -59,9 +59,8 @@ def complex_to_yaml(
         if isinstance(chain, Fragment):
             # Prefer CCD code: Boltz2 uses internal CCD parameterization,
             # avoiding RDKit↔Boltz SMILES canonicalization mismatches.
-            ccd_code = chain.best_ccd_code()
-            if ccd_code:
-                entry["ccd"] = ccd_code
+            if chain.ccd_code:
+                entry["ccd"] = chain.ccd_code
             else:
                 entry["smiles"] = chain.smiles
         else:

@@ -102,40 +102,9 @@ class Fragment(BaseModel):
                     f"smiles='{canonical_smiles}' but CCD {raw_ccd.upper()} resolves to '{ccd_smiles}'"
                 )
         elif canonical_smiles is not None:
-            data["ccd_code"] = map_smiles_to_ccd_code(canonical_smiles, use_name_fallback=False)
+            data["ccd_code"] = map_smiles_to_ccd_code(canonical_smiles)
 
         return data
-
-    def best_ccd_code(self, use_name_fallback: bool = True) -> str | None:
-        """Return the best-effort CCD code for this fragment, or None if no match.
-
-        Two-layer lookup:
-            1. Use ``self.ccd_code`` if the validator already resolved it via the
-               canonical-SMILES match (the strict, conservative default).
-            2. Otherwise re-attempt via :func:`map_smiles_to_ccd_code` with
-               ``use_name_fallback`` enabled — this catches CCD entries whose
-               canonical SMILES differs from RDKit's but whose PubChem-resolved
-               name matches a CCD code.
-
-        The validator deliberately uses ``use_name_fallback=False`` to avoid
-        false-positive CCD matches in the general construction path. Use this
-        method when the consumer (e.g. a structure predictor that natively
-        supports CCD ligand input) wants the broadest possible CCD resolution.
-
-        Args:
-            use_name_fallback (bool): Forwarded to ``map_smiles_to_ccd_code`` when
-                the second-layer lookup is needed. Default True.
-
-        Returns:
-            str | None: A CCD code if either layer matched, else ``None``.
-        """
-        if self.ccd_code:
-            return self.ccd_code
-        if self.smiles is None:
-            return None
-        from proto_tools.entities.ligands.ccd_utils import map_smiles_to_ccd_code
-
-        return map_smiles_to_ccd_code(self.smiles, use_name_fallback=use_name_fallback)
 
     # ============================================================================
     # Factory

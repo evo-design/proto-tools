@@ -33,7 +33,7 @@ def _ensure_ccd_database() -> None:
 # ============================================================================
 # CCD code caches
 #
-# Two independent caches are built from a single pass over the database file:
+# Four independent caches are built from a single pass over the database file:
 #
 # - ``_ALL_CCD_CODES``: the raw set of every CCD code in the file. Used by
 #   ``is_valid_ccd_code`` and ``get_all_ccd_codes`` so validity checks remain
@@ -41,22 +41,35 @@ def _ensure_ccd_database() -> None:
 #   (they exist in the wwPDB CCD file).
 #
 # - ``_RDKIT_CANONICAL_TO_CCD`` / ``_CCD_TO_RDKIT_CANONICAL``: bidirectional
-#   maps keyed by RDKit-canonical SMILES, used by ``map_smiles_to_ccd_code`` /
-#   ``map_ccd_code_to_smiles``. Codes whose SMILES RDKit cannot parse are
-#   excluded from these (no canonical form means no lookup is possible).
+#   maps keyed by RDKit-canonical SMILES. Used by ``map_smiles_to_ccd_code`` /
+#   ``map_ccd_code_to_smiles`` for the primary lookup. Codes whose SMILES RDKit
+#   cannot parse are excluded (no canonical form means no lookup is possible).
+#
+# - ``_INCHIKEY_TO_CCD``: secondary lookup keyed by InChIKey, used as a fallback
+#   when the canonical-SMILES match misses. InChIKey is the IUPAC standard
+#   chemical identifier — designed for cross-tool / cross-database identity
+#   matching (used by ChEMBL, RCSB, PubChem, PDBe for the same purpose). It
+#   normalizes more aggressively than canonical SMILES (handles tautomers,
+#   ionization, aromaticity-perception edge cases). Only *unambiguous*
+#   InChIKeys are added — ~500/49k CCD entries collide on InChIKey (mostly
+#   single-atom ions and tautomer/stereo variants), and silently picking one
+#   would be worse than reporting no match. Ambiguous keys are dropped.
 # ============================================================================
 _ALL_CCD_CODES: set[str] | None = None
 _RDKIT_CANONICAL_TO_CCD: dict[str, str] | None = None
 _CCD_TO_RDKIT_CANONICAL: dict[str, str] | None = None
+_INCHIKEY_TO_CCD: dict[str, str] | None = None
 
 
-def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
-    """Build the raw-code set and bidirectional canonical caches in one pass.
+def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str, str]]:
+    """Build the raw-code set + canonical maps + InChIKey map in one pass.
 
     Returns:
-        tuple[set[str], dict[str, str], dict[str, str]]:
-            (all_codes, smiles_to_ccd, ccd_to_smiles).
+        tuple[set[str], dict[str, str], dict[str, str], dict[str, str]]:
+            (all_codes, smiles_to_ccd, ccd_to_smiles, inchikey_to_ccd).
     """
+    from collections import defaultdict
+
     from rdkit import Chem, RDLogger
 
     _ensure_ccd_database()
@@ -64,6 +77,9 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
     all_codes: set[str] = set()
     smiles_to_ccd: dict[str, str] = {}
     ccd_to_smiles: dict[str, str] = {}
+    # Build with collision tracking; only unambiguous InChIKey → CCD entries
+    # are kept in the final cache (see module docstring).
+    inchikey_groups: dict[str, list[str]] = defaultdict(list)
     skipped = 0
 
     # Silence RDKit's C++ logger (writes to stderr, bypasses Python logging) for
@@ -90,20 +106,38 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
                 if canonical not in smiles_to_ccd:
                     smiles_to_ccd[canonical] = ccd_code
                 ccd_to_smiles[ccd_code.upper()] = canonical
+                inchikey = Chem.MolToInchiKey(mol)  # type: ignore[no-untyped-call]
+                # MolToInchiKey returns "" for entries InChI can't process
+                # (single atoms, certain ions). Skip those.
+                if inchikey:
+                    inchikey_groups[inchikey].append(ccd_code)
     finally:
         RDLogger.EnableLog("rdApp.*")  # type: ignore[attr-defined]
 
+    inchikey_to_ccd = {ikey: ccds[0] for ikey, ccds in inchikey_groups.items() if len(ccds) == 1}
+    n_ambiguous = len(inchikey_groups) - len(inchikey_to_ccd)
+
     if skipped:
         logger.debug("CCD canonical cache: skipped %d RDKit-unparseable entries", skipped)
+    if n_ambiguous:
+        logger.debug(
+            "CCD InChIKey cache: dropped %d ambiguous keys (multiple CCDs sharing the same InChIKey)",
+            n_ambiguous,
+        )
 
-    return all_codes, smiles_to_ccd, ccd_to_smiles
+    return all_codes, smiles_to_ccd, ccd_to_smiles, inchikey_to_ccd
 
 
 def _ensure_caches() -> None:
-    """Lazy-initialize all three caches on first use."""
-    global _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL
+    """Lazy-initialize all caches on first use."""
+    global _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD
     if _ALL_CCD_CODES is None:
-        _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL = _build_caches()
+        (
+            _ALL_CCD_CODES,
+            _RDKIT_CANONICAL_TO_CCD,
+            _CCD_TO_RDKIT_CANONICAL,
+            _INCHIKEY_TO_CCD,
+        ) = _build_caches()
 
 
 def _get_canonical_caches() -> tuple[dict[str, str], dict[str, str]]:
@@ -115,6 +149,17 @@ def _get_canonical_caches() -> tuple[dict[str, str], dict[str, str]]:
     _ensure_caches()
     assert _RDKIT_CANONICAL_TO_CCD is not None and _CCD_TO_RDKIT_CANONICAL is not None  # noqa: S101
     return _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL
+
+
+def _get_inchikey_cache() -> dict[str, str]:
+    """Return the InChIKey → CCD code cache (lazy-initialized, unambiguous only).
+
+    Returns:
+        dict[str, str]: InChIKey → CCD code mapping for entries with a unique InChIKey.
+    """
+    _ensure_caches()
+    assert _INCHIKEY_TO_CCD is not None  # noqa: S101
+    return _INCHIKEY_TO_CCD
 
 
 def _get_all_ccd_codes_cache() -> set[str]:
@@ -131,20 +176,30 @@ def _get_all_ccd_codes_cache() -> set[str]:
 # ============================================================================
 # Public mapping functions
 # ============================================================================
-def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str | None:
-    """Map a SMILES string to its corresponding CCD code.
+def map_smiles_to_ccd_code(smiles: str) -> str | None:
+    """Map a SMILES string to its corresponding CCD code (offline-only).
 
-    Canonicalizes the input SMILES via RDKit and looks up the canonical form
-    in a cached mapping built from the CCD database. This handles differences
-    between OpenEye and RDKit canonicalization transparently.
+    Two-tier lookup, both fully local:
+
+    1. **Canonical-SMILES match** (primary): canonicalize the input via RDKit
+       and look it up in the bundled CCD cache. Handles the common case
+       cleanly; OpenEye-canonical entries in the wwPDB CCD file are
+       re-canonicalized via RDKit at cache build time so the keys agree.
+
+    2. **InChIKey match** (fallback): when (1) misses, compute the IUPAC-standard
+       InChIKey of the input molecule and look it up. InChIKey normalizes
+       more aggressively than canonical SMILES (handles tautomers, ionization,
+       aromaticity-perception edge cases) and is the cross-tool standard used
+       by ChEMBL, RCSB, PubChem, and PDBe for chemical identity. Only
+       unambiguous matches are honored; ambiguous InChIKeys (mostly single-atom
+       ions and tautomer/stereo variants) return None and let the caller
+       decide what to do.
 
     Args:
         smiles (str): SMILES string representation of the molecule.
-        use_name_fallback (bool): If True, attempt PubChem name-based lookup
-            when canonical matching fails.
 
     Returns:
-        str | None: CCD code if found, None otherwise.
+        str | None: CCD code if found in either tier, None otherwise.
     """
     from rdkit import Chem
 
@@ -152,78 +207,19 @@ def map_smiles_to_ccd_code(smiles: str, use_name_fallback: bool = True) -> str |
     if mol is None:
         return None  # type: ignore[unreachable]
 
+    # Tier 1: canonical SMILES match (primary, kept for backward-compat with
+    # existing callers and slightly faster than InChIKey for the common case).
     canonical = Chem.MolToSmiles(mol, canonical=True)
     smiles_to_ccd, _ = _get_canonical_caches()
-
-    result = smiles_to_ccd.get(canonical)
-    if result is not None:
+    if (result := smiles_to_ccd.get(canonical)) is not None:
         return result
 
-    if use_name_fallback:
-        return _map_smiles_to_ccd_via_name(smiles)
+    # Tier 2: InChIKey match (catches canonical-SMILES misses).
+    inchikey = Chem.MolToInchiKey(mol)  # type: ignore[no-untyped-call]
+    if inchikey:
+        return _get_inchikey_cache().get(inchikey)
 
     return None
-
-
-def _map_smiles_to_ccd_via_name(smiles: str) -> str | None:
-    """Attempt to map SMILES to CCD code via molecule name lookup.
-
-    This is a fallback method when exact SMILES matching fails. It:
-    1. Gets the molecule name from PubChem
-    2. Searches CCD descriptions for the name (case-insensitive substring match)
-    3. Returns the CCD code if exactly one match is found
-    4. Logs all matches if multiple are found and returns None
-
-    Args:
-        smiles (str): SMILES string representation of the molecule
-
-    Returns:
-        str | None: CCD code if exactly one match found, None otherwise
-    """
-    try:
-        # Import here to avoid circular dependency and only when needed
-        from proto_tools.entities.ligands.utils import get_name_from_smiles
-
-        # Get molecule name from PubChem
-        name = get_name_from_smiles(smiles)
-
-        if not name or name == "Unknown":
-            return None
-
-        # Search for matching descriptions in CCD database
-        matches = []
-        with open(CCD_DATABASE_PATH) as f:
-            for line in f:
-                fields = line.rstrip().split("\t")
-                if len(fields) < 3:
-                    continue
-
-                ccd_code = fields[1]
-                description = fields[2]
-
-                # Case-insensitive substring match
-                if name.lower() in description.lower():
-                    matches.append({"ccd_code": ccd_code, "description": description, "smiles": fields[0]})
-
-        # If exactly one match, return it
-        if len(matches) == 1:
-            logger.debug(f"Found CCD code via name lookup: {smiles} -> '{name}' -> {matches[0]['ccd_code']}")
-            return matches[0]["ccd_code"]
-
-        # If multiple matches, log them all and return None
-        if len(matches) > 1:
-            logger.debug(f"Multiple CCD matches found for SMILES '{smiles}' with name '{name}':")
-            for match in matches:
-                logger.debug(f"  - CCD: {match['ccd_code']}, Description: {match['description']}")
-            return None
-
-        # No matches found
-        return None
-
-    except Exception as e:
-        # If name lookup fails for any reason, silently return None
-        logger.debug(f"Name-based CCD lookup failed for '{smiles}': {e}")
-        return None
 
 
 def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
