@@ -312,6 +312,18 @@ class ToolPool:
             finally:
                 _pool_executing.reset(token)
 
+        # CPU-mode short-circuit: a tool whose config returns
+        # ``devices_per_instance == 0`` (e.g. colabfold-search with use_gpu=False,
+        # mmseqs2 remote-only mode) is declaring it doesn't need any of the pool's
+        # devices. Partitioning across GPUs would be meaningless, so dispatch as a
+        # single call and let the tool's own batching handle the items.
+        if config.devices_per_instance == 0:
+            token = _pool_executing.set(True)
+            try:
+                return func(inputs, config)
+            finally:
+                _pool_executing.reset(token)
+
         # Compute costs
         input_cls = type(inputs)
         work_items = [

@@ -392,6 +392,62 @@ def test_dispatch_devices_per_instance_grouping(clean_registry):
     assert len(result.results) == 4
 
 
+def test_dispatch_devices_per_instance_zero_bypasses_pool(clean_registry):
+    """CPU-mode tools (devices_per_instance=0) bypass GPU partitioning.
+
+    Regression for #575: ToolPool._parallel_dispatch crashed with
+    `ValueError: range() arg 3 must not be zero` when a tool's config returned
+    devices_per_instance=0 (e.g. colabfold-search with use_gpu=False) and the
+    pool was dispatched with >=2 input items. The fix short-circuits to a
+    single direct call mirroring the n_items<=1 path.
+    """
+    _, call_log = _register_mock_tool(clean_registry)
+
+    class CPUOnlyConfig(BaseConfig):
+        device: str = ConfigField(default="cuda", hidden=True)
+
+        @property
+        def devices_per_instance(self) -> int:
+            return 0
+
+    clean_registry._registry.clear()
+
+    @clean_registry.register(
+        key="cpu-only-process",
+        label="CPU Only",
+        category="testing",
+        input_class=MockInput,
+        config_class=CPUOnlyConfig,
+        output_class=MockOutput,
+        description="CPU-only test",
+        iterable_input_field="items",
+        iterable_output_field="results",
+    )
+    def run_cpu_only(inputs, config=None, instance=None):
+        call_log.append({"device": config.device, "instance": instance, "items": list(inputs.items)})
+        return MockOutput(
+            results=[f"processed_{item}" for item in inputs.items],
+            tool_id="cpu-only-process",
+            execution_time=0.01,
+            success=True,
+        )
+
+    pool = ToolPool(devices=["cuda:0", "cuda:1"])
+    pool._devices = ["cuda:0", "cuda:1"]
+
+    inputs = MockInput(items=["a", "b", "c"])
+    config = CPUOnlyConfig()
+
+    # Must not raise ValueError("range() arg 3 must not be zero")
+    result = pool._parallel_dispatch("cpu-only-process", run_cpu_only, inputs, config)
+
+    # Single direct call with all items; no GPU partitioning, no per-device worker name
+    assert len(call_log) == 1
+    assert call_log[0]["instance"] is None
+    assert call_log[0]["items"] == ["a", "b", "c"]
+    assert result.results == ["processed_a", "processed_b", "processed_c"]
+
+
 def test_dispatch_pool_receives_pre_deduped_items(clean_registry):
     """Pool should receive already-deduped items from @tool wrapper."""
     func, call_log = _register_mock_tool(clean_registry)
@@ -652,10 +708,22 @@ def test_toolspec_iterable_fields_excluded_from_serialization(clean_registry):
 # ── devices_per_instance tests ──────────────────────────────────────────────
 
 
-def test_devices_per_instance_default_is_one():
-    """Default devices_per_instance should be 1."""
-    config = BaseConfig()
-    assert config.devices_per_instance == 1
+def test_devices_per_instance_derived_from_device_string():
+    """Default devices_per_instance is derived from the device field via parse_device_string.
+
+    - cpu → 0 (no pool partitioning, single direct call)
+    - cuda / cuda:N → 1
+    - cudaxN / cuda:0,cuda:1 → N
+    - cloud → 1 (cloud dispatch is handled before pool partitioning)
+    """
+    assert BaseConfig().devices_per_instance == 0  # default device='cpu'
+    assert BaseConfig(device="cpu").devices_per_instance == 0
+    assert BaseConfig(device="cuda").devices_per_instance == 1
+    assert BaseConfig(device="cuda:0").devices_per_instance == 1
+    assert BaseConfig(device="cudax2").devices_per_instance == 2
+    assert BaseConfig(device="cudax4").devices_per_instance == 4
+    assert BaseConfig(device="cuda:0,cuda:1").devices_per_instance == 2
+    assert BaseConfig(device="cloud").devices_per_instance == 1
 
 
 def test_devices_per_instance_override():

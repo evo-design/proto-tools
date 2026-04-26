@@ -477,8 +477,10 @@ class ColabfoldSearchConfig(BaseConfig):
         """Number of GPUs the configured search uses.
 
         Returns 1 when ``use_gpu=True`` (MMseqs2-GPU is invoked with ``--gpu 1``),
-        else 0 (CPU search). Overrides the ``BaseConfig`` default of 1 so the
-        framework's GPU accounting matches actual usage.
+        else 0 (CPU search). Override is required despite ``BaseConfig`` deriving
+        the default from the ``device`` string: this tool always sets
+        ``device='cpu'`` (mmseqs handles its own GPU detection internally), so the
+        real GPU signal is the ``use_gpu`` flag, not the device field.
         """
         return 1 if self.use_gpu else 0
 
