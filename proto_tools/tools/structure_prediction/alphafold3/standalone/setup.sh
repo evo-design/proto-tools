@@ -17,7 +17,8 @@
 #
 # At runtime, inference.py prefers whichever path is present: if
 # $VENV_PATH/alphafold3.sif exists (or the tool config sets sif_path), it uses
-# apptainer exec; otherwise it uses the in-env Python install.
+# `apptainer run` (dispatching through the sif's %runscript); otherwise it uses
+# the in-env Python install.
 #
 # MSAs are supplied by the caller via the input JSON (proto_tools delegates
 # MSA generation to colabfold-search), so at runtime we pass
@@ -192,29 +193,29 @@ fi  # SKIP_BUILD guard (BYO sif via PROTO_ALPHAFOLD3_SIF_PATH)
 proto_resolve_weights_dir alphafold3
 
 if ! compgen -G "$WEIGHTS_DIR/*.bin*" >/dev/null; then
+  # Front-loaded context for users; the critical one-line summary is
+  # repeated at the very end so it survives _stderr_tail (last 10 lines).
   cat <<EOF
 ============================================================
-ERROR: No AlphaFold3 weights found in:
-  $WEIGHTS_DIR
-============================================================
+AlphaFold3 weights are gated by DeepMind's Terms of Use and
+are NOT automatically downloaded. To obtain access:
 
-AlphaFold3 weights are gated by DeepMind's Terms of Use and are
-NOT automatically downloaded. To obtain access:
-
-  1. Follow DeepMind's instructions to request access (link to the
-     current request form is maintained in their README):
+  1. Request access via DeepMind's form (link maintained in
+     their README):
      https://github.com/google-deepmind/alphafold3#obtaining-model-parameters
-  2. After DeepMind approves (2-3 business days), download the
-     weights archive from the link they send.
-  3. Place the weights file (e.g. af3.bin.zst) directly in:
-     $WEIGHTS_DIR
+  2. After approval (2-3 business days), download the weights
+     archive from the link DeepMind emails you.
+  3. Place af3.bin (or af3.bin.zst) in the resolved weights
+     directory, OR point PROTO_ALPHAFOLD3_WEIGHTS_DIR at the
+     directory containing it.
 
-Optionally override the weights location via:
-  export PROTO_ALPHAFOLD3_WEIGHTS_DIR=/path/to/weights
-
-See notes/storage.md for details on PROTO_MODEL_CACHE and
-PROTO_HOME precedence.
-
+See notes/storage.md for PROTO_MODEL_CACHE / PROTO_HOME rules.
+============================================================
+ERROR: No AlphaFold3 weights (*.bin / *.bin.zst) found in:
+  $WEIGHTS_DIR
+Fix: download DeepMind-licensed weights and either place
+af3.bin.zst in the directory above, or set
+PROTO_ALPHAFOLD3_WEIGHTS_DIR=/abs/path/to/weights/dir.
 ============================================================
 EOF
   exit 1

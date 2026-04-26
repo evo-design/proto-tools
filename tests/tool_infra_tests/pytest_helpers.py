@@ -7,7 +7,6 @@ from typing import Any
 from proto_tools.tools.tool_registry import ToolSpec
 
 EXCLUDED_CATEGORIES: frozenset[str] = frozenset({"database_retrieval"})
-CHIMERA_ONLY_KEYS: frozenset[str] = frozenset()
 
 
 def parse_min_gpu_count(device_count: str) -> int:

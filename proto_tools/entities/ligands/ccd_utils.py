@@ -57,7 +57,7 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
         tuple[set[str], dict[str, str], dict[str, str]]:
             (all_codes, smiles_to_ccd, ccd_to_smiles).
     """
-    from rdkit import Chem
+    from rdkit import Chem, RDLogger
 
     _ensure_ccd_database()
 
@@ -66,21 +66,32 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str]]:
     ccd_to_smiles: dict[str, str] = {}
     skipped = 0
 
-    with open(CCD_DATABASE_PATH) as f:
-        for line in f:
-            fields = line.rstrip().split("\t")
-            if len(fields) < 2:
-                continue
-            ccd_code = fields[1]
-            all_codes.add(ccd_code.upper())
-            mol = Chem.MolFromSmiles(fields[0])
-            if mol is None:
-                skipped += 1  # type: ignore[unreachable]
-                continue
-            canonical = Chem.MolToSmiles(mol, canonical=True)
-            if canonical not in smiles_to_ccd:
-                smiles_to_ccd[canonical] = ccd_code
-            ccd_to_smiles[ccd_code.upper()] = canonical
+    # Silence RDKit's C++ logger (writes to stderr, bypasses Python logging) for
+    # the cache build only. The wwPDB CCD file contains hundreds of organometallic
+    # / hypervalent entries (boron clusters, hypervalent N, Be 4-coord, etc.) that
+    # RDKit refuses to sanitize. We already drop them via the `mol is None` guard
+    # below, but the warnings would otherwise leak into every caller's stderr
+    # (e.g. the AlphaFold3 example notebook). Restore after so genuine sanitize
+    # warnings on user-supplied SMILES (via map_smiles_to_ccd_code) are still surfaced.
+    RDLogger.DisableLog("rdApp.*")  # type: ignore[attr-defined]
+    try:
+        with open(CCD_DATABASE_PATH) as f:
+            for line in f:
+                fields = line.rstrip().split("\t")
+                if len(fields) < 2:
+                    continue
+                ccd_code = fields[1]
+                all_codes.add(ccd_code.upper())
+                mol = Chem.MolFromSmiles(fields[0])
+                if mol is None:
+                    skipped += 1  # type: ignore[unreachable]
+                    continue
+                canonical = Chem.MolToSmiles(mol, canonical=True)
+                if canonical not in smiles_to_ccd:
+                    smiles_to_ccd[canonical] = ccd_code
+                ccd_to_smiles[ccd_code.upper()] = canonical
+    finally:
+        RDLogger.EnableLog("rdApp.*")  # type: ignore[attr-defined]
 
     if skipped:
         logger.debug("CCD canonical cache: skipped %d RDKit-unparseable entries", skipped)

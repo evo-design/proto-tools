@@ -12,7 +12,6 @@ import pytest
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.pytest_helpers import (
-    CHIMERA_ONLY_KEYS,
     EXCLUDED_CATEGORIES,
     build_inputs_and_config,
     parse_min_gpu_count,
@@ -31,7 +30,6 @@ def _build_tool_params() -> list:
     Marks applied per-param:
     - ``include_in_env_report(tool=..., category=...)`` for report collection
     - ``uses_gpu`` / ``uses_gpu(n)`` based on device_count
-    - ``only_chimera`` for tools that only run on the Chimera cluster
     """
     params = []
     seen_dirs: set = set()
@@ -58,9 +56,6 @@ def _build_tool_params() -> list:
         if spec.uses_gpu:
             gpu_count = parse_min_gpu_count(spec.device_count)
             marks.append(pytest.mark.uses_gpu(gpu_count))
-
-        if spec.key in CHIMERA_ONLY_KEYS:
-            marks.append(pytest.mark.only_chimera)
 
         params.append(pytest.param(spec, id=spec.key, marks=marks))
 

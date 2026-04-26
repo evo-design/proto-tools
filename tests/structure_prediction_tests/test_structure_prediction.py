@@ -38,6 +38,7 @@ from proto_tools.tools.structure_prediction import (
     run_esmfold,
     run_protenix,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from proto_tools.utils.tool_cache import (
     ToolCache,
     _program_tool_cache,
@@ -62,8 +63,29 @@ _STRUCTURE_PREDICTORS = {
 
 _FAST_PREDICTORS = ["esmfold"]
 
-# Predictors that require Chimera cluster (hardcoded paths to /large_storage/hielab/brk/)
-_CHIMERA_ONLY_PREDICTORS = ["alphafold3"]
+
+def _missing_weights_skip_reason(predictor_name: str) -> str | None:
+    """Return a precise pytest skip reason if the predictor's weights are missing.
+
+    None means no skip needed. Currently only AlphaFold3 has gated weights
+    (DeepMind ToU, see proto_tools/tools/structure_prediction/alphafold3/README.md).
+    All other predictors pull public weights during setup.sh.
+    """
+    if predictor_name != "alphafold3":
+        return None
+    weights_dir = resolve_weights_dir("alphafold3")
+    if weights_dir is None:
+        return (
+            "AlphaFold3 weights dir could not be resolved "
+            "(set PROTO_ALPHAFOLD3_WEIGHTS_DIR or PROTO_MODEL_CACHE/PROTO_HOME)"
+        )
+    if not any(Path(weights_dir).glob("*.bin*")):
+        return (
+            f"AlphaFold3 weights (*.bin / *.bin.zst) not found in {weights_dir}. "
+            "Request access from DeepMind and set PROTO_ALPHAFOLD3_WEIGHTS_DIR."
+        )
+    return None
+
 
 # Short sequences used by batched-inference tests, kept at module level so they
 # are visible to all flat functions that share this fixture data.
@@ -209,13 +231,15 @@ def _generate_test_params() -> list:
             if not _is_compatible_input_for_test(complexes, input_class):
                 continue
 
+            skip_reason = _missing_weights_skip_reason(predictor_name)
+
             # Generate MSA variants if supported
             if _supports_msa(config_class):
                 marks = []
                 if predictor_name not in _FAST_PREDICTORS:
                     marks.append(pytest.mark.slow)
-                if predictor_name in _CHIMERA_ONLY_PREDICTORS:
-                    marks.append(pytest.mark.only_chimera)
+                if skip_reason:
+                    marks.append(pytest.mark.skip(reason=skip_reason))
 
                 params.append(
                     pytest.param(
@@ -232,8 +256,8 @@ def _generate_test_params() -> list:
             marks = []
             if predictor_name not in _FAST_PREDICTORS:
                 marks.append(pytest.mark.slow)
-            if predictor_name in _CHIMERA_ONLY_PREDICTORS:
-                marks.append(pytest.mark.only_chimera)
+            if skip_reason:
+                marks.append(pytest.mark.skip(reason=skip_reason))
 
             params.append(
                 pytest.param(
