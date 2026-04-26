@@ -380,15 +380,27 @@ class ToolRegistry:
                 spec = cls._registry.get(key)
                 effective_gpu_only = spec.gpu_only if spec is not None else gpu_only
 
-                # Validate device allocation against tool requirements
+                # Validate device allocation against tool requirements.
+                # device="cloud" delegates all resource allocation to the registered
+                # cloud backend, so local validation is skipped.
                 if hasattr(config, "device"):
                     device_str = str(config.device)
-                    if effective_gpu_only and device_str == "cpu":
+                    if device_str == "cloud":
+                        from proto_tools.cloud import is_api_backend_enabled
+
+                        if not is_api_backend_enabled():
+                            raise RuntimeError(
+                                f"Tool {key!r} called with device='cloud' but Proto's "
+                                "remote execution backend is not enabled. Install "
+                                "proto-tools[cloud] and call "
+                                "proto_tools.cloud.use_api_backend()."
+                            )
+                    elif effective_gpu_only and device_str == "cpu":
                         raise ValueError(
                             f"Tool {key!r} is gpu_only; cannot run with device='cpu'. "
                             f"Use a CUDA device (e.g. 'cuda' or 'cuda:0')."
                         )
-                    if device_str != "cpu" and not uses_gpu:
+                    elif device_str != "cpu" and not uses_gpu:
                         logger.warning(
                             "Tool %s does not use a GPU but device=%r was requested; "
                             "the tool will run on CPU regardless",

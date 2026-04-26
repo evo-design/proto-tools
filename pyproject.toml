@@ -58,6 +58,11 @@ Repository = "https://github.com/evo-design/proto-tools"
 
 [project.optional-dependencies]
 
+# Cloud dispatch (device="cloud")
+cloud = [
+    "proto-client>=0.1.0",
+]
+
 # Development dependencies
 dev = [
     # Testing
@@ -169,6 +174,8 @@ module = [
     "yaml.*",
     "huggingface_hub.*",
     "tokenizers.*",
+    # Optional cloud extra (not in core deps)
+    "proto_client.*",
     # Bioinformatics tools (only used in standalone/ dirs, not pip deps)
     "pyhmmer.*",
     "pyrodigal.*",
