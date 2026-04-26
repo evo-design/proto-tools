@@ -3,8 +3,6 @@
 Tests for Ligands entity.
 """
 
-from unittest.mock import patch
-
 import pytest
 from rdkit import Chem
 
@@ -219,8 +217,7 @@ def test_fragment_from_mol_multi_fragment_raises():
 # ── Ligands protocol ────────────────────────────────────────────────────
 
 
-@patch("proto_tools.entities.ligands.ligands.get_name_from_smiles", return_value="mock")
-def test_ligands_from_mols(_mock_name):
+def test_ligands_from_mols():
     mol1 = Chem.MolFromSmiles("CCO")
     mol2 = Chem.MolFromSmiles("CO")
     ligands = Ligands.from_mols([mol1, mol2])
@@ -251,10 +248,8 @@ def test_ligands_hash():
 # ── I/O ──────────────────────────────────────────────────────────────────
 
 
-# Eager PubChem name lookup in SDF parse path makes this network-dependent;
-# blows up CI retry budget when PubChem is rate-limiting. Tracked in #550.
-@pytest.mark.skip_ci
 def test_to_sdf_round_trip(tmp_path):
+    """SDF write+parse roundtrip preserves SMILES across all fragments."""
     ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
     sdf_path = tmp_path / "out.sdf"
     ligands.to_sdf(sdf_path)

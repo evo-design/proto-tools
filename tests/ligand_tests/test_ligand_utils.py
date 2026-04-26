@@ -10,10 +10,10 @@ from rdkit import Chem
 
 from proto_tools.entities.ligands.utils import (
     fetch_pubchem_txt,
-    get_name_from_smiles,
-    get_smiles_from_name,
     is_mol_valid,
     is_smiles_valid,
+    lookup_name_via_pubchem,
+    lookup_smiles_via_pubchem,
 )
 
 
@@ -62,10 +62,10 @@ def test_fetch_pubchem_all_429_exhausted():
             assert fetch_pubchem_txt("https://example.com") is None
 
 
-def test_get_smiles_from_name_not_found():
+def test_lookup_smiles_via_pubchem_not_found():
     with patch("proto_tools.entities.ligands.utils.fetch_pubchem_txt", return_value=None):
         with pytest.raises(ValueError, match="Could not find SMILES"):
-            get_smiles_from_name("anything")
+            lookup_smiles_via_pubchem("anything")
 
 
 @pytest.mark.parametrize(
@@ -76,15 +76,15 @@ def test_get_smiles_from_name_not_found():
     ],
     ids=["happy-path", "name-fetch-fails"],
 )
-def test_get_name_from_smiles(side_effects, expected):
+def test_lookup_name_via_pubchem(side_effects, expected):
     with patch("proto_tools.entities.ligands.utils.fetch_pubchem_txt", side_effect=side_effects):
-        assert get_name_from_smiles("CC(=O)Oc1ccccc1C(=O)O") == expected
+        assert lookup_name_via_pubchem("CC(=O)Oc1ccccc1C(=O)O") == expected
 
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_smiles_valid_name():
-    smiles = get_smiles_from_name("Aspirin")
+    smiles = lookup_smiles_via_pubchem("Aspirin")
     assert isinstance(smiles, str)
     mol = Chem.MolFromSmiles(smiles)
     assert mol is not None
@@ -94,18 +94,18 @@ def test_get_smiles_valid_name():
 @pytest.mark.integration
 def test_get_smiles_invalid_name():
     with pytest.raises(ValueError, match="Could not find SMILES for"):
-        get_smiles_from_name("ThisIsNotARealCompound1234")
+        lookup_smiles_via_pubchem("ThisIsNotARealCompound1234")
 
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_name_invalid_smiles():
-    name = get_name_from_smiles("C1C1C1C1C1")
+    name = lookup_name_via_pubchem("C1C1C1C1C1")
     assert name == "Unknown"
 
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_name_empty_smiles():
-    name = get_name_from_smiles("")
+    name = lookup_name_via_pubchem("")
     assert name == "Unknown"
