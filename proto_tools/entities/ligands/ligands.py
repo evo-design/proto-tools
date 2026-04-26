@@ -12,10 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from proto_tools.entities.ligands.utils import (
-    get_name_from_smiles,
-    is_smiles_valid,
-)
+from proto_tools.entities.ligands.utils import is_smiles_valid
 
 
 class Fragment(BaseModel):
@@ -129,7 +126,7 @@ class Fragment(BaseModel):
             msg = "Invalid Mol as Fragment input: Mol must contain only one fragment"
             raise ValueError(msg)
         smiles = Chem.MolToSmiles(Chem.RemoveHs(mol), canonical=True)
-        frag = cls(smiles=smiles, name=name or get_name_from_smiles(smiles))
+        frag = cls(smiles=smiles, name=name)
         frag._mol = Chem.AddHs(mol)
         return frag
 

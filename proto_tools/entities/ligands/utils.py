@@ -10,9 +10,9 @@ import requests
 from rdkit import Chem
 
 
-# ===============================
+# ============================================================================
 # Validation
-# ===============================
+# ============================================================================
 def is_smiles_valid(smiles: str) -> bool:
     """Check if a SMILES string is valid."""
     try:
@@ -31,26 +31,25 @@ def is_mol_valid(mol: Chem.Mol) -> bool:
     return bool(mol.GetNumAtoms() > 0)
 
 
-# ===============================
-# PubChem Retrieval
-# ===============================
+# ============================================================================
+# PubChem Retrieval — opt-in, network-bound
+# ============================================================================
 
-MAX_RETRIES = 10
-TIMEOUT = 10
+MAX_RETRIES = 3
+TIMEOUT = 5
 
 
 def fetch_pubchem_txt(url: str) -> str | None:
-    """Fetch a PubChem TXT response from the given URL, with retries and timeout.
+    """Fetch a PubChem TXT response, with retries and timeout.
 
-    Retries with exponential backoff on rate limiting (429), server errors (5xx),
-    and network exceptions. Client errors (4xx other than 429) are treated as
-    terminal since they indicate the resource is genuinely unavailable.
+    Retries with exponential backoff on 429, 5xx, and network exceptions.
+    Other 4xx are terminal.
 
     Args:
-        url (str): The PubChem REST URL
+        url (str): The PubChem REST URL.
 
     Returns:
-        str | None: The response text if successful, else None
+        str | None: The response text if successful, else None.
     """
     for attempt in range(MAX_RETRIES):
         try:
@@ -67,17 +66,17 @@ def fetch_pubchem_txt(url: str) -> str | None:
     return None
 
 
-def get_smiles_from_name(name: str) -> str:
-    """Retrieve the canonical SMILES for a molecule given its name using PubChem.
+def lookup_smiles_via_pubchem(name: str) -> str:
+    """Look up the canonical SMILES for a molecule by name via PubChem.
 
     Args:
-        name (str): Name of the molecule (e.g., "Aspirin")
+        name (str): Name of the molecule (e.g., ``"Aspirin"``).
 
     Returns:
-        str: Canonical SMILES string
+        str: Canonical SMILES string.
 
     Raises:
-        ValueError: If the molecule is not found.
+        ValueError: If no SMILES is found for the given name.
     """
     encoded_name = quote(name, safe="")
     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{encoded_name}/property/CanonicalSMILES/TXT"
@@ -87,16 +86,16 @@ def get_smiles_from_name(name: str) -> str:
     return txt
 
 
-def get_name_from_smiles(smiles: str) -> str:
-    """Retrieve the primary compound name from PubChem given a SMILES string. If.
+def lookup_name_via_pubchem(smiles: str) -> str:
+    """Look up the IUPAC name for a SMILES via PubChem.
 
-    the molecule is not found, returns "Unknown".
+    For CCD-known ligands, prefer the offline :func:`get_ccd_description`.
 
     Args:
-        smiles (str): Canonical SMILES string
+        smiles (str): Canonical SMILES string.
 
     Returns:
-        str: Name of the compound (string)
+        str: IUPAC name, or ``"Unknown"`` if not found.
     """
     if not smiles:
         return "Unknown"

@@ -6,10 +6,10 @@ from proto_tools.entities.ligands import (
     Fragment,
     Ligands,
     get_ccd_description,
-    get_name_from_smiles,
-    get_smiles_from_name,
     is_smiles_valid,
     is_valid_ccd_code,
+    lookup_name_via_pubchem,
+    lookup_smiles_via_pubchem,
     map_ccd_code_to_smiles,
     map_smiles_to_ccd_code,
 )
@@ -59,8 +59,10 @@ __all__ = [
     "Fragment",
     "Ligands",
     "is_smiles_valid",
-    "get_name_from_smiles",
-    "get_smiles_from_name",
+    # PubChem lookups (opt-in, network-bound — not called by library construction)
+    "lookup_name_via_pubchem",
+    "lookup_smiles_via_pubchem",
+    # CCD utilities (offline)
     "CCD_DATABASE_PATH",
     "get_ccd_description",
     "is_valid_ccd_code",
