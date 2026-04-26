@@ -212,3 +212,11 @@ def test_af3_accepts_ligands_collection_expanded(mock_af3_inference):
     assert len(sequences) == 3
     assert sequences[1]["ligand"]["ccdCodes"] == ["ATP"]
     assert sequences[2]["ligand"]["ccdCodes"] == ["MG"]
+
+
+# Our implementation enforces CCD-only ligand input despite AF3 accepting SMILES.
+# Empirically, AF3 with SMILES for known ligands produces structures with
+# heavy atoms scattered across the box. The CCD-vs-SMILES equivalence test
+# the lenient predictors (Protenix, Boltz2) have doesn't apply here. Trade-off:
+# genuinely novel ligands without a CCD entry are currently unsupported
+# through this implementation.

@@ -98,7 +98,7 @@ def test_protenix_input_accepts_chain_objects():
     assert inputs.complexes[0].chains[0].entity_type == "protein"
 
 
-# ── Ligand JSON shape: CCD-prefer dispatch (#502) ───────────────────────────
+# ── Ligand JSON shape: CCD-prefer dispatch ─────────────────────────────────
 
 
 def _protenix_ligand_entries(chains):
@@ -169,6 +169,68 @@ def test_protenix_model_variants(model_name):
 
     if "gpde" in structure.metrics:
         assert isinstance(structure.metrics["gpde"], (int, float))
+
+
+@pytest.mark.extensive
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_protenix_ccd_vs_smiles_input_equivalent_predictions():
+    """Predictions from CCD and SMILES inputs of the same ligand should agree.
+
+    Empirical check for Protenix's lenient SMILES path. If this test fails,
+    consider tightening the implementation to strict CCD-only (the AF3
+    implementation does this because AF3 with raw SMILES produces broken
+    structures).
+    """
+    from proto_tools.entities.ligands import Fragment
+
+    # L-tyrosine — known CCD entry "TYR", small enough for fast inference
+    tyr_smiles = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
+    protein = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
+
+    # CCD path: validator auto-resolves ccd_code="TYR"; implementation sends "CCD_TYR"
+    ccd_frag = Fragment(smiles=tyr_smiles)
+    assert ccd_frag.ccd_code == "TYR"  # invariant guard
+    ccd_complex = StructurePredictionComplex(chains=[protein, ccd_frag])
+
+    # SMILES path: force ccd_code=None so the implementation falls back to raw SMILES
+    smiles_frag = Fragment(smiles=tyr_smiles)
+    smiles_frag.ccd_code = None
+    smiles_complex = StructurePredictionComplex(chains=[protein, smiles_frag])
+
+    config = ProtenixConfig(
+        model_name="protenix_tiny_default_v0.5.0",
+        use_msa=False,
+        num_diffusion_samples=1,
+        num_diffusion_steps=50,
+        seeds=[42],
+    )
+
+    ccd_output = run_protenix(ProtenixInput(complexes=[ccd_complex]), config)
+    smiles_output = run_protenix(ProtenixInput(complexes=[smiles_complex]), config)
+
+    assert ccd_output.success and smiles_output.success
+    ccd_structure = ccd_output.structures[0]
+    smiles_structure = smiles_output.structures[0]
+
+    # Heavy-atom count must match exactly — the same molecule is being predicted
+    # either way, so any difference indicates a parsing error.
+    ccd_atoms = int((ccd_structure._get_atom_array().element != "H").sum())
+    smiles_atoms = int((smiles_structure._get_atom_array().element != "H").sum())
+    assert ccd_atoms == smiles_atoms, (
+        f"Heavy-atom counts diverge: CCD={ccd_atoms}, SMILES={smiles_atoms}. "
+        "SMILES input may be parsing the ligand differently than CCD."
+    )
+
+    # Confidence shouldn't collapse on the SMILES path. AF3's broken SMILES
+    # predictions had plddt scattered to ~30; a sensible prediction is >50.
+    ccd_plddt = ccd_structure.metrics["avg_plddt"]
+    smiles_plddt = smiles_structure.metrics["avg_plddt"]
+    assert smiles_plddt > 0.5, f"SMILES-input plddt={smiles_plddt:.2f} suggests broken structure"
+    assert abs(ccd_plddt - smiles_plddt) < 0.2, (
+        f"plddt diverges: CCD={ccd_plddt:.2f}, SMILES={smiles_plddt:.2f}. "
+        "Large gap suggests one path is producing a low-quality structure."
+    )
 
 
 @pytest.mark.uses_gpu

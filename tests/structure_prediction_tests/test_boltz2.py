@@ -3,9 +3,20 @@
 Tests for Boltz2.
 """
 
-from proto_tools.tools.structure_prediction import Chain
+import pytest
 
-# ── Ligand YAML shape: CCD-prefer dispatch (#502) ───────────────────────────
+from proto_tools.tools.structure_prediction import (
+    Boltz2Config,
+    Boltz2Input,
+    Chain,
+    StructurePredictionComplex,
+    run_boltz2,
+)
+
+# Cro repressor from bacteriophage lambda. Short, well-folded test protein.
+_CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
+
+# ── Ligand YAML shape: CCD-prefer dispatch ─────────────────────────────────
 
 
 def _boltz2_ligand_entries(chains):
@@ -40,3 +51,65 @@ def test_boltz2_ligand_falls_back_to_smiles_when_no_ccd_match():
 
     [ligand_entry] = _boltz2_ligand_entries([Chain(sequence="MKTLPGCDA", entity_type="protein"), novel])
     assert ligand_entry == {"id": "B", "smiles": novel.smiles}
+
+
+# ── GPU tests ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.extensive
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
+    """Predictions from CCD and SMILES inputs of the same ligand should agree.
+
+    Empirical check for Boltz2's lenient SMILES path. If this test fails,
+    consider tightening the implementation to strict CCD-only (the AF3
+    implementation does this because AF3 with raw SMILES produces broken
+    structures).
+    """
+    from proto_tools.entities.ligands import Fragment
+
+    # L-tyrosine — known CCD entry "TYR", small enough for fast inference
+    tyr_smiles = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
+    protein = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
+
+    # CCD path: validator auto-resolves ccd_code="TYR"; implementation sends ccd: TYR
+    ccd_frag = Fragment(smiles=tyr_smiles)
+    assert ccd_frag.ccd_code == "TYR"  # invariant guard
+    ccd_complex = StructurePredictionComplex(chains=[protein, ccd_frag])
+
+    # SMILES path: force ccd_code=None so the implementation falls back to raw SMILES
+    smiles_frag = Fragment(smiles=tyr_smiles)
+    smiles_frag.ccd_code = None
+    smiles_complex = StructurePredictionComplex(chains=[protein, smiles_frag])
+
+    config = Boltz2Config(
+        use_msa=False,
+        sampling_steps=50,
+        diffusion_samples=1,
+        seed=42,
+    )
+
+    ccd_output = run_boltz2(Boltz2Input(complexes=[ccd_complex]), config)
+    smiles_output = run_boltz2(Boltz2Input(complexes=[smiles_complex]), config)
+
+    assert ccd_output.success and smiles_output.success
+    ccd_structure = ccd_output.structures[0]
+    smiles_structure = smiles_output.structures[0]
+
+    # Heavy-atom count must match exactly — same molecule, two input formats.
+    ccd_atoms = int((ccd_structure._get_atom_array().element != "H").sum())
+    smiles_atoms = int((smiles_structure._get_atom_array().element != "H").sum())
+    assert ccd_atoms == smiles_atoms, (
+        f"Heavy-atom counts diverge: CCD={ccd_atoms}, SMILES={smiles_atoms}. "
+        "SMILES input may be parsing the ligand differently than CCD."
+    )
+
+    # Confidence shouldn't collapse on the SMILES path.
+    ccd_plddt = ccd_structure.metrics["complex_plddt"]
+    smiles_plddt = smiles_structure.metrics["complex_plddt"]
+    assert smiles_plddt > 0.5, f"SMILES-input plddt={smiles_plddt:.2f} suggests broken structure"
+    assert abs(ccd_plddt - smiles_plddt) < 0.2, (
+        f"plddt diverges: CCD={ccd_plddt:.2f}, SMILES={smiles_plddt:.2f}. "
+        "Large gap suggests one path is producing a low-quality structure."
+    )
