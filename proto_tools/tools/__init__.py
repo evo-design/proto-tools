@@ -304,8 +304,14 @@ from proto_tools.tools.sequence_alignment import (
     MafftConfig,
     MafftInput,
     MafftOutput,
+    Mmseqs2HomologySearchConfig,
+    Mmseqs2HomologySearchInput,
+    Mmseqs2HomologySearchOutput,
+    Mmseqs2HomologySearchQuery,
+    Mmseqs2HomologySearchResult,
     run_colabfold_search,
     run_mafft_align,
+    run_mmseqs2_homology_search,
 )
 
 # Sequence scoring tools
@@ -844,6 +850,13 @@ __all__ = [
     "ColabfoldSearchInput",
     "ColabfoldSearchConfig",
     "ColabfoldSearchOutput",
+    # Sequence alignment - MMseqs2 Homology Search
+    "run_mmseqs2_homology_search",
+    "Mmseqs2HomologySearchInput",
+    "Mmseqs2HomologySearchConfig",
+    "Mmseqs2HomologySearchOutput",
+    "Mmseqs2HomologySearchQuery",
+    "Mmseqs2HomologySearchResult",
     # Sequence alignment - Shared helpers
     "MSA",
     # Structure design - RFdiffusion3

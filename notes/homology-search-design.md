@@ -122,18 +122,40 @@ Download/index is idempotent and resumable: check markers before re-running any 
 
 No separate `PROTO_MMSEQS2_HOMOLOGY_SEARCH_DATABASES_DIR` env var — `PROTO_MODEL_CACHE` is already the right knob. Update `notes/storage.md` to document `databases/` when the first registry entry lands.
 
-### Initial datasets (launch set)
+### Launch set
 
-| Name | Type | Size (download / indexed) | Pairing | Use |
+The registry should hold every database any consumer might want — keeping things they don't is cheap (each entry is metadata until `ensure()` is called), and a comprehensive registry lets users mix-and-match without touching the tool layer. Two reference implementations drive the canonical set: [AlphaFast](https://github.com/RomeroLab/alphafast) (AF3 ecosystem) and [Lightning-Boltz](https://github.com/RomeroLab/lightning-boltz) (Boltz-2 ecosystem).
+
+**ColabFold-style protein DBs** (clustered profile databases for the iterative ColabFold MSA pipeline; default for the current `colabfold-search` and Boltz-2's `--mode colabfold`):
+
+| Name | Type | Pairing | Source | Size (download / indexed) |
 |---|---|---|---|---|
-| `uniref30-2302` | protein | ~99 GB / ~250 GB | ✓ | AF2/AF3/Chai-1/Protenix/Boltz-2 — primary protein MSA |
-| `colabfold-envdb-202108` | protein | ~110 GB / ~650 GB | ✓ | metagenomic, optional per-predictor |
-| `bfd` | protein | ~270 GB / ~1.8 TB | ✗ | AF2 path |
-| `rnacentral` | rna | ~30 GB / ~60 GB | ✗ | AF3 RNA |
-| `rfam` | rna | ~1 GB / ~3 GB | ✗ | AF3 RNA |
-| `nt` | dna | ~200 GB / ~400 GB | ✗ | AF3 RNA (covers DNA→RNA fallback hits) |
+| `uniref30-2302` | protein | ✓ | `opendata.mmseqs.org/colabfold` | ~99 GB / ~250 GB |
+| `colabfold-envdb-202108` | protein | ✓ | `opendata.mmseqs.org/colabfold` | ~110 GB / ~650 GB |
 
-Not all materialize at launch — registry entry lands + download/index kicks in on first use of that key.
+**AF3-style protein DBs** (raw FASTA → `mmseqs createdb` → `makepaddedseqdb`; what AF3, AlphaFast, and Boltz-2 `--mode alphafold3` consume):
+
+| Name | Type | Pairing | Source | Size (FASTA / padded) |
+|---|---|---|---|---|
+| `uniref90-2022-05` | protein | (templates only) | `gs://alphafold-databases/v3.0` or HF `RomeroLab-Duke/af3-mmseqs-db` | ~70 GB / ~120 GB |
+| `mgnify-2022-05` | protein | ✗ | same | ~60 GB / ~110 GB |
+| `small-bfd` | protein | ✗ | same | ~14 GB / ~25 GB |
+| `uniprot-2021-04` | protein | ✓ (paired MSA) | same | ~95 GB / ~165 GB |
+| `pdb-seqres-2022-09-28` | protein | ✗ (template hits) | same | tiny / tiny |
+| `bfd` (full) | protein | ✗ | `bfd.mmseqs.com` | ~270 GB / ~1.8 TB |
+
+**Nucleotide DBs** (clustered RNA FASTA → MMseqs2 nucleotide DB; what AF3 RNA chains consume):
+
+| Name | Type | Source | Size (FASTA / indexed) |
+|---|---|---|---|
+| `rnacentral-active-90-80` | rna | AlphaFast HF / AF3 GCS | ~30 GB / ~30 GB |
+| `rfam-14-9-90-80` | rna | same | tiny / tiny |
+| `nt-rna-2023-02-23-90-80` | dna→rna | same | ~30 GB / ~30 GB |
+| `nt` (full) | dna | NCBI FTP | ~200 GB / ~400 GB |
+
+Not all entries materialize at launch — each is just a `DatasetEntry` literal until `DatasetManager.ensure()` is called (Phase 2). Predictor migrations (Phase 5) populate `preferred_datasets` defaults from the table below; users can override with any subset of registry keys.
+
+**HuggingFace prebuilt mirrors**: AlphaFast publishes `RomeroLab-Duke/af3-mmseqs-db` and Lightning-Boltz publishes `boltz-community/mmseqs-databases` — both already contain the padded MMseqs2 indexes, so pulling from HF skips local `createindex` + `makepaddedseqdb` (hours saved). `DatasetEntry` carries an optional `prebuilt_hf_repo` field; `DatasetManager.ensure()` prefers prebuilt when available, falls back to building from the source FASTA.
 
 ## Bulk Provisioning
 
@@ -270,13 +292,21 @@ Each predictor gets a config field:
 preferred_datasets: list[str] = [...]          # registry keys, predictor-specific defaults
 ```
 
-Example defaults:
+The defaults must mirror what each predictor's reference implementation actually uses, so a user invoking the predictor through proto-tools gets MSAs of the same composition as the canonical pipeline. Mismatches here would silently degrade structure-prediction quality.
 
-- AF2: `["uniref30-2302", "bfd"]` (+ `colabfold-envdb-202108` when `use_metagenomic`)
-- AF3 (protein chains): `["uniref30-2302"]` (+ envdb when enabled)
-- AF3 (RNA chains): `["rnacentral", "rfam", "nt"]`  ← unblocks RNA
-- Chai-1 / Protenix / Boltz-2: `["uniref30-2302"]` initially; tune per-predictor in migration PRs
-- BioEmu: `["uniref30-2302"]`
+**Per-predictor defaults** (matched to reference implementations):
+
+| Predictor | Chain type | `preferred_datasets` default | Source of truth |
+|---|---|---|---|
+| **AlphaFold 3** | protein | `["uniref90-2022-05", "mgnify-2022-05", "small-bfd", "uniprot-2021-04", "pdb-seqres-2022-09-28"]` | [AlphaFast `setup_databases.sh`](https://github.com/RomeroLab/alphafast/blob/main/scripts/setup_databases.sh) |
+| AlphaFold 3 | rna | `["rnacentral-active-90-80", "rfam-14-9-90-80", "nt-rna-2023-02-23-90-80"]` | AlphaFast (same script) |
+| **Boltz-2** (default mode) | protein | `["uniref30-2302", "colabfold-envdb-202108"]` | [Lightning-Boltz `setup_boltz_mmseqs_dbs.sh`](https://github.com/RomeroLab/lightning-boltz/blob/main/scripts/setup_boltz_mmseqs_dbs.sh) (`--mode colabfold`, the default) |
+| Boltz-2 (af3 mode) | protein | `["uniref90-2022-05", "mgnify-2022-05", "small-bfd", "uniprot-2021-04"]` | Lightning-Boltz `--mode alphafold3` (no PDB seqres or RNA) |
+| **AlphaFold 2** | protein | `["uniref30-2302", "bfd", "colabfold-envdb-202108"]` (when `use_metagenomic=True`); else drop envdb | Existing `colabfold-search` defaults — unchanged |
+| **Chai-1**, **Protenix** | protein | `["uniref30-2302"]` initially | Pin to current `colabfold-search` default; revisit during each migration PR |
+| **BioEmu** | protein | `["uniref30-2302"]` | Same — currently uses `colabfold-search` for unpaired MSAs |
+
+**Override mechanism**: every predictor's Config exposes `preferred_datasets` so users can swap (e.g., AF3 user with no MGnify provisioned can pass `["uniref90-2022-05", "small-bfd"]`). `mmseqs2-homology-search` validates each key is registered + provisioned at config time; missing entries raise with the relevant `setup_databases.sh` invocation.
 
 Each predictor owns its own "grouped input → `Mmseqs2HomologySearchInput`" builder (i.e. for AF3 multimers: one group per complex, one query per chain). The output consumer (`_assign_msas_to_input_json` in AF3, analogous in others) reads `result.msas` and `result.paired_msas` and writes into the predictor's native input format.
 

@@ -131,7 +131,8 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 └── <a href="proto_tools/tools/rna_splicing/splice_transformer/">splice_transformer/</a>
 <a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Multiple sequence alignment
 ├── <a href="proto_tools/tools/sequence_alignment/colabfold_search/">colabfold_search/</a>
-└── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
+├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
+└── <a href="proto_tools/tools/sequence_alignment/mmseqs2_homology_search/">mmseqs2_homology_search/</a>
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
 ├── <a href="proto_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
