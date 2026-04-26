@@ -127,7 +127,7 @@ def run_{tool_key_snake}(inputs: ToolInput, config: ToolConfig, instance: Any = 
 - **`@tool()`**: handles error catching, timing, metadata, registry, default config, and device allocation validation.
 - **`example_input`**: callable factory returning a minimal valid `Input`. Must be a public named function (not a lambda).
 - **`device_count`** (optional): expected device allocation ("1", "1-2", ">=1"). Defaults to "1".
-- **`devices_per_instance`**: a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Defaults to 1. Override in tool config subclasses where needed.
+- **`devices_per_instance`**: a `@property` on `BaseConfig` (not a field) that tells `ToolPool` how many GPUs each worker needs. Default is derived from the `device` string (`cpu` → 0, `cuda`/`cuda:N` → 1, `cudaxN`/multi → N, `cloud` → 1). Override only when GPU need is decoupled from the device string (e.g. a separate `use_gpu` toggle, or model-variant-dependent count). `0` short-circuits the pool to a single direct call.
 
 ### Tool Execution & Persistence
 

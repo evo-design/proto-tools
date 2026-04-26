@@ -108,11 +108,15 @@ class BaseConfig(BaseModel):
             take their fast non-deterministic path.
 
     Properties:
-        devices_per_instance: Number of GPUs each worker needs (default 1).
-            Override in tool configs where the active model variant determines
-            GPU requirements, e.g. a large checkpoint may need 2 GPUs while
-            the small variant fits on 1. ``ToolPool`` reads this at dispatch
-            time to group devices into worker slots.
+        devices_per_instance: Number of GPUs each worker needs. Default is
+            derived from the ``device`` field via :func:`parse_device_string`
+            (``cpu`` → 0, ``cuda`` / ``cuda:N`` → 1, ``cudaxN`` / multi → N,
+            ``cloud`` → 1). Override in tool configs where GPU need is
+            decoupled from the device string — e.g. a large checkpoint that
+            needs 2 GPUs regardless of input device, or a tool with a
+            separate ``use_gpu`` flag toggling real GPU work. ``ToolPool``
+            reads this at dispatch time to group devices into worker slots
+            (``0`` short-circuits to a single direct call).
 
     Example:
         >>> class MyToolConfig(BaseConfig):
@@ -200,17 +204,28 @@ class BaseConfig(BaseModel):
         """Number of GPUs each ToolPool worker needs for this configuration.
 
         ToolPool reads this at dispatch time to group its device list into
-        worker slots.  For example, with ``devices=["cuda:0", "cuda:1",
+        worker slots. For example, with ``devices=["cuda:0", "cuda:1",
         "cuda:2", "cuda:3"]`` and ``devices_per_instance == 2``, ToolPool
         creates 2 workers: one on ``cuda:0,cuda:1`` and one on
-        ``cuda:2,cuda:3``.
+        ``cuda:2,cuda:3``. A return of ``0`` declares the tool doesn't use
+        the pool's GPUs at all (CPU-only); ToolPool then bypasses partitioning
+        and dispatches as a single direct call.
 
-        This lives on Config (not ToolSpec) because the required device count
-        can depend on a runtime config value, e.g. a large model checkpoint
-        may need 4 GPUs while the small variant fits on 1.  Override in tool
-        config subclasses where this applies; the default is 1.
+        Default is derived from ``self.device`` via :func:`parse_device_string`:
+            - ``"cpu"`` → 0 (no GPUs needed)
+            - ``"cuda"`` / ``"cuda:N"`` → 1
+            - ``"cudaxN"`` / ``"cuda:0,cuda:1"`` → N
+            - ``"cloud"`` → 1 (cloud dispatch handled before pool partitioning)
+
+        Override in subclasses when GPU need is decoupled from the device
+        string — e.g. a model whose large checkpoint needs 4 GPUs regardless
+        of input device, or a tool that toggles real GPU use via a separate
+        config flag (see ``ColabfoldSearchConfig.devices_per_instance``).
         """
-        return 1
+        from proto_tools.utils.device import parse_device_string
+
+        spec = parse_device_string(self.device)
+        return 0 if spec.kind == "cpu" else spec.count
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "BaseConfig":
