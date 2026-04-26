@@ -13,6 +13,8 @@ proto_install_cuda_toolkit
 echo "Installing dependencies from requirements.txt..."
 uv pip install -r requirements.txt
 
+# ColabDesign v1.1.3 uses jax.tree_map, removed in JAX 0.10.
+export PROTEINMPNN_JAX_SPEC="${PROTEINMPNN_JAX_SPEC:-jax[cuda12]==0.5.3}"
 proto_install_jax PROTEINMPNN
 
 # ============================================================================

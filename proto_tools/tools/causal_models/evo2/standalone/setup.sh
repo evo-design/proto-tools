@@ -101,14 +101,16 @@ uv pip install psutil ninja packaging setuptools wheel numpy
 
 echo "Installing flash-attn..."
 # flash-attn's build step imports torch, so disable build isolation.
-uv pip install --no-build-isolation flash-attn==2.8.3 --refresh
+# transformer-engine 2.5.0 disables its flash-attention backend for flash-attn > 2.7.4.post1,
+# which breaks evo2's FP8 input projections. Pin to the TE-supported upper bound.
+uv pip install --no-build-isolation flash-attn==2.7.4.post1 --refresh
 
 # Validate flash-attn ABI compatibility — check CUDA kernels actually load.
 # Test the C++ extension import that vortex uses, not just the Python wrapper.
 if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then
     echo "flash-attn wheel has ABI mismatch (flash_attn_2_cuda import failed), rebuilding from source..."
     echo "WARNING: Source builds can take 30+ minutes depending on hardware."
-    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==2.8.3
+    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==2.7.4.post1
 fi
 
 echo "Installing transformer-engine..."
