@@ -213,6 +213,27 @@ def _is_compatible_input_for_test(complexes, input_class) -> bool:
     return not (_has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS)
 
 
+_BENCHMARK_INPUT_PER_PREDICTOR = {
+    "esmfold": ("trp_heterodimer", "esmfold-prediction"),
+    "alphafold2": ("trp_heterodimer", "alphafold2-prediction"),
+    "alphafold3": ("MfnG_and_ligand", "alphafold3-prediction"),
+    "chai1": ("MfnG_and_ligand", "chai1-prediction"),
+    "boltz2": ("MfnG_and_ligand", "boltz2-prediction"),
+    "protenix": ("MfnG_and_ligand", "protenix-prediction"),
+}
+assert set(_BENCHMARK_INPUT_PER_PREDICTOR) == set(_STRUCTURE_PREDICTORS), (
+    "Every predictor in _STRUCTURE_PREDICTORS needs an entry in _BENCHMARK_INPUT_PER_PREDICTOR."
+)
+
+
+def _is_canonical_benchmark_row(predictor_name: str, test_name: str) -> str | None:
+    """Return the tool_key if (predictor, test_name) is the canonical benchmark row, else None."""
+    spec = _BENCHMARK_INPUT_PER_PREDICTOR.get(predictor_name)
+    if spec is not None and spec[0] == test_name:
+        return spec[1]
+    return None
+
+
 def _generate_test_params() -> list:
     """Generate all valid test parameter combinations.
 
@@ -232,14 +253,18 @@ def _generate_test_params() -> list:
                 continue
 
             skip_reason = _missing_weights_skip_reason(predictor_name)
+            benchmark_tool_key = _is_canonical_benchmark_row(predictor_name, test_name)
+            supports_msa = _supports_msa(config_class)
 
             # Generate MSA variants if supported
-            if _supports_msa(config_class):
+            if supports_msa:
                 marks = []
                 if predictor_name not in _FAST_PREDICTORS:
                     marks.append(pytest.mark.slow)
                 if skip_reason:
                     marks.append(pytest.mark.skip(reason=skip_reason))
+                if benchmark_tool_key is not None:
+                    marks.append(pytest.mark.benchmark(benchmark_tool_key))
 
                 params.append(
                     pytest.param(
@@ -258,6 +283,8 @@ def _generate_test_params() -> list:
                 marks.append(pytest.mark.slow)
             if skip_reason:
                 marks.append(pytest.mark.skip(reason=skip_reason))
+            if benchmark_tool_key is not None and not supports_msa:
+                marks.append(pytest.mark.benchmark(benchmark_tool_key))
 
             params.append(
                 pytest.param(

@@ -50,6 +50,15 @@ def _gpu_available() -> bool:
     return shutil.which("nvidia-smi") is not None
 
 
+def _all_subclasses(cls: type) -> set[type]:
+    """Recursively collect every subclass of ``cls``."""
+    result: set[type] = set()
+    for sub in cls.__subclasses__():
+        result.add(sub)
+        result.update(_all_subclasses(sub))
+    return result
+
+
 # ============================================================================
 # Environment Report Collector
 # ============================================================================
@@ -491,6 +500,21 @@ def pytest_addoption(parser):
         help="Include extensive combinatorial tests (e.g., every tool x device transition)",
     )
     parser.addoption(
+        "--benchmark",
+        action="store_true",
+        default=False,
+        help="Run only @pytest.mark.benchmark tests. Combine with --all (local GPU) or "
+        "--use-cloud (route to Proto's remote execution service); on its own, the GPU/slow "
+        "gates still apply and benchmarks may be skipped. Marked tests also run normally under --all.",
+    )
+    parser.addoption(
+        "--use-cloud",
+        action="store_true",
+        default=False,
+        help="Route every tool run through device='cloud' (proto_tools.cloud.use_api_backend). "
+        "Requires PROTO_API_KEY in the environment.",
+    )
+    parser.addoption(
         "--no-log-console",
         action="store_true",
         default=False,
@@ -763,11 +787,19 @@ def pytest_collection_modifyitems(config, items):
             if "skip_ci" in item.keywords:
                 item.add_marker(skip_ci)
 
+    # Benchmark + --use-cloud: the workload runs on the server, so the local
+    # uses_gpu / slow gates don't apply. Returns True for items that should be
+    # exempt from those skip blocks.
+    use_cloud = config.getoption("--use-cloud")
+
+    def _runs_in_cloud(item) -> bool:
+        return use_cloud and "benchmark" in item.keywords
+
     # Skip GPU tests when --cpu is specified
     if config.getoption("--cpu"):
         skip_gpu = pytest.mark.skip(reason="--cpu specified")
         for item in items:
-            if "uses_gpu" in item.keywords:
+            if "uses_gpu" in item.keywords and not _runs_in_cloud(item):
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu is specified
@@ -781,7 +813,7 @@ def pytest_collection_modifyitems(config, items):
     elif not (config.getoption("--all") or (config.getoption("--integration") and _gpu_available())):
         skip_gpu = pytest.mark.skip(reason="GPU test (use --gpu, --integration with GPU, or --all to run)")
         for item in items:
-            if "uses_gpu" in item.keywords:
+            if "uses_gpu" in item.keywords and not _runs_in_cloud(item):
                 item.add_marker(skip_gpu)
 
     # Handle slow test filtering
@@ -798,7 +830,7 @@ def pytest_collection_modifyitems(config, items):
         # By default, skip slow tests (--all or --ext bypass this)
         skip_slow = pytest.mark.skip(reason="slow test (use --all to run, or --slow to run only slow tests)")
         for item in items:
-            if "slow" in item.keywords:
+            if "slow" in item.keywords and not _runs_in_cloud(item):
                 item.add_marker(skip_slow)
 
     # Skip integration tests unless --integration or --all is specified
@@ -816,6 +848,16 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "extensive" in item.keywords:
                 item.add_marker(skip_extensive)
+
+    # --benchmark: keep only @pytest.mark.benchmark tests. Without the flag,
+    # benchmark-marked tests still run normally — the marker is purely a selection signal.
+    if config.getoption("--benchmark"):
+        selected, deselected = [], []
+        for item in items:
+            (selected if "benchmark" in item.keywords else deselected).append(item)
+        if deselected:
+            items[:] = selected
+            config.hook.pytest_deselected(items=deselected)
 
     # Skip test_on_platforms tests when current architecture doesn't match
     import platform as _platform
@@ -961,16 +1003,47 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _route_tests_to_cloud(request):
+    """Arm proto_tools.cloud and patch BaseConfig.device default to 'cloud' when --use-cloud is set.
+
+    Lets a test that already passes ``Config()`` without an explicit ``device=`` run
+    locally (default ``"cpu"``) or against Proto's remote execution service
+    (``--use-cloud``) without any change to the test body.
+    """
+    if not request.config.getoption("--use-cloud"):
+        yield
+        return
+
+    from proto_tools.cloud import disable_api_backend, use_api_backend
+    from proto_tools.utils.base_config import BaseConfig
+
+    use_api_backend()
+
+    all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
+    originals = {}
+    for cls in all_classes:
+        fi = cls.model_fields.get("device")
+        if fi is not None:
+            originals[cls] = fi.default
+            fi.default = "cloud"
+    for cls in all_classes:
+        cls.model_rebuild(force=True)
+
+    yield
+
+    for cls, original in originals.items():
+        fi = cls.model_fields.get("device")
+        if fi is not None:
+            fi.default = original
+    for cls in all_classes:
+        cls.model_rebuild(force=True)
+    disable_api_backend()
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _force_verbose_tools():
     """Force verbose=True on all tool configs so subprocess stderr streams into test logs."""
     from proto_tools.utils.base_config import BaseConfig
-
-    def _all_subclasses(cls):
-        result = set()
-        for sub in cls.__subclasses__():
-            result.add(sub)
-            result.update(_all_subclasses(sub))
-        return result
 
     all_classes = {BaseConfig} | _all_subclasses(BaseConfig)
 

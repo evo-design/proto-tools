@@ -106,6 +106,7 @@ markers = [
     "integration: Integration tests",
     "skip_ci: Skip test in GitHub Actions CI",
     "extensive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --ext (or --extensive) is passed",
+    "benchmark: Marks the e2e benchmark test for a tool. Required arg: tool_key, e.g. @pytest.mark.benchmark('esm2-embedding'). The test still runs normally under --all; --benchmark selects only marked tests.",
     "test_on_platforms: mark test as requiring specific platform architectures. Args: architecture strings (e.g., 'x86_64', 'aarch64')",
     "include_in_env_report: Include test in --env-report. Requires kwargs: tool='tool-key', category='category_name'. Applied by test_env_report.py",
 ]
