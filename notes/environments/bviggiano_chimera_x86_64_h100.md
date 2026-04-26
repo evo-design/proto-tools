@@ -1,4 +1,4 @@
-# Chimera Environment Report
+# Linux x86_64 Environment Report
 
 ![Pass Rate](https://img.shields.io/badge/pass_rate-100%25-brightgreen) ![Passed](https://img.shields.io/badge/passed-45-brightgreen) ![Failed](https://img.shields.io/badge/failed-0-red) ![Skipped](https://img.shields.io/badge/skipped-3-lightgrey)
 
@@ -6,9 +6,9 @@
 
 | Property | Value |
 |----------|-------|
-| **OS** | Linux Linux 5.15.0-171-generic |
+| **OS** | Linux Linux 5.15.0-164-generic |
 | **Architecture** | x86_64 |
-| **Hostname** | `GPUC960` |
+| **Hostname** | `GPU71E4` |
 | **Python** | 3.14.4 |
 | **RAM** | 1007.4 GB |
 | **GPU** | 1x NVIDIA H100 80GB HBM3 |
@@ -17,9 +17,9 @@
 
 ## Git
 
-- **Commit**: `6d7b0cd0215f`
-- **Branch**: `main`
-- **Dirty**: No
+- **Commit**: `99ec3a9e9f94`
+- **Branch**: `feat/af3-env-no-container`
+- **Dirty**: Yes
 
 ## Environment Variables
 
@@ -27,6 +27,11 @@
 
 ```
 BLASTDB=/common_datasets/external/databases/blast
+BROWSER=/home/bviggiano/.vscode-server/cli/servers/Stable-10c8e557c8b9f9ed0a87f61f1c9a44bde731c409/server/bin/helpers/browser.sh
+CLAUDECODE=1
+CLAUDE_CODE_ENTRYPOINT=cli
+CLAUDE_CODE_EXECPATH=/home/bviggiano/.local/share/claude/versions/2.1.119
+COLORTERM=truecolor
 CONDA_DEFAULT_ENV=proto-tools
 CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
 CONDA_PREFIX=/home/bviggiano/miniforge3/envs/proto-tools
@@ -34,15 +39,12 @@ CONDA_PREFIX_1=/home/bviggiano/miniforge3
 CONDA_PROMPT_MODIFIER=(proto-tools) 
 CONDA_PYTHON_EXE=/home/bviggiano/miniforge3/bin/python
 CONDA_SHLVL=2
-CUDA_VISIBLE_DEVICES=0
+COREPACK_ENABLE_AUTO_PIN=0
 DISABLE_PANDERA_IMPORT_WARNING=True
-GPU_DEVICE_ORDINAL=0
+GIT_EDITOR=true
 HOME=/home/bviggiano
-HYDRA_BOOTSTRAP=slurm
-HYDRA_LAUNCHER_EXTRA_ARGS=--external-launcher
-I_MPI_HYDRA_BOOTSTRAP=slurm
-I_MPI_HYDRA_BOOTSTRAP_EXEC_EXTRA_ARGS=--external-launcher
-LANG=en_US.UTF-8
+LANG=C.UTF-8
+LD_LIBRARY_PATH=/usr/local/cuda/lib64
 LESSCLOSE=/usr/bin/lesspipe %s %s
 LESSOPEN=| /usr/bin/lesspipe %s
 LOGNAME=bviggiano
@@ -50,86 +52,32 @@ LS_COLORS=rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd
 MAMBA_EXE=/home/bviggiano/miniforge3/bin/mamba
 MAMBA_ROOT_PREFIX=/home/bviggiano/.local/share/mamba
 MOTD_SHOWN=pam
-OLDPWD=/home/bviggiano
-OMPI_MCA_plm_slurm_args=--external-launcher
-PATH=/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/usr/local/sbin:/usr/l...
+NoDefaultCurrentDirectoryInExePath=1
+OLDPWD=/home/bviggiano/.vscode-server
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
+PATH=/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/.vscode-server/data/User/globalStorage/github.copilot-chat/debugCommand:/home/bviggiano/.vscode-serv...
+PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
-PRTE_MCA_plm_slurm_args=--external-launcher
-PWD=/home/bviggiano/proto-tools
+PWD=/home/bviggiano/main/codebases/proto-bio/proto-tools
 PYTEST_RUNNING=1
 PYTEST_VERSION=9.0.3
+RCLONE_CONFIG=/large_storage/rclone/etc/rclone.conf
 RDBASE=/home/bviggiano/miniforge3/envs/proto-tools/lib/python3.14/site-packages/rdkit
-ROCR_VISIBLE_DEVICES=0
 SHELL=/bin/bash
-SHLVL=5
-SLURMD_DEBUG=2
-SLURMD_NODENAME=GPUC960
-SLURM_CLUSTER_NAME=arc-slurm
-SLURM_CONF=/etc/slurm/slurm.conf
-SLURM_CPUS_ON_NODE=8
-SLURM_GPUS=1
-SLURM_GPUS_ON_NODE=1
-SLURM_GTIDS=0
-SLURM_JOBID=2210279
-SLURM_JOB_ACCOUNT=hielab
-SLURM_JOB_CPUS_PER_NODE=8
-SLURM_JOB_END_TIME=1776967010
-SLURM_JOB_GID=10004
-SLURM_JOB_GPUS=1
-SLURM_JOB_ID=2210279
-SLURM_JOB_NAME=1_sh_gpu
-SLURM_JOB_NODELIST=GPUC960
-SLURM_JOB_NUM_NODES=1
-SLURM_JOB_PARTITION=evo_gpu_priority
-SLURM_JOB_QOS=normal
-SLURM_JOB_START_TIME=1776923810
-SLURM_JOB_UID=10249
-SLURM_JOB_USER=bviggiano
-SLURM_LAUNCH_NODE_IPADDR=172.18.140.10
-SLURM_LOCALID=0
-SLURM_MPI_TYPE=pmix
-SLURM_NNODES=1
-SLURM_NODEID=0
-SLURM_NODELIST=GPUC960
-SLURM_OOM_KILL_STEP=0
-SLURM_PMIXP_ABORT_AGENT_PORT=41325
-SLURM_PMIX_MAPPING_SERV=(vector,(0,1,1))
-SLURM_PRIO_PROCESS=0
-SLURM_PROCID=0
-SLURM_PTY_PORT=33115
-SLURM_PTY_WIN_COL=212
-SLURM_PTY_WIN_ROW=59
-SLURM_SRUN_COMM_HOST=172.18.140.10
-SLURM_SRUN_COMM_PORT=34267
-SLURM_STEPID=4294967290
-SLURM_STEP_ID=4294967290
-SLURM_STEP_LAUNCHER_PORT=34267
-SLURM_STEP_NODELIST=GPUC960
-SLURM_STEP_NUM_NODES=1
-SLURM_STEP_NUM_TASKS=1
-SLURM_STEP_TASKS_PER_NODE=1
-SLURM_SUBMIT_DIR=/home/bviggiano
-SLURM_SUBMIT_HOST=arc-slurm
-SLURM_TASKS_PER_NODE=8
-SLURM_TASK_PID=3574003
-SLURM_TOPOLOGY_ADDR=GPUC960
-SLURM_TOPOLOGY_ADDR_PATTERN=node
-SRUN_DEBUG=3
+SHLVL=2
+SLURM_JOB_ID=2221076
 TERM=xterm-256color
-TERM_PROGRAM=tmux
-TERM_PROGRAM_VERSION=3.2a
-TMPDIR=/tmp
-TMUX=/tmp/tmux-10249/default,902623,9
-TMUX_PANE=%9
+TERM_PROGRAM=vscode
+TERM_PROGRAM_VERSION=1.117.0
 USER=bviggiano
+VSCODE_GIT_IPC_HANDLE=/tmp/vscode-git-2e22fcc75c.sock
+VSCODE_IPC_HOOK_CLI=/tmp/vscode-ipc-9a035ab2-9cea-4982-a44a-9fc2f65b3001.sock
+VSCODE_PYTHON_AUTOACTIVATE_GUARD=1
 XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop
-XDG_RUNTIME_DIR=/run/user/10249
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
-XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog file:///home/bviggiano/miniforge3/etc/xml/catalog fi...
-ZES_ENABLE_SYSMAN=1
-ZE_AFFINITY_MASK=0
-_=/home/bviggiano/miniforge3/envs/proto-tools/bin/pytest
+XML_CATALOG_FILES=file:///home/bviggiano/miniforge3/etc/xml/catalog file:///etc/xml/catalog
+_=/home/bviggiano/miniforge3/envs/proto-tools/bin/python3
 _CE_CONDA=
 _CE_M=
 _CONDA_EXE=/home/bviggiano/miniforge3/bin/conda
@@ -139,32 +87,32 @@ _CONDA_ROOT=/home/bviggiano/miniforge3
 ### Subprocess Environment (passed to tools)
 
 ```
-CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
-CUDA_VISIBLE_DEVICES=0
+CONDA_PREFIX=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env
+CUDA_ROOT=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env/cuda_env
 DETECTED_COMPUTE_PLATFORM=cuda
 DETECTED_CUDA_VERSION=12
 DETECTED_DRIVER_VERSION=535
 HF_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/huggingface
 HOME=/home/bviggiano
-LANG=en_US.UTF-8
-LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/cuda_env/lib:/home/bviggiano/miniforge3/envs/proto-tools/lib
+LANG=C.UTF-8
+LD_LIBRARY_PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env/cuda_env/lib:/usr/local/cuda/lib64:/home/bviggiano/miniforge3/envs/proto-tools/lib
 LOGNAME=bviggiano
-PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env/bin:/usr/local/cuda/bin:/home/bviggiano/.local/bin:/home/bviggiano/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bvi...
+PATH=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env/bin:/usr/local/cuda/bin:/home/bviggiano/miniforge3/envs/proto-tools/bin:/home/bviggiano/miniforge3/condabin:/home/bviggiano/....
 PIP_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/pip_cache
 PIP_DEFAULT_TIMEOUT=300
+PROTO_ALPHAFOLD3_WEIGHTS_DIR=/large_storage/hielab/brk/models/af3_weights
 PROTO_HOME=/large_storage/hielab/bviggiano/proto_cache
 RECOMMENDED_JAX_SPEC=jax[cuda12]>=0.4.20,<1
 RECOMMENDED_JAX_VARIANT=cuda12
 RECOMMENDED_TORCH_INDEX=https://download.pytorch.org/whl/cu126
 RECOMMENDED_TORCH_SPEC=torch>=2.4,<3
 SHELL=/bin/bash
-TMPDIR=/tmp
 TORCH_CUDA_ARCH_LIST=9.0
 TORCH_HOME=/large_storage/hielab/bviggiano/proto_cache/proto_model_cache/torch
 USER=bviggiano
 UV_CACHE_DIR=/large_storage/hielab/bviggiano/proto_cache/uv_cache
 UV_HTTP_TIMEOUT=300
-VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/progen3_env
+VIRTUAL_ENV=/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env
 XLA_PYTHON_CLIENT_ALLOCATOR=platform
 XLA_PYTHON_CLIENT_PREALLOCATE=false
 ```
@@ -268,7 +216,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | Tool | Requires GPU | Venv Build Succeeded | Duration | Tested At | Status |
 |------|--------------|----------------------|----------|-----------|--------|
 | `alphafold2-binder` | yes | ✅ | 193.1s | `6d7b0cd` | ✅ Pass |
-| `alphafold3-prediction` | yes | ✅ | 71.3s | `6d7b0cd` | ✅ Pass |
+| `alphafold3-prediction` | yes | ✅ | 2466.3s | `99ec3a9` ✱ | ✅ Pass |
 | `boltz2-prediction` | yes | ✅ | 100.4s | `6d7b0cd` | ✅ Pass |
 | `chai1-prediction` | yes | ✅ | 324.7s | `6d7b0cd` | ✅ Pass |
 | `esmfold-prediction` | yes | ✅ | 57.5s | `6d7b0cd` | ✅ Pass |
@@ -295,7 +243,7 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
 | `mock-pytorch-tool-run` | yes | ✅ | 71.8s | `6d7b0cd` | ✅ Pass |
 
 ---
-*Generated at 2026-04-23 00:16:26 by `pytest --env-report`*
+*Generated at 2026-04-24 14:13:18 by `pytest --env-report`*
 
 <!-- env-report-data
 [
@@ -421,13 +369,13 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false
     "category": "structure_prediction",
     "test_name": "tests/tool_infra_tests/test_env_report.py::test_tool_env_report[alphafold3-prediction]",
     "status": "passed",
-    "duration_seconds": 71.34,
+    "duration_seconds": 2466.34,
     "uses_gpu": true,
     "env_path": "/large_storage/hielab/bviggiano/proto_cache/proto_tool_envs/alphafold3_env",
     "env_status": "success",
     "error_message": null,
-    "git_commit": "6d7b0cd0215f",
-    "git_dirty": false
+    "git_commit": "99ec3a9e9f94",
+    "git_dirty": true
   },
   {
     "tool_key": "pyhmmer-hmmscan",

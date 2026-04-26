@@ -119,16 +119,19 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             If specified, creates a persistent directory at the given path that will
             NOT be automatically deleted. Default: ``None``.
 
-        repo_path (str): Local path to the cloned AlphaFold3 repository.
-            Required for execution.
+        model_dir (str | None): Local path to the directory containing AlphaFold3
+            model parameters (a single ``.bin`` or ``.bin.zst`` file per DeepMind's
+            release layout). If ``None`` (default), weights are resolved from
+            ``PROTO_ALPHAFOLD3_WEIGHTS_DIR``, then ``PROTO_MODEL_CACHE``, then
+            ``PROTO_HOME/proto_model_cache/alphafold3/`` (see ``notes/storage.md``).
+            Default: ``None``.
 
-        sif_path (str): Local path to the AlphaFold3 Singularity image file (.sif).
-            Required for container execution.
-
-        model_dir (str): Local path to the directory containing AlphaFold3
-            model parameters/weights.
-
-        db_dir (str): Local path to the AlphaFold3 genetic databases.
+        sif_path (str | None): Optional path to a pre-built AlphaFold3 Apptainer
+            image (``.sif``). When set, the tool runs ``apptainer exec`` against
+            this image instead of the in-env Python install. When ``None`` (default),
+            inference.py looks for ``$VENV_PATH/alphafold3.sif`` (provisioned by
+            setup.sh) and falls back to the env-based install if absent.
+            Default: ``None``.
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using ColabFold search. Inherited from
@@ -169,32 +172,18 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         hidden=True,
     )
 
-    repo_path: str = ConfigField(
-        title="AlphaFold3 Repo Path",
-        default="/large_storage/hielab/brk/models/alphafold3",
-        description="Path to AlphaFold3 repository",
-        hidden=True,
+    model_dir: str | None = ConfigField(
+        title="AlphaFold3 Weights Directory",
+        default=None,
+        description="Directory with AlphaFold3 weights. If unset, resolves from env vars.",
+        advanced=True,
     )
 
-    sif_path: str = ConfigField(
-        title="AlphaFold3 SIF Path",
-        default="/large_storage/hielab/brk/models/alphafold3/alphafold3_latest.sif",
-        description="Path to AlphaFold3 Singularity container",
-        hidden=True,
-    )
-
-    model_dir: str = ConfigField(
-        title="AlphaFold3 Model Path",
-        default="/large_storage/hielab/brk/models/af3_weights",
-        description="Path to AlphaFold3 model weights",
-        hidden=True,
-    )
-
-    db_dir: str = ConfigField(
-        title="AlphaFold3 Database Path",
-        default="/large_storage/hielab/brk/databases/af3_dbs",
-        description="Path to AlphaFold3 sequence database",
-        hidden=True,
+    sif_path: str | None = ConfigField(
+        title="AlphaFold3 Apptainer Image",
+        default=None,
+        description="Pre-built AlphaFold3 .sif image. If unset, prefers provisioned sif then env.",
+        advanced=True,
     )
 
 
@@ -262,15 +251,15 @@ def run_alphafold3(
             with open(input_json_path, "w") as f:
                 json.dump(input_json, f, indent=2)
 
-            # Prepare dispatch input
+            # Prepare dispatch input. The inference.py side picks the sif path
+            # when either config.sif_path is set or setup.sh provisioned one at
+            # $VENV_PATH/alphafold3.sif; otherwise it uses the env-based install.
             input_data = {
                 "input_json_path": input_json_path,
                 "output_dir": output_dir,
                 "device": config.device,
-                "repo_path": config.repo_path,
-                "sif_path": config.sif_path,
                 "model_dir": config.model_dir,
-                "db_dir": config.db_dir,
+                "sif_path": config.sif_path,
                 "verbose": config.verbose,
                 "include_pae_matrix": config.include_pae_matrix,
             }
@@ -417,12 +406,17 @@ def _create_input_json_from_complex(
             }
 
         else:
+            # templates=[] is required when running with --norun_data_pipeline;
+            # AF3's featurisation validates that every protein chain either has
+            # templates (even an empty list explicitly set) or the data pipeline
+            # has run to populate them.
             sequence_entry = {
                 mol_type: {  # type: ignore[dict-item]
                     "id": CHAIN_IDS[idx],
                     "sequence": sequence,
                     "pairedMsa": "",
                     "unpairedMsa": "",
+                    "templates": [],
                 }
             }
 

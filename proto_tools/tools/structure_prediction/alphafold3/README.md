@@ -2,6 +2,15 @@
 
 # AlphaFold3
 
+> [!IMPORTANT]
+> **AlphaFold3 model parameters are gated by DeepMind's Terms of Use.** They are NOT automatically downloaded by `setup.sh` and cannot be redistributed. To run this tool you must:
+>
+> 1. Request access via the form linked in DeepMind's repository: <https://github.com/google-deepmind/alphafold3#obtaining-model-parameters>
+> 2. After DeepMind approves (typically 2–3 business days), download the weights archive from the link they email you.
+> 3. Place the weights file (e.g. `af3.bin.zst`) at `$PROTO_HOME/proto_model_cache/alphafold3/`, or override with `export PROTO_ALPHAFOLD3_WEIGHTS_DIR=/path/to/weights`.
+>
+> `setup.sh` fails fast with a pointer to this flow if the weights directory is empty. See the "Weights setup" section below for full details.
+
 ## Overview
 
 AlphaFold3 is the latest generation structure prediction model from Google DeepMind that predicts 3D structures of biomolecular complexes including proteins, DNA, RNA, ligands, ions, and chemical modifications. It uses a [diffusion](https://en.wikipedia.org/wiki/Diffusion_model)-based architecture to generate joint 3D structures revealing how molecules fit together.
@@ -37,11 +46,47 @@ Confidence metrics include:
 
 ## Execution Modes
 
-AlphaFold3 requires GPU with >=40GB VRAM (A100-40GB minimum; H100/A100-80GB recommended).
+AlphaFold3 requires GPU with >=40GB VRAM (A100-40GB minimum; H100/A100-80GB recommended). DeepMind-licensed model weights (~1GB) are required regardless of install path.
 
-- **Local execution**: Runs on local GPU. Requires model weights (~1GB) and optionally local MSA databases.
+`setup.sh` supports two install paths, chosen by autodetect on first run:
 
-**Two-stage workflow**: MSA generation (when enabled) runs separately from inference (GPU-intensive). Runtime ranges from ~30 minutes to several hours depending on complex size and MSA generation settings.
+1. **Sif path (preferred when available)**: uses the bundled `standalone/Singularity.def` recipe to build a portable Apptainer `.sif` locally via user-namespace build (no root, no Docker daemon required). Output is a single ~4 GB file at `$VENV_PATH/alphafold3.sif` that caches across env rebuilds and can be `scp`'d to other machines. First build takes ~20-30 min. Chosen automatically when the host kernel supports unprivileged user namespaces **and** the user has `/etc/subuid` / `/etc/subgid` mappings (both needed for rootless `apt-get` inside the build rootfs). Managed HPC clusters commonly satisfy (1) but not (2); in that case autodetect picks the env path.
+2. **Env path (fallback)**: builds AlphaFold3 from source into the tool's micromamba venv (CUDA toolkit + JAX 0.9.1 + HMMER + zlib/zstd + AF3 clone + `pip install`). Used when user namespaces aren't available, when apptainer can't be installed, or when the sif build fails. Works everywhere micromamba runs.
+
+At runtime, `inference.py` prefers whichever path is provisioned: if `$VENV_PATH/alphafold3.sif` exists (or the config sets `sif_path`), it runs `apptainer exec <sif> python run_alphafold.py ...`. Otherwise it runs AF3 directly from the in-env Python install.
+
+Override knobs via env vars / config:
+- `PROTO_ALPHAFOLD3_SIF_PATH` — point at an already-built sif (e.g. on shared lab storage). `setup.sh` symlinks it into the venv and skips the env build entirely (~1 min setup instead of ~30 min). The recommended pattern for HPC users sharing one lab-built sif.
+- `PROTO_ALPHAFOLD3_WEIGHTS_DIR` — point at the directory containing your DeepMind-licensed weights file. Falls back to `$PROTO_MODEL_CACHE/alphafold3/` and then `$PROTO_HOME/proto_model_cache/alphafold3/`.
+- `ALPHAFOLD3_BUILD_SIF={auto,1,0}` — `auto` (default) autodetects whether to attempt a local sif build; `1` forces the sif build (errors if subuid missing); `0` forces the env path. Ignored when `PROTO_ALPHAFOLD3_SIF_PATH` is set.
+- `ALPHAFOLD3_VERSION` — target a different AF3 release tag (default `v3.0.2`).
+- `ALPHAFOLD3_JAX_SPEC` — pin a different JAX/jaxlib combination for the env path.
+- `AlphaFold3Config.sif_path` — per-call BYO-sif override at the Python API layer.
+- `AlphaFold3Config.model_dir` — per-call weights directory override at the Python API layer.
+
+**Lab "build once, share many" workflow** (recommended for HPC):
+```bash
+# On a machine with subuid mappings (e.g. a personal Linux workstation):
+ALPHAFOLD3_BUILD_SIF=1 ./setup.sh   # builds alphafold3.sif locally
+cp $VENV_PATH/alphafold3.sif /shared/lab/storage/alphafold3.sif
+
+# On the cluster (no subuid required, just user namespaces):
+export PROTO_ALPHAFOLD3_SIF_PATH=/shared/lab/storage/alphafold3.sif
+# `setup.sh` then symlinks the sif into the venv, installs apptainer,
+# and skips the env install entirely.
+```
+
+**Two-stage workflow**: MSA generation (when enabled) is delegated to the `colabfold-search` tool and runs separately from inference (GPU-intensive). Runtime ranges from ~30 minutes to several hours depending on complex size and MSA generation settings.
+
+**Model weights**: AlphaFold3 weights are gated by DeepMind's [Terms of Use](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md) and cannot be auto-downloaded. Before running this tool:
+
+1. Follow DeepMind's instructions to request weight access (link to the current request form is maintained in their README): <https://github.com/google-deepmind/alphafold3#obtaining-model-parameters>
+2. After DeepMind approves (typically 2-3 business days), download the weights archive from the link they email you.
+3. Place the weights file (e.g. `af3.bin.zst`) in the proto-tools weights cache:
+   - Default location: `$PROTO_HOME/proto_model_cache/alphafold3/`
+   - Or override per-tool: `export PROTO_ALPHAFOLD3_WEIGHTS_DIR=/path/to/weights`
+
+`setup.sh` fails fast with a pointer to the request form if no `.bin` / `.bin.zst` file is found. See `notes/storage.md` for the full precedence rules for `PROTO_HOME`, `PROTO_MODEL_CACHE`, and per-tool overrides.
 
 ## How It Works
 

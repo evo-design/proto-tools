@@ -1,0 +1,23 @@
+# Environment variables for AlphaFold3 (structure prediction)
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+#
+# Compute detection (RECOMMENDED_JAX_SPEC, etc.) is injected automatically.
+# Weights are resolved at runtime via PROTO_ALPHAFOLD3_WEIGHTS_DIR /
+# PROTO_MODEL_CACHE / PROTO_HOME; PROTO_HOME and PROTO_MODEL_CACHE are
+# forwarded automatically by persistent_worker.py.
+
+[passthrough]
+# Per-tool weights override (lets users point at an external DeepMind-licensed weights dir)
+PROTO_ALPHAFOLD3_WEIGHTS_DIR
+# Per-tool sif override (lets users point at a pre-built sif, e.g. on shared lab storage —
+# setup.sh symlinks it into the venv and skips the full env build).
+PROTO_ALPHAFOLD3_SIF_PATH
+
+[set]
+# CUDA libs for JAX (installed via proto_install_cuda_toolkit in setup.sh)
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+# CUDA_ROOT points JAX at ptxas/nvcc from the toolkit
+CUDA_ROOT=${VENV_PATH}/cuda_env

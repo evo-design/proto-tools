@@ -1,0 +1,90 @@
+Bootstrap: docker
+From: nvidia/cuda:12.6.3-base-ubuntu24.04
+
+# Apptainer build recipe for AlphaFold3.
+# Mirrors DeepMind's upstream Dockerfile (github.com/google-deepmind/alphafold3,
+# docker/Dockerfile). Built locally by setup.sh when ALPHAFOLD3_BUILD_SIF=1 —
+# output is a self-contained .sif that pins OS deps, HMMER 3.4 with DeepMind's
+# jackhmmer_seq_limit.patch, Python 3.12, JAX 0.9.1, and the AF3 source install.
+#
+# AF3 release tag is controlled by the AF3_VERSION build-arg (default v3.0.2),
+# passed via: apptainer build --build-arg AF3_VERSION=v3.0.2 out.sif Singularity.def
+#
+# Weights are NOT included — they're DeepMind ToU-gated and bind-mounted at
+# runtime via --bind $model_dir:$model_dir from the caller.
+
+%post
+    set -euo pipefail
+
+    # AF3 release tag (templated from --build-arg AF3_VERSION=...; defaults to v3.0.2)
+    AF3_VERSION="{{AF3_VERSION}}"
+    [ -z "$AF3_VERSION" ] && AF3_VERSION=v3.0.2
+
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=Etc/UTC
+
+    # Base build toolchain + system libs AF3's C++ extensions need.
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        gcc \
+        g++ \
+        make \
+        ninja-build \
+        patch \
+        python3.12 \
+        python3.12-dev \
+        python3.12-venv \
+        python3-pip \
+        wget \
+        zlib1g-dev \
+        zstd
+    rm -rf /var/lib/apt/lists/*
+
+    ln -sf /usr/bin/python3.12 /usr/local/bin/python
+    python -m pip install --no-cache-dir uv
+
+    # Clone AF3 at the pinned version so we get their Dockerfile's exact deps.
+    git clone --depth 1 --branch "$AF3_VERSION" \
+        https://github.com/google-deepmind/alphafold3.git /opt/alphafold3
+
+    # Build HMMER 3.4 from source with DeepMind's jackhmmer_seq_limit.patch.
+    # (DeepMind's Dockerfile does the same — the patch raises a sequence-count
+    # limit that jackhmmer hits on some AF3 inputs.)
+    cd /tmp
+    curl -fsSL http://eddylab.org/software/hmmer/hmmer-3.4.tar.gz | tar xz
+    cd hmmer-3.4
+    patch -p1 < /opt/alphafold3/docker/jackhmmer_seq_limit.patch
+    ./configure --prefix=/usr/local
+    make -j"$(nproc)"
+    make install
+    cd /
+    rm -rf /tmp/hmmer-3.4
+
+    # Install AF3 into a system-wide venv. --all-groups pulls JAX 0.9.1 and the
+    # CUDA plugin per their pin.
+    cd /opt/alphafold3
+    uv venv /opt/venv
+    export VIRTUAL_ENV=/opt/venv
+    export PATH=/opt/venv/bin:$PATH
+    uv sync --frozen --all-groups --no-editable
+
+    # Build the chemical-components DB (AF3 Dockerfile runs this post-install).
+    build_data
+
+%environment
+    export PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin
+    export VIRTUAL_ENV=/opt/venv
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec python /opt/alphafold3/run_alphafold.py "$@"
+
+%labels
+    Maintainer proto-bio
+    Source https://github.com/google-deepmind/alphafold3
+    AF3Version v3.0.2
