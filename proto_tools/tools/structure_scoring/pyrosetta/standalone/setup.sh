@@ -46,6 +46,26 @@ echo "Installing PyRosetta via conda channel..."
 echo "Installing additional Python dependencies..."
 uv pip install -r requirements.txt
 
+echo "Building DAlphaBall for buried unsatisfied H-bond computation..."
+(
+    set +e
+    "$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge gfortran gmp 2>/dev/null
+    DALPHABALL_DIR=$(mktemp -d)
+    git clone --depth 1 https://github.com/outpace-bio/DAlphaBall.git "$DALPHABALL_DIR" 2>&1
+    cd "$DALPHABALL_DIR/src" && make 2>&1
+    if [ -f DAlphaBall.gcc ]; then
+        cp DAlphaBall.gcc "$VENV_PATH/bin/DAlphaBall"
+        chmod +x "$VENV_PATH/bin/DAlphaBall"
+        echo "DAlphaBall installed successfully."
+    else
+        echo "WARNING: DAlphaBall compilation failed."
+        echo "Buried unsatisfied H-bonds (delta_unsat_hbonds) will not be computed."
+    fi
+    rm -rf "$DALPHABALL_DIR"
+) || {
+    echo "WARNING: DAlphaBall build failed. delta_unsat_hbonds will not be computed."
+}
+
 echo "Verifying PyRosetta installation..."
 python -c "import pyrosetta; pyrosetta.init('-mute all'); print('PyRosetta OK')"
 

@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 class PyRosettaInterfaceAnalyzerMetrics(Metrics):
     """Interface-analysis result for a single two-chain complex.
 
-    All seven metrics are computed on the full pose with the target and binder
-    chains specified on the corresponding :class:`InterfaceStructureInput`.
+    Metrics are computed on the full pose with the target and binder chains
+    specified on the corresponding :class:`InterfaceStructureInput`.
 
     Metrics documented in ``metric_spec``:
         interface_sc (float): Shape complementarity across the interface, on
@@ -51,6 +51,9 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             that are apolar or aromatic (set ``"ACFILMPVWY"``), in [0, 100].
         surface_hydrophobicity (float): Fraction of binder-chain surface
             residues that are apolar or aromatic, in [0, 1].
+        delta_unsat_hbonds (int | None): Buried unsatisfied hydrogen bonds
+            across the interface via Rosetta's BuriedUnsatHbonds filter with
+            DAlphaBall SASA. ``None`` when DAlphaBall is not installed.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -102,6 +105,13 @@ class PyRosettaInterfaceAnalyzerMetrics(Metrics):
             "min": 0.0,
             "max": 1.0,
             "unit": None,
+        },
+        "delta_unsat_hbonds": {
+            "availability": "optional",
+            "type": "int",
+            "min": 0,
+            "max": None,
+            "unit": "count",
         },
     }
     primary_metric: str | None = "interface_dG"
