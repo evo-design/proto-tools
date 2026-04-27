@@ -353,6 +353,29 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         return self
 
     @model_validator(mode="after")
+    def _validate_a3m_adapter_supported_in_phase_3(self) -> Any:
+        """Phase 3 only handles ColabFold-style profile DBs.
+
+        The standalone wraps colabfold_search's iterative pipeline, which only
+        works against UniRef30 / ColabFoldDB envdb. AF3-style and RNA datasets
+        need a different MMseqs2 invocation pattern, landing in Phase 4. Block
+        them at config time with a clear hint.
+        """
+        unsupported = [
+            (name, DatasetRegistry.get(name).a3m_adapter)
+            for name in self.datasets
+            if DatasetRegistry.get(name).a3m_adapter != "colabfold"
+        ]
+        if unsupported:
+            raise ValueError(
+                f"Phase 3 only supports datasets with a3m_adapter='colabfold' (UniRef30, "
+                f"ColabFoldDB envdb). Got: {unsupported}. AF3-style protein and RNA "
+                "datasets are registered and provisionable but not yet searchable — "
+                "tracked for Phase 4 of the mmseqs2-homology-search rollout (#581)."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_use_gpu_platform(self) -> Any:
         """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only)."""
         if self.use_gpu and platform.system() != "Linux":
@@ -602,10 +625,12 @@ def _check_dataset_provisioned(name: str, entry: DatasetEntry, cache_dir: Path, 
             f'    "{cmd_path}" {cmd_name} colabfold_envdb_202108 1\n'
             "(see proto_tools/tools/sequence_alignment/colabfold_search/README.md → Local Database Setup)"
         )
-    if require_idx_pad and not (cache_dir / f"{entry.db_prefix}.idx_pad").exists():
-        raise FileNotFoundError(
-            f"Dataset {name!r} is missing its GPU-padded index "
-            f"({entry.db_prefix}.idx_pad) at {cache_dir}.\n"
-            "Build it with: mmseqs makepaddedseqdb <db_prefix> <db_prefix>.idx_pad\n"
-            "(setup_databases.sh runs this automatically; rerun the script or set use_gpu=False)"
-        )
+    if require_idx_pad and entry.gpu_padded_marker:
+        marker = cache_dir / entry.gpu_padded_marker
+        if not marker.exists():
+            raise FileNotFoundError(
+                f"Dataset {name!r} is missing its GPU-padded index marker "
+                f"({entry.gpu_padded_marker}) at {cache_dir}.\n"
+                "Build it with: mmseqs makepaddedseqdb <db_prefix> <gpu_padded_marker>\n"
+                "(setup_databases.py runs this automatically; rerun or set use_gpu=False)"
+            )

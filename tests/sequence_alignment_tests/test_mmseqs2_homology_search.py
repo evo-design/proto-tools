@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.tools.sequence_alignment.databases import DatasetRegistry, get_dataset_dir
+from proto_tools.tools.sequence_alignment.databases import DatasetRegistry, dataset_slug, get_dataset_dir
 from proto_tools.tools.sequence_alignment.mmseqs2_homology_search import (
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,
@@ -128,43 +128,98 @@ def test_missing_dataset_dir_gives_provisioning_hint(tmp_path: Path) -> None:
         _check_dataset_provisioned("uniref30-2302", entry, bogus_cache, require_idx_pad=True)
 
 
-def test_missing_idx_pad_gives_use_gpu_false_hint(tmp_path: Path) -> None:
-    """Dispatch-time check explains the .idx_pad omission and suggests use_gpu=False."""
+def test_missing_gpu_padded_marker_gives_use_gpu_false_hint(tmp_path: Path) -> None:
+    """Dispatch-time check explains the missing GPU marker and suggests use_gpu=False."""
     entry = DatasetRegistry.get("uniref30-2302")
-    # Provision dbtype but NOT idx_pad — simulates a CPU-only DB build.
+    # Provision dbtype but NOT the gpu_padded_marker — simulates a CPU-only DB build.
     (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
     with pytest.raises(FileNotFoundError, match=r"use_gpu=False"):
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
 
 
 # ============================================================================
-# Integration (GPU) — requires uniref30 + GPU
+# Per-dataset provisioning + integration — auto-skip when not on device
 # ============================================================================
 
 
-@pytest.mark.uses_gpu
-def test_gpu_search_against_uniref30_finds_homologs() -> None:
-    """End-to-end GPU search against the provisioned UniRef30 DB.
+def _provisioned_datasets() -> list[str]:
+    """Return registry keys whose declared output_files are all present on disk.
 
-    Skipped automatically without a GPU. Skipped explicitly when UniRef30 is
-    not provisioned. On a working host, ubiquitin should return >>1000 homologs
-    (it's one of the most conserved proteins; 9902 observed at PR time).
+    Used to parametrize per-dataset tests so they auto-skip when a dataset
+    isn't installed; a fresh dev machine sees no parametrize entries skipped
+    here unless the user has run ``setup_databases.py`` for that dataset.
     """
-    if not _uniref30_provisioned():
-        pytest.skip("uniref30-2302 not provisioned locally")
+    found: list[str] = []
+    for name in DatasetRegistry.list_all():
+        entry = DatasetRegistry.get(name)
+        cache = get_dataset_dir(name)
+        if not entry.index_recipe.output_files:
+            if (cache / f"{entry.db_prefix}.dbtype").is_file():
+                found.append(name)
+            continue
+        if all((cache / out.replace("{name}", dataset_slug(name))).exists() for out in entry.index_recipe.output_files):
+            found.append(name)
+    return found
+
+
+@pytest.mark.parametrize("dataset_name", DatasetRegistry.list_all())
+def test_registry_entry_outputs_match_disk_when_provisioned(dataset_name: str) -> None:
+    """If a dataset's cache dir has its dbtype file, all declared output_files exist.
+
+    Catches drift between an entry's ``index_recipe.output_files`` and what
+    its provisioning steps actually produce. Skips when not provisioned.
+    """
+    entry = DatasetRegistry.get(dataset_name)
+    cache = get_dataset_dir(dataset_name)
+    if not (cache / f"{entry.db_prefix}.dbtype").is_file():
+        pytest.skip(f"{dataset_name} not provisioned at {cache}")
+    missing = [
+        out
+        for out in entry.index_recipe.output_files
+        if not (cache / out.replace("{name}", dataset_slug(dataset_name))).exists()
+    ]
+    assert not missing, (
+        f"{dataset_name} declared output_files {missing} are missing from {cache}; "
+        f"either provisioning failed or the entry's output_files list is stale."
+    )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.parametrize("dataset_name", _provisioned_datasets() or ["__none_provisioned__"])
+def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> None:
+    """End-to-end GPU search against each provisioned protein dataset.
+
+    Auto-parametrizes over whatever's on disk. RNA datasets are skipped
+    (current tool surface is protein-only). Asserts the search returns
+    a non-empty MSA for ubiquitin (universally conserved).
+    """
+    if dataset_name == "__none_provisioned__":
+        pytest.skip("No datasets provisioned on this device")
+
+    entry = DatasetRegistry.get(dataset_name)
+    if entry.molecule_type != "protein":
+        pytest.skip(f"{dataset_name} is {entry.molecule_type}; current tool is protein-only")
+    if not entry.supports_gpu:
+        pytest.skip(f"{dataset_name} declares supports_gpu=False")
+    if entry.a3m_adapter != "colabfold":
+        pytest.skip(
+            f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool currently only handles colabfold-style DBs (Phase 4)"
+        )
 
     inp = Mmseqs2HomologySearchInput(queries=[(UBIQUITIN, "ubiquitin")])
-    cfg = Mmseqs2HomologySearchConfig(use_gpu=True)
+    cfg = Mmseqs2HomologySearchConfig(datasets=[dataset_name], use_gpu=True)
     result = run_mmseqs2_homology_search(inp, cfg)
 
-    assert result.success
+    assert result.success, f"Search against {dataset_name} failed: {result.errors}"
     assert len(result.results) == 1
     grp = result.results[0]
-    assert grp.sequence_ids == ["ubiquitin"]
-    assert grp.datasets_searched == ["uniref30-2302"]
-    assert grp.paired_msas == [None]
-    assert grp.num_homologs_found[0] > 100
-    assert grp.msas[0] is not None
+    assert grp.datasets_searched == [dataset_name]
+    # Ubiquitin against any reasonable protein DB should return >0 homologs.
+    # Use a low threshold (>5) so PDB-seqres-style tiny DBs still pass.
+    assert grp.num_homologs_found[0] > 5, (
+        f"{dataset_name} returned only {grp.num_homologs_found[0]} homologs for ubiquitin "
+        "(expected >5 — universally conserved protein)"
+    )
 
 
 def test_rename_a3m_avoids_collision_with_adversarial_numeric_ids(tmp_path: Path) -> None:

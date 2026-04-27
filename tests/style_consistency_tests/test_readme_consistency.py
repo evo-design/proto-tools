@@ -340,10 +340,14 @@ def test_all_links_reachable(readme: Path) -> None:
     # - doi.org: permanent academic identifiers, never break but resolver is slow
     # - proteininformationresource.org: valid PIR database, intermittently slow in CI
     _SKIP_DOMAINS = {"bio-pro.mintlify.app", "doi.org", "proteininformationresource.org"}
+    # TODO: Remove when public
+    _SKIP_URL_PREFIXES = ("https://github.com/proto-bio/proto-tools",)
 
     broken = []
     for lineno, url in urls:
         if any(domain in url for domain in _SKIP_DOMAINS):
+            continue
+        if url.startswith(_SKIP_URL_PREFIXES):
             continue
         try:
             _fetch_url(url, method="HEAD")

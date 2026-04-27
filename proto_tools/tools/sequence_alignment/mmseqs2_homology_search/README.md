@@ -2,6 +2,9 @@
 
 # MMseqs2 Homology Search
 
+> [!NOTE]
+> **Eventual replacement for [`colabfold-search`](../colabfold_search/README.md).** This tool is rolling out in phases under [#581](https://github.com/proto-bio/proto-tools/issues/581) and will become the single homology-search wrapper across proto-tools, retiring `colabfold-search` once every structure-prediction consumer (AF3, AlphaFast, Lightning-Boltz, Chai-1, Protenix, AF2) is migrated. Today it covers protein, unpaired, ColabFold-style DBs only; AF3-style protein and RNA dispatch land in Phase 4, predictor migrations in Phase 5, and `colabfold-search` deprecation in Phase 6.
+
 ## Overview
 
 Generates [Multiple Sequence Alignments](https://en.wikipedia.org/wiki/Multiple_sequence_alignment) (MSAs) for protein sequences by searching MMseqs2-indexed homology databases. The successor to `colabfold-search`: GPU-by-default, registry-driven dataset selection, and a forward-compatible grouped input shape that will support paired multimer MSAs in a future PR (tracked in [#543](https://github.com/proto-bio/proto-tools/issues/543)).

@@ -293,6 +293,7 @@ ignore = [
 "proto_tools/utils/device.py" = ["T20", "PLW1510", "S603", "S607"]
 "proto_tools/utils/proto_home.py" = ["T20"]
 "scripts/*.py" = ["T20", "S603", "S607"]  # dev helper scripts: prints are intentional, subprocess calls use literal argv
+"proto_tools/tools/sequence_alignment/mmseqs2_homology_search/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]  # user-facing provisioning CLI
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]

@@ -142,7 +142,8 @@ The registry should hold every database any consumer might want — keeping thin
 | `small-bfd` | protein | ✗ | same | ~14 GB / ~25 GB |
 | `uniprot-2021-04` | protein | ✓ (paired MSA) | same | ~95 GB / ~165 GB |
 | `pdb-seqres-2022-09-28` | protein | ✗ (template hits) | same | tiny / tiny |
-| `bfd` (full) | protein | ✗ | `bfd.mmseqs.com` | ~270 GB / ~1.8 TB |
+
+Full BFD (~270 GB / ~1.8 TB) is intentionally **not** in the launch set: AF3, AlphaFast, Lightning-Boltz, Chai-1, and Protenix all use `small-bfd`; our AF2 wrapper uses `uniref30-2302`. Add a registry entry for full BFD when a consumer that actually needs it appears.
 
 **Nucleotide DBs** (clustered RNA FASTA → MMseqs2 nucleotide DB; what AF3 RNA chains consume):
 
@@ -151,7 +152,8 @@ The registry should hold every database any consumer might want — keeping thin
 | `rnacentral-active-90-80` | rna | AlphaFast HF / AF3 GCS | ~30 GB / ~30 GB |
 | `rfam-14-9-90-80` | rna | same | tiny / tiny |
 | `nt-rna-2023-02-23-90-80` | dna→rna | same | ~30 GB / ~30 GB |
-| `nt` (full) | dna | NCBI FTP | ~200 GB / ~400 GB |
+
+Full NCBI nt (~200 GB / ~400 GB) is intentionally **not** in the launch set for the same reason as full BFD: AF3 uses the RNA-filtered + clustered subset (`nt-rna-2023-02-23-90-80`). Add the full version when a consumer needs it.
 
 Not all entries materialize at launch — each is just a `DatasetEntry` literal until `DatasetManager.ensure()` is called (Phase 2). Predictor migrations (Phase 5) populate `preferred_datasets` defaults from the table below; users can override with any subset of registry keys.
 

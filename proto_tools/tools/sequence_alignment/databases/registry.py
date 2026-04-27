@@ -129,6 +129,12 @@ class DatasetEntry(BaseModel):
             (required for cross-chain paired MSAs).
         min_gpu_memory_gb (float | None): Minimum GPU memory for GPU search.
             None when the dataset is CPU-only or negligible.
+        gpu_padded_marker (str | None): Filename whose presence signals the
+            GPU-padded index has been built. Set this for ColabFold-style
+            entries that produce a separate ``<db_prefix>.idx_pad`` sibling.
+            Leave ``None`` for AF3-style entries where ``db_prefix`` is itself
+            the padded DB (i.e. ``mmseqs makepaddedseqdb`` writes there
+            directly), in which case ``<db_prefix>.dbtype`` is sufficient.
         a3m_adapter (Literal["colabfold", "plain", "rna"]): Which A3M-writer
             convention the ``mmseqs2-homology-search`` tool uses to stitch
             m8 hits into an A3M for this dataset.
@@ -153,6 +159,15 @@ class DatasetEntry(BaseModel):
     supports_gpu: bool
     supports_pairing: bool
     min_gpu_memory_gb: float | None = None
+    gpu_padded_marker: str | None = Field(
+        default=None,
+        description=(
+            "Filename signaling the GPU-padded index has been built. "
+            "Set for ColabFold-style entries (separate <db_prefix>.idx_pad "
+            "sibling); leave None for AF3-style entries where db_prefix is "
+            "itself the padded DB."
+        ),
+    )
     a3m_adapter: Literal["colabfold", "plain", "rna"] = "colabfold"
 
 
@@ -214,12 +229,25 @@ def get_databases_root() -> Path:
     return Path(model_cache) / "databases"
 
 
+def dataset_slug(name: str) -> str:
+    """Convert a registry name to its filesystem / MMseqs filename slug.
+
+    Kebab-case → snake_case (e.g. ``"uniref30-2302"`` → ``"uniref30_2302"``).
+    The slug is used both for the cache directory name and for ``{name}``
+    placeholder substitution in :class:`IndexStep` commands and
+    :attr:`IndexRecipe.output_files`. Single source of truth so the
+    convention can't drift between the registry, the provisioning CLI,
+    and tests.
+    """
+    return name.replace("-", "_")
+
+
 def get_dataset_dir(name: str) -> Path:
     """Return the on-disk cache directory for a registered dataset.
 
     Resolves to ``$PROTO_MODEL_CACHE/databases/{name_slug}/`` where
-    ``name_slug`` is the dataset's ``name`` with ``-`` replaced by ``_`` (to
-    match MMseqs2 filename conventions, e.g. ``uniref30_2302``).
+    ``name_slug`` is :func:`dataset_slug` of the dataset's name (kebab-case
+    with ``-`` replaced by ``_``, to match MMseqs2 filename conventions).
 
     The directory may not exist yet — this is a pure path helper, not an
     ``ensure``. Materialization belongs to ``DatasetManager.ensure`` (TBD,
@@ -235,4 +263,4 @@ def get_dataset_dir(name: str) -> Path:
         KeyError: If ``name`` is not a registered dataset.
     """
     entry = DatasetRegistry.get(name)
-    return get_databases_root() / entry.name.replace("-", "_")
+    return get_databases_root() / dataset_slug(entry.name)

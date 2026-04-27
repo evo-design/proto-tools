@@ -14,6 +14,7 @@ from proto_tools.tools.sequence_alignment.databases.registry import (
     IndexRecipe,
     IndexStep,
     MmseqsFlags,
+    dataset_slug,
     get_databases_root,
     get_dataset_dir,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "IndexRecipe",
     "IndexStep",
     "MmseqsFlags",
+    "dataset_slug",
     "get_databases_root",
     "get_dataset_dir",
 ]

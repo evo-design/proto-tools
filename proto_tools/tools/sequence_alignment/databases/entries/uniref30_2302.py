@@ -77,6 +77,7 @@ ENTRY = DatasetEntry(
     ),
     db_prefix="uniref30_2302_db",
     supports_gpu=True,
+    gpu_padded_marker="uniref30_2302_db.idx_pad",
     supports_pairing=True,
     min_gpu_memory_gb=10.0,
     a3m_adapter="colabfold",
