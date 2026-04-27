@@ -418,6 +418,7 @@ class PyRosettaScorer:
         constrain_to_start: bool = True,
         seed: int | None = None,
         max_iter: int | None = None,
+        disable_jumps: bool = False,
     ) -> dict[str, Any]:
         """Run FastRelax on each input pose and return the relaxed PDB + total score.
 
@@ -436,6 +437,9 @@ class PyRosettaScorer:
                 calls within the same persistent worker.
             max_iter (int | None): Maximum minimizer iterations per relax
                 cycle. When ``None``, PyRosetta's default (2500) is used.
+            disable_jumps (bool): Lock inter-chain rigid-body degrees of
+                freedom via MoveMap. Backbone and side-chain torsions remain
+                free.
 
         Returns:
             dict: ``{"results": [{"relaxed_pdb": str, "total_score": float,
@@ -466,6 +470,14 @@ class PyRosettaScorer:
             fast_relax = FastRelax(relax_sfxn, relax_cycles)
             if max_iter is not None:
                 fast_relax.max_iter(max_iter)
+            if disable_jumps:
+                from pyrosetta.rosetta.core.kinematics import MoveMap
+
+                mm = MoveMap()
+                mm.set_chi(True)
+                mm.set_bb(True)
+                mm.set_jump(False)
+                fast_relax.set_movemap(mm)
             fast_relax.constrain_relax_to_start_coords(constrain_to_start)
             fast_relax.apply(pose)
 
@@ -783,6 +795,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             constrain_to_start=input_dict["constrain_to_start"],
             seed=input_dict["seed"],
             max_iter=input_dict.get("max_iter"),
+            disable_jumps=input_dict.get("disable_jumps", False),
         )
     if operation == "interface_analyzer":
         return _scorer.compute_interface_analyzer(

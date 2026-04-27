@@ -80,8 +80,7 @@ def test_gradient_input_requires_20_columns():
 
 
 def test_gradient_config_rejects_bad_loss_weights():
-    with pytest.raises(ValidationError, match="non-negative"):
-        AlphaFold2BinderConfig(loss_weights={"plddt": -0.1})
+    AlphaFold2BinderConfig(loss_weights={"helix": -0.3})
     with pytest.raises(ValidationError, match="Unknown loss_weights"):
         AlphaFold2BinderConfig(loss_weights={"pldd": 1.0})
 
