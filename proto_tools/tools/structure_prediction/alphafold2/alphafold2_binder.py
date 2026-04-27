@@ -300,8 +300,6 @@ class AlphaFold2BinderConfig(BaseConfig):
     @model_validator(mode="after")
     def validate_design_surface(self) -> Self:
         """Validate binder redesign settings."""
-        if any(weight < 0 for weight in self.loss_weights.values()):
-            raise ValueError("loss_weights must be non-negative.")
         unknown_keys = set(self.loss_weights) - _VALID_LOSS_KEYS
         if unknown_keys:
             raise ValueError(f"Unknown loss_weights keys: {unknown_keys}. Valid keys: {sorted(_VALID_LOSS_KEYS)}")
