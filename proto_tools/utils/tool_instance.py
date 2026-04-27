@@ -1372,20 +1372,37 @@ class ToolInstance:
         return get_proto_home() / ".foundation_env"
 
     @staticmethod
-    def _ensure_foundation_env() -> Path:
-        """Ensure the foundation environment exists with system tools.
+    def _ensure_foundation_env() -> Path | None:
+        """Ensure a foundation environment is available, or confirm host satisfies it.
 
-        Creates a shared micromamba environment at ``PROTO_HOME/.foundation_env/``
-        containing git, curl, gcc, and gxx from conda-forge. All standalone tool
-        setup scripts get this env's ``bin/`` prepended to PATH so they can use
-        these tools regardless of the host system.
+        The foundation env is a shared micromamba environment at
+        ``PROTO_HOME/.foundation_env/`` containing git, curl, gcc, and gxx
+        from conda-forge. Standalone tool setup scripts get its ``bin/``
+        prepended to PATH so they can compile and download regardless of
+        the host system.
+
+        Skipped entirely when the host already provides those tools at a
+        recent enough version — see ``foundation_env.host_has_foundation_tools``.
+        Override with ``PROTO_USE_FOUNDATION_ENV=1`` to force-install or ``=0``
+        to force-skip (without probing).
 
         Uses a file lock to prevent concurrent creation when multiple processes
         race to set up the foundation env.
 
         Returns:
-            Path: Path to the foundation env root directory.
+            Path | None: Path to the foundation env root, or ``None`` if the
+                host satisfies the contract and creation was skipped.
         """
+        from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+
+        override = os.environ.get("PROTO_USE_FOUNDATION_ENV")
+        if override == "0":
+            logger.debug("PROTO_USE_FOUNDATION_ENV=0 — skipping foundation env")
+            return None
+        if override != "1" and host_has_foundation_tools():
+            logger.debug("Host provides foundation tools — skipping foundation env")
+            return None
+
         foundation_path = ToolInstance._get_foundation_env_path()
         marker = foundation_path / ".ready"
 
@@ -1410,6 +1427,11 @@ class ToolInstance:
             set_substatus("Setting up foundation environment (git, curl, gcc)")
 
             mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
+            # Pin to MIN_FOUNDATION_GCC as a floor — keeps the installed env at
+            # least as new as the threshold we accept on the host, so behavior
+            # matches whether tools fall through to the host or use this env.
+            gcc_pin = f"gcc>={MIN_FOUNDATION_GCC}"
+            gxx_pin = f"gxx>={MIN_FOUNDATION_GCC}"
             try:
                 subprocess.run(
                     [
@@ -1420,8 +1442,8 @@ class ToolInstance:
                         str(foundation_path),
                         "git",
                         "curl",
-                        "gcc",
-                        "gxx",
+                        gcc_pin,
+                        gxx_pin,
                         "-c",
                         "conda-forge",
                     ],
@@ -1916,7 +1938,9 @@ class ToolInstance:
         # and strips conda prefix — breaking access to git, curl, gcc, etc.)
         subprocess.run(["chmod", "+x", str(self.setup_script)], check=True)
 
-        # Ensure foundation environment (provides git, curl, gcc, g++)
+        # Ensure foundation environment (provides git, curl, gcc, g++).
+        # Returns None when the host already provides these — see
+        # foundation_env.host_has_foundation_tools for the contract.
         foundation_path = self._ensure_foundation_env()
 
         env = _build_subprocess_env(
@@ -1926,23 +1950,25 @@ class ToolInstance:
         )
 
         # Prepend foundation env bin/ so setup scripts always have access to
-        # git, curl, gcc. Priority: tool_env/bin > foundation_env/bin > rest
-        foundation_bin = str(foundation_path / "bin")
-        path_parts = env["PATH"].split(":")
-        if foundation_bin not in path_parts:
-            tool_bin = str(self.env_path / "bin")
-            if tool_bin in path_parts:
-                idx = path_parts.index(tool_bin) + 1
-                path_parts.insert(idx, foundation_bin)
-            else:
-                path_parts.insert(0, foundation_bin)
-            env["PATH"] = ":".join(path_parts)
+        # git, curl, gcc. Priority: tool_env/bin > foundation_env/bin > rest.
+        # Skipped when foundation_path is None (host satisfies the contract).
+        if foundation_path is not None:
+            foundation_bin = str(foundation_path / "bin")
+            path_parts = env["PATH"].split(":")
+            if foundation_bin not in path_parts:
+                tool_bin = str(self.env_path / "bin")
+                if tool_bin in path_parts:
+                    idx = path_parts.index(tool_bin) + 1
+                    path_parts.insert(idx, foundation_bin)
+                else:
+                    path_parts.insert(0, foundation_bin)
+                env["PATH"] = ":".join(path_parts)
+            env["FOUNDATION_ENV_PATH"] = str(foundation_path.absolute())
 
         env["VENV_PATH"] = str(self.env_path.absolute())
         env["PYTHON_EXE"] = str(self.env_path.absolute() / "bin" / "python")
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
-        env["FOUNDATION_ENV_PATH"] = str(foundation_path.absolute())
         env["PACKAGE_ROOT"] = str(Path(__file__).parent.parent.parent.absolute())
 
         # Copy standalone_helpers.sh so setup.sh can source it

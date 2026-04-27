@@ -1777,3 +1777,136 @@ def test_get_tool_dirs_resolves_duplicate_names_by_init_py(tmp_path: Path) -> No
     assert len(candidates["mytool"]) == 2
     with_init = [d for d in candidates["mytool"] if (d / "__init__.py").is_file()]
     assert with_init == [real]
+
+
+# ── Foundation env autodetect ───────────────────────────────────────────────
+
+
+def _fake_which(present: dict[str, str | None]):
+    """Return a shutil.which replacement that consults ``present``."""
+
+    def _which(name: str) -> str | None:
+        return present.get(name)
+
+    return _which
+
+
+def _fake_compiler_version(major: int):
+    """Return a subprocess.run replacement that fakes ``gcc/g++ --version`` output."""
+
+    def _run(cmd, *args, **kwargs):
+        bin_path = cmd[0]
+        name = Path(bin_path).name
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = f"{name} (Ubuntu {major}.4.0-1ubuntu1~22.04) {major}.4.0\n"
+        result.stderr = ""
+        return result
+
+    return _run
+
+
+def test_host_probe_skips_when_modern_tools_present(monkeypatch):
+    """All four binaries present + gcc/g++ >= MIN_FOUNDATION_GCC → host satisfies contract."""
+    from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+
+    monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": "/usr/bin/g++"}
+    with (
+        patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
+        patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
+    ):
+        assert host_has_foundation_tools() is True
+        assert ToolInstance._ensure_foundation_env() is None
+
+
+def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
+    """Gcc below MIN_FOUNDATION_GCC → probe returns False; _ensure_foundation_env attempts install."""
+    from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+
+    monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    from proto_tools.utils.proto_home import get_proto_home
+
+    get_proto_home.cache_clear()
+
+    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": "/usr/bin/g++"}
+    install_called = False
+    foundation_path = ToolInstance._get_foundation_env_path()
+    fake_compiler = _fake_compiler_version(MIN_FOUNDATION_GCC - 1)
+
+    # foundation_env.subprocess and tool_instance.subprocess refer to the same
+    # module — one patch covers both. Dispatch by command shape: --version
+    # probes hit the compiler fake; mamba create hits the install fake.
+    def _fake_run(cmd, *args, **kwargs):
+        nonlocal install_called
+        if "create" in cmd:
+            install_called = True
+            foundation_path.mkdir(parents=True, exist_ok=True)
+            result = MagicMock()
+            result.returncode = 0
+            return result
+        return fake_compiler(cmd, *args, **kwargs)
+
+    with (
+        patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(ToolInstance, "_ensure_micromamba", return_value=Path("/fake/mamba")),
+    ):
+        assert host_has_foundation_tools() is False
+        result = ToolInstance._ensure_foundation_env()
+
+    assert install_called, "expected mamba create to be invoked when host gcc too old"
+    assert result == foundation_path
+    get_proto_home.cache_clear()
+
+
+def test_host_probe_falls_through_when_binary_missing(monkeypatch):
+    """Missing g++ → probe returns False even if gcc is present and modern."""
+    from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+
+    monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    present = {"git": "/usr/bin/git", "curl": "/usr/bin/curl", "gcc": "/usr/bin/gcc", "g++": None}
+    with (
+        patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
+        patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
+    ):
+        assert host_has_foundation_tools() is False
+
+
+def test_use_env_var_zero_force_skips_without_probing(monkeypatch):
+    """PROTO_USE_FOUNDATION_ENV=0 → return None without consulting the host."""
+    monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", "0")
+    with patch("proto_tools.utils.foundation_env.shutil.which") as mock_which:
+        assert ToolInstance._ensure_foundation_env() is None
+        mock_which.assert_not_called()
+
+
+def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_path):
+    """PROTO_USE_FOUNDATION_ENV=1 → bypass autodetect and create the env."""
+    monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", "1")
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    from proto_tools.utils.proto_home import get_proto_home
+
+    get_proto_home.cache_clear()
+
+    install_called = False
+    foundation_path = ToolInstance._get_foundation_env_path()
+
+    def _fake_create(cmd, *args, **kwargs):
+        nonlocal install_called
+        install_called = True
+        foundation_path.mkdir(parents=True, exist_ok=True)
+        result = MagicMock()
+        result.returncode = 0
+        return result
+
+    with (
+        patch("subprocess.run", side_effect=_fake_create),
+        patch.object(ToolInstance, "_ensure_micromamba", return_value=Path("/fake/mamba")),
+    ):
+        result = ToolInstance._ensure_foundation_env()
+
+    assert install_called, "PROTO_USE_FOUNDATION_ENV=1 should force install"
+    assert result == foundation_path
+    get_proto_home.cache_clear()
