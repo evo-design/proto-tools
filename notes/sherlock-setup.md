@@ -88,22 +88,33 @@ export PROTO_MODEL_CACHE=$GROUP_SCRATCH/proto_model_cache
 # Fallback if you can't share (per-user scratch — same speed, no sharing):
 # export PROTO_MODEL_CACHE=$SCRATCH/proto_model_cache
 
-# 3. Claude Code on login nodes (when Lmod is healthy)
+# 3. Login-node modules (when Lmod is healthy)
 if type module &>/dev/null; then
     module load claude-code 2>/dev/null
     module load nodejs/20.20.0 2>/dev/null
+    module load git 2>/dev/null
 fi
 
-# 4. Claude Code fallback — works inside the container, and on login nodes
-#    when Lmod is broken (it can be in some shells, e.g. Claude Code's own
-#    shell snapshot). Adds the latest installed version of each tool to PATH.
+# 4. Fallback for inside the container (no Lmod) and broken-Lmod shells.
+#    Adds the latest installed version of each tool to PATH.
 if ! command -v claude &>/dev/null; then
     CLAUDE_BIN=$(ls -d /share/software/user/open/claude-code/*/bin 2>/dev/null | sort -V | tail -1)
     NODE_BIN=$(ls -d /share/software/user/open/nodejs/*/bin 2>/dev/null | sort -V | tail -1)
+    GIT_BIN=$(ls -d /share/software/user/open/git/*/bin 2>/dev/null | sort -V | tail -1)
     GCC_LIB=$(ls -d /share/software/user/open/gcc/*/lib64 2>/dev/null | sort -V | tail -1)
+    CURL_LIB=$(ls -d /share/software/user/open/curl/*/lib 2>/dev/null | sort -V | tail -1)
+    EXPAT_LIB=$(ls -d /share/software/user/open/expat/*/lib 2>/dev/null | sort -V | tail -1)
     [ -n "$CLAUDE_BIN" ] && export PATH="${CLAUDE_BIN}:${PATH}"
     [ -n "$NODE_BIN" ]   && export PATH="${NODE_BIN}:${PATH}"
+    [ -n "$GIT_BIN" ]    && export PATH="${GIT_BIN}:${PATH}"
     [ -n "$GCC_LIB" ]    && export LD_LIBRARY_PATH="${GCC_LIB}:${LD_LIBRARY_PATH}"
+    [ -n "$CURL_LIB" ]   && export LD_LIBRARY_PATH="${CURL_LIB}:${LD_LIBRARY_PATH}"
+    [ -n "$EXPAT_LIB" ]  && export LD_LIBRARY_PATH="${EXPAT_LIB}:${LD_LIBRARY_PATH}"
+    # host git was built against the CentOS CA path; in the container the
+    # bundle lives at the Debian/Ubuntu path instead. Without this, `git push`
+    # fails with "error setting certificate file".
+    [ -f /etc/ssl/certs/ca-certificates.crt ] \
+        && export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
 fi
 ```
 
@@ -112,8 +123,8 @@ Why each piece is needed:
 - **`ptshell`**: enters the container with GPU passthrough (`--nv`), your `.bashrc` (so aliases and env vars carry over), and `/share/software/user/open` (so you can find Sherlock's installed Node.js, Claude Code, and GCC inside the container — `module` doesn't work there).
 - **`PROTO_HOME`** (tool envs + micromamba): redirects off your 15 GB `$HOME` to `$GROUP_HOME`, which is fast NFS, persistent, and 1 TB shared with the lab. These need to be persistent — `$SCRATCH` would purge them.
 - **`PROTO_MODEL_CACHE`** (model weights): goes on `$GROUP_SCRATCH` so the lab shares one copy. Models are large (often 10–100s of GB each) and re-downloading per-user wastes time, network, and quota. Lustre is fast for the random reads model loading does. Both `$GROUP_SCRATCH` and `$SCRATCH` auto-purge after 90 days of **no access**, but actively-used weights are read often and are never purged — and if a tool's weights ever do get cleaned up, it just re-downloads them. Coordinate with your lab on the path before setting it. Avoid `$OAK` for model weights (~2x slower for small-file random reads).
-- **Claude Code module loads** (block #3): work on login nodes when Lmod is functional. The `2>/dev/null` swallows errors so a broken Lmod doesn't spam the shell.
-- **Claude Code fallback** (block #4): kicks in when `claude` isn't on `PATH` after the module loads — which happens inside the container (no Lmod) and in any shell where Lmod is broken. Globs find the latest installed versions and add them directly to `PATH`. Node.js + GCC libs are needed because Claude Code is a Node.js app, and Node needs a modern `libstdc++` that CentOS 7's runtime doesn't provide.
+- **Login-node modules** (block #3): load Claude Code, Node.js, and `git` from Lmod when it's healthy. The `2>/dev/null` swallows errors so a broken Lmod doesn't spam the shell.
+- **Container fallback** (block #4): the pytorch runtime image doesn't include `git`, and Lmod doesn't work inside the container, so we point at the host's `/share/software/user/open` copies (bind-mounted by `ptshell`). Same block also kicks in on login nodes when Lmod is broken (e.g. Claude Code's own shell snapshot). Node.js + GCC libs are needed because Claude Code is a Node.js app and Node needs a modern `libstdc++`. The host `git` binary was linked against `libcurl` and `libexpat` from `/share/software/user/open` and a CentOS CA bundle path that doesn't exist in the container — `CURL_LIB`, `EXPAT_LIB`, and `GIT_SSL_CAINFO` make `git push`/`git fetch` work over HTTPS.
 
 After editing, reload:
 
@@ -228,6 +239,17 @@ Lmod is broken in this shell (happens in some Claude Code subshells). Block #3 i
 export PATH=$(ls -d /share/software/user/open/claude-code/*/bin | sort -V | tail -1):$PATH
 export PATH=$(ls -d /share/software/user/open/nodejs/*/bin | sort -V | tail -1):$PATH
 ```
+
+### `git push` fails inside `ptshell`
+
+Two separate symptoms, both caused by the host `git` binary not finding what it was built against once you enter the container:
+
+```
+git-remote-https: error while loading shared libraries: libcurl.so.4: cannot open shared object file
+fatal: unable to access 'https://github.com/...': error setting certificate file: /etc/pki/tls/certs/ca-bundle.crt
+```
+
+The fallback block in Step 2 should handle both. If you're seeing them, your `.bashrc` is missing the `CURL_LIB` / `EXPAT_LIB` exports (first error) or the `GIT_SSL_CAINFO` export (second error). Re-copy block #4 from Step 2 and `source ~/.bashrc`.
 
 ### `Disk quota exceeded` during tool setup
 
