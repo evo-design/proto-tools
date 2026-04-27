@@ -169,6 +169,16 @@ class DatasetEntry(BaseModel):
         ),
     )
     a3m_adapter: Literal["colabfold", "plain", "rna"] = "colabfold"
+    auto_provision: bool = Field(
+        default=False,
+        description=(
+            "When True, the tool layer transparently runs the entry's download + "
+            "``index_recipe.steps`` on first dispatch instead of erroring with the "
+            "``setup_databases.py`` hint. Reserved for small test/fixture entries "
+            "(typically a few hundred MB or less); production datasets are too "
+            "large to provision implicitly."
+        ),
+    )
 
 
 # ============================================================================

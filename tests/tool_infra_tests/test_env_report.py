@@ -13,6 +13,7 @@ from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.pytest_helpers import (
     EXCLUDED_CATEGORIES,
+    SKIP_CI_TOOLKITS,
     build_inputs_and_config,
     parse_min_gpu_count,
 )
@@ -56,6 +57,9 @@ def _build_tool_params() -> list:
         if spec.uses_gpu:
             gpu_count = parse_min_gpu_count(spec.device_count)
             marks.append(pytest.mark.uses_gpu(gpu_count))
+
+        if spec.source_file.parent.name in SKIP_CI_TOOLKITS:
+            marks.append(pytest.mark.skip_ci)
 
         params.append(pytest.param(spec, id=spec.key, marks=marks))
 

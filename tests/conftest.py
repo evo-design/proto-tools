@@ -924,6 +924,8 @@ def pytest_collection_modifyitems(config, items):
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_no_gpu = pytest.mark.skip(reason="--env-report: GPU not available")
+        skip_ci_mark = pytest.mark.skip(reason="--env-report: skip_ci honored under GitHub Actions / --skip-ci")
+        in_ci = os.getenv("GITHUB_ACTIONS") == "true" or config.getoption("--skip-ci")
         gpu_available = _gpu_available()
         visible_gpus = number_of_visible_gpus() if gpu_available else 0
 
@@ -932,6 +934,11 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "include_in_env_report" not in item.keywords:
                 deselected.append(item)
+            elif in_ci and "skip_ci" in item.keywords:
+                # Honor skip_ci in env-report mode too — same intent as the
+                # normal-mode handler below, just reachable from this early-return path.
+                item.add_marker(skip_ci_mark)
+                selected.append(item)
             elif "uses_gpu" in item.keywords and not gpu_available:
                 # Skip GPU tests on platforms without GPU, but still include in report
                 item.add_marker(skip_no_gpu)

@@ -8,6 +8,11 @@ from proto_tools.tools.tool_registry import ToolSpec
 
 EXCLUDED_CATEGORIES: frozenset[str] = frozenset({"database_retrieval"})
 
+# Toolkits (directory names under ``proto_tools/tools/.../{toolkit}/``) whose
+# parametrized smoke tests should be bypassed on CI runners. Every tool in
+# these toolkits gets ``skip_ci`` applied at parametrize time.
+SKIP_CI_TOOLKITS: frozenset[str] = frozenset({"mmseqs2_homology_search"})
+
 
 def parse_min_gpu_count(device_count: str) -> int:
     """Parse minimum GPU count from a device_count spec (e.g. '1', '2', '1-2', '>=1', '>1')."""

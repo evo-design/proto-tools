@@ -403,6 +403,18 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
         """Number of GPUs the configured search uses (1 if GPU, else 0)."""
         return 1 if self.use_gpu else 0
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Mmseqs2HomologySearchConfig":
+        """Cheap-mode defaults for env-report and seed-reproducibility tests.
+
+        Points at the in-tree ``tiny-test-colabfold`` fixture DB so the test
+        infrastructure never needs the ~100 GB UniRef30 tarball, and forces
+        CPU search so coverage isn't gated on a GPU being present.
+        """
+        kwargs.setdefault("datasets", ["tiny-test-colabfold"])
+        kwargs.setdefault("use_gpu", False)
+        return super().minimal(**kwargs)  # type: ignore[return-value]
+
 
 # ============================================================================
 # Tool implementation
@@ -461,6 +473,10 @@ def run_mmseqs2_homology_search(
     # construction stays cheap and works in CI / fresh dev machines without
     # any datasets provisioned. The user only hits this error when they
     # actually try to dispatch a search.
+    if entry.auto_provision and not _is_provisioned(entry, cache_dir, require_idx_pad=config.use_gpu):
+        # Tiny in-tree fixture entries build themselves on first dispatch so
+        # CI / smoke tests don't need a separate provisioning step.
+        _auto_provision(dataset_name, cache_dir)
     _check_dataset_provisioned(dataset_name, entry, cache_dir, require_idx_pad=config.use_gpu)
 
     flat_queries = inputs.all_queries()
@@ -606,6 +622,72 @@ def _rename_a3m_to_sequence_id(msa_out_dir: Path, idx: int, sequence_id: str) ->
     named = msa_out_dir / f"{sequence_id}.a3m"
     internal.rename(named)
     return named
+
+
+def _is_provisioned(entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bool) -> bool:
+    """Cheap, side-effect-free check for whether the indexed DB exists on disk."""
+    if not (cache_dir / f"{entry.db_prefix}.dbtype").is_file():
+        return False
+    return not (require_idx_pad and entry.gpu_padded_marker and not (cache_dir / entry.gpu_padded_marker).exists())
+
+
+def _auto_provision(name: str, cache_dir: Path) -> None:
+    """Provision an ``auto_provision=True`` entry by running its download + index recipe.
+
+    Reuses the standalone env's ``mmseqs`` binary (built lazily via
+    ``ToolInstance.ensure_ready``) so callers don't need ``mmseqs`` on PATH.
+    Reserved for tiny fixture datasets — production entries declare
+    ``auto_provision=False`` and require ``setup_databases.py`` instead.
+
+    Concurrency: holds an advisory ``flock`` on a sibling lockfile across the
+    download + index steps so parallel pytest-xdist workers (or any other
+    concurrent caller) serialize cleanly instead of racing on ``mmseqs mvdb``
+    / ``tar`` against a half-written cache dir. The second arrival blocks,
+    then re-checks ``_is_provisioned`` and skips its own work.
+
+    Refuses to run under GitHub Actions (``GITHUB_ACTIONS=true``) so CI
+    runners never silently pull fixture tarballs from the public mirror.
+    """
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        raise FileNotFoundError(
+            f"Dataset {name!r} is auto_provision but auto-provisioning is disabled "
+            "under GITHUB_ACTIONS=true (CI runners shouldn't silently download "
+            "fixture tarballs). Provision manually with setup_databases.py if needed."
+        )
+
+    import fcntl
+
+    from proto_tools.tools.sequence_alignment.databases import DatasetRegistry
+    from proto_tools.tools.sequence_alignment.mmseqs2_homology_search.setup_databases import provision
+    from proto_tools.utils.tool_instance import ToolInstance
+
+    instance = ToolInstance("mmseqs2_homology_search")
+    instance.ensure_ready()
+    env_bin = instance.env_path / "bin"
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = cache_dir.parent / f".{cache_dir.name}.provision.lock"
+
+    logger.info("Auto-provisioning fixture dataset %r at %s", name, cache_dir)
+
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        # Re-check after acquiring the lock — a sibling worker may have just
+        # finished provisioning while we were waiting.
+        if _is_provisioned(DatasetRegistry.get(name), cache_dir, require_idx_pad=False):
+            logger.info("Auto-provision skipped for %r: another worker already provisioned it", name)
+            return
+
+        # NOTE: PATH mutation is process-global and not thread-safe. Safe today
+        # because auto_provision only fires from a single test thread; if this
+        # ever runs from a ToolPool worker, swap to passing env_bin into a
+        # provision() variant that resolves mmseqs explicitly.
+        original_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{env_bin}{os.pathsep}{original_path}"
+        try:
+            provision(name)
+        finally:
+            os.environ["PATH"] = original_path
 
 
 def _check_dataset_provisioned(name: str, entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bool) -> None:

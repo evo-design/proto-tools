@@ -15,6 +15,7 @@ from proto_tools.tools.sequence_alignment.databases.entries import (
     rfam_14_9_90_80,  # noqa: F401
     rnacentral_active_90_80,  # noqa: F401
     small_bfd,  # noqa: F401
+    tiny_test_colabfold,  # noqa: F401
     uniprot_2021_04,  # noqa: F401
     uniref30_2302,  # noqa: F401
     uniref90_2022_05,  # noqa: F401
