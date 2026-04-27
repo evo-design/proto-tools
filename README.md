@@ -155,6 +155,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 └── <a href="proto_tools/tools/structure_prediction/viennarna/">viennarna/</a>
 <a href="proto_tools/tools/structure_scoring/">structure_scoring/</a>              # Structure quality scoring
 ├── <a href="proto_tools/tools/structure_scoring/dssp/">dssp/</a>
+├── <a href="proto_tools/tools/structure_scoring/ipsae/">ipsae/</a>
 ├── <a href="proto_tools/tools/structure_scoring/pdockq2/">pdockq2/</a>
 ├── <a href="proto_tools/tools/structure_scoring/pyrosetta/">pyrosetta/</a>
 └── <a href="proto_tools/tools/structure_scoring/structure_metrics/">structure_metrics/</a>

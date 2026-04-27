@@ -437,6 +437,7 @@ from proto_tools.tools.structure_prediction import (
     run_viennarna,
 )
 from proto_tools.tools.structure_scoring import (
+    ChainPairScores,
     DSSPSecondaryStructureConfig,
     DSSPSecondaryStructureInput,
     DSSPSecondaryStructureMetrics,
@@ -444,6 +445,10 @@ from proto_tools.tools.structure_scoring import (
     DSSPStructureInput,
     InterfacePDockQ2,
     InterfaceStructureInput,
+    IPSAEMetrics,
+    IPSAEScoringConfig,
+    IPSAEScoringInput,
+    IPSAEScoringOutput,
     PDockQ2Config,
     PDockQ2Input,
     PDockQ2Metrics,
@@ -477,6 +482,7 @@ from proto_tools.tools.structure_scoring import (
     StructureMetricsOutput,
     StructureQualityMetrics,
     run_dssp_secondary_structure,
+    run_ipsae_scoring,
     run_pdockq2,
     run_pyrosetta_energy,
     run_pyrosetta_interface_analyzer,
@@ -994,6 +1000,13 @@ __all__ = [
     "StructureMetricsConfig",
     "StructureMetricsOutput",
     "StructureQualityMetrics",
+    # Structure scoring - IPSAE
+    "run_ipsae_scoring",
+    "IPSAEScoringInput",
+    "IPSAEScoringConfig",
+    "IPSAEScoringOutput",
+    "IPSAEMetrics",
+    "ChainPairScores",
     # Structure scoring - pDockQ2
     "run_pdockq2",
     "PDockQ2Input",

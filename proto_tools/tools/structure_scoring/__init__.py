@@ -8,6 +8,14 @@ from proto_tools.tools.structure_scoring.dssp import (
     DSSPStructureInput,
     run_dssp_secondary_structure,
 )
+from proto_tools.tools.structure_scoring.ipsae import (
+    ChainPairScores,
+    IPSAEMetrics,
+    IPSAEScoringConfig,
+    IPSAEScoringInput,
+    IPSAEScoringOutput,
+    run_ipsae_scoring,
+)
 from proto_tools.tools.structure_scoring.pdockq2 import (
     InterfacePDockQ2,
     PDockQ2Config,
@@ -62,6 +70,11 @@ __all__ = [
     "DSSPSecondaryStructureMetrics",
     "DSSPSecondaryStructureOutput",
     "DSSPStructureInput",
+    "ChainPairScores",
+    "IPSAEMetrics",
+    "IPSAEScoringConfig",
+    "IPSAEScoringInput",
+    "IPSAEScoringOutput",
     "InterfacePDockQ2",
     "InterfaceStructureInput",
     "PDockQ2Config",
@@ -97,6 +110,7 @@ __all__ = [
     "StructureMetricsOutput",
     "StructureQualityMetrics",
     "run_dssp_secondary_structure",
+    "run_ipsae_scoring",
     "run_pdockq2",
     "run_pyrosetta_energy",
     "run_pyrosetta_interface_analyzer",
