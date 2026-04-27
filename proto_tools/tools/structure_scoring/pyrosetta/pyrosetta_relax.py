@@ -125,6 +125,8 @@ class PyRosettaRelaxConfig(BaseConfig):
         max_iter (int | None): Maximum minimizer iterations per relax cycle.
             ``None`` uses PyRosetta's default (2500). Upstream BindCraft uses
             200 for faster turnaround in binder-design pipelines.
+        disable_jumps (bool): Lock inter-chain rigid-body DOFs so chains
+            cannot translate or rotate relative to each other during relax.
     """
 
     scorefxn: str = ConfigField(
@@ -151,6 +153,12 @@ class PyRosettaRelaxConfig(BaseConfig):
         ge=1,
         title="Max Iterations",
         description="Maximum minimizer iterations per relax cycle. None uses PyRosetta default (2500).",
+        advanced=True,
+    )
+    disable_jumps: bool = ConfigField(
+        default=False,
+        title="Disable Jumps",
+        description="Lock inter-chain rigid-body DOFs during relaxation.",
         advanced=True,
     )
 
@@ -261,6 +269,7 @@ def run_pyrosetta_relax(
         "relax_cycles": config.relax_cycles,  # type: ignore[union-attr]
         "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
         "max_iter": config.max_iter,  # type: ignore[union-attr]
+        "disable_jumps": config.disable_jumps,  # type: ignore[union-attr]
         "seed": seed,
         "device": "cpu",
     }
