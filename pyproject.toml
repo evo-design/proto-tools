@@ -296,6 +296,7 @@ ignore = [
 "proto_tools/tools/sequence_alignment/mmseqs2_homology_search/setup_databases.py" = ["T20", "S603", "S607", "PERF203"]  # user-facing provisioning CLI
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
+"proto_tools/utils/foundation_env.py" = ["S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/tool_pool.py" = ["S101"]
 # S101: type-narrowing asserts for mypy

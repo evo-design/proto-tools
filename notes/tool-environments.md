@@ -109,6 +109,10 @@ Each tool's `standalone/env_vars.txt` supports two sections:
 - `PATH`: `tool_env/bin` > `cuda/bin` (GPU) > parent PATH entries > system dirs
 - `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib`
 
+## Foundation Environment (git, curl, gcc, g++)
+
+`setup.sh` scripts assume `git`, `curl`, `gcc`, and `g++` are on `PATH`. When the host already provides all four with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op; otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
+
 ## GCC/nvcc Compatibility for CUDA JIT Tools
 
 Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-forge. The GCC version is chosen per-tool based on the CUDA toolkit version.
