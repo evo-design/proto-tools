@@ -76,6 +76,8 @@ def test_run_pyrosetta_interface_analyzer_on_pdb():
     assert isinstance(m.interface_packstat, float) and 0.0 <= m.interface_packstat <= 1.0
     assert isinstance(m.interface_hydrophobicity, float) and 0.0 <= m.interface_hydrophobicity <= 100.0
     assert isinstance(m.surface_hydrophobicity, float) and 0.0 <= m.surface_hydrophobicity <= 1.0
+    if "delta_unsat_hbonds" in m:
+        assert isinstance(m.delta_unsat_hbonds, int) and m.delta_unsat_hbonds >= 0
 
 
 @pytest.mark.integration

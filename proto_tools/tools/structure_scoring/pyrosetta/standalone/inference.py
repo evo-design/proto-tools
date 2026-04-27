@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 
@@ -14,6 +15,7 @@ class PyRosettaScorer:
     def __init__(self) -> None:
         """Initialize scorer with lazy PyRosetta loading."""
         self._initialized = False
+        self._has_dalphaball = False
 
     def _ensure_init(self) -> None:
         """Initialize PyRosetta on first use.
@@ -36,7 +38,12 @@ class PyRosettaScorer:
             return
         import pyrosetta
 
-        pyrosetta.init(extra_options="-mute all -ignore_unrecognized_res true -remember_unrecognized_res true")
+        extra_opts = "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true"
+        dalphaball = Path(sys.executable).parent / "DAlphaBall"
+        if dalphaball.is_file():
+            extra_opts += f" -holes:dalphaball {dalphaball}"
+            self._has_dalphaball = True
+        pyrosetta.init(extra_options=extra_opts)
         self._initialized = True
 
     def _find_dropped_residues(self, pose: Any) -> list[str]:
@@ -649,11 +656,13 @@ class PyRosettaScorer:
                 calls within the same persistent worker.
 
         Returns:
-            dict: ``{"results": [{"interface_sc": float, "interface_hbonds": int,
-                "interface_dG": float, "interface_dSASA": float,
-                "interface_packstat": float, "interface_hydrophobicity": float,
-                "surface_hydrophobicity": float,
-                "dropped_residues": [...]}, ...]}``
+            dict: ``{"results": [per_structure_dict, ...]}`` where each dict has:
+                ``interface_sc`` (float), ``interface_hbonds`` (int),
+                ``interface_dG`` (float), ``interface_dSASA`` (float),
+                ``interface_packstat`` (float), ``interface_hydrophobicity`` (float),
+                ``surface_hydrophobicity`` (float),
+                ``delta_unsat_hbonds`` (int | None),
+                ``dropped_residues`` (list[str]).
         """
         self._ensure_init()
         import pyrosetta
@@ -695,6 +704,19 @@ class PyRosettaScorer:
 
             surface_hydrophobicity = self._surface_hydrophobicity(pose, binder_chain)
 
+            delta_unsat_hbonds: int | None = None
+            if self._has_dalphaball:
+                from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
+
+                buns_filter = XmlObjects.static_get_filter(
+                    '<BuriedUnsatHbonds report_all_heavy_atom_unsats="true"'
+                    ' ignore_surface_res="false" use_ddG_style="true"'
+                    ' dalphaball_sasa="1" probe_radius="1.1"'
+                    ' burial_cutoff_apo="0.2" confidence="0" />'
+                )
+                sfxn(pose)
+                delta_unsat_hbonds = int(buns_filter.report_sm(pose))
+
             results.append(
                 {
                     "interface_sc": interface_sc,
@@ -704,6 +726,7 @@ class PyRosettaScorer:
                     "interface_packstat": interface_packstat,
                     "interface_hydrophobicity": interface_hydrophobicity,
                     "surface_hydrophobicity": surface_hydrophobicity,
+                    "delta_unsat_hbonds": delta_unsat_hbonds,
                     "dropped_residues": dropped_residues,
                 }
             )
