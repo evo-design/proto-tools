@@ -419,6 +419,9 @@ class PyRosettaScorer:
         seed: int | None = None,
         max_iter: int | None = None,
         disable_jumps: bool = False,
+        min_type: str | None = None,
+        align_to_start: bool = False,
+        copy_b_factors_from_start: bool = False,
     ) -> dict[str, Any]:
         """Run FastRelax on each input pose and return the relaxed PDB + total score.
 
@@ -440,6 +443,11 @@ class PyRosettaScorer:
             disable_jumps (bool): Lock inter-chain rigid-body degrees of
                 freedom via MoveMap. Backbone and side-chain torsions remain
                 free.
+            min_type (str | None): Optional FastRelax minimizer type.
+            align_to_start (bool): Align the relaxed pose back to the input
+                pose after FastRelax.
+            copy_b_factors_from_start (bool): Copy input per-residue B-factors
+                to the relaxed pose.
 
         Returns:
             dict: ``{"results": [{"relaxed_pdb": str, "total_score": float,
@@ -453,6 +461,7 @@ class PyRosettaScorer:
         import pyrosetta
         from pyrosetta.rosetta.core.scoring import ScoreType
         from pyrosetta.rosetta.protocols.relax import FastRelax
+        from pyrosetta.rosetta.protocols.simple_moves import AlignChainMover
 
         if seed is not None:
             pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
@@ -465,11 +474,14 @@ class PyRosettaScorer:
         results = []
         for pdb_content in pdb_contents:
             pose = self._pdb_content_to_pose(pdb_content)
+            start_pose = pose.clone() if (align_to_start or copy_b_factors_from_start) else None
             dropped_residues = self._find_dropped_residues(pose)
 
             fast_relax = FastRelax(relax_sfxn, relax_cycles)
             if max_iter is not None:
                 fast_relax.max_iter(max_iter)
+            if min_type is not None:
+                fast_relax.min_type(min_type)
             if disable_jumps:
                 from pyrosetta.rosetta.core.kinematics import MoveMap
 
@@ -480,6 +492,21 @@ class PyRosettaScorer:
                 fast_relax.set_movemap(mm)
             fast_relax.constrain_relax_to_start_coords(constrain_to_start)
             fast_relax.apply(pose)
+
+            if start_pose is not None:
+                if align_to_start:
+                    align = AlignChainMover()
+                    align.source_chain(0)
+                    align.target_chain(0)
+                    align.pose(start_pose)
+                    align.apply(pose)
+
+                if copy_b_factors_from_start:
+                    for resid in range(1, pose.total_residue() + 1):
+                        if pose.residue(resid).is_protein():
+                            bfactor = start_pose.pdb_info().bfactor(resid, 1)
+                            for atom_id in range(1, pose.residue(resid).natoms() + 1):
+                                pose.pdb_info().bfactor(resid, atom_id, bfactor)
 
             # PyRosetta's dump_pdb is file-based; round-trip through tempfile
             # so we can return the relaxed coordinates as a string.
@@ -796,6 +823,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
             max_iter=input_dict.get("max_iter"),
             disable_jumps=input_dict.get("disable_jumps", False),
+            min_type=input_dict.get("min_type"),
+            align_to_start=input_dict.get("align_to_start", False),
+            copy_b_factors_from_start=input_dict.get("copy_b_factors_from_start", False),
         )
     if operation == "interface_analyzer":
         return _scorer.compute_interface_analyzer(

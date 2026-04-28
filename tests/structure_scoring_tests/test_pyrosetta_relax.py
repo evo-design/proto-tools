@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.structure_scoring.pyrosetta import pyrosetta_relax as relax_module
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
     PyRosettaRelaxConfig,
     PyRosettaRelaxInput,
@@ -31,6 +32,52 @@ def test_relax_input_normalizes_single_structure():
 def test_relax_input_accepts_dict_with_chain_ids():
     inp = PyRosettaRelaxInput(inputs=[{"structure": TEST_PDB, "chain_ids": ["A"]}])
     assert inp.inputs[0].chain_ids == ["A"]
+
+
+def test_relax_forwards_bindcraft_fastrelax_options(monkeypatch):
+    captured = {}
+
+    def fake_dispatch(toolkit, input_data, *, instance=None, config=None):
+        captured["toolkit"] = toolkit
+        captured["input_data"] = input_data
+        return {
+            "results": [
+                {
+                    "relaxed_pdb": input_data["pdb_contents"][0],
+                    "total_score": -1.0,
+                    "relax_cycles": input_data["relax_cycles"],
+                    "dropped_residues": [],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(relax_module.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+
+    config = PyRosettaRelaxConfig(
+        scorefxn="beta_nov16",
+        relax_cycles=1,
+        max_iter=200,
+        disable_jumps=True,
+        min_type="lbfgs_armijo_nonmonotone",
+        align_to_start=True,
+        copy_b_factors_from_start=True,
+        seed=7,
+    )
+    result = run_pyrosetta_relax(PyRosettaRelaxInput(inputs=[TEST_PDB]), config)
+
+    assert result.success
+    assert captured["toolkit"] == "pyrosetta"
+    payload = captured["input_data"]
+    assert len(payload["pdb_contents"]) == 1
+    assert payload["operation"] == "relax"
+    assert payload["scorefxn"] == "beta_nov16"
+    assert payload["relax_cycles"] == 1
+    assert payload["max_iter"] == 200
+    assert payload["disable_jumps"] is True
+    assert payload["min_type"] == "lbfgs_armijo_nonmonotone"
+    assert payload["align_to_start"] is True
+    assert payload["copy_b_factors_from_start"] is True
+    assert payload["seed"] == 7
 
 
 # ── Integration ───────────────────────────────────────────────────────────────

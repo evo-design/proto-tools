@@ -127,6 +127,15 @@ class PyRosettaRelaxConfig(BaseConfig):
             200 for faster turnaround in binder-design pipelines.
         disable_jumps (bool): Lock inter-chain rigid-body DOFs so chains
             cannot translate or rotate relative to each other during relax.
+        min_type (str | None): Optional minimizer type forwarded to
+            ``FastRelax.min_type``. BindCraft uses
+            ``"lbfgs_armijo_nonmonotone"``.
+        align_to_start (bool): If ``True``, align the relaxed pose back to the
+            input pose after FastRelax. BindCraft does this before saving its
+            relaxed PDBs so coordinates remain in the original frame.
+        copy_b_factors_from_start (bool): If ``True``, copy the input pose's
+            per-residue B-factors onto the relaxed pose. BindCraft uses this
+            to preserve AF2 pLDDT values after relaxation.
     """
 
     scorefxn: str = ConfigField(
@@ -159,6 +168,24 @@ class PyRosettaRelaxConfig(BaseConfig):
         default=False,
         title="Disable Jumps",
         description="Lock inter-chain rigid-body DOFs during relaxation.",
+        advanced=True,
+    )
+    min_type: str | None = ConfigField(
+        default=None,
+        title="Minimizer Type",
+        description="Optional FastRelax minimizer type.",
+        advanced=True,
+    )
+    align_to_start: bool = ConfigField(
+        default=False,
+        title="Align to Start",
+        description="Align the relaxed pose back onto the starting pose after FastRelax.",
+        advanced=True,
+    )
+    copy_b_factors_from_start: bool = ConfigField(
+        default=False,
+        title="Copy Start B-factors",
+        description="Copy per-residue B-factors from the starting pose to the relaxed pose.",
         advanced=True,
     )
 
@@ -270,6 +297,9 @@ def run_pyrosetta_relax(
         "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
         "max_iter": config.max_iter,  # type: ignore[union-attr]
         "disable_jumps": config.disable_jumps,  # type: ignore[union-attr]
+        "min_type": config.min_type,  # type: ignore[union-attr]
+        "align_to_start": config.align_to_start,  # type: ignore[union-attr]
+        "copy_b_factors_from_start": config.copy_b_factors_from_start,  # type: ignore[union-attr]
         "seed": seed,
         "device": "cpu",
     }
