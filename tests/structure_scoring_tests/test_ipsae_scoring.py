@@ -11,17 +11,14 @@ from proto_tools.tools import IPSAEScoringConfig, IPSAEScoringInput, run_ipsae_s
 from proto_tools.tools.structure_scoring.ipsae.ipsae_scoring import example_input
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
-FIXTURE_DIR = Path(__file__).parent.parent.parent / "proto_tools" / "tools" / "structure_scoring" / "pdockq2"
+FIXTURE_DIR = Path(__file__).parent.parent.parent / "proto_tools" / "tools" / "structure_scoring" / "ipsae"
 
 
 def _bundled_structure(*, with_pae: bool = True) -> Structure:
-    """Load the shared pDockQ2 fixture PDB with optional PAE matrix."""
-    metrics: dict[str, object] = {}
+    """Load the bundled IPSAE fixture (4INS insulin A+B) with optional PAE matrix."""
     if with_pae:
-        metrics["pae_matrix"] = json.loads((FIXTURE_DIR / "example_input_fixture_pae.json").read_text())
-    return Structure.from_file(
-        FIXTURE_DIR / "example_input_fixture.pdb", b_factor_type=BFactorType.PLDDT, metrics=metrics
-    )
+        return example_input().structure
+    return Structure.from_file(FIXTURE_DIR / "example_input_fixture.pdb", b_factor_type=BFactorType.PLDDT, metrics={})
 
 
 # ── Input validation ──────────────────────────────────────────────────────────
