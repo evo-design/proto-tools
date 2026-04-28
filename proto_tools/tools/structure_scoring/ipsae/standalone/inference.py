@@ -20,7 +20,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     pdb_content: str = input_dict["pdb_content"]
     pae_matrix: list[list[float]] = input_dict["pae_matrix"]
-    plddt: list[float] | None = input_dict.get("plddt")
     pae_cutoff: float = float(input_dict.get("pae_cutoff", 10))
     dist_cutoff: float = float(input_dict.get("dist_cutoff", 10))
 
@@ -37,11 +36,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         with open(pdb_path, "w") as f:
             f.write(pdb_content)
 
-        pae_json: dict[str, Any] = {"pae": pae_matrix}
-        if plddt is not None:
-            pae_json["plddt"] = plddt
         with open(pae_path, "w") as f:
-            json.dump(pae_json, f)
+            json.dump({"pae": pae_matrix}, f)
 
         result = subprocess.run(
             [sys.executable, ipsae_script, pae_path, pdb_path, str(pae_cutoff), str(dist_cutoff)],
