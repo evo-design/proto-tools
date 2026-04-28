@@ -251,6 +251,9 @@ def run_ipsae_scoring(
 
     pae_list = pae_matrix if isinstance(pae_matrix, list) else [list(row) for row in pae_matrix]
 
+    plddt = structure.per_residue_plddt
+    plddt_list = [float(v) * 100.0 for v in plddt] if plddt is not None else None
+
     logger.debug("Running IPSAE scoring (pae_cutoff=%s, dist_cutoff=%s)", config.pae_cutoff, config.distance_cutoff)
 
     result = ToolInstance.dispatch(
@@ -259,6 +262,7 @@ def run_ipsae_scoring(
             "operation": "score",
             "pdb_content": structure.structure_pdb,
             "pae_matrix": pae_list,
+            "plddt": plddt_list,
             "pae_cutoff": config.pae_cutoff,
             "dist_cutoff": config.distance_cutoff,
         },
