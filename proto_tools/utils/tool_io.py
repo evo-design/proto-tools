@@ -62,6 +62,34 @@ class ToolExecutionError(Exception):
         super().__init__(f"Attempt to access field of tool output after failure: {last_line}\n{self.message}")
 
 
+class MissingAssetError(ToolExecutionError):
+    """Raised when a tool's required external asset isn't provisioned on disk.
+
+    Signalled by a tool's setup script via the ``proto_resolve_asset_availability``
+    helper (``standalone_helpers.sh``), which emits a
+    ``[proto-tools] ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>`` sentinel and
+    exits 64. ``ToolInstance`` recognises that sentinel and raises this
+    exception in place of a generic ``RuntimeError`` so the test layer can
+    convert it into a skip (rather than a hard failure) on machines that
+    haven't been provisioned with gated weights, large databases, etc.
+
+    Attributes:
+        toolkit (str): Toolkit directory name (e.g. ``"alphafold3"``).
+        asset_kind (str): Kind of missing asset (``"weights"``, ``"database"``,
+            ``"dataset"``).
+    """
+
+    def __init__(self, toolkit: str, asset_kind: str, details: str = ""):
+        """Initialize MissingAssetError."""
+        self.toolkit = toolkit
+        self.asset_kind = asset_kind
+        self.message = f"{toolkit}: {asset_kind} not provisioned"
+        if details:
+            self.message = f"{self.message}\n{details}"
+        # Skip ToolExecutionError.__init__
+        Exception.__init__(self, self.message)
+
+
 def _extra_dict(info: Any) -> dict[str, Any]:
     """Return ``json_schema_extra`` as a plain dict, defaulting to ``{}``."""
     extra = info.json_schema_extra
@@ -769,5 +797,6 @@ __all__ = [
     "MetricSpec",
     "MetricValue",
     "Metrics",
+    "MissingAssetError",
     "ToolExecutionError",
 ]

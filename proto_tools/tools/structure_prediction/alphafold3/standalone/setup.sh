@@ -29,6 +29,40 @@ source standalone_helpers.sh
 
 echo "Setting up AlphaFold3 standalone environment..."
 
+# ─── Fail-fast weights precheck ─────────────────────────────────────────────
+# Both install paths need DeepMind-licensed weights, so validate up front
+# (subseconds) before any heavy work (~30 min env build, ~1 min sif build).
+# AF3 weights are gated under DeepMind's Terms of Use — request access via
+# the linked form, wait for approval, and place ``af3.bin`` (or
+# ``af3.bin.zst``) into the resolved directory (or set
+# PROTO_ALPHAFOLD3_WEIGHTS_DIR).
+#
+# Setup-time resolution sees only env-var / default-cache paths; at runtime
+# inference.py honours a config-supplied model_dir on top of this (config
+# wins). Users supplying weights via config should also point
+# PROTO_ALPHAFOLD3_WEIGHTS_DIR at that directory so this check sees them.
+#
+# On failure the helper emits the ``[proto-tools] ASSET_NOT_AVAILABLE``
+# sentinel that the test layer converts into a skip rather than a failure.
+# The hint inlines DeepMind's specific request-and-wait flow so users see
+# the full provisioning steps in either failure banner.
+proto_resolve_asset_availability alphafold3 "*.bin*" \
+    "https://github.com/google-deepmind/alphafold3#obtaining-model-parameters" \
+    weights \
+    "$(cat <<'HINT'
+AlphaFold3 weights are gated by DeepMind's Terms of Use and are NOT
+automatically downloaded. To obtain access:
+
+  1. Request access via DeepMind's form (link above).
+  2. After approval (2-3 business days), download the weights archive
+     from the link DeepMind emails you.
+  3. Place af3.bin (or af3.bin.zst) in the resolved directory above,
+     OR point PROTO_ALPHAFOLD3_WEIGHTS_DIR at the directory containing it.
+
+See notes/storage.md for PROTO_MODEL_CACHE / PROTO_HOME rules.
+HINT
+)"
+
 echo "Installing uv package manager..."
 pip install uv
 
@@ -188,38 +222,6 @@ if [ "$USE_SIF" -eq 0 ]; then
 fi
 
 fi  # SKIP_BUILD guard (BYO sif via PROTO_ALPHAFOLD3_SIF_PATH)
-
-# ─── Common: weights validation (both paths need DeepMind-licensed weights) ─
-proto_resolve_weights_dir alphafold3
-
-if ! compgen -G "$WEIGHTS_DIR/*.bin*" >/dev/null; then
-  # Front-loaded context for users; the critical one-line summary is
-  # repeated at the very end so it survives _stderr_tail (last 10 lines).
-  cat <<EOF
-============================================================
-AlphaFold3 weights are gated by DeepMind's Terms of Use and
-are NOT automatically downloaded. To obtain access:
-
-  1. Request access via DeepMind's form (link maintained in
-     their README):
-     https://github.com/google-deepmind/alphafold3#obtaining-model-parameters
-  2. After approval (2-3 business days), download the weights
-     archive from the link DeepMind emails you.
-  3. Place af3.bin (or af3.bin.zst) in the resolved weights
-     directory, OR point PROTO_ALPHAFOLD3_WEIGHTS_DIR at the
-     directory containing it.
-
-See notes/storage.md for PROTO_MODEL_CACHE / PROTO_HOME rules.
-============================================================
-ERROR: No AlphaFold3 weights (*.bin / *.bin.zst) found in:
-  $WEIGHTS_DIR
-Fix: download DeepMind-licensed weights and either place
-af3.bin.zst in the directory above, or set
-PROTO_ALPHAFOLD3_WEIGHTS_DIR=/abs/path/to/weights/dir.
-============================================================
-EOF
-  exit 1
-fi
 
 if [ "$USE_SIF" -eq 1 ]; then
   echo "AlphaFold3 setup complete! (sif path — image at $SIF_PATH)"

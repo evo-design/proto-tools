@@ -67,6 +67,7 @@ from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.persistent_worker import PersistentWorker, _build_subprocess_env, _parse_env_vars_file
 from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
+from proto_tools.utils.tool_io import MissingAssetError
 
 logger = logging.getLogger(__name__)
 
@@ -685,6 +686,10 @@ class ToolInstance:
         if self.toolkit in self._build_failures:
             tail = self._build_failures[self.toolkit]
             hint = f"\n{tail}" if tail else ""
+            sentinel = self._parse_asset_sentinel(tail)
+            if sentinel is not None:
+                toolkit, asset_kind = sentinel
+                raise MissingAssetError(toolkit, asset_kind, tail)
             raise RuntimeError(
                 f"'{self.toolkit}' may not be compatible with your system. Check logs for details.{hint}"
             )
@@ -1845,6 +1850,36 @@ class ToolInstance:
         lines = [line for line in stderr.strip().splitlines() if line.strip()]
         return "\n".join(lines[-max_lines:])
 
+    @staticmethod
+    def _parse_asset_sentinel(output: str | None) -> tuple[str, str] | None:
+        """Detect the ``proto_resolve_asset_availability`` sentinel in output.
+
+        The shell helper prints
+        ``[proto-tools] ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>`` as the
+        last stderr line and exits 64. Returns ``(toolkit, asset_kind)`` when
+        present (any line — checks the whole output, not just the tail, so it
+        survives even if subsequent shell teardown adds noise after exit).
+
+        Args:
+            output (str | None): Combined stdout/stderr from the failed
+                subprocess.
+
+        Returns:
+            tuple[str, str] | None: ``(toolkit, asset_kind)`` if the sentinel
+                is present, else ``None``.
+        """
+        if not output:
+            return None
+        prefix = "[proto-tools] ASSET_NOT_AVAILABLE: "
+        for line in output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(prefix):
+                payload = stripped[len(prefix) :].strip()
+                if ":" in payload:
+                    toolkit, asset_kind = payload.split(":", 1)
+                    return toolkit.strip(), asset_kind.strip()
+        return None
+
     def _failure_summary(self) -> str:
         """Extract a one-line error summary from a FAILED STATUS.txt."""
         status_file = self.env_path / "STATUS.txt"
@@ -2009,6 +2044,15 @@ class ToolInstance:
             )
             self._build_failures[self.toolkit] = tail
             hint = f"\n{tail}" if tail else ""
+
+            # Asset-not-provisioned signalled by proto_resolve_asset_availability:
+            # raise the typed exception so the test layer converts it to a skip
+            # instead of a hard failure.
+            sentinel = self._parse_asset_sentinel(combined_output)
+            if sentinel is not None:
+                toolkit, asset_kind = sentinel
+                raise MissingAssetError(toolkit, asset_kind, tail)
+
             raise RuntimeError(
                 f"'{self.toolkit}' may not be compatible with your system. setup.sh failed (exit {returncode}).{hint}"
             )

@@ -39,6 +39,7 @@ from proto_tools.utils.system_info import (
     get_platform_id,
 )
 from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_io import MissingAssetError
 
 
 @functools.cache
@@ -772,6 +773,26 @@ def pytest_runtest_makereport(item, call):
     """Hook to capture test results for env report."""
     outcome = yield
     report = outcome.get_result()
+
+    # Convert MissingAssetError into a skip outcome rather than a failure.
+    # Tools whose external assets (DeepMind-gated weights, large MMseqs2 DBs,
+    # NVIDIA NIM models, ...) aren't provisioned on this machine emit the
+    # ``[proto-tools] ASSET_NOT_AVAILABLE`` sentinel from
+    # ``proto_resolve_asset_availability`` in standalone_helpers.sh; the
+    # ToolInstance setup-failure path raises ``MissingAssetError`` when it
+    # sees that sentinel. Treating it as a skip means an unprovisioned host
+    # gets clean test output instead of cascading failures.
+    if call.excinfo is not None and call.excinfo.errisinstance(MissingAssetError):
+        exc = call.excinfo.value
+        report.outcome = "skipped"
+        location_path = str(item.location[0]) if item.location else str(item.fspath)
+        location_line = item.location[1] if item.location and len(item.location) > 1 else 0
+        report.longrepr = (
+            location_path,
+            location_line or 0,
+            f"asset not provisioned: {exc.toolkit}:{exc.asset_kind} "
+            f"(provision the asset and re-run, or set PROTO_{exc.toolkit.upper()}_WEIGHTS_DIR)",
+        )
 
     # Only record final outcome (call phase for pass/fail, setup/teardown for errors)
     if _env_report_collector is not None:

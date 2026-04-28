@@ -166,6 +166,159 @@ proto_resolve_weights_dir() {
 
 
 # ---------------------------------------------------------------------------
+# proto_resolve_asset_availability <toolkit> <pattern> [license_url] [asset_kind] [hint]
+#
+# Standardized fail-fast precheck for tool assets that must be provisioned
+# externally (DeepMind-gated weights, NVIDIA NIM models, large databases the
+# tool can't auto-download, etc.).
+#
+# Resolves the asset directory, checks for files matching <pattern>, and on
+# failure emits a standard banner plus a machine-readable sentinel line that
+# the proto-tools test layer recognises and converts into a *test skip*
+# (rather than a failure). This means tools that signal "asset not on disk"
+# don't fail CI / smoke runs on machines that haven't been provisioned.
+#
+# Args:
+#   toolkit       Toolkit directory name (e.g. ``alphafold3``). Drives both
+#                 the dir resolution (``PROTO_<TOOLKIT>_WEIGHTS_DIR`` and
+#                 friends) and the sentinel payload.
+#   pattern       Glob (relative to the asset dir) of expected files
+#                 (e.g. ``*.bin*`` for AF3, ``*.dbtype`` for an MMseqs2 DB).
+#   license_url   Optional URL with download / license instructions; printed
+#                 in the banner so the user knows where to go.
+#   asset_kind    "weights" (default) | "database" | "dataset". Today only
+#                 "weights" is wired to a resolver; other kinds will be added
+#                 as their cache layouts are formalised. Used in the sentinel
+#                 (``ASSET_NOT_AVAILABLE: <toolkit>:<asset_kind>``).
+#   hint          Optional multi-line string with tool-specific provisioning
+#                 instructions — DeepMind's 2-3 day approval flow, NVIDIA NIM
+#                 key registration, etc. Spliced into BOTH failure banners
+#                 (env-var-empty exit 1 and not-provisioned exit 64) so users
+#                 see the same guidance regardless of which mode triggered.
+#                 Lines are indented 2 spaces under a "Provisioning steps:"
+#                 header. Pass via heredoc for readability.
+#
+# Sets ASSET_DIR to the resolved path on success. Exits 64 with the sentinel
+# on the last stderr line on failure (last-line so ``_stderr_tail`` in
+# ``tool_instance.py`` always preserves it).
+#
+# Example:
+#   proto_resolve_asset_availability alphafold3 "*.bin*" \
+#       "https://github.com/google-deepmind/alphafold3#obtaining-model-parameters" \
+#       weights \
+#       "$(cat <<'HINT'
+#   AlphaFold3 weights are gated by DeepMind's Terms of Use:
+#     1. Request access via DeepMind's form (link above).
+#     2. Wait 2-3 business days for the approval email.
+#     3. Download the weights archive from the emailed link.
+#     4. Place af3.bin (or af3.bin.zst) in the resolved directory above.
+#   HINT
+#   )"
+#
+# Reference: tools/structure_prediction/alphafold3/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_resolve_asset_availability() {
+    local toolkit="$1"
+    local pattern="$2"
+    local license_url="${3:-}"
+    local asset_kind="${4:-weights}"
+    local hint="${5:-}"
+
+    local tool_upper override_var override
+    tool_upper=$(echo "$toolkit" | tr '[:lower:]' '[:upper:]')
+    override_var="PROTO_${tool_upper}_WEIGHTS_DIR"
+    override="${!override_var:-}"
+
+    case "$asset_kind" in
+        weights)
+            proto_resolve_weights_dir "$toolkit"
+            ASSET_DIR="$WEIGHTS_DIR"
+            ;;
+        *)
+            echo "ERROR: proto_resolve_asset_availability: asset_kind '$asset_kind' not yet implemented (supported: weights)" >&2
+            exit 1
+            ;;
+    esac
+
+    if compgen -G "$ASSET_DIR/$pattern" >/dev/null; then
+        return 0
+    fi
+
+    # Local helper to render the optional tool-specific hint with consistent
+    # indentation under both failure banners.
+    _emit_hint() {
+        if [ -z "$hint" ]; then
+            return
+        fi
+        echo ""
+        echo "Provisioning steps:"
+        while IFS= read -r line; do
+            echo "  ${line}"
+        done <<< "${hint}"
+    }
+
+    # Two failure modes, distinguished by whether the user explicitly pointed
+    # us at a directory:
+    #
+    #   (a) Override env var SET but the path is empty → user-supplied
+    #       configuration error. Exit 1 with no sentinel; this should fail
+    #       the test (typo, stale path, forgot to copy weights, etc.).
+    #
+    #   (b) Override env var UNSET → falling through to default cache /
+    #       PROTO_MODEL_CACHE. The host just hasn't been provisioned with
+    #       optional gated assets. Emit the ASSET_NOT_AVAILABLE sentinel and
+    #       exit 64; the test layer converts this into a skip.
+    if [ -n "$override" ]; then
+        {
+            echo ""
+            echo "============================================================"
+            echo "ERROR: ${toolkit} ${asset_kind} not found at the path you configured"
+            echo "============================================================"
+            echo "${override_var}=${override}"
+            echo "Expected files matching: ${pattern}"
+            if [ -n "$license_url" ]; then
+                echo ""
+                echo "License / access:"
+                echo "  ${license_url}"
+            fi
+            _emit_hint
+            echo ""
+            echo "Fix: place ${asset_kind} matching '${pattern}' under that directory,"
+            echo "or update ${override_var} to point at the correct location."
+            echo "============================================================"
+        } >&2
+        exit 1
+    fi
+
+    {
+        echo ""
+        echo "============================================================"
+        echo "${toolkit} ${asset_kind} not provisioned on this host"
+        echo "============================================================"
+        echo "Resolved location (default cache):"
+        echo "  ${ASSET_DIR}"
+        echo "Expected files matching: ${pattern}"
+        if [ -n "$license_url" ]; then
+            echo ""
+            echo "License / access:"
+            echo "  ${license_url}"
+        fi
+        _emit_hint
+        echo ""
+        echo "To enable:"
+        echo "  1. Place ${asset_kind} matching '${pattern}' in the directory above, OR"
+        echo "  2. Set ${override_var}=/path/to/${asset_kind}/dir and re-run."
+        echo "============================================================"
+        # Sentinel must be the LAST stderr line so _stderr_tail (last 10
+        # non-empty lines) preserves it. The proto-tools test layer parses
+        # this exact prefix and converts the failure into a skip.
+        echo "[proto-tools] ASSET_NOT_AVAILABLE: ${toolkit}:${asset_kind}"
+    } >&2
+    exit 64
+}
+
+
+# ---------------------------------------------------------------------------
 # proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]
 #
 # Validate access to a gated HuggingFace repository. Discovers HF tokens

@@ -78,6 +78,7 @@ The user provides EITHER:
      - **HuggingFace `from_pretrained`** → no weight code needed (HF_HOME set automatically). Example: `tools/masked_models/esm2/`
      - **Direct download in setup.sh** → must implement `PROTO_MODEL_CACHE` pattern. Example: `tools/inverse_folding/fampnn/standalone/setup.sh`
      - **Foundry install** → must implement `PROTO_MODEL_CACHE` pattern. Example: `tools/inverse_folding/ligandmpnn/standalone/setup.sh`
+     - **Cannot be auto-downloaded** (the asset is too large to auto-download, or there's no programmatic fetch path at all — e.g. license requires a manual approval flow before the user receives a one-time download link). Distinct from *gated-but-fetchable* assets like HF gated repos, where setup.sh can still download once a token is present (use `proto_check_gated_hf_repo` for those). For not-fetchable assets, the user must place files on disk themselves; setup.sh doesn't fetch. → use `proto_resolve_asset_availability` as a fail-fast precheck at the top of `setup.sh`. Tests skip cleanly on hosts without weights; misconfigured `PROTO_<TOOLKIT>_WEIGHTS_DIR` still fails. Example: `tools/structure_prediction/alphafold3/standalone/setup.sh`. See PATTERNS.md → "standalone/setup.sh for tools whose assets are NOT automatically downloaded".
 
 2. **Read key source files** — Find and read the research repo's inference/prediction scripts to understand:
    - How the model is loaded
@@ -370,6 +371,7 @@ fi
 - `proto_install_jax [TOOL_PREFIX]` — install JAX with tool-specific overrides
 - `proto_install_cuda_toolkit [constraint] [extras...]` — micromamba CUDA toolkit
 - `proto_resolve_weights_dir <toolkit>` — set `$WEIGHTS_DIR` via PROTO_MODEL_CACHE
+- `proto_resolve_asset_availability <toolkit> <pattern> [license_url] [asset_kind]` — fail-fast precheck for gated / manually-provisioned weights / databases. Sentinel exit (64) on default-cache-empty signals a *test skip*; misconfigured `PROTO_<TOOLKIT>_WEIGHTS_DIR` is an exit-1 *failure*. Pair with the `MissingAssetError` plumbing in `tool_instance.py`.
 - `proto_check_gated_hf_repo <repo_id> <license_url> [probe_file]` — validate HF access
 
 **For the standalone inference.py**, non-HF tools must call `resolve_weights_dir()` to find weights at runtime:

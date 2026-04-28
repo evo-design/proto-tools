@@ -678,12 +678,25 @@ def _auto_provision(name: str, cache_dir: Path) -> None:
             logger.info("Auto-provision skipped for %r: another worker already provisioned it", name)
             return
 
+        # The mmseqs env carries the ``mmseqs`` binary; the download step inside
+        # ``provision()`` also needs ``curl`` (or wget/aria2c). On hosts that
+        # don't ship one (e.g. CentOS 7), ``ToolInstance._ensure_foundation_env``
+        # provisions a shared micromamba env with curl/git/gcc — prepend its
+        # ``bin/`` here so the download tool is reachable, mirroring what
+        # ``ToolInstance._setup`` does for the setup.sh subprocess. Returns
+        # None when the host already provides the tools, in which case nothing
+        # extra is added.
+        #
         # NOTE: PATH mutation is process-global and not thread-safe. Safe today
         # because auto_provision only fires from a single test thread; if this
         # ever runs from a ToolPool worker, swap to passing env_bin into a
         # provision() variant that resolves mmseqs explicitly.
+        foundation_path = ToolInstance._ensure_foundation_env()
+        path_prefix = str(env_bin)
+        if foundation_path is not None:
+            path_prefix = f"{path_prefix}{os.pathsep}{foundation_path / 'bin'}"
         original_path = os.environ.get("PATH", "")
-        os.environ["PATH"] = f"{env_bin}{os.pathsep}{original_path}"
+        os.environ["PATH"] = f"{path_prefix}{os.pathsep}{original_path}"
         try:
             provision(name)
         finally:
