@@ -94,10 +94,11 @@ class ESM3Model:
             # Move the inputs to the correct device
             batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
 
-            # Forward pass
+            # Forward pass; sequence_id isolates pad tokens from attention
             with torch.inference_mode():
                 batch_outputs = self.model(
                     sequence_tokens=batch_inputs["input_ids"],
+                    sequence_id=batch_inputs["attention_mask"].long(),
                 )
 
                 # Append the embeddings
@@ -316,8 +317,10 @@ class ESM3Model:
         """Score protein sequences using ESM3 with MLM pseudo-perplexity.
 
         Computes pseudo-perplexity by masking each position individually and
-        computing P(x_i | x_{-i}). Uses batching for efficiency. Requires L forward
-        passes per sequence of length L (batched).
+        computing P(x_i | x_{-i}). For input of N sequences with lengths L_i,
+        the total number of masked variants is sum(L_i); these are pooled
+        across sequences and processed in forward-pass batches of ``batch_size``,
+        for a total of ceil(sum(L_i) / batch_size) forward passes.
 
         Ambiguous amino acids (X, B, Z, etc.) are excluded from the perplexity
         calculation using the industry-standard exclusion strategy. Only positions
@@ -325,8 +328,8 @@ class ESM3Model:
 
         Args:
             sequences: List of protein sequences to score
-            batch_size: Masked variants per forward pass. Larger batches are
-                faster but use more memory.
+            batch_size: Masked variants per forward pass, pooled across sequences.
+                Larger batches are faster but use more memory.
             device: Device to run on
             verbose: Whether to print progress
             return_logits: Whether to include logits in the output
@@ -340,34 +343,110 @@ class ESM3Model:
                 - "metrics": List of metric dicts with log_likelihood, avg_log_likelihood, perplexity
                 - "vocab": List of 20 standard amino acid characters
         """
+        # Lazy-load or move the model to the requested device
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
 
+        # Seed RNGs so persistent workers are call-order-independent
         set_torch_seed(seed)
 
-        # Validate sequences for scoring
+        # Reject empty inputs up front
         if not sequences:
             raise ValueError("ESM3Model.score requires at least one non-empty sequence.")
+        if any(len(s) == 0 for s in sequences):
+            raise ValueError("ESM3Model.score does not support empty sequences.")
 
+        # Tokenize all sequences together, padded to a common length
+        encoded = self.tokenizer(sequences, add_special_tokens=True, padding=True, return_tensors="pt")
+        all_input_ids = encoded["input_ids"].to(self.device)  # (N, max_len)
+        all_attention_mask = encoded["attention_mask"].to(self.device)  # (N, max_len)
+
+        # Per-sequence lengths and total variant count (one variant per residue)
+        seq_lens = [len(s) for s in sequences]
+        total_variants = sum(seq_lens)
+        max_len = all_input_ids.shape[1]
+
+        # Allocate the global pool: one row per (sequence, position) pair
+        pooled_ids = torch.empty((total_variants, max_len), dtype=all_input_ids.dtype, device=self.device)
+        pooled_attention_mask = torch.empty(
+            (total_variants, max_len), dtype=all_attention_mask.dtype, device=self.device
+        )
+        seq_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
+        pos_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
+
+        # Fill the pool: copy each sequence L times, mask one position per copy
+        row = 0
+        for i, length in enumerate(seq_lens):
+            pooled_ids[row : row + length] = all_input_ids[i].unsqueeze(0).expand(length, -1).clone()
+            pooled_attention_mask[row : row + length] = all_attention_mask[i].unsqueeze(0).expand(length, -1)
+            for pos in range(length):
+                pooled_ids[row + pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS
+            seq_idx_per_variant[row : row + length] = i
+            pos_idx_per_variant[row : row + length] = torch.arange(length, device=self.device)
+            row += length
+
+        # Look up the true token at each masked position for log-prob scoring
+        true_token_ids = all_input_ids[seq_idx_per_variant, pos_idx_per_variant + 1]
+
+        # Per-variant validity (False at ambiguous AAs like X/B/Z — excluded from PPL)
+        is_valid = torch.tensor(
+            [aa in AMINO_ACIDS_LIST for seq in sequences for aa in seq],
+            dtype=torch.bool,
+            device=self.device,
+        )
+
+        # Output buffers indexed by global variant row
+        num_aa = self.amino_acid_token_ids.shape[0]
+        all_position_logits = torch.empty((total_variants, num_aa), device=self.device)
+        all_true_log_probs = torch.zeros(total_variants, device=self.device)
+
+        # Run forward passes batched across the pooled variants
+        for batch_start in tqdm(
+            range(0, total_variants, batch_size),
+            desc="ESM3 scoring",
+            unit="batch",
+            disable=not verbose,
+        ):
+            # Slice this forward-pass batch out of the pool
+            batch_end = min(batch_start + batch_size, total_variants)
+            batch_ids = pooled_ids[batch_start:batch_end]
+            batch_attention = pooled_attention_mask[batch_start:batch_end]
+
+            # Forward pass; sequence_id isolates pad tokens from attention
+            with torch.inference_mode():
+                outputs = self.model(sequence_tokens=batch_ids, sequence_id=batch_attention.long())
+
+            # Pull logits at each row's masked position only
+            batch_size_actual = batch_end - batch_start
+            batch_idx = torch.arange(batch_size_actual, device=self.device)
+            mask_token_pos = pos_idx_per_variant[batch_start:batch_end] + 1  # +1 for BOS
+            position_logits = outputs.sequence_logits[batch_idx, mask_token_pos]  # (B, full_vocab)
+
+            # Filter to the 20 standard AA logits and write to the global buffer
+            all_position_logits[batch_start:batch_end] = position_logits[:, self.amino_acid_token_ids]
+
+            # Record log P(true_token | context) for each row using the full-vocab softmax
+            log_probs = torch.log_softmax(position_logits, dim=-1)
+            batch_true = true_token_ids[batch_start:batch_end]
+            all_true_log_probs[batch_start:batch_end] = log_probs[batch_idx, batch_true]
+
+        # Aggregate the pooled outputs back into per-sequence metrics
         all_logits = []
         all_metrics = []
-
-        for seq in tqdm(sequences, desc="ESM3 scoring", unit="sequence", total=len(sequences)):
-            if len(seq) == 0:
-                raise ValueError("ESM3Model.score does not support empty sequences.")
-
-            # Compute MLM pseudo-perplexity and collect logits from masked positions
-            # Returns (log_prob, logits, valid_count) where valid_count excludes ambiguous AAs
-            log_prob, logits, valid_count = self._compute_mlm_score(seq, batch_size)
-
-            # Average over valid positions only (exclusion strategy for ambiguous AAs)
+        cursor = 0
+        for i, length in enumerate(seq_lens):
+            seq_logits = all_position_logits[cursor : cursor + length]
+            seq_log_probs = all_true_log_probs[cursor : cursor + length]
+            seq_valid = is_valid[cursor : cursor + length]
+            valid_count = int(seq_valid.sum().item())
             if valid_count == 0:
-                raise ValueError(f"No valid characters found for ESM3 scoring in sequence: {seq}")
+                raise ValueError(f"No valid characters found for ESM3 scoring in sequence: {sequences[i]}")
+            log_prob = (seq_log_probs * seq_valid.float()).sum().item()
             avg_ll = log_prob / valid_count
 
-            all_logits.append(logits)
+            all_logits.append(seq_logits)
             all_metrics.append(
                 {
                     "log_likelihood": log_prob,
@@ -375,85 +454,14 @@ class ESM3Model:
                     "perplexity": math.exp(-avg_ll),
                 }
             )
+            cursor += length
 
+        # Return per-sequence in input order (logits omitted unless requested)
         return {
             "logits": all_logits if return_logits else None,
             "metrics": all_metrics,
             "vocab": AMINO_ACIDS_LIST,  # Return AA-only vocab (20 tokens)
         }
-
-    def _compute_mlm_score(self, seq: str, batch_size: int) -> tuple[float, torch.Tensor, int]:
-        """Compute MLM pseudo-perplexity by masking each position.
-
-        This method performs L forward passes (batched) for a sequence of length L,
-        collecting the logits P(aa | context without position i) at each masked position.
-
-        Ambiguous amino acids (X, B, Z, etc.) are excluded from the log-likelihood
-        calculation but their logits are still returned (with values only for
-        standard amino acids).
-
-        Args:
-            seq: Protein sequence
-            batch_size: Number of masked variants per forward pass
-
-        Returns:
-            Tuple of (total_log_probability, logits_tensor, valid_count) where:
-                - total_log_probability: Sum of log probs for standard AA positions only
-                - logits_tensor: Shape (seq_len, vocab_size=20) with AA-only logits
-                - valid_count: Number of standard AA positions (excludes ambiguous)
-        """
-        # Tokenize once
-        encoded = self.tokenizer(seq, add_special_tokens=True, return_tensors="pt")
-        original_ids = encoded["input_ids"].to(self.device)
-
-        # Create all masked variants (L variants for sequence of length L)
-        masked_ids = original_ids.repeat(len(seq), 1)
-        for pos in range(len(seq)):
-            masked_ids[pos, pos + 1] = self.tokenizer.mask_token_id  # +1 for BOS token
-
-        # Get true token IDs directly from tokenized input
-        true_token_ids = original_ids[0, 1 : 1 + len(seq)]  # Token positions: [BOS] + seq + [EOS]
-
-        # Create mask for valid (standard AA) positions - exclusion strategy
-        valid_mask = torch.tensor([aa in AMINO_ACIDS_LIST for aa in seq], device=self.device)
-        valid_count = int(valid_mask.sum().item())
-
-        # Initialize outputs
-        total_log_prob = 0.0
-        all_position_logits = []
-
-        # Process in batches
-        for batch_start in range(0, len(seq), batch_size):
-            batch_end = min(batch_start + batch_size, len(seq))
-            batch_ids = masked_ids[batch_start:batch_end]
-
-            with torch.inference_mode():
-                outputs = self.model(sequence_tokens=batch_ids)
-
-            # Extract logits at masked positions
-            batch_indices = torch.arange(batch_end - batch_start, device=self.device)
-            positions = torch.arange(batch_start, batch_end, device=self.device) + 1  # +1 for BOS
-            position_logits = outputs.sequence_logits[batch_indices, positions]
-
-            # Filter logits to AA-only (20 standard amino acids)
-            aa_position_logits = position_logits[:, self.amino_acid_token_ids]
-            all_position_logits.append(aa_position_logits)
-
-            # Compute log probs for scoring (only over standard AAs)
-            log_probs = torch.log_softmax(position_logits, dim=-1)
-
-            # Get log probs for the observed tokens at the masked positions
-            # Only include positions with standard AAs in the total (exclusion strategy)
-            batch_true_ids = true_token_ids[batch_start:batch_end]
-            true_log_probs = log_probs[batch_indices, batch_true_ids]
-
-            # Apply valid mask to exclude ambiguous AAs from log-likelihood
-            batch_valid_mask = valid_mask[batch_start:batch_end].float()
-            total_log_prob += (true_log_probs * batch_valid_mask).sum().item()
-
-        # Concatenate logits from all batches: (seq_len, vocab_size=20)
-        logits = torch.cat(all_position_logits, dim=0)
-        return total_log_prob, logits, valid_count
 
     # ============================================================================
     # Helper Functions

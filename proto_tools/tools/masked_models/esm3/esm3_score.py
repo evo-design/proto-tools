@@ -44,12 +44,8 @@ class ESM3ScoringConfig(BaseConfig):
             ``"esm3_sm_open_v1"`` (small open-source model).
             Default: ``"esm3_sm_open_v1"``.
 
-        batch_size (int): Number of masked sequence variants to process per forward
-            pass. For a sequence of length L, scoring requires L forward passes
-            (one per position). This parameter controls how many of those masked
-            variants are batched together. Larger batches improve throughput but
-            use more GPU memory; reduce if encountering out-of-memory errors.
-            Default: ``1``.
+        batch_size (int): Number of masked variants per GPU forward pass. Larger
+            batches improve throughput but use more memory. Default: ``1``.
 
         device (str): Device to run the model on. Options include ``"cuda"``,
             ``"cpu"``, ``"mps"``, or specific GPU devices like ``"cuda:0"``.

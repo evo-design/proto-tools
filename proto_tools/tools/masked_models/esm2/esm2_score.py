@@ -46,12 +46,8 @@ class ESM2ScoringConfig(BaseConfig):
             ``"esm2_t6_8M_UR50D"`` through ``"esm2_t48_15B_UR50D"``.
             Default: ``"esm2_t33_650M_UR50D"``.
 
-        batch_size (int): Number of masked sequence variants to process per forward
-            pass. For a sequence of length L, scoring requires L forward passes
-            (one per position). This parameter controls how many of those masked
-            variants are batched together. Larger batches improve throughput but
-            use more GPU memory; reduce if encountering out-of-memory errors.
-            Default: ``1``.
+        batch_size (int): Number of masked variants per GPU forward pass. Larger
+            batches improve throughput but use more memory. Default: ``1``.
 
         device (str): Device to run the model on. Options include ``"cuda"``,
             ``"cpu"``, ``"mps"``, or specific GPU devices like ``"cuda:0"``.
