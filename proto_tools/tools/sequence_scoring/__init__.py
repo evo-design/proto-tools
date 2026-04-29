@@ -39,8 +39,10 @@ from proto_tools.tools.sequence_scoring.borzoi import (
     BorzoiConfig,
     BorzoiEnsembleConfig,
     BorzoiEnsembleOutput,
+    BorzoiEnsemblePredictionResult,
     BorzoiInput,
     BorzoiOutput,
+    BorzoiPredictionResult,
     run_borzoi,
     run_borzoi_ensemble,
 )
@@ -50,6 +52,7 @@ from proto_tools.tools.sequence_scoring.enformer import (
     EnformerConfig,
     EnformerInput,
     EnformerOutput,
+    EnformerPredictionResult,
     run_enformer,
 )
 from proto_tools.tools.sequence_scoring.segmasker import (
@@ -103,9 +106,11 @@ __all__ = [
     "BorzoiInput",
     "BorzoiConfig",
     "BorzoiOutput",
+    "BorzoiPredictionResult",
     "run_borzoi",
     "BorzoiEnsembleConfig",
     "BorzoiEnsembleOutput",
+    "BorzoiEnsemblePredictionResult",
     "run_borzoi_ensemble",
     "BORZOI_CONTEXT",
     "BORZOI_OUTPUT",
@@ -113,6 +118,7 @@ __all__ = [
     "EnformerInput",
     "EnformerConfig",
     "EnformerOutput",
+    "EnformerPredictionResult",
     "run_enformer",
     "ENFORMER_CONTEXT",
     "ENFORMER_OUTPUT",

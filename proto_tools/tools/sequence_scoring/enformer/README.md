@@ -47,7 +47,7 @@ The central 114,688 bp of the input maps to the 896 output bins. The flanking se
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sequence` | `str` | Yes | DNA sequence, must be exactly 196,608 bp. Only characters A, T, C, G, N allowed. |
+| `sequences` | `List[str]` | Yes | DNA sequence(s), each exactly 196,608 bp. Only characters A, T, C, G, N allowed. |
 
 ## Configuration
 
@@ -55,7 +55,8 @@ The central 114,688 bp of the input maps to the 896 output bins. The flanking se
 |-------|------|---------|-------------|
 | `output_tracks` | `List[int]` | **required** | Track indices to extract from the model output |
 | `species` | `"human"` or `"mouse"` | `"human"` | Species output head to use |
-| `device` | `str` | `"cuda"` | Inference device (`"cuda"` or `"cpu"`) |
+| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
+| `device` | `str` | `"cuda"` | Inference device |
 | `verbose` | `bool` | `False` | Whether to log status messages during execution |
 
 ### Track Selection Guide
@@ -81,11 +82,11 @@ When using Enformer in optimization loops, prioritize sweeping:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sequence` | `str` | The input DNA sequence that was scored |
-| `sequence_length` | `int` | Always 196,608 |
-| `prediction` | `List[List[float]]` | Predicted signal matrix with shape `[896, num_tracks]` |
+| `results` | `List[EnformerPredictionResult]` | Per-sequence prediction results |
 | `output_tracks` | `List[int]` | Track indices that were extracted |
 | `species` | `str` | Species head used (`"human"` or `"mouse"`) |
+
+Each `EnformerPredictionResult` contains `sequence`, `sequence_length`, and `prediction` with shape `[896, num_tracks]`.
 
 The `prediction` matrix is indexed as `prediction[bin][track]`, where:
 - `bin` ranges from 0 to 895 (896 spatial bins, each covering 128 bp)
@@ -119,14 +120,15 @@ from proto_tools.tools.sequence_scoring.enformer import (
 # 196,608 bp sequence (use real genomic sequence in practice)
 sequence = "ATCG" * 49152  # 196,608 bp
 
-inputs = EnformerInput(sequence=sequence)
+inputs = EnformerInput(sequences=[sequence])
 config = EnformerConfig(
     output_tracks=[0, 1, 2],  # First 3 CAGE tracks
     species="human",
 )
 
 result = run_enformer(inputs, config)
-print(f"Output shape: {len(result.prediction)} x {len(result.prediction[0])}")
+prediction = result.results[0].prediction
+print(f"Output shape: {len(prediction)} x {len(prediction[0])}")
 # Output shape: 896 x 3
 ```
 
@@ -142,15 +144,15 @@ alt_seq = ref_seq[:98304] + "G" + ref_seq[98305:]
 
 config = EnformerConfig(output_tracks=[0, 1, 2], species="human")
 
-ref_result = run_enformer(EnformerInput(sequence=ref_seq), config)
-alt_result = run_enformer(EnformerInput(sequence=alt_seq), config)
+ref_result = run_enformer(EnformerInput(sequences=[ref_seq]), config)
+alt_result = run_enformer(EnformerInput(sequences=[alt_seq]), config)
 
 # Compare central bins (around position 98,304 -> bin ~448)
 import math
 center_bin = 448
 for track_idx in range(3):
-    ref_val = ref_result.prediction[center_bin][track_idx]
-    alt_val = alt_result.prediction[center_bin][track_idx]
+    ref_val = ref_result.results[0].prediction[center_bin][track_idx]
+    alt_val = alt_result.results[0].prediction[center_bin][track_idx]
     if ref_val > 0 and alt_val > 0:
         lfc = math.log2(alt_val / ref_val)
         print(f"Track {track_idx}: log2FC = {lfc:.3f}")
@@ -163,8 +165,9 @@ config = EnformerConfig(
     species="mouse",
 )
 
-result = run_enformer(EnformerInput(sequence=sequence), config)
-print(f"Mouse prediction shape: {len(result.prediction)} x {len(result.prediction[0])}")
+result = run_enformer(EnformerInput(sequences=[sequence]), config)
+prediction = result.results[0].prediction
+print(f"Mouse prediction shape: {len(prediction)} x {len(prediction[0])}")
 ```
 
 **Export results:**

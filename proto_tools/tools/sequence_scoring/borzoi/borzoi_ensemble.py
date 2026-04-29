@@ -6,10 +6,11 @@ Borzoi ensemble sequence scoring tool.
 import csv
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
 from proto_tools.tools.tool_registry import tool
@@ -22,27 +23,50 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Data Models
 # ============================================================================
+class BorzoiEnsemblePredictionResult(BaseModel):
+    """Per-sequence Borzoi ensemble prediction result.
+
+    Attributes:
+        sequence (str): Input DNA sequence that was scored.
+        sequence_length (int): Length of the input sequence.
+        predictions (list[list[list[float]]]): Stacked predictions with shape
+            ``[4, num_tracks, 6144]`` for replicates 0-3.
+    """
+
+    sequence: str = Field(description="Input DNA sequence")
+    sequence_length: int = Field(description="Length of input sequence")
+    predictions: list[list[list[float]]] = Field(description="Stacked predictions with shape [4, num_tracks, 6144]")
+
+
 class BorzoiEnsembleOutput(BaseToolOutput):
     """Output from Borzoi ensemble prediction.
 
     Attributes:
-        sequence (str): Input DNA sequence that was scored.
-        sequence_length (int): Length of the input sequence (always 524,288).
-        predictions (list[list[list[float]]]): Stacked predictions with shape
-            ``[4, num_tracks, 6144]`` for replicates 0-3.
+        results (list[BorzoiEnsemblePredictionResult]): Per-sequence ensemble
+            prediction results.
         output_tracks (list[int]): Track indices used for prediction.
         species (str): Species used for prediction (``"human"`` or ``"mouse"``).
         avg_output_tracks (bool): Whether requested tracks were averaged.
         num_replicates (int): Number of replicates returned (always 4).
     """
 
-    sequence: str = Field(description="Input DNA/RNA sequence")
-    sequence_length: int = Field(description="Length of input sequence")
-    predictions: list[list[list[float]]] = Field(description="Stacked predictions with shape [4, num_tracks, 6144]")
+    results: list[BorzoiEnsemblePredictionResult] = Field(description="Per-sequence ensemble prediction results")
     output_tracks: list[int] = Field(description="Track indices used for prediction")
     species: str = Field(description="Species used for prediction ('human' or 'mouse')")
     avg_output_tracks: bool = Field(description="Whether track outputs were averaged")
     num_replicates: int = Field(default=4, description="Number of Borzoi replicates returned")
+
+    def __len__(self) -> int:
+        """Return the number of per-sequence ensemble results."""
+        return len(self.results)
+
+    def __getitem__(self, index: int) -> BorzoiEnsemblePredictionResult:
+        """Return a per-sequence ensemble prediction result."""
+        return self.results[index]
+
+    def __iter__(self) -> Iterator[BorzoiEnsemblePredictionResult]:  # type: ignore[override]
+        """Iterate over per-sequence ensemble results."""
+        return iter(self.results)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -72,8 +96,29 @@ class BorzoiEnsembleOutput(BaseToolOutput):
         elif file_format == "csv":
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(data.keys())
-                writer.writerow(data.values())
+                writer.writerow(
+                    [
+                        "sequence_index",
+                        "sequence_length",
+                        "output_tracks",
+                        "species",
+                        "avg_output_tracks",
+                        "num_replicates",
+                        "predictions",
+                    ]
+                )
+                for idx, result in enumerate(self.results):
+                    writer.writerow(
+                        [
+                            idx,
+                            result.sequence_length,
+                            json.dumps(self.output_tracks),
+                            self.species,
+                            self.avg_output_tracks,
+                            self.num_replicates,
+                            json.dumps(result.predictions),
+                        ]
+                    )
         else:
             raise ValueError(f"Unsupported format: {file_format}")
 
@@ -87,13 +132,14 @@ class BorzoiEnsembleConfig(BaseConfig):
         species (Literal['human', 'mouse']): Species model to use.
         avg_output_tracks (bool): Whether to average selected tracks.
         use_flash_attn (bool): Whether to run FlashAttention-backed models.
+        batch_size (int): Number of sequences to process in each GPU batch.
         device (str): Device used for inference.
     """
 
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device to run the model on (e.g., 'cuda', 'cpu')",
+        description="Device to run the model on",
         hidden=True,
         include_in_key=False,
     )
@@ -111,6 +157,13 @@ class BorzoiEnsembleConfig(BaseConfig):
         title="Average Tracks",
         default=True,
         description="Whether to average selected tracks into one output",
+        advanced=True,
+    )
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=1,
+        ge=1,
+        description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
     use_flash_attn: bool = ConfigField(
@@ -133,7 +186,7 @@ class BorzoiEnsembleConfig(BaseConfig):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return BorzoiInput(sequence="A" * 524288)
+    return BorzoiInput(sequences=["A" * 524288])
 
 
 @tool(
@@ -146,6 +199,8 @@ def example_input() -> Any:
     description="Regulatory activity prediction using all 4 Borzoi replicates",
     uses_gpu=True,
     example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="results",
 )
 def run_borzoi_ensemble(
     inputs: BorzoiInput,
@@ -168,7 +223,7 @@ def run_borzoi_ensemble(
 
     logger.debug("Using local execution for Borzoi ensemble prediction")
 
-    predictions: list[list[list[float]]] = []
+    replicate_outputs = []
     iterator = progress_bar(
         range(4),
         desc="Borzoi replicates",
@@ -183,17 +238,23 @@ def run_borzoi_ensemble(
             species=config.species,
             replicate=str(replicate),  # type: ignore[arg-type]
             avg_output_tracks=config.avg_output_tracks,
+            batch_size=config.batch_size,
             use_flash_attn=config.use_flash_attn,
             device=config.device,
             verbose=config.verbose,
         )
         replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
-        predictions.append(replicate_output.prediction)
+        replicate_outputs.append(replicate_output)
 
     return BorzoiEnsembleOutput(
-        sequence=inputs.sequence,
-        sequence_length=len(inputs.sequence),
-        predictions=predictions,
+        results=[
+            BorzoiEnsemblePredictionResult(
+                sequence=sequence,
+                sequence_length=len(sequence),
+                predictions=[replicate_output.results[idx].prediction for replicate_output in replicate_outputs],
+            )
+            for idx, sequence in enumerate(inputs.sequences)
+        ],
         output_tracks=config.output_tracks,
         species=config.species,
         avg_output_tracks=config.avg_output_tracks,
