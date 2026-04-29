@@ -33,12 +33,28 @@ class PyRosettaScorer:
                 via a warning after scoring completes. This gives us
                 "warn-but-continue" semantics without hand-rolling a PDB
                 parser to diff the input against the loaded pose.
+            ``-ignore_zero_occupancy true``: Skip atoms with zero occupancy
+                during PDB load. Matches BindCraft's init (defensive default
+                for heterogeneous PDB sources).
+            ``-corrections::beta_nov16 true``: Enable the November 2016 beta
+                corrections to ref2015 (refined HBnet, disulfide, solvation
+                terms). This is the default score function for production
+                binder-design pipelines (BindCraft, Germinal, RFdiffusion).
+                Affects the values returned by ``pr.get_fa_scorefxn()`` and
+                ``create_score_function("ref2015")`` — used here by the
+                FastRelax mover, InterfaceAnalyzerMover, TotalEnergyMetric,
+                and the BuriedUnsatHbonds filter. Without this flag,
+                ``Binder_Energy_Score``, ``interface_dG``, and
+                ``delta_unsat_hbonds`` will not match BindCraft.
         """
         if self._initialized:
             return
         import pyrosetta
 
-        extra_opts = "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true"
+        extra_opts = (
+            "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true"
+            " -ignore_zero_occupancy true -corrections::beta_nov16 true"
+        )
         dalphaball = Path(sys.executable).parent / "DAlphaBall"
         if dalphaball.is_file():
             extra_opts += f" -holes:dalphaball {dalphaball}"
