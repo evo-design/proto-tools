@@ -252,9 +252,9 @@ Flat functions only (no test classes). See `notes/testing.md` for full conventio
 - `pytest-randomly` randomizes test order; reproduce with `--randomly-seed=N`
 - Branch coverage configured via `[tool.coverage]` in `pyproject.toml`; CI runs `--cov`
 - Integration tests are **skipped by default**. Run with `pytest --integration` or `pytest --all`
-- Other useful flags: `--gpu` (GPU tests only), `--slow` (slow tests only), `--ext` / `--extensive` (combinatorial tests)
-- **Generally use `--all` when running tests** to include integration and GPU tests
-- Before running GPU tests, check GPU availability. No GPU → `pytest --cpu`
+- GPU dispatch is hardware-gated: plain `pytest` runs `uses_gpu` tests iff a GPU is visible, otherwise skips them automatically. `--cpu-only` and `--gpu-only` are *selection filters* (only that flavor of test runs); they do not change hardware availability
+- Other useful flags: `--gpu-only` (GPU tests only), `--cpu-only` (CPU tests only), `--slow` (slow tests only), `--ext` / `--extensive` (combinatorial tests), `--benchmark` (additive opt-in for `@pytest.mark.benchmark` tests; gated off by default and not enabled by `--all`/`--slow`)
+- **Generally use `--all` when running tests** to include integration and slow tests
 - Test logs saved to `logs/`. Every `pytest` run creates a `logs/pytest_*.log` file. To monitor a running test, tail the latest log file (`ls -t logs/ | head -1`) rather than relying on stdout (which buffers). Check logs before re-running tests
 - **`PROTO_HOME`** controls where all persistent data lives: model weights, tool envs, and micromamba (defaults to `~/.proto/`). **`PROTO_MODEL_CACHE`** overrides just the model weights location. Per-tool override: `PROTO_{TOOL}_WEIGHTS_DIR`. All configured via environment variables. See `notes/storage.md`.
 

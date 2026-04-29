@@ -111,8 +111,8 @@ Use defensive patterns (`|| true`, conditional checks, graceful fallbacks) that 
 ```bash
 rm -rf tool_envs/{tool}_env
 pytest -k "tool_key" --all -sv
-pytest --cpu --skip-ci
-pytest --gpu --all  # if GPU available
+pytest --cpu-only --skip-ci
+pytest --gpu-only --all  # if GPU available
 ```
 
 ### 7. Document What You Changed

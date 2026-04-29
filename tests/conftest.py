@@ -1,8 +1,8 @@
 """tests/conftest.py.
 
 Supports the same CLI options and markers as the main proto-language tests:
-  --cpu        Run only CPU tests
-  --gpu        Run only GPU tests (skip CPU tests)
+  --cpu-only   Run only CPU tests
+  --gpu-only   Run only GPU tests (skip CPU tests)
   --all        Include slow and GPU tests
   --slow       Run only slow tests
   --ext        Include extensive combinatorial tests (e.g., every tool x device). Long form: --extensive
@@ -593,13 +593,13 @@ _benchmark_report_collector: BenchmarkReportCollector | None = None
 def pytest_addoption(parser):
     """Add custom command line options to pytest."""
     parser.addoption(
-        "--cpu",
+        "--cpu-only",
         action="store_true",
         default=False,
         help="Run only CPU tests, skip GPU tests",
     )
     parser.addoption(
-        "--gpu",
+        "--gpu-only",
         action="store_true",
         default=False,
         help="Run only GPU tests, skip CPU tests",
@@ -640,10 +640,13 @@ def pytest_addoption(parser):
         "--benchmark",
         action="store_true",
         default=False,
-        help="Run only @pytest.mark.benchmark tests. In this mode the 'slow' gate is bypassed (no need "
-        "to also pass --slow); hardware gates (uses_gpu, GPU count) are bypassed only when --use-cloud "
-        "is also set. Outside this mode, marked tests are gated normally — they run under --all but "
-        "are skipped under plain pytest if also marked slow / uses_gpu.",
+        help="Enable @pytest.mark.benchmark tests. Like --ext, this is an additive gate-opener: "
+        "benchmark tests run alongside whatever else is selected, the flag does not deselect "
+        "non-benchmark tests. The 'slow' gate is bypassed for benchmarks (no need to also pass "
+        "--slow); hardware gates (uses_gpu, GPU count) are bypassed only when --use-cloud is set. "
+        "Without this flag (or any of --benchmark-report / --benchmark-tool / --benchmark-toolkit, "
+        "which imply --benchmark), benchmark-marked tests are skipped — they do NOT run under "
+        "--all or --slow.",
     )
     parser.addoption(
         "--use-cloud",
@@ -1014,40 +1017,34 @@ def pytest_collection_modifyitems(config, items):
             if "skip_ci" in item.keywords:
                 item.add_marker(skip_ci)
 
-    # Two independent carve-outs:
-    # - --use-cloud bypasses every hardware-availability gate, since the GPUs
-    #   live on the server. Applies to any selected test, not just benchmarks.
-    # - @pytest.mark.benchmark bypasses the default 'slow' gate so benchmark
-    #   tests still run when invoked under --benchmark, even if they happen
-    #   to also be marked slow. Hardware gates (gpu count) are NOT bypassed
-    #   by the benchmark marker alone — those still need --use-cloud.
+    # GPU/CPU dispatch: --cpu-only and --gpu-only are *selection filters* only.
+    # Whether a uses_gpu test runs is decided solely by the hardware availability
+    # check below (number_of_visible_gpus). --use-cloud bypasses every hardware
+    # gate because the GPUs live on the server.
     use_cloud = config.getoption("--use-cloud")
 
-    # Skip GPU tests when --cpu is specified
-    if config.getoption("--cpu"):
-        skip_gpu = pytest.mark.skip(reason="--cpu specified")
+    # Skip GPU tests when --cpu-only is specified
+    if config.getoption("--cpu-only"):
+        skip_gpu = pytest.mark.skip(reason="--cpu-only specified")
         for item in items:
             if "uses_gpu" in item.keywords and not use_cloud:
                 item.add_marker(skip_gpu)
 
-    # Skip CPU tests when --gpu is specified
-    elif config.getoption("--gpu"):
-        skip_cpu = pytest.mark.skip(reason="--gpu specified")
+    # Skip CPU tests when --gpu-only is specified
+    elif config.getoption("--gpu-only"):
+        skip_cpu = pytest.mark.skip(reason="--gpu-only specified")
         for item in items:
             if "uses_cpu" in item.keywords and "uses_gpu" not in item.keywords:
                 item.add_marker(skip_cpu)
 
-    # Default: skip GPU tests unless --integration (with GPU available) or --all
-    elif not (config.getoption("--all") or (config.getoption("--integration") and _gpu_available())):
-        skip_gpu = pytest.mark.skip(reason="GPU test (use --gpu, --integration with GPU, or --all to run)")
-        for item in items:
-            if "uses_gpu" in item.keywords and not use_cloud:
-                item.add_marker(skip_gpu)
-
     # Handle slow test filtering
     run_all = config.getoption("--all")
     run_slow_only = config.getoption("--slow")
-    benchmark_mode = config.getoption("--benchmark") or config.getoption("--benchmark-report")
+    tool_filter = config.getoption("--benchmark-tool")
+    toolkit_filter = config.getoption("--benchmark-toolkit")
+    benchmark_mode = (
+        config.getoption("--benchmark") or config.getoption("--benchmark-report") or tool_filter or toolkit_filter
+    )
 
     if run_slow_only:
         # When --slow is specified, skip tests NOT marked as slow
@@ -1055,12 +1052,13 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" not in item.keywords:
                 item.add_marker(skip_non_slow)
-    elif not run_all and not config.getoption("extensive") and not benchmark_mode:
-        # By default, skip slow tests. --all and --ext bypass this; --benchmark
-        # also bypasses (benchmark mode is opt-in to running slow workloads).
+    elif not run_all and not config.getoption("extensive"):
+        # Skip slow tests by default. --benchmark exempts benchmark-marked slow tests only.
         skip_slow = pytest.mark.skip(reason="slow test (use --all to run, or --slow to run only slow tests)")
         for item in items:
             if "slow" in item.keywords:
+                if benchmark_mode and "benchmark" in item.keywords:
+                    continue
                 item.add_marker(skip_slow)
 
     # Skip integration tests unless --integration or --all is specified
@@ -1079,30 +1077,31 @@ def pytest_collection_modifyitems(config, items):
             if "extensive" in item.keywords:
                 item.add_marker(skip_extensive)
 
-    # --benchmark: keep only @pytest.mark.benchmark tests. Without the flag,
-    # benchmark-marked tests still run normally — the marker is purely a selection signal.
-    # --benchmark-report / --benchmark-tool / --benchmark-toolkit all imply --benchmark.
-    tool_filter = config.getoption("--benchmark-tool")
-    toolkit_filter = config.getoption("--benchmark-toolkit")
-    if config.getoption("--benchmark") or config.getoption("--benchmark-report") or tool_filter or toolkit_filter:
-        selected, deselected = [], []
+    # Benchmark-marked tests are gated off by default — opt in via --benchmark or
+    # one of its variants (--benchmark-report / --benchmark-tool / --benchmark-toolkit,
+    # all of which imply --benchmark). Like --ext, this is an additive gate: the
+    # flag enables benchmark tests alongside whatever else is selected, it does not
+    # deselect non-benchmark tests. --benchmark-tool / --benchmark-toolkit narrow
+    # *within* the benchmark set (other benchmarks are skipped, non-benchmarks
+    # untouched).
+    if not benchmark_mode:
+        skip_benchmark = pytest.mark.skip(reason="benchmark test (use --benchmark to run)")
+        for item in items:
+            if "benchmark" in item.keywords:
+                item.add_marker(skip_benchmark)
+    elif tool_filter or toolkit_filter:
         for item in items:
             if "benchmark" not in item.keywords:
-                deselected.append(item)
                 continue
-            if tool_filter or toolkit_filter:
-                marker = item.get_closest_marker("benchmark")
-                tool_key = marker.args[0] if marker and marker.args else None
-                if tool_filter and tool_key != tool_filter:
-                    deselected.append(item)
-                    continue
-                if toolkit_filter and (tool_key is None or _resolve_toolkit(tool_key) != toolkit_filter):
-                    deselected.append(item)
-                    continue
-            selected.append(item)
-        if deselected:
-            items[:] = selected
-            config.hook.pytest_deselected(items=deselected)
+            marker = item.get_closest_marker("benchmark")
+            tool_key = marker.args[0] if marker and marker.args else None
+            skip_reason = None
+            if tool_filter and tool_key != tool_filter:
+                skip_reason = f"benchmark for {tool_key} (filtered to {tool_filter})"
+            elif toolkit_filter and (tool_key is None or _resolve_toolkit(tool_key) != toolkit_filter):
+                skip_reason = f"benchmark for {tool_key} (filtered to toolkit {toolkit_filter})"
+            if skip_reason:
+                item.add_marker(pytest.mark.skip(reason=skip_reason))
 
     # Skip test_on_platforms tests when current architecture doesn't match
     import platform as _platform
@@ -1344,14 +1343,14 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         (it will be normalized).
     gpu : bool
         When *True* (default), the fixture skips persistence when no
-        GPU is available: ``--cpu`` flag, ``CUDA_VISIBLE_DEVICES=""``,
+        GPU is available: ``--cpu-only`` flag, ``CUDA_VISIBLE_DEVICES=""``,
         or ``nvidia-smi`` not found.  When *False* (CPU-only tools),
         persistence is always active.
     """
 
     @pytest.fixture(scope="module", autouse=True)
     def _persistent_tool(request):
-        if gpu and (request.config.getoption("--cpu") or not _gpu_available()):
+        if gpu and (request.config.getoption("--cpu-only") or not _gpu_available()):
             yield
             return
         with ToolInstance.persist_tool(toolkit):

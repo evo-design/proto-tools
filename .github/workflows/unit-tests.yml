@@ -29,7 +29,7 @@ jobs:
         python-version: "3.12"
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --cpu -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
+    - run: pytest --cpu-only -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
 
   test-macos:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -46,4 +46,4 @@ jobs:
         python-version: "3.12"
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --cpu -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
+    - run: pytest --cpu-only -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing

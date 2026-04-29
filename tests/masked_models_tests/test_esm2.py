@@ -3,22 +3,34 @@
 Tests for ESM2.
 """
 
+import random
+
 import numpy as np
 import pytest
 
 from proto_tools.tools.masked_models.esm2 import (
     ESM2EmbeddingsConfig,
     ESM2EmbeddingsInput,
+    ESM2SampleConfig,
+    ESM2SampleInput,
     ESM2ScoringConfig,
     ESM2ScoringInput,
     run_esm2_embeddings,
+    run_esm2_sample,
     run_esm2_score,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esm2")
+
+
+def _random_protein_sequences(n: int, length: int, seed: int = 0) -> list[str]:
+    """Deterministic synthetic protein sequences for benchmark workloads."""
+    rng = random.Random(seed)
+    return ["".join(rng.choices(AMINO_ACIDS_LIST, k=length)) for _ in range(n)]
 
 
 # ── Input validation ─────────────────────────────────────────────────────────
@@ -44,27 +56,74 @@ def test_esm2_embeddings_input_normalizes_single_string():
 
 
 @pytest.mark.benchmark("esm2-embedding")
+@pytest.mark.slow
 @pytest.mark.uses_gpu
-def test_esm2_forward_pass():
-    sequences = ["TARGET"] * 10 + ["TEST"] * 30
+def test_esm2_embedding_benchmark():
+    """Benchmark esm2-embedding on 100 sequences of length 300."""
+    sequences = _random_protein_sequences(n=100, length=300, seed=0)
 
     inputs = ESM2EmbeddingsInput(sequences=sequences)
-    config = ESM2EmbeddingsConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=2, return_logits=True)
+    config = ESM2EmbeddingsConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=32, return_logits=True)
 
     result = run_esm2_embeddings(inputs=inputs, config=config)
 
-    # SequenceEmbedding bundle (primary field)
-    assert len(result.results) == 40, "Should have 40 SequenceEmbedding objects"
+    assert len(result.results) == 100, "Should have 100 SequenceEmbedding objects"
     assert len(result.results[0].mean_embedding) == 1280, "Embedding dimension should be 1280"
-    assert len(result.results[0].attention_mask) == 6, "Attention mask length should be 6"
+    assert len(result.results[0].attention_mask) == 300, "Attention mask length should be 300"
     assert result.results[0].logits is not None
-    assert len(result.results[0].logits) == 6, "Logit sequence length should be 6"
-
-    # Logit details
+    assert len(result.results[0].logits) == 300, "Logit sequence length should be 300"
     assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
 
 
+# ── Sampling tests ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esm2-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm2_sample_benchmark():
+    """Benchmark esm2-sample on 50 sequences of length 200 with default 30% random masking."""
+    sequences = _random_protein_sequences(n=50, length=200, seed=1)
+
+    inputs = ESM2SampleInput(sequences=sequences)
+    config = ESM2SampleConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=16, temperature=1.0)
+
+    result = run_esm2_sample(inputs=inputs, config=config)
+
+    assert len(result.sequences) == 50, "Should have 50 sampled sequences"
+    for sampled in result.sequences:
+        assert len(sampled) == 200, "Sampled sequence should preserve length"
+        assert "_" not in sampled, "Sampled sequence should have no remaining mask tokens"
+        assert all(aa in AMINO_ACIDS_LIST for aa in sampled), "All residues should be standard amino acids"
+
+
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esm2-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm2_score_benchmark():
+    """Benchmark esm2-score on 100 sequences of length 300."""
+    sequences = _random_protein_sequences(n=100, length=300, seed=2)
+
+    inputs = ESM2ScoringInput(sequences=sequences)
+    config = ESM2ScoringConfig(
+        model_checkpoint="esm2_t33_650M_UR50D",
+        batch_size=32,
+        verbose=False,
+        return_logits=True,
+    )
+
+    result = run_esm2_score(inputs=inputs, config=config)
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "esm2-score"
+    assert len(result.scores) == 100
+    for score in result.scores:
+        assert score.logits is not None
+        assert len(score.logits) == 300
+        assert len(score.logits[0]) == 20
 
 
 @pytest.mark.uses_gpu

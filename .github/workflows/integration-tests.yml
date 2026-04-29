@@ -40,4 +40,4 @@ jobs:
         key: ${{ runner.os }}-micromamba
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --integration --cpu
+    - run: pytest --integration --cpu-only

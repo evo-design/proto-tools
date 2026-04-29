@@ -49,7 +49,7 @@ _GRADIENT_EXAMPLE_PDB_PATH = Path(__file__).resolve().parents[1] / "dummy_data/p
 
 @pytest.fixture(scope="module", autouse=True)
 def _persistent_worker(request):
-    if request.config.getoption("--cpu"):
+    if request.config.getoption("--cpu-only"):
         yield
         return
     with ToolInstance.scope():

@@ -311,7 +311,7 @@ def _persistent_tool_instances(request):
     ToolInstance.persist() keeps workers cached across dispatch() calls for the
     duration of this module and cleans them up on exit.
     """
-    if request.config.getoption("--cpu"):
+    if request.config.getoption("--cpu-only"):
         yield
         return
     with ToolInstance.persist():

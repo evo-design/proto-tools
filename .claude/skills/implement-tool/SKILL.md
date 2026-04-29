@@ -661,9 +661,9 @@ CRITICAL RULES:
 
 2. **Run tests** — Execute the test file:
    ```bash
-   python3 -m pytest tests/{category}_tests/test_{tool_key_snake}.py -v --cpu
+   python3 -m pytest tests/{category}_tests/test_{tool_key_snake}.py -v
    ```
-   (Use `--cpu` if no GPU available; tests requiring GPU will be skipped)
+   (Plain `pytest` runs everything the host can handle. Add `--cpu-only` to force-skip GPU tests, or `--gpu-only` to filter to GPU-marked tests.)
 
 3. **Validate tool registration** — Check the tool appears in the registry:
    ```bash

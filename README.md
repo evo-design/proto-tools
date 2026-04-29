@@ -246,14 +246,27 @@ Every tool follows the same `Input` / `Config` / `run_{tool}()` / `Output` patte
 
 ### Testing
 
-Tests are split by resource requirements. GPU and integration tests are skipped by default.
-
 ```bash
-pytest                          # CPU unit tests (skips GPU, slow, integration)
-pytest --gpu                    # GPU tests only (skip CPU tests)
-pytest --integration            # Add integration tests (external APIs) + GPU if available
-pytest --all                    # Everything: GPU + slow + integration
-pytest --all --cpu              # Slow + integration, but skip GPU
-pytest --env-report             # Generate environment compatibility report
-pytest --env-report --cpu       # CPU tools only
+pytest                          # run everything the host can handle (GPU tests run iff a GPU is visible; slow + integration + extensive skipped)
+pytest --gpu-only               # filter: only GPU-marked tests
+pytest --cpu-only               # filter: only CPU-only tests
+pytest --slow                   # filter: only slow-marked tests
+pytest --integration            # add: include integration tests (external APIs/services)
+pytest --ext                    # add: include extensive (combinatorial) tests
+pytest --benchmark              # add: include @pytest.mark.benchmark tests (slow gate bypassed)
+pytest --benchmark-report=DIR   # implies --benchmark, plus per-tool markdown reports
+pytest --benchmark-tool=KEY     # implies --benchmark, narrows to one tool's benchmark
+pytest --benchmark-toolkit=NAME # implies --benchmark, narrows to one toolkit's benchmarks
+pytest --all                    # add: include slow + integration (does NOT include extensive or benchmark)
+pytest --env-report             # generate environment compatibility report
 ```
+
+Markers:
+
+| Marker | Purpose | Default behavior | Bypassed by |
+|---|---|---|---|
+| `uses_gpu` | needs a GPU | runs iff a GPU is visible (hardware-gated) | `--use-cloud` (uses cloud GPUs) |
+| `slow` | long-running | skipped | `--all`, `--ext`, `--slow`, `--benchmark` |
+| `integration` | hits external APIs | skipped | `--integration`, `--all` |
+| `extensive` | combinatorial / matrix tests | skipped | `--ext` / `--extensive` |
+| `benchmark("tool-key")` | the canonical benchmark for one tool | skipped | `--benchmark` / `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit` |

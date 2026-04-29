@@ -8,7 +8,7 @@ has a recognized ``type``, ``min``/``max`` are numeric or ``None``,
 spec declarations themselves; value-vs-spec validation on actual tool outputs
 lives in each tool's e2e test via ``assert_metrics_in_spec``.
 
-Runs under ``--cpu`` in CI — no tool execution, no env builds.
+Runs under ``--cpu-only`` in CI — no tool execution, no env builds.
 """
 
 from __future__ import annotations

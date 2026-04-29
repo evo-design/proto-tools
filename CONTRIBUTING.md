@@ -99,11 +99,14 @@ Tests use flat functions only, no test classes.
 ### Running Tests
 
 ```bash
-pytest                          # CPU unit tests (skips GPU, slow, integration)
-pytest --gpu                    # GPU tests only
-pytest --integration            # Integration tests (external APIs) + GPU if available
-pytest --all                    # Everything: GPU + slow + integration
-pytest --all --cpu              # Slow + integration, but skip GPU
+pytest                          # run everything the host can handle (GPU tests run iff a GPU is visible; slow + integration + extensive skipped)
+pytest --gpu-only               # filter: only GPU-marked tests
+pytest --cpu-only               # filter: only CPU-only tests
+pytest --integration            # add: include integration tests (external APIs/services)
+pytest --ext                    # add: include extensive (combinatorial) tests
+pytest --benchmark              # add: include @pytest.mark.benchmark tests (slow gate bypassed)
+pytest --all                    # add: include slow + integration (does NOT include extensive or benchmark)
+pytest --all --cpu-only         # add slow + integration, but skip GPU
 ```
 
 ### Markers
