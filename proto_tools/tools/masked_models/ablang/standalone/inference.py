@@ -3,7 +3,10 @@
 import json
 import logging
 import math
+import os
+import shutil
 import sys
+from pathlib import Path
 from typing import Any
 
 from standalone_helpers import serialize_output
@@ -11,6 +14,140 @@ from standalone_helpers import serialize_output
 logger = logging.getLogger(__name__)
 
 STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+
+
+# Mirror of setup.sh's URL table — kept in sync by hand (URLs are static).
+_ABLANG_MODEL_INFO: dict[str, tuple[str, str]] = {
+    "ablang1-heavy": ("https://opig.stats.ox.ac.uk/data/downloads/ablang-heavy.tar.gz", "amodel.pt"),
+    "ablang1-light": ("https://opig.stats.ox.ac.uk/data/downloads/ablang-light.tar.gz", "amodel.pt"),
+    "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
+}
+
+
+def _redownload_ablang_to_cache(model_choice: str) -> Path | None:
+    """Re-fetch ablang weights into PROTO_MODEL_CACHE via setup.sh's curl-with-retry path.
+
+    Restores the cache-and-symlink layout after a corruption-triggered
+    cleanup, instead of falling through to ablang2's brittle ``requests.get``.
+
+    Args:
+        model_choice (str): Key from ``_ABLANG_MODEL_INFO``.
+
+    Returns:
+        Path | None: Cache dir staged into, or ``None`` if ``PROTO_MODEL_CACHE=NONE``
+            without a fallback venv path. Caller creates the symlink on success.
+
+    Raises:
+        subprocess.CalledProcessError: ``curl`` or ``tar`` exited nonzero.
+        RuntimeError: Tarball is not gzip, or extracted dir is missing the weight file.
+    """
+    import subprocess
+
+    from standalone_helpers import get_subprocess_device_env
+    from standalone_helpers.weights import resolve_weights_dir
+
+    weights_dir = resolve_weights_dir("ablang")
+    if weights_dir is None:
+        return None
+
+    url, weight_file = _ABLANG_MODEL_INFO[model_choice]
+    cache_dir = Path(weights_dir) / f"model-weights-{model_choice}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp_tarball = cache_dir / "tmp.tar.gz"
+
+    # curl + tar don't touch CUDA, but the standalone-helper convention is to
+    # always pass the device-mapped env to subprocess calls.
+    env = get_subprocess_device_env("cpu")
+
+    logger.info("AbLang %s: re-downloading from %s into %s", model_choice, url, cache_dir)
+    curl_cmd = [
+        "curl",
+        "--no-progress-meter",
+        "--show-error",
+        "--location",
+        "--fail",
+        "--retry",
+        "5",
+        "--retry-delay",
+        "30",
+        "--retry-all-errors",
+        "--max-time",
+        "600",
+        "--output",
+        str(tmp_tarball),
+        url,
+    ]
+    subprocess.run(curl_cmd, check=True, env=env)
+    with tmp_tarball.open("rb") as f:
+        if f.read(2) != b"\x1f\x8b":
+            tmp_tarball.unlink()
+            raise RuntimeError(f"AbLang {model_choice}: pre-fetched tarball is not gzip")
+    tar_cmd = ["tar", "-zxf", str(tmp_tarball), "-C", str(cache_dir)]
+    subprocess.run(tar_cmd, check=True, env=env)
+    tmp_tarball.unlink()
+
+    if not (cache_dir / weight_file).exists():
+        raise RuntimeError(f"AbLang {model_choice}: extracted tarball missing expected weight file {weight_file}")
+    return cache_dir
+
+
+def _validate_ablang_weights(model_choice: str) -> None:
+    """Validate cached ablang weights; on corruption, wipe and re-stage into PROTO_MODEL_CACHE.
+
+    Mirrors protenix's ``cleanup_corrupted_checkpoints`` pattern, with
+    re-staging via ``_redownload_ablang_to_cache`` so the cache-and-symlink
+    layout invariant holds regardless of whether cleanup ran. Handles linked,
+    un-linked, and dangling-symlink layouts.
+
+    Args:
+        model_choice (str): One of the keys in ``ablang2.load_model.list_of_models``
+            (e.g. ``"ablang1-heavy"``, ``"ablang2-paired"``).
+    """
+    import pickle
+
+    import ablang2
+    import torch
+
+    pkg_dir = Path(os.path.dirname(ablang2.__file__))
+    model_dir = pkg_dir / f"model-weights-{model_choice}"
+    # Nothing to validate if neither a real dir nor a (possibly dangling) symlink is present.
+    if not model_dir.is_symlink() and not model_dir.is_dir():
+        return
+
+    weight_file = "amodel.pt" if "ablang1" in model_choice else "model.pt"
+    weights_path = model_dir / weight_file
+
+    reason: str | None = None
+    if not weights_path.exists():  # also covers dangling symlinks (exists() follows links)
+        reason = f"{weight_file} missing"
+    else:
+        try:
+            torch.load(weights_path, map_location="cpu", weights_only=False)
+        except (RuntimeError, OSError, EOFError, pickle.UnpicklingError) as e:
+            reason = f"weights validation failed ({e})"
+
+    if reason is None:
+        return
+
+    logger.warning("AbLang %s: %s; clearing for re-download", model_choice, reason)
+    # Explicit unlink + rmtree (rmtree on a symlink raises NotADirectoryError,
+    # which ignore_errors silently swallows without doing anything).
+    if model_dir.is_symlink():
+        target = model_dir.resolve(strict=False)
+        model_dir.unlink()
+        if target.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
+    else:
+        shutil.rmtree(model_dir, ignore_errors=True)
+
+    # Re-stage so post-cleanup state matches post-setup state. None means
+    # PROTO_MODEL_CACHE=NONE without a fallback venv — let ablang2 recover
+    # in-package in that rare case.
+    cache_dir = _redownload_ablang_to_cache(model_choice)
+    if cache_dir is None:
+        return
+    model_dir.symlink_to(cache_dir)
+    logger.info("AbLang %s: cache restored at %s, symlinked from %s", model_choice, cache_dir, model_dir)
 
 
 class AbLangModel:
@@ -38,6 +175,9 @@ class AbLangModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load AbLang model to device."""
+        # Validate + auto-recover from corruption. No-op on the warm path.
+        _validate_ablang_weights(self.model_choice)
+
         if verbose:
             logger.info(f"Loading AbLang model: {self.model_choice} on {device}")
 
