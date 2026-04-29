@@ -10,7 +10,7 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCEmbeddingsInput,
     run_esmc_embeddings,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esmc")
@@ -76,3 +76,26 @@ def test_esmc_persistent_worker_reuse(checkpoint):
     assert r1.success and r2.success
     # Identical inputs through one persistent worker → identical embeddings
     assert r1.results[0].mean_embedding == r2.results[0].mean_embedding
+
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esmc-embedding")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esmc_embedding_benchmark(request):
+    """Benchmark esmc-embedding on 100 sequences of length 300 (cold + warm)."""
+    sequences = random_protein_sequences(n=100, length=300, seed=0)
+    inputs = ESMCEmbeddingsInput(sequences=sequences)
+    config = ESMCEmbeddingsConfig(model_checkpoint="esmc_300m", batch_size=32, return_logits=True)
+
+    result = benchmark_twice(request, "esmc", lambda: run_esmc_embeddings(inputs=inputs, config=config))
+
+    assert result.tool_id == "esmc-embedding"
+    assert len(result.results) == 100, "Should have 100 SequenceEmbedding objects"
+    assert len(result.results[0].mean_embedding) == 960, "esmc_300m embedding dimension should be 960"
+    assert len(result.results[0].attention_mask) == 300, "Attention mask length should be 300"
+    assert result.results[0].logits is not None
+    assert len(result.results[0].logits) == 300, "Logit sequence length should be 300"
+    assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
