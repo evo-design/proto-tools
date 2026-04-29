@@ -6,7 +6,7 @@ import sys
 from typing import Any, cast
 
 import torch
-from standalone_helpers import serialize_output
+from standalone_helpers import serialize_output, set_torch_seed
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,7 @@ _model: EnformerModel | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
+    set_torch_seed(input_dict["seed"])
     if _model is None:
         _model = EnformerModel()
 
@@ -131,8 +132,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 .detach()
                 .cpu()
             )
-        if input_dict.get("unload_after_predict", False):
-            _model.unload(verbose=input_dict["verbose"])
         return {
             "predictions": torch.cat(predictions, dim=0),
             "applied_species": input_dict["species"],

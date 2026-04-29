@@ -242,6 +242,8 @@ def run_borzoi_ensemble(
             use_flash_attn=config.use_flash_attn,
             device=config.device,
             verbose=config.verbose,
+            timeout=config.timeout,
+            seed=config.seed,
         )
         replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
         replicate_outputs.append(replicate_output)

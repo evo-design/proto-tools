@@ -194,7 +194,6 @@ class BorzoiConfig(BaseConfig):
         use_flash_attn (bool): Whether to run FlashAttention-backed models.
         batch_size (int): Number of sequences to process in each GPU batch.
         device (str): Device used for inference (inherited).
-        unload_after_predict (bool): Whether to unload the model after prediction.
     """
 
     device: str = ConfigField(
@@ -241,13 +240,6 @@ class BorzoiConfig(BaseConfig):
         description="Whether to use FlashAttention models",
         hidden=True,
         reload_on_change=True,
-    )
-    unload_after_predict: bool = ConfigField(
-        title="Unload After Predict",
-        default=False,
-        description="Whether to unload the model after prediction to release GPU memory.",
-        hidden=True,
-        include_in_key=False,
     )
 
     @model_validator(mode="after")
@@ -309,9 +301,9 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) 
             "use_flash_attn": config.use_flash_attn,
             "avg_output_tracks": config.avg_output_tracks,
             "batch_size": config.batch_size,
-            "unload_after_predict": config.unload_after_predict,
             "device": config.device,
             "verbose": config.verbose,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,

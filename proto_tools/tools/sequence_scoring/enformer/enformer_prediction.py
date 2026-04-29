@@ -175,7 +175,6 @@ class EnformerConfig(BaseConfig):
         species (Literal['human', 'mouse']): Species track head to use.
         batch_size (int): Number of sequences to process in each GPU batch.
         device (str): Device used for inference.
-        unload_after_predict (bool): Whether to unload the model after prediction.
     """
 
     device: str = ConfigField(
@@ -203,13 +202,6 @@ class EnformerConfig(BaseConfig):
         ge=1,
         description="Number of sequences to process simultaneously on GPU",
         advanced=True,
-    )
-    unload_after_predict: bool = ConfigField(
-        title="Unload After Predict",
-        default=False,
-        description="Whether to unload the model after prediction to release GPU memory.",
-        hidden=True,
-        include_in_key=False,
     )
 
 
@@ -257,9 +249,9 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
             "output_tracks": config.output_tracks,
             "species": config.species,
             "batch_size": config.batch_size,
-            "unload_after_predict": config.unload_after_predict,
             "device": config.device,
             "verbose": config.verbose,
+            "seed": config.seed,
         },
         instance=instance,
         config=config,
