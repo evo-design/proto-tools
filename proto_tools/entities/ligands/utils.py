@@ -3,11 +3,16 @@
 Utility functions for working with ligands.
 """
 
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import requests
-from rdkit import Chem
+
+if TYPE_CHECKING:
+    from rdkit import Chem
 
 
 # ============================================================================
@@ -15,6 +20,8 @@ from rdkit import Chem
 # ============================================================================
 def is_smiles_valid(smiles: str) -> bool:
     """Check if a SMILES string is valid."""
+    from rdkit import Chem
+
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:

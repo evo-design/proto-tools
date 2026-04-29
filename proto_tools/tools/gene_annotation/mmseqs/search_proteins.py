@@ -4,14 +4,18 @@ Also defines shared data models (MmseqsHit, MmseqsSequenceSearchResult),
 constants, and helper functions used by all MMseqs2 search tools.
 """
 
+from __future__ import annotations
+
 import io
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from pydantic import BaseModel, Field, field_validator
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -180,6 +184,8 @@ class MmseqsSearchProteinsOutput(BaseToolOutput):
         return "m8"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        import pandas as pd
+
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats
@@ -372,6 +378,8 @@ def _parse_m8_output(raw_output: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: pandas.DataFrame with columns: query, target, pident, evalue.
     """
+    import pandas as pd
+
     col_names = ["query", "target", "pident", "evalue"]
 
     if not raw_output.strip():

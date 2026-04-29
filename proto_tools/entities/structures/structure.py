@@ -7,16 +7,14 @@ import math
 from enum import Enum
 from io import StringIO
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-import gemmi
 import numpy as np
-import py3Dmol
-from biotite.structure import AtomArray, CellList, annotate_sse, superimpose
-from biotite.structure import gyration_radius as _biotite_gyration_radius
-from biotite.structure import rmsd as _biotite_rmsd
-from IPython.display import HTML, display
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+if TYPE_CHECKING:
+    import gemmi
+    from biotite.structure import AtomArray
 
 from proto_tools.entities.structures.utils import (
     _serialize_gemmi,
@@ -324,6 +322,8 @@ class Structure(BaseModel):
         Returns:
             gemmi.Structure: The parsed structure object.
         """
+        import gemmi
+
         if self._gemmi_struct is None:
             if self.structure_format == "cif":
                 doc = gemmi.cif.read_string(self.structure)
@@ -514,6 +514,8 @@ class Structure(BaseModel):
                 multi-character when the output format is PDB (PDB column 22 is
                 single-character only — convert inputs to CIF first to allow it).
         """
+        import gemmi
+
         if not structures:
             raise ValueError("concat requires at least one Structure")
         formats = {s.structure_format for s in structures if s.structure_format is not None}
@@ -594,6 +596,8 @@ class Structure(BaseModel):
         if self.structure_format == "pdb":
             identity = {cid: cid for cid in self.get_chain_ids()}
             return self.structure, identity
+
+        import gemmi
 
         # CIF input: parse fresh (do not mutate the cached _gemmi_struct),
         # shorten chain names in place on the copy, then emit PDB.
@@ -781,6 +785,8 @@ class Structure(BaseModel):
         Returns:
             dict[str, list[tuple[str, int]]]: Chain ID to (one-letter code, position) mapping.
         """
+        import gemmi
+
         position_map: dict[str, list[tuple[str, int]]] = {}
         for model in self.gemmi_struct:
             for chain in model:
@@ -835,6 +841,8 @@ class Structure(BaseModel):
                 (the PDB conversion path truncates these, which could silently collide
                 distinct chains onto one ID and mis-fire the bonded-neighbor exclusion).
         """
+        from biotite.structure import CellList
+
         for chain in self.gemmi_struct[0]:  # Guard the first model — same one pdb_file_to_atomarray reads.
             if len(chain.name) != 1:
                 raise ValueError(f"Chain {chain.name!r} must be a single character.")
@@ -887,6 +895,8 @@ class Structure(BaseModel):
             ValueError: If any chain ID is more than 1 character, or if ``binder_chain``
                 appears in ``target_chains`` (self-contact is not meaningful).
         """
+        from biotite.structure import CellList
+
         raw_chain_ids = [target_chains] if isinstance(target_chains, str) else target_chains
         targets = [chain.strip() for raw in raw_chain_ids for chain in raw.split(",") if chain.strip()]
         if not targets:
@@ -933,6 +943,8 @@ class Structure(BaseModel):
         Raises:
             ValueError: ``binder_chain`` not single-char, in hotspot chains, or bad token format.
         """
+        from biotite.structure import CellList
+
         if len(binder_chain) != 1:
             raise ValueError(f"Chain ID {binder_chain!r} must be a single character.")
 
@@ -1078,6 +1090,8 @@ class Structure(BaseModel):
         Returns:
             dict[str, float]: Keys ``"helix"``, ``"sheet"``, ``"loop"`` with values 0-100.
         """
+        from biotite.structure import annotate_sse
+
         sse = annotate_sse(self._get_atom_array(chain_id))
         sse = sse[sse != ""]  # exclude non-amino-acid residues
         total = max(len(sse), 1)
@@ -1095,6 +1109,8 @@ class Structure(BaseModel):
         Returns:
             float: Radius of gyration.
         """
+        from biotite.structure import gyration_radius as _biotite_gyration_radius
+
         return float(_biotite_gyration_radius(self._get_atom_array(chain_id)))
 
     def longest_alpha_helix(self, chain_id: str | None = None) -> int:
@@ -1106,6 +1122,8 @@ class Structure(BaseModel):
         Returns:
             int: Residue count of the longest helix.
         """
+        from biotite.structure import annotate_sse
+
         sse = annotate_sse(self._get_atom_array(chain_id))
         max_len = 0
         cur = 0
@@ -1131,6 +1149,9 @@ class Structure(BaseModel):
         Returns:
             float: RMSD in Angstroms after superposition.
         """
+        from biotite.structure import rmsd as _biotite_rmsd
+        from biotite.structure import superimpose
+
         self_array = self._get_atom_array(chain_id)
         other_array = other._get_atom_array(chain_id)
         ca_self = self_array[self_array.atom_name == "CA"]
@@ -1185,6 +1206,9 @@ class Structure(BaseModel):
             ligand_style (Literal["stick", "sphere", "line", "licorice"]): Visualization style for
                 ligand (non-polymer) chains (default: "stick").
         """
+        import py3Dmol
+        from IPython.display import HTML, display
+
         if color_by is None:
             color_by = "chain" if self.b_factor_type == BFactorType.UNSPECIFIED else "bfactor"
 

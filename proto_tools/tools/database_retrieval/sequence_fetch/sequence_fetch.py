@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import requests
-from Bio.Seq import transcribe
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 # Database tool imports (orchestrator calls these directly)
@@ -1203,6 +1202,8 @@ def _fetch_rna_transcript(
     session: requests.Session,
 ) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch transcript RNA sequence."""
+    from Bio.Seq import transcribe
+
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
@@ -1276,6 +1277,8 @@ def _fetch_rna_premrna(
     session: requests.Session,
 ) -> tuple[FetchedSequence, dict[str, str], list[str]]:
     """Fetch or infer pre-mRNA sequence from genomic sequence."""
+    from Bio.Seq import transcribe
+
     try:
         genomic_result = _fetch_dna_genomic(request, config, session)
     except SequenceFetchError as exc:

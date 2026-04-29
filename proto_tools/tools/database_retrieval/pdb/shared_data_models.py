@@ -9,8 +9,6 @@ from io import StringIO
 from typing import Any
 
 import requests
-from Bio import SeqIO
-from Bio.Data.IUPACData import protein_letters
 from pydantic import BaseModel, Field
 
 from proto_tools.utils import BaseConfig, ConfigField
@@ -20,7 +18,17 @@ logger = logging.getLogger(__name__)
 _PDB_ENTRY_BASE = "https://data.rcsb.org/rest/v1/core/entry"
 _PDB_FASTA_BASE = "https://www.rcsb.org/fasta/entry"
 
-_PROTEIN_ONLY_CHARS = set(protein_letters.upper()) - set("ATGCNU")
+_PROTEIN_ONLY_CHARS_CACHE: set[str] | None = None
+
+
+def _get_protein_only_chars() -> set[str]:
+    """Return amino-acid letters that don't overlap nucleotides; lazy-imports biopython."""
+    global _PROTEIN_ONLY_CHARS_CACHE  # noqa: PLW0603 -- module-level cache
+    if _PROTEIN_ONLY_CHARS_CACHE is None:
+        from Bio.Data.IUPACData import protein_letters
+
+        _PROTEIN_ONLY_CHARS_CACHE = set(protein_letters.upper()) - set("ATGCNU")
+    return _PROTEIN_ONLY_CHARS_CACHE
 
 
 # ============================================================================
@@ -150,6 +158,8 @@ def _fetch_pdb_fasta(
     session: requests.Session,
 ) -> list[tuple[str, str]] | None:
     """Fetch PDB FASTA chains as (header, sequence) tuples, or None on 404."""
+    from Bio import SeqIO
+
     response = _request_pdb(session, f"{_PDB_FASTA_BASE}/{pdb_id}", config, "pdb-fasta")
     if response is None:
         return None
@@ -167,4 +177,4 @@ def _is_protein_sequence(seq: str) -> bool:
     upper = set(seq.upper()) - {"-", "*", "X", " "}
     if not upper:
         return False
-    return bool(upper & _PROTEIN_ONLY_CHARS)
+    return bool(upper & _get_protein_only_chars())

@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import requests
-from Bio import SeqIO
 from pydantic import BaseModel, Field
 
 from proto_tools.utils import BaseConfig, ConfigField
@@ -219,6 +218,8 @@ def _sanitize_url(url: str) -> str:
 
 def _parse_fasta_records(text: str) -> list[NCBIFastaRecord]:
     """Parse FASTA text into NCBIFastaRecord objects."""
+    from Bio import SeqIO
+
     if not text or not text.strip():
         return []
     return [

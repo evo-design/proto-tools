@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
-import py3Dmol
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
-from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from proto_tools.entities.ligands.utils import is_smiles_valid
+
+if TYPE_CHECKING:
+    from rdkit import Chem
 
 
 class Fragment(BaseModel):
@@ -54,6 +54,8 @@ class Fragment(BaseModel):
         """Resolve and cross-validate SMILES and CCD code."""
         if not isinstance(data, dict):
             return data
+
+        from rdkit import Chem
 
         from proto_tools.entities.ligands.ccd_utils import (
             is_valid_ccd_code,
@@ -121,6 +123,8 @@ class Fragment(BaseModel):
         Raises:
             ValueError: If the Mol contains more than one fragment.
         """
+        from rdkit import Chem
+
         fragments = Chem.rdmolops.GetMolFrags(mol, asMols=True)
         if len(fragments) > 1:
             msg = "Invalid Mol as Fragment input: Mol must contain only one fragment"
@@ -141,6 +145,8 @@ class Fragment(BaseModel):
         Returns:
             Chem.Mol: The molecule with hydrogens added.
         """
+        from rdkit import Chem
+
         if self._mol is None:
             self._mol = Chem.AddHs(Chem.MolFromSmiles(self.smiles))
         return self._mol  # type: ignore[no-any-return]
@@ -167,6 +173,8 @@ class Fragment(BaseModel):
         Raises:
             RuntimeError: If conformer generation fails.
         """
+        from rdkit.Chem import AllChem
+
         params = AllChem.ETKDGv3()  # type: ignore[attr-defined]
         if random_seed is not None:
             params.randomSeed = random_seed
@@ -205,6 +213,9 @@ class Fragment(BaseModel):
             height (int): Viewer height in pixels.
             style (str): Visualization style ('stick', 'sphere', etc.).
         """
+        import py3Dmol
+        from rdkit import Chem
+
         if len(self.conformers) == 0:
             self.generate_conformers(num_conformers=1)
 
@@ -405,6 +416,8 @@ class Ligands(BaseModel):
         Args:
             filepath (str | Path): Destination file path.
         """
+        from rdkit import Chem
+
         filepath = Path(filepath)
         writer = Chem.SDWriter(str(filepath))
 
@@ -430,6 +443,8 @@ class Ligands(BaseModel):
         Raises:
             ValueError: If no fragments exist.
         """
+        from rdkit import Chem
+
         if len(self.fragments) == 0:
             raise ValueError("Cannot generate PDB: no fragments in Ligands object")
 
@@ -505,6 +520,8 @@ class Ligands(BaseModel):
             height (int): Viewer height in pixels.
             style (Literal["stick", "sphere", "line", "cartoon", "licorice"]): Visualization style.
         """
+        import py3Dmol
+
         pdb = self.to_pdb()
         viewer = py3Dmol.view(width=width, height=height)
         viewer.addModel(pdb, "pdb")
@@ -571,6 +588,8 @@ def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
     Raises:
         FileNotFoundError: If the file does not exist.
     """
+    from rdkit import Chem
+
     if not Path(filepath).exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
@@ -592,6 +611,8 @@ def parse_fragments_from_mols(mols: list[Chem.Mol]) -> list[Fragment]:
     Returns:
         list[Fragment]: One Fragment per molecular fragment.
     """
+    from rdkit import Chem
+
     fragments: list[Fragment] = []
     for mol in mols:
         frags = Chem.rdmolops.GetMolFrags(mol, asMols=True)

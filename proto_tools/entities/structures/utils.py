@@ -3,15 +3,18 @@
 Utility functions for working with protein structures.
 """
 
+from __future__ import annotations
+
 import warnings
 from io import StringIO
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import gemmi
 import numpy as np
-from biotite.structure import AtomArray
-from biotite.structure.io.pdb import PDBFile
+
+if TYPE_CHECKING:
+    import gemmi
+    from biotite.structure import AtomArray
 
 # PDB format field limits — anything beyond these is truncated, remapped, or dropped
 # when converting from CIF to PDB.
@@ -159,6 +162,8 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
     Returns:
         bool: True if the structure content string/file has valid PDB or CIF format, False otherwise
     """
+    import gemmi
+
     try:
         # Determine if input is a file path or content string
         input_str = str(structure_filepath_or_content)
@@ -201,6 +206,8 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
 
 def pdb_file_to_atomarray(pdb_path: str | StringIO) -> AtomArray:
     """Convert a PDB file to a Biotite AtomArray."""
+    from biotite.structure.io.pdb import PDBFile
+
     return PDBFile.read(pdb_path).get_structure(model=1)
 
 
@@ -300,6 +307,8 @@ def convert_pdb_str_to_cif_str(pdb_content: str) -> str:
     Returns:
         str: Structure in mmCIF format (empty string if input is empty)
     """
+    import gemmi
+
     if not pdb_content.strip():
         return ""
 
@@ -413,6 +422,8 @@ def convert_cif_str_to_pdb_str(cif_content: str) -> str:
     Raises:
         ValueError: If the CIF content is not parseable or contains no valid structure.
     """
+    import gemmi
+
     if not cif_content.strip():
         return ""
 

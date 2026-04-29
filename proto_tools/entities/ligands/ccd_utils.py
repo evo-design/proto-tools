@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +346,8 @@ def _get_ccd_parent_dataframe() -> pd.DataFrame:
     Returns:
         pd.DataFrame: DataFrame with columns: ccd_code, parent_3letter, parent_1letter
     """
+    import pandas as pd
+
     global _CCD_PARENT_DF_CACHE  # noqa: PLW0603 -- module-level cache
 
     if _CCD_PARENT_DF_CACHE is None:

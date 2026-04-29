@@ -3,12 +3,13 @@
 MMseqs2 genome-to-genome nucleotide search tool.
 """
 
+from __future__ import annotations
+
 import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 from pydantic import Field, field_validator
 
 from proto_tools.tools.gene_annotation.mmseqs.search_proteins import (
@@ -127,6 +128,8 @@ class MmseqsSearchGenomesOutput(BaseToolOutput):
         return "m8"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        import pandas as pd
+
         path = Path(export_path).with_suffix(f".{file_format}")
 
         # Flatten results for tabular formats

@@ -3,12 +3,13 @@
 MMseqs2 sequence clustering tool.
 """
 
+from __future__ import annotations
+
 import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.gene_annotation.mmseqs.search_proteins import DEFAULT_MIN_SEQ_ID
@@ -142,6 +143,8 @@ class MmseqsClusteringOutput(BaseToolOutput):
         return "csv"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        import pandas as pd
+
         path = Path(export_path).with_suffix(f".{file_format}")
 
         data = [r.model_dump() for r in self.results]
