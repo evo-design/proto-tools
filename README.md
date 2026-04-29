@@ -253,7 +253,7 @@ pytest --cpu-only               # filter: only CPU-only tests
 pytest --slow                   # filter: only slow-marked tests
 pytest --integration            # add: include integration tests (external APIs/services)
 pytest --ext                    # add: include extensive (combinatorial) tests
-pytest --benchmark              # add: include @pytest.mark.benchmark tests (slow gate bypassed)
+pytest --benchmark              # filter: only @pytest.mark.benchmark tests (slow gate bypassed)
 pytest --benchmark-report=DIR   # implies --benchmark, plus per-tool markdown reports
 pytest --benchmark-tool=KEY     # implies --benchmark, narrows to one tool's benchmark
 pytest --benchmark-toolkit=NAME # implies --benchmark, narrows to one toolkit's benchmarks

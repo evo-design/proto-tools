@@ -16,13 +16,17 @@ import functools
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -32,6 +36,7 @@ import proto_tools.tools.testing  # noqa: F401
 from proto_tools import setup_logging
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.device import number_of_visible_gpus
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
 from proto_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
@@ -456,7 +461,14 @@ _env_report_collector: EnvReportCollector | None = None
 # ============================================================================
 @dataclass
 class BenchmarkResult:
-    """Outcome of a single @pytest.mark.benchmark test."""
+    """Outcome of a single @pytest.mark.benchmark test.
+
+    ``cold_seconds`` and ``warm_seconds`` are optional split timings recorded by
+    benchmarks that run their workload twice within one test (first call
+    cold-starts the worker; second call reuses it). When unset, the benchmark
+    only reported a single duration. See ``_render_benchmark_markdown`` for
+    how these are surfaced in the per-tool report.
+    """
 
     tool_key: str
     toolkit: str
@@ -467,6 +479,8 @@ class BenchmarkResult:
     backend_url: str | None
     parametrize_summary: dict[str, str] | None  # callspec.params for parametrized tests
     timestamp: str  # ISO-8601 UTC
+    cold_seconds: float | None = None  # First-call duration: model load + execute
+    warm_seconds: float | None = None  # Second-call duration: execute only (warm worker)
 
 
 def _resolve_toolkit(tool_key: str) -> str:
@@ -518,6 +532,8 @@ class BenchmarkReportCollector:
         duration_seconds: float,
         *,
         error_message: str | None = None,
+        cold_seconds: float | None = None,
+        warm_seconds: float | None = None,
     ) -> None:
         self.results[tool_key] = BenchmarkResult(
             tool_key=tool_key,
@@ -529,6 +545,8 @@ class BenchmarkReportCollector:
             backend_url=self.backend_url,
             parametrize_summary=_summarize_callspec(item),
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            cold_seconds=round(cold_seconds, 2) if cold_seconds is not None else None,
+            warm_seconds=round(warm_seconds, 2) if warm_seconds is not None else None,
         )
 
     def write_reports(self) -> list[Path]:
@@ -564,6 +582,12 @@ def _render_benchmark_markdown(result: BenchmarkResult) -> str:
         f"| **Backend** | `{backend_display}` |",
         f"| **Test** | `{result.test_nodeid}` |",
         f"| **Duration** | {result.duration_seconds:.2f}s |",
+    ]
+    if result.cold_seconds is not None:
+        lines.append(f"| **First execution** (load + execute) | {result.cold_seconds:.2f}s |")
+    if result.warm_seconds is not None:
+        lines.append(f"| **Second execution** (warm worker, execute only) | {result.warm_seconds:.2f}s |")
+    lines += [
         f"| **Status** | {status_emoji} {result.status} |",
         f"| **Run at** | {result.timestamp} |",
         "",
@@ -640,13 +664,12 @@ def pytest_addoption(parser):
         "--benchmark",
         action="store_true",
         default=False,
-        help="Enable @pytest.mark.benchmark tests. Like --ext, this is an additive gate-opener: "
-        "benchmark tests run alongside whatever else is selected, the flag does not deselect "
-        "non-benchmark tests. The 'slow' gate is bypassed for benchmarks (no need to also pass "
-        "--slow); hardware gates (uses_gpu, GPU count) are bypassed only when --use-cloud is set. "
-        "Without this flag (or any of --benchmark-report / --benchmark-tool / --benchmark-toolkit, "
-        "which imply --benchmark), benchmark-marked tests are skipped — they do NOT run under "
-        "--all or --slow.",
+        help="Run only @pytest.mark.benchmark tests. Selecting benchmark mode deselects "
+        "everything that isn't benchmark-marked (similar to --env-report). The 'slow' gate is "
+        "bypassed for benchmarks (no need to also pass --slow); hardware gates (uses_gpu, GPU "
+        "count) are bypassed only when --use-cloud is set. Without this flag (or any of "
+        "--benchmark-report / --benchmark-tool / --benchmark-toolkit, which imply --benchmark), "
+        "benchmark-marked tests are skipped — they do NOT run under --all or --slow.",
     )
     parser.addoption(
         "--use-cloud",
@@ -867,6 +890,11 @@ def pytest_runtest_makereport(item, call):
         if marker and marker.args:
             tool_key = marker.args[0]
             longrepr = str(report.longrepr) if report.longrepr else None
+            # Tests that run their workload twice (cold + warm) record split
+            # timings via request.node.user_properties. Pull them out here.
+            user_props = dict(getattr(report, "user_properties", []) or [])
+            cold = user_props.get("cold_seconds")
+            warm = user_props.get("warm_seconds")
             if report.when == "call":
                 if report.passed:
                     status, err = "passed", None
@@ -874,7 +902,15 @@ def pytest_runtest_makereport(item, call):
                     status, err = "skipped", longrepr
                 else:
                     status, err = "failed", longrepr
-                _benchmark_report_collector.record_result(item, tool_key, status, call.duration, error_message=err)
+                _benchmark_report_collector.record_result(
+                    item,
+                    tool_key,
+                    status,
+                    call.duration,
+                    error_message=err,
+                    cold_seconds=cold,
+                    warm_seconds=warm,
+                )
             elif report.when == "setup" and (report.failed or report.skipped):
                 status = "skipped" if report.skipped else "failed"
                 _benchmark_report_collector.record_result(item, tool_key, status, call.duration, error_message=longrepr)
@@ -1079,29 +1115,34 @@ def pytest_collection_modifyitems(config, items):
 
     # Benchmark-marked tests are gated off by default — opt in via --benchmark or
     # one of its variants (--benchmark-report / --benchmark-tool / --benchmark-toolkit,
-    # all of which imply --benchmark). Like --ext, this is an additive gate: the
-    # flag enables benchmark tests alongside whatever else is selected, it does not
-    # deselect non-benchmark tests. --benchmark-tool / --benchmark-toolkit narrow
-    # *within* the benchmark set (other benchmarks are skipped, non-benchmarks
-    # untouched).
-    if not benchmark_mode:
+    # all of which imply --benchmark). When any of those is set, benchmark mode is
+    # *exclusive*: every non-benchmark test in the collected set is deselected
+    # (mirroring how --env-report scopes the run). --benchmark-tool / --benchmark-toolkit
+    # then narrow *within* the benchmark set.
+    if benchmark_mode:
+        selected, deselected = [], []
+        for item in items:
+            if "benchmark" not in item.keywords:
+                deselected.append(item)
+                continue
+            if tool_filter or toolkit_filter:
+                marker = item.get_closest_marker("benchmark")
+                tool_key = marker.args[0] if marker and marker.args else None
+                if tool_filter and tool_key != tool_filter:
+                    deselected.append(item)
+                    continue
+                if toolkit_filter and (tool_key is None or _resolve_toolkit(tool_key) != toolkit_filter):
+                    deselected.append(item)
+                    continue
+            selected.append(item)
+        if deselected:
+            items[:] = selected
+            config.hook.pytest_deselected(items=deselected)
+    else:
         skip_benchmark = pytest.mark.skip(reason="benchmark test (use --benchmark to run)")
         for item in items:
             if "benchmark" in item.keywords:
                 item.add_marker(skip_benchmark)
-    elif tool_filter or toolkit_filter:
-        for item in items:
-            if "benchmark" not in item.keywords:
-                continue
-            marker = item.get_closest_marker("benchmark")
-            tool_key = marker.args[0] if marker and marker.args else None
-            skip_reason = None
-            if tool_filter and tool_key != tool_filter:
-                skip_reason = f"benchmark for {tool_key} (filtered to {tool_filter})"
-            elif toolkit_filter and (tool_key is None or _resolve_toolkit(tool_key) != toolkit_filter):
-                skip_reason = f"benchmark for {tool_key} (filtered to toolkit {toolkit_filter})"
-            if skip_reason:
-                item.add_marker(pytest.mark.skip(reason=skip_reason))
 
     # Skip test_on_platforms tests when current architecture doesn't match
     import platform as _platform
@@ -1346,6 +1387,13 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         GPU is available: ``--cpu-only`` flag, ``CUDA_VISIBLE_DEVICES=""``,
         or ``nvidia-smi`` not found.  When *False* (CPU-only tools),
         persistence is always active.
+
+    Note:
+        Skipped in benchmark mode (any of ``--benchmark``, ``--benchmark-report``,
+        ``--benchmark-tool``, ``--benchmark-toolkit``). Benchmarks measure
+        cold-start vs warm by running their workload twice with their own
+        ``ToolInstance.persist()`` scope; a module-level warm worker would
+        steal the cold-start measurement.
     """
 
     @pytest.fixture(scope="module", autouse=True)
@@ -1353,7 +1401,77 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         if gpu and (request.config.getoption("--cpu-only") or not _gpu_available()):
             yield
             return
+        if (
+            request.config.getoption("--benchmark")
+            or request.config.getoption("--benchmark-report")
+            or request.config.getoption("--benchmark-tool")
+            or request.config.getoption("--benchmark-toolkit")
+        ):
+            yield
+            return
         with ToolInstance.persist_tool(toolkit):
             yield
 
     return _persistent_tool
+
+
+def benchmark_twice(request: pytest.FixtureRequest, toolkit: str, runner: Callable[[], Any]) -> Any:
+    """Run ``runner()`` twice in a persistent-worker scope, recording cold/warm timings.
+
+    The first call cold-starts the worker (model load + execute); the second
+    call reuses the warm worker (execute only). Both elapsed times are written
+    to ``request.node.user_properties`` as ``("cold_seconds", float)`` and
+    ``("warm_seconds", float)`` so :class:`BenchmarkReportCollector` can include
+    them in the per-tool markdown report. Returns the second call's result so
+    the test can assert against a warm-worker output.
+
+    Uses :meth:`ToolInstance.persist_tool` (not ``persist()``) so the worker
+    is pre-registered in the active cache. Tools whose Config defines a
+    ``preprocess`` hook (e.g. masked-model samplers) trigger
+    ``_auto_persist_scope`` inside the ``@tool`` wrapper; with a pre-cached
+    instance, that scope short-circuits to a no-op and the warm worker
+    survives into the second call.
+
+    Args:
+        request (pytest.FixtureRequest): The active test's pytest request.
+        toolkit (str): Toolkit name to keep persistent (e.g. ``"esm2"``,
+            ``"esm3"``). Accepts a registered tool_key too; it will be
+            normalized to its toolkit.
+        runner (Callable[[], Any]): Zero-arg callable that executes the
+            tool's workload (e.g. ``lambda: run_esm2_score(inputs, config)``).
+
+    Returns:
+        Any: The result of the second (warm) ``runner()`` call.
+    """
+    with ToolInstance.persist_tool(toolkit):
+        t0 = time.perf_counter()
+        _ = runner()
+        cold = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
+        result = runner()
+        warm = time.perf_counter() - t0
+
+    request.node.user_properties.append(("cold_seconds", cold))
+    request.node.user_properties.append(("warm_seconds", warm))
+    return result
+
+
+def random_protein_sequences(n: int, length: int, seed: int = 0) -> list[str]:
+    """Generate ``n`` deterministic synthetic protein sequences of length ``length``.
+
+    Uses a seeded ``random.Random`` so calls with the same ``seed`` produce
+    identical output across runs and across machines. Sequences contain only
+    the 20 standard amino acids from ``AMINO_ACIDS_LIST``. Intended for
+    benchmark workloads that need a reproducible-but-large input.
+
+    Args:
+        n (int): Number of sequences to generate.
+        length (int): Length of each sequence in residues.
+        seed (int): Seed for the local RNG. Default ``0``.
+
+    Returns:
+        list[str]: ``n`` strings of length ``length`` over standard AAs.
+    """
+    rng = random.Random(seed)
+    return ["".join(rng.choices(AMINO_ACIDS_LIST, k=length)) for _ in range(n)]

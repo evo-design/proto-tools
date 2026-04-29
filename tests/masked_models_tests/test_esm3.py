@@ -9,12 +9,16 @@ import pytest
 from proto_tools.tools.masked_models.esm3 import (
     ESM3EmbeddingsConfig,
     ESM3EmbeddingsInput,
+    ESM3SampleConfig,
+    ESM3SampleInput,
     ESM3ScoringConfig,
     ESM3ScoringInput,
     run_esm3_embeddings,
+    run_esm3_sample,
     run_esm3_score,
 )
-from tests.conftest import make_persistent_fixture
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -67,7 +71,68 @@ def test_esm3_forward_pass():
     assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
 
 
+@pytest.mark.benchmark("esm3-embedding")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm3_embedding_benchmark(request):
+    """Benchmark esm3-embedding on 100 sequences of length 300 (cold + warm)."""
+    sequences = random_protein_sequences(n=100, length=300, seed=0)
+    inputs = ESM3EmbeddingsInput(sequences=sequences)
+    config = ESM3EmbeddingsConfig(batch_size=32, return_logits=True)
+
+    result = benchmark_twice(request, "esm3", lambda: run_esm3_embeddings(inputs=inputs, config=config))
+    assert result.success, "ESM3 embeddings failed"
+
+    assert len(result.results) == 100, "Should have 100 SequenceEmbedding objects"
+    assert len(result.results[0].mean_embedding) == 1536, "Embedding dimension should be 1536"
+    assert len(result.results[0].attention_mask) == 300, "Attention mask length should be 300"
+    assert result.results[0].logits is not None
+    assert len(result.results[0].logits) == 300, "Logit sequence length should be 300"
+    assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
+
+
+# ── Sampling tests ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esm3-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm3_sample_benchmark(request):
+    """Benchmark esm3-sample on 50 sequences of length 200 (cold + warm)."""
+    sequences = random_protein_sequences(n=50, length=200, seed=1)
+    inputs = ESM3SampleInput(sequences=sequences)
+    config = ESM3SampleConfig(batch_size=16, temperature=1.0)
+
+    result = benchmark_twice(request, "esm3", lambda: run_esm3_sample(inputs=inputs, config=config))
+
+    assert len(result.sequences) == 50, "Should have 50 sampled sequences"
+    for sampled in result.sequences:
+        assert len(sampled) == 200, "Sampled sequence should preserve length"
+        assert "_" not in sampled, "Sampled sequence should have no remaining mask tokens"
+        assert all(aa in AMINO_ACIDS_LIST for aa in sampled), "All residues should be standard amino acids"
+
+
 # ── Scoring tests ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esm3-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm3_score_benchmark(request):
+    """Benchmark esm3-score on 100 sequences of length 300 (cold + warm)."""
+    sequences = random_protein_sequences(n=100, length=300, seed=2)
+    inputs = ESM3ScoringInput(sequences=sequences)
+    config = ESM3ScoringConfig(batch_size=32, verbose=False, return_logits=True)
+
+    result = benchmark_twice(request, "esm3", lambda: run_esm3_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "esm3-score"
+    assert len(result.scores) == 100
+    for score in result.scores:
+        assert score.logits is not None
+        assert len(score.logits) == 300
+        assert len(score.logits[0]) == 20
 
 
 @pytest.mark.uses_gpu
