@@ -6,6 +6,7 @@ from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import (
     EnformerConfig,
     EnformerInput,
     EnformerOutput,
+    EnformerPredictionResult,
     run_enformer,
 )
 
@@ -13,6 +14,7 @@ __all__ = [
     "EnformerInput",
     "EnformerConfig",
     "EnformerOutput",
+    "EnformerPredictionResult",
     "run_enformer",
     "ENFORMER_CONTEXT",
     "ENFORMER_OUTPUT",

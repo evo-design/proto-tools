@@ -29,8 +29,22 @@ def test_enformer_input_valid():
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     seq = _random_dna(ENFORMER_CONTEXT)
-    inp = EnformerInput(sequence=seq)
-    assert len(inp.sequence) == ENFORMER_CONTEXT
+    inp = EnformerInput(sequences=seq)
+    assert inp.sequences == [seq]
+    assert len(inp.sequences[0]) == ENFORMER_CONTEXT
+
+
+def test_enformer_input_accepts_sequence_batches():
+    """Enformer input should normalize sequence batches to a list."""
+    from proto_tools.tools.sequence_scoring.enformer import EnformerInput
+
+    seq_a = _random_dna(ENFORMER_CONTEXT)
+    seq_b = _random_dna(ENFORMER_CONTEXT, seed=123)
+
+    inp = EnformerInput(sequences=[seq_a, seq_b])
+
+    assert inp.sequences == [seq_a, seq_b]
+    assert len(inp) == 2
 
 
 @pytest.mark.parametrize(
@@ -45,7 +59,7 @@ def test_enformer_input_rejects_wrong_length(seq, label):
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     with pytest.raises(ValueError, match=f"must have length {ENFORMER_CONTEXT}"):
-        EnformerInput(sequence=seq)
+        EnformerInput(sequences=seq)
 
 
 def test_enformer_input_rejects_empty():
@@ -53,7 +67,7 @@ def test_enformer_input_rejects_empty():
     from proto_tools.tools.sequence_scoring.enformer import EnformerInput
 
     with pytest.raises((ValueError, ValidationError), match=r"[Ss]equence"):
-        EnformerInput(sequence="")
+        EnformerInput(sequences="")
 
 
 def test_enformer_input_rejects_invalid_nucleotides():
@@ -62,7 +76,7 @@ def test_enformer_input_rejects_invalid_nucleotides():
 
     bad_seq = "X" * ENFORMER_CONTEXT
     with pytest.raises((ValueError, ValidationError), match=r"[Ii]nvalid"):
-        EnformerInput(sequence=bad_seq)
+        EnformerInput(sequences=bad_seq)
 
 
 # ── Config validation ─────────────────────────────────────────────────────────
@@ -98,7 +112,7 @@ def test_enformer_prediction_human():
     )
 
     seq = _random_dna(ENFORMER_CONTEXT)
-    inputs = EnformerInput(sequence=seq)
+    inputs = EnformerInput(sequences=[seq])
     config = EnformerConfig(output_tracks=[0, 1, 2], species="human", verbose=False)
 
     result = run_enformer(inputs, config)
@@ -107,10 +121,10 @@ def test_enformer_prediction_human():
     assert result.tool_id == "enformer-prediction"
     assert result.species == "human"
     assert result.output_tracks == [0, 1, 2]
-    assert result.sequence == seq
-    assert result.sequence_length == ENFORMER_CONTEXT
-    assert len(result.prediction) == 896
-    assert len(result.prediction[0]) == 3
+    assert result.results[0].sequence == seq
+    assert result.results[0].sequence_length == ENFORMER_CONTEXT
+    assert len(result.results[0].prediction) == 896
+    assert len(result.results[0].prediction[0]) == 3
 
 
 @pytest.mark.uses_gpu
@@ -123,15 +137,15 @@ def test_enformer_prediction_mouse():
     )
 
     seq = _random_dna(ENFORMER_CONTEXT, seed=123)
-    inputs = EnformerInput(sequence=seq)
+    inputs = EnformerInput(sequences=[seq])
     config = EnformerConfig(output_tracks=[0, 5, 10], species="mouse", verbose=False)
 
     result = run_enformer(inputs, config)
 
     validate_output(result)
     assert result.species == "mouse"
-    assert len(result.prediction) == 896
-    assert len(result.prediction[0]) == 3
+    assert len(result.results[0].prediction) == 896
+    assert len(result.results[0].prediction[0]) == 3
 
 
 @pytest.mark.parametrize(
@@ -151,11 +165,11 @@ def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
     )
 
     seq = _random_dna(ENFORMER_CONTEXT, seed=456)
-    inputs = EnformerInput(sequence=seq)
+    inputs = EnformerInput(sequences=[seq])
     config = EnformerConfig(output_tracks=track_indices, species="human", verbose=False)
 
     result = run_enformer(inputs, config)
 
     validate_output(result)
-    assert len(result.prediction) == 896
-    assert len(result.prediction[0]) == expected_n_tracks
+    assert len(result.results[0].prediction) == 896
+    assert len(result.results[0].prediction[0]) == expected_n_tracks

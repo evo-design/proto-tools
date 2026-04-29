@@ -3,7 +3,7 @@
 import json
 import logging
 import sys
-from typing import Any
+from typing import Any, cast
 
 import torch
 from standalone_helpers import serialize_output
@@ -51,32 +51,37 @@ class EnformerModel:
 
     def to_device(self, device: str) -> None:
         """Move model to a different device."""
+        from standalone_helpers import move_model_to_device
+
         if not self._loaded:
             raise RuntimeError("Cannot move unloaded model to device. Call load() first.")
 
         if self.device != device:
-            self.model = self.model.to(device)
+            self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
 
-    def __call__(
+    def _predict_sequences(
         self,
-        sequence: str,
+        sequences: list[str],
         output_tracks: list[int],
         species: str,
         device: str = "cuda",
         verbose: bool = False,
     ) -> torch.Tensor:
-        """Run Enformer inference on a DNA sequence.
+        """Run Enformer inference on a batch of DNA sequences.
 
         Args:
-            sequence: DNA sequence (must be ENFORMER_CONTEXT=196,608 bp)
-            output_tracks: List of track indices to extract
-            species: Species to predict for ('human' or 'mouse')
-            device: Device to run on (defaults to cuda if available)
-            verbose: Whether to print status messages
+            sequences: DNA sequences to score. Each sequence must be
+                ENFORMER_CONTEXT=196,608 bp.
+            output_tracks: Track indices to extract from the selected species
+                output head.
+            species: Species output head to use, either ``"human"`` or
+                ``"mouse"``.
+            device: Device to run inference on.
+            verbose: Whether to log status messages.
 
         Returns:
-            Predicted regulatory activity tensor
+            Prediction tensor with shape ``[batch, ENFORMER_OUTPUT, num_tracks]``.
         """
         # Lazy load on first call or device change
         if not self._loaded:
@@ -86,17 +91,14 @@ class EnformerModel:
 
         # Prepare input (Enformer handles 'N' as index 4)
         mapping = {"A": 0, "C": 1, "G": 2, "T": 3, "N": 4}
-        input_ids = torch.tensor([mapping.get(char, 4) for char in sequence]).unsqueeze(0).to(device)
+        input_ids = torch.tensor([[mapping.get(char, 4) for char in sequence] for sequence in sequences]).to(device)
 
         # Run prediction
         with torch.inference_mode():
             output = self.model(input_ids)
 
         # Extract prediction for specified tracks and species
-        prediction = output[species][0][:, output_tracks]
-
-        self.unload(verbose=verbose)
-        return prediction
+        return cast(torch.Tensor, output[species][:, :, output_tracks])
 
 
 # ============================================================================
@@ -113,15 +115,26 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     operation = input_dict["operation"]
     if operation == "predict":
-        prediction = _model(
-            sequence=input_dict["sequence"],
-            output_tracks=input_dict["output_tracks"],
-            species=input_dict["species"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-        )
+        sequences = input_dict["sequences"]
+        batch_size = max(1, int(input_dict.get("batch_size", len(sequences))))
+        predictions = []
+        for start in range(0, len(sequences), batch_size):
+            chunk = sequences[start : start + batch_size]
+            predictions.append(
+                _model._predict_sequences(
+                    sequences=chunk,
+                    output_tracks=input_dict["output_tracks"],
+                    species=input_dict["species"],
+                    device=input_dict["device"],
+                    verbose=input_dict["verbose"],
+                )
+                .detach()
+                .cpu()
+            )
+        if input_dict.get("unload_after_predict", False):
+            _model.unload(verbose=input_dict["verbose"])
         return {
-            "prediction": prediction,
+            "predictions": torch.cat(predictions, dim=0),
             "applied_species": input_dict["species"],
         }
     raise ValueError(f"Unknown operation: {operation}")

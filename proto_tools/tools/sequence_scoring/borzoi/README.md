@@ -45,7 +45,7 @@ For ensemble mode, all 4 replicates run sequentially.
 
 ## How It Works
 
-1. **Input**: A fixed-length 524,288 bp DNA sequence centered on the region of interest
+1. **Input**: One or more fixed-length 524,288 bp DNA sequences centered on the region of interest
 2. **One-hot encoding**: The sequence is converted to a 4-channel (A, C, G, T) representation; N bases are encoded as all zeros
 3. **Convolutional stem + dilated residual blocks**: Initial layers downsample and process the sequence using dilated convolutions for efficient long-range feature extraction
 4. **Attention layers**: Transformer-style attention captures dependencies across the full context window
@@ -56,7 +56,7 @@ For ensemble mode, all 4 replicates run sequentially.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sequence` | `str` | Yes | DNA sequence, must be exactly 524,288 bp. Only characters A, T, C, G, N allowed. |
+| `sequences` | `List[str]` | Yes | DNA sequence(s), each exactly 524,288 bp. Only characters A, T, C, G, N allowed. |
 
 ## Configuration
 
@@ -68,6 +68,7 @@ For ensemble mode, all 4 replicates run sequentially.
 | `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
 | `replicate` | `"0"`, `"1"`, `"2"`, or `"3"` | `"0"` | Which replicate model to run |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
+| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
 | `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
 | `device` | `str` | `"cuda"` | Inference device |
 | `verbose` | `bool` | `False` | Log status messages |
@@ -79,6 +80,7 @@ For ensemble mode, all 4 replicates run sequentially.
 | `output_tracks` | `List[int]` | **required** | Track indices to extract from model output |
 | `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
+| `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
 | `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
 | `device` | `str` | `"cuda"` | Inference device |
 | `verbose` | `bool` | `False` | Log status messages |
@@ -105,25 +107,25 @@ When using Borzoi in optimization loops:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sequence` | `str` | The input DNA sequence |
-| `sequence_length` | `int` | Always 524,288 |
-| `prediction` | `List[List[float]]` | Shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`) |
+| `results` | `List[BorzoiPredictionResult]` | Per-sequence prediction results |
 | `output_tracks` | `List[int]` | Track indices used |
 | `species` | `str` | Species head used |
 | `replicate` | `str` | Replicate ID used |
 | `avg_output_tracks` | `bool` | Whether averaging was applied |
 
+Each `BorzoiPredictionResult` contains `sequence`, `sequence_length`, and `prediction` with shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`).
+
 ### `BorzoiEnsembleOutput` (ensemble)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sequence` | `str` | The input DNA sequence |
-| `sequence_length` | `int` | Always 524,288 |
-| `predictions` | `List[List[List[float]]]` | Shape `[4, num_tracks, 6144]` |
+| `results` | `List[BorzoiEnsemblePredictionResult]` | Per-sequence ensemble prediction results |
 | `output_tracks` | `List[int]` | Track indices used |
 | `species` | `str` | Species head used |
 | `avg_output_tracks` | `bool` | Whether averaging was applied |
 | `num_replicates` | `int` | Always 4 |
+
+Each `BorzoiEnsemblePredictionResult` contains `sequence`, `sequence_length`, and `predictions` with shape `[4, num_tracks, 6144]`.
 
 ## Interpreting Results
 
@@ -157,7 +159,7 @@ from proto_tools.tools.sequence_scoring.borzoi import (
 # 524,288 bp sequence (use real genomic sequence in practice)
 sequence = "ATCG" * 131072  # 524,288 bp
 
-inputs = BorzoiInput(sequence=sequence)
+inputs = BorzoiInput(sequences=[sequence])
 config = BorzoiConfig(
     output_tracks=[0, 1, 2],
     species="human",
@@ -166,7 +168,8 @@ config = BorzoiConfig(
 )
 
 result = run_borzoi(inputs, config)
-print(f"Output shape: {len(result.prediction)} x {len(result.prediction[0])}")
+prediction = result.results[0].prediction
+print(f"Output shape: {len(prediction)} x {len(prediction[0])}")
 # Output shape: 1 x 6144 (averaged tracks)
 ```
 
@@ -178,7 +181,7 @@ from proto_tools.tools.sequence_scoring.borzoi import (
     run_borzoi_ensemble,
 )
 
-inputs = BorzoiInput(sequence=sequence)
+inputs = BorzoiInput(sequences=[sequence])
 config = BorzoiEnsembleConfig(
     output_tracks=[0, 1, 2],
     species="human",
@@ -186,15 +189,16 @@ config = BorzoiEnsembleConfig(
 )
 
 result = run_borzoi_ensemble(inputs, config)
-print(f"Ensemble shape: {len(result.predictions)} x "
-      f"{len(result.predictions[0])} x {len(result.predictions[0][0])}")
+predictions = result.results[0].predictions
+print(f"Ensemble shape: {len(predictions)} x "
+      f"{len(predictions[0])} x {len(predictions[0][0])}")
 # Ensemble shape: 4 x 3 x 6144
 
 # Compute per-bin variance across replicates
 import statistics
 bin_idx = 3072  # Center bin
 for track in range(3):
-    vals = [result.predictions[rep][track][bin_idx] for rep in range(4)]
+    vals = [predictions[rep][track][bin_idx] for rep in range(4)]
     print(f"Track {track}, bin {bin_idx}: "
           f"mean={statistics.mean(vals):.3f}, std={statistics.stdev(vals):.3f}")
 ```
@@ -207,7 +211,7 @@ config = BorzoiConfig(
     use_flash_attn=False,  # Required for mouse models
 )
 
-result = run_borzoi(BorzoiInput(sequence=sequence), config)
+result = run_borzoi(BorzoiInput(sequences=[sequence]), config)
 ```
 
 **Export results:**
@@ -222,7 +226,7 @@ result.export("borzoi_output", file_format="json")
 - **Center your region of interest**: Like Enformer, predictions are most informative near the center of the input window. Place your target gene or variant at position ~262,144.
 - **Mouse requires `use_flash_attn=False`**: Mouse checkpoints were not trained with FlashAttention. Setting `species="mouse"` with `use_flash_attn=True` raises a `ValueError`.
 - **Ensemble is 4x slower**: Each replicate runs a full forward pass. Use single replicate for iteration, ensemble for final analysis.
-- **Track averaging collapses dimensions**: With `avg_output_tracks=True`, `prediction` shape is `[1, 6144]` regardless of how many tracks you requested. Set to `False` if you need per-track resolution.
+- **Track averaging collapses dimensions**: With `avg_output_tracks=True`, each result's `prediction` shape is `[1, 6144]` regardless of how many tracks you requested. Set to `False` if you need per-track resolution.
 - **GPU memory**: A single replicate inference uses ~6-8 GB of GPU memory due to the longer context window. Ensemble runs replicates sequentially, so peak memory is the same as single replicate.
 - **N characters**: Accepted but degrade prediction quality. Minimize N content in your input.
 
