@@ -14,7 +14,7 @@ from proto_tools.tools.inverse_folding import (
     InverseFoldingStructureInput,
     run_ligandmpnn_sample,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -89,3 +89,30 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     for designed in output.designed_sequences:
         assert len(designed.sequences) == 3
         assert all(isinstance(sequence, str) for sequence in designed.sequences)
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("ligandmpnn-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ligandmpnn_sample_benchmark(request: pytest.FixtureRequest, cif_structure: Structure) -> None:
+    """Benchmark ligandmpnn-sample: 50 designs of renin chain A (~217 aa) at batch_size=16 (cold + warm)."""
+    inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=cif_structure, chain_ids=["A"])])
+    config = InverseFoldingConfig(
+        num_sequences_per_structure=50,
+        batch_size=16,
+        temperature=0.1,
+        seed=0,
+    )
+
+    result = benchmark_twice(request, "ligandmpnn", lambda: run_ligandmpnn_sample(inputs, config))
+
+    assert result.tool_id == "ligandmpnn-sample"
+    assert len(result.designed_sequences) == 1, "Should have one DesignedSequences per input structure"
+    designs = result.designed_sequences[0]
+    assert len(designs.sequences) == 50, "Should have 50 designed sequences"
+    lengths = {len(seq) for seq in designs.sequences}
+    assert len(lengths) == 1, f"All designed sequences should have the same length, got {lengths}"
+    assert next(iter(lengths)) > 0, "Designed sequences should be non-empty"
