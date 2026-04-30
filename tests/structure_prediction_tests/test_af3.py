@@ -4,11 +4,13 @@ Tests for AlphaFold3.
 """
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from proto_tools.entities.ligands import Fragment, Ligands
+from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
@@ -16,6 +18,31 @@ from proto_tools.tools.structure_prediction import (
     StructurePredictionComplex,
     run_alphafold3,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
+from tests.conftest import benchmark_twice
+from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+
+def _alphafold3_weights_skip_reason() -> str | None:
+    """Return a skip reason if AlphaFold3 weights are missing, else None.
+
+    AlphaFold3 weights are gated under DeepMind's ToU and must be obtained
+    separately. See ``proto_tools/tools/structure_prediction/alphafold3/README.md``.
+    """
+    weights_dir = resolve_weights_dir("alphafold3")
+    if weights_dir is None:
+        return (
+            "AlphaFold3 weights dir could not be resolved "
+            "(set PROTO_ALPHAFOLD3_WEIGHTS_DIR or PROTO_MODEL_CACHE/PROTO_HOME)"
+        )
+    if not any(Path(weights_dir).glob("*.bin*")):
+        return (
+            f"AlphaFold3 weights (*.bin / *.bin.zst) not found in {weights_dir}. "
+            "Request access from DeepMind and set PROTO_ALPHAFOLD3_WEIGHTS_DIR."
+        )
+    return None
+
 
 # ── Module-level constants ────────────────────────────────────────────────────
 
@@ -220,3 +247,29 @@ def test_af3_accepts_ligands_collection_expanded(mock_af3_inference):
 # the lenient predictors (Protenix, Boltz2) have doesn't apply here. Trade-off:
 # genuinely novel ligands without a CCD entry are currently unsupported
 # through this implementation.
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("alphafold3-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+@pytest.mark.skipif(_alphafold3_weights_skip_reason() is not None, reason=_alphafold3_weights_skip_reason() or "")
+def test_alphafold3_benchmark(request):
+    """Benchmark alphafold3-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+
+    Single ~390-residue protein-ligand complex without MSA — a representative
+    AF3 workload. Cold pass measures weight load + first inference; warm pass
+    measures inference only.
+    """
+    complex_ = load_benchmark_complex("MfnG_and_ligand")
+    inputs = AlphaFold3Input(complexes=[complex_])
+    config = AlphaFold3Config(use_msa=False, verbose=True)
+
+    result = benchmark_twice(request, "alphafold3", lambda: run_alphafold3(inputs=inputs, config=config))
+
+    assert result.success, "AlphaFold3 benchmark run failed"
+    assert len(result.structures) == 1
+    assert is_valid_structure(result.structures[0].structure_cif)
+    assert_metrics_in_spec(result)

@@ -1,12 +1,14 @@
 """tests/structure_prediction_tests/test_structure_prediction.py.
 
-Tests for structure prediction tools.
+Cross-tool integration tests for structure prediction tools.
+
+Per-tool benchmarks (``benchmark_twice``-based cold/warm timings) live in the
+respective ``test_{toolkit}.py`` files alongside any tool-specific tests.
 """
 
 from pathlib import Path
 
 import pytest
-from Bio import SeqIO
 from pydantic import ValidationError
 
 from proto_tools.entities.structures import is_valid_structure
@@ -45,12 +47,11 @@ from proto_tools.utils.tool_cache import (
     get_cache_info,
 )
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-
-_FASTA_DIR = Path(__file__).parent.parent / "dummy_data" / "structure_prediction_test_examples"
 
 _STRUCTURE_PREDICTORS = {
     "esmfold": (run_esmfold, ESMFoldInput, ESMFoldConfig, ESMFoldOutput),
@@ -96,85 +97,8 @@ _BATCHED_TEST_SEQUENCES = [
 ]
 
 
-# ── File loading ───────────────────────────────────────────────────────────────
-
-
-def _parse_modifications_from_header(description: str) -> list[tuple]:
-    """Parse modifications from FASTA header.
-
-    Format: >name|entity_type|position:code,position:code
-    Example: >peptide|protein|5:SEP,10:TPO
-
-    Returns list of (position, code) tuples or empty list if no modifications.
-    """
-    parts = description.split("|")
-    if len(parts) < 3:
-        return []
-
-    mod_string = parts[2].strip()
-    if not mod_string:
-        return []
-
-    modifications = []
-    for raw_mod in mod_string.split(","):
-        mod = raw_mod.strip()
-        if ":" in mod:
-            pos_str, code = mod.split(":")
-            modifications.append((int(pos_str), code.strip()))
-
-    return modifications
-
-
-def _parse_fasta_to_complexes(fasta_file: Path) -> list[StructurePredictionComplex]:
-    """Parse a FASTA file into a list of StructurePredictionComplex objects.
-
-    FASTA format supports modifications in the header:
-    >name|entity_type|position:code,position:code
-
-    Examples:
-    >peptide|protein|5:SEP,10:TPO  (protein with modifications at positions 5 and 10)
-    >peptide|protein  (protein without modifications)
-    """
-    chains_data = []
-
-    for record in SeqIO.parse(str(fasta_file), "fasta"):
-        sequence = str(record.seq).strip()
-        parts = record.description.split("|")
-        entity_type = parts[1].strip()
-        modifications = _parse_modifications_from_header(record.description)
-
-        chain_dict = {
-            "sequence": sequence,
-            "entity_type": entity_type,
-        }
-
-        if modifications:
-            chain_dict["modifications"] = modifications
-
-        chains_data.append(chain_dict)
-
-    # By default, treat all sequences as chains in a single complex
-    if "two_complex" not in fasta_file.name:
-        complexes = [StructurePredictionComplex(chains=chains_data)]
-    else:
-        # For two_complex.fasta, treat each sequence as a separate complex to test
-        # multi-complex prediction.
-        complexes = [StructurePredictionComplex(chains=[chain_dict]) for chain_dict in chains_data]
-
-    return complexes
-
-
-def _load_all_test_complexes() -> dict:
-    """Pre-load all FASTA files and parse them into complexes."""
-    test_complexes = {}
-    for fasta_file in _FASTA_DIR.glob("*.fasta"):
-        complexes = _parse_fasta_to_complexes(fasta_file)
-        test_complexes[fasta_file.stem] = complexes
-    return test_complexes
-
-
-# Pre-load all test complexes at module level.
-_TEST_COMPLEXES = _load_all_test_complexes()
+# Pre-load all test complexes at module level (FASTA parsing).
+_TEST_COMPLEXES = load_all_test_complexes()
 
 
 # ── Test parameterization helpers ──────────────────────────────────────────────
@@ -213,27 +137,6 @@ def _is_compatible_input_for_test(complexes, input_class) -> bool:
     return not (_has_modifications(complexes) and not input_class.ALLOWS_CHAIN_MODIFICATIONS)
 
 
-_BENCHMARK_INPUT_PER_PREDICTOR = {
-    "esmfold": ("trp_heterodimer", "esmfold-prediction"),
-    "alphafold2": ("trp_heterodimer", "alphafold2-prediction"),
-    "alphafold3": ("MfnG_and_ligand", "alphafold3-prediction"),
-    "chai1": ("MfnG_and_ligand", "chai1-prediction"),
-    "boltz2": ("MfnG_and_ligand", "boltz2-prediction"),
-    "protenix": ("MfnG_and_ligand", "protenix-prediction"),
-}
-assert set(_BENCHMARK_INPUT_PER_PREDICTOR) == set(_STRUCTURE_PREDICTORS), (
-    "Every predictor in _STRUCTURE_PREDICTORS needs an entry in _BENCHMARK_INPUT_PER_PREDICTOR."
-)
-
-
-def _is_canonical_benchmark_row(predictor_name: str, test_name: str) -> str | None:
-    """Return the tool_key if (predictor, test_name) is the canonical benchmark row, else None."""
-    spec = _BENCHMARK_INPUT_PER_PREDICTOR.get(predictor_name)
-    if spec is not None and spec[0] == test_name:
-        return spec[1]
-    return None
-
-
 def _generate_test_params() -> list:
     """Generate all valid test parameter combinations.
 
@@ -253,7 +156,6 @@ def _generate_test_params() -> list:
                 continue
 
             skip_reason = _missing_weights_skip_reason(predictor_name)
-            benchmark_tool_key = _is_canonical_benchmark_row(predictor_name, test_name)
             supports_msa = _supports_msa(config_class)
 
             # Generate MSA variants if supported
@@ -263,8 +165,6 @@ def _generate_test_params() -> list:
                     marks.append(pytest.mark.slow)
                 if skip_reason:
                     marks.append(pytest.mark.skip(reason=skip_reason))
-                if benchmark_tool_key is not None:
-                    marks.append(pytest.mark.benchmark(benchmark_tool_key))
 
                 params.append(
                     pytest.param(
@@ -283,8 +183,6 @@ def _generate_test_params() -> list:
                 marks.append(pytest.mark.slow)
             if skip_reason:
                 marks.append(pytest.mark.skip(reason=skip_reason))
-            if benchmark_tool_key is not None and not supports_msa:
-                marks.append(pytest.mark.benchmark(benchmark_tool_key))
 
             params.append(
                 pytest.param(

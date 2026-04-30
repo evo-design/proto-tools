@@ -22,6 +22,8 @@ from proto_tools.tools.structure_prediction import (
 )
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.conftest import benchmark_twice
+from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Mock standalone_helpers so we can import standalone inference utilities without
@@ -417,3 +419,27 @@ def test_homooligomer():
     assert is_valid_structure(output.structures[0].structure_cif)
     assert 0 <= output.structures[0].metrics["avg_plddt"] <= 1.0
     assert output.structures[0].metrics["iptm"] is not None
+
+
+# -- Benchmark ----------------------------------------------------------------
+
+
+@pytest.mark.benchmark("alphafold2-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphafold2_benchmark(request):
+    """Benchmark alphafold2-prediction on the trp heterodimer (cold + warm).
+
+    Two-chain protein complex (~500 residues total) folded without MSA. Cold
+    pass measures weight load + first inference; warm pass measures inference
+    only.
+    """
+    complex_ = load_benchmark_complex("trp_heterodimer")
+    inputs = AlphaFold2Input(complexes=[complex_])
+    config = AlphaFold2Config(use_msa=False, verbose=True)
+
+    result = benchmark_twice(request, "alphafold2", lambda: run_alphafold2(inputs=inputs, config=config))
+
+    assert result.success, "AlphaFold2 benchmark run failed"
+    assert len(result.structures) == 1
+    assert is_valid_structure(result.structures[0].structure_cif)

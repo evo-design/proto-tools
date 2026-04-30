@@ -6,6 +6,7 @@ Tests for Protenix.
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Chain,
     ProtenixConfig,
@@ -13,7 +14,9 @@ from proto_tools.tools.structure_prediction import (
     StructurePredictionComplex,
     run_protenix,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 _persistent_tool = make_persistent_fixture("protenix")
 
@@ -254,3 +257,28 @@ def test_protenix_mini_models_with_msa(model_name):
     assert output.success
     assert len(output.structures) == 1
     assert output.structures[0].metrics["avg_plddt"] > 0.0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("protenix-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_protenix_benchmark(request):
+    """Benchmark protenix-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+
+    Single ~390-residue protein-ligand complex without MSA, run with the default
+    base model. Cold pass measures weight load + first inference; warm pass
+    measures inference only.
+    """
+    complex_ = load_benchmark_complex("MfnG_and_ligand")
+    inputs = ProtenixInput(complexes=[complex_])
+    config = ProtenixConfig(use_msa=False, verbose=True)
+
+    result = benchmark_twice(request, "protenix", lambda: run_protenix(inputs=inputs, config=config))
+
+    assert result.success, "Protenix benchmark run failed"
+    assert len(result.structures) == 1
+    assert is_valid_structure(result.structures[0].structure_cif)
+    assert_metrics_in_spec(result)
