@@ -36,7 +36,10 @@ import proto_tools.tools.testing  # noqa: F401
 from proto_tools import setup_logging
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.device import number_of_visible_gpus
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import (
+    AMINO_ACIDS_LIST,
+    DNA_NUCLEOTIDES,
+)
 from proto_tools.utils.system_info import (
     capture_parent_env,
     collect_system_info,
@@ -1475,3 +1478,23 @@ def random_protein_sequences(n: int, length: int, seed: int = 0) -> list[str]:
     """
     rng = random.Random(seed)
     return ["".join(rng.choices(AMINO_ACIDS_LIST, k=length)) for _ in range(n)]
+
+
+def random_dna_sequences(n: int, length: int, seed: int = 0) -> list[str]:
+    """Generate ``n`` deterministic synthetic DNA sequences of length ``length``.
+
+    Companion of :func:`random_protein_sequences` for nucleotide-domain tools
+    (Evo, Borzoi, Enformer, ...). Uses a seeded ``random.Random`` so calls with
+    the same ``seed`` produce identical output across runs and machines.
+    Sequences are uppercase and contain only A/C/G/T from ``DNA_NUCLEOTIDES``.
+
+    Args:
+        n (int): Number of sequences to generate.
+        length (int): Length of each sequence in nucleotides.
+        seed (int): Seed for the local RNG. Default ``0``.
+
+    Returns:
+        list[str]: ``n`` strings of length ``length`` over A/C/G/T.
+    """
+    rng = random.Random(seed)
+    return ["".join(rng.choices(DNA_NUCLEOTIDES, k=length)) for _ in range(n)]

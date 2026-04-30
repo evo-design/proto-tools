@@ -91,6 +91,14 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
         hidden=True,
         reload_on_change=True,
     )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1800,
+        ge=1,
+        description="Maximum execution time in seconds",
+        hidden=True,
+        include_in_key=False,
+    )
 
 
 # ============================================================================

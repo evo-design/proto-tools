@@ -19,7 +19,8 @@ from proto_tools.tools.causal_models.evo1 import (
     run_evo1_score,
 )
 from proto_tools.tools.causal_models.shared_data_models import CausalModelScoringMetrics
-from tests.conftest import make_persistent_fixture
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import DNA_NUCLEOTIDES
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -278,3 +279,58 @@ def test_evo1_score_batched():
 
     for score in result.scores:
         assert score.logits is not None
+
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("evo1-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_evo1_sample_benchmark(request):
+    """Benchmark evo1-sample: 20 DNA prompts x 1000 nt, generating 500 tokens each (cold + warm)."""
+    prompts = random_dna_sequences(n=20, length=1000, seed=0)
+    inputs = Evo1SampleInput(prompts=prompts)
+    config = Evo1SampleConfig(
+        model_name="evo-1-8k-base",
+        num_tokens=500,
+        temperature=1.0,
+        batch_size=16,
+        prepend_prompt=True,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "evo1", lambda: run_evo1_sample(inputs=inputs, config=config))
+
+    assert result.tool_id == "evo1-sample"
+    assert len(result.sequences) == 20, "Should have 20 sampled sequences"
+    valid_chars = set(DNA_NUCLEOTIDES) | set(DNA_NUCLEOTIDES.lower())
+    for seq in result.sequences:
+        assert isinstance(seq, str) and len(seq) >= 1000, "Output should include the 1000nt prompt at minimum"
+        invalid = set(seq) - valid_chars
+        assert not invalid, f"Non-DNA characters in output: {invalid}"
+
+
+@pytest.mark.benchmark("evo1-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_evo1_score_benchmark(request):
+    """Benchmark evo1-score: 30 DNA sequences x 4000 nt (cold + warm)."""
+    sequences = random_dna_sequences(n=30, length=4000, seed=1)
+    inputs = Evo1ScoringInput(sequences=sequences)
+    config = Evo1ScoringConfig(
+        model_name="evo-1-8k-base",
+        batch_size=16,
+        return_logits=True,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "evo1", lambda: run_evo1_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "evo1-score"
+    assert len(result.scores) == 30
+    for score in result.scores:
+        assert score.logits is not None
+        assert len(score.logits) == 4000
+        assert len(score.logits[0]) == 512  # Evo1 byte-level vocab

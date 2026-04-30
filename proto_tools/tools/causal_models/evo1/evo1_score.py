@@ -62,6 +62,14 @@ class Evo1ScoringConfig(CausalModelScoringConfig):
         description="Evo1 model checkpoint to use",
         reload_on_change=True,
     )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1800,
+        ge=1,
+        description="Maximum execution time in seconds",
+        hidden=True,
+        include_in_key=False,
+    )
 
 
 # ============================================================================

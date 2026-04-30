@@ -96,6 +96,14 @@ class Evo1SampleConfig(CausalModelSampleConfig):
         ge=1,
         description="Number of tokens to generate per prompt",
     )
+    timeout: int = ConfigField(
+        title="Timeout",
+        default=1800,
+        ge=1,
+        description="Maximum execution time in seconds",
+        hidden=True,
+        include_in_key=False,
+    )
 
 
 # ============================================================================
