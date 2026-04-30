@@ -34,7 +34,7 @@ Enformer requires GPU acceleration for inference.
 
 ## How It Works
 
-1. **Input**: A fixed-length 196,608 bp DNA sequence centered on the region of interest
+1. **Input**: One or more 196,608 bp model-context sequences, or longer source sequences with `target_ranges`
 2. **One-hot encoding**: The sequence is converted to a 4-channel (A, C, G, T) binary representation; N bases are encoded as all zeros
 3. **Convolutional stem**: Initial layers downsample the sequence by 2x, producing a 98,304-length feature map
 4. **Transformer tower**: 11 transformer blocks with attention capture long-range dependencies across the sequence
@@ -47,7 +47,12 @@ The central 114,688 bp of the input maps to the 896 output bins. The flanking se
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sequences` | `List[str]` | Yes | DNA sequence(s), each exactly 196,608 bp. Only characters A, T, C, G, N allowed. |
+| `sequences` | `List[str]` | Yes | DNA source sequence(s). Without `target_ranges`, each sequence must be exactly 196,608 bp. With `target_ranges`, sequences may be longer and must contain enough context for a full Enformer input window. Only A, T, C, G, N are allowed. |
+| `target_ranges` | `List[SequenceTargetRange]` | No | Sequence-relative target range(s) to keep inside the model output window. Each range has `start` (0-based inclusive) and `end` (0-based exclusive). A single range is auto-wrapped into a list. |
+
+If `target_ranges` is omitted, the provided sequence is the exact model input. If `target_ranges` is provided, the tool extracts a 196,608 bp model input window from each source sequence. The returned result reports where that model input window and the model output window landed in source-sequence coordinates.
+
+Target-range extraction is start-aligned, not midpoint-centered: when possible, bin 0 starts at `target_ranges[i].start`. Near the right edge, the context window shifts left so the full target range still fits.
 
 ## Configuration
 
@@ -86,11 +91,20 @@ When using Enformer in optimization loops, prioritize sweeping:
 | `output_tracks` | `List[int]` | Track indices that were extracted |
 | `species` | `str` | Species head used (`"human"` or `"mouse"`) |
 
-Each `EnformerPredictionResult` contains `sequence`, `sequence_length`, and `prediction` with shape `[896, num_tracks]`.
+Each `EnformerPredictionResult` contains `sequence`, `sequence_length`, coordinate metadata, and `prediction` with shape `[896, num_tracks]`.
 
 The `prediction` matrix is indexed as `prediction[bin][track]`, where:
 - `bin` ranges from 0 to 895 (896 spatial bins, each covering 128 bp)
 - `track` ranges from 0 to `len(output_tracks) - 1`
+
+Coordinate metadata is relative to the input `sequence`:
+
+| Field | Meaning |
+|-------|---------|
+| `context_start`, `context_end` | The 196,608 bp model input window that was sent to Enformer |
+| `output_start`, `output_end` | The source-sequence span covered by Enformer output bins |
+| `output_resolution` | Base pairs per output bin (`128`) |
+| `target_start`, `target_end` | The requested `target_ranges` entry, if one was provided |
 
 ## Interpreting Results
 
@@ -103,9 +117,9 @@ Enformer outputs are in **log(1 + x) transformed counts** space, matching the tr
 
 **For promoter/enhancer design**, maximize the predicted signal at the central bins for expression-related tracks (CAGE) or accessibility tracks (DNase/ATAC).
 
-**Spatial interpretation**: Bin index maps to genomic position as:
-- Genomic offset from start = `bin_index * 128`
-- The center of the input (position 98,304) corresponds approximately to bin 448
+**Spatial interpretation**: Bin index maps to source-sequence coordinates as:
+- Source coordinate = `output_start + bin_index * output_resolution`
+- With exact-window inputs, `output_start` is 40,960 and the center of the input (position 98,304) corresponds approximately to bin 448
 
 ## Quick Start Examples
 
@@ -178,12 +192,13 @@ result.export("enformer_output", file_format="json")
 
 ## Best Practices & Gotchas
 
-- **Exact length required**: The input sequence must be exactly 196,608 bp. Shorter or longer sequences will be rejected. Pad with N characters if necessary, but prefer extracting the correct genomic window.
+- **Exact-window inputs must be 196,608 bp**: If you do not pass `target_ranges`, each input sequence is treated as the exact Enformer model input and must be exactly 196,608 bp.
+- **Use `target_ranges` for longer source sequences**: When your sequence includes extra flanking context, provide one sequence-relative target range per sequence. Enformer will extract the fixed model input window and report where the context and output windows landed.
 - **Center your region of interest**: Enformer's predictions are most accurate near the center of the window. Place your gene, variant, or regulatory element at position ~98,304.
 - **N characters reduce accuracy**: While N is accepted, regions with many Ns (e.g., assembly gaps) will have unreliable predictions. Minimize N content.
 - **Track indices are 0-based**: `output_tracks=[0]` extracts the first track, not a track labeled "0" in external databases.
 - **Predictions are not absolute expression values**: Outputs are in model-specific units. Use them for relative comparisons (e.g., variant vs. reference, design A vs. design B), not as direct RPM or TPM estimates.
-- **GPU memory**: A single inference uses ~4-6 GB of GPU memory. Batch processing is not natively supported; run one sequence at a time.
+- **GPU memory**: A single inference uses ~4-6 GB of GPU memory. Increase `batch_size` only when your GPU has enough memory for multiple 196,608 bp model inputs.
 
 ## References
 

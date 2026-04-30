@@ -36,6 +36,9 @@ from proto_tools.tools.sequence_scoring.alphagenome import (
 from proto_tools.tools.sequence_scoring.borzoi import (
     BORZOI_CONTEXT,
     BORZOI_OUTPUT,
+    BORZOI_OUTPUT_FLANK,
+    BORZOI_OUTPUT_LENGTH,
+    BORZOI_OUTPUT_RESOLUTION,
     BorzoiConfig,
     BorzoiEnsembleConfig,
     BorzoiEnsembleOutput,
@@ -43,12 +46,16 @@ from proto_tools.tools.sequence_scoring.borzoi import (
     BorzoiInput,
     BorzoiOutput,
     BorzoiPredictionResult,
+    SequenceTargetRange,
     run_borzoi,
     run_borzoi_ensemble,
 )
 from proto_tools.tools.sequence_scoring.enformer import (
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
+    ENFORMER_OUTPUT_FLANK,
+    ENFORMER_OUTPUT_LENGTH,
+    ENFORMER_OUTPUT_RESOLUTION,
     EnformerConfig,
     EnformerInput,
     EnformerOutput,
@@ -103,6 +110,7 @@ __all__ = [
     "AlphaGenomeScoreISMOutput",
     "run_alphagenome_score_ism_variants_batch",
     # Borzoi
+    "SequenceTargetRange",
     "BorzoiInput",
     "BorzoiConfig",
     "BorzoiOutput",
@@ -114,6 +122,9 @@ __all__ = [
     "run_borzoi_ensemble",
     "BORZOI_CONTEXT",
     "BORZOI_OUTPUT",
+    "BORZOI_OUTPUT_RESOLUTION",
+    "BORZOI_OUTPUT_LENGTH",
+    "BORZOI_OUTPUT_FLANK",
     # Enformer
     "EnformerInput",
     "EnformerConfig",
@@ -122,6 +133,9 @@ __all__ = [
     "run_enformer",
     "ENFORMER_CONTEXT",
     "ENFORMER_OUTPUT",
+    "ENFORMER_OUTPUT_RESOLUTION",
+    "ENFORMER_OUTPUT_LENGTH",
+    "ENFORMER_OUTPUT_FLANK",
     # Segmasker
     "SegmaskerInput",
     "SegmaskerConfig",

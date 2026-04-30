@@ -8,12 +8,16 @@ import random
 import pytest
 from pydantic import ValidationError
 
+from proto_tools.tools.sequence_scoring.borzoi import (
+    BORZOI_CONTEXT,
+    BORZOI_OUTPUT,
+    BORZOI_OUTPUT_FLANK,
+    BORZOI_OUTPUT_RESOLUTION,
+)
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("borzoi")
-
-_BORZOI_CONTEXT = 524_288
 
 
 def _generate_random_dna_sequence(length: int, seed: int = 42) -> str:
@@ -29,18 +33,18 @@ def test_borzoi_input_valid():
     """Test valid Borzoi input is accepted."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT)
     inputs = BorzoiInput(sequences=sequence)
     assert inputs.sequences == [sequence]
-    assert len(inputs.sequences[0]) == _BORZOI_CONTEXT
+    assert len(inputs.sequences[0]) == BORZOI_CONTEXT
 
 
 def test_borzoi_input_accepts_sequence_batches():
     """Borzoi input should normalize sequence batches to a list."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
 
-    seq_a = _generate_random_dna_sequence(_BORZOI_CONTEXT)
-    seq_b = _generate_random_dna_sequence(_BORZOI_CONTEXT, seed=123)
+    seq_a = _generate_random_dna_sequence(BORZOI_CONTEXT)
+    seq_b = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=123)
 
     inputs = BorzoiInput(sequences=[seq_a, seq_b])
 
@@ -53,12 +57,66 @@ def test_borzoi_input_rejects_wrong_length():
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput
 
     # Too short
-    with pytest.raises(ValueError, match=f"must have length {_BORZOI_CONTEXT}"):
+    with pytest.raises(ValueError, match=f"must have length {BORZOI_CONTEXT}"):
         BorzoiInput(sequences="ATCG" * 100)
 
     # Too long
-    with pytest.raises(ValueError, match=f"must have length {_BORZOI_CONTEXT}"):
+    with pytest.raises(ValueError, match=f"must have length {BORZOI_CONTEXT}"):
         BorzoiInput(sequences="ATCG" * 200000)
+
+
+def test_borzoi_input_accepts_target_aligned_sequences():
+    """Target coordinates let Borzoi extract a model window from a larger construct."""
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput, SequenceTargetRange
+
+    sequence = ("C" * 100) + ("A" * BORZOI_CONTEXT) + ("G" * 100)
+    target_start = 100 + BORZOI_OUTPUT_FLANK
+
+    target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
+    inputs = BorzoiInput(sequences=sequence, target_ranges=target_range)
+
+    assert inputs.sequences == [sequence]
+    assert inputs.target_ranges == [target_range]
+
+
+def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
+    """run_borzoi should dispatch exact-context windows and return source coordinates."""
+    from proto_tools.tools.sequence_scoring.borzoi import (
+        BorzoiConfig,
+        BorzoiInput,
+        SequenceTargetRange,
+        borzoi_prediction,
+        run_borzoi,
+    )
+
+    captured_payloads = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured_payloads.append(payload)
+        return {"predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]]}
+
+    monkeypatch.setattr(borzoi_prediction.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+
+    sequence = ("C" * 100) + ("A" * BORZOI_CONTEXT) + ("G" * 100)
+    target_start = 100 + BORZOI_OUTPUT_FLANK
+    result = run_borzoi(
+        BorzoiInput(
+            sequences=[sequence], target_ranges=[SequenceTargetRange(start=target_start, end=target_start + 10)]
+        ),
+        BorzoiConfig(output_tracks=[0], use_flash_attn=False, device="cpu"),
+    )
+
+    dispatched_sequence = captured_payloads[0]["sequences"][0]
+    assert len(dispatched_sequence) == BORZOI_CONTEXT
+    assert dispatched_sequence == sequence[100 : 100 + BORZOI_CONTEXT]
+    assert result.results[0].sequence == sequence
+    assert result.results[0].context_start == 100
+    assert result.results[0].context_end == 100 + BORZOI_CONTEXT
+    assert result.results[0].output_start == 100 + BORZOI_OUTPUT_FLANK
+    assert result.results[0].output_end == 100 + BORZOI_OUTPUT_FLANK + (BORZOI_OUTPUT * BORZOI_OUTPUT_RESOLUTION)
+    assert result.results[0].output_resolution == BORZOI_OUTPUT_RESOLUTION
+    assert result.results[0].target_start == target_start
+    assert result.results[0].target_end == target_start + 10
 
 
 # -- Config validation -----------------------------------------------------------------
@@ -129,7 +187,7 @@ def test_borzoi_prediction_human():
         run_borzoi,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT)
     inputs = BorzoiInput(sequences=[sequence])
     config = BorzoiConfig(
         output_tracks=[0, 1, 2],
@@ -149,7 +207,7 @@ def test_borzoi_prediction_human():
     assert result.output_tracks == [0, 1, 2]
     assert result.avg_output_tracks is True
     assert result.results[0].sequence == sequence
-    assert result.results[0].sequence_length == _BORZOI_CONTEXT
+    assert result.results[0].sequence_length == BORZOI_CONTEXT
 
     # 1 averaged track, 6144 output positions
     assert len(result.results[0].prediction) == 1
@@ -165,7 +223,7 @@ def test_borzoi_prediction_no_average():
         run_borzoi,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT, seed=123)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=123)
     inputs = BorzoiInput(sequences=[sequence])
     config = BorzoiConfig(
         output_tracks=[0, 1, 2, 3, 4],
@@ -195,7 +253,7 @@ def test_borzoi_prediction_different_replicates():
         run_borzoi,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT, seed=456)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=456)
     inputs = BorzoiInput(sequences=[sequence])
 
     results = []
@@ -231,7 +289,7 @@ def test_borzoi_ensemble_prediction():
         run_borzoi_ensemble,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT)
     inputs = BorzoiInput(sequences=[sequence])
     config = BorzoiEnsembleConfig(
         output_tracks=[0, 1, 2],
@@ -249,7 +307,7 @@ def test_borzoi_ensemble_prediction():
     assert result.output_tracks == [0, 1, 2]
     assert result.avg_output_tracks is True
     assert result.num_replicates == 4
-    assert result.results[0].sequence_length == _BORZOI_CONTEXT
+    assert result.results[0].sequence_length == BORZOI_CONTEXT
 
     # 4 replicates x 1 averaged track x 6144 positions
     assert len(result.results[0].predictions) == 4
@@ -266,7 +324,7 @@ def test_borzoi_ensemble_no_average():
         run_borzoi_ensemble,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT, seed=789)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=789)
     inputs = BorzoiInput(sequences=[sequence])
     config = BorzoiEnsembleConfig(
         output_tracks=[0, 1, 2, 3],
@@ -297,7 +355,7 @@ def test_borzoi_ensemble_statistics():
         run_borzoi_ensemble,
     )
 
-    sequence = _generate_random_dna_sequence(_BORZOI_CONTEXT, seed=999)
+    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=999)
     inputs = BorzoiInput(sequences=[sequence])
     config = BorzoiEnsembleConfig(
         output_tracks=[0, 1],
@@ -333,7 +391,7 @@ def test_borzoi_prediction_benchmark(request: pytest.FixtureRequest) -> None:
         run_borzoi,
     )
 
-    sequences = random_dna_sequences(n=4, length=_BORZOI_CONTEXT, seed=0)
+    sequences = random_dna_sequences(n=4, length=BORZOI_CONTEXT, seed=0)
     inputs = BorzoiInput(sequences=sequences)
     config = BorzoiConfig(
         output_tracks=[0, 1, 2, 3, 4],
@@ -350,7 +408,7 @@ def test_borzoi_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.tool_id == "borzoi-prediction"
     assert len(result.results) == 4
     for r in result.results:
-        assert r.sequence_length == _BORZOI_CONTEXT
+        assert r.sequence_length == BORZOI_CONTEXT
         assert len(r.prediction) == 5  # 5 individual tracks
         assert len(r.prediction[0]) == 6144
 
@@ -366,7 +424,7 @@ def test_borzoi_ensemble_benchmark(request: pytest.FixtureRequest) -> None:
         run_borzoi_ensemble,
     )
 
-    sequences = random_dna_sequences(n=4, length=_BORZOI_CONTEXT, seed=1)
+    sequences = random_dna_sequences(n=4, length=BORZOI_CONTEXT, seed=1)
     inputs = BorzoiInput(sequences=sequences)
     config = BorzoiEnsembleConfig(
         output_tracks=[0, 1, 2],
@@ -383,7 +441,7 @@ def test_borzoi_ensemble_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.num_replicates == 4
     assert len(result.results) == 4
     for r in result.results:
-        assert r.sequence_length == _BORZOI_CONTEXT
+        assert r.sequence_length == BORZOI_CONTEXT
         assert len(r.predictions) == 4  # 4 replicates
         assert len(r.predictions[0]) == 1  # 1 averaged track
         assert len(r.predictions[0][0]) == 6144

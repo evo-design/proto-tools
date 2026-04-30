@@ -8,7 +8,7 @@ Borzoi is a deep learning model that predicts gene expression and regulatory act
 
 - **Tool keys**: `borzoi-prediction` (single replicate), `borzoi-ensemble` (all 4 replicates)
 - **Model context**: 524,288 bp (fixed length, ~262 kb in each direction from center)
-- **Output resolution**: 6,144 bins x 128 bp per bin (~786 kb output span)
+- **Output resolution**: 6,144 bins x 32 bp per bin (~197 kb output span)
 - **Species heads**: `human`, `mouse`
 - **Replicates**: 4 independently trained models
 - **GPU required**: Yes
@@ -20,7 +20,7 @@ Gene regulation involves interactions across a wide range of genomic distances. 
 Borzoi was trained to predict RNA-seq coverage directly from DNA sequence, rather than the processed experimental tracks used by Enformer. This training objective enables:
 - **Quantitative RNA-seq profiles**: Direct prediction of read coverage across gene bodies, capturing splicing patterns, alternative [TSS](https://en.wikipedia.org/wiki/Transcription_start_site) usage, and transcript isoform ratios
 - **Broader regulatory context**: The 524 kb window captures most enhancer-promoter interactions and some TAD-level organization
-- **Higher output resolution**: 6,144 bins at 128 bp resolution (vs. 896 bins in Enformer) provide finer spatial detail
+- **Higher output resolution**: 6,144 bins at 32 bp resolution provide finer spatial detail than Enformer
 
 The model also predicts [CAGE](https://en.wikipedia.org/wiki/Cap_analysis_of_gene_expression), [DNase-seq](https://en.wikipedia.org/wiki/DNase-Seq), [ATAC-seq](https://en.wikipedia.org/wiki/ATAC-seq), and [histone modification](https://en.wikipedia.org/wiki/Histone_modification) tracks, making it a general-purpose regulatory genomics predictor with improved long-range accuracy.
 
@@ -45,7 +45,7 @@ For ensemble mode, all 4 replicates run sequentially.
 
 ## How It Works
 
-1. **Input**: One or more fixed-length 524,288 bp DNA sequences centered on the region of interest
+1. **Input**: One or more 524,288 bp model-context sequences, or longer source sequences with `target_ranges`
 2. **One-hot encoding**: The sequence is converted to a 4-channel (A, C, G, T) representation; N bases are encoded as all zeros
 3. **Convolutional stem + dilated residual blocks**: Initial layers downsample and process the sequence using dilated convolutions for efficient long-range feature extraction
 4. **Attention layers**: Transformer-style attention captures dependencies across the full context window
@@ -56,7 +56,12 @@ For ensemble mode, all 4 replicates run sequentially.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sequences` | `List[str]` | Yes | DNA sequence(s), each exactly 524,288 bp. Only characters A, T, C, G, N allowed. |
+| `sequences` | `List[str]` | Yes | DNA source sequence(s). Without `target_ranges`, each sequence must be exactly 524,288 bp. With `target_ranges`, sequences may be longer and must contain enough context for a full Borzoi input window. Only A, T, C, G, N are allowed. |
+| `target_ranges` | `List[SequenceTargetRange]` | No | Sequence-relative target range(s) to keep inside the model output window. Each range has `start` (0-based inclusive) and `end` (0-based exclusive). A single range is auto-wrapped into a list. |
+
+If `target_ranges` is omitted, the provided sequence is the exact model input. If `target_ranges` is provided, the tool extracts a 524,288 bp model input window from each source sequence. The returned result reports where that model input window and the model output window landed in source-sequence coordinates.
+
+Target-range extraction is start-aligned, not midpoint-centered: when possible, bin 0 starts at `target_ranges[i].start`. Near the right edge, the context window shifts left so the full target range still fits.
 
 ## Configuration
 
@@ -113,7 +118,16 @@ When using Borzoi in optimization loops:
 | `replicate` | `str` | Replicate ID used |
 | `avg_output_tracks` | `bool` | Whether averaging was applied |
 
-Each `BorzoiPredictionResult` contains `sequence`, `sequence_length`, and `prediction` with shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`).
+Each `BorzoiPredictionResult` contains `sequence`, `sequence_length`, coordinate metadata, and `prediction` with shape `[num_tracks, 6144]` (or `[1, 6144]` if `avg_output_tracks=True`).
+
+Coordinate metadata is relative to the input `sequence`:
+
+| Field | Meaning |
+|-------|---------|
+| `context_start`, `context_end` | The 524,288 bp model input window that was sent to Borzoi |
+| `output_start`, `output_end` | The source-sequence span covered by Borzoi output bins |
+| `output_resolution` | Base pairs per output bin (`32`) |
+| `target_start`, `target_end` | The requested `target_ranges` entry, if one was provided |
 
 ### `BorzoiEnsembleOutput` (ensemble)
 
@@ -125,7 +139,7 @@ Each `BorzoiPredictionResult` contains `sequence`, `sequence_length`, and `predi
 | `avg_output_tracks` | `bool` | Whether averaging was applied |
 | `num_replicates` | `int` | Always 4 |
 
-Each `BorzoiEnsemblePredictionResult` contains `sequence`, `sequence_length`, and `predictions` with shape `[4, num_tracks, 6144]`.
+Each `BorzoiEnsemblePredictionResult` contains the same coordinate metadata as `BorzoiPredictionResult`, plus `predictions` with shape `[4, num_tracks, 6144]`.
 
 ## Interpreting Results
 
@@ -140,6 +154,10 @@ Borzoi outputs are in **log(1 + x) transformed counts** space. Higher values ind
 - The output captures read coverage patterns including exon/intron structure
 - Peaks in CAGE tracks indicate predicted transcription start sites
 - Track averaging (`avg_output_tracks=True`) gives a composite signal across related tracks
+
+**Spatial interpretation**: Bin index maps to source-sequence coordinates as:
+- Source coordinate = `output_start + bin_index * output_resolution`
+- With exact-window inputs, `output_start` is 163,840 and the center of the input (position 262,144) corresponds to bin 3,072
 
 **Ensemble uncertainty:**
 - Compute standard deviation across 4 replicate predictions per bin
@@ -222,7 +240,8 @@ result.export("borzoi_output", file_format="json")
 
 ## Best Practices & Gotchas
 
-- **Exact length required**: Input must be exactly 524,288 bp. Shorter or longer sequences are rejected.
+- **Exact-window inputs must be 524,288 bp**: If you do not pass `target_ranges`, each input sequence is treated as the exact Borzoi model input and must be exactly 524,288 bp.
+- **Use `target_ranges` for longer source sequences**: When your sequence includes extra flanking context, provide one sequence-relative target range per sequence. Borzoi will extract the fixed model input window and report where the context and output windows landed.
 - **Center your region of interest**: Like Enformer, predictions are most informative near the center of the input window. Place your target gene or variant at position ~262,144.
 - **Mouse requires `use_flash_attn=False`**: Mouse checkpoints were not trained with FlashAttention. Setting `species="mouse"` with `use_flash_attn=True` raises a `ValueError`.
 - **Ensemble is 4x slower**: Each replicate runs a full forward pass. Use single replicate for iteration, ensemble for final analysis.

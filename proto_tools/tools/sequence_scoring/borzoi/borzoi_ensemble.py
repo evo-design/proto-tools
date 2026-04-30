@@ -12,7 +12,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import BorzoiConfig, BorzoiInput, run_borzoi
+from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
+    BORZOI_OUTPUT_RESOLUTION,
+    BorzoiConfig,
+    BorzoiInput,
+    run_borzoi,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
 from proto_tools.utils.progress import progress_bar
@@ -26,16 +31,45 @@ logger = logging.getLogger(__name__)
 class BorzoiEnsemblePredictionResult(BaseModel):
     """Per-sequence Borzoi ensemble prediction result.
 
+    Coordinates in this result are relative to the input sequence returned in
+    ``sequence``. ``context_start``/``context_end`` describe the model input
+    window used for every replicate. ``output_start``/``output_end`` describe
+    the source-sequence span covered by Borzoi's output bins. If target ranges
+    were supplied, ``target_start``/``target_end`` echo the requested range that
+    was validated to fit inside the output window.
+
     Attributes:
         sequence (str): Input DNA sequence that was scored.
         sequence_length (int): Length of the input sequence.
         predictions (list[list[list[float]]]): Stacked predictions with shape
             ``[4, num_tracks, 6144]`` for replicates 0-3.
+        context_start (int): Start coordinate of the Borzoi input window in the
+            source sequence.
+        context_end (int): End coordinate of the Borzoi input window in the
+            source sequence.
+        output_start (int): Source-sequence coordinate of the first Borzoi
+            output bin.
+        output_end (int): Source-sequence coordinate immediately after the last
+            Borzoi output bin.
+        output_resolution (int): Base pairs represented by each output bin.
+        target_start (int | None): Target start coordinate supplied for this
+            sequence.
+        target_end (int | None): Target end coordinate supplied for this
+            sequence.
     """
 
-    sequence: str = Field(description="Input DNA sequence")
-    sequence_length: int = Field(description="Length of input sequence")
+    sequence: str = Field(description="DNA sequence originally provided to the tool")
+    sequence_length: int = Field(description="Length of the provided DNA sequence")
     predictions: list[list[list[float]]] = Field(description="Stacked predictions with shape [4, num_tracks, 6144]")
+    context_start: int = Field(description="0-based start of the Borzoi input window in sequence")
+    context_end: int = Field(description="0-based exclusive end of the Borzoi input window")
+    output_start: int = Field(description="0-based start of the span covered by Borzoi output bins")
+    output_end: int = Field(description="0-based exclusive end of the Borzoi output-bin span")
+    output_resolution: int = Field(
+        default=BORZOI_OUTPUT_RESOLUTION, description="Base pairs represented by each output bin"
+    )
+    target_start: int | None = Field(default=None, description="Requested target start, if target_ranges was provided")
+    target_end: int | None = Field(default=None, description="Requested target end, if target_ranges was provided")
 
 
 class BorzoiEnsembleOutput(BaseToolOutput):
@@ -104,6 +138,13 @@ class BorzoiEnsembleOutput(BaseToolOutput):
                         "species",
                         "avg_output_tracks",
                         "num_replicates",
+                        "context_start",
+                        "context_end",
+                        "output_start",
+                        "output_end",
+                        "output_resolution",
+                        "target_start",
+                        "target_end",
                         "predictions",
                     ]
                 )
@@ -116,6 +157,13 @@ class BorzoiEnsembleOutput(BaseToolOutput):
                             self.species,
                             self.avg_output_tracks,
                             self.num_replicates,
+                            result.context_start,
+                            result.context_end,
+                            result.output_start,
+                            result.output_end,
+                            result.output_resolution,
+                            result.target_start,
+                            result.target_end,
                             json.dumps(result.predictions),
                         ]
                     )
@@ -248,12 +296,21 @@ def run_borzoi_ensemble(
         replicate_output = run_borzoi(inputs, replicate_config, instance=instance)
         replicate_outputs.append(replicate_output)
 
+    reference_output = replicate_outputs[0]
+
     return BorzoiEnsembleOutput(
         results=[
             BorzoiEnsemblePredictionResult(
                 sequence=sequence,
                 sequence_length=len(sequence),
                 predictions=[replicate_output.results[idx].prediction for replicate_output in replicate_outputs],
+                context_start=reference_output.results[idx].context_start,
+                context_end=reference_output.results[idx].context_end,
+                output_start=reference_output.results[idx].output_start,
+                output_end=reference_output.results[idx].output_end,
+                output_resolution=reference_output.results[idx].output_resolution,
+                target_start=reference_output.results[idx].target_start,
+                target_end=reference_output.results[idx].target_end,
             )
             for idx, sequence in enumerate(inputs.sequences)
         ],

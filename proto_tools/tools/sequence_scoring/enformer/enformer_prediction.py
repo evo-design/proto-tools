@@ -10,8 +10,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from proto_tools.tools.sequence_scoring.shared_data_models import (
+    SequenceTargetRange,
+    prepare_model_windows,
+    validate_dna_sequence,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -20,7 +25,6 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
-    return_invalid_nucleotide_chars,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,36 +32,48 @@ logger = logging.getLogger(__name__)
 # Enformer model constants
 ENFORMER_CONTEXT = 196_608
 ENFORMER_OUTPUT = 896
+ENFORMER_OUTPUT_RESOLUTION = 128
+ENFORMER_OUTPUT_LENGTH = ENFORMER_OUTPUT * ENFORMER_OUTPUT_RESOLUTION
+ENFORMER_OUTPUT_FLANK = (ENFORMER_CONTEXT - ENFORMER_OUTPUT_LENGTH) // 2
 
 
 # ============================================================================
 # Data Models
 # ============================================================================
-# Input:
-def _validate_enformer_sequence(sequence: str) -> str:
-    """Validate and normalize one Enformer input sequence."""
-    if not sequence or not sequence.strip():
-        raise ValueError("Sequence cannot be empty")
-    sequence = sequence.upper()
-    invalid_chars = return_invalid_nucleotide_chars(sequence, additional_valid_chars="N")
-    if invalid_chars:
-        raise ValueError(f"Invalid nucleotide characters in sequence: {', '.join(sorted(invalid_chars))}")
-    if len(sequence) != ENFORMER_CONTEXT:
-        raise ValueError(f"Input sequence must have length {ENFORMER_CONTEXT}, got {len(sequence)}")
-    return sequence
-
-
 class EnformerInput(BaseToolInput):
     """Input for Enformer regulatory activity prediction.
 
+    There are two supported modes:
+
+    * Exact-window mode: pass sequence(s) that are exactly 196,608 bp, the
+      Enformer model context length. The full sequence is sent to the model.
+    * Target-range mode: pass longer source sequence(s) plus one
+      ``SequenceTargetRange`` per sequence. Each range identifies the
+      sequence-relative span the caller wants covered by Enformer's output
+      bins. The tool extracts the fixed 196,608 bp model context window and
+      records where that context and output window came from in the original
+      sequence.
+
     Attributes:
         sequences (list[str]): DNA sequence(s) for Enformer inference. A string
-            passed to this plural field is normalized to a one-item list. Each
-            sequence must be exactly 196,608 bp and only contain valid nucleotide
-            characters.
+            passed to this plural field is normalized to a one-item list.
+        target_ranges (list[SequenceTargetRange] | None): Optional target
+            ranges within each provided sequence. Coordinates are relative to
+            the corresponding sequence, 0-based, and use exclusive ends. When
+            provided, each sequence must contain enough real context to extract
+            a full Enformer input window; the tool does not pad missing
+            context.
     """
 
-    sequences: list[str] = InputField(description="DNA sequence(s) to score", min_length=1)
+    sequences: list[str] = InputField(
+        description="DNA sequence(s): exact model windows, or sources paired with target_ranges",
+        min_length=1,
+    )
+    target_ranges: list[SequenceTargetRange] | None = InputField(
+        default=None,
+        description="Sequence-relative range(s) that must remain inside Enformer output bins",
+        advanced=True,
+    )
 
     @field_validator("sequences", mode="before")
     @classmethod
@@ -74,8 +90,31 @@ class EnformerInput(BaseToolInput):
     @field_validator("sequences")
     @classmethod
     def validate_sequences(cls, sequences: list[str]) -> list[str]:
-        """Validate and normalize nucleotide sequences; require length 196,608 bp."""
-        return [_validate_enformer_sequence(sequence) for sequence in sequences]
+        """Validate and normalize nucleotide sequences."""
+        return [validate_dna_sequence(sequence) for sequence in sequences]
+
+    @field_validator("target_ranges", mode="before")
+    @classmethod
+    def normalize_target_ranges(cls, value: Any) -> list[Any] | None:
+        """Normalize a single target range to a list."""
+        if value is None:
+            return None
+        if isinstance(value, list):
+            if not value:
+                raise ValueError("target_ranges cannot be empty")
+            return value
+        return [value]
+
+    @model_validator(mode="after")
+    def validate_window_inputs(self) -> "EnformerInput":
+        """Validate exact-context or target-aligned window inputs."""
+        prepare_model_windows(
+            self.sequences,
+            context_length=ENFORMER_CONTEXT,
+            output_length=ENFORMER_OUTPUT_LENGTH,
+            target_ranges=self.target_ranges,
+        )
+        return self
 
     def __len__(self) -> int:
         """Return the number of input sequences."""
@@ -86,16 +125,46 @@ class EnformerInput(BaseToolInput):
 class EnformerPredictionResult(BaseModel):
     """Per-sequence Enformer prediction result.
 
+    Coordinates in this result are relative to the input sequence returned in
+    ``sequence``. ``context_start``/``context_end`` describe the 196,608 bp
+    model input window that was dispatched. ``output_start``/``output_end``
+    describe the span of that source sequence covered by Enformer's 896 output
+    bins. If ``target_ranges`` were supplied, ``target_start``/``target_end``
+    echo the requested target range that was validated to fit inside the output
+    window.
+
     Attributes:
         sequence (str): Input DNA sequence that was scored.
         sequence_length (int): Length of the input sequence.
         prediction (list[list[float]]): Predicted signal matrix with shape
             ``[896, num_tracks]``.
+        context_start (int): Start coordinate of the Enformer input window in
+            the source sequence.
+        context_end (int): End coordinate of the Enformer input window in the
+            source sequence.
+        output_start (int): Source-sequence coordinate of the first Enformer
+            output bin.
+        output_end (int): Source-sequence coordinate immediately after the last
+            Enformer output bin.
+        output_resolution (int): Base pairs represented by each output bin.
+        target_start (int | None): Target start coordinate supplied for this
+            sequence.
+        target_end (int | None): Target end coordinate supplied for this
+            sequence.
     """
 
-    sequence: str = Field(description="Input DNA sequence")
-    sequence_length: int = Field(description="Length of input sequence")
+    sequence: str = Field(description="DNA sequence originally provided to the tool")
+    sequence_length: int = Field(description="Length of the provided DNA sequence")
     prediction: list[list[float]] = Field(description="Predicted activity matrix with shape [896, num_tracks]")
+    context_start: int = Field(description="0-based start of the Enformer input window in sequence")
+    context_end: int = Field(description="0-based exclusive end of the Enformer input window")
+    output_start: int = Field(description="0-based start of the span covered by Enformer output bins")
+    output_end: int = Field(description="0-based exclusive end of the Enformer output-bin span")
+    output_resolution: int = Field(
+        default=ENFORMER_OUTPUT_RESOLUTION, description="Base pairs represented by each output bin"
+    )
+    target_start: int | None = Field(default=None, description="Requested target start, if target_ranges was provided")
+    target_end: int | None = Field(default=None, description="Requested target end, if target_ranges was provided")
 
 
 class EnformerOutput(BaseToolOutput):
@@ -151,7 +220,22 @@ class EnformerOutput(BaseToolOutput):
         elif file_format == "csv":
             with open(path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["sequence_index", "sequence_length", "output_tracks", "species", "prediction"])
+                writer.writerow(
+                    [
+                        "sequence_index",
+                        "sequence_length",
+                        "output_tracks",
+                        "species",
+                        "context_start",
+                        "context_end",
+                        "output_start",
+                        "output_end",
+                        "output_resolution",
+                        "target_start",
+                        "target_end",
+                        "prediction",
+                    ]
+                )
                 for idx, result in enumerate(self.results):
                     writer.writerow(
                         [
@@ -159,6 +243,13 @@ class EnformerOutput(BaseToolOutput):
                             result.sequence_length,
                             json.dumps(self.output_tracks),
                             self.species,
+                            result.context_start,
+                            result.context_end,
+                            result.output_start,
+                            result.output_end,
+                            result.output_resolution,
+                            result.target_start,
+                            result.target_end,
                             json.dumps(result.prediction),
                         ]
                     )
@@ -241,11 +332,19 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
     """
     logger.debug("Using local venv for Enformer prediction")
 
+    prepared_windows = prepare_model_windows(
+        inputs.sequences,
+        context_length=ENFORMER_CONTEXT,
+        output_length=ENFORMER_OUTPUT_LENGTH,
+        target_ranges=inputs.target_ranges,
+    )
+    model_sequences = [window.model_sequence for window in prepared_windows]
+
     result = ToolInstance.dispatch(
         "enformer",
         {
             "operation": "predict",
-            "sequences": inputs.sequences,
+            "sequences": model_sequences,
             "output_tracks": config.output_tracks,
             "species": config.species,
             "batch_size": config.batch_size,
@@ -258,8 +357,8 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
     )
 
     predictions = result["predictions"]
-    if len(predictions) != len(inputs.sequences):
-        raise ValueError(f"Expected {len(inputs.sequences)} Enformer predictions, got {len(predictions)}")
+    if len(predictions) != len(model_sequences):
+        raise ValueError(f"Expected {len(model_sequences)} Enformer predictions, got {len(predictions)}")
 
     return EnformerOutput(
         results=[
@@ -267,8 +366,15 @@ def run_enformer(inputs: EnformerInput, config: EnformerConfig, instance: Any = 
                 sequence=sequence,
                 sequence_length=len(sequence),
                 prediction=prediction,
+                context_start=window.context_start,
+                context_end=window.context_end,
+                output_start=window.output_start,
+                output_end=window.output_end,
+                output_resolution=ENFORMER_OUTPUT_RESOLUTION,
+                target_start=window.target_start,
+                target_end=window.target_end,
             )
-            for sequence, prediction in zip(inputs.sequences, predictions, strict=True)
+            for sequence, prediction, window in zip(inputs.sequences, predictions, prepared_windows, strict=True)
         ],
         output_tracks=config.output_tracks,
         species=config.species,
