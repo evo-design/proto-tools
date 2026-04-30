@@ -24,10 +24,11 @@ from proto_tools.tools.inverse_folding.fampnn import (
     run_fampnn_score,
     run_fampnn_score_all_mutations,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "test_structure_similarity.pdb"
+BENCHMARK_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 
 
 _persistent_tool = make_persistent_fixture("fampnn")
@@ -36,6 +37,11 @@ _persistent_tool = make_persistent_fixture("fampnn")
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)
+
+
+@pytest.fixture(scope="module")
+def benchmark_pdb_structure():
+    return Structure.from_file(BENCHMARK_PDB_FILE)
 
 
 # ============================================================================
@@ -429,3 +435,125 @@ def test_fampnn_score_all_mutations_scores_range(pdb_structure):
             assert score == score, f"NaN score at {pos_label}->{residue}"
             # Log-likelihood ratios should be bounded
             assert abs(score) < 50, f"Extreme score at {pos_label}->{residue}: {score}"
+
+
+# ============================================================================
+# Benchmarks
+# ============================================================================
+def _random_mutations(sequence: str, n: int, seed: int) -> list[str]:
+    """Generate ``n`` deterministic random single-point mutations on ``sequence``."""
+    import random as _random
+
+    rng = _random.Random(seed)
+    aa_alphabet = "ACDEFGHIKLMNPQRSTVWY"
+    mutations: list[str] = []
+    for _ in range(n):
+        pos = rng.randint(1, len(sequence))
+        wt = sequence[pos - 1]
+        mut = rng.choice([aa for aa in aa_alphabet if aa != wt])
+        mutations.append(f"{wt}{pos}{mut}")
+    return mutations
+
+
+@pytest.mark.benchmark("fampnn-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_fampnn_sample_benchmark(request: pytest.FixtureRequest, benchmark_pdb_structure: Structure) -> None:
+    """Benchmark fampnn-sample: 20 full-atom designs of renin (~340 aa) at batch_size=8 (cold + warm).
+
+    Uses default ``num_steps=100`` and ``model_variant="0.3"`` so each design exercises
+    the full iterative-MLM + sidechain-diffusion path. FAMPNN sample is much heavier
+    per sequence than ProteinMPNN, so the workload is sized smaller than proteinmpnn-sample.
+    """
+    inputs = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=benchmark_pdb_structure)])
+    config = FAMPNNSampleConfig(
+        num_sequences_per_structure=20,
+        batch_size=8,
+        temperature=0.1,
+        seed=0,
+    )
+
+    result = benchmark_twice(request, "fampnn", lambda: run_fampnn_sample(inputs, config))
+
+    assert result.tool_id == "fampnn-sample"
+    assert len(result.designed_sequences) == 1
+    designs = result.designed_sequences[0]
+    assert len(designs.sequences) == 20
+    target_len = len(benchmark_pdb_structure.get_chain_sequence("A"))
+    for seq in designs.sequences:
+        assert len(seq) == target_len
+    assert len(designs.output_pdb_strings) == 20
+    assert all("ATOM" in pdb for pdb in designs.output_pdb_strings)
+
+
+@pytest.mark.benchmark("fampnn-pack")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_fampnn_pack_benchmark(request: pytest.FixtureRequest, benchmark_pdb_structure: Structure) -> None:
+    """Benchmark fampnn-pack: 20 sidechain repacks of renin (~340 aa) at batch_size=8 (cold + warm)."""
+    inputs = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=benchmark_pdb_structure)])
+    config = FAMPNNPackConfig(
+        num_samples_per_structure=20,
+        batch_size=8,
+        seed=0,
+    )
+
+    result = benchmark_twice(request, "fampnn", lambda: run_fampnn_pack(inputs, config))
+
+    assert result.tool_id == "fampnn-pack"
+    assert len(result.packed_structures) == 1
+    assert len(result.packed_structures[0]) == 20
+    for pdb_str in result.packed_structures[0]:
+        assert "ATOM" in pdb_str
+    assert len(result.psce[0]) == 20
+
+
+@pytest.mark.benchmark("fampnn-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_fampnn_score_benchmark(request: pytest.FixtureRequest, benchmark_pdb_structure: Structure) -> None:
+    """Benchmark fampnn-score on 200 random single-point mutations of renin at batch_size=16 (cold + warm).
+
+    fampnn-score runs the full denoiser + sidechain diffusion (50 steps) per
+    batch, so peak GPU memory scales sharply with batch_size for large
+    structures. batch_size=16 (the implementation default) fits a 340-aa
+    structure on an 80 GiB GPU; 32 OOMs.
+    """
+    seq = benchmark_pdb_structure.get_chain_sequence("A")
+    mutations = _random_mutations(seq, n=200, seed=0)
+
+    inputs = FAMPNNScoreInput(
+        inputs=[
+            MutationInput(structure=benchmark_pdb_structure, mutations=mutations),
+        ]
+    )
+    config = FAMPNNScoreConfig(batch_size=16, seed=0)
+
+    result = benchmark_twice(request, "fampnn", lambda: run_fampnn_score(inputs, config))
+
+    assert result.tool_id == "fampnn-score"
+    assert len(result.results) == 1
+    assert len(result.results[0].mutations) == 200
+    assert len(result.results[0].scores) == 200
+    assert all(isinstance(s, float) for s in result.results[0].scores)
+
+
+@pytest.mark.benchmark("fampnn-score-all-mutations")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_fampnn_score_all_mutations_benchmark(
+    request: pytest.FixtureRequest, benchmark_pdb_structure: Structure
+) -> None:
+    """Benchmark fampnn-score-all-mutations on renin (~340 positions x 20 AAs) at batch_size=32 (cold + warm)."""
+    inputs = FAMPNNScoreAllMutationsInput(inputs=[benchmark_pdb_structure])
+    config = FAMPNNScoreAllMutationsConfig(batch_size=32)
+
+    result = benchmark_twice(request, "fampnn", lambda: run_fampnn_score_all_mutations(inputs, config))
+
+    assert result.tool_id == "fampnn-score-all-mutations"
+    assert len(result.results) == 1
+    scores = result.results[0].scores
+    target_len = len(benchmark_pdb_structure.get_chain_sequence("A"))
+    assert len(scores) == target_len
+    first_pos = next(iter(scores))
+    assert len(scores[first_pos]) == 20

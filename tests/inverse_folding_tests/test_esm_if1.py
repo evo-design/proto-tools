@@ -22,7 +22,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -206,3 +206,53 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
         np.exp(-score.avg_log_likelihood),
         rtol=1e-5,
     )
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("esm-if1-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm_if1_sample_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
+    """Benchmark esm-if1-sample: 50 ProteinDPO designs of renin (~340 aa) at batch_size=16 (cold + warm)."""
+    inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
+    config = ESMIF1SampleConfig(
+        num_sequences_per_structure=50,
+        batch_size=16,
+        temperature=0.1,
+        seed=0,
+    )
+
+    result = benchmark_twice(request, "esm_if1", lambda: run_esm_if1_sample(inputs, config))
+
+    assert result.tool_id == "esm-if1-sample"
+    assert len(result.designed_sequences) == 1
+    designs = result.designed_sequences[0]
+    assert len(designs.sequences) == 50
+    target_len = len(pdb_structure.get_chain_sequence("A"))
+    for seq in designs.sequences:
+        assert len(seq) == target_len
+    assert len(designs.log_likelihoods) == 50
+    assert all(np.isfinite(ll) for ll in designs.log_likelihoods)
+
+
+@pytest.mark.benchmark("esm-if1-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esm_if1_score_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
+    """Benchmark esm-if1-score on 50 sequence-structure pairs against renin (cold + warm)."""
+    target_len = len(pdb_structure.get_chain_sequence("A"))
+    sequences = random_protein_sequences(n=50, length=target_len, seed=1)
+    pairs = [SequenceStructurePair(sequence=s, structure=pdb_structure) for s in sequences]
+
+    inputs = ESMIF1ScoringInput(sequence_structure_pairs=pairs)
+    config = ESMIF1ScoringConfig()
+
+    result = benchmark_twice(request, "esm_if1", lambda: run_esm_if1_score(inputs, config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "esm-if1-score"
+    assert len(result.scores) == 50
+    for score in result.scores:
+        assert score["perplexity"] >= 1.0
