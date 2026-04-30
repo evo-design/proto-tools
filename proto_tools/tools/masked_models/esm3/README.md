@@ -3,7 +3,7 @@
 # ESM3
 
 ## Overview
-ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) with sequence understanding and generation capabilities. Unlike ESM2, ESM3 is a generative model that can perform both embedding extraction and sequence generation. The open model (`esm3_sm_open_v1`) provides embeddings, logits, sampling, and scoring in a unified framework.
+ESM3 is EvolutionaryScale's next-generation [protein language model](https://www.evolutionaryscale.ai/blog/esm-cambrian) with sequence and structure modeling capabilities. This package's `esm3-sample` tool exposes masked sequence editing over supplied protein sequences. The open model (`esm3_sm_open_v1`) provides embeddings, logits, masked sampling, and scoring in a unified framework.
 
 ## Background
 
@@ -15,14 +15,14 @@ Protein language models (pLMs) learn the "grammar" of proteins from evolutionary
 - **3D geometry**: Spatial relationships between residues
 
 **Why ESM3 over ESM2?**
-ESM3 adds generation capabilities. When you need both sequence analysis and generation in a single model, ESM3 provides a unified framework. For pure sequence embedding tasks, ESM2 is often faster.
+ESM3 is broader than ESM2 at the model-family level. In Proto Tools today, use `esm3-sample` for masked sequence editing and local refinement; for pure sequence embedding tasks, ESM2 is often faster.
 
 ## Tool Catalog
 
 | Tool | Description | Output |
 |------|-------------|--------|
 | `esm3-embedding` | Extract embeddings and logits | Embeddings, logits, attention masks |
-| `esm3-sample` | Mutate sequences using model | Modified sequences, optional logits |
+| `esm3-sample` | Mutate/restore masked sequence positions using model | Modified sequences, optional logits |
 | `esm3-score` | Score sequences with MLM pseudo-perplexity | Per-sequence metrics, optional logits |
 
 ## Model Variants
@@ -40,13 +40,13 @@ Currently only the small open-source model is available. Larger models may becom
 ## How It Works
 
 ESM3 uses a transformer architecture that jointly models protein sequence and structure. Key differences from ESM2:
-- **Generative model**: Can generate new sequences and structures, not just analyze existing ones
+- **Generative model family**: Can support sequence/structure generation modes, though this package exposes masked sequence sampling for supplied sequences
 - **Structure tokens**: Encodes 3D structure as discrete tokens alongside sequence tokens
 - **Multi-track architecture**: Processes sequence, structure, and function information in parallel
 
 **Embeddings**: Forward pass produces per-position hidden states; mean-pooling yields fixed-length descriptors.
 
-**Sampling**: Positions are selected by decoding method (entropy, max_logit, or random), masked, and resampled from the model's distribution.
+**Sampling**: Positions are selected by masking strategy (entropy, max-logit, or random), masked, and resampled from the model's distribution.
 
 **Scoring**: Each position is masked one at a time to compute log-probability of the true amino acid, yielding pseudo-perplexity.
 

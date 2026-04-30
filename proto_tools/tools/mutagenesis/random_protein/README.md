@@ -152,5 +152,5 @@ for scheme in ["UNIFORM", "NNK", "NDT"]:
 - `esm2-sample`: Language model-guided protein mutations
 
 **Alternative tools:**
-- ESM2/ESM3 sampling: Use learned protein distributions instead of uniform/codon-based random sampling
+- ESM2/ESM3 sampling: Use learned protein distributions for local masked mutations instead of uniform/codon-based random sampling
 - ProteinMPNN: Structure-conditioned inverse folding for informed sequence design

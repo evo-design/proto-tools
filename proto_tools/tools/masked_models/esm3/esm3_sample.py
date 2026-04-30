@@ -42,14 +42,14 @@ ESM3SampleInput = MaskedModelInput
 class ESM3SampleOutput(BaseToolOutput):
     """Output from ESM3 protein sequence sampling.
 
-    This class encapsulates the results of ESM3 sequence generation or mutation,
-    providing the sampled protein sequences and optionally the logits.
+    This class encapsulates the results of ESM3 masked sequence sampling,
+    providing mutated/refined protein sequences and optionally the logits. The
+    tool fills selected positions in supplied sequences.
 
     Attributes:
         sequences (list[str]): Sampled or mutated protein sequences. Each sequence
-            is a string of amino acid characters. For de novo generation, these are
-            completely new sequences. For mutation, these are modified versions of
-            the input sequences with specified positions changed to model-predicted
+            is a string of amino acid characters and is a modified version of the
+            input sequence with masked positions changed to model-predicted
             alternatives.
         logits (list[list[list[float]]] | None): Per-position logits for each
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present
@@ -173,7 +173,7 @@ def run_esm3_sample(
     config: ESM3SampleConfig,
     instance: Any = None,
 ) -> ESM3SampleOutput:
-    """Sample protein sequences using ESM3 language model.
+    """Sample masked positions in protein sequences using ESM3.
 
     The ``preprocess`` hook on :class:`ESM3SampleConfig` applies the masking
     strategy before this function runs, so ``inputs.sequences`` already

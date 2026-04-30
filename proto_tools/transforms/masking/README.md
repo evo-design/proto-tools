@@ -46,9 +46,9 @@ MaskingStrategy(
 ).mask(["MKTLLIFLA"])
 # → ["MK_LL_F_A"]  (three highest-entropy positions)
 
-# Mask everything except a fixed position.
-MaskingStrategy(mask_fraction=1.0, fixed_positions=[1]).mask(["MKTLLIFLA"])
-# → ["_K_______"]
+# Mask a larger editable subset while preserving fixed positions.
+MaskingStrategy(mask_fraction=0.5, fixed_positions=[1]).mask(["MKTLLIFLA"])
+# → ["MK_L__F_A"]
 ```
 
 The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [ESM2](../../tools/masked_models/esm2/README.md) and [ESM3](../../tools/masked_models/esm3/README.md) example notebooks for end-to-end usage.

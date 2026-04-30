@@ -48,14 +48,15 @@ ESM2SampleInput = MaskedModelInput
 class ESM2SampleOutput(BaseToolOutput):
     """Output from ESM2 protein sequence sampling.
 
-    This class encapsulates the results of ESM2 sequence generation or mutation,
-    providing the sampled protein sequences and optionally the logits.
+    This class encapsulates the results of ESM2 masked sequence sampling,
+    providing mutated/refined protein sequences and optionally the logits. ESM2 is
+    a masked language model for filling selected positions in an existing
+    sequence.
 
     Attributes:
         sequences (list[str]): Sampled or mutated protein sequences. Each sequence
-            is a string of amino acid characters. For de novo generation, these are
-            completely new sequences. For mutation, these are modified versions of
-            the input sequences with specified positions changed to model-predicted
+            is a string of amino acid characters and is a modified version of the
+            input sequence with masked positions changed to model-predicted
             alternatives.
         logits (list[list[list[float]]] | None): Per-position logits for each
             sequence. Shape is (num_sequences, seq_len, vocab_size=20). Only present

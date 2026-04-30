@@ -235,8 +235,11 @@ class MaskingStrategy(BaseModel):
         MaskingStrategy(method="entropy", model_name="esm2", num_mutations=3).mask(["MKTLLIFLA"])
         # → ["MK_LL_F_A"]  (3 highest-entropy positions)
 
-        MaskingStrategy(mask_fraction=1.0, fixed_positions=[1]).mask(["MKTLLIFLA"])
-        # → ["M________"]  (all designable positions masked)
+        MaskingStrategy(mask_fraction=0.5, fixed_positions=[1]).mask(["MKTLLIFLA"])
+        # → ["M_TL_I__A"]  (roughly half of designable positions masked)
+
+        ``mask_fraction`` is applied over designable positions after fixed
+        positions are excluded.
     """
 
     model_config = ConfigDict(frozen=True)
