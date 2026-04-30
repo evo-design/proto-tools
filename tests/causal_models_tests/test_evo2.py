@@ -14,7 +14,8 @@ from proto_tools.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
-from tests.conftest import make_persistent_fixture
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import DNA_NUCLEOTIDES
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -381,3 +382,57 @@ def test_evo2_score_logits_serialization(model_checkpoint):
     for position_logits in score.logits:
         for logit_value in position_logits:
             assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
+
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("evo2-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_evo2_sample_benchmark(request):
+    """Benchmark evo2-sample: 16 DNA prompts x 1024 nt, generating 512 tokens each (cold + warm)."""
+    prompts = random_dna_sequences(n=16, length=1024, seed=0)
+    inputs = Evo2SampleInput(prompts=prompts)
+    config = Evo2SampleConfig(
+        model_checkpoint="evo2_7b",
+        num_tokens=512,
+        temperature=1.0,
+        batch_size=16,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "evo2", lambda: run_evo2_sample(inputs=inputs, config=config))
+
+    assert result.tool_id == "evo2-sample"
+    assert len(result.sequences) == 16, "Should have 16 sampled sequences"
+    valid_chars = set(DNA_NUCLEOTIDES) | set(DNA_NUCLEOTIDES.lower()) | set("Nn")
+    for seq in result.sequences:
+        assert isinstance(seq, str) and len(seq) >= 1024, "Output should include the 1024nt prompt at minimum"
+        invalid = set(seq) - valid_chars
+        assert not invalid, f"Non-DNA characters in output: {invalid}"
+
+
+@pytest.mark.benchmark("evo2-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_evo2_score_benchmark(request):
+    """Benchmark evo2-score: 24 DNA sequences x 4096 nt (cold + warm)."""
+    sequences = random_dna_sequences(n=24, length=4096, seed=1)
+    inputs = Evo2ScoringInput(sequences=sequences)
+    config = Evo2ScoringConfig(
+        model_checkpoint="evo2_7b",
+        batch_size=16,
+        return_logits=True,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "evo2", lambda: run_evo2_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "evo2-score"
+    assert len(result.scores) == 24
+    for score in result.scores:
+        assert score.logits is not None
+        assert len(score.logits) == 4096
+        assert len(score.logits[0]) == 512  # Evo2 byte-level vocab
