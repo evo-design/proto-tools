@@ -13,7 +13,8 @@ from proto_tools.tools.structure_design import (
     RFdiffusion3Input,
     run_rfdiffusion3,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("rfdiffusion3")
 
@@ -75,3 +76,28 @@ def test_rfdiffusion3_unconditional_design():
     assert len(output[0].sequence) > 0
     assert output[0].spec_key == "spec-0"
     assert output[0].design_index == 0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("rfdiffusion3-design")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_rfdiffusion3_design_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark rfdiffusion3-design: 8 unconditional 128-aa designs in one diffusion batch, 200 timesteps (cold + warm)."""
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="128")])
+    config = RFdiffusion3Config(
+        n_batches=1,
+        diffusion_batch_size=8,  # 8 parallel designs per pass; mirrors typical mini-binder generation
+        num_timesteps=200,
+    )
+
+    result = benchmark_twice(request, "rfdiffusion3", lambda: run_rfdiffusion3(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "rfdiffusion3-design"
+    assert len(result.output_structures) == 8
+    for design in result.output_structures:
+        assert design.structure is not None
+        assert len(design.sequence) == 128

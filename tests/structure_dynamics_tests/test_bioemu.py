@@ -16,6 +16,7 @@ from proto_tools.tools.structure_dynamics.bioemu import (
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionComplex,
 )
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _SAMPLE_SEQUENCE = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
@@ -176,3 +177,33 @@ def test_bioemu_sample_end_to_end():
         assert isinstance(structure, Structure)
         assert structure.structure_pdb is not None
         assert len(structure.structure_pdb) > 0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+# Barnase (110 aa) — well-characterized small enzyme; comfortably below the
+# 500-aa BioEmu performance warning while large enough to exercise the
+# diffusion sampler at realistic batched scale.
+_BARNASE_SEQUENCE = (
+    "AQVINTFDGVADYLQTYHKLPDNYITKSEAQALGWVASKGNLADVAPGKSIGGDIFSNREGKLPGKSGRTWREADINYTSGFRNSDRILYSSDWLIYKTTDHYQTFTKIR"
+)
+
+
+@pytest.mark.benchmark("bioemu-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_bioemu_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark bioemu-sample: 20 conformations of barnase (110 aa), batch_size=10 (cold + warm)."""
+    inputs = BioEmuInput(
+        complexes=[StructurePredictionComplex(chains=[{"sequence": _BARNASE_SEQUENCE, "entity_type": "protein"}])]
+    )
+    config = BioEmuConfig(num_samples=20, batch_size=10, verbose=False)
+
+    result = benchmark_twice(request, "bioemu", lambda: run_bioemu(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "bioemu-sample"
+    assert len(result.ensembles) == 1
+    assert len(result.ensembles[0].structures) >= 1
+    for structure in result.ensembles[0].structures:
+        assert structure.structure_pdb is not None
