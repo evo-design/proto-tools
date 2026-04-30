@@ -15,7 +15,7 @@ from proto_tools.tools.causal_models.progen2 import (
     run_progen2_score,
 )
 from proto_tools.utils import PROTEIN_AMINO_ACIDS
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -477,3 +477,53 @@ def test_progen2_sample_logits_not_returned_by_default():
     validate_output(result)
 
     assert result.logits is None, f"Logits should be None when return_logits=False, got {type(result.logits)}"
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("progen2-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_progen2_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark progen2-sample on 50 length-250 prompts generating up to 700 total tokens (cold + warm)."""
+    prompts = random_protein_sequences(n=50, length=250, seed=0)
+    inputs = ProGen2SampleInput(prompts=prompts)
+    config = ProGen2SampleConfig(
+        model_checkpoint="progen2-medium",
+        batch_size=16,
+        max_length=700,
+        temperature=0.2,
+        top_p=0.95,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "progen2", lambda: run_progen2_sample(inputs=inputs, config=config))
+
+    assert len(result.sequences) == 50, "Should have 50 generated sequences"
+    for sampled in result.sequences:
+        assert len(sampled) > 0, "Generated sequence should be non-empty"
+        assert all(aa in PROTEIN_AMINO_ACIDS for aa in sampled), "All residues should be standard amino acids"
+
+
+@pytest.mark.benchmark("progen2-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_progen2_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark progen2-score on 200 sequences of length 500 (cold + warm)."""
+    sequences = random_protein_sequences(n=200, length=500, seed=1)
+    inputs = ProGen2ScoringInput(sequences=sequences)
+    config = ProGen2ScoringConfig(
+        model_checkpoint="progen2-medium",
+        batch_size=32,
+        return_logits=False,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "progen2", lambda: run_progen2_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "progen2-score"
+    assert len(result.scores) == 200
+    for score in result.scores:
+        assert score["perplexity"] >= 1.0
