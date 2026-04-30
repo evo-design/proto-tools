@@ -5,6 +5,7 @@ Tests for Boltz2.
 
 import pytest
 
+from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Boltz2Config,
     Boltz2Input,
@@ -12,6 +13,9 @@ from proto_tools.tools.structure_prediction import (
     StructurePredictionComplex,
     run_boltz2,
 )
+from tests.conftest import benchmark_twice
+from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -113,3 +117,28 @@ def test_boltz2_ccd_vs_smiles_input_equivalent_predictions():
         f"plddt diverges: CCD={ccd_plddt:.2f}, SMILES={smiles_plddt:.2f}. "
         "Large gap suggests one path is producing a low-quality structure."
     )
+
+
+# ── Benchmark ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("boltz2-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_boltz2_benchmark(request):
+    """Benchmark boltz2-prediction on the MfnG protein + L-tyrosine ligand (cold + warm).
+
+    Single ~390-residue protein-ligand complex without MSA — a representative
+    Boltz2 workload. Cold pass measures weight load + first inference; warm
+    pass measures inference only.
+    """
+    complex_ = load_benchmark_complex("MfnG_and_ligand")
+    inputs = Boltz2Input(complexes=[complex_])
+    config = Boltz2Config(use_msa=False, verbose=True)
+
+    result = benchmark_twice(request, "boltz2", lambda: run_boltz2(inputs=inputs, config=config))
+
+    assert result.success, "Boltz2 benchmark run failed"
+    assert len(result.structures) == 1
+    assert is_valid_structure(result.structures[0].structure_cif)
+    assert_metrics_in_spec(result)

@@ -3,6 +3,8 @@
 Tests for ViennaRNA secondary structure prediction.
 """
 
+import random
+
 import pytest
 
 from proto_tools.tools.structure_prediction import (
@@ -11,7 +13,7 @@ from proto_tools.tools.structure_prediction import (
     ViennaRNAOutput,
     run_viennarna,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("viennarna", gpu=False)
@@ -21,6 +23,15 @@ _HAIRPIN = "GCGCUUUUGCGC"
 _POLY_A = "AAAAAAAAAA"
 _HAIRPIN_2 = "GGGGAAAACCCC"
 _HAIRPIN_DNA = "GCGCTTTTGCGC"
+
+_RNA_NUCLEOTIDES = ("A", "C", "G", "U")
+
+
+def _random_rna_sequences(n: int, length: int, seed: int = 0) -> list[str]:
+    """Generate ``n`` deterministic random RNA sequences of length ``length``."""
+    rng = random.Random(seed)
+    return ["".join(rng.choices(_RNA_NUCLEOTIDES, k=length)) for _ in range(n)]
+
 
 # ── Validation tests (no dispatch) ───────────────────────────────────────────
 
@@ -137,3 +148,30 @@ def test_viennarna_mixed_empty_and_valid_sequences():
 
     assert output.results[2].structure == "." * 10
     assert output.results[2].mfe is not None
+
+
+# ── Benchmark ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("viennarna-prediction")
+@pytest.mark.slow
+def test_viennarna_benchmark(request):
+    """Benchmark viennarna-prediction on 100 random 200-nt RNA sequences (cold + warm).
+
+    Folding 100 sequences mirrors a screening workload over a designed library.
+    ViennaRNA is CPU-bound, so cold/warm differences come from process startup
+    and library import rather than weights loading.
+    """
+    sequences = _random_rna_sequences(n=100, length=200, seed=0)
+    inputs = ViennaRNAInput(sequences=sequences)
+    config = ViennaRNAConfig()
+
+    result = benchmark_twice(request, "viennarna", lambda: run_viennarna(inputs=inputs, config=config))
+    validate_output(result)
+
+    assert isinstance(result, ViennaRNAOutput)
+    assert len(result.results) == 100
+    for sampled in result.results:
+        assert sampled.structure is not None
+        assert sampled.mfe is not None
+        assert len(sampled.structure) == 200
