@@ -5,7 +5,7 @@ Tests for AlphaGenome.
 
 import pytest
 
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("alphagenome")
@@ -323,3 +323,226 @@ def test_interval_prediction_131k_context():
     output = result[0]
     assert output.interval_end == 131_072
     assert "predictions" in output.result
+
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+# Score tools require >=524 kbp context (default RNA_SEQ scorer needs a
+# 200,001 bp centre mask); predict tools use 131 kbp to keep wall time tractable.
+_BENCH_PREDICT_LEN = 131_072
+_BENCH_SCORE_LEN = 524_288
+_BENCH_PREDICT_MID = _BENCH_PREDICT_LEN // 2
+_BENCH_SCORE_MID = _BENCH_SCORE_LEN // 2
+_BENCH_REQUESTED_OUTPUTS = ["RNA_SEQ", "ATAC", "DNASE"]
+_BENCH_BATCH = 2
+
+
+@pytest.mark.benchmark("alphagenome-predict-intervals")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_predict_intervals_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-predict-intervals: 2 intervals x 131,072 bp, RNA_SEQ + ATAC + DNASE (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomeInterval,
+        AlphaGenomePredictIntervalsConfig,
+        AlphaGenomePredictIntervalsInput,
+        run_alphagenome_predict_intervals,
+    )
+
+    intervals = [
+        AlphaGenomeInterval(
+            chromosome="chr1",
+            interval_start=i * _BENCH_PREDICT_LEN,
+            interval_end=(i + 1) * _BENCH_PREDICT_LEN,
+        )
+        for i in range(_BENCH_BATCH)
+    ]
+    inputs = AlphaGenomePredictIntervalsInput(intervals=intervals)
+    config = AlphaGenomePredictIntervalsConfig(
+        requested_outputs=_BENCH_REQUESTED_OUTPUTS,
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_intervals(inputs, config))
+    validate_output(result, check_export=False)  # multi-GB prediction tensors; export round-trip dominates wall time
+
+    assert result.tool_id == "alphagenome-predict-intervals"
+    assert len(result) == _BENCH_BATCH
+    for output in result.results:
+        assert output.interval_end - output.interval_start == _BENCH_PREDICT_LEN
+        assert "predictions" in output.result
+
+
+@pytest.mark.benchmark("alphagenome-predict-sequences")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_predict_sequences_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-predict-sequences: 2 raw 131,072 bp sequences, RNA_SEQ + ATAC + DNASE (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomePredictSequencesConfig,
+        AlphaGenomePredictSequencesInput,
+        run_alphagenome_predict_sequences,
+    )
+
+    sequences = random_dna_sequences(n=_BENCH_BATCH, length=_BENCH_PREDICT_LEN, seed=0)
+    inputs = AlphaGenomePredictSequencesInput(sequences=sequences)
+    config = AlphaGenomePredictSequencesConfig(
+        requested_outputs=_BENCH_REQUESTED_OUTPUTS,
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_sequences(inputs, config))
+    validate_output(result, check_export=False)  # multi-GB prediction tensors; skip export round-trip
+
+    assert result.tool_id == "alphagenome-predict-sequences"
+    assert len(result) == _BENCH_BATCH
+    for output in result.results:
+        assert output.interval_end - output.interval_start == _BENCH_PREDICT_LEN
+        assert "predictions" in output.result
+
+
+@pytest.mark.benchmark("alphagenome-predict-variants")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_predict_variants_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-predict-variants: 2 variants x 131,072 bp interval, RNA_SEQ + ATAC + DNASE (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomePredictVariantsConfig,
+        AlphaGenomePredictVariantsInput,
+        AlphaGenomeVariant,
+        run_alphagenome_predict_variants,
+    )
+
+    variants = [
+        AlphaGenomeVariant(
+            chromosome="chr1",
+            interval_start=i * _BENCH_PREDICT_LEN,
+            interval_end=(i + 1) * _BENCH_PREDICT_LEN,
+            variant_position=i * _BENCH_PREDICT_LEN + _BENCH_PREDICT_MID,
+            reference_bases="A",
+            alternate_bases="G",
+        )
+        for i in range(_BENCH_BATCH)
+    ]
+    inputs = AlphaGenomePredictVariantsInput(variants=variants)
+    config = AlphaGenomePredictVariantsConfig(
+        requested_outputs=_BENCH_REQUESTED_OUTPUTS,
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_predict_variants(inputs, config))
+    validate_output(result, check_export=False)  # multi-GB prediction tensors; skip export round-trip
+
+    assert result.tool_id == "alphagenome-predict-variants"
+    assert len(result) == _BENCH_BATCH
+    for output in result.results:
+        assert "predictions" in output.result
+
+
+@pytest.mark.benchmark("alphagenome-score-variants")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_score_variants_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-score-variants: 2 variants x 524,288 bp, default recommended scorers (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomeScoreVariantsConfig,
+        AlphaGenomeScoreVariantsInput,
+        AlphaGenomeVariant,
+        run_alphagenome_score_variants,
+    )
+
+    variants = [
+        AlphaGenomeVariant(
+            chromosome="chr1",
+            interval_start=i * _BENCH_SCORE_LEN,
+            interval_end=(i + 1) * _BENCH_SCORE_LEN,
+            variant_position=i * _BENCH_SCORE_LEN + _BENCH_SCORE_MID,
+            reference_bases="A",
+            alternate_bases="G",
+        )
+        for i in range(_BENCH_BATCH)
+    ]
+    inputs = AlphaGenomeScoreVariantsInput(variants=variants)
+    config = AlphaGenomeScoreVariantsConfig(
+        variant_scorers=None,  # all recommended scorers
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_score_variants(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "alphagenome-score-variants"
+    assert len(result) == _BENCH_BATCH
+    for output in result.results:
+        assert isinstance(output.scores, list)
+        assert len(output.scores) > 0
+
+
+@pytest.mark.benchmark("alphagenome-score-intervals")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_score_intervals_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-score-intervals: 2 intervals x 524,288 bp, default recommended scorers (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomeInterval,
+        AlphaGenomeScoreIntervalsConfig,
+        AlphaGenomeScoreIntervalsInput,
+        run_alphagenome_score_intervals,
+    )
+
+    intervals = [
+        AlphaGenomeInterval(
+            chromosome="chr1",
+            interval_start=i * _BENCH_SCORE_LEN,
+            interval_end=(i + 1) * _BENCH_SCORE_LEN,
+        )
+        for i in range(_BENCH_BATCH)
+    ]
+    inputs = AlphaGenomeScoreIntervalsInput(intervals=intervals)
+    config = AlphaGenomeScoreIntervalsConfig(
+        interval_scorers=None,  # all recommended scorers
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_score_intervals(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "alphagenome-score-intervals"
+    assert len(result) == _BENCH_BATCH
+    for output in result.results:
+        assert isinstance(output.scores, list)
+        assert len(output.scores) > 0
+
+
+@pytest.mark.benchmark("alphagenome-score-ism-variants-batch")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphagenome_score_ism_variants_batch_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark alphagenome-score-ism-variants-batch: 50-bp ISM window x 2 position-based scorers over 524 kbp (cold + warm)."""
+    from proto_tools import (
+        AlphaGenomeISM,
+        AlphaGenomeScoreISMConfig,
+        AlphaGenomeScoreISMInput,
+        run_alphagenome_score_ism_variants_batch,
+    )
+
+    inputs = AlphaGenomeScoreISMInput(
+        requests=AlphaGenomeISM(
+            chromosome="chr1",
+            interval_start=0,
+            interval_end=_BENCH_SCORE_LEN,
+            ism_interval_start=_BENCH_SCORE_MID - 25,
+            ism_interval_end=_BENCH_SCORE_MID + 25,  # 50 bp window
+        ),
+    )
+    config = AlphaGenomeScoreISMConfig(
+        variant_scorers=["ATAC", "DNASE"],
+        organism="human",
+    )
+
+    result = benchmark_twice(request, "alphagenome", lambda: run_alphagenome_score_ism_variants_batch(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "alphagenome-score-ism-variants-batch"
+    assert len(result) == 1
+    assert isinstance(result[0].scores, list)
+    assert len(result[0].scores) > 0
