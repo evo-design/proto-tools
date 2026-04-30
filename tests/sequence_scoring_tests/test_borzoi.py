@@ -8,7 +8,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("borzoi")
@@ -317,3 +317,73 @@ def test_borzoi_ensemble_statistics():
     assert mean_pred.shape == (1, 6144)
     assert std_pred.shape == (1, 6144)
     assert std_pred.sum() > 0, "Standard deviation should be non-zero across replicates"
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("borzoi-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_borzoi_prediction_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark borzoi-prediction: 4 random 524 kbp sequences, batch_size=4, 5 tracks (cold + warm)."""
+    from proto_tools.tools.sequence_scoring.borzoi import (
+        BorzoiConfig,
+        BorzoiInput,
+        run_borzoi,
+    )
+
+    sequences = random_dna_sequences(n=4, length=_BORZOI_CONTEXT, seed=0)
+    inputs = BorzoiInput(sequences=sequences)
+    config = BorzoiConfig(
+        output_tracks=[0, 1, 2, 3, 4],
+        species="human",
+        replicate="0",
+        avg_output_tracks=False,
+        batch_size=4,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "borzoi", lambda: run_borzoi(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "borzoi-prediction"
+    assert len(result.results) == 4
+    for r in result.results:
+        assert r.sequence_length == _BORZOI_CONTEXT
+        assert len(r.prediction) == 5  # 5 individual tracks
+        assert len(r.prediction[0]) == 6144
+
+
+@pytest.mark.benchmark("borzoi-ensemble")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_borzoi_ensemble_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark borzoi-ensemble: 4 random 524 kbp sequences across all 4 replicates, batch_size=4 (cold + warm)."""
+    from proto_tools.tools.sequence_scoring.borzoi import (
+        BorzoiEnsembleConfig,
+        BorzoiInput,
+        run_borzoi_ensemble,
+    )
+
+    sequences = random_dna_sequences(n=4, length=_BORZOI_CONTEXT, seed=1)
+    inputs = BorzoiInput(sequences=sequences)
+    config = BorzoiEnsembleConfig(
+        output_tracks=[0, 1, 2],
+        species="human",
+        avg_output_tracks=True,
+        batch_size=4,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "borzoi", lambda: run_borzoi_ensemble(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "borzoi-ensemble"
+    assert result.num_replicates == 4
+    assert len(result.results) == 4
+    for r in result.results:
+        assert r.sequence_length == _BORZOI_CONTEXT
+        assert len(r.predictions) == 4  # 4 replicates
+        assert len(r.predictions[0]) == 1  # 1 averaged track
+        assert len(r.predictions[0][0]) == 6144

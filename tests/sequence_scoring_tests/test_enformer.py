@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.sequence_scoring.enformer import ENFORMER_CONTEXT
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("enformer")
@@ -173,3 +173,38 @@ def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
     validate_output(result)
     assert len(result.results[0].prediction) == 896
     assert len(result.results[0].prediction[0]) == expected_n_tracks
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("enformer-prediction")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_enformer_prediction_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark enformer-prediction: 8 random 196,608 bp sequences, batch_size=8, 10 tracks (cold + warm)."""
+    from proto_tools.tools.sequence_scoring.enformer import (
+        EnformerConfig,
+        EnformerInput,
+        run_enformer,
+    )
+
+    sequences = random_dna_sequences(n=8, length=ENFORMER_CONTEXT, seed=0)
+    inputs = EnformerInput(sequences=sequences)
+    # 10 tracks keeps the per-position output non-trivial without bloating I/O.
+    config = EnformerConfig(
+        output_tracks=list(range(10)),
+        species="human",
+        batch_size=8,
+        verbose=False,
+    )
+
+    result = benchmark_twice(request, "enformer", lambda: run_enformer(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "enformer-prediction"
+    assert len(result.results) == 8
+    for r in result.results:
+        assert r.sequence_length == ENFORMER_CONTEXT
+        assert len(r.prediction) == 896
+        assert len(r.prediction[0]) == 10
