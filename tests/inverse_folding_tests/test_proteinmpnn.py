@@ -26,7 +26,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -441,3 +441,51 @@ def test_abmpnn_score(pdb_structure: Structure):
     assert output.success, f"AbMPNN scoring failed: {output}"
     assert output.scores[0].perplexity >= 1.0
     assert "avg_log_likelihood" in output.scores[0]
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("proteinmpnn-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_proteinmpnn_sample_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
+    """Benchmark proteinmpnn-sample: 50 designs of renin (~340 aa) at batch_size=16 (cold + warm)."""
+    inputs = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
+    config = ProteinMPNNSampleConfig(
+        num_sequences_per_structure=50,
+        batch_size=16,
+        temperature=0.1,
+        seed=0,
+    )
+
+    result = benchmark_twice(request, "proteinmpnn", lambda: run_proteinmpnn_sample(inputs, config))
+
+    assert result.tool_id == "proteinmpnn-sample"
+    assert len(result.designed_sequences) == 1, "Should have one DesignedSequences per input structure"
+    designs = result.designed_sequences[0]
+    assert len(designs.sequences) == 50, "Should have 50 designed sequences"
+    target_len = len(pdb_structure.get_chain_sequence("A"))
+    for seq in designs.sequences:
+        assert len(seq) == target_len, "Designed sequence should match structure length"
+
+
+@pytest.mark.benchmark("proteinmpnn-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_proteinmpnn_score_benchmark(request: pytest.FixtureRequest, pdb_structure: Structure) -> None:
+    """Benchmark proteinmpnn-score on 50 sequence-structure pairs against renin (cold + warm)."""
+    target_len = len(pdb_structure.get_chain_sequence("A"))
+    sequences = random_protein_sequences(n=50, length=target_len, seed=1)
+    pairs = [SequenceStructurePair(sequence=s, structure=pdb_structure) for s in sequences]
+
+    inputs = ProteinMPNNScoringInput(sequence_structure_pairs=pairs)
+    config = ProteinMPNNScoringConfig(seed=42, return_logits=False)
+
+    result = benchmark_twice(request, "proteinmpnn", lambda: run_proteinmpnn_score(inputs, config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "proteinmpnn-score"
+    assert len(result.scores) == 50
+    for score in result.scores:
+        assert score["perplexity"] >= 1.0
