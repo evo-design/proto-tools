@@ -1,6 +1,8 @@
 """Tests for AbLang antibody language model tools."""
 
 import math
+import random
+import re
 import sys
 import types
 
@@ -22,8 +24,9 @@ from proto_tools.tools.masked_models.ablang import (
     run_ablang_sample,
     run_ablang_score,
 )
-from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
-from tests.conftest import make_persistent_fixture
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS, one_hot_protein_logits
+from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _VALID_AAS = set(PROTEIN_AMINO_ACIDS)
@@ -627,3 +630,145 @@ def test_ablang_batched_operations():
     assert sample_result.success
     assert len(sample_result.sequences) == 3
     assert all("_" not in s for s in sample_result.sequences)
+
+
+# ── Benchmark fixtures ──────────────────────────────────────────────────────
+# Real therapeutic antibody variable-domain sequences (publicly documented).
+# Used to scale benchmark inputs without sacrificing antibody-shape realism —
+# every input is a real-shaped antibody, optionally diversified by mutating
+# CDR3 (the most variable region in real antibody libraries).
+
+# Trastuzumab (Herceptin) — anti-HER2 — VH and VL.
+_VH_TRASTUZUMAB = "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCSRWGGDGFYAMDYWGQGTLVTVSS"
+_VL_TRASTUZUMAB = (
+    "DIQMTQSPSSLSASVGDRVTITCRASQDVNTAVAWYQQKPGKAPKLLIYSASFLYSGVPSRFSGSRSGTDFTLTISSLQPEDFATYYCQQHYTTPPTFGQGTKVEIK"
+)
+
+# Pertuzumab (Perjeta) — anti-HER2 — VH and VL.
+_VH_PERTUZUMAB = "EVQLVESGGGLVQPGGSLRLSCAASGFTFTDYTMDWVRQAPGKGLEWVADVNPNSGGSIYNQRFKGRFTLSVDRSKNTLYLQMNSLRAEDTAVYYCARNLGPSFYFDYWGQGTLVTVSS"
+_VL_PERTUZUMAB = (
+    "DIQMTQSPSSLSASVGDRVTITCKASQDVSIGVAWYQQKPGKAPKLLIYSASYRYTGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQYYIYPYTFGQGTKVEIK"
+)
+
+_VH_TEMPLATES = [_VH_TRASTUZUMAB, _VH_PERTUZUMAB, VH_SEQ]
+_VL_TEMPLATES = [_VL_TRASTUZUMAB, _VL_PERTUZUMAB, VL_SEQ]
+
+
+def _diversify_cdr3(seq: str, rng: random.Random) -> str:
+    """Mutate 5 contiguous positions just before the WG[QK]GT framework boundary.
+
+    CDR3 is the most variable region in real antibody libraries; randomising
+    a small CDR3 window keeps framework regions intact while producing
+    distinct, antibody-shaped sequences for benchmark workloads.
+    """
+    m = re.search(r"WG[QK]GT", seq)
+    cdr3_end = m.start() if m else len(seq) - 12
+    start = max(0, cdr3_end - 8)
+    seq_list = list(seq)
+    for pos in range(start, min(start + 5, cdr3_end)):
+        seq_list[pos] = rng.choice(PROTEIN_AMINO_ACIDS)
+    return "".join(seq_list)
+
+
+def _benchmark_paired_antibodies(n: int, seed: int) -> list[Antibody]:
+    """Generate n paired antibodies cycling through real templates with CDR3 diversification."""
+    rng = random.Random(seed)
+    return [
+        Antibody(
+            heavy_chain=_diversify_cdr3(rng.choice(_VH_TEMPLATES), rng),
+            light_chain=rng.choice(_VL_TEMPLATES),
+        )
+        for _ in range(n)
+    ]
+
+
+def _mask_cdr3(seq: str) -> str:
+    """Replace 5 contiguous CDR3 positions with the AbLang mask token (``_``)."""
+    m = re.search(r"WG[QK]GT", seq)
+    cdr3_end = m.start() if m else len(seq) - 12
+    start = max(0, cdr3_end - 8)
+    seq_list = list(seq)
+    for pos in range(start, min(start + 5, cdr3_end)):
+        seq_list[pos] = "_"
+    return "".join(seq_list)
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("ablang-embedding")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ablang_embeddings_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark ablang-embeddings on 100 paired antibodies (cold + warm)."""
+    antibodies = _benchmark_paired_antibodies(n=100, seed=0)
+    inputs = AbLangEmbeddingsInput(antibodies=antibodies)
+    config = AbLangEmbeddingsConfig(batch_size=32)
+
+    result = benchmark_twice(request, "ablang", lambda: run_ablang_embeddings(inputs=inputs, config=config))
+
+    assert len(result.results) == 100
+    # ablang2-paired emits 480-dim embeddings.
+    assert len(result.results[0].mean_embedding) == 480
+
+
+@pytest.mark.benchmark("ablang-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ablang_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark ablang-score on 100 paired antibodies (cold + warm)."""
+    antibodies = _benchmark_paired_antibodies(n=100, seed=1)
+    inputs = AbLangScoringInput(antibodies=antibodies)
+    config = AbLangScoringConfig(batch_size=32)
+
+    result = benchmark_twice(request, "ablang", lambda: run_ablang_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "ablang-score"
+    assert len(result.scores) == 100
+    for score in result.scores:
+        assert score["perplexity"] >= 1.0
+
+
+@pytest.mark.benchmark("ablang-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ablang_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark ablang-sample on 50 heavy chains with CDR3 masked (cold + warm)."""
+    rng = random.Random(2)
+    masked = [Antibody(heavy_chain=_mask_cdr3(_diversify_cdr3(rng.choice(_VH_TEMPLATES), rng))) for _ in range(50)]
+    inputs = AbLangSampleInput(antibodies=masked)
+    config = AbLangSampleConfig(batch_size=16)
+
+    result = benchmark_twice(request, "ablang", lambda: run_ablang_sample(inputs=inputs, config=config))
+
+    assert len(result.sequences) == 50
+    for sampled in result.sequences:
+        assert "_" not in sampled, "All masks should be filled"
+        assert all(aa in _VALID_AAS for aa in sampled), "All residues should be valid amino acids"
+
+
+@pytest.mark.benchmark("ablang-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_ablang_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark ablang-gradient on a full-length paired antibody as logits (cold + warm)."""
+    # Gradient takes a single AntibodyLogits (not a list); workload size comes
+    # from sequence length times per-position MLM batches inside the model.
+    rng = random.Random(3)
+    heavy_logits = one_hot_protein_logits(_diversify_cdr3(rng.choice(_VH_TEMPLATES), rng))
+    light_logits = one_hot_protein_logits(rng.choice(_VL_TEMPLATES))
+    total_len = len(heavy_logits) + len(light_logits)
+    inputs = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy_logits, light_chain=light_logits))
+    config = AbLangGradientConfig()
+
+    result = benchmark_twice(request, "ablang", lambda: run_ablang_gradient(inputs=inputs, config=config))
+
+    assert result.tool_id == "ablang-gradient"
+    # Output gradient is a flat (Lh + Ll, 20) matrix — chains concatenated.
+    assert result.gradient is not None
+    assert len(result.gradient) == total_len
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert result.metrics["sequence_length"] == total_len
+    assert result.metrics["model_choice"] == "ablang2-paired"
