@@ -15,9 +15,13 @@ from proto_tools.tools.causal_models.progen3 import (
     run_progen3_sample,
     run_progen3_score,
 )
+from proto_tools.utils import PROTEIN_AMINO_ACIDS
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 _SMALL_MODEL = "progen3-112m"
+
+_persistent_tool = make_persistent_fixture("progen3")
 
 
 # ── Sample input validation ──────────────────────────────────────────────────
@@ -304,3 +308,50 @@ def test_progen3_score_per_position_consistency():
     result2 = run_progen3_score(inputs, config)
     fwd2 = [v for v in result2.scores[0]["forward_log_likelihood_pp"] if v is not None]
     assert all(abs(a - b) < 1e-4 for a, b in zip(fwd, fwd2, strict=True)), "Per-position scores not deterministic"
+
+
+# ── Benchmarks ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("progen3-sample")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_progen3_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark progen3-sample on 50 length-250 prompts generating up to 450 new tokens (cold + warm)."""
+    prompts = random_protein_sequences(n=50, length=250, seed=0)
+    inputs = ProGen3SampleInput(prompts=prompts)
+    config = ProGen3SampleConfig(
+        model_checkpoint="progen3-762m",
+        batch_size=16,
+        max_new_tokens=450,
+        temperature=0.2,
+        top_p=0.95,
+    )
+
+    result = benchmark_twice(request, "progen3", lambda: run_progen3_sample(inputs=inputs, config=config))
+
+    assert len(result.sequences) == 50, "Should have 50 generated sequences"
+    for sampled in result.sequences:
+        assert len(sampled) > 0, "Generated sequence should be non-empty"
+        assert all(aa in PROTEIN_AMINO_ACIDS for aa in sampled), "All residues should be standard amino acids"
+
+
+@pytest.mark.benchmark("progen3-score")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_progen3_score_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark progen3-score on 200 sequences of length 500 (cold + warm)."""
+    sequences = random_protein_sequences(n=200, length=500, seed=1)
+    inputs = ProGen3ScoringInput(sequences=sequences)
+    config = ProGen3ScoringConfig(
+        model_checkpoint="progen3-762m",
+        batch_size=32,
+    )
+
+    result = benchmark_twice(request, "progen3", lambda: run_progen3_score(inputs=inputs, config=config))
+    assert_metrics_in_spec(result)
+
+    assert result.tool_id == "progen3-score"
+    assert len(result.scores) == 200
+    for score in result.scores:
+        assert score["perplexity"] >= 1.0
