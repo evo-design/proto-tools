@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Literal
 
@@ -95,6 +96,7 @@ class Evo2Model:
         stop_at_eos: bool = True,
         old_kv_cache: dict[str, Any] | None = None,
         batch_size: int = 1,
+        return_kv_cache: bool = False,
         return_logits: bool = False,
         seed: int | None = None,
     ) -> dict[str, Any]:
@@ -117,14 +119,15 @@ class Evo2Model:
             print_generation: Whether to print generation tokens
             verbose: Whether to print verbose output
             stop_at_eos: Whether to stop at end-of-sequence token
-            old_kv_cache: Dictionary of inference parameters to use for replaying cached sampling (KV cache)
+            old_kv_cache: Resolved KV cache state to continue generation from
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.
+            return_kv_cache: Whether to include KV caches in the output
             return_logits: Whether to include logits in the output
             seed: Random seed for reproducible generation.
 
         Returns:
-            Dictionary with keys: "sequences" (List[str]), optionally "logits" (List[torch.Tensor]), "kv_caches" (Optional[List[Dict]])
+            Dictionary with generated sequences, optional logits, and optional KV caches.
         """
         from vortex.model.generation import Generator as VortexGenerator
 
@@ -150,11 +153,19 @@ class Evo2Model:
         num_batches = (len(prompts) + batch_size - 1) // batch_size
 
         all_sequences, all_logits, all_inference_params_dicts = [], [], []
+        old_cache_batch_size = _cache_batch_size(old_kv_cache) if old_kv_cache is not None else None
+        if old_cache_batch_size is not None and old_cache_batch_size != len(prompts):
+            raise ValueError(
+                f"old_kv_cache batch size must match the number of prompts ({old_cache_batch_size} != {len(prompts)})."
+            )
 
         for batch_idx in tqdm(range(num_batches), desc="Evo2 Sequence Generation", unit="batch", total=num_batches):
             batch_start = batch_idx * batch_size
             batch_end = min(batch_start + batch_size, len(prompts))
             batch_prompts = prompts[batch_start:batch_end]
+            batch_old_kv_cache = (
+                _slice_cache(old_kv_cache, batch_start, batch_end) if old_kv_cache is not None else None
+            )
 
             if verbose:
                 logger.info(f"Processing batch {batch_idx + 1}/{num_batches} ({len(batch_prompts)} prompts)")
@@ -164,14 +175,22 @@ class Evo2Model:
             uniform_lengths = all(len(s) == len(batch_prompts[0]) for s in batch_prompts)
             if uniform_lengths:
                 input_ids, _ = self._prepare_batch(batch_prompts)
-                input_ids_list = [input_ids]
+                input_batches = [(input_ids, batch_old_kv_cache)]
             else:
                 if verbose:
                     logger.warning("Prompts have different lengths, processing individually.")
-                input_ids_list = [self._prepare_batch([prompt])[0] for prompt in batch_prompts]
+                input_batches = [
+                    (
+                        self._prepare_batch([prompt])[0],
+                        _slice_cache(old_kv_cache, batch_start + offset, batch_start + offset + 1)
+                        if old_kv_cache is not None
+                        else None,
+                    )
+                    for offset, prompt in enumerate(batch_prompts)
+                ]
 
             # Generate - loop over input_ids_list
-            for input_ids in input_ids_list:
+            for input_ids, current_old_kv_cache in input_batches:
                 current_batch_size = input_ids.shape[0]
 
                 # Vortex generator internally calls torch.inference_mode()
@@ -185,7 +204,7 @@ class Evo2Model:
                     print_generation=print_generation,
                     verbose=verbose,
                     stop_at_eos=stop_at_eos,
-                    inference_params_dict=old_kv_cache,
+                    inference_params_dict=current_old_kv_cache,
                 )
 
                 if verbose:
@@ -200,16 +219,18 @@ class Evo2Model:
                 # Collect sequences, logits, and inference params dicts
                 all_sequences.extend(batch_sequences)
                 all_logits.extend([logits[i] for i in range(logits.shape[0])])
-                if new_kv_cache:
+                if return_kv_cache and new_kv_cache:
                     all_inference_params_dicts.extend(_split_cache(new_kv_cache))
-                else:
+                elif return_kv_cache:
                     all_inference_params_dicts.extend([None] * current_batch_size)  # type: ignore[list-item]  # no cache generated
 
         assert len(prompts) == len(all_sequences) == len(all_logits)
+        if return_kv_cache:
+            assert len(prompts) == len(all_inference_params_dicts)
         return {
             "sequences": all_sequences,
             "logits": all_logits if return_logits else None,
-            "kv_caches": all_inference_params_dicts,
+            "kv_caches": all_inference_params_dicts if return_kv_cache else None,
         }
 
     def _prepare_batch(
@@ -476,6 +497,137 @@ def _split_cache(cache: dict[str, Any]) -> list[dict[str, Any]]:
     return [_slice_cache(cache, i, i + 1) for i in range(n_samples)]
 
 
+def _cache_batch_size(cache: dict[str, Any]) -> int:
+    kv = next(iter(cache["mha"].key_value_memory_dict.values()))
+    return int(kv.shape[0])
+
+
+def _repeat_cache_dict(cache_dict: dict[Any, torch.Tensor], n_replicates: int) -> dict[Any, torch.Tensor]:
+    return {key: data.repeat((n_replicates,) + (1,) * (data.ndim - 1)) for key, data in cache_dict.items()}
+
+
+def _replicate_cache(cache: dict[str, Any], n_replicates: int) -> dict[str, Any]:
+    """Replicate a single-sequence cache for beam branching."""
+    from vortex.model.cache import (
+        HyenaCascadeFIRInferenceParams,
+        HyenaCascadeIIRInferenceParams,
+        InferenceParams,
+    )
+
+    if n_replicates < 1:
+        raise ValueError(f"n_replicates must be at least 1 (found {n_replicates}).")
+    batch_size = _cache_batch_size(cache)
+    if batch_size != 1:
+        raise ValueError(f"Can only replicate a single-sequence cache (found batch size {batch_size}).")
+
+    mha, hcl, hcm, hcs = cache["mha"], cache["hcl"], cache["hcm"], cache["hcs"]
+    return {
+        "mha": InferenceParams(
+            max_seqlen=mha.max_seqlen,
+            max_batch_size=max(mha.max_batch_size, n_replicates),
+            seqlen_offset=mha.seqlen_offset,
+            batch_size_offset=mha.batch_size_offset,
+            key_value_memory_dict=_repeat_cache_dict(mha.key_value_memory_dict, n_replicates),
+        ),
+        "hcl": HyenaCascadeIIRInferenceParams(
+            fir_filter_length=hcl.fir_filter_length,
+            state_dim=hcl.state_dim,
+            seqlen_offset=hcl.seqlen_offset,
+            fir_state_dict=_repeat_cache_dict(hcl.fir_state_dict, n_replicates),
+            state_dict=_repeat_cache_dict(hcl.state_dict, n_replicates),
+        ),
+        "hcm": HyenaCascadeFIRInferenceParams(
+            fir_filter_length=hcm.fir_filter_length,
+            seqlen_offset=hcm.seqlen_offset,
+            fir_inner_filter_length=hcm.fir_inner_filter_length,
+            fir_state_dict=_repeat_cache_dict(hcm.fir_state_dict, n_replicates),
+            fir_inner_state_dict=_repeat_cache_dict(hcm.fir_inner_state_dict, n_replicates),
+            state_dict=_repeat_cache_dict(hcm.state_dict, n_replicates),
+        ),
+        "hcs": HyenaCascadeFIRInferenceParams(
+            fir_filter_length=hcs.fir_filter_length,
+            seqlen_offset=hcs.seqlen_offset,
+            fir_inner_filter_length=hcs.fir_inner_filter_length,
+            fir_state_dict=_repeat_cache_dict(hcs.fir_state_dict, n_replicates),
+            fir_inner_state_dict=_repeat_cache_dict(hcs.fir_inner_state_dict, n_replicates),
+            state_dict=_repeat_cache_dict(hcs.state_dict, n_replicates),
+        ),
+    }
+
+
+def _move_cache_to_device(value: Any, device: str) -> Any:
+    if torch.is_tensor(value):
+        return value.to(device)
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            value[key] = _move_cache_to_device(inner, device)
+        return value
+    if isinstance(value, list):
+        for idx, inner in enumerate(value):
+            value[idx] = _move_cache_to_device(inner, device)
+        return value
+    if isinstance(value, tuple):
+        return tuple(_move_cache_to_device(inner, device) for inner in value)
+    if hasattr(value, "__dict__"):
+        for attr_name, attr_value in vars(value).items():
+            setattr(value, attr_name, _move_cache_to_device(attr_value, device))
+    return value
+
+
+KV_CACHE_REF_TYPE = "evo2_kv_cache"
+_kv_cache_store: dict[str, dict[str, Any]] = {}
+
+
+def _cache_id_from_handle(cache_handle: dict[str, Any]) -> str:
+    cache_id = cache_handle.get("cache_id")
+    if cache_handle.get("type") != KV_CACHE_REF_TYPE or not isinstance(cache_id, str):
+        raise ValueError("Expected an Evo2 KV-cache handle returned by a persistent Evo2 worker.")
+    return cache_id
+
+
+def _resolve_cache_handle(cache_handle: dict[str, Any]) -> dict[str, Any]:
+    cache_id = _cache_id_from_handle(cache_handle)
+    cache = _kv_cache_store.get(cache_id)
+    if cache is None:
+        raise ValueError(
+            "Evo2 KV-cache handle is no longer available. It may have been released, "
+            "or the persistent Evo2 worker may have restarted."
+        )
+    return cache
+
+
+def _store_cache_handle(cache: dict[str, Any]) -> dict[str, str]:
+    cache_id = uuid.uuid4().hex
+    _kv_cache_store[cache_id] = cache
+    return {"type": KV_CACHE_REF_TYPE, "cache_id": cache_id}
+
+
+def _release_cache_handles(cache_handles: dict[str, Any] | list[dict[str, Any] | None] | None) -> None:
+    if cache_handles is None:
+        return
+    handles = [cache_handles] if isinstance(cache_handles, dict) else cache_handles
+    for cache_handle in handles:
+        if cache_handle is None:
+            continue
+        _kv_cache_store.pop(_cache_id_from_handle(cache_handle), None)
+
+
+def _uses_worker_local_cache_handles(input_dict: dict[str, Any]) -> bool:
+    operation = input_dict["operation"]
+    return operation == "release_kv_caches" or (
+        operation == "sample"
+        and (input_dict.get("old_kv_cache") is not None or bool(input_dict.get("return_kv_cache")))
+    )
+
+
+def _ensure_cache_handles_use_persistent_worker(input_dict: dict[str, Any]) -> None:
+    if __name__ == "__main__" and _uses_worker_local_cache_handles(input_dict):
+        raise RuntimeError(
+            "Evo2 KV-cache handles require a persistent ToolInstance worker. "
+            "Wrap calls in ToolInstance.persist() or pass a persistent ToolInstance."
+        )
+
+
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -485,14 +637,38 @@ _model: Evo2Model | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
+    operation = input_dict["operation"]
+    _ensure_cache_handles_use_persistent_worker(input_dict)
+
+    if operation == "release_kv_caches":
+        _release_cache_handles(input_dict.get("kv_caches"))
+        return {"released": True}
+
     if _model is None:
         _model = Evo2Model(
             model_checkpoint=input_dict["model_checkpoint"],
             local_path=input_dict.get("local_path"),
         )
 
-    operation = input_dict["operation"]
     if operation == "sample":
+        old_kv_cache = None
+        max_seqlen = input_dict.get("max_seqlen")
+        old_kv_cache_handle = input_dict.get("old_kv_cache")
+        if old_kv_cache_handle is not None:
+            resolved_cache = _resolve_cache_handle(old_kv_cache_handle)
+            required_seqlen = max(len(prompt) for prompt in input_dict["prompts"]) + input_dict["num_tokens"]
+            if resolved_cache["mha"].max_seqlen < required_seqlen:
+                logger.warning(
+                    "KV cache max_seqlen (%s) is insufficient for continued generation (need %s). Discarding cache.",
+                    resolved_cache["mha"].max_seqlen,
+                    required_seqlen,
+                )
+            else:
+                old_kv_cache = _replicate_cache(resolved_cache, len(input_dict["prompts"]))
+            if max_seqlen is None:
+                max_seqlen = required_seqlen
+
+        return_kv_cache = bool(input_dict.get("return_kv_cache"))
         result = _model.sample(
             prompts=input_dict["prompts"],
             top_k=input_dict["top_k"],
@@ -502,17 +678,22 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_tokens=input_dict["num_tokens"],
             cached_generation=input_dict["cached_generation"],
             force_prompt_threshold=input_dict.get("force_prompt_threshold"),
-            max_seqlen=input_dict.get("max_seqlen"),
+            max_seqlen=max_seqlen,
             print_generation=input_dict["print_generation"],
             verbose=input_dict["verbose"],
             stop_at_eos=input_dict["stop_at_eos"],
-            old_kv_cache=None,  # KV caching not supported in venv mode
+            old_kv_cache=old_kv_cache,
             batch_size=input_dict["batch_size"],
+            return_kv_cache=return_kv_cache,
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
         )
-        # KV caches are vortex GPU objects, not JSON-serializable
-        result["kv_caches"] = None
+        kv_caches = result["kv_caches"] if return_kv_cache else None
+        result["kv_caches"] = (
+            [_store_cache_handle(cache) for cache in kv_caches if cache is not None]
+            if kv_caches and all(cache is not None for cache in kv_caches)
+            else None
+        )
         return result
     if operation == "score":
         return _model.score(
@@ -548,6 +729,8 @@ def to_device(device: str) -> dict[str, Any]:
     global _model
     if _model is not None and _model._loaded:
         _model.to_device(device)
+        for cache in _kv_cache_store.values():
+            _move_cache_to_device(cache, device)
         return {"success": True, "device": device}
     # Model not loaded yet - will use device on next call
     return {"success": True, "device": device, "note": "model not loaded yet"}
