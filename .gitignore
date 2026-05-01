@@ -62,5 +62,8 @@ analyses/*
 # Same helpers, copied next to setup.sh for shared envs
 **/shared_envs/*/standalone_helpers.sh
 
+# Vendored upstream scripts fetched by standalone setup.sh (not committed)
+proto_tools/tools/structure_scoring/ipsae/standalone/ipsae.py
+
 .claude/worktrees/
 uv.lock
