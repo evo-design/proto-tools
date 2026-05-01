@@ -98,36 +98,17 @@ echo "Installing torch..."
 # work with the exact torch version they were compiled against.
 uv pip install torch==2.7.1 --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --refresh
 
-echo "Installing flash-attn..."
-# Pin flash-attn to 2.7.4.post1: stripedhyena (used by evo1) reads the
-# pos_idx_in_fp32 attribute on flash-attn's RotaryEmbedding, which existed on
-# 2.7.x and was removed in 2.8.x — Evo1Warmup blows up at construction otherwise.
-# evo2 and progen3 both pin to this same version. Install BEFORE requirements.txt
-# so the resolver leaves it alone (evo-model declares flash-attn as a transitive
-# dep with no upper bound).
-uv pip install --no-build-isolation flash-attn==2.7.4.post1 --refresh
-
-# Validate flash-attn ABI compatibility — check the C++ extension actually loads.
-# Import torch first so libc10.so is mapped into the process: source-built
-# flash-attn wheels link against torch's libs but don't always RPATH them, so a
-# bare `import flash_attn_2_cuda` would fail with ImportError(libc10.so) even on
-# a fully working install. stripedhyena always imports torch before flash_attn,
-# so this matches real runtime behavior.
-if ! python -c "import torch; import flash_attn_2_cuda" 2>/dev/null; then
-    echo "flash-attn wheel has ABI mismatch (flash_attn_2_cuda import failed), rebuilding from source..."
-    echo "WARNING: Source builds can take 30+ minutes depending on hardware."
-    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==2.7.4.post1
-    if ! python -c "import torch; import flash_attn_2_cuda" 2>/dev/null; then
-        echo "ERROR: flash-attn source rebuild still does not import flash_attn_2_cuda" >&2
-        exit 1
-    fi
-fi
-
 echo "Installing dependencies from requirements.txt..."
-# flash-attn is already installed at the pinned version above; uv leaves a
-# satisfied dep alone. --no-build-isolation-package keeps any subsequent
-# flash-attn touchpoint from spinning up a fresh build env.
+# Use --no-build-isolation-package for flash-attn to ensure it uses the installed torch
+# and doesn't download a different version during build
 uv pip install -r requirements.txt --extra-index-url "${RECOMMENDED_TORCH_INDEX}" --no-build-isolation-package flash-attn --refresh
+
+# Validate flash-attn ABI compatibility — check the C++ extension actually loads
+if ! python -c "import flash_attn_2_cuda" 2>/dev/null; then
+    echo "WARNING: flash-attn wheel has ABI mismatch (flash_attn_2_cuda import failed)"
+    echo "Rebuilding from source... This can take 30+ minutes."
+    uv pip install --no-build-isolation --no-binary flash-attn --reinstall-package flash-attn flash-attn==2.8.0.post2
+fi
 
 echo "If installation fails, follow upstream setup guide:"
 echo "  - https://github.com/evo-design/evo"
