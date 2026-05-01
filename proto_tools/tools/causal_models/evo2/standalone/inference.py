@@ -107,7 +107,7 @@ class Evo2Model:
             top_k: Top-k sampling parameter
             top_p: Top-p sampling parameter
             temperature: Sampling temperature
-            device: Device to run on
+            device: CUDA device to run inference on
             num_tokens: Number of tokens to generate
             cached_generation: Whether to use vortex KV caching for generation
             force_prompt_threshold: Number of tokens to prefill in parallel before
@@ -276,7 +276,7 @@ class Evo2Model:
 
         Args:
             sequences: DNA sequences to score
-            device: Device to run on
+            device: CUDA device to run inference on
             verbose: Whether to print status messages
             batch_size: Number of sequences per GPU forward pass. Larger batches
                 are faster but use more memory.

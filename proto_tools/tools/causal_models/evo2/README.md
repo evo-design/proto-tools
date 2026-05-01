@@ -4,7 +4,7 @@
 
 ## Overview
 
-Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local GPU/CPU execution with KV caching for efficient long generations.
+Evo2 is Arc Institute's genome-scale DNA language model for sequence generation and scoring. Trained on billions of nucleotides spanning prokaryotic and eukaryotic genomes, Evo2 performs autoregressive generation of DNA from prompts and scores sequences by log-likelihood. The tool supports local CUDA GPU execution with KV caching for efficient long generations.
 
 ## Background
 
@@ -92,7 +92,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | `old_kv_cache` | `Optional[Evo2KVCacheRef]` | `None` | Worker-local KV cache handle from a previous persistent-worker call |
 | `return_kv_cache` | `bool` | `False` | Return worker-local KV cache handles for continued generation |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Inference device |
+| `device` | `str` | `cuda` | Device to run the model on |
 | `return_logits` | `bool` | `False` | Include per-token logits in output |
 
 ### Scoring (`Evo2ScoringConfig`)
@@ -102,7 +102,7 @@ Evo2 uses byte-level tokenization (vocab_size=512), where each DNA base maps to 
 | `model_checkpoint` | `str` | `evo2_7b` | Model checkpoint to use |
 | `local_path` | `Optional[str]` | `None` | Local weights path |
 | `batch_size` | `int` | `1` | Sequences per GPU forward pass |
-| `device` | `str` | `cuda` | Inference device |
+| `device` | `str` | `cuda` | Device to run the model on |
 | `return_logits` | `bool` | `False` | Include per-position logits |
 
 ### Parameter Guides
