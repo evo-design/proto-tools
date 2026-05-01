@@ -6,7 +6,7 @@ Evo2 sampling tool.
 import logging
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelSampleConfig,
@@ -39,6 +39,13 @@ EVO2_MODEL_CHECKPOINTS = Literal[
 Evo2SampleInput = CausalModelSampleInput
 
 
+class Evo2KVCacheRef(BaseModel):
+    """Worker-local Evo2 KV-cache handle returned by a persistent worker."""
+
+    type: Literal["evo2_kv_cache"] = Field(default="evo2_kv_cache", description="Evo2 KV-cache handle type")
+    cache_id: str = Field(description="Identifier for the worker-local KV cache")
+
+
 class Evo2SampleOutput(CausalModelSampleOutput):
     """Output from Evo2 DNA sequence sampling.
 
@@ -46,12 +53,14 @@ class Evo2SampleOutput(CausalModelSampleOutput):
         sequences (list[str]): Generated DNA sequences.
         logits (list[Any] | None): Per-token logits for each generated sequence
             (shape: [num_sequences, num_generated_tokens, vocab_size]).
-        kv_caches (list[dict[str, Any]] | None): KV caches for each sequence,
-            enabling continued generation from where sampling left off.
+        kv_caches (list[Evo2KVCacheRef] | None): Worker-local cache handles
+            for continued generation inside the same persistent worker.
     """
 
     logits: list[Any] | None = Field(default=None, description="Per-token logits for each generated sequence")
-    kv_caches: list[dict[str, Any]] | None = Field(default=None, description="KV caches for continued generation")
+    kv_caches: list[Evo2KVCacheRef] | None = Field(
+        default=None, description="Worker-local KV cache handles for continued generation"
+    )
 
 
 # Config:
@@ -79,8 +88,8 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         num_tokens (int): Number of new tokens to generate per sequence (does not
             include the prompt tokens). Default: 32.
 
-        cached_generation (bool): Whether to use vortex KV caching for faster
-            generation. Default: ``True``.
+        cached_generation (bool): Whether to use Vortex's internal per-call
+            KV cache during generation. Default: ``True``.
 
         force_prompt_threshold (int | None): Optional number of tokens to
             prefill in parallel before switching to autoregressive prompt forcing.
@@ -95,8 +104,12 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         stop_at_eos (bool): Whether to stop generation when an end-of-sequence
             (EOS) token is encountered. Default: ``True``.
 
-        old_kv_cache (dict[str, Any] | None): Dictionary of inference parameters containing
-            a pre-computed KV cache from a previous generation run. Default: ``None``.
+        old_kv_cache (Evo2KVCacheRef | None): Worker-local KV cache handle
+            returned by a previous persistent-worker generation call. Default:
+            ``None``.
+
+        return_kv_cache (bool): Whether to return worker-local KV cache handles
+            for continued generation. Default: ``False``.
 
         return_logits (bool): Whether to include per-token logits in the output.
             Default: ``False``.
@@ -110,6 +123,12 @@ class Evo2SampleConfig(CausalModelSampleConfig):
                 "parallelism, which we haven't implemented into our device "
                 "manager system. Use a 7b or 1b variant instead."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_kv_cache_settings(self) -> "Evo2SampleConfig":
+        if (self.old_kv_cache is not None or self.return_kv_cache) and not self.cached_generation:
+            raise ValueError("Evo2 KV cache handles require cached_generation=True.")
         return self
 
     # Evo2 model params
@@ -150,7 +169,7 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     cached_generation: bool = ConfigField(
         title="Cached Generation",
         default=True,
-        description="Whether to use vortex KV caching for generation",
+        description="Use Vortex's internal per-call KV cache. Worker-local handles require Return KV Cache.",
         advanced=True,
     )
     force_prompt_threshold: int | None = ConfigField(
@@ -177,10 +196,16 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         description="Whether to stop at end-of-sequence token",
         advanced=True,
     )
-    old_kv_cache: dict[str, Any] | None = ConfigField(
+    old_kv_cache: Evo2KVCacheRef | None = ConfigField(
         title="Old KV Cache",
         default=None,
-        description="Dictionary of inference parameters to use for cached sampling (KV cache)",
+        description="Worker-local KV cache handle to use for continued generation",
+        hidden=True,
+    )
+    return_kv_cache: bool = ConfigField(
+        title="Return KV Cache",
+        default=False,
+        description="Return worker-local KV cache handles for continued generation",
         hidden=True,
     )
     return_logits: bool = ConfigField(
@@ -236,7 +261,7 @@ def run_evo2_sample(
         Evo2SampleOutput: Structured output containing:
             - ``sequences``: List of generated DNA sequences
             - ``logits``: Optional per-token logits for each sequence
-            - ``kv_caches``: Optional KV caches for continuing generation
+            - ``kv_caches``: Optional worker-local KV cache handles for continuing generation
             - Metadata about generation parameters and execution mode
 
     Examples:
@@ -257,13 +282,6 @@ def run_evo2_sample(
     # Local GPU - use standalone venv
     logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
 
-    # Warn about KV cache limitation in venv mode
-    if config.old_kv_cache is not None:
-        logger.warning(
-            "old_kv_cache provided but standalone venv execution does not support "
-            "KV caching. The cache will be ignored."
-        )
-
     result = ToolInstance.dispatch(
         "evo2",
         {
@@ -280,6 +298,8 @@ def run_evo2_sample(
             "max_seqlen": config.max_seqlen,
             "print_generation": config.print_generation,
             "stop_at_eos": config.stop_at_eos,
+            "old_kv_cache": config.old_kv_cache.model_dump() if config.old_kv_cache is not None else None,
+            "return_kv_cache": config.return_kv_cache,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,
@@ -317,4 +337,26 @@ def run_evo2_sample(
         sequences=result["sequences"],
         kv_caches=result["kv_caches"],
         logits=logits,
+    )
+
+
+def release_evo2_kv_caches(
+    kv_caches: list[Evo2KVCacheRef | None] | Evo2KVCacheRef | None,
+    instance: Any = None,
+) -> None:
+    """Release Evo2 KV-cache handles held by the persistent worker."""
+    if kv_caches is None:
+        return
+    cache_payload = (
+        [cache.model_dump() if cache is not None else None for cache in kv_caches]
+        if isinstance(kv_caches, list)
+        else kv_caches.model_dump()
+    )
+    ToolInstance.dispatch(
+        "evo2",
+        {
+            "operation": "release_kv_caches",
+            "kv_caches": cache_payload,
+        },
+        instance=instance,
     )

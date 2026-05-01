@@ -12,12 +12,14 @@ from proto_tools.tools.causal_models.evo1 import (
     run_evo1_score,
 )
 from proto_tools.tools.causal_models.evo2 import (
+    Evo2KVCacheRef,
     Evo2SampleConfig,
     Evo2SampleInput,
     Evo2SampleOutput,
     Evo2ScoringConfig,
     Evo2ScoringInput,
     Evo2ScoringOutput,
+    release_evo2_kv_caches,
     run_evo2_sample,
     run_evo2_score,
 )
@@ -57,9 +59,11 @@ __all__ = [
     "run_evo1_score",
     "EVO1_MODEL_CHECKPOINTS",
     # Evo2
+    "Evo2KVCacheRef",
     "Evo2SampleConfig",
     "Evo2SampleInput",
     "Evo2SampleOutput",
+    "release_evo2_kv_caches",
     "Evo2ScoringConfig",
     "Evo2ScoringInput",
     "Evo2ScoringOutput",
