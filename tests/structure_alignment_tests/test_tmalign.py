@@ -13,6 +13,7 @@ from proto_tools.tools.structure_alignment.tmalign import (
     TMalignInput,
     run_tmalign,
 )
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _DUMMY_DATA = Path(__file__).parent.parent / "dummy_data"
@@ -66,3 +67,28 @@ def test_tmalign_self_alignment_perfect_score():
     validate_output(result)
     assert result.tm_score_chain_1 == pytest.approx(1.0, abs=0.01)
     assert result.tm_score_chain_2 == pytest.approx(1.0, abs=0.01)
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("tmalign-alignment")
+@pytest.mark.slow
+def test_tmalign_alignment_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark tmalign-alignment: 20 sequential alignments of pdl1 vs renin_af3 (~340 aa) (cold + warm)."""
+    pdb_1 = _PDB_1_PATH.read_text()
+    pdb_2 = _PDB_2_PATH.read_text()
+    inputs = TMalignInput(pdb_text_1=pdb_1, pdb_text_2=pdb_2)
+    config = TMalignConfig()
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_tmalign(inputs, config)
+        return last
+
+    result = benchmark_twice(request, "tmalign", run_batch)
+    validate_output(result)
+
+    assert result.tool_id == "tmalign-alignment"
+    assert 0.0 <= result.tm_score_chain_1 <= 1.0

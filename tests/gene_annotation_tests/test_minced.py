@@ -15,9 +15,10 @@ from proto_tools.tools.gene_annotation.minced import (
     MincedSequenceResult,
     run_minced,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
+    validate_output,
 )
 
 _persistent_tool = make_persistent_fixture("minced", gpu=False)
@@ -191,3 +192,23 @@ def test_run_minced_no_crispr():
     assert isinstance(result, MincedOutput)
     assert len(result.results) == 1
     assert result.num_sequences_with_crispr == 0
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("minced-crispr")
+@pytest.mark.slow
+def test_minced_crispr_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark minced-crispr: 100 distinct CRISPR-bearing sequences with varied flanking regions (cold + warm)."""
+    # Distinct sequences avoid the @tool cacheable=True dedup path, which would
+    # collapse N identical inputs to a single unique workload.
+    sequences = [_CRISPR_SEQUENCE + f"AAAA{i:08d}AAAA" for i in range(100)]
+    inputs = MincedInput(sequences=sequences, sequence_ids=[f"seq_{i}" for i in range(100)])
+    config = MincedConfig()
+
+    result = benchmark_twice(request, "minced", lambda: run_minced(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "minced-crispr"
+    assert len(result.results) == 100

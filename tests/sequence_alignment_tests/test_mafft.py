@@ -12,6 +12,7 @@ from proto_tools.tools.sequence_alignment.mafft import (
     run_mafft_align,
 )
 from proto_tools.tools.sequence_alignment.msas import MSA
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -428,3 +429,21 @@ def test_mafft_sequence_ids_length_mismatch_fails():
     result = run_mafft_align(inputs, MafftConfig())
     assert result.success is False
     assert any("must match" in err for err in result.errors)
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("mafft-align")
+@pytest.mark.slow
+def test_mafft_align_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark mafft-align: 50 random 150-aa protein sequences, default 'auto' method (cold + warm)."""
+    sequences = random_protein_sequences(n=50, length=150, seed=0)
+    inputs = MafftInput(sequences=sequences)
+    config = MafftConfig(threads=4)
+
+    result = benchmark_twice(request, "mafft", lambda: run_mafft_align(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "mafft-align"
+    assert result.msa.num_sequences == 50

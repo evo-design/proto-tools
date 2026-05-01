@@ -11,7 +11,9 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sasa import (
     run_pyrosetta_sasa,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
@@ -102,3 +104,22 @@ def test_sasa_with_pre_relax_preprocess():
     assert abs(relaxed_sasa - raw_sasa) / raw_sasa < 0.05, (
         f"Relaxed SASA {relaxed_sasa} differs by >5% from raw {raw_sasa}"
     )
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pyrosetta-sasa")
+@pytest.mark.slow
+def test_pyrosetta_sasa_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyrosetta-sasa: 5 distinct renin_af3 copies (~340 aa each) (cold + warm)."""
+    structures = [Structure(structure=TEST_PDB, metrics={"_bench_id": i}) for i in range(5)]
+    inputs = PyRosettaSASAInput(inputs=structures)
+
+    result = benchmark_twice(request, "pyrosetta", lambda: run_pyrosetta_sasa(inputs))
+    validate_output(result)
+
+    assert result.tool_id == "pyrosetta-sasa"
+    assert len(result.results) == 5
+    for r in result.results:
+        assert r.total_sasa > 0

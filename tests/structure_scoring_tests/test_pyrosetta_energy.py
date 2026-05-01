@@ -11,7 +11,9 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
     run_pyrosetta_energy,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
@@ -118,3 +120,23 @@ def test_run_pyrosetta_energy_with_pre_relax_preprocess():
     assert relaxed.results[0].total_energy < raw.results[0].total_energy - 1.0, (
         f"Relaxed energy {relaxed.results[0].total_energy} should be lower than raw {raw.results[0].total_energy}"
     )
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pyrosetta-energy")
+@pytest.mark.slow
+def test_pyrosetta_energy_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyrosetta-energy: 5 distinct renin_af3 copies (~340 aa each), no preprocess relax (cold + warm)."""
+    # Distinct metrics break the iterable-input dedup so all 5 copies actually compute.
+    structures = [Structure(structure=TEST_PDB, metrics={"_bench_id": i}) for i in range(5)]
+    inputs = PyRosettaEnergyInput(inputs=structures)
+
+    result = benchmark_twice(request, "pyrosetta", lambda: run_pyrosetta_energy(inputs))
+    validate_output(result)
+
+    assert result.tool_id == "pyrosetta-energy"
+    assert len(result.results) == 5
+    for r in result.results:
+        assert isinstance(r.total_energy, float)

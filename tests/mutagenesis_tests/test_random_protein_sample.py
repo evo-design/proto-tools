@@ -11,6 +11,7 @@ from proto_tools.tools.mutagenesis.random_protein import (
     RandomProteinSampleInput,
     run_random_protein_sample,
 )
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Codon scheme variations
@@ -88,3 +89,35 @@ def test_export_unsupported_format(tmp_path):
     )
     with pytest.raises(ValueError, match="Unsupported format"):
         result._export_output(str(tmp_path / "out"), "csv")
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("random-protein-sample")
+@pytest.mark.slow
+def test_random_protein_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark random-protein-sample: 1000 fully-masked 100-aa sequences, NNK codon scheme (cold + warm).
+
+    Pure-Python sampler with no persistent worker, so we time both passes directly.
+    """
+    import time
+
+    masked = ["_" * 100] * 1000
+    inputs = RandomProteinSampleInput(sequences=masked)
+    config = RandomProteinSampleConfig(codon_scheme="NNK", seed=0)
+    runner = lambda: run_random_protein_sample(inputs, config)  # noqa: E731
+
+    t0 = time.perf_counter()
+    _ = runner()
+    cold = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    result = runner()
+    warm = time.perf_counter() - t0
+    request.node.user_properties.append(("cold_seconds", cold))
+    request.node.user_properties.append(("warm_seconds", warm))
+
+    validate_output(result)
+    assert result.tool_id == "random-protein-sample"
+    assert len(result.sequences) == 1000
+    assert all(len(s) == 100 for s in result.sequences)

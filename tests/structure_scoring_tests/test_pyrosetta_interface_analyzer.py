@@ -13,7 +13,9 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_interface_analyzer 
     run_pyrosetta_interface_analyzer,
 )
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb")
 
@@ -101,3 +103,22 @@ def test_interface_analyzer_with_pre_relax_preprocess():
         f"interface_dG unchanged after relax: raw={raw.results[0].interface_dG}, "
         f"relaxed={relaxed.results[0].interface_dG}"
     )
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pyrosetta-interface-analyzer")
+@pytest.mark.slow
+def test_pyrosetta_interface_analyzer_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyrosetta-interface-analyzer: 3 distinct pdl1 copies (multi-chain interface) (cold + warm)."""
+    structures = [{"structure": Structure(structure=TEST_PDB, metrics={"_bench_id": i})} for i in range(3)]
+    inputs = PyRosettaInterfaceAnalyzerInput(inputs=structures)
+
+    result = benchmark_twice(request, "pyrosetta", lambda: run_pyrosetta_interface_analyzer(inputs))
+    validate_output(result)
+
+    assert result.tool_id == "pyrosetta-interface-analyzer"
+    assert len(result.results) == 3
+    for r in result.results:
+        assert isinstance(r.interface_dG, float)

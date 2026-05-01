@@ -11,6 +11,7 @@ from proto_tools.tools.mutagenesis.random_nucleotide import (
     RandomNucleotideSampleInput,
     run_random_nucleotide_sample,
 )
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ============================================================================
 # Substitution scheme variations
@@ -127,3 +128,35 @@ def test_export_unsupported_format(tmp_path):
     )
     with pytest.raises(ValueError, match="Unsupported format"):
         result._export_output(str(tmp_path / "out"), "csv")
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("random-nucleotide-sample")
+@pytest.mark.slow
+def test_random_nucleotide_sample_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark random-nucleotide-sample: 1000 fully-masked 1000-bp sequences, IUPAC scheme=N (cold + warm).
+
+    Pure-Python sampler with no persistent worker, so we time both passes directly.
+    """
+    import time
+
+    masked = ["_" * 1000] * 1000
+    inputs = RandomNucleotideSampleInput(sequences=masked)
+    config = RandomNucleotideSampleConfig(substitution_scheme="N", seed=0)
+    runner = lambda: run_random_nucleotide_sample(inputs, config)  # noqa: E731
+
+    t0 = time.perf_counter()
+    _ = runner()
+    cold = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    result = runner()
+    warm = time.perf_counter() - t0
+    request.node.user_properties.append(("cold_seconds", cold))
+    request.node.user_properties.append(("warm_seconds", warm))
+
+    validate_output(result)
+    assert result.tool_id == "random-nucleotide-sample"
+    assert len(result.sequences) == 1000
+    assert all(len(s) == 1000 for s in result.sequences)

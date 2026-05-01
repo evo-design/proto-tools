@@ -15,6 +15,7 @@ from proto_tools.tools.orf_prediction import (
     run_prodigal_prediction,
 )
 from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # ── Input validation ───────────────────────────────────────────────────
@@ -231,3 +232,21 @@ def test_caching_behavior():
             assert mock_call.call_count == 2
     finally:
         _program_tool_cache.reset(token)
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("prodigal-prediction")
+@pytest.mark.slow
+def test_prodigal_prediction_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark prodigal-prediction: 50 random 10 kbp DNA sequences, meta-mode (cold + warm)."""
+    sequences = random_dna_sequences(n=50, length=10_000, seed=0)
+    inputs = ProdigalInput(input_sequences=sequences)
+    config = ProdigalConfig(meta_mode=True)
+
+    result = benchmark_twice(request, "prodigal", lambda: run_prodigal_prediction(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "prodigal-prediction"
+    assert len(result.predicted_orfs) == 50

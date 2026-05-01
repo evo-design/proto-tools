@@ -17,9 +17,10 @@ from proto_tools.tools.gene_annotation.crispr_tracr import (
     TracrPrediction,
     run_crispr_tracr,
 )
-from tests.conftest import make_persistent_fixture
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
+    validate_output,
 )
 
 # Checked-in positive-control FASTA files.
@@ -278,3 +279,22 @@ def test_positive_control_spyogenes_sf370():
     assert pred.anti_repeat_similarity_coverage_multiplication is not None
     assert pred.anti_repeat_similarity_coverage_multiplication > 0.5
     assert pred.intarna_anti_repeat_interaction is not None
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("crispr-tracr")
+@pytest.mark.slow
+def test_crispr_tracr_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark crispr-tracr: full S. pyogenes SF370 CRISPR-Cas9 locus (~26 kbp), model_type='II' (cold + warm)."""
+    test_fasta = DATA_DIR / "NC_002737_849000_875000.fasta"
+    seq = _read_fasta_sequence(test_fasta)
+    inputs = CrisprTracrInput(sequences=[seq], sequence_ids=["SpCas9_SF370"])
+    config = CrisprTracrConfig(model_type="II")
+
+    result = benchmark_twice(request, "crispr_tracr", lambda: run_crispr_tracr(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "crispr-tracr"
+    assert len(result.predictions) == 1

@@ -14,7 +14,10 @@ from proto_tools.tools.structure_scoring.dssp import (
     DSSPSecondaryStructureMetrics,
     DSSPSecondaryStructureOutput,
     DSSPStructureInput,
+    run_dssp_secondary_structure,
 )
+from tests.conftest import benchmark_twice
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 FIXTURE = (
     Path(__file__).resolve().parents[2]
@@ -65,3 +68,30 @@ def test_export_dssp_output_csv_and_json(tmp_path: Path) -> None:
 
     assert csv_rows == [{"helix_pct": "50.0", "sheet_pct": "25.0", "loop_pct": "25.0", "chain_id": "A"}]
     assert json_rows == [{"helix_pct": 50.0, "sheet_pct": 25.0, "loop_pct": 25.0, "chain_id": "A"}]
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+_BENCH_RENIN_PDB = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+
+
+@pytest.mark.benchmark("dssp-secondary-structure")
+@pytest.mark.slow
+def test_dssp_secondary_structure_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark dssp-secondary-structure: 50 distinct renin_af3 copies (~340 aa each) (cold + warm)."""
+    # Distinct metrics break the @tool iterable-input dedup that would otherwise
+    # collapse N identical structures to a single compute, defeating the benchmark.
+    structures = [
+        {"structure": Structure(structure=str(_BENCH_RENIN_PDB), metrics={"_bench_id": i})} for i in range(50)
+    ]
+    inputs = DSSPSecondaryStructureInput(inputs=structures)
+
+    result = benchmark_twice(request, "dssp", lambda: run_dssp_secondary_structure(inputs))
+    validate_output(result)
+
+    assert result.tool_id == "dssp-secondary-structure"
+    assert len(result.results) == 50
+    for r in result.results:
+        assert 0.0 <= r.helix_pct <= 100.0
+        assert 0.0 <= r.sheet_pct <= 100.0
+        assert 0.0 <= r.loop_pct <= 100.0

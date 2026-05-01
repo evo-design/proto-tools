@@ -13,6 +13,7 @@ from proto_tools.tools.orf_prediction import (
     run_orfipy_prediction,
 )
 from proto_tools.tools.orf_prediction.orf import ORF
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _VALID_ORF_KWARGS = {
@@ -204,3 +205,21 @@ def test_cache_reconstruction():
 
 def test_translation_table_map_matches_literal():
     assert set(get_args(OrfipyTranslationTable)) == set(ORFIPY_TRANSLATION_TABLE_MAP.keys())
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("orfipy-prediction")
+@pytest.mark.slow
+def test_orfipy_prediction_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark orfipy-prediction: 50 random 10 kbp DNA sequences (cold + warm)."""
+    sequences = random_dna_sequences(n=50, length=10_000, seed=0)
+    inputs = OrfipyInput(sequences=sequences)
+    config = OrfipyConfig(min_len=100)
+
+    result = benchmark_twice(request, "orfipy", lambda: run_orfipy_prediction(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "orfipy-prediction"
+    assert len(result.predicted_orfs) == 50

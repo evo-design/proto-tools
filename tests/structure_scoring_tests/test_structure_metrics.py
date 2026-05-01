@@ -15,6 +15,7 @@ from proto_tools.tools.structure_scoring.structure_metrics import (
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import (
     validate_export_output,
+    validate_output,
 )
 
 # ── Input validation ─────────────────────────────────────────────────────────
@@ -138,3 +139,46 @@ END
 
     assert isinstance(result, StructureMetricsOutput)
     assert len(result.metrics) == 1
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+_BENCH_RENIN_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
+
+
+@pytest.mark.benchmark("structure-metrics")
+@pytest.mark.slow
+def test_structure_metrics_benchmark(request: pytest.FixtureRequest, tmp_path: Path) -> None:
+    """Benchmark structure-metrics: 50 distinct renin_af3 copies (~340 aa each), all metrics enabled (cold + warm).
+
+    structure-metrics is an in-process Biotite/gemmi compute tool with no
+    persistent worker, so we time both passes directly. Distinct file paths
+    break the @tool iterable-input dedup.
+    """
+    import shutil
+    import time
+
+    # 50 distinct paths so the @tool dedup doesn't collapse them to one compute.
+    pdb_paths = []
+    for i in range(50):
+        p = tmp_path / f"renin_{i:03d}.pdb"
+        shutil.copyfile(_BENCH_RENIN_PDB, p)
+        pdb_paths.append(str(p))
+    inputs = StructureMetricsInput(pdb_paths=pdb_paths)
+    runner = lambda: run_structure_metrics(inputs)  # noqa: E731
+
+    t0 = time.perf_counter()
+    _ = runner()
+    cold = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    result = runner()
+    warm = time.perf_counter() - t0
+    request.node.user_properties.append(("cold_seconds", cold))
+    request.node.user_properties.append(("warm_seconds", warm))
+
+    validate_output(result)
+    assert result.tool_id == "structure-metrics"
+    assert len(result.metrics) == 50
+    for m in result.metrics:
+        assert m.gyration_radius > 0
+        assert m.longest_alpha_helix >= 0

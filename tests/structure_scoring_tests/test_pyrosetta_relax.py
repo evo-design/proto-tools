@@ -14,7 +14,9 @@ from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import (
 )
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
 from tests._structure_fixtures import synthetic_cif
+from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 
@@ -179,3 +181,23 @@ def test_relax_preserves_multichar_chain_ids():
     # Multi-char chains can be selected by their original labels.
     heavy_only = relaxed.select_chain("Heavy")
     assert heavy_only.get_chain_ids() == ["Heavy"]
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pyrosetta-relax")
+@pytest.mark.slow
+def test_pyrosetta_relax_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pyrosetta-relax: 1 renin_af3 (~340 aa), default scorefxn ref2015, relax_cycles=1 (cold + warm)."""
+    # FastRelax is the dominant cost for any PyRosetta-based design pipeline; one
+    # relax_cycle on a ~340-aa monomer is the typical per-design unit of work.
+    inputs = PyRosettaRelaxInput(inputs=[Structure(structure=TEST_PDB)])
+    config = PyRosettaRelaxConfig(relax_cycles=1, seed=42)
+
+    result = benchmark_twice(request, "pyrosetta", lambda: run_pyrosetta_relax(inputs, config))
+    validate_output(result)
+
+    assert result.tool_id == "pyrosetta-relax"
+    assert len(result.results) == 1
+    assert isinstance(result.results[0].total_score, float)

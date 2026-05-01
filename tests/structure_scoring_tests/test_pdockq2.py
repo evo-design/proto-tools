@@ -17,6 +17,7 @@ from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_scoring.pdockq2 import PDockQ2Config, PDockQ2Input, run_pdockq2
 from proto_tools.tools.structure_scoring.pdockq2.pdockq2 import _pmidockq_sigmoid, example_input
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+from tests.tool_infra_tests.test_export_functionality import validate_output
 
 FIXTURE_DIR = Path(__file__).parent.parent.parent / "proto_tools" / "tools" / "structure_scoring" / "pdockq2"
 
@@ -215,3 +216,40 @@ def test_disjoint_chains_score_zero_with_warning(tmp_path, caplog):
     assert out.metrics.pdockq2 == 0.0
     assert out.metrics.num_interface_contacts == 0
     assert any("pdockq2=0.0" in rec.message for rec in caplog.records)
+
+
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.benchmark("pdockq2")
+@pytest.mark.slow
+def test_pdockq2_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark pdockq2: 20 sequential calls on the bundled fixture (cold + warm).
+
+    pdockq2 is an in-process numpy compute tool with no persistent worker, so
+    we time both passes directly. The "cold" pass captures any first-call
+    lazy-import cost; the "warm" pass measures pure compute.
+    """
+    import time
+
+    inp = example_input()
+    config = PDockQ2Config()
+
+    def run_batch():
+        last = None
+        for _ in range(20):
+            last = run_pdockq2(inp, config)
+        return last
+
+    t0 = time.perf_counter()
+    _ = run_batch()
+    cold = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    result = run_batch()
+    warm = time.perf_counter() - t0
+    request.node.user_properties.append(("cold_seconds", cold))
+    request.node.user_properties.append(("warm_seconds", warm))
+
+    validate_output(result)
+    assert result.tool_id == "pdockq2"
+    assert result.metrics.pdockq2 >= 0.0
