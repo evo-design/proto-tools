@@ -127,7 +127,6 @@ omit = [
     # Tool implementation files require GPU or external services to test.
     # Coverage tracks infra (utils/, entities/, tool_registry) not tool wrappers.
     "proto_tools/tools/*/*/*.py",
-    "*/_in_process_mode/*",
     # Subprocess entry point — only exercised by tool dispatch integration tests
     "proto_tools/utils/_worker_bootstrap.py",
     # Runs inside standalone tool envs during setup.sh
