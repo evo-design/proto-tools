@@ -26,7 +26,7 @@ from typing import Any
 # =============================================================================
 # CRISPRtracrRNA Invocation
 # =============================================================================
-def _find_crispr_tracr_script() -> str:
+def _find_crispr_tracr_rna_script() -> str:
     """Find the CRISPRtracrRNA.py script path.
 
     Searches in common installation locations.
@@ -37,8 +37,8 @@ def _find_crispr_tracr_script() -> str:
     Raises:
         FileNotFoundError: If script cannot be found.
     """
-    # Check if CRISPR_TRACR_PATH env var is set
-    env_path = os.environ.get("CRISPR_TRACR_PATH")
+    # Check if CRISPR_TRACR_RNA_PATH env var is set
+    env_path = os.environ.get("CRISPR_TRACR_RNA_PATH")
     if env_path and Path(env_path).exists():
         script = Path(env_path) / "CRISPRtracrRNA.py"
         if script.exists():
@@ -62,52 +62,57 @@ def _find_crispr_tracr_script() -> str:
         return which_result
 
     raise FileNotFoundError(
-        "CRISPRtracrRNA.py not found. Set CRISPR_TRACR_PATH environment variable "
+        "CRISPRtracrRNA.py not found. Set CRISPR_TRACR_RNA_PATH environment variable "
         "to the CRISPRtracrRNA installation directory, or run setup.sh to install."
     )
+
+
+# NA-style cells normalized to None at the parser boundary so Pydantic's
+# int/float coercion doesn't choke on them.
+_NULL_CSV_TOKENS = frozenset({"", "NA", "nan", "None", "null", "-"})
+
+
+def _normalize_csv_value(value: Any) -> Any:
+    """Return None for empty / NA-style CSV cells, otherwise the raw value."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip() in _NULL_CSV_TOKENS:
+        return None
+    return value
 
 
 def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict[str, Any]]:
     """Parse CRISPRtracrRNA output CSV files.
 
-    CRISPRtracrRNA writes results to CSV files in the output directory.
-    We parse all CSV files and match results back to input sequence IDs.
+    Generic pass-through: we don't pick specific columns. Every column from
+    each CSV row is forwarded to the wrapper, which has the typed Pydantic
+    model that knows which fields are int/float/str/etc. and lets Pydantic
+    coerce. Unknown columns are silently dropped by the wrapper's Pydantic
+    model (extra=ignore), which is the right behavior for forward-compat with
+    upstream column additions and for ``model_run`` mode whose CSV uses a
+    different (cmsearch-derived) column set than ``complete_run``.
 
     Args:
         output_dir: Path to CRISPRtracrRNA output directory.
         sequence_ids: List of input sequence IDs.
 
     Returns:
-        List of prediction dicts, one per input sequence.
+        List of prediction dicts, one per input sequence (input order).
     """
-    # Collect all results from CSV files in output dir
-    results_by_id = {}
+    results_by_id: dict[str, dict[str, Any]] = {}
 
     for csv_file in output_dir.glob("*.csv"):
         try:
             with open(csv_file) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    acc_id = row.get("accession_number", row.get("tracr_id", ""))
-                    if acc_id and acc_id not in results_by_id:
-                        # CRISPRtracrRNA complete_run mode uses anti_repeat_start/end
-                        # and tracr_rna_sequence columns, not tracr_start/end/hit.
-                        tracr_start = _safe_int(row.get("anti_repeat_start", row.get("tracr_start")))
-                        tracr_end = _safe_int(row.get("anti_repeat_end", row.get("tracr_end")))
-                        tracr_hit = row.get("tracr_rna_sequence") or row.get("tracr_hit")
-                        interaction_energy = _safe_float(row.get("interaction_energy"))
-                        results_by_id[acc_id] = {
-                            "sequence_id": acc_id,
-                            "tracr_start": tracr_start,
-                            "tracr_end": tracr_end,
-                            "tracr_hit": tracr_hit,
-                            "interaction_energy": interaction_energy,
-                            "anti_repeat_similarity_coverage_multiplication": _safe_float(
-                                row.get("anti_repeat_similarity_coverage_multiplication")
-                            ),
-                            "intarna_anti_repeat_interaction": row.get("intarna_anti_repeat_interaction"),
-                        }
-        except Exception as e:  # noqa: PERF203 -- per-file error handling
+                    acc_id = row.get("accession_number") or row.get("tracr_id") or ""
+                    if not acc_id or acc_id in results_by_id:
+                        continue
+                    normalized = {k: _normalize_csv_value(v) for k, v in row.items()}
+                    normalized["sequence_id"] = acc_id
+                    results_by_id[acc_id] = normalized
+        except Exception as e:
             print(f"Warning: Failed to parse {csv_file}: {e}", file=sys.stderr)
             continue
 
@@ -117,45 +122,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
             file=sys.stderr,
         )
 
-    # Build results list in input order
-    predictions = []
-    for seq_id in sequence_ids:
-        if seq_id in results_by_id:
-            predictions.append(results_by_id[seq_id])
-        else:
-            predictions.append(
-                {
-                    "sequence_id": seq_id,
-                    "tracr_start": None,
-                    "tracr_end": None,
-                    "tracr_hit": None,
-                    "interaction_energy": None,
-                    "anti_repeat_similarity_coverage_multiplication": None,
-                    "intarna_anti_repeat_interaction": None,
-                }
-            )
-
-    return predictions
-
-
-def _safe_int(val: Any) -> int | None:
-    """Safely convert to int, returning None on failure."""
-    if val is None or val == "" or val == "NA" or val == "nan":
-        return None
-    try:
-        return int(float(val))
-    except (ValueError, TypeError):
-        return None
-
-
-def _safe_float(val: Any) -> float | None:
-    """Safely convert to float, returning None on failure."""
-    if val is None or val == "" or val == "NA" or val == "nan":
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
+    return [results_by_id.get(seq_id, {"sequence_id": seq_id}) for seq_id in sequence_ids]
 
 
 # =============================================================================
@@ -205,12 +172,47 @@ def _create_worker_cwd(tracr_install_dir: str, worker_dir: Path) -> Path:
     return worker_cwd
 
 
+# Upstream argparse defaults; flags matching these are omitted from the CLI.
+_UPSTREAM_DEFAULTS: dict[str, Any] = {
+    "anti_repeat_similarity_threshold": 0.7,
+    "anti_repeat_coverage_threshold": 0.6,
+    "weight_crispr_array_score": 0.5,
+    "weight_anti_repeat_sim": 0.5,
+    "weight_anti_repeat_coverage": 0.5,
+    "weight_anti_sim_coverage": 0.5,
+    "weight_interaction_score": 0.6,
+    "weight_model_hit_score": 0.9,
+    "weight_terminator_hit_score": 0.9,
+    "weight_consistency_orientation": 0.1,
+    "weight_consistency_anti_repeat_tail": 0.1,
+    "weight_consistency_tail_terminator": 0.1,
+}
+
+
+def _build_upstream_flags(config: dict[str, Any]) -> list[str]:
+    """Build CRISPRtracrRNA CLI flags for the optional config knobs.
+
+    Only emits a flag when the configured value differs from upstream's
+    documented default. ``perform_type_v_anti_repeat_analysis`` is special-
+    cased: upstream's argparse uses ``type=bool`` (the Python footgun where
+    any non-empty string evaluates True), so we only pass the flag when our
+    config is True.
+    """
+    flags: list[str] = []
+    for key, default in _UPSTREAM_DEFAULTS.items():
+        value = config.get(key, default)
+        if value != default:
+            flags.extend([f"--{key}", str(value)])
+    if config.get("perform_type_v_anti_repeat_analysis", False):
+        flags.extend(["--perform_type_v_anti_repeat_analysis", "True"])
+    return flags
+
+
 def _run_tracr_batch(
     sequences: list[str],
     sequence_ids: list[str],
-    model_type: str,
-    run_type: str,
-    crispr_tracr_script: str,
+    config: dict[str, Any],
+    crispr_tracr_rna_script: str,
     tracr_install_dir: str,
     run_env: dict[str, Any],
     batch_idx: int,
@@ -220,9 +222,9 @@ def _run_tracr_batch(
     Args:
         sequences: Nucleotide sequences in this batch.
         sequence_ids: Corresponding sequence IDs.
-        model_type: CRISPR model type ("II" or "all").
-        run_type: Run type ("complete_run" or "model_only").
-        crispr_tracr_script: Full path to CRISPRtracrRNA.py.
+        config: Full upstream config dict (model_type, run_type, thresholds,
+            ranking weights, perform_type_v_anti_repeat_analysis).
+        crispr_tracr_rna_script: Full path to CRISPRtracrRNA.py.
         tracr_install_dir: CRISPRtracrRNA installation directory.
         run_env: Environment variables dict.
         batch_idx: Batch index for logging.
@@ -230,6 +232,9 @@ def _run_tracr_batch(
     Returns:
         List of prediction dicts for this batch.
     """
+    model_type = config.get("model_type", "II")
+    run_type = config.get("run_type", "complete_run")
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         input_dir = temp_path / "input"
@@ -251,7 +256,7 @@ def _run_tracr_batch(
 
         cmd = [
             sys.executable,
-            crispr_tracr_script,
+            crispr_tracr_rna_script,
             "--input_folder",
             str(input_dir),
             "--output_folder",
@@ -262,6 +267,7 @@ def _run_tracr_batch(
             model_type,
             "--run_type",
             run_type,
+            *_build_upstream_flags(config),
         ]
 
         try:
@@ -287,7 +293,7 @@ def _run_tracr_batch(
 
         predictions = _parse_tracr_results(output_dir, sequence_ids)
 
-        if proc.returncode != 0 and not any(p.get("tracr_start") is not None for p in predictions):
+        if proc.returncode != 0 and not any(p.get("anti_repeat_start") is not None for p in predictions):
             # CRISPRtracrRNA can crash on sequences where fasta36 finds no
             # anti-repeat hits (IndexError in anti_repeat_search.py).  This
             # is expected for some generated sequences. Treat as "no
@@ -304,7 +310,7 @@ def _run_tracr_batch(
 # =============================================================================
 # Main Entry Point
 # =============================================================================
-def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
+def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run CRISPRtracrRNA prediction on one or more sequences.
 
     Splits sequences into batches and runs them in parallel, each in an
@@ -319,15 +325,10 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
     sequences = input_data["sequences"]
     sequence_ids = input_data["sequence_ids"]
     config = input_data.get("config", {})
-    model_type = config.get("model_type", "II")
-    run_type = config.get("run_type", "complete_run")
-    num_workers = config.get("num_workers")
-    if num_workers is None:
-        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
-        num_workers = int(slurm_cpus) if slurm_cpus else 1
+    num_workers = config["num_workers"]  # always resolved wrapper-side
 
-    crispr_tracr_script = _find_crispr_tracr_script()
-    tracr_install_dir = str(Path(crispr_tracr_script).parent)
+    crispr_tracr_rna_script = _find_crispr_tracr_rna_script()
+    tracr_install_dir = str(Path(crispr_tracr_rna_script).parent)
     run_env = _prepare_run_env()
 
     # Single-worker fast path
@@ -335,9 +336,8 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
         predictions = _run_tracr_batch(
             sequences,
             sequence_ids,
-            model_type,
-            run_type,
-            crispr_tracr_script,
+            config,
+            crispr_tracr_rna_script,
             tracr_install_dir,
             run_env,
             batch_idx=0,
@@ -372,9 +372,8 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
                 _run_tracr_batch,
                 batch_seqs,
                 batch_ids,
-                model_type,
-                run_type,
-                crispr_tracr_script,
+                config,
+                crispr_tracr_rna_script,
                 tracr_install_dir,
                 run_env,
                 batch_idx=idx,
@@ -391,19 +390,10 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
                     file=sys.stderr,
                 )
                 batch_errors.append(idx)
-                # Fill with empty predictions for this batch
+                # Empty predictions; all model fields default to None.
                 _, batch_ids = batches[idx]
                 all_predictions[idx] = [  # type: ignore[call-overload]
-                    {
-                        "sequence_id": seq_id,
-                        "tracr_start": None,
-                        "tracr_end": None,
-                        "tracr_hit": None,
-                        "interaction_energy": None,
-                        "anti_repeat_similarity_coverage_multiplication": None,
-                        "intarna_anti_repeat_interaction": None,
-                    }
-                    for seq_id in batch_ids
+                    {"sequence_id": seq_id} for seq_id in batch_ids
                 ]
 
     if batch_errors:
@@ -422,7 +412,7 @@ def run_crispr_tracr(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
-    return run_crispr_tracr(input_dict)
+    return run_crispr_tracr_rna(input_dict)
 
 
 # =============================================================================
@@ -451,7 +441,7 @@ if __name__ == "__main__":
     with open(input_json_path) as f:
         input_data = json.load(f)
 
-    output_data = run_crispr_tracr(input_data)
+    output_data = run_crispr_tracr_rna(input_data)
 
     with open(output_json_path, "w") as f:
         json.dump(output_data, f)

@@ -2,6 +2,8 @@
 # Setup script for CRISPRtracrRNA standalone environment
 set -euo pipefail
 
+source standalone_helpers.sh
+
 echo "Setting up CRISPRtracrRNA standalone environment..."
 
 echo "Cloning CRISPRtracrRNA repository..."
@@ -20,6 +22,18 @@ echo "Cloning CRISPRcasIdentifier into CRISPRtracrRNA tools directory..."
 CAS_ID_DIR="$INSTALL_DIR/tools/CRISPRcasIdentifier/CRISPRcasIdentifier"
 if [ ! -f "$CAS_ID_DIR/CRISPRcasIdentifier.py" ]; then
     git clone https://github.com/BackofenLab/CRISPRcasIdentifier.git "$CAS_ID_DIR"
+fi
+
+# CRISPRcasIdentifier expects models at BASE_DIR/{HMM_sets,trained_models}.tar.gz.
+# Pre-extract here: upstream's lazy tar.extractall() lands in CWD, which is wrong
+# when invoked from a per-worker temp dir.
+CAS_MODELS_SENTINEL="$CAS_ID_DIR/.proto_models_downloaded"
+if [ ! -f "$CAS_MODELS_SENTINEL" ]; then
+    echo "Downloading CRISPRcasIdentifier HMM/ML models from Google Drive..."
+    proto_download_gdrive 1YbTxkn9KuJP2D7U1-6kL1Yimu_4RqSl1 "$CAS_ID_DIR/HMM_sets.tar.gz"
+    proto_download_gdrive 1Nc5o6QVB6QxMxpQjmLQcbwQwkRLk-thM "$CAS_ID_DIR/trained_models.tar.gz"
+    ( cd "$CAS_ID_DIR" && tar -xzf HMM_sets.tar.gz && tar -xzf trained_models.tar.gz )
+    touch "$CAS_MODELS_SENTINEL"
 fi
 
 echo "Creating isolated conda environment (Python 3.8 + scikit-learn 0.22)..."
@@ -84,8 +98,8 @@ for rel, find, repl, guard in patches:
     p.write_text(t.replace(find, repl)); print(f'  PATCHED: {rel}')
 " "$INSTALL_DIR"
 
-echo "Setting CRISPR_TRACR_PATH..."
-export CRISPR_TRACR_PATH="$INSTALL_DIR"
+echo "Setting CRISPR_TRACR_RNA_PATH..."
+export CRISPR_TRACR_RNA_PATH="$INSTALL_DIR"
 
 echo "CRISPRtracrRNA setup complete!"
-echo "Set CRISPR_TRACR_PATH=$INSTALL_DIR to use this installation."
+echo "Set CRISPR_TRACR_RNA_PATH=$INSTALL_DIR to use this installation."

@@ -107,7 +107,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
 <a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation and homology search
 ├── <a href="proto_tools/tools/gene_annotation/blast/">blast/</a>
-├── <a href="proto_tools/tools/gene_annotation/crispr_tracr/">crispr_tracr/</a>
+├── <a href="proto_tools/tools/gene_annotation/crispr_tracr_rna/">crispr_tracr_rna/</a>
 ├── <a href="proto_tools/tools/gene_annotation/minced/">minced/</a>
 ├── <a href="proto_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
 ├── <a href="proto_tools/tools/gene_annotation/promoter_calculator/">promoter_calculator/</a>

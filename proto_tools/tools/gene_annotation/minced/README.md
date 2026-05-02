@@ -197,7 +197,7 @@ print(f"{result.num_sequences_with_crispr} of {len(result.results)} sequences ha
 ## Related Tools
 
 **Tools often used together:**
-- **`crispr-tracr`**: Predict tracrRNA sequences in CRISPR loci (run after MinCED confirms array presence)
+- **`crispr-tracr-rna`**: Predict tracrRNA sequences in CRISPR loci (run after MinCED confirms array presence)
 - **`prodigal`**: Find ORFs near CRISPR arrays to identify Cas genes
 - **`pyhmmer-hmmsearch`**: Search for Cas protein domains using HMM profiles
 - **`local-blast`**: Search spacer sequences against phage databases

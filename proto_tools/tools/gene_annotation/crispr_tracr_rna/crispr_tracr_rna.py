@@ -1,0 +1,406 @@
+"""Standardized interface for the CRISPRtracrRNA pipeline.
+
+Wraps the CRISPRtracrRNA tool from the Backofen Lab
+(https://github.com/BackofenLab/CRISPRtracrRNA) for predicting tracrRNA
+sequences and validating them via a multi-evidence ranking pipeline.
+"""
+
+import os
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    BaseToolOutput,
+    ConfigField,
+    InputField,
+    ToolInstance,
+    resolve_sequence_ids,
+)
+
+
+# ============================================================================
+# Data Models
+# ============================================================================
+class CrisprTracrRNAPrediction(BaseModel):
+    """A single tracrRNA prediction with all upstream evidence fields.
+
+    Mirrors upstream CRISPRtracrRNA's ``complete_run`` CSV columns plus the
+    multi-evidence ``score`` from ``candidate_ranking.py``. Every field is
+    nullable: ``model_run`` mode only populates candidate-detection fields;
+    ``complete_run`` may populate any subject to pipeline-stage hits. Flag
+    fields are raw strings (typically ``"True"``/``"False"``) to mirror
+    upstream's CSV verbatim.
+    """
+
+    # Identity
+    sequence_id: str = Field(description="ID of the input sequence")
+    accession_number: str | None = Field(default=None, description="Upstream's accession_number column.")
+    crispr_array_index: int | None = Field(default=None, description="Index of the matched CRISPR array.")
+    crispr_array_category: str | None = Field(default=None, description="CRISPR array category from CRISPRidentify.")
+
+    # CRISPR array (from CRISPRidentify)
+    crispr_array_score: float | None = Field(default=None, description="CRISPRidentify array-detection confidence.")
+    crispr_array_start: int | None = Field(default=None, description="Start position of the CRISPR array.")
+    crispr_array_end: int | None = Field(default=None, description="End position of the CRISPR array.")
+    crispr_array_repeat_consensus: str | None = Field(default=None, description="Consensus repeat sequence.")
+    crispr_array_orientation: str | None = Field(default=None, description="Predicted array orientation.")
+    crispr_orientation_flag: str | None = Field(default=None, description="Orientation-confidence flag.")
+
+    # Anti-repeat (from fasta36 + vmatch + clustalo + blast)
+    anti_repeat_sequence: str | None = Field(default=None, description="Anti-repeat sequence.")
+    anti_repeat_start: int | None = Field(default=None, description="Anti-repeat start position.")
+    anti_repeat_end: int | None = Field(default=None, description="Anti-repeat end position.")
+    anti_repeat_direction: str | None = Field(default=None, description="Anti-repeat strand/direction.")
+    anti_repeat_relative_location: str | None = Field(
+        default=None, description="Anti-repeat location relative to the CRISPR array."
+    )
+    anti_repeat_distance_from_crispr_array: int | None = Field(
+        default=None, description="Distance from the anti-repeat to the CRISPR array."
+    )
+    anti_repeat_similarity: float | None = Field(default=None, description="Anti-repeat sequence similarity (0-1).")
+    anti_repeat_coverage: float | None = Field(default=None, description="Anti-repeat alignment coverage (0-1).")
+    anti_repeat_similarity_coverage_multiplication: float | None = Field(
+        default=None, description="Similarity x coverage product."
+    )
+    anti_repeat_upstream: str | None = Field(default=None, description="Sequence upstream of the anti-repeat.")
+
+    # tracrRNA (from covariance-model search)
+    tracr_rna_taken_flag: str | None = Field(default=None, description="Flag for whether the tracrRNA was selected.")
+    tracr_rna_tail_sequence: str | None = Field(default=None, description="3' tail sequence of the tracrRNA.")
+    tracr_rna_global_window_sequence: str | None = Field(
+        default=None, description="Global window sequence around the tracrRNA."
+    )
+    tracr_rna_sequence: str | None = Field(default=None, description="Predicted tracrRNA sequence.")
+
+    # Interaction (from IntaRNA)
+    intarna_anti_repeat_interaction_interval: str | None = Field(
+        default=None, description="Interval of the predicted RNA-RNA interaction."
+    )
+    intarna_anti_repeat_interaction: str | None = Field(
+        default=None, description="IntaRNA anti-repeat interaction structure."
+    )
+    interaction_energy: float | None = Field(
+        default=None,
+        description="IntaRNA interaction energy in kcal/mol, more negative = stronger (complete_run mode).",
+    )
+    poli_u_signal_coordinates: str | None = Field(
+        default=None, description="Coordinates of the poly-U transcription terminator signal."
+    )
+
+    # Terminator (from erpin)
+    terminator_all_locations: str | None = Field(default=None, description="All erpin terminator hit locations.")
+    terminator_all_scores: str | None = Field(default=None, description="All erpin terminator hit scores.")
+    best_terminator_location: str | None = Field(default=None, description="Best erpin terminator location.")
+    best_terminator_score: float | None = Field(default=None, description="Best erpin terminator score.")
+    terminator_presence_flag: str | None = Field(default=None, description="Flag for terminator presence.")
+
+    # Tail (covariance-model tail hit)
+    tail_model_hit_location: str | None = Field(default=None, description="Tail model hit location.")
+    tail_model_hit_score: float | None = Field(default=None, description="Tail model hit score.")
+    tail_presence_flag: str | None = Field(default=None, description="Flag for tail presence.")
+
+    # Cas (from CRISPRcasIdentifier)
+    closest_corresponding_cas_interval: str | None = Field(
+        default=None, description="Coordinates of the closest cas-effector cassette."
+    )
+    distance_to_cas: int | None = Field(default=None, description="Distance from the tracrRNA to the cas cassette.")
+
+    # Multi-evidence ranking (from candidate_ranking.py)
+    score: float | None = Field(
+        default=None, description="Multi-evidence ranking score (weighted sum across all evidence fields)."
+    )
+
+    @property
+    def has_tracr(self) -> bool:
+        """Whether a tracrRNA was predicted (any candidate-detection field populated)."""
+        return self.tracr_rna_sequence is not None or self.anti_repeat_start is not None
+
+
+# Input:
+class CrisprTracrRNAInput(BaseToolInput):
+    """Input for CRISPRtracrRNA prediction.
+
+    Attributes:
+        sequences (list[str]): Nucleotide sequence(s) to predict tracrRNA from.
+            Each sequence should contain a CRISPR locus.
+        sequence_ids (list[str] | None): Optional sequence identifiers.
+    """
+
+    sequences: list[str] = InputField(description="Nucleotide sequence(s) to predict tracrRNA from")
+    sequence_ids: list[str] | None = InputField(
+        default=None,
+        description="Optional sequence identifiers (defaults to seq_0, seq_1, ...)",
+    )
+
+    @field_validator("sequences", mode="before")
+    @classmethod
+    def normalize_sequences(cls, value: Any) -> list[str]:
+        """Normalize a single sequence to a list."""
+        if isinstance(value, str):
+            return [value]
+        return value  # type: ignore[no-any-return]
+
+
+# Output:
+class CrisprTracrRNAOutput(BaseToolOutput):
+    """Output from CRISPRtracrRNA prediction.
+
+    Attributes:
+        predictions (list[CrisprTracrRNAPrediction]): Per-sequence tracrRNA predictions.
+    """
+
+    predictions: list[CrisprTracrRNAPrediction] = Field(
+        default_factory=list,
+        description="Per-sequence tracrRNA predictions",
+    )
+
+    @property
+    def num_with_tracr(self) -> int:
+        """Number of sequences with a detected tracrRNA."""
+        return sum(1 for p in self.predictions if p.has_tracr)
+
+    @property
+    def output_format_options(self) -> list[str]:
+        """Return the supported output format options."""
+        return ["csv", "json"]
+
+    @property
+    def output_format_default(self) -> str:
+        """Return the default output format."""
+        return "csv"
+
+    def _export_output(self, export_path: str | Path, file_format: str) -> None:
+        import pandas as pd
+
+        path = Path(export_path).with_suffix(f".{file_format}")
+        df = pd.DataFrame([p.model_dump() for p in self.predictions])
+        if file_format == "csv":
+            df.to_csv(path, index=False)
+        elif file_format == "json":
+            df.to_json(path, orient="records", indent=2)
+        else:
+            raise ValueError(f"Unsupported format: {file_format}")
+
+
+# Config:
+class CrisprTracrRNAConfig(BaseConfig):
+    """Configuration for CRISPRtracrRNA prediction.
+
+    Mirrors the upstream CRISPRtracrRNA.py argparse surface. Defaults match
+    upstream verbatim. The ten ranking weights only take effect in
+    ``run_type="complete_run"`` and are flagged ``advanced`` so client UIs
+    can collapse them by default.
+
+    Attributes:
+        model_type (Literal['II', 'all']): CRISPR model type.
+        run_type (Literal['complete_run', 'model_run']): Pipeline mode.
+        num_workers (int | None): Parallel workers (defaults to SLURM CPUs or 1).
+        anti_repeat_similarity_threshold (float): Minimum anti-repeat ↔ repeat similarity (0-1).
+        anti_repeat_coverage_threshold (float): Minimum anti-repeat alignment coverage (0-1).
+        weight_crispr_array_score (float): Ranking weight for CRISPR array confidence.
+        weight_anti_repeat_sim (float): Ranking weight for anti-repeat similarity.
+        weight_anti_repeat_coverage (float): Ranking weight for anti-repeat coverage.
+        weight_anti_sim_coverage (float): Ranking weight for similarity x coverage.
+        weight_interaction_score (float): Ranking weight for IntaRNA interaction energy.
+        weight_model_hit_score (float): Ranking weight for the covariance-model tail hit.
+        weight_terminator_hit_score (float): Ranking weight for erpin terminator score.
+        weight_consistency_orientation (float): Ranking weight for orientation consistency.
+        weight_consistency_anti_repeat_tail (float): Ranking weight for anti-repeat ↔ tail consistency.
+        weight_consistency_tail_terminator (float): Ranking weight for tail ↔ terminator consistency.
+        perform_type_v_anti_repeat_analysis (bool): Type V (Cas12) anti-repeat search.
+    """
+
+    model_type: Literal["II", "all"] = ConfigField(
+        title="Model Type",
+        default="II",
+        description='CRISPR model type: "II" for type II only (faster), "all" for comprehensive',
+    )
+    run_type: Literal["complete_run", "model_run"] = ConfigField(
+        title="Run Type",
+        default="complete_run",
+        description="Pipeline mode: complete_run = full pipeline; model_run = covariance-model scan only.",
+    )
+    num_workers: int | None = ConfigField(
+        title="Number of Workers",
+        default=None,
+        description="Number of parallel workers (defaults to SLURM CPUs or 1)",
+        include_in_key=False,
+    )
+    anti_repeat_similarity_threshold: float = ConfigField(
+        title="Anti-repeat Similarity",
+        default=0.7,
+        description="Minimum sequence similarity (0-1) between anti-repeat candidate and CRISPR repeat.",
+    )
+    anti_repeat_coverage_threshold: float = ConfigField(
+        title="Anti-repeat Coverage",
+        default=0.6,
+        description="Minimum alignment coverage (0-1) of anti-repeat candidates.",
+    )
+    weight_crispr_array_score: float = ConfigField(
+        title="Weight: CRISPR Array Score",
+        default=0.5,
+        description="Multi-evidence ranking weight for CRISPRidentify array-detection confidence.",
+        advanced=True,
+    )
+    weight_anti_repeat_sim: float = ConfigField(
+        title="Weight: Anti-repeat Similarity",
+        default=0.5,
+        description="Multi-evidence ranking weight for anti-repeat sequence similarity.",
+        advanced=True,
+    )
+    weight_anti_repeat_coverage: float = ConfigField(
+        title="Weight: Anti-repeat Coverage",
+        default=0.5,
+        description="Multi-evidence ranking weight for anti-repeat alignment coverage.",
+        advanced=True,
+    )
+    weight_anti_sim_coverage: float = ConfigField(
+        title="Weight: Sim x Coverage",
+        default=0.5,
+        description="Multi-evidence ranking weight for the similarity x coverage product.",
+        advanced=True,
+    )
+    weight_interaction_score: float = ConfigField(
+        title="Weight: IntaRNA Score",
+        default=0.6,
+        description="Multi-evidence ranking weight for the IntaRNA RNA-RNA interaction energy.",
+        advanced=True,
+    )
+    weight_model_hit_score: float = ConfigField(
+        title="Weight: Tail Hit Score",
+        default=0.9,
+        description="Multi-evidence ranking weight for the covariance-model tail hit score.",
+        advanced=True,
+    )
+    weight_terminator_hit_score: float = ConfigField(
+        title="Weight: Terminator Hit Score",
+        default=0.9,
+        description="Multi-evidence ranking weight for erpin terminator presence/score.",
+        advanced=True,
+    )
+    weight_consistency_orientation: float = ConfigField(
+        title="Weight: Orientation",
+        default=0.1,
+        description="Multi-evidence ranking weight for repeat / anti-repeat orientation consistency.",
+        advanced=True,
+    )
+    weight_consistency_anti_repeat_tail: float = ConfigField(
+        title="Weight: Anti-repeat-Tail",
+        default=0.1,
+        description="Multi-evidence ranking weight for anti-repeat ↔ tail positional consistency.",
+        advanced=True,
+    )
+    weight_consistency_tail_terminator: float = ConfigField(
+        title="Weight: Tail-Terminator",
+        default=0.1,
+        description="Multi-evidence ranking weight for tail ↔ terminator positional consistency.",
+        advanced=True,
+    )
+    perform_type_v_anti_repeat_analysis: bool = ConfigField(
+        title="Type V Anti-repeat Analysis",
+        default=False,
+        description='Enable Type V (Cas12) anti-repeat search. Use with model_type="all".',
+    )
+
+
+# ============================================================================
+# Tool Implementation
+# ============================================================================
+def example_input() -> Any:
+    """Minimal valid input for testing and examples."""
+    return CrisprTracrRNAInput(sequences=["ATCGATCG"])
+
+
+@tool(
+    key="crispr-tracr-rna",
+    label="CRISPRtracrRNA Prediction",
+    category="gene_annotation",
+    input_class=CrisprTracrRNAInput,
+    config_class=CrisprTracrRNAConfig,
+    output_class=CrisprTracrRNAOutput,
+    description="Predict tracrRNA sequences from nucleotide CRISPR loci",
+    example_input=example_input,
+    iterable_input_field="sequences",
+    iterable_output_field="predictions",
+    cacheable=True,
+)
+def run_crispr_tracr_rna(
+    inputs: CrisprTracrRNAInput,
+    config: CrisprTracrRNAConfig,
+    instance: Any = None,
+) -> CrisprTracrRNAOutput:
+    """Predict tracrRNA sequences from nucleotide CRISPR loci.
+
+    Uses the CRISPRtracrRNA tool from the Backofen Lab to predict tracrRNA
+    sequences associated with CRISPR loci. This is used as a Stage 3 filter
+    in the Cas9 filtering pipeline to confirm that candidate sequences
+    contain functional tracrRNA binding sites.
+
+    Args:
+        inputs (CrisprTracrRNAInput): Validated input containing nucleotide sequences.
+        config (CrisprTracrRNAConfig): CRISPRtracrRNA configuration including model type.
+
+        instance (Any): Optional ToolInstance for subprocess execution.
+
+    Returns:
+        CrisprTracrRNAOutput: Per-sequence tracrRNA predictions.
+
+    Examples:
+        >>> inputs = CrisprTracrRNAInput(sequences=["ATCG..." * 1000])
+        >>> config = CrisprTracrRNAConfig(model_type="II")
+        >>> result = run_crispr_tracr_rna(inputs, config)
+        >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
+    """
+    sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
+
+    num_workers = config.num_workers
+    if num_workers is None:
+        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
+        num_workers = int(slurm_cpus) if slurm_cpus else 1
+
+    input_data = {
+        "sequences": inputs.sequences,
+        "sequence_ids": sequence_ids,
+        "config": {
+            "model_type": config.model_type,
+            "run_type": config.run_type,
+            "num_workers": num_workers,
+            "anti_repeat_similarity_threshold": config.anti_repeat_similarity_threshold,
+            "anti_repeat_coverage_threshold": config.anti_repeat_coverage_threshold,
+            "weight_crispr_array_score": config.weight_crispr_array_score,
+            "weight_anti_repeat_sim": config.weight_anti_repeat_sim,
+            "weight_anti_repeat_coverage": config.weight_anti_repeat_coverage,
+            "weight_anti_sim_coverage": config.weight_anti_sim_coverage,
+            "weight_interaction_score": config.weight_interaction_score,
+            "weight_model_hit_score": config.weight_model_hit_score,
+            "weight_terminator_hit_score": config.weight_terminator_hit_score,
+            "weight_consistency_orientation": config.weight_consistency_orientation,
+            "weight_consistency_anti_repeat_tail": config.weight_consistency_anti_repeat_tail,
+            "weight_consistency_tail_terminator": config.weight_consistency_tail_terminator,
+            "perform_type_v_anti_repeat_analysis": config.perform_type_v_anti_repeat_analysis,
+        },
+    }
+
+    input_data["device"] = "cpu"
+    output_data = ToolInstance.dispatch(
+        "crispr_tracr_rna",
+        input_data,
+        instance=instance,
+        config=config,
+    )
+
+    predictions = [CrisprTracrRNAPrediction(**p) for p in output_data["predictions"]]
+
+    return CrisprTracrRNAOutput(
+        metadata={
+            "model_type": config.model_type,
+            "run_type": config.run_type,
+            "num_sequences": len(inputs.sequences),
+        },
+        predictions=predictions,
+    )
