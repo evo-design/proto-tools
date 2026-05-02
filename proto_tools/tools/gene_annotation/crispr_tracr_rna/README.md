@@ -47,7 +47,7 @@ Runs only stage 3 (Infernal `cmsearch`). Skips array detection, cas detection, a
 **Limitations:**
 - `complete_run` requires the CRISPRcasIdentifier ML/HMM models, which `setup.sh` downloads from Google Drive on first install. The download is rate-limited by Google; on `setup.sh` failure, retry or download manually per upstream's README.
 - Covariance-model sensitivity falls off for tracrRNAs highly divergent from known families.
-- Type I and Type III CRISPR systems do not use tracrRNA — `complete_run` will return None-heavy predictions for those loci even when arrays are detected.
+- Type I and Type III CRISPR systems do not use tracrRNA — `complete_run` will return None-heavy candidates for those loci even when arrays are detected.
 
 **Computational requirements:**
 - **Hardware:** CPU only; no GPU.
@@ -93,12 +93,17 @@ Runs only stage 3 (Infernal `cmsearch`). Skips array detection, cas detection, a
 
 **Output specification:**
 
+`CrisprTracrRNAOutput.results` is one entry per input sequence; each entry is a `CrisprTracrRNASequenceResult` carrying every candidate hit upstream produced for that accession, sorted by `score` descending (`candidates[0]` is the top-ranked hit).
+
 ```python
 # Return type: CrisprTracrRNAOutput
 {
-    "predictions": [
-        CrisprTracrRNAPrediction(
+    "results": [
+        CrisprTracrRNASequenceResult(
             sequence_id="seq1",
+            candidates=[
+                CrisprTracrRNAPrediction(
+                    sequence_id="seq1",
 
             # Identity (set in complete_run)
             accession_number=...,
@@ -138,19 +143,24 @@ Runs only stage 3 (Infernal `cmsearch`). Skips array detection, cas detection, a
             # Cas — from CRISPRcasIdentifier
             closest_corresponding_cas_interval=..., distance_to_cas=...,
 
-            # Multi-evidence ranking
-            score=...,  # weighted sum across all evidence
+                    # Multi-evidence ranking
+                    score=...,  # weighted sum across all evidence
+                ),
+                # Additional candidates for the same accession (lower-scoring), if any.
+            ],
         ),
-        ...
+        ...  # one CrisprTracrRNASequenceResult per input sequence
     ]
 }
 ```
 
-All output fields are `Optional`. In `model_run` mode only the candidate-detection columns are populated; the rest are `None`. In `complete_run` they can all be populated subject to the input genome actually hitting each pipeline stage.
+All `CrisprTracrRNAPrediction` fields are `Optional`. In `model_run` mode only the cmsearch-only columns (`start`, `end`, `e_value` / `best_e_value`, `hit_sequence`) are populated; in `complete_run` the full evidence stack can populate.
 
 **Convenience properties:**
-- `CrisprTracrRNAPrediction.has_tracr` — True if `tracr_rna_sequence` or `anti_repeat_start` is set.
-- `CrisprTracrRNAOutput.num_with_tracr` — count of predictions with a tracrRNA.
+- `CrisprTracrRNAPrediction.has_tracr` — True if `tracr_rna_sequence`, `anti_repeat_start`, or `hit_sequence` is set.
+- `CrisprTracrRNASequenceResult.top_candidate` — first candidate (top-ranked) or `None`.
+- `CrisprTracrRNASequenceResult.has_tracr` — True if any candidate has `has_tracr`.
+- `CrisprTracrRNAOutput.num_with_tracr` — count of input sequences for which a tracrRNA was detected.
 
 **Supported export formats:** `csv`, `json`.
 
@@ -181,11 +191,13 @@ from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
 # Full pipeline — multi-evidence ranking
 inputs = CrisprTracrRNAInput(sequences=["ATCG..." * 1000], sequence_ids=["my_locus"])
 result = run_crispr_tracr_rna(inputs, CrisprTracrRNAConfig(model_type="II"))
-for pred in result.predictions:
-    if pred.has_tracr:
-        print(f"{pred.sequence_id}: score={pred.score}, "
-              f"tracrRNA={pred.tracr_rna_sequence}, "
-              f"interaction={pred.interaction_energy} kcal/mol")
+for seq_result in result.results:
+    top = seq_result.top_candidate
+    if top is not None and top.has_tracr:
+        print(f"{seq_result.sequence_id}: score={top.score}, "
+              f"tracrRNA={top.tracr_rna_sequence}, "
+              f"interaction={top.interaction_energy} kcal/mol "
+              f"({len(seq_result.candidates)} candidates)")
 ```
 
 ```python

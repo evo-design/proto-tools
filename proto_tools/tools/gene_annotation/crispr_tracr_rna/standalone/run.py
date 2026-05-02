@@ -82,47 +82,62 @@ def _normalize_csv_value(value: Any) -> Any:
 
 
 def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict[str, Any]]:
-    """Parse CRISPRtracrRNA output CSV files.
+    """Parse upstream CSVs into one per-sequence result, each with all candidate rows.
 
-    Generic pass-through: we don't pick specific columns. Every column from
-    each CSV row is forwarded to the wrapper, which has the typed Pydantic
-    model that knows which fields are int/float/str/etc. and lets Pydantic
-    coerce. Unknown columns are silently dropped by the wrapper's Pydantic
-    model (extra=ignore), which is the right behavior for forward-compat with
-    upstream column additions and for ``model_run`` mode whose CSV uses a
-    different (cmsearch-derived) column set than ``complete_run``.
+    Columns pass through verbatim (typed Pydantic model on the wrapper side); NA-style
+    cells normalize to None. The priority sort routes CRISPRtracrRNA_result.csv (the
+    complete_run final, includes score) and complete_report.csv (model_run dedupe)
+    first, then per-fasta intermediates are skipped for any accession a priority file
+    already covered.
 
     Args:
         output_dir: Path to CRISPRtracrRNA output directory.
         sequence_ids: List of input sequence IDs.
 
     Returns:
-        List of prediction dicts, one per input sequence (input order).
+        One dict per input sequence: ``{"sequence_id": str, "candidates": list[dict]}``.
     """
-    results_by_id: dict[str, dict[str, Any]] = {}
+    candidates_by_id: dict[str, list[dict[str, Any]]] = {seq_id: [] for seq_id in sequence_ids}
+    covered_by_priority: set[str] = set()
 
-    for csv_file in output_dir.glob("*.csv"):
+    # complete_run final ranked CSV first; then model_run's per-accession dedupe.
+    priority = ("CRISPRtracrRNA_result.csv", "complete_report.csv")
+    csv_files = sorted(
+        output_dir.glob("*.csv"),
+        key=lambda p: (priority.index(p.name) if p.name in priority else len(priority), p.name),
+    )
+
+    for csv_file in csv_files:
+        is_priority = csv_file.name in priority
         try:
             with open(csv_file) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    acc_id = row.get("accession_number") or row.get("tracr_id") or ""
-                    if not acc_id or acc_id in results_by_id:
+                    acc_id = row.get("accession_number") or row.get("acc_num") or ""
+                    if not acc_id:
+                        continue
+                    if not is_priority and acc_id in covered_by_priority:
                         continue
                     normalized = {k: _normalize_csv_value(v) for k, v in row.items()}
                     normalized["sequence_id"] = acc_id
-                    results_by_id[acc_id] = normalized
+                    candidates_by_id.setdefault(acc_id, []).append(normalized)
+                    if is_priority:
+                        covered_by_priority.add(acc_id)
         except Exception as e:
             print(f"Warning: Failed to parse {csv_file}: {e}", file=sys.stderr)
             continue
 
-    if not results_by_id and sequence_ids:
+    if not any(candidates_by_id.values()) and sequence_ids:
         print(
             f"Warning: No tracrRNA CSV output files found in {output_dir} for {len(sequence_ids)} input sequences",
             file=sys.stderr,
         )
 
-    return [results_by_id.get(seq_id, {"sequence_id": seq_id}) for seq_id in sequence_ids]
+    # Sort score-descending; rows with no score (NA / missing) sort last.
+    for cands in candidates_by_id.values():
+        cands.sort(key=lambda c: float(c["score"]) if c.get("score") else float("-inf"), reverse=True)
+
+    return [{"sequence_id": seq_id, "candidates": candidates_by_id.get(seq_id, [])} for seq_id in sequence_ids]
 
 
 # =============================================================================
@@ -261,6 +276,8 @@ def _run_tracr_batch(
             str(input_dir),
             "--output_folder",
             str(output_dir),
+            "--output_summary_file",
+            str(output_dir / "CRISPRtracrRNA_result.csv"),
             "--temp_folder_path",
             str(tmp_dir),
             "--model_type",
@@ -291,20 +308,19 @@ def _run_tracr_batch(
             )
             print(proc.stderr, file=sys.stderr)
 
-        predictions = _parse_tracr_results(output_dir, sequence_ids)
+        results = _parse_tracr_results(output_dir, sequence_ids)
 
-        if proc.returncode != 0 and not any(p.get("anti_repeat_start") is not None for p in predictions):
+        if proc.returncode != 0 and not any(r["candidates"] for r in results):
             # CRISPRtracrRNA can crash on sequences where fasta36 finds no
-            # anti-repeat hits (IndexError in anti_repeat_search.py).  This
-            # is expected for some generated sequences. Treat as "no
-            # tracrRNA found" rather than a hard failure.
+            # anti-repeat hits (IndexError in anti_repeat_search.py). Expected
+            # for some generated sequences — treat as "no tracrRNA found".
             print(
                 f"WARNING: Batch {batch_idx} produced no results "
                 f"(exit code {proc.returncode}); treating as no tracrRNA found",
                 file=sys.stderr,
             )
 
-    return predictions
+    return results
 
 
 # =============================================================================
@@ -320,7 +336,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
         input_data: Dict with keys: sequences, sequence_ids, config.
 
     Returns:
-        Dict with key: predictions (list of prediction dicts).
+        Dict with key: results (list of per-sequence result dicts).
     """
     sequences = input_data["sequences"]
     sequence_ids = input_data["sequence_ids"]
@@ -333,7 +349,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
 
     # Single-worker fast path
     if num_workers <= 1 or len(sequences) <= 1:
-        predictions = _run_tracr_batch(
+        results = _run_tracr_batch(
             sequences,
             sequence_ids,
             config,
@@ -342,7 +358,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
             run_env,
             batch_idx=0,
         )
-        return {"predictions": predictions}
+        return {"results": results}
 
     # Split sequences into batches
     num_workers = min(num_workers, len(sequences))
@@ -362,7 +378,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
 
     # Run batches in parallel (ThreadPoolExecutor is fine since workers
     # are subprocess-bound, not CPU-bound in Python)
-    all_predictions = [None] * len(batches)
+    all_results = [None] * len(batches)
     batch_errors = []
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -383,17 +399,17 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             try:
-                all_predictions[idx] = future.result()  # type: ignore[call-overload]
+                all_results[idx] = future.result()  # type: ignore[call-overload]
             except Exception as e:
                 print(
                     f"ERROR: Batch {idx} failed: {e}",
                     file=sys.stderr,
                 )
                 batch_errors.append(idx)
-                # Empty predictions; all model fields default to None.
+                # Empty per-sequence results so each input is still represented.
                 _, batch_ids = batches[idx]
-                all_predictions[idx] = [  # type: ignore[call-overload]
-                    {"sequence_id": seq_id} for seq_id in batch_ids
+                all_results[idx] = [  # type: ignore[call-overload]
+                    {"sequence_id": seq_id, "candidates": []} for seq_id in batch_ids
                 ]
 
     if batch_errors:
@@ -402,12 +418,12 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
             file=sys.stderr,
         )
 
-    # Flatten predictions in original order
-    predictions = []
-    for batch_preds in all_predictions:
-        predictions.extend(batch_preds)  # type: ignore[arg-type]
+    # Flatten in original order
+    results = []
+    for batch_results in all_results:
+        results.extend(batch_results)  # type: ignore[arg-type]
 
-    return {"predictions": predictions}
+    return {"results": results}
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:

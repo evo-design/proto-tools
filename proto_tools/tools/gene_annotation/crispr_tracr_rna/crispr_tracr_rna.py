@@ -115,10 +115,19 @@ class CrisprTracrRNAPrediction(BaseModel):
         default=None, description="Multi-evidence ranking score (weighted sum across all evidence fields)."
     )
 
+    # model_run only
+    start: int | None = Field(default=None, description="cmsearch hit start position (model_run mode).")
+    end: int | None = Field(default=None, description="cmsearch hit end position (model_run mode).")
+    e_value: float | None = Field(default=None, description="cmsearch hit e-value (model_run mode).")
+    best_e_value: float | None = Field(default=None, description="cmsearch best-hit e-value (model_run mode).")
+    hit_sequence: str | None = Field(default=None, description="cmsearch hit sequence (model_run mode).")
+
     @property
     def has_tracr(self) -> bool:
         """Whether a tracrRNA was predicted (any candidate-detection field populated)."""
-        return self.tracr_rna_sequence is not None or self.anti_repeat_start is not None
+        return (
+            self.tracr_rna_sequence is not None or self.anti_repeat_start is not None or self.hit_sequence is not None
+        )
 
 
 # Input:
@@ -146,23 +155,51 @@ class CrisprTracrRNAInput(BaseToolInput):
         return value  # type: ignore[no-any-return]
 
 
+class CrisprTracrRNASequenceResult(BaseModel):
+    """All tracrRNA candidates for one input sequence, score-descending.
+
+    Attributes:
+        sequence_id (str): ID of the input sequence.
+        candidates (list[CrisprTracrRNAPrediction]): All candidate hits for
+            this sequence, top-ranked first; empty when upstream found nothing.
+    """
+
+    sequence_id: str = Field(description="ID of the input sequence")
+    candidates: list[CrisprTracrRNAPrediction] = Field(
+        default_factory=list,
+        description="All candidate hits for this sequence, top-ranked first.",
+    )
+
+    @property
+    def has_tracr(self) -> bool:
+        """Whether any candidate has a tracrRNA detection."""
+        return any(c.has_tracr for c in self.candidates)
+
+    @property
+    def top_candidate(self) -> CrisprTracrRNAPrediction | None:
+        """The highest-scoring candidate, or None when no hits."""
+        return self.candidates[0] if self.candidates else None
+
+
 # Output:
 class CrisprTracrRNAOutput(BaseToolOutput):
     """Output from CRISPRtracrRNA prediction.
 
     Attributes:
-        predictions (list[CrisprTracrRNAPrediction]): Per-sequence tracrRNA predictions.
+        results (list[CrisprTracrRNASequenceResult]): One result per input
+            sequence, each carrying all candidate hits upstream produced for
+            that sequence (top-ranked first).
     """
 
-    predictions: list[CrisprTracrRNAPrediction] = Field(
+    results: list[CrisprTracrRNASequenceResult] = Field(
         default_factory=list,
-        description="Per-sequence tracrRNA predictions",
+        description="Per-input sequence results, each with all candidate hits top-ranked first.",
     )
 
     @property
     def num_with_tracr(self) -> int:
-        """Number of sequences with a detected tracrRNA."""
-        return sum(1 for p in self.predictions if p.has_tracr)
+        """Number of input sequences for which a tracrRNA was detected."""
+        return sum(1 for r in self.results if r.has_tracr)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -177,8 +214,15 @@ class CrisprTracrRNAOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import pandas as pd
 
+        # One row per candidate; sequences with no candidates emit a sequence_id-only row.
+        rows: list[dict[str, Any]] = []
+        for result in self.results:
+            if not result.candidates:
+                rows.append({"sequence_id": result.sequence_id})
+            else:
+                rows.extend(c.model_dump() for c in result.candidates)
         path = Path(export_path).with_suffix(f".{file_format}")
-        df = pd.DataFrame([p.model_dump() for p in self.predictions])
+        df = pd.DataFrame(rows)
         if file_format == "csv":
             df.to_csv(path, index=False)
         elif file_format == "json":
@@ -235,76 +279,89 @@ class CrisprTracrRNAConfig(BaseConfig):
         title="Anti-repeat Similarity",
         default=0.7,
         description="Minimum sequence similarity (0-1) between anti-repeat candidate and CRISPR repeat.",
+        depends_on={"run_type": "complete_run"},
     )
     anti_repeat_coverage_threshold: float = ConfigField(
         title="Anti-repeat Coverage",
         default=0.6,
         description="Minimum alignment coverage (0-1) of anti-repeat candidates.",
+        depends_on={"run_type": "complete_run"},
     )
     weight_crispr_array_score: float = ConfigField(
         title="Weight: CRISPR Array Score",
         default=0.5,
         description="Multi-evidence ranking weight for CRISPRidentify array-detection confidence.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_anti_repeat_sim: float = ConfigField(
         title="Weight: Anti-repeat Similarity",
         default=0.5,
         description="Multi-evidence ranking weight for anti-repeat sequence similarity.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_anti_repeat_coverage: float = ConfigField(
         title="Weight: Anti-repeat Coverage",
         default=0.5,
         description="Multi-evidence ranking weight for anti-repeat alignment coverage.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_anti_sim_coverage: float = ConfigField(
         title="Weight: Sim x Coverage",
         default=0.5,
         description="Multi-evidence ranking weight for the similarity x coverage product.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_interaction_score: float = ConfigField(
         title="Weight: IntaRNA Score",
         default=0.6,
         description="Multi-evidence ranking weight for the IntaRNA RNA-RNA interaction energy.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_model_hit_score: float = ConfigField(
         title="Weight: Tail Hit Score",
         default=0.9,
         description="Multi-evidence ranking weight for the covariance-model tail hit score.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_terminator_hit_score: float = ConfigField(
         title="Weight: Terminator Hit Score",
         default=0.9,
         description="Multi-evidence ranking weight for erpin terminator presence/score.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_orientation: float = ConfigField(
         title="Weight: Orientation",
         default=0.1,
         description="Multi-evidence ranking weight for repeat / anti-repeat orientation consistency.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_anti_repeat_tail: float = ConfigField(
         title="Weight: Anti-repeat-Tail",
         default=0.1,
         description="Multi-evidence ranking weight for anti-repeat ↔ tail positional consistency.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     weight_consistency_tail_terminator: float = ConfigField(
         title="Weight: Tail-Terminator",
         default=0.1,
         description="Multi-evidence ranking weight for tail ↔ terminator positional consistency.",
         advanced=True,
+        depends_on={"run_type": "complete_run"},
     )
     perform_type_v_anti_repeat_analysis: bool = ConfigField(
         title="Type V Anti-repeat Analysis",
         default=False,
-        description='Enable Type V (Cas12) anti-repeat search. Use with model_type="all".',
+        description="Enable Type V (Cas12) anti-repeat search in model_run mode (no-op in complete_run).",
+        depends_on={"run_type": "model_run"},
     )
 
 
@@ -326,7 +383,7 @@ def example_input() -> Any:
     description="Predict tracrRNA sequences from nucleotide CRISPR loci",
     example_input=example_input,
     iterable_input_field="sequences",
-    iterable_output_field="predictions",
+    iterable_output_field="results",
     cacheable=True,
 )
 def run_crispr_tracr_rna(
@@ -348,13 +405,15 @@ def run_crispr_tracr_rna(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        CrisprTracrRNAOutput: Per-sequence tracrRNA predictions.
+        CrisprTracrRNAOutput: One ``CrisprTracrRNASequenceResult`` per input sequence,
+            each carrying every candidate hit upstream produced (top-ranked first).
 
     Examples:
         >>> inputs = CrisprTracrRNAInput(sequences=["ATCG..." * 1000])
         >>> config = CrisprTracrRNAConfig(model_type="II")
         >>> result = run_crispr_tracr_rna(inputs, config)
-        >>> print(f"{result.num_with_tracr} sequences have tracrRNA predictions")
+        >>> top = result.results[0].top_candidate
+        >>> print(f"{result.num_with_tracr} sequences have a tracrRNA hit")
     """
     sequence_ids = resolve_sequence_ids(inputs.sequences, inputs.sequence_ids)
 
@@ -394,7 +453,13 @@ def run_crispr_tracr_rna(
         config=config,
     )
 
-    predictions = [CrisprTracrRNAPrediction(**p) for p in output_data["predictions"]]
+    results = [
+        CrisprTracrRNASequenceResult(
+            sequence_id=r["sequence_id"],
+            candidates=[CrisprTracrRNAPrediction(**c) for c in r["candidates"]],
+        )
+        for r in output_data["results"]
+    ]
 
     return CrisprTracrRNAOutput(
         metadata={
@@ -402,5 +467,5 @@ def run_crispr_tracr_rna(
             "run_type": config.run_type,
             "num_sequences": len(inputs.sequences),
         },
-        predictions=predictions,
+        results=results,
     )
