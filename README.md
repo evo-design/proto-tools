@@ -110,6 +110,7 @@ Some tools use gated models that require accepting a license / terms-of-use. Two
 ├── <a href="proto_tools/tools/gene_annotation/crispr_tracr/">crispr_tracr/</a>
 ├── <a href="proto_tools/tools/gene_annotation/minced/">minced/</a>
 ├── <a href="proto_tools/tools/gene_annotation/mmseqs/">mmseqs/</a>
+├── <a href="proto_tools/tools/gene_annotation/promoter_calculator/">promoter_calculator/</a>
 └── <a href="proto_tools/tools/gene_annotation/pyhmmer/">pyhmmer/</a>
 <a href="proto_tools/tools/inverse_folding/">inverse_folding/</a>                # Sequence design from structures
 ├── <a href="proto_tools/tools/inverse_folding/esm_if1/">esm_if1/</a>
