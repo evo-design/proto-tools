@@ -162,7 +162,7 @@ def example_input() -> Any:
     input_class=ESM3SampleInput,
     config_class=ESM3SampleConfig,
     output_class=ESM3SampleOutput,
-    description="Sample protein sequences using ESM3 language model",
+    description="Sample masked positions in protein sequences using ESM3 language model",
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="sequences",

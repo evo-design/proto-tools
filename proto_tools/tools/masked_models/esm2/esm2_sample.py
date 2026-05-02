@@ -169,7 +169,7 @@ def example_input() -> Any:
     input_class=ESM2SampleInput,
     config_class=ESM2SampleConfig,
     output_class=ESM2SampleOutput,
-    description="Sample protein sequences using ESM2 language model",
+    description="Sample masked positions in protein sequences using ESM2 language model",
     uses_gpu=True,
     example_input=example_input,
     iterable_input_field="sequences",
@@ -180,7 +180,7 @@ def run_esm2_sample(
     config: ESM2SampleConfig,
     instance: Any = None,
 ) -> ESM2SampleOutput:
-    """Sample protein sequences using ESM2 language model.
+    """Sample masked positions in protein sequences using ESM2.
 
     The ``preprocess`` hook on :class:`ESM2SampleConfig` applies the masking
     strategy before this function runs, so ``inputs.sequences`` already
