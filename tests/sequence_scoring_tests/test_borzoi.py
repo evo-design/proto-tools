@@ -103,10 +103,11 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
         BorzoiInput(
             sequences=[sequence], target_ranges=[SequenceTargetRange(start=target_start, end=target_start + 10)]
         ),
-        BorzoiConfig(output_tracks=[0], use_flash_attn=False, device="cpu"),
+        BorzoiConfig(output_tracks=[0], device="cuda"),
     )
 
     dispatched_sequence = captured_payloads[0]["sequences"][0]
+    assert captured_payloads[0]["use_flash_attn"] is True
     assert len(dispatched_sequence) == BORZOI_CONTEXT
     assert dispatched_sequence == sequence[100 : 100 + BORZOI_CONTEXT]
     assert result.results[0].sequence == sequence
@@ -138,39 +139,35 @@ def test_borzoi_config_rejects_invalid_replicate():
         BorzoiConfig(output_tracks=[0], replicate="5")
 
 
-def test_borzoi_config_rejects_mouse_with_flash_attn():
-    """Test that FlashAttention cannot be used with mouse models."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+@pytest.mark.parametrize(("species", "expected_flash_attn"), [("human", True), ("mouse", False)])
+def test_borzoi_flash_attn_is_derived_from_species(monkeypatch, species, expected_flash_attn):
+    """Borzoi selects FlashAttention internally from the species checkpoint."""
+    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig, BorzoiInput, borzoi_prediction, run_borzoi
 
-    with pytest.raises(ValueError, match=r"FlashAttention.*not available for mouse"):
-        BorzoiConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
+    captured_payloads = []
 
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured_payloads.append(payload)
+        return {"predictions": [[[0.0] * BORZOI_OUTPUT] for _ in payload["sequences"]]}
 
-def test_borzoi_config_mouse_without_flash_attn():
-    """Mouse config is valid when FlashAttention is disabled."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
+    monkeypatch.setattr(borzoi_prediction.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
-    config = BorzoiConfig(output_tracks=[0], species="mouse", use_flash_attn=False)
-    assert config.species == "mouse"
-    assert config.use_flash_attn is False
+    run_borzoi(
+        BorzoiInput(sequences=["A" * BORZOI_CONTEXT]),
+        BorzoiConfig(output_tracks=[0], species=species, device="cuda"),
+    )
+
+    assert captured_payloads[0]["use_flash_attn"] is expected_flash_attn
 
 
 # -- Ensemble config validation --------------------------------------------------------
 
 
-def test_borzoi_ensemble_config_rejects_mouse_with_flash_attn():
-    """Test that FlashAttention cannot be used with mouse models in ensemble."""
+def test_borzoi_ensemble_config_mouse():
+    """Mouse ensemble config is valid without a user-facing FlashAttention switch."""
     from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
 
-    with pytest.raises(ValueError, match=r"FlashAttention.*not available for mouse"):
-        BorzoiEnsembleConfig(output_tracks=[0], species="mouse", use_flash_attn=True)
-
-
-def test_borzoi_ensemble_config_mouse_without_flash_attn():
-    """Ensemble mouse config is valid when FlashAttention is disabled."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
-
-    config = BorzoiEnsembleConfig(output_tracks=[0], species="mouse", use_flash_attn=False)
+    config = BorzoiEnsembleConfig(output_tracks=[0], species="mouse")
     assert config.species == "mouse"
 
 

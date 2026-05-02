@@ -273,7 +273,6 @@ class BorzoiConfig(BaseConfig):
         species (Literal['human', 'mouse']): Species model to use.
         replicate (Literal['0', '1', '2', '3']): Replicate ID to run.
         avg_output_tracks (bool): Whether to average selected tracks.
-        use_flash_attn (bool): Whether to run FlashAttention-backed models.
         batch_size (int): Number of sequences to process in each GPU batch.
         device (str): Device used for inference (inherited).
     """
@@ -316,20 +315,6 @@ class BorzoiConfig(BaseConfig):
         description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
-    use_flash_attn: bool = ConfigField(
-        title="Use FlashAttention",
-        default=True,
-        description="Whether to use FlashAttention models",
-        hidden=True,
-        reload_on_change=True,
-    )
-
-    @model_validator(mode="after")
-    def validate_mouse_flash_attn(self) -> "BorzoiConfig":
-        """Mouse Borzoi checkpoints do not support FlashAttention."""
-        if self.species == "mouse" and self.use_flash_attn:
-            raise ValueError("FlashAttention (use_flash_attn=True) is not available for mouse models.")
-        return self
 
 
 # ============================================================================
@@ -367,7 +352,8 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) 
         BorzoiOutput: Prediction object for one Borzoi replicate. Contains one
             result per input sequence.
     """
-    if config.use_flash_attn and not config.device.startswith("cuda"):
+    use_flash_attn = config.species == "human"
+    if use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
 
     logger.debug("Using local venv for Borzoi prediction")
@@ -388,7 +374,7 @@ def run_borzoi(inputs: BorzoiInput, config: BorzoiConfig, instance: Any = None) 
             "output_tracks": config.output_tracks,
             "species": config.species,
             "replicate": config.replicate,
-            "use_flash_attn": config.use_flash_attn,
+            "use_flash_attn": use_flash_attn,
             "avg_output_tracks": config.avg_output_tracks,
             "batch_size": config.batch_size,
             "device": config.device,

@@ -34,9 +34,7 @@ class BorzoiModel:
             use_flash_attn: Whether to use FlashAttention
         """
         if species == "mouse" and use_flash_attn:
-            raise ValueError(
-                "FlashAttention (flashzoi) is not available for mouse models. Please set use_flash_attn=False."
-            )
+            raise ValueError("FlashAttention (flashzoi) is not available for mouse Borzoi checkpoints.")
 
         self.species = species
         self.replicate = replicate

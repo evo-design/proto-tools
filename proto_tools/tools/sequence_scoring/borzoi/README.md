@@ -74,7 +74,6 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 | `replicate` | `"0"`, `"1"`, `"2"`, or `"3"` | `"0"` | Which replicate model to run |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
 | `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
-| `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
 | `device` | `str` | `"cuda"` | Inference device |
 | `verbose` | `bool` | `False` | Log status messages |
 
@@ -86,7 +85,6 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 | `species` | `"human"` or `"mouse"` | `"human"` | Species model to use |
 | `avg_output_tracks` | `bool` | `True` | Whether to average selected tracks into one output |
 | `batch_size` | `int` | `1` | Number of sequences to process simultaneously on GPU |
-| `use_flash_attn` | `bool` | `True` | Use FlashAttention models (faster, human only) |
 | `device` | `str` | `"cuda"` | Inference device |
 | `verbose` | `bool` | `False` | Log status messages |
 
@@ -94,7 +92,7 @@ Target-range extraction is start-aligned, not midpoint-centered: when possible, 
 
 **`avg_output_tracks`**: When `True` (default), all requested tracks are averaged into a single output track per bin. This is useful for combining related tracks (e.g., multiple CAGE tracks) into a composite signal. Set to `False` to get individual predictions per track.
 
-**`use_flash_attn`**: FlashAttention provides significant speedup for attention computation. It is enabled by default for human models. Mouse models do NOT support FlashAttention -- setting `use_flash_attn=True` with `species="mouse"` raises a validation error.
+Human Borzoi runs use FlashAttention-backed checkpoints automatically. Mouse Borzoi runs use the non-FlashAttention checkpoints because those are the available mouse checkpoints.
 
 **`replicate`**: Borzoi has 4 independently trained replicates (0-3). Each produces slightly different predictions. Replicate "0" is the default. For production analysis, use the ensemble tool to get all 4.
 
@@ -221,12 +219,11 @@ for track in range(3):
           f"mean={statistics.mean(vals):.3f}, std={statistics.stdev(vals):.3f}")
 ```
 
-**Mouse prediction (FlashAttention disabled):**
+**Mouse prediction:**
 ```python
 config = BorzoiConfig(
     output_tracks=[0, 1, 2],
     species="mouse",
-    use_flash_attn=False,  # Required for mouse models
 )
 
 result = run_borzoi(BorzoiInput(sequences=[sequence]), config)
@@ -243,7 +240,7 @@ result.export("borzoi_output", file_format="json")
 - **Exact-window inputs must be 524,288 bp**: If you do not pass `target_ranges`, each input sequence is treated as the exact Borzoi model input and must be exactly 524,288 bp.
 - **Use `target_ranges` for longer source sequences**: When your sequence includes extra flanking context, provide one sequence-relative target range per sequence. Borzoi will extract the fixed model input window and report where the context and output windows landed.
 - **Center your region of interest**: Like Enformer, predictions are most informative near the center of the input window. Place your target gene or variant at position ~262,144.
-- **Mouse requires `use_flash_attn=False`**: Mouse checkpoints were not trained with FlashAttention. Setting `species="mouse"` with `use_flash_attn=True` raises a `ValueError`.
+- **Species selects the checkpoint family**: Human runs use FlashAttention-backed checkpoints automatically; mouse runs use the available non-FlashAttention checkpoints.
 - **Ensemble is 4x slower**: Each replicate runs a full forward pass. Use single replicate for iteration, ensemble for final analysis.
 - **Track averaging collapses dimensions**: With `avg_output_tracks=True`, each result's `prediction` shape is `[1, 6144]` regardless of how many tracks you requested. Set to `False` if you need per-track resolution.
 - **GPU memory**: A single replicate inference uses ~6-8 GB of GPU memory due to the longer context window. Ensemble runs replicates sequentially, so peak memory is the same as single replicate.

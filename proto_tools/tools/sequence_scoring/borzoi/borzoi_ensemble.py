@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
     BORZOI_OUTPUT_RESOLUTION,
@@ -179,7 +179,6 @@ class BorzoiEnsembleConfig(BaseConfig):
         output_tracks (list[int]): Track indices to extract from model output.
         species (Literal['human', 'mouse']): Species model to use.
         avg_output_tracks (bool): Whether to average selected tracks.
-        use_flash_attn (bool): Whether to run FlashAttention-backed models.
         batch_size (int): Number of sequences to process in each GPU batch.
         device (str): Device used for inference.
     """
@@ -214,19 +213,6 @@ class BorzoiEnsembleConfig(BaseConfig):
         description="Number of sequences to process simultaneously on GPU",
         advanced=True,
     )
-    use_flash_attn: bool = ConfigField(
-        title="Use FlashAttention",
-        default=True,
-        description="Whether to use FlashAttention models",
-        hidden=True,
-    )
-
-    @model_validator(mode="after")
-    def validate_mouse_flash_attn(self) -> "BorzoiEnsembleConfig":
-        """Mouse Borzoi checkpoints do not support FlashAttention."""
-        if self.species == "mouse" and self.use_flash_attn:
-            raise ValueError("FlashAttention (use_flash_attn=True) is not available for mouse models.")
-        return self
 
 
 # ============================================================================
@@ -266,9 +252,6 @@ def run_borzoi_ensemble(
     Returns:
         BorzoiEnsembleOutput: Stacked predictions from Borzoi replicates 0-3.
     """
-    if config.use_flash_attn and not config.device.startswith("cuda"):
-        raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
-
     logger.debug("Using local execution for Borzoi ensemble prediction")
 
     replicate_outputs = []
@@ -287,7 +270,6 @@ def run_borzoi_ensemble(
             replicate=str(replicate),  # type: ignore[arg-type]
             avg_output_tracks=config.avg_output_tracks,
             batch_size=config.batch_size,
-            use_flash_attn=config.use_flash_attn,
             device=config.device,
             verbose=config.verbose,
             timeout=config.timeout,
