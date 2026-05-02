@@ -53,6 +53,16 @@ from proto_tools.tools.gene_annotation.mmseqs import (
     run_mmseqs_search_proteins,
 )
 
+# Promoter Calculator tools
+from proto_tools.tools.gene_annotation.promoter_calculator import (
+    PromoterCalculatorConfig,
+    PromoterCalculatorInput,
+    PromoterCalculatorOutput,
+    PromoterCalculatorSequenceResult,
+    PromoterPrediction,
+    run_promoter_calculator,
+)
+
 # PyHMMER tools
 from proto_tools.tools.gene_annotation.pyhmmer import (
     DomainHit,
@@ -149,4 +159,11 @@ __all__ = [
     "MincedSequenceResult",
     "CrisprArray",
     "CrisprRepeatSpacer",
+    # Promoter Calculator
+    "run_promoter_calculator",
+    "PromoterCalculatorInput",
+    "PromoterCalculatorConfig",
+    "PromoterCalculatorOutput",
+    "PromoterCalculatorSequenceResult",
+    "PromoterPrediction",
 ]
