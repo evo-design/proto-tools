@@ -51,7 +51,7 @@ _VALID_LOSS_KEYS = frozenset(
     }
 )
 
-_BINDER_FIXTURE_PDB = Path(__file__).resolve().parents[4] / "tests" / "dummy_data" / "pdl1.pdb"
+_BINDER_FIXTURE_PDB = Path(__file__).resolve().parent / "example_input_fixture.pdb"
 
 
 class AlphaFold2BinderInput(GradientInput):

@@ -73,7 +73,7 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     from proto_tools.entities.structures import Structure
 
-    _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
+    _pdb_path = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
     return ESMIF1ScoringInput(
         sequence_structure_pairs=[
             SequenceStructurePair(
