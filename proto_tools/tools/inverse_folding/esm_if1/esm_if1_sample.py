@@ -73,9 +73,7 @@ def example_input() -> Any:
     return ESMIF1SampleInput(
         inputs=[
             InverseFoldingStructureInput(
-                structure=str(  # type: ignore[arg-type]
-                    Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb"
-                ),
+                structure=str(Path(__file__).parents[1] / "example_input_fixture.pdb"),  # type: ignore[arg-type]
             )
         ]
     )

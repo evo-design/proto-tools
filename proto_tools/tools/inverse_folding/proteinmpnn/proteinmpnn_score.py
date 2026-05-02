@@ -115,7 +115,7 @@ def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     from proto_tools.entities.structures import Structure
 
-    _pdb_path = str(Path(__file__).parents[4] / "tests" / "dummy_data" / "test_structure_similarity.pdb")
+    _pdb_path = str(Path(__file__).parents[1] / "example_input_fixture.pdb")
     return ProteinMPNNScoringInput(
         sequence_structure_pairs=[SequenceStructurePair(sequence="A", structure=Structure.from_file(_pdb_path))]
     )
