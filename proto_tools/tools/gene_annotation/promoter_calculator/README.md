@@ -3,7 +3,7 @@
 # Salis Lab Promoter Calculator
 
 ## Overview
-The [Salis Lab Promoter Calculator](https://github.com/barricklab/promoter-calculator) is a 346-parameter biophysical + machine-learning model that predicts [sigma70 promoter](https://en.wikipedia.org/wiki/Sigma_factor) strength in *Escherichia coli*. It scans both strands of input DNA for canonical promoter elements -- the [-35 hexamer](https://en.wikipedia.org/wiki/Pribnow_box#%E2%88%9235_element), spacer, [-10 hexamer (Pribnow box)](https://en.wikipedia.org/wiki/Pribnow_box), [UP element](https://en.wikipedia.org/wiki/UP_element), and discriminator -- and returns binding free energy (`dG_total`, kcal/mol) and transcription initiation rate (`Tx_rate`, arbitrary units) per candidate.
+The [Salis Lab Promoter Calculator](https://github.com/barricklab/promoter-calculator) is a 346-parameter biophysical + machine-learning model that predicts [sigma70 promoter](https://en.wikipedia.org/wiki/Sigma_factor) strength in *Escherichia coli*. It scans both strands of input DNA for canonical promoter elements -- the [-35 hexamer](https://en.wikipedia.org/wiki/Pribnow_box#%E2%88%9235_element), spacer, [-10 hexamer (Pribnow box)](https://en.wikipedia.org/wiki/Pribnow_box), [UP element](https://en.wikipedia.org/wiki/Promoter_(genetics)#UP_element), and discriminator -- and returns binding free energy (`dG_total`, kcal/mol) and transcription initiation rate (`Tx_rate`, arbitrary units) per candidate.
 
 ## Background
 
@@ -14,7 +14,7 @@ Per-TSS (transcription start site) [Gibbs free energy](https://en.wikipedia.org/
 sigma70 is the housekeeping [sigma factor](https://en.wikipedia.org/wiki/Sigma_factor) of *E. coli*. Quantitative promoter strength prediction is foundational for designing tunable expression cassettes, avoiding cryptic promoters in engineered DNA, and understanding native gene regulation.
 
 **Scientific foundation:**
-The model combines a free-energy biophysical layer (per-element contributions: -10/-35 boxes, spacer length and composition, UP element, discriminator) with a regression learned on a [massively parallel reporter assay](https://en.wikipedia.org/wiki/Massively_parallel_reporter_assay) and validated across 22,132 bacterial promoters with diverse sequences.
+The model combines a free-energy biophysical layer (per-element contributions: -10/-35 boxes, spacer length and composition, UP element, discriminator) with a regression learned on a [massively parallel reporter assay](https://en.wikipedia.org/wiki/Reporter_gene#Massively_parallel_reporter_assays) and validated across 22,132 bacterial promoters with diverse sequences.
 
 ## How It Works
 

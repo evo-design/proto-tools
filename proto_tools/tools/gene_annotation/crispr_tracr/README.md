@@ -3,7 +3,7 @@
 # CRISPRtracrRNA
 
 ## Overview
-CRISPRtracrRNA predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activating_crRNA) (trans-activating CRISPR RNA) sequences from nucleotide [CRISPR](https://en.wikipedia.org/wiki/CRISPR) loci using [covariance models](http://eddylab.org/infernal/) and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/).
+CRISPRtracrRNA predicts [tracrRNA](https://en.wikipedia.org/wiki/Trans-activating_crRNA) (trans-activating CRISPR RNA) sequences from nucleotide [CRISPR](https://en.wikipedia.org/wiki/CRISPR) loci using [covariance models](http://eddylab.org/infernal/) and RNA-RNA interaction prediction. It identifies tracrRNA candidates, scores them by E-value and anti-repeat similarity, and predicts the anti-repeat interaction structure via [IntaRNA](https://github.com/BackofenLab/IntaRNA).
 
 ## Background
 
@@ -18,7 +18,7 @@ For a CRISPR-Cas9 system to function, three components must be present: the Cas9
 - Discovering novel CRISPR-Cas9 systems in metagenomic data
 
 **Scientific foundation:**
-CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure; similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://rna.informatik.uni-freiburg.de/IntaRNA/) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
+CRISPRtracrRNA uses [Infernal](http://eddylab.org/infernal/) covariance models (CMs) to detect tracrRNA candidates. Covariance models are probabilistic models of RNA sequence and secondary structure; similar to [profile HMMs](https://en.wikipedia.org/wiki/Hidden_Markov_model) but extended to capture base-pairing (covariance). After identifying tracrRNA candidates, the tool uses [IntaRNA](https://github.com/BackofenLab/IntaRNA) to predict the RNA-RNA interaction between the tracrRNA's anti-repeat region and the CRISPR repeat, providing a structural validation of the prediction.
 
 ## How It Works
 
@@ -138,7 +138,7 @@ The tool operates in two stages:
 
 **Additional resources:**
 - Infernal: [http://eddylab.org/infernal/](http://eddylab.org/infernal/)
-- IntaRNA: [https://rna.informatik.uni-freiburg.de/IntaRNA/](https://rna.informatik.uni-freiburg.de/IntaRNA/)
+- IntaRNA: [https://github.com/BackofenLab/IntaRNA](https://github.com/BackofenLab/IntaRNA)
 
 ## Quick Start Examples
 
