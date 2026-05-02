@@ -393,3 +393,43 @@ proto_check_gated_hf_repo() {
         exit 1
     fi
 }
+
+
+# ---------------------------------------------------------------------------
+# proto_download_gdrive <file_id> <dest>
+#
+# Download a Google Drive file by ID to <dest>, handling the >100MB
+# confirm interstitial (re-submits the hidden-field form to
+# drive.usercontent.google.com with cookies preserved). Self-contained:
+# uses only stdlib so it works inside setup.sh subprocesses where
+# proto_tools is not on PYTHONPATH.
+#
+# Example:
+#   proto_download_gdrive 1YbTxkn9KuJP2D7U1-6kL1Yimu_4RqSl1 "$CAS_ID_DIR/HMM_sets.tar.gz"
+# ---------------------------------------------------------------------------
+proto_download_gdrive() {
+    python3 -c "
+import http.cookiejar, re, sys, urllib.parse, urllib.request
+
+file_id, dest = sys.argv[1], sys.argv[2]
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+response = opener.open(f'https://drive.google.com/uc?export=download&id={file_id}', timeout=30)
+
+if 'text/html' in response.headers.get('Content-Type', ''):
+    html = response.read().decode('utf-8', errors='replace')
+    action = re.search(r'<form[^>]*action=\"([^\"]+)\"', html)
+    fields = dict(re.findall(r'<input type=\"hidden\" name=\"([^\"]+)\" value=\"([^\"]*)\"', html))
+    if not action or 'id' not in fields:
+        sys.exit(f'Google Drive interstitial for {file_id!r} had no confirm form')
+    response = opener.open(f'{action.group(1)}?{urllib.parse.urlencode(fields)}', timeout=30)
+    if 'text/html' in response.headers.get('Content-Type', ''):
+        sys.exit(f'Google Drive still returning HTML after submitting confirm form for {file_id!r}')
+
+with open(dest, 'wb') as f:
+    while True:
+        chunk = response.read(8192)
+        if not chunk:
+            break
+        f.write(chunk)
+" "$1" "$2"
+}

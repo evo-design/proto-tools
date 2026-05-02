@@ -14,12 +14,12 @@ from proto_tools.tools.gene_annotation.blast import (
 )
 
 # CRISPRtracrRNA tools
-from proto_tools.tools.gene_annotation.crispr_tracr import (
-    CrisprTracrConfig,
-    CrisprTracrInput,
-    CrisprTracrOutput,
-    TracrPrediction,
-    run_crispr_tracr,
+from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
+    CrisprTracrRNAConfig,
+    CrisprTracrRNAInput,
+    CrisprTracrRNAOutput,
+    CrisprTracrRNAPrediction,
+    run_crispr_tracr_rna,
 )
 
 # MinCED tools
@@ -146,11 +146,11 @@ __all__ = [
     "MmseqsClusteringConfig",
     "MmseqsClusteringOutput",
     # CRISPRtracrRNA
-    "run_crispr_tracr",
-    "CrisprTracrInput",
-    "CrisprTracrConfig",
-    "CrisprTracrOutput",
-    "TracrPrediction",
+    "CrisprTracrRNAConfig",
+    "CrisprTracrRNAInput",
+    "CrisprTracrRNAOutput",
+    "CrisprTracrRNAPrediction",
+    "run_crispr_tracr_rna",
     # MinCED
     "run_minced",
     "MincedInput",
