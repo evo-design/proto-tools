@@ -105,12 +105,8 @@ All three tools share `NCBIFetchConfig`:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout in seconds |
-| `http_retries` | `int` | `2` | Retries for HTTP requests |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt) |
 | `ncbi_api_key` | `Optional[str]` | `None` | NCBI API key for higher rate limits (10 req/sec vs 3 req/sec) |
 | `ncbi_email` | `Optional[str]` | `None` | Contact email (recommended by NCBI for tracking) |
-| `user_agent` | `str` | `"proto-tools/ncbi-fetch-v1"` | Identifier string sent with each request |
 
 ## Output Specification
 
@@ -281,7 +277,49 @@ print(f"BRCA1 CDS: {record.accession}, {len(record.sequence)} nt")
 assert len(record.sequence) % 3 == 0  # CDS must be a complete reading frame
 ```
 
-**Example 6: Chained workflow -- NCBI gene summary -> UniProt protein record**
+**Example 6: Canonical Entrez triple chain -- esearch -> esummary -> efetch**
+
+The textbook NCBI workflow: discover IDs with `esearch`, screen them with `esummary`, then pull full records with `efetch`. Useful when you need to inspect record metadata before paying the cost of fetching the full sequence.
+
+```python
+from proto_tools.tools.database_retrieval import (
+    NCBIEfetchInput, NCBIEsearchInput, NCBIEsummaryInput, NCBIFetchConfig,
+    run_ncbi_efetch, run_ncbi_esearch, run_ncbi_esummary,
+)
+
+cfg = NCBIFetchConfig()
+
+# 1. esearch: find candidate RefSeq mRNA records for human BRCA1.
+search = run_ncbi_esearch(
+    NCBIEsearchInput(
+        db="nuccore",
+        search_term='BRCA1[Gene Name] AND "Homo sapiens"[Organism] AND refseq[Filter] AND mRNA[Filter]',
+        max_results=5,
+    ),
+    cfg,
+)
+assert search.ids, "no hits"
+
+# 2. esummary: cheaply inspect titles/lengths to pick the right record before fetching the sequence.
+summaries = run_ncbi_esummary(
+    NCBIEsummaryInput(db="nuccore", identifier=",".join(search.ids)),
+    cfg,
+)
+canonical_id = max(
+    search.ids,
+    key=lambda i: int(summaries.summary.get(i, {}).get("slen", 0)),  # longest mRNA
+)
+
+# 3. efetch: pull the full FASTA for the chosen ID.
+fasta = run_ncbi_efetch(
+    NCBIEfetchInput(db="nuccore", identifier=canonical_id, return_format="fasta"),
+    cfg,
+)
+record = fasta.fasta_records[0]
+print(f"Picked {record.accession} ({len(record.sequence)} nt) from {len(search.ids)} esearch hits")
+```
+
+**Example 7: Chained workflow -- NCBI gene summary -> UniProt protein record**
 
 Bridge from organism-genome data (NCBI) to protein-centric data (UniProt).
 

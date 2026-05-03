@@ -26,6 +26,10 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/pubchem-fetch-v1"
 
 PubChemProperty = Literal[
     "MolecularFormula",
@@ -131,12 +135,6 @@ class PubChemFetchConfig(BaseConfig):
             (one extra HTTP call).
         max_synonyms (int): Maximum number of synonyms to return (PubChem can
             return hundreds; the wrapper truncates client-side).
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Number of retries for failed requests.
-        backoff_seconds (float): Seconds to wait between retries (doubles after
-            each attempt).
-        user_agent (str): Identifier string sent to the PubChem API with each
-            request.
     """
 
     properties: list[PubChemProperty] = ConfigField(
@@ -154,33 +152,6 @@ class PubChemFetchConfig(BaseConfig):
         default=50,
         ge=1,
         description="Maximum number of synonyms to return",
-    )
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/pubchem-fetch-v1",
-        description="Identifier string sent to the PubChem API with each request",
-        advanced=True,
     )
 
 
@@ -281,6 +252,7 @@ def example_input() -> Any:
     ),
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_pubchem_fetch(
     inputs: PubChemFetchInput,
@@ -307,13 +279,13 @@ def run_pubchem_fetch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
     )
 
     try:
-        all_cids = _resolve_to_cids(inputs, config, session)
+        all_cids = _resolve_to_cids(inputs, session)
         if not all_cids:
             raise ValueError(f"PubChem returned no CIDs for the supplied identifier: {_describe_input(inputs)}")
         if len(all_cids) > 1:
@@ -370,11 +342,7 @@ def _describe_input(inputs: PubChemFetchInput) -> str:
     return f"inchikey={inputs.inchikey!r}"
 
 
-def _resolve_to_cids(
-    inputs: PubChemFetchInput,
-    config: PubChemFetchConfig,
-    session: requests.Session,
-) -> list[int]:
+def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> list[int]:
     """Resolve any identifier to a list of matching PubChem CIDs.
 
     Returns an empty list on 404 (compound not found). Any other malformed
@@ -391,7 +359,7 @@ def _resolve_to_cids(
     else:
         url = f"{_PUBCHEM_BASE}/compound/inchikey/{quote(inputs.inchikey or '', safe='')}/cids/JSON"
 
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         return []
     response.raise_for_status()
@@ -407,7 +375,7 @@ def _fetch_properties(
     """Fetch the requested property bundle for a CID. Returns (record, url)."""
     props = ",".join(config.properties)
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/property/{props}/JSON"
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     properties = response.json()["PropertyTable"]["Properties"]
     if not properties:
@@ -426,7 +394,7 @@ def _fetch_synonyms(
     other malformed shape raises KeyError via direct dict access.
     """
     url = f"{_PUBCHEM_BASE}/compound/cid/{cid}/synonyms/JSON"
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         return []
     response.raise_for_status()

@@ -11,12 +11,16 @@ from typing import Any
 import requests
 from pydantic import BaseModel, Field
 
-from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils import BaseConfig
 
 logger = logging.getLogger(__name__)
 
 _PDB_ENTRY_BASE = "https://data.rcsb.org/rest/v1/core/entry"
 _PDB_FASTA_BASE = "https://www.rcsb.org/fasta/entry"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 3
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/pdb-fetch-v1"
 
 _PROTEIN_ONLY_CHARS_CACHE: set[str] | None = None
 
@@ -55,41 +59,11 @@ class PdbChain(BaseModel):
 class PdbFetchConfig(BaseConfig):
     """Configuration for PDB fetch operations.
 
-    Attributes:
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Maximum HTTP retries.
-        backoff_seconds (float): Seconds to wait between retries (doubles after each
-            attempt).
-        user_agent (str): Identifier string sent to database APIs with each request.
+    PDB tools have no user-facing knobs — all behavior comes from the
+    PDB ID supplied as input. This class is kept (rather than removed)
+    so callers can still pass ``run_pdb_fetch_entry(input, config)``
+    without breakage, but it has no fields.
     """
-
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout per request",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=3,
-        ge=0,
-        description="Max HTTP retries",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/pdb-fetch-v1",
-        description="Identifier string sent to database APIs with each request",
-        advanced=True,
-    )
 
 
 # ============================================================================
@@ -97,14 +71,9 @@ class PdbFetchConfig(BaseConfig):
 # ============================================================================
 
 
-def _request_pdb(
-    session: requests.Session,
-    url: str,
-    config: PdbFetchConfig,
-    source_label: str,
-) -> requests.Response | None:
+def _request_pdb(session: requests.Session, url: str, source_label: str) -> requests.Response | None:
     """Execute an HTTP GET, returning None on 404."""
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         logger.debug("No record found at %s: %s", source_label, response.url)
         return None
@@ -121,13 +90,9 @@ def _chain_id_from_header(header: str) -> str | None:
     return None
 
 
-def _fetch_pdb_entry(
-    pdb_id: str,
-    config: PdbFetchConfig,
-    session: requests.Session,
-) -> dict[str, Any] | None:
+def _fetch_pdb_entry(pdb_id: str, session: requests.Session) -> dict[str, Any] | None:
     """Fetch PDB entry metadata (title, method, resolution), or None on 404."""
-    response = _request_pdb(session, f"{_PDB_ENTRY_BASE}/{pdb_id}", config, "pdb-entry")
+    response = _request_pdb(session, f"{_PDB_ENTRY_BASE}/{pdb_id}", "pdb-entry")
     if response is None:
         return None
     data = response.json()
@@ -152,15 +117,11 @@ def _fetch_pdb_entry(
     return {"title": title, "method": method, "resolution": resolution}
 
 
-def _fetch_pdb_fasta(
-    pdb_id: str,
-    config: PdbFetchConfig,
-    session: requests.Session,
-) -> list[tuple[str, str]] | None:
+def _fetch_pdb_fasta(pdb_id: str, session: requests.Session) -> list[tuple[str, str]] | None:
     """Fetch PDB FASTA chains as (header, sequence) tuples, or None on 404."""
     from Bio import SeqIO
 
-    response = _request_pdb(session, f"{_PDB_FASTA_BASE}/{pdb_id}", config, "pdb-fasta")
+    response = _request_pdb(session, f"{_PDB_FASTA_BASE}/{pdb_id}", "pdb-fasta")
     if response is None:
         return None
     text = response.text

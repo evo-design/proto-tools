@@ -11,6 +11,9 @@ from typing import Any, Literal
 from pydantic import Field
 
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
+    _BACKOFF_SECONDS,
+    _HTTP_RETRIES,
+    _USER_AGENT,
     NCBIFastaRecord,
     NCBIFetchConfig,
     _ncbi_efetch,
@@ -124,6 +127,7 @@ def example_input() -> Any:
     description="Fetch sequences and records from NCBI Entrez by accession or ID",
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_ncbi_efetch(
     inputs: NCBIEfetchInput,
@@ -148,9 +152,9 @@ def run_ncbi_efetch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
         allowed_methods=["GET", "POST"],
     )
 

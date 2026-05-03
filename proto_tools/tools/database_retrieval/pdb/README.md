@@ -73,14 +73,7 @@ The PDB was established in 1971 and now contains over 220,000 structures. Key me
 
 ## Configuration
 
-Both tools share `PdbFetchConfig`:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout per request |
-| `http_retries` | `int` | `3` | Max HTTP retries |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt) |
-| `user_agent` | `str` | `"proto-tools/pdb-fetch-v1"` | Identifier string sent with each request |
+`PdbFetchConfig` has no user-facing fields. Pass it bare (or omit entirely): all behavior comes from the Input. Example: `run_pdb_fetch_entry(PdbFetchEntryInput(pdb_id="1LBG"))`.
 
 ## Output Specification
 

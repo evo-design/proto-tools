@@ -25,6 +25,10 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _AFDB_API_BASE = "https://alphafold.ebi.ac.uk/api/prediction"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/alphafold-db-fetch-v1"
 
 
 # ============================================================================
@@ -51,12 +55,6 @@ class AlphaFoldDBFetchConfig(BaseConfig):
         include_plddt (bool): If True, download the per-residue pLDDT JSON.
         include_pae (bool): If True, download the PAE (predicted aligned error)
             matrix. PAE files can be large for long proteins; default off.
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Number of retries for failed requests.
-        backoff_seconds (float): Seconds to wait between retries (doubles after each
-            attempt).
-        user_agent (str): Identifier string sent to the AlphaFold DB API with each
-            request.
     """
 
     structure_format: Literal["pdb", "cif"] = ConfigField(
@@ -78,33 +76,6 @@ class AlphaFoldDBFetchConfig(BaseConfig):
         title="Include PAE Matrix",
         default=False,
         description="Download the PAE (predicted aligned error) matrix; large for long proteins",
-    )
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/alphafold-db-fetch-v1",
-        description="Identifier string sent to the AlphaFold DB API with each request",
-        advanced=True,
     )
 
 
@@ -223,6 +194,7 @@ def example_input() -> Any:
     ),
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_alphafold_db_fetch(
     inputs: AlphaFoldDBFetchInput,
@@ -257,13 +229,13 @@ def run_alphafold_db_fetch(
     api_url = f"{_AFDB_API_BASE}/{accession}"
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
     )
 
     try:
-        entries = _fetch_prediction(api_url, config, session)
+        entries = _fetch_prediction(api_url, session)
         if entries is None or not entries:
             raise ValueError(f"AlphaFold DB has no prediction for accession '{accession}'")
 
@@ -281,15 +253,15 @@ def run_alphafold_db_fetch(
         structure_text: str | None = None
         if config.include_structure:
             structure_url = entry["pdbUrl"] if structure_format == "pdb" else entry["cifUrl"]
-            structure_text = _fetch_text(structure_url, config, session)
+            structure_text = _fetch_text(structure_url, session)
 
         plddt_per_residue: list[float] | None = None
         if config.include_plddt:
-            plddt_per_residue = _fetch_plddt(entry["plddtDocUrl"], config, session)
+            plddt_per_residue = _fetch_plddt(entry["plddtDocUrl"], session)
 
         pae_matrix: list[list[float]] | None = None
         if config.include_pae:
-            pae_matrix = _fetch_pae(entry["paeDocUrl"], config, session)
+            pae_matrix = _fetch_pae(entry["paeDocUrl"], session)
 
         return AlphaFoldDBFetchOutput(
             uniprot_accession=entry.get("uniprotAccession", accession),
@@ -326,13 +298,9 @@ def run_alphafold_db_fetch(
 # ============================================================================
 
 
-def _fetch_prediction(
-    api_url: str,
-    config: AlphaFoldDBFetchConfig,
-    session: requests.Session,
-) -> list[dict[str, Any]] | None:
+def _fetch_prediction(api_url: str, session: requests.Session) -> list[dict[str, Any]] | None:
     """Fetch prediction metadata list. Returns None on 404."""
-    response = session.get(api_url, timeout=config.request_timeout_seconds)
+    response = session.get(api_url, timeout=_REQUEST_TIMEOUT_SECONDS)
     if response.status_code == 404:
         logger.debug("AlphaFold DB returned 404 for %s", api_url)
         return None
@@ -343,24 +311,16 @@ def _fetch_prediction(
     return payload
 
 
-def _fetch_text(
-    url: str,
-    config: AlphaFoldDBFetchConfig,
-    session: requests.Session,
-) -> str:
+def _fetch_text(url: str, session: requests.Session) -> str:
     """Fetch a structure file as text."""
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     return response.text
 
 
-def _fetch_plddt(
-    url: str,
-    config: AlphaFoldDBFetchConfig,
-    session: requests.Session,
-) -> list[float]:
+def _fetch_plddt(url: str, session: requests.Session) -> list[float]:
     """Fetch the per-residue pLDDT confidence array."""
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     payload = response.json()
     scores = payload.get("confidenceScore")
@@ -369,13 +329,9 @@ def _fetch_plddt(
     return [float(value) for value in scores]
 
 
-def _fetch_pae(
-    url: str,
-    config: AlphaFoldDBFetchConfig,
-    session: requests.Session,
-) -> list[list[float]]:
+def _fetch_pae(url: str, session: requests.Session) -> list[list[float]]:
     """Fetch the PAE matrix as a 2D list of floats."""
-    response = session.get(url, timeout=config.request_timeout_seconds)
+    response = session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, list) or not payload:

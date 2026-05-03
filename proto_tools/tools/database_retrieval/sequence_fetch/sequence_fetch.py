@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 
 # Database tool imports (orchestrator calls these directly)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
+    _BACKOFF_SECONDS,
+    _HTTP_RETRIES,
+    _USER_AGENT,
     NCBIFastaRecord,
     NCBIFetchConfig,
     _accession_from_header,
@@ -24,14 +27,12 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
-    PdbFetchConfig,
     _fetch_pdb_entry,
     _fetch_pdb_fasta,
     _is_protein_sequence,
 )
 from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
     _UNIPROT_BASE,
-    UniProtFetchConfig,
     _extract_pdb_crossrefs,
 )
 from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
@@ -344,10 +345,6 @@ class SequenceFetchConfig(BaseConfig):
     """Configuration for sequence retrieval.
 
     Attributes:
-        request_timeout_seconds (int): Timeout per HTTP request.
-        http_retries (int): Retries per upstream HTTP call.
-        backoff_seconds (float): Seconds to wait between retries (doubles
-            after each attempt).
         max_candidates_per_source (int): Maximum database candidates to
             evaluate per name-based search.
         strict_type_checks (bool): Reject requests where molecule type
@@ -355,33 +352,11 @@ class SequenceFetchConfig(BaseConfig):
         fail_on_type_mismatch (bool): Treat molecule type mismatches as errors
             instead of warnings.
         include_sequence_checksums (bool): Include SHA256 checksums in outputs.
-        ncbi_api_key (str | None): Optional API key for NCBI Entrez.
-        ncbi_email (str | None): Optional contact email for NCBI requests.
-        user_agent (str): Identifier string sent to database APIs with each
-            request.
+        ncbi_api_key (str | None): Optional NCBI API key. Without one NCBI
+            limits to 3 requests/second; with one the limit is 10/second.
+        ncbi_email (str | None): Optional contact email; recommended by NCBI.
     """
 
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for upstream HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
     max_candidates_per_source: int = ConfigField(
         title="Max Candidates",
         default=5,
@@ -409,20 +384,15 @@ class SequenceFetchConfig(BaseConfig):
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
         default=None,
-        description="Optional NCBI API key",
-        advanced=True,
+        description="Optional NCBI API key (lifts rate limit from 3 to 10 req/s)",
+        include_in_key=False,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default=None,
-        description="Optional NCBI contact email",
+        description="Optional contact email; recommended by NCBI for traceability",
         advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/sequence-fetch-v1",
-        description="Identifier string sent to database APIs with each request",
-        advanced=True,
+        include_in_key=False,
     )
 
 
@@ -434,32 +404,8 @@ class SequenceFetchConfig(BaseConfig):
 def _ncbi_config(config: SequenceFetchConfig) -> NCBIFetchConfig:
     """Create an NCBIFetchConfig from the orchestrator config."""
     return NCBIFetchConfig(
-        request_timeout_seconds=config.request_timeout_seconds,
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
         ncbi_api_key=config.ncbi_api_key,
         ncbi_email=config.ncbi_email,
-        user_agent=config.user_agent,
-    )
-
-
-def _uniprot_config(config: SequenceFetchConfig) -> UniProtFetchConfig:
-    """Create a UniProtFetchConfig from the orchestrator config."""
-    return UniProtFetchConfig(
-        request_timeout_seconds=config.request_timeout_seconds,
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
-    )
-
-
-def _pdb_config(config: SequenceFetchConfig) -> PdbFetchConfig:
-    """Create a PdbFetchConfig from the orchestrator config."""
-    return PdbFetchConfig(
-        request_timeout_seconds=config.request_timeout_seconds,
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
     )
 
 
@@ -559,11 +505,10 @@ def run_sequence_fetch(
     """
     del instance  # unused; kept for tool API consistency
 
-    ncfg = _ncbi_config(config)
     session = build_http_session(
-        http_retries=ncfg.http_retries,
-        backoff_seconds=ncfg.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
         allowed_methods=["GET", "POST"],
     )
 
@@ -701,11 +646,9 @@ def _fetch_protein(
     """Fetch protein sequence using ID-priority resolution."""
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
-    ucfg = _uniprot_config(config)
-    pcfg = _pdb_config(config)
 
     if request.uniprot_id:
-        entry = _fetch_uniprot_entry(request.uniprot_id, ucfg, session)
+        entry = _fetch_uniprot_entry(request.uniprot_id, session)
         if entry is None:
             raise SequenceFetchError(f"UniProt ID '{request.uniprot_id}' not found")
         sequence = entry.get("sequence", {}).get("value")
@@ -761,7 +704,7 @@ def _fetch_protein(
         )
 
     if request.pdb_id:
-        fasta_records = _fetch_pdb_fasta(request.pdb_id.upper(), pcfg, session)
+        fasta_records = _fetch_pdb_fasta(request.pdb_id.upper(), session)
         if not fasta_records:
             raise SequenceFetchError(f"PDB ID '{request.pdb_id}' returned no FASTA records")
         protein_records = [(h, s) for h, s in fasta_records if _is_protein_sequence(s)]
@@ -795,7 +738,6 @@ def _fetch_protein(
         organism=request.organism,
         prefer_pdb_crossref="structure" in request.sequence_types,
         max_candidates=config.max_candidates_per_source,
-        config=ucfg,
         session=session,
     )
     if entry is not None:
@@ -1312,8 +1254,6 @@ def _fetch_structure(
 ) -> tuple[FetchedStructure, dict[str, str], list[str]]:
     """Fetch structure metadata from PDB."""
     warnings: list[str] = []
-    ucfg = _uniprot_config(config)
-    pcfg = _pdb_config(config)
 
     pdb_id = request.pdb_id
     uniprot_id = request.uniprot_id
@@ -1330,7 +1270,6 @@ def _fetch_structure(
             organism=request.organism,
             prefer_pdb_crossref=True,
             max_candidates=config.max_candidates_per_source,
-            config=ucfg,
             session=session,
         )
         if entry is not None:
@@ -1340,7 +1279,7 @@ def _fetch_structure(
 
     if not pdb_id and uniprot_id:
         if entry is None:
-            entry = _fetch_uniprot_entry(uniprot_id, ucfg, session)
+            entry = _fetch_uniprot_entry(uniprot_id, session)
         if entry is None:
             raise SequenceFetchError(f"UniProt entry '{uniprot_id}' not found")
         pdb_ids = _extract_pdb_crossrefs(entry)
@@ -1354,7 +1293,7 @@ def _fetch_structure(
         raise SequenceFetchError(f"No PDB ID resolved for '{request.target_name}' in '{request.organism}'")
 
     pdb_id = pdb_id.upper()
-    meta = _fetch_pdb_entry(pdb_id, pcfg, session)
+    meta = _fetch_pdb_entry(pdb_id, session)
     if meta is None:
         raise SequenceFetchError(f"PDB ID '{pdb_id}' not found")
 

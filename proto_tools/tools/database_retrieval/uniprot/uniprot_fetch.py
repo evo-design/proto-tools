@@ -18,7 +18,6 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
-    ConfigField,
     InputField,
     build_http_session,
 )
@@ -26,6 +25,10 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _UNIPROT_BASE = "https://rest.uniprot.org"
+_REQUEST_TIMEOUT_SECONDS = 15
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_USER_AGENT = "proto-tools/uniprot-fetch-v1"
 
 
 # ============================================================================
@@ -128,41 +131,12 @@ class UniProtFetchOutput(BaseToolOutput):
 class UniProtFetchConfig(BaseConfig):
     """Configuration for UniProt fetch operations.
 
-    Attributes:
-        request_timeout_seconds (int): HTTP timeout per request.
-        http_retries (int): Number of retries for failed requests.
-        backoff_seconds (float): Seconds to wait between retries (doubles after each
-            attempt).
-        user_agent (str): Identifier string sent to database APIs with each request.
+    UniProt fetch has no user-facing knobs — all behavior comes from the
+    Input fields (uniprot_id, target_name, organism, prefer_pdb_crossref,
+    max_candidates). This class is kept (rather than removed) so callers
+    can still pass ``run_uniprot_fetch(input, config)`` without breakage,
+    but it has no fields.
     """
-
-    request_timeout_seconds: int = ConfigField(
-        title="Request Timeout",
-        default=15,
-        ge=1,
-        description="HTTP timeout in seconds",
-        advanced=True,
-    )
-    http_retries: int = ConfigField(
-        title="HTTP Retries",
-        default=2,
-        ge=0,
-        description="Retries for HTTP requests",
-        advanced=True,
-    )
-    backoff_seconds: float = ConfigField(
-        title="Backoff Seconds",
-        default=1.0,
-        ge=0.0,
-        description="Seconds to wait between retries (doubles after each attempt)",
-        advanced=True,
-    )
-    user_agent: str = ConfigField(
-        title="User Agent",
-        default="proto-tools/uniprot-fetch-v1",
-        description="Identifier string sent to database APIs with each request",
-        advanced=True,
-    )
 
 
 # ============================================================================
@@ -185,6 +159,7 @@ def example_input() -> Any:
     description="Fetch protein entries from UniProt by accession or search by name and organism",
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_uniprot_fetch(
     inputs: UniProtFetchInput,
@@ -199,25 +174,24 @@ def run_uniprot_fetch(
 
     Args:
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
-        config (UniProtFetchConfig): HTTP timeout and retry settings.
-
+        config (UniProtFetchConfig): Empty placeholder (UniProt fetch has no user knobs).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and
             PDB cross-references.
     """
-    del instance
+    del config, instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
     )
 
     try:
         if inputs.uniprot_id:
-            entry = _fetch_entry(inputs.uniprot_id, config, session)
+            entry = _fetch_entry(inputs.uniprot_id, session)
             if entry is None:
                 raise ValueError(f"UniProt ID '{inputs.uniprot_id}' not found")
         else:
@@ -226,7 +200,6 @@ def run_uniprot_fetch(
                 organism=inputs.organism,  # type: ignore[arg-type]
                 prefer_pdb_crossref=inputs.prefer_pdb_crossref,
                 max_candidates=inputs.max_candidates,
-                config=config,
                 session=session,
             )
             if entry is None:
@@ -259,15 +232,11 @@ def run_uniprot_fetch(
 # ============================================================================
 
 
-def _fetch_entry(
-    uniprot_id: str,
-    config: UniProtFetchConfig,
-    session: requests.Session,
-) -> dict[str, Any] | None:
+def _fetch_entry(uniprot_id: str, session: requests.Session) -> dict[str, Any] | None:
     """Fetch a UniProtKB entry by accession. Returns None on 404."""
     response = session.get(
         f"{_UNIPROT_BASE}/uniprotkb/{uniprot_id}.json",
-        timeout=config.request_timeout_seconds,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
     )
     if response.status_code == 404:
         logger.debug("UniProt ID '%s' not found", uniprot_id)
@@ -281,7 +250,6 @@ def _search_entry(
     organism: str,
     prefer_pdb_crossref: bool,
     max_candidates: int,
-    config: UniProtFetchConfig,
     session: requests.Session,
 ) -> dict[str, Any] | None:
     """Search UniProt by name and organism and return best ranked entry."""
@@ -302,7 +270,7 @@ def _search_entry(
         response = session.get(
             f"{_UNIPROT_BASE}/uniprotkb/search",
             params=params,  # type: ignore[arg-type]
-            timeout=config.request_timeout_seconds,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
         )
         if response.status_code >= 400:
             logger.warning(

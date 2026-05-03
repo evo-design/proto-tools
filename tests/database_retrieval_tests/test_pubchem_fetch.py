@@ -37,7 +37,7 @@ def test_input_rejects_anything_other_than_one_identifier(kwargs):
 def test_resolve_to_cids_skips_http_when_cid_given():
     """Direct CID input must not trigger any HTTP call."""
     session = MagicMock()
-    cids = _resolve_to_cids(PubChemFetchInput(cid=42), PubChemFetchConfig(), session)
+    cids = _resolve_to_cids(PubChemFetchInput(cid=42), session)
     assert cids == [42]
     session.get.assert_not_called()
 
@@ -57,7 +57,7 @@ def test_resolve_to_cids_parses_response(status_code, payload, expected):
     response.status_code = status_code
     response.json.return_value = payload
     session.get.return_value = response
-    cids = _resolve_to_cids(PubChemFetchInput(name="anything"), PubChemFetchConfig(), session)
+    cids = _resolve_to_cids(PubChemFetchInput(name="anything"), session)
     assert cids == expected
 
 

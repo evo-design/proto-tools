@@ -11,7 +11,10 @@ from typing import Any
 from pydantic import Field
 
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
+    _BACKOFF_SECONDS,
+    _HTTP_RETRIES,
     _PDB_ENTRY_BASE,
+    _USER_AGENT,
     PdbFetchConfig,
     _fetch_pdb_entry,
 )
@@ -95,6 +98,7 @@ def example_input() -> Any:
     description="Fetch structure metadata (title, method, resolution) from RCSB PDB",
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_pdb_fetch_entry(
     inputs: PdbFetchEntryInput,
@@ -107,25 +111,24 @@ def run_pdb_fetch_entry(
 
     Args:
         inputs (PdbFetchEntryInput): PDB accession to look up.
-        config (PdbFetchConfig): HTTP timeout and retry settings.
-
+        config (PdbFetchConfig): Empty placeholder (PDB fetch has no user knobs).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.
     """
-    del instance
+    del config, instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
 
     try:
-        meta = _fetch_pdb_entry(pdb_id, config, session)
+        meta = _fetch_pdb_entry(pdb_id, session)
         if meta is None:
             return PdbFetchEntryOutput()
         return PdbFetchEntryOutput(

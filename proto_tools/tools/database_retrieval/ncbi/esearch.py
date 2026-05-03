@@ -10,7 +10,13 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from proto_tools.tools.database_retrieval.ncbi.shared_data_models import NCBIFetchConfig, _ncbi_esearch
+from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
+    _BACKOFF_SECONDS,
+    _HTTP_RETRIES,
+    _USER_AGENT,
+    NCBIFetchConfig,
+    _ncbi_esearch,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -100,6 +106,7 @@ def example_input() -> Any:
     description="Search NCBI Entrez databases by query term to find matching IDs",
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_ncbi_esearch(
     inputs: NCBIEsearchInput,
@@ -121,9 +128,9 @@ def run_ncbi_esearch(
     del instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
         allowed_methods=["GET", "POST"],
     )
 

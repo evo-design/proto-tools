@@ -11,7 +11,10 @@ from typing import Any
 from pydantic import Field
 
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
+    _BACKOFF_SECONDS,
+    _HTTP_RETRIES,
     _PDB_FASTA_BASE,
+    _USER_AGENT,
     PdbChain,
     PdbFetchConfig,
     _chain_id_from_header,
@@ -94,6 +97,7 @@ def example_input() -> Any:
     description="Fetch chain sequences from RCSB PDB with protein/nucleotide classification",
     uses_gpu=False,
     example_input=example_input,
+    cacheable=True,
 )
 def run_pdb_fetch_fasta(
     inputs: PdbFetchFastaInput,
@@ -107,25 +111,24 @@ def run_pdb_fetch_fasta(
 
     Args:
         inputs (PdbFetchFastaInput): PDB accession to look up.
-        config (PdbFetchConfig): HTTP timeout and retry settings.
-
+        config (PdbFetchConfig): Empty placeholder (PDB fetch has no user knobs).
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.
     """
-    del instance
+    del config, instance
 
     session = build_http_session(
-        http_retries=config.http_retries,
-        backoff_seconds=config.backoff_seconds,
-        user_agent=config.user_agent,
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=_USER_AGENT,
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
 
     try:
-        raw_chains = _fetch_pdb_fasta(pdb_id, config, session)
+        raw_chains = _fetch_pdb_fasta(pdb_id, session)
         if raw_chains is None:
             return PdbFetchFastaOutput()
         pdb_chains = [

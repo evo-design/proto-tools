@@ -88,10 +88,6 @@ rejects calls supplying zero or more than one identifier.
 | `properties` | `list[PubChemProperty]` | 15 defaults (see below) | PubChem property names to request. |
 | `include_synonyms` | `bool` | `False` | If `True`, fetch the compound's synonyms (one extra HTTP call). |
 | `max_synonyms` | `int` | `50` | Maximum number of synonyms to return (truncated client-side). |
-| `request_timeout_seconds` | `int` | `15` | HTTP timeout per request. |
-| `http_retries` | `int` | `2` | Number of retries for failed HTTP requests. |
-| `backoff_seconds` | `float` | `1.0` | Initial wait between retries (doubles after each attempt). |
-| `user_agent` | `str` | `"proto-tools/pubchem-fetch-v1"` | Identifier string sent to the PubChem API. |
 
 **Default `properties` bundle (15 entries):** `MolecularFormula`, `MolecularWeight`, `SMILES`, `ConnectivitySMILES`,
 `InChI`, `InChIKey`, `IUPACName`, `ExactMass`, `TPSA`, `Complexity`, `Charge`, `HBondDonorCount`,

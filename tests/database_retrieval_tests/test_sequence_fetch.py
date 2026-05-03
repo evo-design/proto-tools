@@ -63,7 +63,7 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
         ("1LBG_2|Chain B|Lac repressor|Escherichia coli", "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNR"),
     ]
 
-    def fake_fetch_pdb_fasta(pdb_id, config, session):
+    def fake_fetch_pdb_fasta(pdb_id, session):
         return fake_records
 
     monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", fake_fetch_pdb_fasta)
@@ -99,7 +99,7 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
         ("1ABC_2|Chain B|RNA|organism", "GAUUCGAUUCGAUUCG"),
     ]
 
-    def fake_fetch_pdb_fasta(pdb_id, config, session):
+    def fake_fetch_pdb_fasta(pdb_id, session):
         return fake_records
 
     monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", fake_fetch_pdb_fasta)
