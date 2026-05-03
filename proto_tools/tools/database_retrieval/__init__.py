@@ -1,5 +1,15 @@
 """Database retrieval tools for biological sequences and structures."""
 
+# AlphaMissense fetch
+from proto_tools.tools.database_retrieval.alphamissense import (
+    AlphaMissenseClass,
+    AlphaMissenseFetchConfig,
+    AlphaMissenseFetchInput,
+    AlphaMissenseFetchOutput,
+    AlphaMissensePrediction,
+    run_alphamissense_fetch,
+)
+
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEfetchConfig,
@@ -53,6 +63,13 @@ from proto_tools.tools.database_retrieval.uniprot import (
 )
 
 __all__ = [
+    # AlphaMissense fetch
+    "AlphaMissenseClass",
+    "AlphaMissenseFetchConfig",
+    "AlphaMissenseFetchInput",
+    "AlphaMissenseFetchOutput",
+    "AlphaMissensePrediction",
+    "run_alphamissense_fetch",
     # NCBI Entrez tools
     "NCBIFastaRecord",
     "NCBIFetchConfig",
